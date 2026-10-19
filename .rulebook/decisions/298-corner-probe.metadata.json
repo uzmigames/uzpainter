@@ -1,0 +1,13 @@
+{
+  "id": 298,
+  "slug": "298-corner-probe",
+  "title": "One corner-reach probe tests decision 294's corner reach independently of the Wand: 432 copies of one island corner whose two seam edges meet at a bent UV corner on different planar faces, the ring texel beyond the corner at 0.90 to 1.30 texel from it, the meeting edge gated, open or no seam, collinear and same-face controls; designed, recording pending",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.26_gate-g1"
+  ],
+  "supersededBy": null
+}

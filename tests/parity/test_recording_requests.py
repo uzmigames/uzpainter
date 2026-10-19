@@ -593,6 +593,80 @@ def test_window_side_copies_put_far_points_on_window_boundaries() -> None:
     assert oblique == len(placed)
 
 
+def test_corner_copies_bend_at_v_and_put_the_target_past_the_far_edge() -> None:
+    """Decision 298: each copy's triangles cover disjoint texel centres, none on an edge, F1, F2
+    and B2 some, an empty B1 none; the copies lie at least 7 texels apart in UV and apart in
+    3D; the target T is uncovered beside e1 with its left neighbour in F1, `across` texels from
+    e1 and `reach` from V, past e2's end V; e1 and e2 meet at V bent by the copy's angle (exactly
+    straight at 0); across every designed hinge the two pieces share exactly two mesh vertices
+    and the written float32 positions bend the far piece by its angle, on the near piece's
+    normal side exactly when it is positive; the box is [-256, 256] x [-64, 64] x [-256, 256]."""
+    owner: dict[tuple[int, int], int] = {}
+    placed, _ = rf.corner_layout()
+    covered = 0
+    for index, (copy, (oc, orow), _) in enumerate(placed):
+        uv = [[(c + oc, r + orow) for c, r in uvs] for _, uvs in copy.tris]
+        cells = [covered_centres(t) for t in uv]
+        union = set().union(*cells)
+        assert sum(map(len, cells)) == len(union), copy.name
+        assert cells[0] and cells[1] and cells[-2] | cells[-1], copy.name
+        if len(copy.tris) == 6:
+            assert bool(cells[2] | cells[3]) == (copy.gate == "g"), copy.name
+        covered += len(union)
+        owner |= dict.fromkeys(union, index)
+        tx, ty = oc + copy.target[0], orow + copy.target[1]
+        assert (tx, ty) not in union and (tx - 1, ty) in cells[0], copy.name
+        v, w1, w2 = np.array(uv[0][0]), np.array(uv[0][1]), np.array(uv[1][2])
+        t = np.array([tx + 0.5, ty + 0.5]) - v
+        e1, e2 = w1 - v, w2 - v
+        assert np.linalg.norm(t) == pytest.approx(copy.reach, abs=1e-9), copy.name
+        cross = e1[0] * t[1] - e1[1] * t[0]  # rows down: T on e1's right
+        assert cross / np.linalg.norm(e1) == pytest.approx(copy.across, abs=1e-9), copy.name
+        assert 0 < t @ e1 < e1 @ e1 and t @ e2 < 0, copy.name
+        bend = math.degrees(math.atan2(e2[0] * e1[1] - e2[1] * e1[0], -e2 @ e1))
+        assert bend == pytest.approx(copy.bend, abs=1e-9), copy.name
+    assert covered == 10_767
+    for (x, y), index in owner.items():
+        near = {owner.get((x + dx, y + dy), index) for dx in range(-6, 7) for dy in range(-6, 7)}
+        assert near == {index}, placed[index][0].name
+    bounds = [
+        tuple(tuple(b + o for b, o in zip(corner, offset, strict=True)) for corner in copy.bounds())
+        for copy, _, offset in placed
+    ]
+    for i, (lo, hi) in enumerate(bounds):
+        for lo2, hi2 in bounds[i + 1 :]:
+            assert any(hi[a] < lo2[a] or hi2[a] < lo[a] for a in range(3)), placed[i][0].name
+    vertices, uvs, faces = obj_uvs("corner-reach")
+    low = tuple(min(c) for c in zip(*vertices, strict=True))
+    high = tuple(max(c) for c in zip(*vertices, strict=True))
+    assert (low, high) == ((-256.0, -64.0, -256.0), (256.0, 64.0, 256.0))
+    refs = [[ref.split("/") for ref in line.split()[1:]] for line in faces]
+    first = 0
+    for copy, _, _ in placed:
+        tris = [[int(r[0]) - 1 for r in t] for t in refs[first : first + len(copy.tris)]]
+        if copy.bend == 0:  # e1 and e2 exactly collinear in the written UVs
+            corner = [uvs[int(r[1]) - 1] for r in refs[first][:2] + refs[first + 1][2:]]
+            assert len({u for u, _ in corner}) == 1, copy.name
+        first += len(copy.tris)
+        for inner, outer, angle in copy.hinges:
+            a = {v for t in copy.faces[inner] for v in tris[t]}
+            b = {v for t in copy.faces[outer] for v in tris[t]}
+            assert len(a & b) == 2, (copy.name, inner, outer)
+            p = [np.array(vertices[v]) for v in tris[copy.faces[inner][0]]]
+            normal = np.cross(p[1] - p[0], p[2] - p[0])
+            normal /= np.linalg.norm(normal)
+            for t in copy.faces[outer]:
+                r = [np.array(vertices[v]) for v in tris[t]]
+                other = np.cross(r[1] - r[0], r[2] - r[0])
+                cos = normal @ other / np.linalg.norm(other)
+                bent = math.degrees(math.acos(min(cos, 1.0)))
+                # Float32 rounding: up to about 3.4e-4 degree (an empty B1 is 0.375 cm deep).
+                assert bent == pytest.approx(abs(angle), abs=1e-3), (copy.name, inner, outer)
+            lift = max((normal @ (np.array(vertices[v]) - p[0]) for v in b - a), key=abs)
+            assert (lift > 1e-4) == (angle > 0) and (lift < -1e-4) == (angle < 0), copy.name
+    assert first == len(refs) - 2  # the two box anchors
+
+
 def test_normal_combine_probe_separates_the_mesh_map_height_and_channel() -> None:
     """Decision 293: the two sets share four texel-aligned 48 x 48 islands, one per quadrant,
     at least 40 texels from the tile border; only uzp_nc_mesh binds the 16-bit mesh map; the

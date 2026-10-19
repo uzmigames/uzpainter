@@ -305,6 +305,12 @@ REQUEST_FIXTURES["window-side"] = (
     f"{FIXTURE_DIR}/meshes/window-side.obj",
     rf.window_side,
 )
+# Decision 298's corner-reach mesh: copies of one island corner whose seam edges meet at V.
+REQUEST_FIXTURES["corner-reach"] = (
+    "mesh",
+    f"{FIXTURE_DIR}/meshes/corner-reach.obj",
+    rf.corner_reach,
+)
 # Decision 293's Normal mesh-map combination probe: the twin-set mesh and its four bitmaps.
 REQUEST_FIXTURES["normal-combine"] = (
     "mesh",
@@ -349,6 +355,7 @@ MESH_SETS = {
     **{concave_fold_mesh(p): ["uzp_concave_fold"] for p in rf.FOLD_PROBES},
     **{hinge_mesh(p): ["uzp_hinge"] for p in rf.HINGE_PROBES},
     "window-side": ["uzp_window_side"],
+    "corner-reach": ["uzp_corner"],
     "normal-combine": list(rf.COMBINE_SETS),
 }
 
@@ -1544,6 +1551,35 @@ def padding_window_side_probe() -> Golden:
     )
 
 
+# --- Decision 298: the corner-reach probe ------------------------------------------------------
+
+
+def padding_corner_reach_probe() -> Golden:
+    """Decision 298's corner-reach probe for decision 294 (a): how far a seam edge of another
+    planar face reaches a ring texel beyond its end at a UV corner of the island."""
+    resolution = rf.SWEEP_RESOLUTION
+    return Golden(
+        "export-padding-corner-reach",
+        EXPORT_DOMAIN,
+        "Decision 298's corner-reach probe for decision 294 (a) (phase1.25_pilot-wand item 2.7: "
+        "whether a seam edge of another planar face, reached past its end at a UV corner of the "
+        "island, reaches the ring texel within 1.0 texel when the seam edge meeting it there is "
+        "gated, 1.15 otherwise, and decision 285's 1.78 when the two are collinear), "
+        f"exploratory: {len(rf.corner_copies())} copies of one island corner (two triangles at "
+        "1 texel per cm hinged 6 degrees, so that its two seam edges lie on different planar "
+        "faces; their far islands are their own UV islands), the corner bent 90, 30, 10, 2, 1, "
+        "0.25, 0.05 and 0 degrees, the target ring texel beside the first edge at 0.90 to 1.30 "
+        "texel from the corner, the first edge's far island folded 20 degrees concave (gated), "
+        "20 degrees convex (open, past the gate's dot product), 6 degrees convex (open) or "
+        "absent (no seam), with and without covered texels, and the hinge 0 (one planar face), "
+        "2 and 20 degrees; each copy its own 3D piece, mesh box exactly [-256, 256] cm in x and "
+        f"z and [-64, 64] in y; document resolution {resolution}. " + KERNEL_TAIL,
+        "corner-reach",
+        ["corner-reach", *kernel_bitmaps(resolution)],
+        kernel_probe("corner-reach", resolution),
+    )
+
+
 # --- Decision 293: the Normal mesh-map combination probe --------------------------------------
 
 COMBINE_EXR_MAPS = [
@@ -1781,7 +1817,8 @@ def later_goldens() -> list[Golden]:
     216's ring-sign and seam probes, then decision 225's sRGB minification on random content,
     then decision 266's kernel-code padding probes, then decision 272's tie-order sweeps, then
     decision 278's concave seam-gate probes and decision 289's far-side hinge and
-    window-side probes, then decision 293's Normal mesh-map combination probe."""
+    window-side probes, then decision 293's Normal mesh-map combination probe, then decision
+    298's corner-reach probe."""
     return [
         srgb_bitmap_variants(),
         *(template_base(t) for t in INFERRED_BASE_TEMPLATES),
@@ -1801,6 +1838,7 @@ def later_goldens() -> list[Golden]:
         *padding_hinge_probes(),
         padding_window_side_probe(),
         padding_normal_combine_probe(),
+        padding_corner_reach_probe(),
     ]
 
 

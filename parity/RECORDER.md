@@ -441,6 +441,8 @@ Decision 295 adds eight Legacy P22-B API probes (phase1.24 item 3.4: the pending
 
 Decision 296 adds six Legacy P22-B API probes (layerstack, levels and colormanagement), recorded with `python -m tools.parity.recorder.probes record "$req/tier0/api-probes/<golden>.json"` each: `phase1-blending-modes-layer`, `phase1-blending-modes-mask`, `phase1-layer-navigation`, `phase1-layer-node-kinds`, `phase1-levels-params` and `phase1-color-srgb-value`. `phase1-layer-node-kinds` finds the starter-asset Blur filter and Metal Edge Wear generator by the documented search; a query that finds nothing is recorded as the step's `ValueError`, not a refused golden. Not yet recorded.
 
+Decision 298 adds one Legacy probe, `export-padding-corner-reach` (decision 294 (a), its open item (c)), recorded as in 11.1 step 3 with decision 266's kernel-code sequence at 512 px and the same void rules: `python -m tools.parity.recorder record "$req/tier0/semantics/export-padding-corner-reach.json"`. Its mesh holds 432 copies of one island corner: two triangles hinged 6 degrees, so that the island's two seam edges meet at a UV corner bent 0 to 90 degrees on different planar faces; the target ring texel lies beside the first edge at 0.90 to 1.30 texel from the corner, and the first edge's far island is folded 20 degrees concave (gated), 20 or 6 degrees convex (open), or absent. The covered texels must be exactly 10,767. Not yet recorded.
+
 ### 11.3 After the sessions
 
 - For each admitted Tier 0 golden, add its name to `recording_requests.ADMITTED` (the generator then plans its manifest under `manifests/`) and delete its request file. `python -m tools.parity.tier0_semantics check` must pass.

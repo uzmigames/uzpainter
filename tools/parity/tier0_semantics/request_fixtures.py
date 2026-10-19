@@ -1795,7 +1795,7 @@ SIDE_OFFSETS = [
 SIDE_MARGIN = 1.0 / 64.0  # texel: every centre this far from every edge, beyond the 1/256 snap
 
 
-def side_margin(copy: SideCopy) -> float:
+def side_margin(copy: SideCopy | CornerCopy) -> float:
     """The smallest texel distance from a texel centre to an edge of the copy's triangles."""
     low = math.inf
     for _, uvs in copy.tris:
@@ -1851,6 +1851,196 @@ def window_side() -> bytes:
         "oblique island is turned by a Pythagorean angle, so that two ring texels' far points lie "
         "exactly on a window boundary in exact arithmetic and a few 1e-5 texel off it in float32.",
         [("uzp_window_side", faces)],
+        "".join(data),
+    )
+
+
+# --- Decision 298: corner-reach probe ----------------------------------------------------------
+
+# Copies of one island corner, for decision 294's corner reach: island A (1 texel per cm) is two
+# triangles F1 = (V, W1, C) and F2 = (V, C, W2) meeting along the hinge V C. Its seam edges
+# e1 = V W1 (F1's) and e2 = V W2 (F2's) meet at the UV corner V, where A's boundary bends by
+# `bend` degrees (0: e2 continues e1 straight). F2 is folded about V C by `facet` degrees
+# (positive concave), so that e2 lies on another planar face than F1. B1 lies across e1, folded
+# about it by its gate's angle; B2 lies across e2 in F2's plane. Each is its own UV island, a
+# translate of its unfolded place. The target ring texel T lies `across` texels beside e1 and
+# `reach` texels from V, so that e2's nearest point to T is its end V and T's tau is F1. The
+# local frame: x and y in texels, y up, V at the origin, e1 up the y axis and A on the side
+# x < 0; 3D (x, 0, -y) cm before the folds.
+CORNER_ARM = 4.0  # |V W1| = |V W2| = |V C|
+CORNER_DEPTH = 2.0  # B2's depth across e2, and a full B1's across e1
+CORNER_EMPTY = 0.375  # an empty B1's depth: a strip between two texel columns, no centre covered
+CORNER_GAP = 4  # whole texels between a copy's UV islands
+CORNER_FACET = 6.0  # F2 folded concave about V C, below decision 278's gate
+# B1 per gate variant, as (fold about e1 in degrees, depth). g and ge: concave past decision 278's
+# gate, so e1 is gated for T (T lies beyond e1, behind B1's plane); ve: convex past the gate's
+# dot product but open for T (T lies in front of B1's plane); oe: convex below the gate, open;
+# n: no B1, e1 is no seam. The e variants' B1 covers no texel, so that e1 never feeds T a tap.
+CORNER_GATES: dict[str, tuple[float, float] | None] = {
+    "g": (20.0, CORNER_DEPTH),
+    "ge": (20.0, CORNER_EMPTY),
+    "ve": (-20.0, CORNER_EMPTY),
+    "oe": (-6.0, CORNER_EMPTY),
+    "n": None,
+}
+# The islands' sub-texel UV translations (columns, rows), the first that keeps SIDE_MARGIN.
+CORNER_SHIFTS = ((0.25, 0.25), (0.25, 0.375), (0.375, 0.25), (0.125, 0.25), (0.25, 0.125))
+# T's distance from e1, searched in this order: thirty-seconds of a texel outward from 1/2.
+CORNER_ACROSS = sorted((k / 32 for k in range(10, 23)), key=lambda a: (abs(a - 0.5), a))
+CORNER_TARGET = (5, 4)  # T's texel in the copy's slot
+# T's distances from V: across decision 294's D_g bracket [0.974615, 1.020004) and D_o bracket
+# [1.075926, 1.208074), 0.90 to 1.30 (no reach is a cap); a coarse subset for the side families.
+CORNER_REACHES = (
+    0.90, 0.95, 0.975, 0.985, 0.995, 1.005, 1.015, 1.03, 1.06,
+    1.08, 1.10, 1.12, 1.14, 1.16, 1.18, 1.20, 1.25, 1.30,
+)  # fmt: skip
+CORNER_COARSE = (0.95, 0.99, 1.03, 1.10, 1.18, 1.25)
+
+
+class CornerCopy:
+    """One corner copy: the boundary's `bend` at V (degrees), B1's `gate` (CORNER_GATES), F2's
+    `facet` fold about V C, T's `reach` (texels from V) and `across` (from e1), the B quads'
+    diagonal `split` (as `_quad_tris`) and the B islands' sub-texel `shift`. `tris` are F1's,
+    F2's, B1's then B2's triangles in local cm with layout UVs from the slot's top-left texel;
+    `faces` group them by planar piece, `hinges` are (near piece, far piece, designed signed
+    angle); `target` is T's texel in the slot and `size` the UV slot."""
+
+    def __init__(
+        self,
+        name: str,
+        bend: float,
+        reach: float,
+        gate: str = "g",
+        facet: float = CORNER_FACET,
+        across: float = 0.5,
+        split: int = 1,
+        shift: tuple[float, float] = CORNER_SHIFTS[0],
+    ) -> None:
+        self.name, self.bend, self.reach, self.gate, self.facet = name, bend, reach, gate, facet
+        self.across, self.split, self.shift = across, split, shift
+        t = math.radians(bend)
+        sin, cos = math.sin(t), math.cos(t)
+        if bend % 90 == 0:
+            sin, cos = float(round(sin)), float(round(cos))
+        arm = CORNER_ARM
+        v, w1 = (0.0, 0.0), (0.0, arm)
+        w2 = (-arm * sin + 0.0, -arm * cos + 0.0)
+        c = (-arm * math.cos(t / 2), arm * math.sin(t / 2))
+        out2 = (CORNER_DEPTH * cos, -CORNER_DEPTH * sin + 0.0)
+        b2 = [v, w2, (w2[0] + out2[0], w2[1] + out2[1]), out2]
+
+        def m3(p: tuple[float, float]) -> Vec3:
+            return (p[0] + 0.0, 0.0, -p[1] + 0.0)
+
+        f2_3d, b2_3d = _hinge_turn(
+            [[m3(v), m3(c), m3(w2)], [m3(p) for p in b2]], m3(v), m3(c), facet, m3(w2)
+        )
+        b = math.sqrt(reach * reach - across * across)
+        vc, vr = CORNER_TARGET[0] + 0.5 - across, CORNER_TARGET[1] + 0.5 + b
+
+        def layout(p: tuple[float, float], by: tuple[float, float]) -> tuple[float, float]:
+            return (vc + p[0] + by[0], vr - p[1] + by[1])
+
+        zero = (0.0, 0.0)
+        self.tris: list[Tri] = [
+            ([m3(v), m3(w1), m3(c)], [layout(p, zero) for p in (v, w1, c)]),
+            (f2_3d, [layout(p, zero) for p in (v, c, w2)]),
+        ]
+        self.faces = [[0], [1]]
+        self.hinges = [(0, 1, facet)]
+        right = vc
+        b1_shape = CORNER_GATES[gate]
+        if b1_shape is not None:
+            fold, depth = b1_shape
+            b1 = [v, (depth, 0.0), (depth, arm), w1]
+            [b1_3d] = _hinge_turn([[m3(p) for p in b1]], m3(v), (0.0, 0.0, -1.0), fold, m3(b1[1]))
+            if depth == CORNER_EMPTY:  # between two texel centre columns, 1/16 texel from one
+                s1 = (math.floor(vc) + CORNER_GAP + 0.5625 - vc, shift[1])
+            else:
+                s1 = (CORNER_GAP + shift[0], shift[1])
+            self.tris += _quad_tris([_vec3(p) for p in b1_3d], [layout(p, s1) for p in b1], split)
+            self.faces.append([2, 3])
+            self.hinges.append((0, 2, fold))
+            right = vc + s1[0] + depth
+        n2 = math.ceil(right + CORNER_GAP - shift[0] - vc - min(p[0] for p in b2))
+        s2 = (n2 + shift[0], shift[1])
+        self.tris += _quad_tris([_vec3(p) for p in b2_3d], [layout(p, s2) for p in b2], split)
+        self.faces.append([len(self.tris) - 2, len(self.tris) - 1])
+        self.hinges.append((1, len(self.faces) - 1, 0.0))
+        uvs = [uv for _, us in self.tris for uv in us]
+        self.target = CORNER_TARGET
+        self.size = (math.ceil(max(u for u, _ in uvs)), math.ceil(max(r for _, r in uvs)))
+
+    def bounds(self) -> tuple[Vec3, Vec3]:
+        points = [p for ps, _ in self.tris for p in ps]
+        low = tuple(min(p[i] for p in points) for i in range(3))
+        high = tuple(max(p[i] for p in points) for i in range(3))
+        return _vec3(low), _vec3(high)
+
+
+def corner_copy(bend: float, reach: float, gate: str, facet: float = CORNER_FACET) -> CornerCopy:
+    """The copy at the first `across`, diagonal and shift (CORNER_ACROSS, then split 1 and 0,
+    then CORNER_SHIFTS) that keeps every texel centre SIDE_MARGIN from every edge."""
+    name = f"{gate}-b{bend:g}-f{facet:g}-r{reach:.3f}"
+    for across in CORNER_ACROSS:
+        for split in (1, 0):
+            for shift in CORNER_SHIFTS:
+                copy = CornerCopy(name, bend, reach, gate, facet, across, split, shift)
+                if side_margin(copy) >= SIDE_MARGIN:
+                    return copy
+    raise AssertionError(name)
+
+
+def corner_copies() -> list[CornerCopy]:
+    """Over CORNER_REACHES: the gated (g) and no-seam (n) corners bent 90, 30, 10, 2 and 0
+    degrees; the empty-B1 gated (ge) and open (oe) corners bent 90, 10 and 0 degrees; the convex
+    past-the-dot open corner (ve) bent 90 and 10 degrees. Over CORNER_COARSE: g and n bent 0.05,
+    0.25 and 1 degree (around the collinear exemption's |sin| <= 1e-3), and g and n bent 90 and
+    10 degrees with F2 folded 0 (one planar face), 2 and 20 degrees."""
+    copies = [
+        corner_copy(bend, r, gate)
+        for gate in ("g", "n")
+        for bend in (90.0, 30.0, 10.0, 2.0, 0.0)
+        for r in CORNER_REACHES
+    ]
+    copies += [
+        corner_copy(bend, r, gate)
+        for gate in ("ge", "oe")
+        for bend in (90.0, 10.0, 0.0)
+        for r in CORNER_REACHES
+    ]
+    copies += [corner_copy(bend, r, "ve") for bend in (90.0, 10.0) for r in CORNER_REACHES]
+    copies += [
+        corner_copy(bend, r, gate)
+        for gate in ("g", "n")
+        for bend in (0.05, 0.25, 1.0)
+        for r in CORNER_COARSE
+    ]
+    copies += [
+        corner_copy(bend, r, gate, facet)
+        for facet in (0.0, 2.0, 20.0)
+        for gate in ("g", "n")
+        for bend in (90.0, 10.0)
+        for r in CORNER_COARSE
+    ]
+    return copies
+
+
+def corner_layout() -> tuple[list[tuple[Any, tuple[float, float], Vec3]], tuple[float, float]]:
+    return _pack(corner_copies())
+
+
+def corner_reach() -> bytes:
+    """The decision 298 mesh: positions as exact float32 decimals, the box fixed at
+    [-256, 256] cm in x and z and [-64, 64] in y."""
+    placed, anchors = corner_layout()
+    data, faces = _packed_obj_lines(placed, anchors)
+    return obj(
+        "uzp_corner",
+        f"Decision 298 corner-reach probe: {len(placed)} copies of one island corner whose seam "
+        "edges meet at a bent UV corner, one of them on another planar face, the ring texel "
+        "beyond the corner at 0.90 to 1.30 texel from it, the other edge gated, open or no seam.",
+        [("uzp_corner", faces)],
         "".join(data),
     )
 
