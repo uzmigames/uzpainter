@@ -265,6 +265,23 @@ for _family in rf.SWEEP_FAMILIES:
             f"{FIXTURE_DIR}/meshes/{tie_sweep_mesh(_family, _box)}.obj",
             tie_sweep_generator(_family, _box),
         )
+
+
+# Decision 278's concave seam-gate meshes: copies of one ratio-1 seam pair folded by swept angles.
+def concave_fold_generator(probe: str) -> Generate:
+    return lambda: rf.concave_fold(probe)
+
+
+def concave_fold_mesh(probe: str) -> str:
+    return f"concave-fold-{probe}"
+
+
+for _probe in rf.FOLD_PROBES:
+    REQUEST_FIXTURES[concave_fold_mesh(_probe)] = (
+        "mesh",
+        f"{FIXTURE_DIR}/meshes/{concave_fold_mesh(_probe)}.obj",
+        concave_fold_generator(_probe),
+    )
 for _group, _probes in probe_groups().items():
     for _probe in _probes:
         REQUEST_FIXTURES[f"probe-{_group}-{_probe}"] = (
@@ -289,6 +306,7 @@ MESH_SETS = {
     **{kernel_atlas_mesh(n): ["uzp_kernel_atlas"] for n in rf.ATLAS_RESOLUTIONS},
     kernel_atlas_mesh(1024, moved=True): ["uzp_kernel_atlas"],
     **{tie_sweep_mesh(f, b): ["uzp_tie_sweep"] for f in rf.SWEEP_FAMILIES for b in rf.SWEEP_BOXES},
+    **{concave_fold_mesh(p): ["uzp_concave_fold"] for p in rf.FOLD_PROBES},
 }
 
 
@@ -1372,6 +1390,47 @@ def padding_tie_sweep_probes() -> list[Golden]:
     ]
 
 
+# --- Decision 278: concave seam-gate probes ---------------------------------------------------
+
+CONCAVE_FOLD_PROBES = {
+    "fold": (
+        "194 copies of one seam pair (A and B 4 x 4 texels at 1 cm per texel, B its own UV "
+        "island turned 90 degrees): B folded concave about the seam from 6 to 16 degrees in "
+        "0.25 degree steps with both quad diagonals, flat and convex controls (6 to 45 "
+        "degrees), copies tilted 90 degrees about x and obliquely, and copies scaled by 0.5, 2 "
+        "and 4"
+    ),
+    "shape": (
+        "366 copies of the seam pair with six B shapes (depth 1, 2 or 4 texels, far edge "
+        "sheared along the seam) whose seam-triangle apex sits 0, 1 or 2 heights along the "
+        "seam from its midpoint, each folded concave from 6 to 36 degrees in 0.5 degree steps"
+    ),
+    "fine": (
+        "306 copies of the base seam pair folded concave and convex by 9.75 to 10.25 degrees in "
+        "0.01 degree steps, 9.951 to 10.05 degrees in 0.001 degree steps, and 20 to 178 degrees"
+    ),
+}
+
+
+def padding_concave_fold_probes() -> list[Golden]:
+    """Decision 278's concave seam-gate probes: where a concave fold stops the far taps."""
+    resolution = rf.SWEEP_RESOLUTION
+    return [
+        Golden(
+            f"export-padding-concave-{probe}",
+            EXPORT_DOMAIN,
+            "Decision 278's concave seam-gate probe (phase1.25_pilot-wand item 2.7: from which "
+            "concave fold of a seam edge the infinite ring takes no far taps), exploratory: "
+            f"{what}; each copy its own 3D piece, mesh box exactly [-256, 256] cm in x and z and "
+            f"[-64, 64] in y; document resolution {resolution}. " + KERNEL_TAIL,
+            concave_fold_mesh(probe),
+            [concave_fold_mesh(probe), *kernel_bitmaps(resolution)],
+            kernel_probe(concave_fold_mesh(probe), resolution),
+        )
+        for probe, what in CONCAVE_FOLD_PROBES.items()
+    ]
+
+
 # --- Decision 174 item 6: bilinear minification of an sRGB bitmap ------------------------------
 
 SRGB_MINIFY_SOURCES = ("srgb8-ramp", "field-a")
@@ -1561,12 +1620,13 @@ def later_goldens() -> list[Golden]:
         srgb_bitmap_minification_random(),
         *padding_kernel_probes(),
         *padding_tie_sweep_probes(),
+        *padding_concave_fold_probes(),
     ]
 
 
 # Goldens that the Painter sessions of 2026-10-12, 2026-10-13 and 2026-10-19 recorded and the
-# store admitted (decisions 101, 160, 167, 172, 180, 198, 216, 266 and 272): their manifests live
-# under the envelope's `manifests/`, and their requests are deleted.
+# store admitted (decisions 101, 160, 167, 172, 180, 198, 216, 266, 272 and 278): their manifests
+# live under the envelope's `manifests/`, and their requests are deleted.
 ADMITTED = frozenset(
     {
         "export-bit-depth",
@@ -1623,6 +1683,9 @@ ADMITTED = frozenset(
             for family in rf.SWEEP_FAMILIES
             for box in rf.SWEEP_BOXES
         ),
+        # Decision 278's concave seam-gate probes (Painter sessions of 2026-10-19, 12:41 and
+        # 12:51, Legacy).
+        *(f"export-padding-concave-{probe}" for probe in CONCAVE_FOLD_PROBES),
     }
 )
 

@@ -1,0 +1,13 @@
+{
+  "id": 278,
+  "slug": "278-seam-fold-gate",
+  "title": "Three fold probes pin the seam gate: a ring texel takes no far taps across a seam edge when its point lies behind the far triangle's plane and the two faces' normals meet at a float32 dot product of at most about 0.985 (9.93° to 9.94°)",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}

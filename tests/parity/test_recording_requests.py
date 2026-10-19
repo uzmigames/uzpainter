@@ -404,3 +404,52 @@ def test_tie_sweep_copies_are_apart_and_the_boxes_differ_only_as_designed(family
     for p, q in changed:
         shift = 64.0 if p[0] > 0 else -64.0
         assert q == (p[0] + shift, p[1], p[2] + shift)
+
+
+@pytest.mark.parametrize("probe", rf.FOLD_PROBES)
+def test_fold_copies_share_their_seam_and_fold_by_their_angle(probe: str) -> None:
+    """Decision 278: A covers 16 texel centres and B 4 per texel of depth, none on an edge; the
+    copies lie at least 7 texels apart in UV and apart in 3D; each copy's A and B share the two
+    seam vertices in the mesh, and the written float32 positions fold B by the copy's angle,
+    on the side of A's normal when it is positive (concave); the box is [-256, 256] x
+    [-64, 64] x [-256, 256]."""
+    owner: dict[tuple[int, int], int] = {}
+    placed, _ = rf.fold_layout(probe)
+    for index, (copy, (oc, orow), _) in enumerate(placed):
+        cells = [covered_centres([(c + oc, r + orow) for c, r in uvs]) for _, uvs in copy.tris]
+        union = set().union(*cells)
+        assert sum(map(len, cells)) == len(union) == 16 + 4 * copy.depth, copy.name
+        owner |= dict.fromkeys(union, index)
+    for (x, y), index in owner.items():
+        near = {owner.get((x + dx, y + dy), index) for dx in range(-6, 7) for dy in range(-6, 7)}
+        assert near == {index}, placed[index][0].name
+    bounds = [
+        tuple(tuple(b + o for b, o in zip(corner, offset, strict=True)) for corner in copy.bounds())
+        for copy, _, offset in placed
+    ]
+    for i, (lo, hi) in enumerate(bounds):
+        for lo2, hi2 in bounds[i + 1 :]:
+            assert any(hi[a] < lo2[a] or hi2[a] < lo[a] for a in range(3)), placed[i][0].name
+    vertices, _, faces = obj_uvs(f"concave-fold-{probe}")
+    low = tuple(min(c) for c in zip(*vertices, strict=True))
+    high = tuple(max(c) for c in zip(*vertices, strict=True))
+    assert (low, high) == ((-256.0, -64.0, -256.0), (256.0, 64.0, 256.0))
+    triangles = [
+        [np.array(vertices[int(ref.split("/")[0]) - 1]) for ref in line.split()[1:]]
+        for line in faces
+    ]
+    for index, (copy, _, _) in enumerate(placed):
+        a, a2, *bs = triangles[4 * index : 4 * index + 4]
+        [(b, shared)] = [
+            (b, s)
+            for b in bs
+            if len(s := [i for i, p in enumerate(b) if any((p == q).all() for q in a + a2)]) == 2
+        ]
+        normal = np.cross(a[1] - a[0], a[2] - a[0])
+        normal /= np.linalg.norm(normal)
+        far = b[3 - sum(shared)]
+        other = np.cross(b[1] - b[0], b[2] - b[0])
+        cos = normal @ other / np.linalg.norm(other)
+        assert math.degrees(math.acos(min(cos, 1.0))) == pytest.approx(abs(copy.angle), abs=1e-3)
+        lift = normal @ (far - b[shared[0]])
+        assert (lift > 1e-6) == (copy.angle > 0) and (lift < -1e-6) == (copy.angle < 0), copy.name

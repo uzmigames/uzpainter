@@ -1120,12 +1120,29 @@ def _f32(value: float) -> str:
 def tie_sweep(family: str, box: str) -> bytes:
     """The decision 272 sweep mesh of `family` under mesh box `box`: positions written as exact
     float32 decimals, anchors fixing the box at +-half in x and z and +-64 cm in y."""
-    half = SWEEP_HALF[box]
-    shift = SWEEP_SHIFT[box]
-    placed, (anchor_column, anchor_row) = sweep_layout(family)
+    placed, anchors = sweep_layout(family)
     tris: list[Tri] = []
     for copy, (oc, orow) in placed:
         tris += [(ps, [(c + oc, r + orow) for c, r in uvs]) for ps, uvs in copy.tris]
+    data, faces = _sweep_obj_lines(tris, anchors, SWEEP_HALF[box], SWEEP_SHIFT[box])
+    what = {"strips": "straight-edge strips", "seams": "ratio-2 seam pairs and fan V-gaps"}[family]
+    return obj(
+        "uzp_tie_sweep",
+        f"Decision 272 tie-order sweep, {what}, mesh box {box}: {len(placed)} copies of one UV "
+        "configuration at swept 3D positions, scales and vertex orders.",
+        [("uzp_tie_sweep", faces)],
+        "".join(data),
+    )
+
+
+def _sweep_obj_lines(
+    tris: list[Tri], anchors: tuple[float, float], half: float, shift: Vec3
+) -> tuple[list[str], list[str]]:
+    """The OBJ data and face lines of copies' triangles (layout UVs in texels of a 512 px tile)
+    and of two box anchors in the slot `anchors`: positions moved by `shift` and written as
+    exact float32 decimals, the box fixed at +-`half` in x and z and +-64 cm in y."""
+    anchor_column, anchor_row = anchors
+    tris = list(tris)
     for k, sign in enumerate((-1.0, 1.0)):
         corner = sign * half
         step = -0.25 * sign
@@ -1162,12 +1179,210 @@ def tie_sweep(family: str, box: str) -> bytes:
             uv_count += 1
             refs.append(f"{positions[q]}/{uv_count}/{normals[text]}")
         faces.append(f"f {' '.join(refs)}\n")
-    what = {"strips": "straight-edge strips", "seams": "ratio-2 seam pairs and fan V-gaps"}[family]
+    return data, faces
+
+
+# --- Decision 278: concave seam-gate probes ---------------------------------------------------
+
+# Copies of one flat seam pair (decision 266's `seam-r1-turn90` at side 4): A a 4 x 4 cm square
+# at 1 texel per cm, B beyond A's seam edge, folded about it by a signed dihedral angle (positive
+# concave: B rises on the side of A's normal; negative convex), its own UV island at ratio 1
+# turned 90 degrees. B is a parallelogram `depth` texels across the seam whose far edge is
+# sheared by `shear` * depth along the seam, so that the apex of B's seam triangle sits off the
+# seam's midpoint by a chosen amount and its elevation above A's plane differs from the fold
+# angle. A copy may be scaled and tilted as a whole. Copies are packed as decision 272's (UV
+# shelves 7 texels apart, 3D boxes disjoint) in one texture set `uzp_concave_fold`, the mesh box
+# exactly [-256, 256] cm in x and z and [-64, 64] in y.
+FOLD_PROBES = ("fold", "shape", "fine")
+FOLD_SIDE = 4
+FOLD_B_COLUMN = FOLD_SIDE + 8  # B's UV box: 8 texels right of A's left edge (covered 8 apart)
+FOLD_GAP_3D = 2  # cm between the 3D boxes of neighbouring copies
+FOLD_TILTS: dict[str, tuple[Vec3, float]] = {
+    "flat": ((1.0, 0.0, 0.0), 0.0),
+    "x90": ((1.0, 0.0, 0.0), 90.0),
+    "oblique": ((1.0, 2.0, 3.0), 37.0),
+}
+
+
+def _turned(p: Vec3, axis: Vec3, degrees: float) -> Vec3:
+    """`p` turned by `degrees` about `axis` through the origin (Rodrigues); multiples of 90
+    degrees about a coordinate axis stay exact."""
+    if degrees == 0:
+        return p
+    norm = math.sqrt(sum(a * a for a in axis))
+    k = [a / norm for a in axis]
+    cos, sin = math.cos(math.radians(degrees)), math.sin(math.radians(degrees))
+    if degrees % 90 == 0:
+        cos, sin = round(cos), round(sin)
+    dot = sum(a * b for a, b in zip(k, p, strict=True))
+    cross = (k[1] * p[2] - k[2] * p[1], k[2] * p[0] - k[0] * p[2], k[0] * p[1] - k[1] * p[0])
+    return _vec3([p[i] * cos + cross[i] * sin + k[i] * dot * (1 - cos) + 0.0 for i in range(3)])
+
+
+class FoldCopy:
+    """One copy of the fold pair: the signed fold `angle` in degrees, B's `depth` and `shear`,
+    the diagonals of A's and B's quads (`splits`, as `_quad_tris`), a uniform `scale` and a
+    `tilt` of FOLD_TILTS. Its triangles are in local cm (A in y = 0 over x in [-side, 0], the
+    seam on the z axis from (0, 0, 0) to (0, 0, -side)), with layout UVs from the slot's top-left
+    texel; `size` is the UV slot."""
+
+    def __init__(
+        self,
+        name: str,
+        angle: float,
+        depth: float = FOLD_SIDE,
+        shear: float = 0.0,
+        splits: tuple[int, int] = (1, 1),
+        scale: float = 1.0,
+        tilt: str = "flat",
+    ) -> None:
+        self.name, self.angle, self.depth, self.shear = name, angle, depth, shear
+        self.splits, self.scale, self.tilt = splits, scale, tilt
+        side = float(FOLD_SIDE)
+        cos, sin = math.cos(math.radians(angle)), math.sin(math.radians(angle))
+        if angle % 90 == 0:
+            cos, sin = round(cos), round(sin)
+        axis, degrees = FOLD_TILTS[tilt]
+
+        def place(x: float, y: float, z: float) -> Vec3:
+            return _turned((x * scale + 0.0, y * scale + 0.0, z * scale + 0.0), axis, degrees)
+
+        a_pq = [(0.0, 0.0), (side, 0.0), (side, side), (0.0, side)]
+        a3 = [place(p - side, 0.0, -q) for p, q in a_pq]
+        a_uv = [(0.25 + p, 0.125 + side - q) for p, q in a_pq]
+        along = shear * depth
+        b_pq = [(0.0, 0.0), (depth, along), (depth, side + along), (0.0, side)]
+        b3 = [place(p * cos, p * sin, -q) for p, q in b_pq]
+        b_uv = [(FOLD_B_COLUMN + 0.25 + side + along - q, 0.125 + depth - p) for p, q in b_pq]
+        self.tris: list[Tri] = _quad_tris(a3, a_uv, splits[0]) + _quad_tris(b3, b_uv, splits[1])
+        self.size = (
+            math.ceil(FOLD_B_COLUMN + 0.25 + side + along),
+            math.ceil(0.125 + max(side, depth)),
+        )
+
+    def bounds(self) -> tuple[Vec3, Vec3]:
+        points = [p for ps, _ in self.tris for p in ps]
+        low = tuple(min(p[i] for p in points) for i in range(3))
+        high = tuple(max(p[i] for p in points) for i in range(3))
+        return _vec3(low), _vec3(high)
+
+
+def _steps(start: float, stop: float, step: float) -> list[float]:
+    return [start + step * j for j in range(round((stop - start) / step) + 1)]
+
+
+# The shape probe's B quads: name -> (depth, shear, B's split). With side 4, the apex of B's seam
+# triangle sits along the seam at shear * depth - 2 (split 0) or 2 + shear * depth (split 1) from
+# the seam's midpoint, so its offset over its height across the seam is 0, 1 or 2.
+FOLD_SHAPES: dict[str, tuple[float, float, int]] = {
+    "d4-k0.5-s0": (4.0, 0.5, 0),  # offset 0: apex over the midpoint
+    "d4-k0.5-s1": (4.0, 0.5, 1),  # 4 / 4 = 1
+    "d4-k1.5-s0": (4.0, 1.5, 0),  # 4 / 4 = 1
+    "d2-k0-s1": (2.0, 0.0, 1),  # 2 / 2 = 1
+    "d4-k1.5-s1": (4.0, 1.5, 1),  # 8 / 4 = 2
+    "d1-k0-s1": (1.0, 0.0, 1),  # 2 / 1 = 2
+}
+
+
+# The fine probe's fold angles (degrees, both signs): 0.01 degree steps from 9.75 to 10.25 and
+# 0.001 degree steps from 9.951 to 10.05 around the 10 degrees that the fold probe brackets, then
+# wide folds up to 178 degrees.
+FOLD_FINE = sorted(
+    {round(a, 3) for a in _steps(9.75, 10.25, 0.01) + _steps(9.951, 10.05, 0.001)}
+    | {20.0, 30.0, 45.0, 60.0, 90.0, 120.0, 150.0, 165.0, 170.0, 172.0, 175.0, 178.0}
+)
+
+
+def fold_copies(probe: str) -> list[FoldCopy]:
+    """The copies of the `fold` probe (the base pair swept concave from 6 to 16 degrees in 0.25
+    degree steps with both diagonals, convex and flat controls, tilted and scaled copies), of
+    the `shape` probe (six B shapes swept concave from 6 to 36 degrees in 0.5 degree steps) or
+    of the `fine` probe (the base pair at FOLD_FINE, concave then convex)."""
+    copies: list[FoldCopy] = []
+    if probe == "fine":
+        return [FoldCopy(f"fine-a{s * a:+.3f}", s * a) for s in (1, -1) for a in FOLD_FINE]
+    if probe == "fold":
+        for splits in ((1, 1), (0, 0)):
+            tag = f"s{splits[0]}{splits[1]}"
+            copies += [
+                FoldCopy(f"base-{tag}-a{a:+.2f}", a, splits=splits) for a in _steps(6, 16, 0.25)
+            ]
+        copies += [
+            FoldCopy(f"control-a{a:+.2f}", a)
+            for a in (0.0, -6.0, -10.0, -12.5, -15.0, -20.0, -45.0)
+        ]
+        for tilt in ("x90", "oblique"):
+            copies += [FoldCopy(f"tilt-{tilt}-a{a:+.2f}", a, tilt=tilt) for a in _steps(6, 16, 0.5)]
+        for scale in (0.5, 2.0, 4.0):
+            copies += [
+                FoldCopy(f"scale{scale:g}-a{a:+.2f}", a, scale=scale) for a in _steps(6, 16, 0.5)
+            ]
+        return copies
+    for shape, (depth, shear, split) in FOLD_SHAPES.items():
+        copies += [
+            FoldCopy(f"{shape}-a{a:+.2f}", a, depth, shear, (1, split)) for a in _steps(6, 36, 0.5)
+        ]
+    return copies
+
+
+def fold_layout(
+    probe: str,
+) -> tuple[list[tuple[FoldCopy, tuple[float, float], Vec3]], tuple[float, float]]:
+    """Every copy with its UV slot's top-left texel (decision 272's shelves) and its 3D offset
+    (whole centimetres, shelves along x then z, layers in y), and the anchors' UV slot."""
+    limit = SWEEP_RESOLUTION - SWEEP_MARGIN
+    column, row, shelf = SWEEP_MARGIN, SWEEP_MARGIN, 0
+    x, z, depth, layer = -250.0, -250.0, 0.0, -60.0
+    placed = []
+    for copy in fold_copies(probe):
+        width, height = copy.size
+        if column + width > limit:
+            column, row, shelf = SWEEP_MARGIN, row + shelf + SWEEP_GAP, 0
+        low, high = copy.bounds()
+        extent = [math.ceil(h - lo) for lo, h in zip(low, high, strict=True)]
+        if x + extent[0] > 250:
+            x, z, depth = -250.0, z + depth + FOLD_GAP_3D, 0.0
+        if z + extent[2] > 250:
+            x, z, depth, layer = -250.0, -250.0, 0.0, layer + 30.0
+        offset = (x - math.floor(low[0]), layer - math.floor(low[1]), z - math.floor(low[2]))
+        assert layer + extent[1] < SWEEP_Y_HALF, "the fold copies do not fit the mesh box"
+        placed.append((copy, (float(column), float(row)), offset))
+        column += width + SWEEP_GAP
+        shelf = max(shelf, height)
+        x += extent[0] + FOLD_GAP_3D
+        depth = max(depth, extent[2])
+    anchors = (float(SWEEP_MARGIN), float(row + shelf + SWEEP_GAP))
+    assert anchors[1] + 1 <= limit, "the fold copies do not fit their tile"
+    return placed, anchors
+
+
+def concave_fold(probe: str) -> bytes:
+    """The decision 278 mesh of `probe`: positions as exact float32 decimals, the box fixed at
+    [-256, 256] cm in x and z and [-64, 64] in y."""
+    placed, anchors = fold_layout(probe)
+    tris: list[Tri] = []
+    for copy, (oc, orow), offset in placed:
+        tris += [
+            (
+                [_vec3([p[i] + offset[i] for i in range(3)]) for p in ps],
+                [(c + oc, r + orow) for c, r in uvs],
+            )
+            for ps, uvs in copy.tris
+        ]
+    data, faces = _sweep_obj_lines(tris, anchors, 256.0, (0.0, 0.0, 0.0))
+    what = {
+        "fold": "the base pair folded concave 6 to 16 degrees, convex and flat controls, tilted "
+        "and scaled copies",
+        "shape": "six B shapes whose seam-triangle apex sits off the seam's midpoint, folded "
+        "concave 6 to 36 degrees",
+        "fine": "the base pair folded concave and convex by 9.75 to 10.25 degrees in steps down "
+        "to 0.001 degree and by 20 to 178 degrees",
+    }[probe]
     return obj(
-        "uzp_tie_sweep",
-        f"Decision 272 tie-order sweep, {what}, mesh box {box}: {len(placed)} copies of one UV "
-        "configuration at swept 3D positions, scales and vertex orders.",
-        [("uzp_tie_sweep", faces)],
+        "uzp_concave_fold",
+        f"Decision 278 concave seam-gate probe: {len(placed)} copies of one ratio-1 seam pair, "
+        f"{what}.",
+        [("uzp_concave_fold", faces)],
         "".join(data),
     )
 
