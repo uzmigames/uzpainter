@@ -26,7 +26,8 @@ It is the `__main__` script of the run; the Assets3D code it executes is given a
 4. **Exports.** Each fixed-name copy the run's exports wrote (Painter's flat layout, the route
    Assets3D's consumers read) is verified against its generation's receipt before the run
    reports success, and each receipt's `manifest_files` are rebased under the Assets3D root
-   (`UZP_ASSETS3D_ROOT`, decision 097).
+   (`UZP_ASSETS3D_ROOT`, decision 097). A receipt that says `non_conformant` (a diagnostic
+   measure export, decision 286) gets no manifest, whatever its paths.
 5. **Report.** The session left open, the script's result and the exports go to the report file
    (also on failure). A project left open untitled cannot outlive the process: the call fails.
 
@@ -62,6 +63,11 @@ class AdapterExportError(RuntimeError):
 
 
 # ── Pure helpers (host-side tests import these) ─────────────────────────────────────────────────
+
+
+# Why a diagnostic measure export (decision 286), whose receipt says `non_conformant`, has no
+# manifest: it is not Painter's output, so nothing of it may reach an Assets3D manifest.
+NON_CONFORMANT = "not conformant: a diagnostic measure export (decision 286) is never delivered"
 
 
 def same_path(first: str, second: str) -> bool:
@@ -290,6 +296,8 @@ def exports_of_run(uzpainter: Any) -> list[dict[str, Any]]:
             publication["mesh_path"],
             root,
         )
+        if "non_conformant" in receipt:  # `--diagnostic-measure-export`: never into a manifest
+            manifest, reason = None, NON_CONFORMANT
         out.append(
             {
                 "generation": publication["generation"],

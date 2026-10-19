@@ -18,6 +18,11 @@
 //   `exportacao` (fontes, saidas, momento, preset, mapas, comparacao, evidencias, pendencias),
 //   which Assets3D retired (decision 097).
 //
+// A generation of the diagnostic measure export (write.h, decision 286) also carries
+// `non_conformant`: {mode: "diagnostic-measure", decision: "286", bypassed: [{path, refusal}]}, the
+// production refusals it bypassed per file, and its manifest export block names it in `open_items`
+// (`kNonConformantNote`). A conformant generation has no `non_conformant`.
+//
 // resource_hashes is the set of resources the planned files read: the bitmaps of every channel DAG
 // they evaluate (fills, content effects, masks, groups), the masks of a diagnostic's material and
 // its enclosing groups, the mesh maps read, and the texturing mesh whose UV coverage drives the
@@ -38,6 +43,11 @@ namespace uzp::exporter {
 
 /// The receipt's JSON schema id.
 inline constexpr std::string_view kReceiptSchema = "uzpainter/export-receipt/1";
+/// `non_conformant.mode` of a diagnostic measure generation (decision 286), and its open item.
+inline constexpr std::string_view kDiagnosticMeasureMode = "diagnostic-measure";
+inline constexpr std::string_view kNonConformantNote =
+    "NON-CONFORMANT: diagnostic measure export (decision 286), written past production's refusals; "
+    "not Painter's output, never deliver it";
 
 /// The application that publishes: ARC-11's app version and build, supplied by the caller (the
 /// application or the test harness), never empty.

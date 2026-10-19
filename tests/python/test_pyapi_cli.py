@@ -149,6 +149,7 @@ def test_run_reports_a_raising_script_as_a_structured_failure(
         ["--gpu-backend", "metal", "x.py"],
         ["--gpu-backend"],
         ["x.py", "--gpu-backend", "dx12", "--gpu-backend", "dx12"],
+        ["x.py", "--diagnostic-measure-export", "--diagnostic-measure-export"],
     ],
 )
 def test_run_usage_errors(painter: Path, args: list[str]) -> None:
@@ -157,6 +158,120 @@ def test_run_usage_errors(painter: Path, args: list[str]) -> None:
     assert status == 2
     assert documents == []
     assert "usage: UzPainter.exe run" in err
+
+
+# The sphere of the Tier 0 corpus, whose UV islands leave texels uncovered.
+SPHERE = REPO_ROOT / "parity" / "fixtures" / "tier0-semantics" / "meshes" / "sphere.obj"
+RECEIPT_SCHEMA = REPO_ROOT / "src" / "export" / "schema" / "receipt.schema.json"
+
+
+def test_run_diagnostic_measure_export_is_explicit(painter: Path, tmp_path: Path) -> None:
+    """Decision 286: the export of a Height and its `Normal_OpenGL` with `infinite` padding on the
+    sphere's UV islands, which production refuses (decisions 245 and 259):
+    - without `--diagnostic-measure-export`, and with it after `--` (it is then the script's
+      argument), the export is refused before anything is written and the report says nothing of
+      a diagnostic; no Python call can turn the mode on;
+    - with it, both files are written, and the job's result, the run's report and the
+      generation's receipt (valid against its schema) say the export is NOT conformant: the
+      receipt lists, per file, the production refusals it bypassed, and its manifest export block
+      names it in `open_items`."""
+    channel = {"destChannel": "L", "srcChannel": "L", "srcMapType": "documentMap"}
+    virtual = {"srcMapType": "virtualMap", "srcMapName": "Normal_OpenGL"}
+    rgb = [{"destChannel": c, "srcChannel": c, **virtual} for c in "RGB"]
+    parameters = {
+        "fileFormat": "png",
+        "bitDepth": "16",
+        "dithering": False,
+        "paddingAlgorithm": "infinite",
+    }
+    maps = [
+        {"fileName": "$textureSet_height", "channels": [{**channel, "srcMapName": "height"}]},
+        {"fileName": "$textureSet_normal", "channels": rgb},
+    ]
+    config = {
+        "exportShaderParams": False,
+        "defaultExportPreset": "p",
+        "exportPresets": [{"name": "p", "maps": [{**m, "parameters": parameters} for m in maps]}],
+        "exportList": [{"rootPath": "uzp_sphere"}],
+    }
+    path = script(
+        tmp_path,
+        f"""
+        import json, os, sys
+        import uzpainter
+        from uzpainter import colormanagement as cm, export, layerstack as ls, project
+        from uzpainter import textureset as ts
+        work = sys.argv[1]
+        project.create({str(SPHERE.as_posix())!r}, project.Settings(default_texture_resolution=256))
+        fill = ls.insert_fill(ls.InsertPosition.from_textureset_stack(ts.get_active_stack()))
+        fill.active_channels = {{ts.ChannelType.Height}}
+        fill.set_source(ts.ChannelType.Height, cm.Color(0.25, 0.25, 0.25, "Raw"))
+        config = dict(json.loads({json.dumps(config)!r}), exportPath=work + "/export")
+        hidden = [n for n in dir(uzpainter.export) if "diagnostic" in n or "measure" in n]
+        try:
+            out = export.export_project_textures(config)
+        except Exception as error:
+            out = None
+            refusal = type(error).__name__ + ": " + str(error)
+        else:
+            refusal = None
+        receipt = None
+        if out is not None:
+            with open(out["receipt"], encoding="utf-8") as stream:
+                receipt = json.load(stream)
+        files = sorted(os.listdir(work + "/export")) if os.path.isdir(work + "/export") else []
+        result = {{"argv": sys.argv[1:], "out": out, "refusal": refusal, "receipt": receipt,
+                   "files": files, "hidden": hidden}}
+        """,
+    )
+    flag = "--diagnostic-measure-export"
+    for name, args in (
+        ("plain", []),
+        ("script-argument", ["--", str(tmp_path / "script-argument"), flag]),
+    ):
+        work = tmp_path / name
+        work.mkdir()
+        status, documents, stderr = cli(painter, "run", path, *(args or [str(work)]))
+        assert status == 0, stderr
+        (report,) = documents
+        assert report["status"] == "ok", report
+        assert "diagnostic" not in report
+        result = report["result"]
+        assert result["out"] is None and result["hidden"] == [], (name, result)
+        assert result["refusal"].startswith("NotYetSupported: "), (name, result)
+        assert "decision 259" in result["refusal"] or "decision 245" in result["refusal"]
+        assert [f for f in result["files"] if f not in ("publication.lock",)] == [], result
+
+    work = tmp_path / "diagnostic"
+    work.mkdir()
+    status, documents, stderr = cli(painter, "run", path, str(work), flag)
+    assert status == 0, stderr
+    (report,) = documents
+    assert report["status"] == "ok", report
+    assert report["diagnostic"] == "diagnostic-measure"
+    result = report["result"]
+    assert result["refusal"] is None and result["argv"] == [str(work)], result
+    out, receipt = result["out"], result["receipt"]
+    assert out["non_conformant"] == "diagnostic-measure"
+    assert [f["relative_path"] for f in out["files"]] == [
+        "uzp_sphere_height.png",
+        "uzp_sphere_normal.png",
+    ]
+    validator = Draft202012Validator(json.loads(RECEIPT_SCHEMA.read_text(encoding="utf-8")))
+    assert [e.message for e in validator.iter_errors(receipt)] == []
+    marked = receipt["non_conformant"]
+    assert marked["mode"] == "diagnostic-measure" and marked["decision"] == "286"
+    bypassed: dict[str, list[str]] = {}
+    for entry in marked["bypassed"]:
+        bypassed.setdefault(entry["path"], []).append(entry["refusal"])
+    assert sorted(bypassed) == ["uzp_sphere_height.png", "uzp_sphere_normal.png"], bypassed
+    assert all("decision 259" in r for r in bypassed["uzp_sphere_height.png"]), bypassed
+    normal = bypassed["uzp_sphere_normal.png"]
+    assert len(normal) == 2 and "decision 245" in normal[0] and "decision 259" in normal[1], normal
+    assert any(
+        item.startswith("NON-CONFORMANT: diagnostic measure export (decision 286)")
+        for item in receipt["manifest_export"]["open_items"]
+    ), receipt["manifest_export"]["open_items"]
 
 
 def test_run_passes_non_ascii_arguments(painter: Path, tmp_path: Path) -> None:

@@ -36,6 +36,17 @@ the one structural failure `candidate_export_refused`, with no map compared (dec
 rebuild keeps the refusal's message. Any other failed call stops the run. Nothing is written
 under the Assets3D root or into the repository except the report, when `UZP_TIER1_REPORT` names
 it.
+
+`measured(painter, work)` is the diagnostic measure mode (decision 286), never the test's: both
+rebuilds export with `UzPainter.exe run --diagnostic-measure-export` (through the adapter client),
+which writes past those two refusals: `InexactPadding::measure` over the islands, and the Normal as
+the evaluator gives it, padded as its stored values. Its maps are NOT conformant (each rebuild's
+receipt must say `non_conformant`, and a conformant rebuild's must not), so its report is no
+verdict and is never written as the Tier 1 report. It returns the report and, per map, the texels
+of the first rebuild that differ from Painter's r1 (in any component), per class: `interior` (the
+covered texels), `edge` (the covered texels with an uncovered 8-neighbour, a part of `interior`),
+`ring` (the uncovered texels with a covered 8-neighbour, x wrapping as the ring does) and `gutter`
+(every other uncovered texel).
 """
 
 from __future__ import annotations
@@ -46,13 +57,19 @@ import re
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+import numpy.typing as npt
+
 from tests.adapters.assets3d.wand import REQUEST, Call, Wand
-from tools.parity.coverage import obj_materials, obj_triangles
+from tools.parity.coverage import coverage, distance_bands, obj_materials, obj_triangles
+from tools.parity.fit.decode import decode
+from tools.parity.fit.oracle import load
 from tools.parity.recorder.environment import video_controllers
 from tools.parity.recorder.script_run import texture_set_of
 from tools.parity.schemas import REGISTER_PATH, load_json
 from tools.parity.store.store import locate
 from tools.parity.tier1.compare import (
+    FIRST,
     CandidateRun,
     RunIdentity,
     Subject,
@@ -89,11 +106,25 @@ def built(painter: Path, work: Path, manifest: Path) -> Wand:
     return wand
 
 
-def rebuild(painter: Path, work: Path, manifest: Path) -> tuple[Wand, CandidateRun]:
+def rebuild(
+    painter: Path, work: Path, manifest: Path, diagnostic: bool = False
+) -> tuple[Wand, CandidateRun]:
     """create, sync and export through the adapter in `work`; the exported files by (texture set,
-    map name), or the export's refusal."""
+    map name), or the export's refusal. `diagnostic`: the measure mode (above)."""
     wand = built(painter, work, manifest)
-    return wand, exported(wand, wand.export())
+    run = exported(wand, wand.export(diagnostic=diagnostic))
+    if not run.refused and non_conformant(wand) != diagnostic:
+        raise RunError(f"the export's receipt is {'not ' * diagnostic}marked non_conformant")
+    return wand, run
+
+
+def non_conformant(wand: Wand) -> bool:
+    """Whether the generation the export published in its `out` is the diagnostic measure
+    export's: its receipt holds `non_conformant` (src/export/receipt.h)."""
+    out = wand.argument("export", "out")
+    current = json.loads((out / "current.json").read_text(encoding="utf-8"))
+    receipt = json.loads((out / current["receipt"]).read_text(encoding="utf-8"))
+    return "non_conformant" in receipt
 
 
 def refusal(call: Call) -> str:
@@ -148,10 +179,17 @@ def compared(
 ) -> tuple[dict[str, Any], tuple[CandidateRun, CandidateRun]]:
     """The comparison report of `run` and the two rebuilds it compared, each with its files or
     its refusal's message."""
+    report, runs, _ = _compared(painter, work, golden_id, request, diagnostic=False)
+    return report, runs
+
+
+def _compared(
+    painter: Path, work: Path, golden_id: str, request: Path, diagnostic: bool
+) -> tuple[dict[str, Any], tuple[CandidateRun, CandidateRun], Subject]:
     resolved = resolve_golden(golden_id)
     manifest = resolved.manifest_path if resolved is not None else request
-    wand, first = rebuild(painter, work / "run-1", manifest)
-    _, second = rebuild(painter, work / "run-2", manifest)
+    wand, first = rebuild(painter, work / "run-1", manifest, diagnostic)
+    _, second = rebuild(painter, work / "run-2", manifest, diagnostic)
     stack = load_json(wand.stack)
     masks = wand.staged[wand.job.sync.args["masks"][0]].parent
     assert wand.job.export.arguments is not None
@@ -177,4 +215,44 @@ def compared(
     )
     entries = load_json(REGISTER_PATH)["entries"]
     report = compare(subject, resolved, locate(), (first, second), identity, entries)
-    return report, (first, second)
+    return report, (first, second), subject
+
+
+def texel_classes(covered: npt.NDArray[np.bool_]) -> dict[str, npt.NDArray[np.bool_]]:
+    """The classes of `measured` (above) over the coverage `covered`."""
+    ring = ~covered & (distance_bands(covered, 1) == 1)
+    edge = covered & (distance_bands(~covered, 1) == 1)
+    return {"interior": covered, "edge": edge, "ring": ring, "gutter": ~covered & ~ring}
+
+
+def measured(
+    painter: Path, work: Path, golden_id: str = GOLDEN_ID, request: Path = REQUEST
+) -> tuple[dict[str, Any], dict[str, dict[str, dict[str, int]]]]:
+    """The diagnostic measure mode (above, decision 286): the report of two non-conformant
+    rebuilds, and per map (`<texture set>/<map>`) and class the texels that differ from r1 and the
+    class's texel count."""
+    report, (first, _), subject = _compared(painter, work, golden_id, request, diagnostic=True)
+    if first.refused:
+        raise RunError(f"the diagnostic measure export was refused: {first.refusal}")
+    resolved = resolve_golden(golden_id)
+    assert resolved is not None
+    golden = load(locate(), resolved.manifest_path)
+    split: dict[str, dict[str, dict[str, int]]] = {}
+    for output_id, output in sorted(golden.recordings[FIRST].outputs.items()):
+        key = (str(output.get("texture_set")), str(output.get("map")))
+        if output.get("kind") != "exported_map" or key not in first.files:
+            continue
+        if key[0] not in subject.uv_triangles:
+            continue
+        oracle = golden.map(FIRST, output_id).values
+        candidate = decode(first.files[key].read_bytes()).values
+        differs = oracle != candidate
+        if differs.ndim == 3:
+            differs = differs.any(axis=2)
+        height, width = differs.shape
+        classes = texel_classes(coverage(subject.uv_triangles[key[0]], width, height))
+        split[f"{key[0]}/{key[1]}"] = {
+            name: {"differing": int((differs & mask).sum()), "texels": int(mask.sum())}
+            for name, mask in classes.items()
+        }
+    return report, split

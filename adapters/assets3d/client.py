@@ -8,7 +8,7 @@ running interpreter (`python client.py execute_python args.json`).
 It prints one JSON reply, a superset of the bridge's `{"success", "data"}` envelope:
 
     {"success", "data", "stdout", "stderr", "error": {type, message, traceback} | null,
-     "code_sha256", "last_committed_revision", "session", "exports", "redirects"}
+     "code_sha256", "last_committed_revision", "session", "exports", "redirects"[, "diagnostic"]}
 
 and exits 0 on success, 1 on a structured failure (as the MCP client on an error result), 2 on a
 usage error and 3 when UzPainter could not run the code (`host_error`). The reply is also written
@@ -21,7 +21,12 @@ Environment:
   `%LOCALAPPDATA%/UzPainter/assets3d-adapter/session.json`);
 - `UZP_ASSETS3D_ROOT`: the Assets3D root the receipts' manifest files are rebased under (set by
   the layer-stack entry from the script's own root);
-- `UZP_ASSETS3D_OPEN_REDIRECTS`: fixture only, read by the runner (`runner.py`).
+- `UZP_ASSETS3D_OPEN_REDIRECTS`: fixture only, read by the runner (`runner.py`);
+- `UZP_ASSETS3D_DIAGNOSTIC_MEASURE_EXPORT`: diagnostic fixture only (the Tier 1 runner's
+  measure mode, decision 286): exactly `1` passes `--diagnostic-measure-export` to
+  `UzPainter.exe run`, whose exports are then NOT conformant (their receipts say
+  `non_conformant`, the reply `diagnostic`). Any other value is a host error; never set it in a
+  production pipeline.
 """
 
 from __future__ import annotations
@@ -41,6 +46,8 @@ RUNNER = Path(__file__).resolve().with_name("runner.py")
 JSON_PREFIX = "UZP_JSON:"
 PAINTER_ENV = "UZPAINTER_EXE"
 SESSION_ENV = "UZP_ASSETS3D_SESSION"
+DIAGNOSTIC_ENV = "UZP_ASSETS3D_DIAGNOSTIC_MEASURE_EXPORT"
+DIAGNOSTIC_FLAG = "--diagnostic-measure-export"
 OK, FAILED, USAGE, HOST_ERROR = 0, 1, 2, 3
 TOOL = "execute_python"
 # SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX
@@ -146,6 +153,15 @@ def windowless_python() -> Path:
     return executable
 
 
+def diagnostic_flags() -> list[str]:
+    """`--diagnostic-measure-export` when `UZP_ASSETS3D_DIAGNOSTIC_MEASURE_EXPORT` is `1` (above),
+    none when it is unset or empty; any other value is a host error."""
+    value = os.environ.get(DIAGNOSTIC_ENV, "")
+    if value not in ("", "1"):
+        raise HostError(f"{DIAGNOSTIC_ENV} must be 1 or unset, not {value!r}")
+    return [DIAGNOSTIC_FLAG] if value == "1" else []
+
+
 def report_line(stdout: str) -> dict[str, Any] | None:
     lines = [line for line in stdout.splitlines() if line.startswith(JSON_PREFIX)]
     return json.loads(lines[-1][len(JSON_PREFIX) :]) if lines else None
@@ -153,7 +169,7 @@ def report_line(stdout: str) -> dict[str, Any] | None:
 
 def execute_python(code: str) -> tuple[dict[str, Any], int]:
     """Run `code` in UzPainter as the bridge runs it; the reply and the exit status."""
-    painter, session = painter_exe(), session_file()
+    painter, session, diagnostic = painter_exe(), session_file(), diagnostic_flags()
     with session_lock(session), tempfile.TemporaryDirectory(prefix="uzp-a3d-") as tmp:
         code_file, report_file = Path(tmp) / "code.py", Path(tmp) / "report.json"
         code_file.write_bytes(code.encode("utf-8"))
@@ -162,6 +178,7 @@ def execute_python(code: str) -> tuple[dict[str, Any], int]:
                 str(painter),
                 "run",
                 str(RUNNER),
+                *diagnostic,
                 "--",
                 str(code_file),
                 str(session),
@@ -194,6 +211,8 @@ def execute_python(code: str) -> tuple[dict[str, Any], int]:
         "exports": extra.get("exports", []),
         "redirects": extra.get("redirects", {}),
     }
+    if "diagnostic" in host:  # `UzPainter.exe run --diagnostic-measure-export`: not conformant
+        reply["diagnostic"] = host["diagnostic"]
     return reply, OK if success else FAILED
 
 

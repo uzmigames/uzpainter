@@ -1,0 +1,13 @@
+{
+  "id": 286,
+  "slug": "286-diagnostic-measure-export",
+  "title": "The diagnostic measure export: `UzPainter.exe run --diagnostic-measure-export` writes past decisions 245 and 259 on UV islands, marked non-conformant, so the Wand's real pipeline is scored end to end against its Tier 1 golden",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.23_pyapi-pipeline-adapter"
+  ],
+  "supersededBy": null
+}

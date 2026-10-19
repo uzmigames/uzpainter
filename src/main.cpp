@@ -61,6 +61,7 @@ constexpr const char* kUsage =
     "       UzPainter.exe export <file.uzp> --config <config.json> --app-version <version> --build <id>\n"
     "       UzPainter.exe export --recover <exportPath> [--fixed-names <dir>]...\n"
     "       UzPainter.exe run <script.py> [args...] [--gpu-backend dx12|vulkan] [-- args...]\n"
+    "                         [--diagnostic-measure-export]   (non-conformant, decision 286)\n"
     "       UzPainter.exe capabilities\n"
     "       UzPainter.exe cache info | clear\n"
     "       UzPainter.exe --preview <file.uzp> [--gpu-backend dx12|vulkan] [--headless]\n"

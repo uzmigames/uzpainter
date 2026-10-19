@@ -16,6 +16,12 @@
 // for an uncaught exception, `error: {type, message, traceback}`. The host then closes a project
 // left open.
 //
+// `--diagnostic-measure-export`, anywhere before `--`, makes every export of this process the
+// diagnostic measure export of decision 286 (export/write.h): NOT conformant, it writes what
+// production refuses on UV-islanded sets, `InexactPadding::measure` included, and marks the
+// generation's receipt `non_conformant`. The report then holds `diagnostic: "diagnostic-measure"`.
+// No other verb, no MCP or worker process and no Python call can turn it on.
+//
 // The arguments are UTF-8 (src/main.cpp): the script's path and `sys.argv` keep every character.
 // Ctrl+C or Ctrl+Break raises KeyboardInterrupt in the script, a structured failure; the host then
 // reports it and closes a project left open, as after any run.
@@ -43,6 +49,9 @@ inline constexpr std::string_view kJsonPrefix = "UZP_JSON:";
 
 /// True for `run`.
 bool IsRunCommand(std::string_view verb);
+
+/// True only in a `run` process started with `--diagnostic-measure-export` (above, decision 286).
+[[nodiscard]] bool DiagnosticMeasureExport();
 
 /// Runs `args` (the verb first) and returns the exit status. The interpreter stays running and
 /// its worker threads may still wait for jobs: the caller ends the process with `std::_Exit`.

@@ -101,6 +101,45 @@
           "type": "null"
         }
       ]
+    },
+    "non_conformant": {
+      "description": "Only in a generation of the diagnostic measure export (src/export/write.h, decision 286): not Painter's output. The production refusals it bypassed, per file.",
+      "type": "object",
+      "required": [
+        "mode",
+        "decision",
+        "bypassed"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "const": "diagnostic-measure"
+        },
+        "decision": {
+          "const": "286"
+        },
+        "bypassed": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "path",
+              "refusal"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "refusal": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
     }
   },
   "$defs": {

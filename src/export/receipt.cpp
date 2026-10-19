@@ -340,6 +340,20 @@ json::Object BuildReceipt(const ReceiptInputs& in) {
         }
         presets.insert(file.preset);
     }
+    // The diagnostic measure export (write.h, decision 286): the generation is not conformant.
+    json::Value nonConformant = nullptr;
+    if (std::any_of(in.encoded.begin(), in.encoded.end(), [](const EncodedFile& e) { return e.diagnostic; })) {
+        json::Array bypassed;
+        for (size_t i = 0; i < plan.files.size(); ++i) {
+            for (const std::string& refusal : in.encoded[i].bypassed) {
+                bypassed.push_back(json::Object{{"path", plan.files[i].relativePath}, {"refusal", refusal}});
+            }
+        }
+        openItems.emplace_back(std::string(kNonConformantNote));
+        nonConformant = json::Object{{"mode", std::string(kDiagnosticMeasureMode)},
+                                     {"decision", "286"},
+                                     {"bypassed", std::move(bypassed)}};
+    }
     json::Array skipped;
     for (const SkippedMap& s : plan.skipped) {
         skipped.push_back(json::Object{{"root_path", s.rootPath},
@@ -385,6 +399,7 @@ json::Object BuildReceipt(const ReceiptInputs& in) {
     receipt["skipped"] = std::move(skipped);
     receipt["manifest_files"] = std::move(manifestFiles);
     receipt["manifest_export"] = std::move(manifestExport);
+    if (!nonConformant.IsNull()) receipt["non_conformant"] = std::move(nonConformant);
     return receipt;
 }
 

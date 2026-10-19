@@ -16,8 +16,20 @@
 // The coverage comes from `inputs.geometry` (the texture set's material, every object); a
 // configuration with an image file and no texturing mesh fails before anything is written. Same
 // build, project and configuration give the same bytes (EXP-05).
+//
+// The diagnostic measure export (`DiagnosticMeasure`, decision 286) is NOT conformant and never
+// the default: only `UzPainter.exe run --diagnostic-measure-export` reaches it (python/run.h). It
+// writes what production refuses on a UV-islanded set so that the whole pipeline can be scored
+// against Painter: step 1 records the refusals of CheckIslandNormal and of CheckPadding instead of
+// throwing them (`EncodedFile::bypassed`; every other check still throws), and step 2 pads with
+// `InexactPadding::measure` over the coverage and its triangles. A combined virtual normal is
+// written as the evaluator gives it (EvaluateFileOn over the whole tile), then padded as its stored
+// values: its island-edge texels are known to differ (decision 245) and so is its gutter wherever a
+// mesh map is bound (decision 276). The receipt marks such a generation `non_conformant`
+// (receipt.h).
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -25,7 +37,18 @@
 #include "export/padding.h"
 #include "export/plan.h"
 
+namespace uzp::mesh {
+struct TexturingMesh;
+}
+
 namespace uzp::exporter {
+
+/// The diagnostic measure export of decision 286 (above): not conformant. `mesh` is the texturing
+/// mesh `inputs.geometry` rasterises, whose triangles the measured padding reads
+/// (padding.h `IslandTriangles`).
+struct DiagnosticMeasure {
+    std::shared_ptr<const mesh::TexturingMesh> mesh;
+};
 
 /// The texel-centre UV coverage of every object of `set`'s material (`inputs.geometry`), or
 /// nullopt without a texturing mesh. `uzpainter.diagnostics` reads it for CheckIslandNormal's
@@ -39,18 +62,24 @@ struct EncodedFile {
     std::optional<evaluator::NormalTag> normalTag;
     /// The layout written: the plan's, or L / RGB when an all-opaque alpha was dropped (encode.h).
     FileLayout layout = FileLayout::L;
+    /// Encoded by the diagnostic measure export (decision 286): not conformant.
+    bool diagnostic = false;
+    /// The production refusals that export bypassed for this file, their messages in check order.
+    std::vector<std::string> bypassed{};
 };
 
 /// Steps 1 and 2 above: every file of `plan` (compiled from revision `revision` of `project`)
 /// checked, then evaluated, padded and encoded in memory, in plan order. Throws
 /// `core::NotYetSupported` (or `core::ValueError`) before anything is evaluated for an unrecorded
 /// processing or padding; returns the evaluator's failure, or an `export:` failure (no texturing
-/// mesh, a padding or encoder that fails). Writes nothing.
+/// mesh, a padding or encoder that fails). Writes nothing. With `diagnostic`, the diagnostic
+/// measure export (above, decision 286); it fails without its mesh.
 [[nodiscard]] render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& project, std::int64_t revision,
                                                                     const ExportPlan& plan, const SourceInputs& inputs,
                                                                     const evaluator::TemplateLibrary& templates,
                                                                     evaluator::ITileStore& store,
-                                                                    evaluator::TileCache& cache);
+                                                                    evaluator::TileCache& cache,
+                                                                    const DiagnosticMeasure* diagnostic = nullptr);
 
 struct WrittenFile {
     std::string rootPath;

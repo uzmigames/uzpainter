@@ -473,3 +473,72 @@ def test_a_project_opened_from_a_bundle_is_carried_as_its_store_file(
     monkeypatch.chdir(client_dir)
     assert runner.restore_session(session_file) == carried
     assert opened == [store]
+
+
+def test_the_diagnostic_measure_export_is_passed_only_when_asked(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Decision 286: `UZP_ASSETS3D_DIAGNOSTIC_MEASURE_EXPORT=1` alone passes
+    `--diagnostic-measure-export` to `UzPainter.exe run` (before `--`, so it is the host's flag,
+    not the script's), and the reply then carries the run's `diagnostic`; unset, nothing is
+    passed; any other value is a host error before UzPainter runs."""
+    calls: list[list[str]] = []
+
+    def fake_run(argv: list[str]) -> Any:
+        calls.append(argv)
+        host: dict[str, Any] = {"status": "ok", "result": None, "stdout": "", "stderr": ""}
+        if client.DIAGNOSTIC_FLAG in argv:
+            host["diagnostic"] = "diagnostic-measure"
+        return type("Done", (), {"returncode": 0, "stdout": client.JSON_PREFIX + json.dumps(host)})
+
+    monkeypatch.setattr(client, "run_painter", fake_run)
+    monkeypatch.setattr(client, "painter_exe", lambda: tmp_path / "UzPainter.exe")
+    monkeypatch.setenv(client.SESSION_ENV, str(tmp_path / "session.json"))
+    monkeypatch.delenv(client.DIAGNOSTIC_ENV, raising=False)
+    reply, status = client.execute_python("result = None")
+    assert status == client.OK and "diagnostic" not in reply
+    assert client.DIAGNOSTIC_FLAG not in calls[-1]
+    monkeypatch.setenv(client.DIAGNOSTIC_ENV, "1")
+    reply, status = client.execute_python("result = None")
+    assert status == client.OK and reply["diagnostic"] == "diagnostic-measure"
+    assert calls[-1].index(client.DIAGNOSTIC_FLAG) < calls[-1].index("--")
+    monkeypatch.setenv(client.DIAGNOSTIC_ENV, "yes")
+    with pytest.raises(client.HostError, match="must be 1 or unset"):
+        client.execute_python("result = None")
+    assert len(calls) == 2
+
+
+def test_a_non_conformant_export_gets_no_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Decision 286: an export whose receipt says `non_conformant` (the diagnostic measure export)
+    is reported without a manifest, so nothing of it reaches an Assets3D manifest, although its
+    paths lie under the root."""
+    from types import SimpleNamespace
+
+    root = tmp_path / "assets"
+    generation = root / "exports" / "generations" / "000001"
+    generation.mkdir(parents=True)
+    receipt = {
+        "manifest_export": {"sources": ["project"], "outputs": []},
+        "manifest_files": {"project": {"path": "A.spp", "sha256": "hash-of-A"}},
+        "non_conformant": {"mode": "diagnostic-measure", "decision": "286", "bypassed": []},
+    }
+    (generation / "receipt.json").write_text(json.dumps(receipt), encoding="utf-8")
+    publication = {
+        "fixed_names": [],
+        "receipt": str(generation / "receipt.json"),
+        "directory": str(generation),
+        "generation": "000001",
+        "receipt_sha256": "receipt-hash",
+        "plan_hash": "plan-hash",
+        "revision": 1,
+        "project_path": str(root / "A.spp"),
+        "mesh_path": None,
+    }
+    job = SimpleNamespace(kind="export", status="succeeded", wait=lambda: publication)
+    host = SimpleNamespace(jobs=SimpleNamespace(list=lambda: [job]))
+    monkeypatch.setenv(runner.ROOT_ENV, str(root))
+    (result,) = runner.exports_of_run(host)
+    assert result["manifest"] is None
+    assert result["manifest_unavailable"] == runner.NON_CONFORMANT

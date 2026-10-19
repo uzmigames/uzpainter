@@ -3,6 +3,7 @@
 #include "export/encode.h"
 #include "export/padding.h"
 #include "uzp_core/manifest/sha256.h"
+#include "uzp_core/types/errors.h"
 
 #include <filesystem>
 #include <fstream>
@@ -53,10 +54,16 @@ std::optional<Coverage> CoverageOf(const core::TextureSet& set, const SourceInpu
 render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& project, std::int64_t revision,
                                                       const ExportPlan& plan, const SourceInputs& inputs,
                                                       const evaluator::TemplateLibrary& templates,
-                                                      evaluator::ITileStore& store, evaluator::TileCache& cache) {
+                                                      evaluator::ITileStore& store, evaluator::TileCache& cache,
+                                                      const DiagnosticMeasure* diagnostic) {
+    if (diagnostic != nullptr && !diagnostic->mesh) {
+        return ExportFail("the diagnostic measure export (decision 286) needs the texturing mesh");
+    }
     // 1. Every file's processing and padding, before any evaluation.
     std::map<core::Id, Coverage> coverages;
-    for (const PlannedFile& file : plan.files) {
+    std::vector<std::vector<std::string>> bypassed(plan.files.size());
+    for (size_t i = 0; i < plan.files.size(); ++i) {
+        const PlannedFile& file = plan.files[i];
         const core::TextureSet* set = SetOf(project, file.textureSetId);
         if (set == nullptr) return ExportFail("the texture set of " + file.relativePath + " is not in the project");
         CheckProcessing(project, file);
@@ -70,11 +77,26 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
                 return ExportFail("the padding of " + file.relativePath + " needs the UV coverage of the texture set \"" +
                                   set->name + "\", and no texturing mesh provides it");
             }
+            if (diagnostic != nullptr) IslandTriangles(*coverage, *diagnostic->mesh, set->material_id);
             coverages.emplace(set->id, std::move(*coverage));
         }
         const Coverage& coverage = coverages.at(set->id);
-        CheckIslandNormal(file, coverage);
-        CheckPadding(file, coverage);
+        if (diagnostic == nullptr) {
+            CheckIslandNormal(file, coverage);
+            CheckPadding(file, coverage);
+            continue;
+        }
+        // The diagnostic measure export: production's two island refusals recorded, not thrown.
+        const auto record = [&](const auto& check) {
+            try {
+                check();
+            } catch (const core::NotYetSupported& refusal) {
+                bypassed[i].emplace_back(refusal.what());
+            }
+        };
+        record([&] { CheckIslandNormal(file, coverage); });
+        record([&] { CheckPadding(file, coverage); });
+        CheckPadding(file, coverage, InexactPadding::measure);
     }
     // 2. Every file evaluated, padded and encoded in memory. Every check passed in step 1, so a
     // padding or an encoder that throws here is a failure of this export, returned as such: the
@@ -94,8 +116,10 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
 #endif
             const Coverage* coverage =
                 file.layout != FileLayout::Statistics ? &coverages.at(file.textureSetId) : nullptr;
-            EncodedImage image = EncodeFile(file, *raster, coverage);
-            encoded.push_back({std::move(image.bytes), raster->normalTag, image.layout});
+            EncodedImage image = EncodeFile(file, *raster, coverage,
+                                            diagnostic != nullptr ? InexactPadding::measure : InexactPadding::refuse);
+            encoded.push_back(
+                {std::move(image.bytes), raster->normalTag, image.layout, diagnostic != nullptr, std::move(bypassed[i])});
         } catch (const std::exception& e) {
             return ExportFail("encoding " + file.relativePath + " failed: " + e.what());
         }

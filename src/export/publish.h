@@ -118,6 +118,9 @@ struct PublishRequest {
     /// PlanContext::projectPath of the plan (the manifest's project source).
     std::string projectPath;
     std::chrono::milliseconds lockTimeout = kLockTimeout;
+    /// The diagnostic measure export (write.h, decision 286): not conformant, its receipt marked
+    /// `non_conformant`. Never set by production: only `UzPainter.exe run --diagnostic-measure-export`.
+    std::optional<DiagnosticMeasure> diagnostic;
 };
 
 struct Publication {

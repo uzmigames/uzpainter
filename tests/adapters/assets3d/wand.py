@@ -31,6 +31,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from adapters.assets3d.client import DIAGNOSTIC_ENV
 from adapters.assets3d.runner import under_root
 from tools.parity.recorder.script_run import ScriptJob, load_script_job, stage_inputs
 
@@ -111,8 +112,12 @@ class Wand:
                 out += ["--pin", f"{self.staged[item.input_id]}={item.sha256}"]
         return out
 
-    def call(self, *arguments: str, pins: list[str] | None = None) -> Call:
-        """`python layer_stack.py --pin ... <painter_layer_stack.py> <arguments>`."""
+    def call(
+        self, *arguments: str, pins: list[str] | None = None, diagnostic: bool = False
+    ) -> Call:
+        """`python layer_stack.py --pin ... <painter_layer_stack.py> <arguments>`; `diagnostic`
+        runs UzPainter with `--diagnostic-measure-export` (adapter client, decision 286): its
+        exports are NOT conformant."""
         process = subprocess.run(
             [
                 sys.executable,
@@ -122,7 +127,7 @@ class Wand:
                 *arguments,
             ],
             cwd=self.work,
-            env=self.env,
+            env={**self.env, DIAGNOSTIC_ENV: "1"} if diagnostic else self.env,
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -169,8 +174,9 @@ class Wand:
             *extra,
         )
 
-    def export(self) -> Call:
-        return self.call("run", str(self.script("painter-export-py")))
+    def export(self, diagnostic: bool = False) -> Call:
+        """`painter_export.py`; `diagnostic`: the non-conformant measure export (`call`)."""
+        return self.call("run", str(self.script("painter-export-py")), diagnostic=diagnostic)
 
     def run_file(self, path: Path) -> Call:
         """A test's own Painter-side file through the script's `run` command."""

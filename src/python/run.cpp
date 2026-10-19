@@ -8,6 +8,7 @@
 
 #include <pybind11/embed.h>
 
+#include "export/receipt.h"
 #include "python/capture.h"
 #include "python/interpreter.h"
 #include "python/script.h"
@@ -22,7 +23,12 @@ namespace {
 namespace json = core::json;
 
 constexpr const char* kUsage =
-    "usage: UzPainter.exe run <script.py> [args...] [--gpu-backend dx12|vulkan] [-- args...]\n";
+    "usage: UzPainter.exe run <script.py> [args...] [--gpu-backend dx12|vulkan] [--diagnostic-measure-export] "
+    "[-- args...]\n";
+constexpr std::string_view kDiagnosticFlag = "--diagnostic-measure-export";
+
+/// Set once, before the script runs, by `--diagnostic-measure-export` (decision 286).
+bool g_diagnosticMeasureExport = false;
 
 void PrintJson(std::FILE* out, const json::Object& object) {
     std::fprintf(out, "%.*s%s\n", static_cast<int>(kJsonPrefix.size()), kJsonPrefix.data(),
@@ -44,13 +50,24 @@ void InterruptOnConsoleBreak() {
 
 bool IsRunCommand(std::string_view verb) { return verb == "run"; }
 
+bool DiagnosticMeasureExport() { return g_diagnosticMeasureExport; }
+
 int RunRunCommand(const std::vector<std::string>& args, std::FILE* out, std::FILE* err) {
     std::optional<render::Backend> backend;
+    bool diagnostic = false;
     std::vector<std::string> positional;
     for (size_t i = 1; i < args.size(); ++i) {
         if (args[i] == "--") {  // the rest goes to the script as given
             positional.insert(positional.end(), args.begin() + static_cast<std::ptrdiff_t>(i) + 1, args.end());
             break;
+        }
+        if (args[i] == kDiagnosticFlag) {
+            if (diagnostic) {
+                std::fprintf(err, "%s", kUsage);
+                return kRunUsage;
+            }
+            diagnostic = true;
+            continue;
         }
         if (args[i] != "--gpu-backend") {
             positional.push_back(args[i]);
@@ -69,6 +86,7 @@ int RunRunCommand(const std::vector<std::string>& args, std::FILE* out, std::FIL
         std::fprintf(err, "%s", kUsage);
         return kRunUsage;
     }
+    g_diagnosticMeasureExport = diagnostic;
     const std::string backend_name(render::BackendName(backend.value_or(render::Backend::Dx12)));
     // The first GPU operation (a painter_viewport capture) creates its device on this backend.
     SetCaptureGpu(backend.value_or(render::Backend::Dx12), nullptr);
@@ -97,6 +115,7 @@ int RunRunCommand(const std::vector<std::string>& args, std::FILE* out, std::FIL
                                   {"error", json::Object{{"type", "HostError"}, {"message", error.what()}}}};
         }
         report["gpu_backend"] = backend_name;
+        if (diagnostic) report["diagnostic"] = std::string(exporter::kDiagnosticMeasureMode);
         PrintJson(out, report);
     }
     // A project the script left open is closed (its lock released, an untitled folder removed)

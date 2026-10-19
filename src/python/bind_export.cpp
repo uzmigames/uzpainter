@@ -31,10 +31,12 @@
 #include "export/fixed_names.h"
 #include "export/plan.h"
 #include "export/publish.h"
+#include "export/receipt.h"
 #include "python/bindings.h"
 #include "python/errors.h"
 #include "python/evaluation.h"
 #include "python/jobs.h"
+#include "python/run.h"
 
 #ifndef UZP_BUILD_MODE
 #error "UZP_BUILD_MODE is defined by build.zig"
@@ -107,13 +109,14 @@ private:
 
 /// The export job of `snapshot` (see above).
 JobBody ExportBody(std::shared_ptr<OpenProject> project, core::Snapshot snapshot, std::string config,
-                   std::string project_path, std::string project_source, std::vector<std::string> fixed_names) {
+                   std::string project_path, std::string project_source, std::vector<std::string> fixed_names,
+                   bool diagnostic) {
     // The export's own sources, absolute, read when it is queued: the mesh from the exported
     // revision itself. A project written before the mesh source was recorded has none (None).
     std::string mesh_source = snapshot.project->mesh ? snapshot.project->mesh->source : std::string();
     return [project = std::move(project), snapshot = std::move(snapshot), config = std::move(config),
             project_path = std::move(project_path), project_source = std::move(project_source),
-            mesh_source = std::move(mesh_source), fixed_names = std::move(fixed_names)](JobContext& context) {
+            mesh_source = std::move(mesh_source), fixed_names = std::move(fixed_names), diagnostic](JobContext& context) {
         const core::Project& p = *snapshot.project;
         const exporter::ExportPlan plan = exporter::CompilePlan(p, config, exporter::PlanContext{project_path});
         exporter::CheckExportable(plan);
@@ -140,6 +143,8 @@ JobBody ExportBody(std::shared_ptr<OpenProject> project, core::Snapshot snapshot
         exporter::PublishRequest request;
         request.identity = exporter::BuildIdentity{kAppVersion, std::string("uzpainter-") + UZP_BUILD_MODE};
         request.projectPath = project_path;
+        // `UzPainter.exe run --diagnostic-measure-export` only (run.h): not conformant (decision 286).
+        if (diagnostic) request.diagnostic = exporter::DiagnosticMeasure{evaluation->mesh};
         render::Result<exporter::Publication> published = exporter::PublishExport(
             p, snapshot.revision, plan, inputs, *evaluation->templates, tiles, evaluation->cpu.cache(), request);
         if (!published) {
@@ -163,7 +168,7 @@ JobBody ExportBody(std::shared_ptr<OpenProject> project, core::Snapshot snapshot
             copies.push_back(core::json::Object{{"directory", exporter::Utf8String(delivery->directory)},
                                                 {"generation", delivery->generation}});
         }
-        return core::json::Object{{"directory", exporter::Utf8String(published->directory)},
+        core::json::Object result{{"directory", exporter::Utf8String(published->directory)},
                                   {"files", std::move(files)},
                                   {"fixed_names", std::move(copies)},
                                   {"generation", published->generation},
@@ -175,6 +180,8 @@ JobBody ExportBody(std::shared_ptr<OpenProject> project, core::Snapshot snapshot
                                   {"receipt", exporter::Utf8String(published->receipt)},
                                   {"receipt_sha256", published->receiptSha256},
                                   {"revision", snapshot.revision}};
+        if (diagnostic) result["non_conformant"] = std::string(exporter::kDiagnosticMeasureMode);
+        return result;
     };
 }
 
@@ -208,7 +215,7 @@ JobBody ExportJob(std::string config, std::vector<std::string> fixed_names) {
     core::Snapshot snapshot = project->document->snapshot();
     std::string source = project->untitled_dir.empty() ? exporter::Utf8String(project->project_source) : std::string();
     return ExportBody(project, std::move(snapshot), std::move(config), ProjectPath(), std::move(source),
-                      std::move(fixed_names));
+                      std::move(fixed_names), DiagnosticMeasureExport());
 }
 
 void BindExport(py::module_& m, py::module_& jobs) {

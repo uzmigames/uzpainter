@@ -367,7 +367,8 @@ render::Result<Publication> PublishExport(const core::Project& project, std::int
     }
     // 1. Everything encoded in memory: a refusal or a failure writes nothing.
     render::Result<std::vector<EncodedFile>> encoded =
-        EncodeExport(project, revision, plan, inputs, templates, store, cache);
+        EncodeExport(project, revision, plan, inputs, templates, store, cache,
+                     request.diagnostic ? &*request.diagnostic : nullptr);
     if (!encoded) return render::Unexpected(encoded.error());
     render::Result<std::set<std::string>> resources = ReadResourceHashes(project, plan, templates, inputs.templateId);
     if (!resources) return render::Unexpected(resources.error());
