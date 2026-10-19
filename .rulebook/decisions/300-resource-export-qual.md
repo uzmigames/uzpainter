@@ -146,6 +146,19 @@ python -m tools.parity.recorder resource-export-qual-analyse <run directory prin
 - **What is committed.** Only the report: identifiers, statuses, field names and hashes.
 - **Afterwards.** The verdict is recorded in this decision and in phase2.9 and phase2.10. Item 6 or item 7 follows.
 
+## Amendment (2026-10-19, SUP-018 and SUP-019)
+
+The Codex supervisor's joint findings SUP-018 and SUP-019 (`tmp/claude-supervision.json`) found defects in the merged run (cc55850). The UI recording was held until they were fixed. These changes amend items 3, 4 and 5; the byte, SHA-256, SHA-1, PROJECT-location and version checks are unchanged.
+
+- **The window of the started process (SUP-018).** The UI operator is made only after `--launch` has started Painter, inside the run's `try`/`finally`. Before, it was made first, so it failed when Painter was closed, or bound an unrelated window that already existed. `PainterUi(pid=...)` binds only the main window of the process the launcher started (`PainterLauncher.pid`), and refuses a window of any other process. After the restart between the conditions, it binds the new process's window.
+- **The dialog's file name (SUP-018).** A native save dialog's proposed name is used only if it is a simple file name that resolves to a new file directly inside the private target (`painter_ui.contained_file`). These are refused: an empty name, `.` and `..`, absolute, rooted, drive-relative and UNC paths, separators, parent paths, wildcards, stream colons, device names, and trailing dots or spaces. A refused name cancels the dialog and refuses the step, and nothing is saved.
+- **Source removal for B (SUP-019).** After the restart and before B opens the moved copy, the recorder records every staged path and whether it is absent (`sources_absent`). A source that is still present refuses the run. `analyse` qualifies B only when `sources_removed` is literally true and `sources_absent` names every case, each absent (`sources_removed_verified`). Otherwise the verdict is `INCONCLUSIVE`, with no qualified forms.
+- **The verdicts (SUP-019).**
+  - **PARTIAL.** It needs exact cases, not a whole exact format class. A sole exact `png16-grey-pillow` among failing PNGs is `PARTIAL`, and its form qualifies.
+  - **Re-encoded.** A case is `re-encoded` only when its one fenced file has other bytes that decode as an image here. Other bytes that do not decode are `other-bytes-undecoded`.
+  - **RE_ENCODED and SOURCE_DEPENDENT.** They need failures that establish them: `re-encoded`, `no-file`, `menu-absent` or `menu-disabled`.
+  - **Failures that prove nothing.** These are `exact-bytes-version-differs`, `stale-or-link`, `not-project`, `multiple-files`, `other-bytes-undecoded`, and exact bytes with an unstable version. They are listed in `unresolved_cases`. With no exact case, they make the run `INCONCLUSIVE`, under item 5's re-run cap; they never make it `RE_ENCODED`.
+
 ## Alternatives Considered
 
 - **Reading the resource bytes through `getResourceInfo.filePath` or `urlToLocalFile`.** Rejected (SUP-008): that is metadata or path conversion.

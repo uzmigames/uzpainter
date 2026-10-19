@@ -42,6 +42,9 @@ STOP_TIMEOUT_S = 120.0
 
 
 class Process(Protocol):
+    @property
+    def pid(self) -> int: ...
+
     def poll(self) -> int | None: ...
 
     def terminate(self) -> None: ...
@@ -127,6 +130,14 @@ class PainterLauncher:
                 "the started Painter process exited while an endpoint answers: that endpoint "
                 "belongs to a process the recorder did not start"
             )
+
+    @property
+    def pid(self) -> int:
+        """The id of the process this launcher started and runs now (UI automation binds the
+        window of this process only)."""
+        if self.process is None or self.process.poll() is not None:
+            raise RecorderError("the launcher runs no Painter process")
+        return self.process.pid
 
     def stop(self, session: PainterSession | None = None) -> None:
         """Close the project through the documented API, then end the started process."""

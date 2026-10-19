@@ -174,8 +174,9 @@ def refresh_after_unseen_build(args: argparse.Namespace, error: UnseenBuild) -> 
     return 3
 
 
-def make_operator(kind: str) -> Operator:
-    """The person at the console, or the UI automation of Painter's panels (decision 029)."""
+def make_operator(kind: str, pid: int | None = None) -> Operator:
+    """The person at the console, or the UI automation of Painter's panels (decision 029),
+    bound to the main window of process `pid` when it is given."""
     if kind == "console":
         return ConsoleOperator()
     from datetime import UTC, datetime
@@ -183,7 +184,7 @@ def make_operator(kind: str) -> Operator:
     from tools.parity.recorder.painter_ui import PainterUi, UiOperator
 
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    return UiOperator(PainterUi(), work_root() / "ui-operator" / stamp)
+    return UiOperator(PainterUi(pid=pid), work_root() / "ui-operator" / stamp)
 
 
 def run_iray_probe(args: argparse.Namespace) -> int:
@@ -228,6 +229,13 @@ class Launcher(Protocol):
     def start(self) -> None: ...
 
     def stop(self, session: PainterSession | None = None) -> None: ...
+
+
+class ProcessLauncher(Launcher, Protocol):
+    """A launcher that names the process it runs (the UI operator binds that process's window)."""
+
+    @property
+    def pid(self) -> int: ...
 
 
 def run_iray(args: argparse.Namespace, launcher: Launcher | None = None) -> int:
@@ -308,9 +316,13 @@ def run_record_script(args: argparse.Namespace, launcher: Launcher | None = None
     return 0
 
 
-def run_resource_qualification(args: argparse.Namespace, launcher: Launcher | None = None) -> int:
+def run_resource_qualification(
+    args: argparse.Namespace, launcher: ProcessLauncher | None = None
+) -> int:
     """Decision 300: record the qualification (Painter started, restarted for condition B and
-    stopped by the launcher), or analyse a recorded run."""
+    stopped by the launcher), or analyse a recorded run. The operator is made only once the
+    launcher's Painter runs, and the UI operator is bound to that process's window, again
+    after the restart (SUP-018)."""
     from tools.parity.recorder import resource_qualification as rq
 
     try:
@@ -327,26 +339,26 @@ def run_resource_qualification(args: argparse.Namespace, launcher: Launcher | No
         if not args.launch:
             print("refused: condition B needs a freshly started Painter: use --launch")
             return 2
-        painter: Launcher = launcher or PainterLauncher(
+        painter: ProcessLauncher = launcher or PainterLauncher(
             args.painter_exe or default_painter_exe(), host=args.host, port=args.port
         )
-        operator = make_operator(args.operator)
         current = [rq.ResourceSession(HttpTransport(args.host, args.port))]
-
-        def restart(old: PainterSession) -> PainterSession:
-            painter.stop(old)
-            painter.start()
-            from tools.parity.recorder.painter_ui import PainterUi, UiOperator
-
-            if isinstance(operator, UiOperator):  # it binds to the new process's main window
-                operator.ui = PainterUi()
-            fresh = rq.ResourceSession(HttpTransport(args.host, args.port))
-            fresh.connect()
-            current[0] = fresh
-            return fresh
-
         painter.start()
         try:
+            operator = make_operator(args.operator, pid=painter.pid)
+
+            def restart(old: PainterSession) -> PainterSession:
+                painter.stop(old)
+                painter.start()
+                from tools.parity.recorder.painter_ui import PainterUi, UiOperator
+
+                if isinstance(operator, UiOperator):  # the new process's main window only
+                    operator.ui = PainterUi(pid=painter.pid)
+                fresh = rq.ResourceSession(HttpTransport(args.host, args.port))
+                fresh.connect()
+                current[0] = fresh
+                return fresh
+
             run = rq.record_qualification(current[0], operator, work_root(), restart)
         finally:
             painter.stop(current[0])

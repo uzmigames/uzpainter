@@ -320,16 +320,17 @@ The documented APIs cannot read back a project resource's original bytes. This r
   2. **Condition A.** Per case:
      - `Resource.show_in_ui`, then an Assets panel image;
      - a fence, then the operator's Export resource into a fresh folder.
-  3. **Between the conditions.** The recorder closes the project, deletes the staged sources, restarts Painter, copies the project to a new folder and reopens the copy. `list_project_resources` must list every case again.
+  3. **Between the conditions.** The recorder closes the project, deletes the staged sources and restarts Painter. It records every staged path as absent (`sources_absent`), or refuses the run. Then it copies the project to a new folder and reopens the copy. `list_project_resources` must list every case again.
   4. **Condition B.** The same exports again.
 - **The UI operator.**
+  - It is made only once `--launch` has started Painter. It binds the main window of that process, by its PID, and binds the new process's window again after the restart.
   - It right-clicks the one visible Assets item that shows the resource's name. If none shows, it first filters the view with the window's search field.
   - It clicks the one enabled item labelled Export resource. It answers `absent` or `disabled` otherwise.
-  - It gives a native folder picker the target folder, or a native save dialog the folder joined with the name it proposed. A Qt dialog is cancelled and refused.
+  - It gives a native folder picker the target folder, or a native save dialog the folder joined with the name it proposed. That name must be a simple file name that resolves to a new file directly inside the folder. Any other name cancels the dialog and refuses the step. A Qt dialog is cancelled and refused.
   - The menu, the dialog and the UI Automation surveys go to `export-<n>.json` next to the panel images.
 - **Evidence and verdict.** The evidence stays private: `UZP_ORACLE_WORK\resource-export-qual\<run>\evidence.json`, with the exports.
   - **Exact.** A case is exact when all of these hold: one file is written after the fence, not a link; its SHA-256, size and SHA-1 equal the original's; its SHA-1 equals the version shown; the location is PROJECT; the version is stable across A and B; and B ran in another process. The measured fields always name what differs.
-  - **Verdicts.** `EXACT`, `PARTIAL` (only the exact cases' forms qualify), `RE_ENCODED`, `SOURCE_DEPENDENT`, `UNAVAILABLE` and `INCONCLUSIVE`.
+  - **Verdicts.** `EXACT`, `PARTIAL` (some cases exact: only their forms qualify), `RE_ENCODED`, `SOURCE_DEPENDENT`, `UNAVAILABLE` and `INCONCLUSIVE`. Condition B counts only when it ran in a fresh process with every source verified absent. `RE_ENCODED` needs bytes that differ and decode as an image. A wrong version, a file before the fence, a resource that is not PROJECT, several files or undecodable bytes prove nothing: with no exact case, the run is `INCONCLUSIVE` and `unresolved_cases` names those cases.
   - **The public report.** `python -m tools.parity.recorder resource-export-qual-analyse <run> --report parity/reports/phase2/resource-export-qualification.md` re-runs the analysis without Painter and writes it. The report holds identifiers, statuses and hashes only.
 
 ## 10. Oracle envelope: rolling refresh, stability study, canary

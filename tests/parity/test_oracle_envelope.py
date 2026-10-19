@@ -166,6 +166,7 @@ class Painter:
 
 class FakeProcess:
     def __init__(self) -> None:
+        self.pid = 4242
         self.alive = True
         self.terminated = False
 

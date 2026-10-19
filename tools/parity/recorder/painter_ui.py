@@ -259,16 +259,32 @@ def hex_colour(value: float | int | str | bool) -> str:
 class PainterUi:
     """Painter's main window and settings docks, through UI Automation (pywinauto)."""
 
-    def __init__(self, settle_s: float = 0.4, timeout_s: float = 30.0) -> None:
+    def __init__(
+        self, settle_s: float = 0.4, timeout_s: float = 30.0, pid: int | None = None
+    ) -> None:
+        """`pid`: the process whose main window is operated (the Painter a recorder started);
+        any other process's window, also one that already existed, is never bound."""
         from pywinauto import Desktop, mouse  # dev-only dependency (decision 029)
+        from pywinauto.findwindows import ElementAmbiguousError, ElementNotFoundError
 
         self.desktop = Desktop(backend="uia")
         self.mouse = mouse
         self.settle_s = settle_s
         self.timeout_s = timeout_s
-        spec = self.desktop.window(class_name=MAIN_WINDOW_CLASS)
+        criteria: dict[str, Any] = {"class_name": MAIN_WINDOW_CLASS}
+        if pid is not None:
+            criteria["process"] = pid
+        spec = self.desktop.window(**criteria)
         self.button_spec = spec
-        self.window = spec.wrapper_object()
+        try:
+            self.window = spec.wrapper_object()
+        except (ElementNotFoundError, ElementAmbiguousError) as error:
+            owner = f" of process {pid}" if pid is not None else ""
+            raise RecorderError(f"no single main window of Painter{owner}: {error}") from error
+        if pid is not None and self.window.process_id() != pid:
+            raise RecorderError(
+                f"the bound main window belongs to process {self.window.process_id()}, not {pid}"
+            )
         self.window_surveyed = False
 
     def front(self) -> None:
@@ -998,7 +1014,9 @@ class PainterUi:
         `evidence` receives what happened, also when the step is refused: the menu's items, the
         dialog's kind and title and survey, the file name it proposed and its file types, and
         the text of any message box after it. A native folder picker is given `target`; a
-        native save dialog is given `target` joined with the name it proposed. A Qt
+        native save dialog is given `target` joined with the name it proposed, only when that
+        name is a simple file name that stays inside `target` (`contained_file`; any other
+        proposal cancels the dialog and refuses the step). A Qt
         (non-native) dialog is cancelled and the step refused, with the dialog's survey kept."""
         evidence.update(resource=gui_name, target=str(target))
         try:
@@ -1048,7 +1066,12 @@ class PainterUi:
             evidence["dialog"]["file_types"] = self.file_types(dialog)
             proposed = str(field.iface_value.CurrentValue)
             evidence["dialog"]["proposed"] = proposed
-            field.iface_value.SetValue(str(target / proposed))
+            try:
+                destination = contained_file(target, proposed)
+            except RecorderError:
+                self.cancel(dialog)
+                raise
+            field.iface_value.SetValue(str(destination))
         else:
             field.iface_value.SetValue(str(target))
         self.dialog_button(dialog, "1").invoke()
@@ -1063,6 +1086,39 @@ class PainterUi:
             messages[0].type_keys("{ESC}")
         self.wait_dialog_closed()
         return str(evidence["label"])
+
+
+WINDOWS_DEVICE = re.compile(r"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$", re.IGNORECASE)
+UNSAFE_NAME = re.compile(r'[\x00-\x1f<>:"/\\|?*]')
+
+
+def contained_file(target: Path, proposed: str) -> Path:
+    """`target / proposed`, when `proposed` is a simple file name and the destination resolves
+    to a new file directly inside `target`; anything else (empty, `.` or `..`, absolute, rooted,
+    drive-relative, a separator, a wildcard or stream colon, a device name, a trailing dot or
+    space) is refused, so a dialog's suggestion can never write outside the private folder."""
+    from pathlib import PurePosixPath, PureWindowsPath
+
+    windows = PureWindowsPath(proposed)
+    if (
+        not proposed
+        or proposed in (".", "..")
+        or UNSAFE_NAME.search(proposed)
+        or windows.drive
+        or windows.root
+        or windows.name != proposed
+        or PurePosixPath(proposed).name != proposed
+        or proposed[-1] in ". "
+        or WINDOWS_DEVICE.match(proposed.split(".", 1)[0].rstrip(" "))
+    ):
+        raise RecorderError(f"the dialog proposed {proposed!r}, not a simple file name")
+    folder = target.resolve(strict=True)
+    destination = (folder / proposed).resolve()
+    if destination.parent != folder or destination.name != proposed or destination.exists():
+        raise RecorderError(
+            f"the dialog's name {proposed!r} does not give a new file inside {target}"
+        )
+    return folder / proposed
 
 
 def menu_label(text: str) -> str:

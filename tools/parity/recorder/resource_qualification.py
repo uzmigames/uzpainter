@@ -28,8 +28,9 @@ staged copy that differs refuses the run.
    BaseColor of its own fill layer, so the project uses it, and saves the project (Full).
 2. Condition `A_source_present`: for each case, `Resource.show_in_ui` highlights it and the operator
    uses the Assets window's Export resource on it, into a fresh empty folder written after a fence.
-3. The project is closed, every staged source file is deleted, and the project is reopened.
-   `list_project_resources` must list every case again.
+3. The project is closed, every staged source file is deleted, Painter is restarted, every staged
+   path is recorded absent (`sources_absent`; otherwise the run is refused), and a moved copy of
+   the project is reopened. `list_project_resources` must list every case again.
 4. Condition `B_source_removed`: the exports of step 2 again, from the reopened project. This is
    the pilots' condition: their sources are gone and their project is reopened.
 
@@ -788,13 +789,25 @@ def record_qualification(
         session.wait_closed()
         for case in CASES:
             staged[case.case_id].unlink()
-        evidence["sources_removed"] = not any((directory / "sources").iterdir())
         session = restart(session)
         fresh = session.identity
         if fresh is None or fresh.session_id == identity.session_id:
             raise RecorderError("condition B needs a freshly started Painter process")
         evidence["session_ids"][CONDITION_B] = fresh.session_id
         require_substance_ocio(fresh)
+        # Measured just before B opens the project: every staged path, and whether it is absent.
+        evidence["sources_absent"] = {
+            case.case_id: {
+                "path": staged[case.case_id].relative_to(directory).as_posix(),
+                "absent": not staged[case.case_id].exists(),
+            }
+            for case in CASES
+        }
+        evidence["sources_removed"] = all(
+            v["absent"] for v in evidence["sources_absent"].values()
+        ) and not any((directory / "sources").iterdir())
+        if not evidence["sources_removed"]:
+            raise RecorderError("condition B needs every staged source removed")
         moved.parent.mkdir()
         shutil.copyfile(project, moved)
         session.call("open_project", path=moved.as_posix())
@@ -834,7 +847,8 @@ def record_qualification(
 # Per case and condition.
 EXACT = "exact"  # one file after the fence; SHA-256, size and SHA-1 equal; version is the SHA-1
 EXACT_BYTES_VERSION_DIFFERS = "exact-bytes-version-differs"
-RE_ENCODED = "re-encoded"  # one file, other bytes
+RE_ENCODED = "re-encoded"  # one file, other bytes that decode as an image here
+UNDECODED = "other-bytes-undecoded"  # one file, other bytes that do not decode: no proof
 MULTIPLE_FILES = "multiple-files"
 NO_FILE = "no-file"
 MENU_ABSENT = "menu-absent"
@@ -843,14 +857,23 @@ STALE = "stale-or-link"  # a file older than the fence, or a link: never an expo
 NOT_PROJECT = "not-project"  # the highlighted resource is not a PROJECT resource
 INCONCLUSIVE = "inconclusive"  # the operator or the automation could not complete the step
 
+# What a case's failure establishes: the operation wrote other image bytes, or nothing. Every
+# other non-exact status (version, fence, location, several files, undecodable bytes) and an
+# unstable version prove nothing about the operation: the case stays unresolved (SUP-019).
+ESTABLISHED_FAILURES = (RE_ENCODED, NO_FILE, MENU_ABSENT, MENU_DISABLED)
+
 # Overall (decision 300 item 5).
 OUTCOMES = {
     "EXACT": "every case is exact in both conditions",
     "PARTIAL": "some cases are exact in both conditions, others are not: only their forms qualify",
-    "RE_ENCODED": "files are written but no case is exact in both conditions",
-    "SOURCE_DEPENDENT": "a case is exact with its source present but not after its removal",
+    "RE_ENCODED": "no case is exact: re-encoded files are written, and every other case wrote "
+    "nothing or offered no enabled menu item",
+    "SOURCE_DEPENDENT": "a case is exact with its source present but, after its removal, "
+    "re-encoded, not written or not offered",
     "UNAVAILABLE": "the menu item is absent or disabled, or nothing is written, for every case",
-    "INCONCLUSIVE": "a step could not be completed; fix the locators from the evidence and re-run",
+    "INCONCLUSIVE": "a step could not be completed, condition B is not proven (a fresh process "
+    "after every source was removed), or no case is exact and a failure proves nothing; fix the "
+    "cause from the evidence and re-run",
 }
 
 
@@ -896,13 +919,13 @@ def case_status(case: Case, entry: dict[str, Any]) -> dict[str, Any]:
     return {**result, "status": EXACT}
 
 
-def pixel_comparison(case: Case, directory: Path, condition: str, file: str) -> bool | None:
-    """Whether a re-encoded export decodes to the original's values (None: not decodable)."""
+def pixel_comparison(case: Case, exported: Any) -> bool | None:
+    """Whether a re-encoded export's decoded values are the original's (None: the original
+    does not decode here)."""
     import numpy as np
 
-    path = directory / "exports" / condition / case.case_id / "out" / file
-    exported, original = decoded(path.read_bytes()), decoded(original_bytes(case))
-    if exported is None or original is None:
+    original = decoded(original_bytes(case))
+    if original is None:
         return None
     return bool(exported.shape == original.shape and np.array_equal(exported, original))
 
@@ -927,53 +950,86 @@ def analyse(directory: Path) -> dict[str, Any]:
             entry = evidence["conditions"].get(condition, {}).get(case.case_id, {})
             status = case_status(case, entry)
             status["version"] = (entry.get("shown") or {}).get("version")
-            if status["status"] == RE_ENCODED:
-                file = status["file"]
-                status["pixels_equal"] = pixel_comparison(case, directory, condition, file)
+            if status["status"] == RE_ENCODED:  # other bytes: re-encoded only if they decode
+                path = directory / "exports" / condition / case.case_id / "out" / status["file"]
+                exported = decoded(path.read_bytes())
+                if exported is None:
+                    status["status"] = UNDECODED
+                else:
+                    status["pixels_equal"] = pixel_comparison(case, exported)
             row[condition] = status
         versions = {row[condition]["version"] for condition in CONDITIONS}
         row["version_stable"] = len(versions) == 1 and None not in versions
         rows[case.case_id] = row
     sessions = evidence.get("session_ids", {})
     fresh = len({sessions.get(c) for c in CONDITIONS} - {None}) == len(CONDITIONS)
+    removed = sources_removal_verified(evidence)
     return {
         "schema": SCHEMA + "/analysis",
-        "outcome": outcome(rows, fresh),
+        "outcome": outcome(rows, fresh, removed),
         "fresh_process_for_b": fresh,
+        "sources_removed_verified": removed,
         "cases": rows,
     }
 
 
-def outcome(rows: dict[str, Any], fresh_process_for_b: bool = True) -> dict[str, Any]:
-    """The run's verdict (`OUTCOMES`); a run whose condition B did not run in a freshly started
-    Painter process is inconclusive."""
+def sources_removal_verified(evidence: dict[str, Any]) -> bool:
+    """Whether the evidence shows every case's staged source absent before condition B: the
+    run's flag is literally true and the per-path record names every case, each absent."""
+    absent = evidence.get("sources_absent")
+    return (
+        evidence.get("sources_removed") is True
+        and isinstance(absent, dict)
+        and set(absent) == {case.case_id for case in CASES}
+        and all(isinstance(v, dict) and v.get("absent") is True for v in absent.values())
+    )
+
+
+def outcome(
+    rows: dict[str, Any], fresh_process_for_b: bool, sources_removed: bool
+) -> dict[str, Any]:
+    """The run's verdict (`OUTCOMES`). Condition B qualifies only when it ran in a freshly
+    started Painter process after every staged source was verified absent; otherwise the run is
+    inconclusive. PARTIAL needs exact cases (a whole format class need not be exact); RE_ENCODED
+    and SOURCE_DEPENDENT need failures that establish them (`ESTABLISHED_FAILURES`)."""
     statuses = {c: [rows[c][k]["status"] for k in CONDITIONS] for c in rows}
     exact = {c for c, s in statuses.items() if s == [EXACT, EXACT] and rows[c]["version_stable"]}
     classes = sorted({rows[c]["format_class"] for c in rows})
     exact_classes = [
         k for k in classes if all(c in exact for c in rows if rows[c]["format_class"] == k)
     ]
+    established = (EXACT, *ESTABLISHED_FAILURES)
+    unresolved = sorted(
+        c
+        for c, s in statuses.items()
+        if c not in exact and (s == [EXACT, EXACT] or any(x not in established for x in s))
+    )
     pilot_cases = [c for c in rows if rows[c]["pilot_like"]]
-    if not fresh_process_for_b or any(INCONCLUSIVE in s for s in statuses.values()):
+    b_proven = fresh_process_for_b and sources_removed
+    if not b_proven or any(INCONCLUSIVE in s for s in statuses.values()):
         verdict = "INCONCLUSIVE"
     elif len(exact) == len(rows):
         verdict = "EXACT"
-    elif any(s[0] == EXACT and s[1] != EXACT for s in statuses.values()):
+    elif any(s[0] == EXACT and s[1] in ESTABLISHED_FAILURES for s in statuses.values()):
         verdict = "SOURCE_DEPENDENT"
     elif all(x in (MENU_ABSENT, MENU_DISABLED, NO_FILE) for s in statuses.values() for x in s):
         verdict = "UNAVAILABLE"
-    elif exact_classes:
+    elif exact:
         verdict = "PARTIAL"
-    else:
+    elif not unresolved:
         verdict = "RE_ENCODED"
-    forms = sorted({f"{r['format_class']}/{r['form']}" for c, r in rows.items() if c in exact})
+    else:
+        verdict = "INCONCLUSIVE"
+    qualified = exact if verdict in ("EXACT", "PARTIAL") else set()
+    forms = sorted({f"{r['format_class']}/{r['form']}" for c, r in rows.items() if c in qualified})
     return {
         "verdict": verdict,
         "meaning": OUTCOMES[verdict],
         "exact_cases": sorted(exact),
         "qualified_forms": forms,
-        "exact_format_classes": exact_classes,
-        "pilot_forms_exact": bool(pilot_cases) and all(c in exact for c in pilot_cases),
+        "exact_format_classes": exact_classes if qualified else [],
+        "unresolved_cases": unresolved,
+        "pilot_forms_exact": bool(pilot_cases) and all(c in qualified for c in pilot_cases),
     }
 
 
@@ -986,8 +1042,12 @@ def report_markdown(analysis: dict[str, Any], evidence: dict[str, Any]) -> str:
         f"`{evidence['colour_management'].get('mode')}`, run `{evidence['started_at']}`.",
         "",
         f"**Verdict: {analysis['outcome']['verdict']}** ({analysis['outcome']['meaning']}). "
+        f"Qualified forms: {', '.join(analysis['outcome']['qualified_forms']) or 'none'}. "
         f"Exact format classes: {', '.join(analysis['outcome']['exact_format_classes']) or 'none'}."
-        f" Pilot forms exact: {'yes' if analysis['outcome']['pilot_forms_exact'] else 'no'}.",
+        f" Pilot forms exact: {'yes' if analysis['outcome']['pilot_forms_exact'] else 'no'}."
+        f" Unresolved cases: {', '.join(analysis['outcome']['unresolved_cases']) or 'none'}."
+        f" Fresh process for B: {'yes' if analysis['fresh_process_for_b'] else 'no'}; every "
+        f"source verified absent: {'yes' if analysis['sources_removed_verified'] else 'no'}.",
         "",
         "| Case | Class | Version = SHA-1 at import | A (source present) | B (source removed) "
         "| Version stable | Fields that differ |",

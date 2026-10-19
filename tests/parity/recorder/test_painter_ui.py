@@ -179,3 +179,221 @@ def test_a_texture_set_list_prompt_reaches_the_rename(monkeypatch: pytest.Monkey
     assert ui.target_value("Texture Set List", "Name of texture set 'renamed0'", None) == "renamed0"
     assert ui.target_value("Texture Set List", "Visibility of texture set 's0'", None) is None
     assert calls == [("s0", "renamed0"), ("renamed0", None)]
+
+
+# --- SUP-018: the window of the started process, and a contained Export resource name -------
+
+
+class FakeElementNotFound(Exception):
+    pass
+
+
+class FakeElementAmbiguous(Exception):
+    pass
+
+
+@dataclass
+class FakeWindow:
+    pid: int
+
+    def process_id(self) -> int:
+        return self.pid
+
+
+def fake_pywinauto(
+    monkeypatch: pytest.MonkeyPatch, pids: list[int], report: int | None = None
+) -> list[dict[str, Any]]:
+    """A pywinauto stand-in whose desktop holds one main window per process id; `report`
+    makes the bound window claim another process."""
+    import sys
+    import types
+
+    criteria_seen: list[dict[str, Any]] = []
+
+    class Spec:
+        def __init__(self, criteria: dict[str, Any]) -> None:
+            self.criteria = criteria
+
+        def wrapper_object(self) -> FakeWindow:
+            wanted = self.criteria.get("process")
+            found = [p for p in pids if wanted is None or p == wanted]
+            if not found:
+                raise FakeElementNotFound(self.criteria)
+            if len(found) > 1:
+                raise FakeElementAmbiguous(self.criteria)
+            return FakeWindow(report if report is not None else found[0])
+
+    class Desktop:
+        def __init__(self, backend: str) -> None:
+            assert backend == "uia"
+
+        def window(self, **criteria: Any) -> Spec:
+            criteria_seen.append(criteria)
+            return Spec(criteria)
+
+    package = types.ModuleType("pywinauto")
+    package.Desktop = Desktop  # type: ignore[attr-defined]
+    package.mouse = object()  # type: ignore[attr-defined]
+    findwindows = types.ModuleType("pywinauto.findwindows")
+    findwindows.ElementNotFoundError = FakeElementNotFound  # type: ignore[attr-defined]
+    findwindows.ElementAmbiguousError = FakeElementAmbiguous  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "pywinauto", package)
+    monkeypatch.setitem(sys.modules, "pywinauto.findwindows", findwindows)
+    return criteria_seen
+
+
+def test_the_ui_binds_only_the_main_window_of_the_given_process(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tools.parity.recorder.painter_ui import MAIN_WINDOW_CLASS, PainterUi
+
+    seen = fake_pywinauto(monkeypatch, [7, 9])  # 7: a Painter this run did not start
+    assert PainterUi(pid=9).window.process_id() == 9
+    assert seen[-1] == {"class_name": MAIN_WINDOW_CLASS, "process": 9}
+    with pytest.raises(RecorderError, match="process 11"):
+        PainterUi(pid=11)
+    fake_pywinauto(monkeypatch, [9], report=7)
+    with pytest.raises(RecorderError, match="belongs to process 7, not 9"):
+        PainterUi(pid=9)
+
+
+REJECTED_NAMES = [
+    "",
+    ".",
+    "..",
+    r"C:\Users\x\a.png",  # absolute
+    "/tmp/a.png",  # rooted
+    r"\a.png",  # rooted on the current drive
+    "C:a.png",  # drive-relative
+    r"\\server\share\a.png",  # UNC
+    r"sub\a.png",  # separator
+    "sub/a.png",
+    r"..\a.png",  # parent
+    "../a.png",
+    "a.png:stream",  # alternate data stream
+    "*.png",  # a dialog filter, not a name
+    "a?.png",
+    "NUL",  # device names
+    "com1.png",
+    "a.png.",  # Windows drops trailing dots and spaces
+    "a.png ",
+    "a\x00.png",
+]
+
+
+@pytest.mark.parametrize("name", REJECTED_NAMES)
+def test_a_proposed_name_that_is_not_simple_is_refused(tmp_path: Path, name: str) -> None:
+    from tools.parity.recorder.painter_ui import contained_file
+
+    with pytest.raises(RecorderError):
+        contained_file(tmp_path, name)
+
+
+def test_a_simple_name_stays_inside_the_private_folder(tmp_path: Path) -> None:
+    from tools.parity.recorder.painter_ui import contained_file
+
+    assert contained_file(tmp_path, "uzp_rq_x_abcdef.png") == tmp_path.resolve() / (
+        "uzp_rq_x_abcdef.png"
+    )
+    (tmp_path / "taken.png").write_bytes(b"")
+    with pytest.raises(RecorderError, match="new file inside"):
+        contained_file(tmp_path, "taken.png")
+
+
+@dataclass
+class Info:
+    automation_id: str = ""
+    control_type: str = ""
+    class_name: str = ""
+
+
+@dataclass
+class Element:
+    info: Info
+    text: str = ""
+    value: str = ""
+    set_to: list[str] = field(default_factory=list)
+    invoked: int = 0
+
+    @property
+    def element_info(self) -> Info:
+        return self.info
+
+    @property
+    def iface_value(self) -> Element:
+        return self
+
+    @property
+    def CurrentValue(self) -> str:
+        return self.value
+
+    def SetValue(self, text: str) -> None:
+        self.set_to.append(text)
+
+    def window_text(self) -> str:
+        return self.text
+
+    def is_enabled(self) -> bool:
+        return True
+
+    def invoke(self) -> None:
+        self.invoked += 1
+
+    def type_keys(self, keys: str) -> None:
+        return None
+
+    def descendants(self, control_type: str | None = None) -> list[Element]:
+        return [Element(Info(control_type="MenuItem"), text="Export resource...")]
+
+    def children(self) -> list[Element]:
+        return []
+
+    handle = 1
+
+
+def save_dialog_ui(
+    monkeypatch: pytest.MonkeyPatch, proposed: str
+) -> tuple[Any, Element, Element, list[Any]]:
+    """A PainterUi whose Export resource opens a native save dialog proposing `proposed`."""
+    from tools.parity.recorder import painter_ui
+
+    ui = painter_ui.PainterUi.__new__(painter_ui.PainterUi)
+    ui.window_surveyed = False
+    ui.window = Element(Info())
+    name = Element(Info(automation_id="1001", control_type="Edit"), value=proposed)
+    save = Element(Info(automation_id="1", control_type="Button"))
+    dialog = Element(Info(class_name=painter_ui.DIALOG_CLASS), text="Save As")
+    cancelled: list[Any] = []
+    monkeypatch.setattr(ui, "asset_item", lambda gui_name, evidence: Element(Info()))
+    monkeypatch.setattr(ui, "context_menu", lambda item: Element(Info()))
+    monkeypatch.setattr(ui, "click", lambda element, owner=None: None)
+    monkeypatch.setattr(ui, "file_dialog", lambda: dialog)
+    monkeypatch.setattr(ui, "survey", lambda root: [])
+    elements = [Element(Info(automation_id="FileTypeControlHost")), name]
+    monkeypatch.setattr(ui, "dialog_elements", lambda d: elements)
+    monkeypatch.setattr(ui, "file_types", lambda d: ["PNG (*.png)"])
+    monkeypatch.setattr(ui, "cancel", cancelled.append)
+    monkeypatch.setattr(ui, "dialog_button", lambda d, automation_id: save)
+    monkeypatch.setattr(ui, "wait_dialog_closed", lambda: None)
+    monkeypatch.setattr("tools.parity.recorder.painter_ui.time.sleep", lambda s: None)
+    return ui, name, save, cancelled
+
+
+def test_an_escaping_dialog_name_is_cancelled_before_saving(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ui, name, save, cancelled = save_dialog_ui(monkeypatch, r"..\..\escape.png")
+    evidence: dict[str, Any] = {}
+    with pytest.raises(RecorderError, match="not a simple file name"):
+        ui.export_resource("uzp_rq_x", tmp_path, evidence)
+    assert name.set_to == [] and save.invoked == 0 and len(cancelled) == 1
+    assert evidence["dialog"]["proposed"] == r"..\..\escape.png"
+
+
+def test_a_simple_dialog_name_is_saved_inside_the_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ui, name, save, cancelled = save_dialog_ui(monkeypatch, "uzp_rq_x.png")
+    assert ui.export_resource("uzp_rq_x", tmp_path, {}) == "Export resource..."
+    assert name.set_to == [str(tmp_path.resolve() / "uzp_rq_x.png")]
+    assert save.invoked == 1 and cancelled == []
