@@ -1,0 +1,11 @@
+{
+  "id": 304,
+  "slug": "304-inventory-prose-check",
+  "title": "The API inventory's prose is UzmiGames' own wording, checked against the local public documentation by a deterministic overlap test (six-word runs, whole short cells, 60% four-word coverage); scope is the inventory the task names plus the capability inventory's notes",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase5.5_clean-history"
+  ],
+  "supersededBy": null
+}
