@@ -28,3 +28,12 @@
 - [ ] 5.1 Update or create documentation covering the implementation
 - [ ] 5.2 Write tests covering the new behavior
 - [ ] 5.3 Run tests and confirm they pass
+
+## 6. Notes (feasibility slice, decision 302; 2026-10-19, branch `wt/bake-feas`)
+- A permitted early-feasibility slice (SUP-014, `docs/roadmap.md` rule 1), not acceptance of any item above: no box is ticked, and prerequisite 1.1 still gates the task.
+- Built: `src/bake/` (`EmbreeBaker` on the vendored Embree 4.4.1, its `BakeRequest`/`Capabilities`/`BakeResult`, the distance-based cage's primary ray, the AO usage), `tests/bake/` (authored fixtures generated in code, no Painter or Assets3D data) and the `bake-feasibility-tests` build step.
+  - Toward 2.2: a synchronous `bake`, plus the capability error for an unqualified CPU, ISA or Embree build. `IBaker` and `JobHandle` are still open.
+  - Toward 2.3: Hammersley addressing by texel index and sample id, a fixed reduction order and fixed 16 x 16 tiles.
+  - Toward 2.6: the texel classes uncovered / straight hit / back-face hit / centre miss, and the ray classes escaped / front / back-face / self. Cage hit, hidden and `SubSampling` are still open.
+- Toward 3.3 (plane, box and sphere-on-ground fixtures; the bevelled cube with highs is still open): the scene's bytes are identical at 1, 4 and 32 threads (SHA-256 `11cdde9b…e1d0fa`). `python -m pytest tests/bake/test_bake_feasibility.py`: exit 0, 12 passed.
+- Parity: AO is `pending-evidence` (owner `phase3.4_baker-ao`), never `supported`. No Python or MCP symbol is exposed, so the capability manifest is unchanged.

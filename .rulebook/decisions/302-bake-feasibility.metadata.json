@@ -1,0 +1,13 @@
+{
+  "id": 302,
+  "slug": "302-bake-feasibility",
+  "title": "CPU baker feasibility on Embree 4.4.1: a serial BVH build, fixed 16 x 16 tiles cast by any number of workers under one floating-point state, Hammersley samples addressed by texel index and sample id, an integer AO reduction in which every hit occludes, and four texel classes and four ray classes reported, never filled; parity pending-evidence",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase3.1_baker-request-model",
+    "phase3.4_baker-ao",
+    "phase3.5_embree-bakers"
+  ],
+  "supersededBy": null
+}

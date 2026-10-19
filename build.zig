@@ -27,6 +27,9 @@
 //!   the canonical manifest (`src/uzp_core/`, `tests/uzp_core/uzp_core_test.cpp`)
 //! - `zig build uzp-core-transaction-tests` `uzp-core-transaction-tests.exe`, the native tests of
 //!   transactions, operation records and name addressing (`tests/uzp_core/transaction_test.cpp`)
+//! - `zig build bake-feasibility-tests` `uzp-bake-feasibility-tests.exe`, the native tests of the
+//!   CPU baker feasibility slice (`src/bake/` on Embree, `tests/bake/bake_feasibility_test.cpp`)
+//!   with `embree4.dll`, `tbb12.dll` and the Visual C++ runtime beside it
 //! - `zig build evaluator-tests` `uzp-evaluator-tests.exe`, the native tests of the compositor's
 //!   tile DAG, cache, admission, templates and kernels (`src/evaluator/`,
 //!   `tests/evaluator/evaluator_test.cpp`) with the DX run-time files and `assets/templates/`
@@ -951,6 +954,43 @@ pub fn build(b: *std.Build) void {
     const uzp_core_txn_tests_step = b.step("uzp-core-transaction-tests", "Build the native tests of transactions and name addressing");
     uzp_core_txn_tests_step.dependOn(&b.addInstallArtifact(uzp_core_txn_tests_exe, .{}).step);
     b.getInstallStep().dependOn(uzp_core_txn_tests_step);
+
+    // ── CPU baker feasibility (phase3.1_baker-request-model slice, decision 302) ─────────────
+    // `src/bake/` on Embree's C API, which `embree4.dll` beside the executable provides at run
+    // time (headers only at build time); CPU only, so the tests run on the CPU lane.
+
+    const bake_tests_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    bake_tests_mod.addIncludePath(b.path("src"));
+    bake_tests_mod.addIncludePath(b.path("thirdparty/embree/include"));
+    bake_tests_mod.linkLibrary(uzp_core_lib);
+    bake_tests_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &.{ "bake/bake_request.cpp", "bake/embree_api.cpp", "bake/embree_baker.cpp", "bake/sampling.cpp" },
+        .flags = &uzp_core_flags,
+    });
+    bake_tests_mod.addCSourceFiles(.{
+        .root = b.path("tests/bake"),
+        .files = &.{"bake_feasibility_test.cpp"},
+        .flags = &uzp_core_flags,
+    });
+    const bake_tests_exe = b.addExecutable(.{
+        .name = "uzp-bake-feasibility-tests",
+        .root_module = bake_tests_mod,
+    });
+    const bake_tests_step = b.step("bake-feasibility-tests", "Build the native tests of the CPU baker feasibility slice with Embree beside them");
+    bake_tests_step.dependOn(&b.addInstallArtifact(bake_tests_exe, .{}).step);
+    for (embree_runtime_files) |file| {
+        bake_tests_step.dependOn(&b.addInstallBinFile(b.path(file[0]), file[1]).step);
+    }
+    for ([_][]const u8{ "vcruntime140.dll", "vcruntime140_1.dll" }) |name| {
+        bake_tests_step.dependOn(&b.addInstallBinFile(b.path(b.fmt("{s}/{s}", .{ cpython_package_dir, name })), name).step);
+    }
+    b.getInstallStep().dependOn(bake_tests_step);
 
     // ── Mesh importers (phase1.4_mesh-importers) ─────────────────────────────────────────────
     // UzPainter's own OBJ parser and its FBX (ufbx) and glTF (fastgltf on simdjson) loaders, over
