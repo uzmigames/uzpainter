@@ -24,11 +24,17 @@ from typing import Any
 import pytest
 
 from tools.parity.envelope import canary as canary_module
-from tools.parity.envelope.backfill import backfill
+from tools.parity.envelope.backfill import backfill, manifest_environment
 from tools.parity.envelope.canary import CANARY
 from tools.parity.envelope.compare import RecordSource, normalise_text, normalised
 from tools.parity.envelope.corpus import recorder_kind
 from tools.parity.envelope.drift import DriftInput, golden_drift
+from tools.parity.envelope.ocio import (
+    OCIO_REFERENCE,
+    detect_for_colour,
+    named_ocio,
+    ocio_reference_state,
+)
 from tools.parity.envelope.refresh import (
     CURRENT_OUTCOME,
     EQUIVALENT,
@@ -56,6 +62,7 @@ from tools.parity.recorder.environment import (
     colour_configuration_sha256,
     envelope_match,
     envelope_sha256,
+    environment_bytes,
     environment_record,
     environment_sha256,
     recorder_version,
@@ -955,3 +962,140 @@ def test_drift_classifies_save_reopen_instability_apart_from_drift() -> None:
     )
     assert moved["status"] == "changed" and moved["changed_recordings"] == ["r1", "r2"]
     assert moved["unstable_recordings"] == []
+
+
+# --- OCIO sessions against the current envelope (decision 309) --------------------------------
+
+OCIO_VALUE = "resources/ocio/substance/config.ocio"
+
+
+def admit_environment(repo: Repo, name: str, environment: dict[str, Any], ocio: bool) -> Path:
+    """A manifest of the current envelope naming `environment` as its environment record."""
+    manifest = load_json(repo.manifests[0])
+    manifest["golden_id"] = f"tier0/recorder-sample/{name}"
+    if ocio:
+        manifest["applied_settings"] = [
+            *manifest["applied_settings"],
+            {"name": "OCIO", "value": OCIO_VALUE, "applied_by": "environment_variable"},
+        ]
+    data = environment_bytes(environment)
+    sha = hashlib.sha256(data).hexdigest()
+    source = repo.root.parent / f"{name}-environment.json"
+    source.write_bytes(data)
+    repo.store.put_blob(source, sha)
+    manifest["private_records"] = [
+        {
+            "record_id": "oracle-environment",
+            "kind": ENVIRONMENT_KIND,
+            "sha256": sha,
+            "size_bytes": len(data),
+        }
+    ]
+    path = repo.manifests[0].with_name(f"{name}.json")
+    path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return path
+
+
+@pytest.fixture
+def ocio_repo(repo: Repo, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Repo:
+    """The sample corpus as a known current envelope (its registry hash is the seeded Legacy
+    goldens'), plus one admitted golden recorded in an OCIO session on the same host."""
+    legacy = manifest_environment(repo.store, repo.manifests[0])
+    assert legacy is not None
+    registry = load_registry(repo.root)
+    registry["envelopes"][0]["envelope_sha256"] = envelope_sha256(legacy)
+    save_registry(registry, repo.root)
+    config = tmp_path / "Painter" / Path(OCIO_VALUE)
+    config.parent.mkdir(parents=True)
+    config.write_text("ocio_profile_version: 2\n", encoding="utf-8")
+    monkeypatch.setenv("OCIO", str(config))
+    found = detect(repo.session(world(repo.fake)), repo.root)
+    assert found.identity.environment is not None
+    admit_environment(repo, "ocio-reference", found.identity.environment, ocio=True)
+    return repo
+
+
+def check_state(
+    repo: Repo, configuration: str | None, host: dict[str, str] = HOST_A
+) -> tuple[str, str]:
+    found = detect(repo.session(world(repo.fake), host=host), repo.root)
+    return detect_for_colour(found, configuration, repo.store, repo.root)
+
+
+def test_ocio_request_on_the_matching_ocio_identity_is_admitted(ocio_repo: Repo) -> None:
+    state, reason = check_state(ocio_repo, OCIO_VALUE)
+    assert state == OCIO_REFERENCE and "1 admitted goldens naming OCIO" in reason
+    # the plain check (a Legacy request) still sees another environment: nothing relabelled
+    assert check_state(ocio_repo, None)[0] == "other_environment"
+    assert load_registry(ocio_repo.root)["envelopes"][0]["equivalent_envelopes"] == []
+
+
+def test_legacy_request_on_an_ocio_session_is_refused(ocio_repo: Repo) -> None:
+    request = load_json(ocio_repo.manifests[0])
+    assert named_ocio(request) is None
+    assert check_state(ocio_repo, named_ocio(request)) == ("other_environment", "")
+
+
+def test_ocio_request_on_a_legacy_session_is_refused(
+    ocio_repo: Repo, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("OCIO")
+    assert check_state(ocio_repo, None)[0] == CURRENT_OUTCOME
+    state, reason = check_state(ocio_repo, OCIO_VALUE)
+    assert state == "other_environment" and "colour_configuration_sha256" in reason
+
+
+def test_any_identity_field_mismatch_is_refused(ocio_repo: Repo, tmp_path: Path) -> None:
+    state, reason = check_state(ocio_repo, OCIO_VALUE, HOST_B)
+    assert state == "other_environment" and "(driver_version)" in reason
+    for field, value in (("gpu_model", "Other GPU"), ("os_build", "10.0.2.2")):
+        state, reason = check_state(ocio_repo, OCIO_VALUE, {**HOST_A, field: value})
+        assert state == "other_environment" and f"({field})" in reason
+    # the same configuration path with other file contents: another colour configuration hash
+    config = tmp_path / "Painter" / Path(OCIO_VALUE)
+    config.write_text("ocio_profile_version: 2.1\n", encoding="utf-8")
+    state, reason = check_state(ocio_repo, OCIO_VALUE)
+    assert state == "other_environment" and "colour_configuration_sha256" in reason
+    # another Painter build is the build guard's answer, not an OCIO one
+    newer = detect(ocio_repo.session(world(ocio_repo.fake, "12.1.5", "1.1.21")), ocio_repo.root)
+    found = detect_for_colour(newer, OCIO_VALUE, ocio_repo.store, ocio_repo.root)
+    assert found[0] == "unseen_build"
+
+
+def test_ocio_check_refuses_without_a_single_reference_identity(ocio_repo: Repo) -> None:
+    with pytest.raises(RecorderError, match=r"no admitted golden .* names OCIO other.ocio"):
+        check_state(ocio_repo, "other.ocio")
+    found = detect(ocio_repo.session(world(ocio_repo.fake)), ocio_repo.root)
+    with pytest.raises(RecorderError, match="no private store"):
+        detect_for_colour(found, OCIO_VALUE, None, ocio_repo.root)
+    assert found.identity.environment is not None
+    split = {**found.identity.environment, "colour_configuration_sha256": "0" * 64}
+    admit_environment(ocio_repo, "ocio-split", split, ocio=True)
+    with pytest.raises(RecorderError, match="disagree on 2 envelope identities"):
+        check_state(ocio_repo, OCIO_VALUE)
+
+
+def test_ocio_references_must_share_the_current_envelope_host() -> None:
+    anchor = {
+        "painter_build": "b",
+        "gpu_model": "g",
+        "driver_version": "1",
+        "os_build": "o",
+        "colour_configuration_sha256": "legacy",
+    }
+    reference = {**anchor, "driver_version": "2", "colour_configuration_sha256": "ocio"}
+    with pytest.raises(RecorderError, match="other host fields"):
+        ocio_reference_state(reference, [anchor], [reference], OCIO_VALUE)
+    with pytest.raises(RecorderError, match="carries its identity"):
+        ocio_reference_state(reference, [], [reference], OCIO_VALUE)
+    running = {**anchor, "colour_configuration_sha256": "ocio"}
+    recorded = {**running, "recorder_version": "x"}  # provenance, not part of the match
+    assert ocio_reference_state(running, [anchor], [recorded], OCIO_VALUE)[0] == OCIO_REFERENCE
+
+
+def test_named_ocio_reads_the_manifest_setting() -> None:
+    setting = {"name": "OCIO", "value": OCIO_VALUE, "applied_by": "environment_variable"}
+    assert named_ocio({"applied_settings": [setting]}) == OCIO_VALUE
+    assert named_ocio({"applied_settings": [{**setting, "applied_by": "recorder_api"}]}) is None
+    with pytest.raises(RecorderError, match="several OCIO"):
+        named_ocio({"applied_settings": [setting, {**setting, "value": "x.ocio"}]})

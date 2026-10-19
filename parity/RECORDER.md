@@ -346,7 +346,7 @@ Task `phase0.9_oracle-envelope`, decisions 034 (envelope, study, canary) and 037
 
 ### 10.1 Detection and refresh (decision 037)
 
-`python -m tools.parity.recorder refresh --launch` (or without `--launch` against a running Painter). The local parity gate checks with `python -m tools.parity.envelope check` (exit 0 current, 3 refresh needed, 4 the build of a superseded envelope, 2 Painter unreachable) and refreshes with the same `refresh` command. Every recording command also reads the build first and starts the refresh on an unseen build (exit status 3).
+`python -m tools.parity.recorder refresh --launch` (or without `--launch` against a running Painter). The local parity gate checks with `python -m tools.parity.envelope check` (exit 0 current, 3 refresh needed, 4 the build of a superseded envelope, 2 Painter unreachable) and refreshes with the same `refresh` command. Before an OCIO recording, `python -m tools.parity.envelope check --request <manifest>` (or `--ocio <configuration>` for a command without a manifest, such as `resource-export-qual`) checks the session against the current envelope's OCIO identity (decision 309): exit 0 `ocio_reference` only when the build is the current build, the four non-colour fields equal those of the current envelope's admitted goldens whose envelope hash is the registry's, and the five-field envelope hash equals that of every admitted golden naming the same `OCIO`; a field that differs is `other_environment` (exit 3, naming the fields); no such golden, goldens that disagree, or no private store refuse (exit 1). A request that names no `OCIO` is checked as without the option, so it is refused in an OCIO session. The registry is never changed by it. Every recording command also reads the build first and starts the refresh on an unseen build (exit status 3).
 
 1. Detection reads the running build and environment. Current build and envelope (or an environment the canary proved equivalent): nothing to do. Current build, other environment: the canary runs; exact equality records the environment as equivalent in the registry, any difference starts the refresh. Unseen build: the refresh starts. A superseded envelope's build is refused.
 2. The candidate is entered in the registry (its build becomes recordable; the previous envelope stays current) with a ledger `<work>/envelopes/<dir>/candidate.json`; runs go to `<inbox>/envelopes/<dir>/`.
@@ -413,6 +413,7 @@ $exe = "C:\Program Files\Adobe\Adobe Substance 3D Painter\Adobe Substance 3D Pai
 ### 11.2 Session O (OCIO)
 
 1. Close Painter. Set `$env:OCIO = "C:\Program Files\Adobe\Adobe Substance 3D Painter\resources\ocio\substance\config.ocio"` and start `& $exe --enable-remote-scripting` from that shell. The recorder refuses an OCIO golden in a Legacy session and a Legacy golden in an OCIO session.
+   `python -m tools.parity.envelope check --request <the first request>` must exit 0 (`ocio_reference`, decision 309); the plain `check` reports `other_environment` in every OCIO session.
 2. `python -m tools.parity.recorder record "$req/tier0/semantics/export-ocio-encode.json"`, then `export-presets-ocio.json`.
 3. R9, the Wand v1 Tier 1 golden, last (the longest): with the Assets3D lock held (the recorder only reads Assets3D):
 

@@ -9,7 +9,9 @@ Painter-driving commands run through `python -m tools.parity.recorder` (they sha
 
 Offline commands, and the build check of the local parity gate:
 
-    python -m tools.parity.envelope check            exit 0 current, 3 refresh needed,
+    python -m tools.parity.envelope check [--request <manifest> | --ocio <configuration>]
+                                                     exit 0 current (or ocio_reference),
+                                                     3 refresh needed or other environment,
                                                      4 superseded build, 2 Painter unreachable
     python -m tools.parity.envelope status
     python -m tools.parity.envelope report
@@ -33,6 +35,7 @@ from tools.parity.envelope.canary import drift_free, previous_source, run_canary
 from tools.parity.envelope.compare import SourceUnavailable, store_source
 from tools.parity.envelope.corpus import manifests_under
 from tools.parity.envelope.drift import DriftInput, drift_document, tier3_goldens
+from tools.parity.envelope.ocio import OCIO_REFERENCE, detect_for_colour, named_ocio
 from tools.parity.envelope.registry import (
     RegistryError,
     corpus_manifests,
@@ -211,18 +214,25 @@ def run_canary_command(args: argparse.Namespace) -> int:
 
 
 def check(args: argparse.Namespace) -> int:
+    """Where the running Painter stands. With `--request` (its `OCIO` setting) or `--ocio`, an
+    OCIO recording is checked against the current envelope's OCIO identity (decision 309)."""
+    configuration = args.ocio
+    if args.request is not None:
+        configuration = named_ocio(load_json(args.request))
     session = session_factory(args)(lambda: recordable_builds(), False)
     try:
         found = refreshing.detect(session)
     except (RecorderError, OSError) as error:
         print(f"unreachable: {error}", file=sys.stderr)
         return EXIT_UNREACHABLE
+    state, reason = detect_for_colour(found, configuration, store_or_none())
     print(
-        f"{found.state}: running {found.identity.build_id}; current {found.current['envelope_id']}"
+        f"{state}: running {found.identity.build_id}; current {found.current['envelope_id']}"
+        + (f"; {reason}" if reason else "")
     )
-    if found.state == refreshing.CURRENT_OUTCOME:
+    if state in (refreshing.CURRENT_OUTCOME, OCIO_REFERENCE):
         return EXIT_CURRENT
-    return EXIT_SUPERSEDED if found.state == refreshing.SUPERSEDED_BUILD else EXIT_REFRESH
+    return EXIT_SUPERSEDED if state == refreshing.SUPERSEDED_BUILD else EXIT_REFRESH
 
 
 def status() -> int:
@@ -287,8 +297,14 @@ def parse_known(values: Sequence[str]) -> dict[str, str]:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m tools.parity.envelope")
     commands = parser.add_subparsers(dest="command", required=True)
-    add_painter_options(
-        commands.add_parser("check", help="where the running Painter stands"), False
+    checking = commands.add_parser("check", help="where the running Painter stands")
+    add_painter_options(checking, False)
+    colour = checking.add_mutually_exclusive_group()
+    colour.add_argument(
+        "--request", type=Path, default=None, help="the manifest to record (its OCIO setting)"
+    )
+    colour.add_argument(
+        "--ocio", default=None, help="the OCIO configuration the recording needs (decision 309)"
     )
     commands.add_parser("status", help="print the envelope registry")
     commands.add_parser("report", help="regenerate parity/reports/phase0/oracle-envelope.md")

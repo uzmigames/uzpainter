@@ -1,0 +1,11 @@
+{
+  "id": 309,
+  "slug": "309-ocio-envelope-check",
+  "title": "An OCIO session is checked against the current envelope's OCIO identity: the host fields of its Legacy goldens and the five fields of its admitted OCIO goldens",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase0.9_oracle-envelope"
+  ],
+  "supersededBy": null
+}
