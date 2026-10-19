@@ -40,6 +40,7 @@ First match wins; any other JSON under `parity/` is blocked until a rule for its
 | `parity/reports/<phase>/preview-settling.json` | The preview's settling report (`tools/parity/settling/preview.py`, `phase2.3_realtime-preview`, decision 162): numbers, enums, identifiers, dates and SHA-256 digests only; no oracle data |
 | `parity/reports/<phase>/mcp-contract.json` | The MCP contract report (`tools/parity/settling/mcp_contract.py`, `phase2.8_mcp-server`, decision 186): numbers, enums, identifiers, dates and SHA-256 digests only; no oracle data |
 | `parity/reports/<phase>/<pilot>-mcp-round.json` | A pilot's MCP-only round report (`tools/parity/tier1/mcp_round.py`, `phase2.9_pilot-belt`, decision 192): the call log, the outcome and each exported map's SHA-256 beside the Tier 1 run's; both sides are UzPainter's, no oracle data |
+| `parity/reports/<phase>/held-out-ledger.json` | The procedural held-out ledger (`tools/parity/proc_cert/ledger.py`, `phase3.1_proc-backend-seam`, decision 303): `schema` `uzpainter/parity/proc-cert-ledger/1` and `spent`, an object mapping each held-out pin (SHA-256) to the SHA-256 of the one candidate it was revealed to; nothing else |
 
 ## 3. Running it
 

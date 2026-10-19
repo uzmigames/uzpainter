@@ -1,0 +1,11 @@
+{
+  "id": 305,
+  "slug": "305-float-oracle-ulps",
+  "title": "Float (EXR) oracles in procedural certification are compared bit for bit in their stored type, and their residuals are counted in ULPs",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase3.1_proc-backend-seam"
+  ],
+  "supersededBy": null
+}

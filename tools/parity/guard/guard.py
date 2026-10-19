@@ -23,7 +23,9 @@ Checks the content of files, never only their names or signatures:
   (`parity/reports/<phase>/preview-settling.json`, `tools/parity/settling/preview.py`) and the
   MCP contract report (`parity/reports/<phase>/mcp-contract.json`,
   `tools/parity/settling/mcp_contract.py`), and a pilot's MCP-only round report
-  (`parity/reports/<phase>/<pilot>-mcp-round.json`, `tools/parity/tier1/mcp_round.py`).
+  (`parity/reports/<phase>/<pilot>-mcp-round.json`, `tools/parity/tier1/mcp_round.py`). The
+  procedural held-out ledger (`parity/reports/<phase>/held-out-ledger.json`,
+  `tools/parity/proc_cert/ledger.py`) holds held-out pins and candidate SHA-256 digests only.
 """
 
 from __future__ import annotations
@@ -377,6 +379,12 @@ def _mcp_round(path: str, document: Any, data: bytes, ctx: _Context) -> list[str
     return report_problems(document)
 
 
+def _held_out_ledger(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
+    from tools.parity.proc_cert.ledger import ledger_problems
+
+    return ledger_problems(document)
+
+
 _Rule = Callable[[str, Any, bytes, _Context], list[str]]
 
 # First match wins: (path pattern, schema it assigns, check).
@@ -456,6 +464,11 @@ PATH_RULES: tuple[tuple[re.Pattern[str], str, _Rule], ...] = (
         re.compile(r"^parity/reports/[^/]+/[a-z0-9][a-z0-9.-]*-mcp-round\.json$"),
         "pilot MCP-only round report (numbers, identifiers and hashes only)",
         _mcp_round,
+    ),
+    (
+        re.compile(r"^parity/reports/[^/]+/held-out-ledger\.json$"),
+        "procedural held-out ledger (held-out pins and candidate SHA-256 digests only)",
+        _held_out_ledger,
     ),
 )
 

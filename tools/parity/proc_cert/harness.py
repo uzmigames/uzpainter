@@ -1,16 +1,20 @@
 """Fit on the calibration set, then certify on both sets (decisions 222 and 303).
 
-    run = CertificationRun(batch_path, store, reports_dir)
+    run = CertificationRun(batch_path, store, reports_dir, Ledger(ledger_path))
     fit = run.fit(fitter)        # the fitter sees the calibration set only, behind the fence
     report = run.certify(fit)    # evaluates every case behind the fence, then compares
 
 - `fit` loads the calibration oracles and inputs into read-only arrays, then raises the fence
-  over the private store, the held-out root and the reports directory and calls the fitter. A
-  fitter that reaches any of them (or starts a process) is refused: no candidate comes out.
+  over the private store, the held-out root, the reports directory and the ledger and calls the
+  fitter. A fitter that reaches any of them (or starts a process) is refused: no candidate
+  comes out.
+- Every call into candidate code runs behind the same fence: the fitter, the candidate's
+  `fingerprint` (at fit and again at certify) and every `evaluate`. Each evaluated output is
+  copied into an owned, read-only array before the next call.
 - `certify` re-checks the batch pins and the candidate's fingerprint, refuses a held-out set
-  already spent on another candidate, evaluates the candidate on every case behind the fence
-  (so evaluation cannot read an oracle either), spends the held-out set on the candidate (the
-  report file, created first as a reservation), then loads the oracles and compares.
+  already spent on another candidate (in the ledger or in the report), evaluates the candidate
+  on every case, spends the held-out set on the candidate (the ledger entry, then the report
+  file, created first as a reservation), then loads the oracles and compares.
 - A case is `exact` only when every value equals its oracle. A missing, unreadable or wrong
   oracle is `oracle_unavailable`. Any non-zero difference is `residual`: a candidate exception
   for the owner, never a pass. The asset is `exact` only when every case of both sets is.
@@ -20,7 +24,7 @@
 
 from __future__ import annotations
 
-import inspect
+import importlib
 import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -36,10 +40,12 @@ from tools.parity.proc_cert.batch import (
     RasterSpec,
     canonical,
     load_batch,
-    sha256_bytes,
 )
 from tools.parity.proc_cert.fence import Fence, HeldOutAccessError, fenced
+from tools.parity.proc_cert.fingerprint import PROJECT_ROOT, FingerprintError, candidate_sha256
+from tools.parity.proc_cert.ledger import Ledger
 from tools.parity.proc_cert.raster import (
+    DecoderMissing,
     Raster,
     RasterError,
     Residual,
@@ -77,7 +83,10 @@ class CandidateChanged(Exception):
 
 class Candidate(Protocol):
     def fingerprint(self) -> Mapping[str, Any]:
-        """JSON data that identifies the candidate: family, code version, fitted values."""
+        """JSON data that identifies the candidate: family, code version and every fitted value
+        that changes its outputs. The harness binds this declaration to the candidate's class
+        and code; it cannot see fitted state the declaration leaves out, so reuse of a spent
+        held-out set is refused only as far as this identity is complete."""
         ...
 
     def evaluate(self, case: Case, inputs: Mapping[str, Raster]) -> Raster:
@@ -111,24 +120,9 @@ class FitResult:
     batch_sha256: str
     candidate: Candidate
     candidate_sha256: str
+    calibration_cases: int
+    calibration_unavailable: int  # calibration cases fitted without their oracle
     _run: CertificationRun = field(repr=False)
-
-
-def _fingerprint_sha256(candidate: Candidate) -> str:
-    """The declared identity, bound to the class and the bytes of the file that defines it."""
-    kind = type(candidate)
-    source = inspect.getsourcefile(kind)
-    if source is None:
-        raise FitRefused(f"{kind.__qualname__} has no source file to bind its fingerprint to")
-    return sha256_bytes(
-        canonical(
-            {
-                "declared": candidate.fingerprint(),
-                "class": f"{kind.__module__}.{kind.__qualname__}",
-                "source_sha256": sha256_bytes(Path(source).read_bytes()),
-            }
-        )
-    )
 
 
 def _spent_on(path: Path) -> str | None:
@@ -142,10 +136,20 @@ def _refuse_if_breached(fence: Fence, what: str) -> None:
 
 
 class CertificationRun:
-    def __init__(self, batch_path: Path, store: OracleStore | None, reports_dir: Path) -> None:
+    def __init__(
+        self,
+        batch_path: Path,
+        store: OracleStore | None,
+        reports_dir: Path,
+        ledger: Ledger,
+        *,
+        project_root: Path = PROJECT_ROOT,
+    ) -> None:
         self.batch: Batch = load_batch(batch_path)
         self.store = store
         self.reports_dir = reports_dir.resolve()
+        self.ledger = ledger
+        self.project_root = project_root
 
     # --- private store -----------------------------------------------------------------------
 
@@ -158,6 +162,8 @@ class CertificationRun:
             return None, f"{what} {ref.sha256}: {reason or 'unavailable'}"
         try:
             return decode(spec, ref.encoding, data), ""
+        except DecoderMissing as error:
+            return None, f"{what} {ref.sha256}: {error}"
         except RasterError as error:
             raise BatchError(f"{what} {ref.sha256} is not a {spec}: {error}") from error
 
@@ -171,7 +177,7 @@ class CertificationRun:
         return inputs, ""
 
     def _fence_roots(self) -> list[Path]:
-        roots = [self.batch.held_out.root, self.reports_dir]
+        roots = [self.batch.held_out.root, self.reports_dir, *self.ledger.paths()]
         if self.store is not None:
             roots.append(self.store.root)
         return roots
@@ -179,6 +185,34 @@ class CertificationRun:
     def report_path(self) -> Path:
         name = f"{self.batch.asset.replace('/', '__')}@{self.batch.asset_version}"
         return self.reports_dir / name / f"{self.batch.held_out.sha256[:16]}.json"
+
+    def _fingerprint(self, candidate: Candidate, what: str) -> str:
+        """The candidate's fingerprint, computed behind the fence (it runs candidate code)."""
+        with fenced(self._fence_roots(), f"fingerprinting {self.batch.asset}") as fence:
+            try:
+                sha = candidate_sha256(candidate, self.project_root)
+            except HeldOutAccessError as error:
+                raise FitRefused(f"{what} reached a fenced root: {error}") from error
+            except FingerprintError as error:
+                raise FitRefused(str(error)) from error
+        _refuse_if_breached(fence, what)
+        return sha
+
+    def import_fitter(self, spec: str) -> Fitter:
+        """`module:callable`, imported behind the fence (importing runs the module's code)."""
+        module_name, _, attribute = spec.partition(":")
+        if not module_name or not attribute:
+            raise BatchError(f"fitter {spec!r} is not module:callable")
+        with fenced(self._fence_roots(), f"importing {spec}") as fence:
+            try:
+                fitter = getattr(importlib.import_module(module_name), attribute)
+            except HeldOutAccessError as error:
+                raise FitRefused(f"importing the fitter reached a fenced root: {error}") from error
+        _refuse_if_breached(fence, "importing the fitter")
+        if not callable(fitter):
+            raise BatchError(f"fitter {spec!r} is not callable")
+        result: Fitter = fitter
+        return result
 
     # --- fitting -----------------------------------------------------------------------------
 
@@ -199,11 +233,12 @@ class CertificationRun:
         with fenced(self._fence_roots(), f"fitting {self.batch.asset}") as fence:
             try:
                 candidate = fitter(access)
-                candidate_sha256 = _fingerprint_sha256(candidate)
             except HeldOutAccessError as error:
                 raise FitRefused(f"the fitter reached a fenced root: {error}") from error
         _refuse_if_breached(fence, "the fitter")
-        return FitResult(self.batch.sha256, candidate, candidate_sha256, self)
+        sha = self._fingerprint(candidate, "the candidate's fingerprint")
+        unavailable = sum(case.oracle is None for case in cases)
+        return FitResult(self.batch.sha256, candidate, sha, len(cases), unavailable, self)
 
     # --- certification -----------------------------------------------------------------------
 
@@ -213,8 +248,9 @@ class CertificationRun:
         current = load_batch(self.batch.path)
         if current.sha256 != fit.batch_sha256:
             raise BatchError("batch.json changed after fitting")
-        if _fingerprint_sha256(fit.candidate) != fit.candidate_sha256:
+        if self._fingerprint(fit.candidate, "the candidate's fingerprint") != fit.candidate_sha256:
             raise CandidateChanged("the candidate's fingerprint changed after fitting")
+        self._refuse_spent(self.ledger.spent_on(current.held_out.sha256), fit)
         path = self.report_path()
         if path.is_file():
             self._refuse_spent(_spent_on(path), fit)
@@ -231,6 +267,7 @@ class CertificationRun:
                         continue
                     try:
                         produced = fit.candidate.evaluate(case, inputs[case.case_id][0])
+                        # an owned, read-only copy before the next call into the candidate
                         outputs[case.case_id] = check_candidate(case.output, produced)
                     except RasterError as error:
                         outputs[case.case_id] = str(error)
@@ -244,7 +281,7 @@ class CertificationRun:
         return report
 
     def _refuse_spent(self, spent_on: str | None, fit: FitResult) -> None:
-        if spent_on != fit.candidate_sha256:
+        if spent_on is not None and spent_on != fit.candidate_sha256:
             raise HeldOutSpent(
                 f"held-out set {self.batch.held_out.sha256} was revealed to candidate "
                 f"{spent_on}; record a new held-out set and move these cases to calibration"
@@ -253,7 +290,9 @@ class CertificationRun:
     def _reserve(self, path: Path, fit: FitResult) -> None:
         """Spend the held-out set on this candidate before any oracle is loaded, so a run that
         stops before its report still leaves the set spent (created exclusively: of two runs
-        racing for one held-out set, the second is refused)."""
+        racing for one held-out set, the second is refused). The ledger entry comes first: it is
+        the durable record, which deleting the report does not undo."""
+        self._refuse_spent(self.ledger.spend(self.batch.held_out.sha256, fit.candidate_sha256), fit)
         path.parent.mkdir(parents=True, exist_ok=True)
         reservation = {
             "schema": REPORT_SCHEMA,
@@ -264,7 +303,12 @@ class CertificationRun:
             with path.open("x", encoding="utf-8", newline="\n") as stream:
                 stream.write(json.dumps(reservation, sort_keys=True, indent=2) + "\n")
         except FileExistsError:
-            self._refuse_spent(_spent_on(path), fit)
+            spent_on = _spent_on(path)
+            if spent_on is None:
+                raise HeldOutSpent(
+                    f"{path} names no candidate; the held-out set is spent"
+                ) from None
+            self._refuse_spent(spent_on, fit)
 
     def _case_result(
         self, case: Case, input_reason: str, output: Raster | str | None
@@ -285,7 +329,7 @@ class CertificationRun:
         result["candidate_sha256"] = raster_sha256(output)
         if oracle is None:
             return {**result, "outcome": ORACLE_UNAVAILABLE, "reason": reason}, None
-        measured = residual(oracle, output)
+        measured = residual(oracle, output, case.output.format)
         return {
             **result,
             "outcome": EXACT if measured.exact else RESIDUAL,
@@ -328,12 +372,9 @@ class CertificationRun:
         if outcome == EXACT:
             status: dict[str, Any] = {"kind": "exact"}
         elif measured and not all(one.exact for one in measured):
-            total = pooled(measured)
             status = {
                 "kind": "calibrated",
-                "max_abs_diff": total.histogram[-1][0],
-                "mean_abs_diff": total.total / total.values,
-                "p99_abs_diff": total.p99(),
+                "residuals": {unit: one.statistics() for unit, one in pooled(measured).items()},
                 "corpus_ids": [batch.calibration.corpus_id, batch.held_out.corpus_id],
             }
         else:
@@ -344,6 +385,7 @@ class CertificationRun:
             "asset_version": batch.asset_version,
             "batch_sha256": batch.sha256,
             "domain_sha256": batch.domain.sha256(),
+            "matrix": batch.matrix.summary(),
             "candidate_sha256": fit.candidate_sha256,
             "outcome": outcome,
             "certified": outcome == EXACT,
