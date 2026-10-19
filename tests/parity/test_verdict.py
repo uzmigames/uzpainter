@@ -490,6 +490,106 @@ def test_scoped_entries_cover_only_their_golden_and_outputs() -> None:
         assert judge(*stable_case, 1, stable=True).outcome is Outcome.FAIL, stable_case
 
 
+# Stable outputs (r1 = r2, measured on the private records with tools/parity/fit/stability.py) of
+# each decision 032 domain: of the scoped goldens, and of every other golden of the domain.
+STABLE_OUTPUTS: dict[str, tuple[tuple[str, str], ...]] = {
+    "tier0/quantisation/thirds": (
+        ("tier0/semantics/quantisation-thirds", "s0/user0"),
+        ("tier0/semantics/quantisation-thirds", "s2/user1"),
+    ),
+    "tier0/blend/inputs": (
+        ("tier0/semantics/blend-inputs", "s2/user0"),
+        ("tier0/semantics/blend-inputs", "s0/user2"),
+    ),
+    "tier0/height-normal/method": (
+        ("tier0/semantics-ui/height-normal-sharp-plane-strength", "s1/normal"),
+        ("tier0/semantics-ui/height-normal-sharp-plane-strength", "s0/Normal_OpenGL"),
+        ("tier0/semantics-ui/height-normal-sobel-plane-strength", "s4/normal"),
+        ("tier0/semantics-ui/height-normal-sharp-sphere", "uzp_sphere/Normal_OpenGL"),
+        ("tier0/semantics-ui/height-normal-sobel-bevelled-cube", "uzp_bevelled_cube/height"),
+    ),
+    "tier0/height-normal/combination": (
+        ("tier0/semantics/height-normal-channel-coverage", "s2/height"),
+        ("tier0/semantics/height-normal-channel-coverage", "s1/Normal_OpenGL"),
+        ("tier0/semantics/height-normal-mesh-map", "s2/Normal_OpenGL"),
+        ("tier0/semantics/height-normal-mesh-map-directx", "s2/Normal_DirectX"),
+    ),
+    "tier0/height-normal/resolution": (
+        ("tier0/semantics/height-normal-resolution-2048", "s2/height"),
+        ("tier0/semantics/height-normal-resolution-2048", "s0/Normal_OpenGL"),
+        ("tier0/semantics/height-normal-resolution-512", "s2/Normal_OpenGL"),
+        ("tier0/semantics/height-normal-resolution-1024", "s2/Normal_DirectX"),
+        ("tier0/semantics/height-normal-resolution-1024-sobel", "s2/Normal_OpenGL"),
+    ),
+    OCIO_DOMAIN: (
+        (LEGACY_GOLDEN, "probe/s50/s0_basecolor_.png"),
+        (OCIO_GOLDEN, "probe/s50/s0_basecolor_sRGB.png"),
+    ),
+    SRGB_BITMAPS: (
+        (VARIANTS_GOLDEN, "s0/basecolor/step78"),
+        ("tier0/semantics/srgb-bitmap-minification", "s0/basecolor/step36"),
+    ),
+}
+
+
+def test_decision_032_entries_cover_no_stable_comparison() -> None:
+    """Decision 307 amendment: every in-force decision 032 entry is scoped to the goldens and
+    outputs its evidence measured unstable. With the published register, a stable comparison of
+    each domain fails on a one-code difference, whether it names no golden, a stable output of a
+    scoped golden, or another golden of the domain (also under a listed output id); each listed
+    output still passes against r2 at the entry's max, through that entry alone."""
+    register: list[dict[str, Any]] = load_json(REGISTER_PATH)["entries"]
+    r1 = [float(1000 + i) for i in range(64)]
+
+    def judge(
+        selector: str, golden: str | None, output: str | None, delta: float, *, stable: bool
+    ) -> Verdict:
+        oracle = list(r1)
+        oracle[7] += delta
+        comparison = Comparison(
+            "0",
+            selector,
+            oracle,
+            list(r1),
+            oracle_stable=stable,
+            golden_id=golden,
+            output_id=output,
+        )
+        return evaluate(comparison, register)
+
+    entries = decision_032_entries()
+    assert {e["domain"]["selector"] for e in entries} == set(STABLE_OUTPUTS)
+    unstable = {
+        (e["domain"]["selector"], g, o)
+        for e in entries
+        for g in e["domain"].get("goldens", [])
+        for o in e["domain"].get("outputs", [])
+    }
+    for entry in entries:
+        domain = entry["domain"]
+        selector = domain["selector"]
+        assert domain.get("goldens") and domain.get("outputs"), entry["exception_id"]
+        stable_cases: list[tuple[str | None, str | None]] = [(None, None)]
+        stable_cases += list(STABLE_OUTPUTS[selector])
+        others = sorted({g for g, _ in STABLE_OUTPUTS[selector]} - set(domain["goldens"]))
+        # The same output ids under another golden of the domain, unless that golden's own
+        # entry lists them (the OCIO twins share their unstable outputs).
+        stable_cases += [
+            (g, o) for g in others for o in domain["outputs"] if (selector, g, o) not in unstable
+        ]
+        for golden, output in stable_cases:
+            assert (selector, golden, output) not in unstable, (golden, output)
+            verdict = judge(selector, golden, output, 1, stable=True)
+            assert verdict.outcome is Outcome.FAIL, (entry["exception_id"], golden, output)
+        top = max(b["max"] for b in entry["bounds"] if b["metric"] == "max_abs_diff")
+        relied = ((entry["exception_id"], entry["version"]),)
+        for golden in domain["goldens"]:
+            for output in domain["outputs"]:
+                verdict = judge(selector, golden, output, top, stable=False)
+                assert verdict.outcome is Outcome.PASS, (entry["exception_id"], golden, output)
+                assert verdict.exceptions_relied_on == relied, (golden, output)
+
+
 def test_register_scopes_name_current_goldens_of_their_domain() -> None:
     """Decision 307: `outputs` needs `goldens`, and every listed golden resolves through the
     current envelope with the entry's domain (`register_problems`)."""

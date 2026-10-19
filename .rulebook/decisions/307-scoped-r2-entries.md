@@ -75,3 +75,21 @@ In each golden the differing texels are the same in every file. Each one lies wh
 - Both goldens' r2 comparisons pass only within their own measured bounds, and only with r1 exact. A defect larger than the bound fails against r2 as well. The injected wrong region, +4 096 codes, fails both.
 - **Open, separate task:** an unscoped instability entry (EXC-001 to EXC-005) still covers differences on stable comparisons of its domain. The scoped entries do not.
 - The PNG 8 and OpenEXR r2 comparisons are bounded by the PNG 16 numbers. Their r1 comparisons stay exact.
+
+## Amendment (2026-10-19): EXC-001 to EXC-005 scoped
+
+The open item of the Consequences is closed. Each of EXC-001 to EXC-005 has a version 2 with its version 1's bounds, evidence basis, decision 032 and approval unchanged, scoped to the goldens and outputs its evidence measured unstable. Version 1 of each stays in the register as history. This only narrows what the entries cover, so it needs no new owner approval.
+
+**Measured** with `tools/parity/fit/stability.py` (r1 against r2, every exported map) on the private records the entries name and, for EXC-001 and EXC-002, also on the current envelope's re-recordings (`7cf9c35b…`, `e8f9ccda…`). Their maps equal the named records' maps in both recordings (`parity/reports/phase0/oracle-envelope.md`), and the unstable outputs are the same. Each entry's summary already named these outputs as its unstable maps. Every other map of the listed goldens is stable.
+
+| Entry | Goldens | Outputs (r2 ≠ r1) | Left out of the domain |
+|---|---|---|---|
+| EXC-001 v2 | `quantisation-thirds` | the 16 of 36: s0/user3-5; s1/user1, user3, user4, user7; s2/scattering, user0, user3, user4, user7; s3/scattering, user2, user3, user4 | (the only golden of the domain) |
+| EXC-002 v2 | `blend-inputs` | s2/user2, s2/user3 (sRGB8), s2/user4 (RGB8) | (the only golden of the domain) |
+| EXC-003 v2 | `height-normal-sharp-plane-strength`, `height-normal-sobel-plane-strength` | s1 and s4: Normal_DirectX, Normal_OpenGL, height (the same six in each golden) | the sharp and Sobel sphere and bevelled-cube goldens |
+| EXC-004 v2 | `height-normal-channel-coverage` | s2/Normal_DirectX, s2/Normal_OpenGL, s2/normal | `height-normal-mesh-map`, `height-normal-mesh-map-directx` |
+| EXC-005 v2 | `height-normal-resolution-2048` | s2/Normal_DirectX, s2/Normal_OpenGL | `height-normal-resolution-512`, `-1024`, `-1024-sobel` |
+
+The sharp sphere's one unstable output is a settings-panel readback, not an exported map. No entry judges it.
+
+**Consumers.** The union run's `observe` (`tests/evaluator/union_run.py`) now names the golden and the output in its comparisons. Without them, no scoped entry would cover its r2 comparisons. `tests/parity/test_verdict.py::test_decision_032_entries_cover_no_stable_comparison` checks each decision 032 domain. A stable comparison with a one-code difference must fail, whether it names no golden, a stable output of a scoped golden, or another golden of the domain. Each listed output must still pass against r2 at its entry's maximum, through that entry alone.

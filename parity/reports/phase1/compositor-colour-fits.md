@@ -89,7 +89,7 @@ EXC-006 version 2 replaces version 1's stale note that the OCIO twin was unrecor
 - the three tests above, `-k`: 3 passed, exit code 0, 606 s;
 - `tests/parity/test_verdict.py` and `tests/parity/test_schemas.py`: 137 passed, exit code 0.
 
-**Open.** An unscoped instability entry, EXC-001 to EXC-005, still covers differences on stable comparisons of its domain. This needs its own task (decision 307).
+**Closed (decision 307, amendment).** EXC-001 to EXC-005 had no scope, so each covered differences on stable comparisons of its domain. Each now has a version 2, scoped to the goldens and outputs its evidence measured unstable.
 
 ## DX12: GPU = CPU on every lifted case (37 passed, exit 0, 291 s)
 

@@ -15,7 +15,8 @@ child's own conversion and domain) while `evaluate` (`test_compositor_tile_dag.p
 `note_rasters` (the SHA-256 of every raw channel raster it evaluated). Outside a run both do
 nothing. Per comparison the run records the |Δ| statistics (`tools.parity.fit.stats`), the
 non-zero |Δ| histogram (so pooled p99 values are exact), the verdict of `tools.parity.verdict`
-(r1 the exact target of an unstable golden, decision 032; the exception register) and, per map,
+(r1 the exact target of an unstable golden, decision 032; the exception register, the comparison
+naming its golden and output, decision 307) and, per map,
 the oracle stability r1 against r2. UzPainter repeatability is the two passes' rasters compared
 byte for byte (item 3.2 has its own lane in `test_compositor_core.py`).
 """
@@ -153,6 +154,8 @@ def observe(
                 candidate=a[mask].astype(np.float64).ravel().tolist(),
                 oracle_stable=stable,
                 exact_target=recording == "r1",
+                golden_id=golden.golden_id,
+                output_id=map_name,
             ),
             register_entries(),
         )

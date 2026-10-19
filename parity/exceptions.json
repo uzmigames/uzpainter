@@ -37,6 +37,67 @@
       "notes": "Evaluator profile painter-12.1-isolated-linear equals r1 exactly on every UNORM, sRGB8 and 16-bit float map (parity/reports/phase1/compositor-quantisation-profile.md)."
     },
     {
+      "exception_id": "EXC-001",
+      "version": 2,
+      "tier": "0",
+      "domain": {
+        "kind": "channel",
+        "selector": "tier0/quantisation/thirds",
+        "goldens": ["tier0/semantics/quantisation-thirds"],
+        "outputs": [
+          "s0/user3",
+          "s0/user4",
+          "s0/user5",
+          "s1/user1",
+          "s1/user3",
+          "s1/user4",
+          "s1/user7",
+          "s2/scattering",
+          "s2/user0",
+          "s2/user3",
+          "s2/user4",
+          "s2/user7",
+          "s3/scattering",
+          "s3/user2",
+          "s3/user3",
+          "s3/user4"
+        ]
+      },
+      "bounds": [
+        { "metric": "max_abs_diff", "scope": "whole", "max": 512 },
+        { "metric": "mean_abs_diff", "scope": "whole", "max": 257 }
+      ],
+      "evidence": {
+        "basis": "oracle_instability",
+        "summary": "Version 1's terms, scoped to the golden and its 16 unstable outputs (decision 307). Painter is unstable on tier0/semantics/quantisation-thirds: its after-reopen recording r2 differs from its same-session recording r1 on 16 of the 36 maps (parity/reports/phase0/tier0-stability.md §4). Under decision 032 r1 is the exact target and every comparison against r1 must be exact; this entry covers only the comparisons against r2 of the listed outputs, per map in native units (16-bit codes of the 16-bit PNG exports, float values of the OpenEXR exports). Its bounds are the evaluator's published r2 residuals (parity/semantics/quantisation-profile.json, entry quantisation-isolated-root): max |delta| 512 codes (sRGB8, one 8-bit code), per-map mean at most 257 (L8, one 8-bit code on every texel of a map). Not covered: the RGB32F and L32F residuals against r1 (6 of 16 values off by 2^-25 or 2^-24), which stay divergences (task phase1.10_compositor-float32-residual).",
+        "private_evidence": [
+          {
+            "sha256": "238ccd015d2d5edf8f02fb941953f3e037c9e80cda2fc5b7f171af227ba061b5",
+            "description": "private golden record of tier0/semantics/quantisation-thirds: recordings r1 (same session) and r2 (after save and reopen), every exported map and its blob hash"
+          },
+          {
+            "sha256": "7cf9c35b8d633e61ce37cae0730828f66b7e66462e15507632a16f5507a31d8c",
+            "description": "private golden record of tier0/semantics/quantisation-thirds under the current envelope painter-12.1.5+js-api.1.1.20: every map of its r1 and of its r2 equals the record above's (parity/reports/phase0/oracle-envelope.md), so the same outputs differ"
+          }
+        ],
+        "uncontrolled_settings": []
+      },
+      "defect_detection_test": {
+        "test_id": "tests/parity/test_verdict.py::test_decision_032_entries_catch_injected_defects",
+        "injected_defects": [
+          "one_value_off_by_one_code",
+          "uniform_offset_one_code",
+          "one_wrong_texel_region",
+          "float32_last_place_residual"
+        ],
+        "outcome": "every_injected_defect_fails"
+      },
+      "decision_id": "032",
+      "approved_by": "owner",
+      "approved_on": "2026-10-11",
+      "notes": "Version 2 (decision 307, amendment of 2026-10-19): version 1 matched its whole domain, so a stable comparison of the domain could pass within its bounds. This version keeps version 1's bounds, evidence basis and approval and limits them to the listed golden's outputs whose r2 differs from r1, measured with tools/parity/fit/stability.py on the private records named above (every other map of the listed golden is stable); the domain holds no other golden. Version 1's note: Evaluator profile painter-12.1-isolated-linear equals r1 exactly on every UNORM, sRGB8 and 16-bit float map (parity/reports/phase1/compositor-quantisation-profile.md)."
+    },
+    {
       "exception_id": "EXC-002",
       "version": 1,
       "tier": "0",
@@ -71,6 +132,55 @@
       "approved_by": "owner",
       "approved_on": "2026-10-11",
       "notes": "Evaluator profile painter-12.1-isolated-linear equals r1 exactly on every map of s2, 1 245 184 values (parity/reports/phase1/compositor-quantisation-profile.md)."
+    },
+    {
+      "exception_id": "EXC-002",
+      "version": 2,
+      "tier": "0",
+      "domain": {
+        "kind": "channel",
+        "selector": "tier0/blend/inputs",
+        "goldens": ["tier0/semantics/blend-inputs"],
+        "outputs": [
+          "s2/user2",
+          "s2/user3",
+          "s2/user4"
+        ]
+      },
+      "bounds": [
+        { "metric": "max_abs_diff", "scope": "whole", "max": 768 },
+        { "metric": "mean_abs_diff", "scope": "whole", "max": 58.7917 },
+        { "metric": "differing_percent", "scope": "whole", "max": 11.6537 }
+      ],
+      "evidence": {
+        "basis": "oracle_instability",
+        "summary": "Version 1's terms, scoped to the golden and the three unstable outputs of s2 (decision 307). Painter is unstable on tier0/semantics/blend-inputs set s2 (fields A at opacity 0.5 over the base): r2 differs from r1 on the two sRGB8 maps (22 912 of 196 608 values each) and the RGB8 map (11 520 values) (parity/reports/phase0/tier0-stability.md §4); every other map of the golden is stable. Under decision 032 r1 is the exact target and every comparison against r1 must be exact; this entry covers only the comparisons against r2 of the listed outputs, per map in native units (16-bit codes). Its bounds are the evaluator's published r2 residuals on s2 (parity/semantics/quantisation-profile.json, entry quantisation-isolated-root): max |delta| 768, mean 58.7917, 11.6537 % differing values (the sRGB8 maps); RGB16, RGB16F, L16 and RGB32F equal r2.",
+        "private_evidence": [
+          {
+            "sha256": "08bccde04a00ed886c7a1908365e7ec0bf7b227bfd1227cfe93fc2c5d1c6bb51",
+            "description": "private golden record of tier0/semantics/blend-inputs: recordings r1 (same session) and r2 (after save and reopen), every exported map and its blob hash"
+          },
+          {
+            "sha256": "e8f9ccdad8c44531ede5c9e08a5328e4de4bf412f3eeae2f602261f1028b5aa5",
+            "description": "private golden record of tier0/semantics/blend-inputs under the current envelope painter-12.1.5+js-api.1.1.20: every map of its r1 and of its r2 equals the record above's (parity/reports/phase0/oracle-envelope.md), so the same outputs differ"
+          }
+        ],
+        "uncontrolled_settings": []
+      },
+      "defect_detection_test": {
+        "test_id": "tests/parity/test_verdict.py::test_decision_032_entries_catch_injected_defects",
+        "injected_defects": [
+          "one_value_off_by_one_code",
+          "uniform_offset_one_code",
+          "one_wrong_texel_region",
+          "float32_last_place_residual"
+        ],
+        "outcome": "every_injected_defect_fails"
+      },
+      "decision_id": "032",
+      "approved_by": "owner",
+      "approved_on": "2026-10-11",
+      "notes": "Version 2 (decision 307, amendment of 2026-10-19): version 1 matched its whole domain, so a stable comparison of the domain could pass within its bounds. This version keeps version 1's bounds, evidence basis and approval and limits them to the listed golden's outputs whose r2 differs from r1, measured with tools/parity/fit/stability.py on the private records named above (every other map of the listed golden is stable); the domain holds no other golden. Version 1's note: Evaluator profile painter-12.1-isolated-linear equals r1 exactly on every map of s2, 1 245 184 values (parity/reports/phase1/compositor-quantisation-profile.md)."
     },
     {
       "exception_id": "EXC-003",
@@ -113,6 +223,61 @@
       "notes": "Evaluator profile painter-12.1-isolated-coverage-weights equals r1 exactly on every map of both goldens (parity/reports/phase1/compositor-height-normal.md); decision 064 §5."
     },
     {
+      "exception_id": "EXC-003",
+      "version": 2,
+      "tier": "0",
+      "domain": {
+        "kind": "channel",
+        "selector": "tier0/height-normal/method",
+        "goldens": [
+          "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "tier0/semantics-ui/height-normal-sobel-plane-strength"
+        ],
+        "outputs": [
+          "s1/Normal_DirectX",
+          "s1/Normal_OpenGL",
+          "s1/height",
+          "s4/Normal_DirectX",
+          "s4/Normal_OpenGL",
+          "s4/height"
+        ]
+      },
+      "bounds": [
+        { "metric": "max_abs_diff", "scope": "whole", "max": 31 },
+        { "metric": "mean_abs_diff", "scope": "whole", "max": 2.4583 },
+        { "metric": "differing_percent", "scope": "whole", "max": 100.0 }
+      ],
+      "evidence": {
+        "basis": "oracle_instability",
+        "summary": "Version 1's terms, scoped to the two plane-strength goldens and the six unstable outputs of s1 and s4 (the same six in each) (decision 307). Painter is unstable on tier0/semantics-ui/height-normal-sharp-plane-strength and tier0/semantics-ui/height-normal-sobel-plane-strength (the domain tier0/height-normal/method): after save and reopen, r2 of sets s1 (opacity 0.75) and s4 (opacity 0.1) differs from r1 on the Height export and both virtual maps (parity/reports/phase0/tier0-semantics-ui.md §3); every other map of the domain is stable. Under decision 032 r1 is the exact target and every comparison against r1 must be exact (the evaluator equals r1 on every map, parity/semantics/height-to-normal.json); this entry covers only the comparisons against r2 of the listed outputs, per map in native units (16-bit codes of the PNG exports, float values of the OpenEXR Height). Its bounds are the evaluator's published r2 residuals (entry height-normal-save-reopen-divergence): max |delta| 31 codes (Sharp s1 Normal_OpenGL), per-map mean at most 2.4583, and every value of the s4 Height differing (by at most 2^-14).",
+        "private_evidence": [
+          {
+            "sha256": "2fe57df3bd838b54ba1c3c39d9948c674260415b206a8b56ca68aa06b2c304ec",
+            "description": "private golden record of tier0/semantics-ui/height-normal-sharp-plane-strength: recordings r1 (same session) and r2 (after save and reopen), every exported map and its blob hash"
+          },
+          {
+            "sha256": "c427fce046ae6c0b2e751b9ba78c3e45ea0fd5adf64d8a6d48fc4a1431da20e8",
+            "description": "private golden record of tier0/semantics-ui/height-normal-sobel-plane-strength: recordings r1 (same session) and r2 (after save and reopen), every exported map and its blob hash"
+          }
+        ],
+        "uncontrolled_settings": []
+      },
+      "defect_detection_test": {
+        "test_id": "tests/parity/test_verdict.py::test_decision_032_entries_catch_injected_defects",
+        "injected_defects": [
+          "one_value_off_by_one_code",
+          "uniform_offset_one_code",
+          "one_wrong_texel_region",
+          "float32_last_place_residual"
+        ],
+        "outcome": "every_injected_defect_fails"
+      },
+      "decision_id": "032",
+      "approved_by": "owner",
+      "approved_on": "2026-10-11",
+      "notes": "Version 2 (decision 307, amendment of 2026-10-19): version 1 matched its whole domain, so a stable comparison of the domain could pass within its bounds. This version keeps version 1's bounds, evidence basis and approval and limits them to the listed goldens' outputs whose r2 differs from r1, measured with tools/parity/fit/stability.py on the private records named above (every other map of the listed goldens is stable); the domain's sphere and bevelled-cube goldens of both methods, whose maps are all stable, are not covered. Version 1's note: Evaluator profile painter-12.1-isolated-coverage-weights equals r1 exactly on every map of both goldens (parity/reports/phase1/compositor-height-normal.md); decision 064 §5."
+    },
+    {
       "exception_id": "EXC-004",
       "version": 1,
       "tier": "0",
@@ -149,6 +314,51 @@
       "notes": "Evaluator profile painter-12.1-isolated-coverage-weights equals r1 exactly on every map of the golden (parity/reports/phase1/compositor-height-normal.md §3); decision 080. Entered under decision 032's standing approval; flagged for the owner's review."
     },
     {
+      "exception_id": "EXC-004",
+      "version": 2,
+      "tier": "0",
+      "domain": {
+        "kind": "channel",
+        "selector": "tier0/height-normal/combination",
+        "goldens": ["tier0/semantics/height-normal-channel-coverage"],
+        "outputs": [
+          "s2/Normal_DirectX",
+          "s2/Normal_OpenGL",
+          "s2/normal"
+        ]
+      },
+      "bounds": [
+        { "metric": "max_abs_diff", "scope": "whole", "max": 61 },
+        { "metric": "mean_abs_diff", "scope": "whole", "max": 4.629 },
+        { "metric": "differing_percent", "scope": "whole", "max": 72.67 }
+      ],
+      "evidence": {
+        "basis": "oracle_instability",
+        "summary": "Version 1's terms, scoped to the golden and the three unstable outputs of s2 (decision 307). Painter is unstable on tier0/semantics/height-normal-channel-coverage (the domain tier0/height-normal/combination): after save and reopen, r2 of set s2 (normal-a on the Normal channel at opacity 1 under a Black mask with a mask-codes fill) differs from r1 on the Normal export and both virtual maps, and a second recording in a freshly started Painter process reproduced both r1 and r2 (decision 077); every other map of the domain, the mesh-map goldens included, is stable. Under decision 032 r1 is the exact target and every comparison against r1 must be exact (the evaluator equals r1 on every map, parity/semantics/height-to-normal.json); this entry covers only the comparisons against r2 of the listed outputs, per map in native units (16-bit codes of the PNG exports, float values of the OpenEXR Normal). Its bounds are the evaluator's published r2 residuals (entry height-normal-coverage-save-reopen-divergence): max |delta| 61 codes (both virtual maps), per-map mean at most 4.62893 codes, at most 72.664 % of the values differing (Normal_DirectX); the Normal export differs on 114 266 of 196 608 values by at most 2^-10.",
+        "private_evidence": [
+          {
+            "sha256": "58fa28f33cdfefdb939ea05b34d0abe0ea05644f6328e21087428c79edba3ba3",
+            "description": "private golden record of tier0/semantics/height-normal-channel-coverage: recordings r1 (same session) and r2 (after save and reopen), every exported map and its blob hash"
+          }
+        ],
+        "uncontrolled_settings": []
+      },
+      "defect_detection_test": {
+        "test_id": "tests/parity/test_verdict.py::test_decision_032_entries_catch_injected_defects",
+        "injected_defects": [
+          "one_value_off_by_one_code",
+          "uniform_offset_one_code",
+          "one_wrong_texel_region",
+          "float32_last_place_residual"
+        ],
+        "outcome": "every_injected_defect_fails"
+      },
+      "decision_id": "032",
+      "approved_by": "owner",
+      "approved_on": "2026-10-11",
+      "notes": "Version 2 (decision 307, amendment of 2026-10-19): version 1 matched its whole domain, so a stable comparison of the domain could pass within its bounds. This version keeps version 1's bounds, evidence basis and approval and limits them to the listed golden's outputs whose r2 differs from r1, measured with tools/parity/fit/stability.py on the private records named above (every other map of the listed golden is stable); the stable mesh-map goldens height-normal-mesh-map and height-normal-mesh-map-directx are not covered. Version 1's note: Evaluator profile painter-12.1-isolated-coverage-weights equals r1 exactly on every map of the golden (parity/reports/phase1/compositor-height-normal.md §3); decision 080. Entered under decision 032's standing approval; flagged for the owner's review."
+    },
+    {
       "exception_id": "EXC-005",
       "version": 1,
       "tier": "0",
@@ -182,6 +392,49 @@
       "approved_by": "owner",
       "approved_on": "2026-10-11",
       "notes": "Evaluator profile painter-12.1-isolated-coverage-weights equals r1 exactly on every map of the golden (parity/reports/phase1/compositor-height-normal.md §3); decision 080. Entered under decision 032's standing approval; flagged for the owner's review."
+    },
+    {
+      "exception_id": "EXC-005",
+      "version": 2,
+      "tier": "0",
+      "domain": {
+        "kind": "channel",
+        "selector": "tier0/height-normal/resolution",
+        "goldens": ["tier0/semantics/height-normal-resolution-2048"],
+        "outputs": [
+          "s2/Normal_DirectX",
+          "s2/Normal_OpenGL"
+        ]
+      },
+      "bounds": [
+        { "metric": "max_abs_diff", "scope": "whole", "max": 1 },
+        { "metric": "differing_count", "scope": "whole", "max": 5 }
+      ],
+      "evidence": {
+        "basis": "oracle_instability",
+        "summary": "Version 1's terms, scoped to the golden and the two unstable outputs of s2 (decision 307). Painter is unstable on tier0/semantics/height-normal-resolution-2048 (the domain tier0/height-normal/resolution): after save and reopen, r2 of set s2 (the height ramps at opacity 0.25 on a 2048 px set) differs from r1 on 4 values of Normal_OpenGL and 5 of Normal_DirectX, one code each, and a second recording in a freshly started Painter process reproduced both r1 and r2 (decision 077); every other map of the domain is stable. r2 equals the stencils on the stored Height (written half toward zero) instead of the read-out before the write rule. Under decision 032 r1 is the exact target and every comparison against r1 must be exact (the evaluator equals r1 on every map, parity/semantics/height-to-normal.json); this entry covers only the comparisons against r2 of the listed outputs, per map in 16-bit codes. Its bounds are the evaluator's published r2 residuals (entry height-normal-resolution-save-reopen-divergence): max |delta| 1 code, at most 5 values differing.",
+        "private_evidence": [
+          {
+            "sha256": "0f02c91260dac1035dc0805eaada5a38c177261b1629939844023eb66d33fea2",
+            "description": "private golden record of tier0/semantics/height-normal-resolution-2048: recordings r1 (same session) and r2 (after save and reopen), every exported map and its blob hash"
+          }
+        ],
+        "uncontrolled_settings": []
+      },
+      "defect_detection_test": {
+        "test_id": "tests/parity/test_verdict.py::test_decision_032_entries_catch_injected_defects",
+        "injected_defects": [
+          "one_value_off_by_one_code",
+          "uniform_offset_one_code",
+          "one_wrong_texel_region",
+          "float32_last_place_residual"
+        ],
+        "outcome": "every_injected_defect_fails"
+      },
+      "decision_id": "032",
+      "approved_by": "owner",
+      "approved_on": "2026-10-11",
+      "notes": "Version 2 (decision 307, amendment of 2026-10-19): version 1 matched its whole domain, so a stable comparison of the domain could pass within its bounds. This version keeps version 1's bounds, evidence basis and approval and limits them to the listed golden's outputs whose r2 differs from r1, measured with tools/parity/fit/stability.py on the private records named above (every other map of the listed golden is stable); the stable goldens height-normal-resolution-512, -1024 and -1024-sobel are not covered. Version 1's note: Evaluator profile painter-12.1-isolated-coverage-weights equals r1 exactly on every map of the golden (parity/reports/phase1/compositor-height-normal.md §3); decision 080. Entered under decision 032's standing approval; flagged for the owner's review."
     },
     {
       "exception_id": "EXC-006",
