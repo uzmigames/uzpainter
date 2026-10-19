@@ -1,0 +1,11 @@
+{
+  "id": 303,
+  "slug": "303-proc-cert-fence",
+  "title": "The procedural certification harness: calibration and held-out sets pinned in separate roots, a fence that refuses fitters any access to held-out data, bit-exact cases, and a held-out set spent on the first candidate it is revealed to",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase3.1_proc-backend-seam"
+  ],
+  "supersededBy": null
+}
