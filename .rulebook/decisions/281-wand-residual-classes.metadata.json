@@ -1,0 +1,13 @@
+{
+  "id": 281,
+  "slug": "281-wand-residual-classes",
+  "title": "The Wand's remaining infinite-padding misses, classified: Painter's coverage snaps UV vertices to 1/256 texel, a tap with no hinge to the ring face is moved along the fewest-hinge face path, and the gutter is decision 197's flood up to 81 seed ties",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}
