@@ -1,0 +1,13 @@
+{
+  "id": 275,
+  "slug": "275-seam-far-window",
+  "title": "The seam ring's far taps come from the 3 × 3 far texels around floor(f − ½) in v-up texel space, exact on every decoded seam texel of the flat kernel probes; on the Wand it lifts the four-map count from 3,857 to 4,517, and 632 single-triangle seam misses are no chain over the window's taps",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}
