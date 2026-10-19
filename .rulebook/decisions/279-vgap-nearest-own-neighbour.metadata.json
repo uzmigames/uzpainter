@@ -1,0 +1,13 @@
+{
+  "id": 279,
+  "slug": "279-vgap-nearest-own-neighbour",
+  "title": "The V-gap ring point comes from the triangle of the nearest own neighbour under decision 273's comparator, ties toward +u; an own neighbour in another island that no far window reaches keeps its own triangle's distance; the Wand's seam-edge reach and its 34 convex misses",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}
