@@ -7,9 +7,13 @@ documentation is read at run time from the local Painter install; no documentati
 stored in the repository.
 
 The comparison is deterministic and works on normalised words (lower case, runs of `[a-z0-9]`).
-Inline code spans that read as code (one token, or code punctuation) are cut out first, because
-module, symbol, signature, parameter and enum names are documented API shape that the inventory
-keeps on purpose (licensing §1.4); a code span of plain words is checked as prose.
+Inline code is cut out first, because module, symbol, signature, parameter and enum names are
+documented API shape that the inventory keeps on purpose (licensing §1.4). A code span of one
+token is code. In a code span of several tokens only the tokens that read as code are cut
+(`is_code_token`: code punctuation such as brackets, `=`, `|`, `/` or `->`, a `snake_case`
+or `dotted.name` identifier); its other words are checked as prose, so sentence punctuation
+(a period, a comma, an apostrophe) never turns wrapped prose into code. A span that only lists
+single-token names separated by commas (enum members, map names) is code (`is_name_list`).
 
 - verbatim span: a prose cell fails when it holds a run of `RUN_WORDS` or more consecutive
   words that occurs in a documentation page;
@@ -23,13 +27,31 @@ On the pre-sanitisation revision of the inventory these rules flag 487 of its ce
 thresholds leave room for the short domain phrases ("of the Texture Set") that any
 description of the same API shares with the documentation.
 
-Checked prose: every table cell of the Markdown inventory except the API-shape and citation
-columns (`KEPT_COLUMNS`), every paragraph and list line outside its tables (headings are
-names), and the `notes` and `justification` text of each Painter symbol entry of the
-capability inventory (`JSON_PROSE_FIELDS`).
+Two kinds of text are not prose and are cut out like code spans (decision 304, amendment of
+2026-10-19): the product and preset names of `NAME_ALLOWLIST`, which any text about the
+product has to spell as Adobe does (the edition label "<product> 12.1.0 python-doc (Python API
+0.3.5)" passes once its product name is cut), and runs made only of numbers (`(1.0, 1.0, 1.0)`,
+`0 / 0 / 0`), which are measured facts, not wording. A window or short cell counts only when it
+holds at least one word that is not a number.
+
+Checked prose (`CHECKED_FILES`): every table cell of the Markdown files except the API-shape,
+citation and UI-label columns (`KEPT_COLUMNS`), every paragraph and list line outside their
+tables (headings are names), and the `notes` and `justification` text of each Painter symbol
+entry of the capability inventory (`JSON_PROSE_FIELDS`). The Markdown files are the Substance
+API inventory, the other substance-parity analyses (02 to 08), their Astra review and every
+decision record.
+
+The full gate (no `--doc-root`, no FILE) checks `CHECKED_FILES` and needs both documentation
+families of the install, python-doc and javascript-doc, each with readable pages. A run given
+`--doc-root` or FILE is a partial scan: it says so and never counts as the gate's approval.
+
+A lexical pass is not provenance admission (the inventory's index entry stays quarantined,
+QH-SP-INVENTORY) and does not prove independent authorship.
 
 Run: `python -m tools.sources.doc_overlap [--doc-root DIR ...] [FILE ...]`. Exit status 0 when
-no cell fails, 1 on findings, 2 when no documentation root is available.
+the full gate finds no failing cell, 1 on findings, 2 when the documentation is missing or
+unusable (an expected family absent, a root without readable pages), 3 when a partial scan
+finds nothing (not an approval).
 """
 
 from __future__ import annotations
@@ -37,6 +59,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import html
+import io
 import json
 import os
 import re
@@ -48,7 +71,15 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 INVENTORY_PATH = REPO_ROOT / "docs" / "analysis" / "substance-parity" / "01-python-api-inventory.md"
 CAPABILITY_INVENTORY_PATH = REPO_ROOT / "tools" / "capabilities" / "painter-api-inventory.json"
-CHECKED_FILES = (INVENTORY_PATH, CAPABILITY_INVENTORY_PATH)
+SUBSTANCE_PARITY_DIR = INVENTORY_PATH.parent
+REVIEW_PATH = REPO_ROOT / "docs" / "analysis" / "reviews" / "substance-parity-astra-review.md"
+DECISIONS_DIR = REPO_ROOT / ".rulebook" / "decisions"
+CHECKED_FILES = (
+    *sorted(SUBSTANCE_PARITY_DIR.glob("0[1-8]-*.md")),
+    REVIEW_PATH,
+    *sorted(DECISIONS_DIR.glob("*.md")),
+    CAPABILITY_INVENTORY_PATH,
+)
 JSON_PROSE_FIELDS = ("notes", "justification")
 
 # Same convention as tests/capabilities and tests/parity/recorder: the variable names the
@@ -64,14 +95,34 @@ COVER_GRAM = 4
 COVER_MIN_WORDS = 8
 COVER_LIMIT = 0.6
 
-# Columns that hold API shape (kept verbatim by design) or citations, not description prose.
+# Columns that hold API shape (kept verbatim by design), citations or Painter's UI labels (names
+# a description has to spell as the UI does, `03-baking.md`), not description prose.
 KEPT_COLUMNS = frozenset(
-    {"symbol", "kind", "signature / fields / members", "source", "label", "module", "item", "#"}
+    {
+        "symbol",
+        "kind",
+        "signature / fields / members",
+        "source",
+        "label",
+        "module",
+        "item",
+        "#",
+        "likely ui label",
+    }
 )
 
+# Names, not wording: each is cut out of the prose like a code span, so a run never bridges it.
+# Every entry is a whole name; no generic phrase belongs here.
+NAME_ALLOWLIST: dict[str, str] = {
+    "Adobe Substance 3D Painter": "product name (approved sources, edition label, provenance)",
+    "Substance 3D Painter": "product name without the vendor",
+    "PBR Metallic Roughness": "name of a shipped export preset (`PredefinedExportPreset`)",
+}
+
 _CODE_SPAN = re.compile(r"`([^`]*)`")
-# A code span is API shape when it reads as code: one token, or any code punctuation.
-_CODE_LIKE = re.compile(r"^\S*$|[()\[\]{}:=_./\\<>*|,'\"-]")
+# A token of a code span reads as code when it holds code punctuation or an identifier joint
+# (`a_b`, `name.attr`); a period, comma, colon, apostrophe or hyphen alone is prose punctuation.
+_CODE_TOKEN = re.compile(r"[()\[\]{}=<>|*/\\$#@]|->|\w_\w|[A-Za-z_]\w+\.\w")
 _TAG = re.compile(r"<[^>]*>")
 _SCRIPT_STYLE = re.compile(r"<(script|style)\b.*?</\1>", re.DOTALL | re.IGNORECASE)
 _WORD = re.compile(r"[a-z0-9]+")
@@ -82,12 +133,53 @@ def words(text: str) -> list[str]:
     return _WORD.findall(text.lower())
 
 
-def default_doc_roots() -> list[Path]:
-    """The python-doc and javascript-doc folders of the local install, where present."""
+_NAME_TOKENS = sorted((tuple(words(name)) for name in NAME_ALLOWLIST), key=len, reverse=True)
+
+
+def is_prose(tokens: Sequence[str]) -> bool:
+    """A window of words is prose unless every word is a number."""
+    return not all(token.isdigit() for token in tokens)
+
+
+def cut_names(tokens: Sequence[str]) -> list[list[str]]:
+    """`tokens` split at each `NAME_ALLOWLIST` name, which is dropped."""
+    segments: list[list[str]] = [[]]
+    i = 0
+    while i < len(tokens):
+        name = next((n for n in _NAME_TOKENS if tuple(tokens[i : i + len(n)]) == n), None)
+        if name is None:
+            segments[-1].append(tokens[i])
+            i += 1
+        else:
+            segments.append([])
+            i += len(name)
+    return [segment for segment in segments if segment]
+
+
+class DocumentationError(Exception):
+    """The documentation compared against is missing or unusable."""
+
+
+def expected_doc_roots() -> dict[str, Path]:
+    """The python-doc and javascript-doc folders the full gate compares against."""
     objects_inv = Path(os.environ.get(PYTHON_DOC_ENV, str(DEFAULT_OBJECTS_INV)))
     python_doc = objects_inv.parent
-    candidates = (python_doc, python_doc.parent / "javascript-doc")
-    return [root for root in candidates if root.is_dir()]
+    return {"python-doc": python_doc, "javascript-doc": python_doc.parent / "javascript-doc"}
+
+
+def default_doc_roots() -> list[Path]:
+    """Both documentation families of the local install; `[]` where neither is installed.
+
+    Raises `DocumentationError` when only one family is present: a run with one family must
+    never approve text checked against the other.
+    """
+    expected = expected_doc_roots()
+    missing = [family for family, root in expected.items() if not root.is_dir()]
+    if len(missing) == len(expected):
+        return []
+    if missing:
+        raise DocumentationError(f"documentation family missing: {', '.join(missing)}")
+    return list(expected.values())
 
 
 def page_words(path: Path) -> list[str]:
@@ -112,14 +204,21 @@ class DocCorpus:
         streams: list[str] = []
         pages = 0
         for root in roots:
+            readable = 0
             for path in sorted(root.rglob("*.html")):
                 tokens = page_words(path)
                 pages += 1
+                if len(tokens) >= RUN_WORDS:
+                    readable += 1
                 streams.append(" " + " ".join(tokens) + " ")
                 for i in range(len(tokens) - RUN_WORDS + 1):
                     grams.add(tuple(tokens[i : i + RUN_WORDS]))
                 for i in range(len(tokens) - COVER_GRAM + 1):
                     cover_grams.add(tuple(tokens[i : i + COVER_GRAM]))
+            if readable == 0:
+                raise DocumentationError(f"no readable documentation pages under {root}")
+        if pages == 0:
+            raise DocumentationError("no documentation root given")
         return cls(grams, cover_grams, streams, pages)
 
     def longest_run(self, tokens: Sequence[str]) -> int:
@@ -130,7 +229,8 @@ class DocCorpus:
         best = 0
         current = 0
         for i in range(len(tokens) - RUN_WORDS + 1):
-            if tuple(tokens[i : i + RUN_WORDS]) in self.grams:
+            window = tuple(tokens[i : i + RUN_WORDS])
+            if window in self.grams and is_prose(window):
                 current = RUN_WORDS if current == 0 else current + 1
                 best = max(best, current)
             else:
@@ -149,7 +249,8 @@ class DocCorpus:
         """How many of `tokens` lie inside a `COVER_GRAM`-word window found in the documentation."""
         inside = [False] * len(tokens)
         for i in range(len(tokens) - COVER_GRAM + 1):
-            if tuple(tokens[i : i + COVER_GRAM]) in self.cover_grams:
+            window = tuple(tokens[i : i + COVER_GRAM])
+            if window in self.cover_grams and is_prose(window):
                 inside[i : i + COVER_GRAM] = [True] * COVER_GRAM
         return sum(inside)
 
@@ -228,18 +329,37 @@ def json_prose_cells(path: Path, label: str | None = None) -> Iterator[Cell]:
                 yield Cell(name, index, f"{entry['symbol']}.{field}", text)
 
 
+def is_code_token(token: str) -> bool:
+    return bool(_CODE_TOKEN.search(token))
+
+
+def is_name_list(span: str) -> bool:
+    """A code span listing names: two or more comma-separated items, each a single token."""
+    items = [item.strip() for item in span.split(",")]
+    return len(items) > 1 and all(item and len(item.split()) == 1 for item in items)
+
+
 def prose_parts(text: str) -> list[str]:
     """`text` split at its code spans, so that a run never bridges a removed symbol name.
 
-    A code span that does not read as code (several plain words, no code punctuation) is
-    prose wrapped in backticks and is kept as its own part.
+    A one-token code span is dropped. In a longer span each code token is dropped and the
+    words between them are kept, each run of them as its own part: prose wrapped in
+    backticks stays prose.
     """
     parts: list[str] = []
     last = 0
     for match in _CODE_SPAN.finditer(text):
         parts.append(text[last : match.start()])
-        if not _CODE_LIKE.search(match.group(1).strip()):
-            parts.append(match.group(1))
+        tokens = match.group(1).split()
+        if len(tokens) > 1 and not is_name_list(match.group(1)):
+            current: list[str] = []
+            for token in tokens:
+                if is_code_token(token):
+                    parts.append(" ".join(current))
+                    current = []
+                else:
+                    current.append(token)
+            parts.append(" ".join(current))
         last = match.end()
     parts.append(text[last:])
     return parts
@@ -248,13 +368,14 @@ def prose_parts(text: str) -> list[str]:
 def check_cells(cells: Iterable[Cell], corpus: DocCorpus) -> list[Finding]:
     findings: list[Finding] = []
     for cell in cells:
-        segments = [seg for seg in (words(part) for part in prose_parts(cell.text)) if seg]
+        segments = [seg for part in prose_parts(cell.text) for seg in cut_names(words(part))]
         run = max((corpus.longest_run(seg) for seg in segments), default=0)
         if run:
             findings.append(Finding(cell, f"shares a {run}-word run with the documentation"))
         elif (
             len(segments) == 1
             and SHORT_MIN_WORDS <= len(segments[0]) < RUN_WORDS
+            and is_prose(segments[0])
             and corpus.contains(segments[0])
         ):
             findings.append(Finding(cell, "whole cell occurs verbatim in the documentation"))
@@ -288,20 +409,34 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--doc-root", action="append", type=Path, default=None)
     args = parser.parse_args(argv)
-    roots = args.doc_root or default_doc_roots()
-    roots = [root for root in roots if root.is_dir()]
-    if not roots:
-        print("no documentation root found (set UZP_PAINTER_PYTHON_DOC)", file=sys.stderr)
+    partial = args.doc_root is not None or bool(args.files)
+    try:
+        roots = args.doc_root if args.doc_root is not None else default_doc_roots()
+        if not roots:
+            raise DocumentationError(f"no documentation root found (set {PYTHON_DOC_ENV})")
+        absent = [str(root) for root in roots if not root.is_dir()]
+        if absent:
+            raise DocumentationError(f"documentation root absent: {', '.join(absent)}")
+        corpus = DocCorpus.load(roots)
+    except DocumentationError as error:
+        print(error, file=sys.stderr)
         return 2
-    corpus = DocCorpus.load(roots)
+    # Findings quote the checked text, which holds non-ASCII punctuation; a legacy console
+    # code page must not abort the report.
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        sys.stdout.reconfigure(errors="backslashreplace")
     findings = check_files(args.files or CHECKED_FILES, corpus)
     for finding in findings:
         print(finding)
+    scope = "partial scan (--doc-root or FILE), not the full gate" if partial else "full gate"
     print(
-        f"{len(findings)} finding(s); {corpus.pages} documentation pages, sha256 {corpus.digest()}",
+        f"{len(findings)} finding(s); {scope}; {corpus.pages} documentation pages, "
+        f"sha256 {corpus.digest()}",
         file=sys.stderr,
     )
-    return 1 if findings else 0
+    if findings:
+        return 1
+    return 3 if partial else 0
 
 
 if __name__ == "__main__":

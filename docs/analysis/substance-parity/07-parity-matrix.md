@@ -33,12 +33,12 @@ One row per capability: the Substance 3D Painter 12.1.0 Python API symbols that 
 | B3 | Auto-unwrap at creation / reload | `project.AutoUnwrapSettings`, `AutoUnwrapUVTilesSettingsUVTilesCount`, `…TexelDensity`, `AutoUnwrapUVIslandOrientation` | Yes | |
 | B4 | USD / glTF import options | `project.UsdSettings`, `project.GltfSettings` | Yes | glTF only at creation (API limitation: `MeshReloadingSettings.mesh_settings` is `UsdSettings`) |
 | B5 | OCIO / ACE color-management mode | environment variables `OCIO`, `PAINTER_ACE_CONFIG` read by `project.create` | No | must be set in Painter's process environment |
-| B6 | Open a project | `project.open` | Yes | `open_project` (requires backup when dirty) |
+| B6 | Project open | `project.open` | Yes | `open_project` (requires backup when dirty) |
 | B7 | Close a project | `project.close` | Partial | only inside `create_project` / `open_project` |
 | B8 | Save in place (Incremental/Full) | `project.save`, `ProjectSaveMode` | Yes | `save_project` |
 | B9 | Save as (relocate) | `project.save_as` | Partial | used only inside `create_project` |
 | B10 | Save a copy / backup | `project.save_as_copy` | Yes | `save_project_copy`; optional backups in recipe, bake, reload tools |
-| B11 | Save as template (`.spt`) | `project.save_as_template` | No | |
+| B11 | Template save (`.spt`) | `project.save_as_template` | No | |
 | B12 | "Clean" unused resources | none (UI only) | N/A | |
 | B13 | Project state (open, dirty, name, path) | `project.is_open`, `needs_saving`, `name`, `file_path`, `is_in_edition_state` | Partial | `get_project_info` returns open/name/path/Texture Sets; dirty state (`needs_saving`) only through plan tools; `is_in_edition_state` is not used |
 | B14 | Project UUID, last-saved version, scene bounding box, last imported mesh | `project.get_uuid`, `last_saved_substance_painter_version`, `get_scene_bounding_box`, `last_imported_mesh_path` | Partial | only `last_imported_mesh_path` is used (mesh-reload planning) |
@@ -79,7 +79,7 @@ One row per capability: the Substance 3D Painter 12.1.0 Python API symbols that 
 | D11 | Selection | `layerstack.set_selected_nodes`, `get_selected_nodes`, `get/set_selection_type`, `SelectionType` | Partial | `select_layers` (no selection type) |
 | D12 | Multi-node creation with rollback on failure | (MCP-level composition of the insert APIs) | Partial | `plan_layer_recipe`, `create_layer_recipe`: best-effort cleanup that suppresses deletion errors, no native transaction, optional backup not restored automatically (`OPS:2425–2433`); not atomic |
 | D13 | Structural snapshot and diff | (MCP-level) | Yes | `snapshot_layer_tree`, `diff_layer_snapshots`: structure only (names, types, visibility, masks, effect lists, geometry masks, Fill-layer active channels, collapse); sources, parameters, per-channel blend/opacity, projections and Paint-layer channels are not captured, so equal snapshots do not prove equal material output |
-| D14 | Paint strokes (read/write) | none ("Strokes are not accessible from the Python API") | N/A | N/A for the public Python surface only; painting output stays relevant to product parity |
+| D14 | Paint strokes (read/write) | none (the Python API cannot read or write strokes) | N/A | N/A for the public Python surface only; painting output stays relevant to product parity |
 | D15 | Material-output (semantic) snapshot: sources, parameters, per-channel blending, projections, masks, colour spaces | (MCP-level) | No | D13 is structural only; no route captures the material-producing values needed for output comparison |
 
 ## E. Effects
@@ -92,7 +92,7 @@ One row per capability: the Substance 3D Painter 12.1.0 Python API symbols that 
 | E4 | Generator effect | `insert_generator_effect`, `GeneratorEffectNode.get/set/remove_source`, `active_channels` | Partial | insertion in a mask stack only (optional resource at insertion); image inputs of an existing effect editable by uid via `set_procedural_input`; main-graph replacement/removal on an existing effect and graph parameters not exposed (`set_fill_parameters` is Fill-layer only) |
 | E5 | Filter effect | `insert_filter_effect`, `FilterEffectNode.*` | Partial | same limits as E4 |
 | E6 | Levels effect | `insert_levels_effect`, `LevelsEffectNode.affected_channel`, `get/set_parameters`, `levels.LevelsParamsMono/RGB` | Partial | insertion in mask only; parameters not editable |
-| E7 | Compare Mask effect | `insert_compare_mask_effect`, `CompareMaskEffectParams` | No | |
+| E7 | Mask comparison effect | `insert_compare_mask_effect`, `CompareMaskEffectParams` | No | |
 | E8 | Color Selection (ID-map) effect | `insert_color_selection_effect`, `ColorSelectionEffectParams` | No | |
 | E9 | Anchor points | `insert_anchor_point_effect`, `AnchorPointEffectNode` | Partial | insert in mask (`insert_mask_effect`), list (`list_anchor_points`) |
 | E10 | Reference an anchor as a source | `set_source(channel, anchor)`, `set_material_source(anchor)`, `SourceReference.channel_mapping/referenced_channel/alpha_matte/get_levels/set_levels` | Partial | `set_fill_anchor_source` binds (Fill layers only); mapping, referenced channel, alpha matte and levels not editable |
@@ -204,7 +204,7 @@ One row per capability: the Substance 3D Painter 12.1.0 Python API symbols that 
 | M11 | Shader-parameter JSON | `exportShaderParams` | No | always `false` |
 | M12 | USD export | undocumented key ([Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: C:\Program Files\Adobe\Adobe Substance 3D Painter\resources\python\modules\engine_tests\test_usd_openpbr_roundtrip.py.]) | No | undocumented; not a supported contract |
 | M13 | Mesh export | `export.export_mesh`, `MeshExportOption`, `scene_is_triangulated`, `scene_has_tessellation` | No | |
-| M14 | Default export path | `export.get_default_export_path` | No | |
+| M14 | Export folder default | `export.get_default_export_path` | No | |
 | M15 | Export events | `ExportTexturesAboutToStart`, `ExportTexturesEnded` | No | |
 | M16 | Export a single layer node's texture | private API ([Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: C:\Program Files\Adobe\Adobe Substance 3D Painter\resources\python\modules\engine_tests\test_export_layerstack_nodes.py.]) | N/A | not public |
 | M17 | File-name tokens (`$project`, `$mesh`, `$textureSet`, `$sceneMaterial`, `$udim`, `$uvTileName`, `$colorSpace`) | `exportPresets[].maps[].fileName` | Partial | only as defined by the chosen preset; no file-name template input |

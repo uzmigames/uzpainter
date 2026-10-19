@@ -23,7 +23,7 @@ Measured facts. They come from the private goldens of the current envelope, Pain
   - A compare mask is named "Compare mask".
   - The native insert gives Normal blending everywhere.
 - **Uniform colours.**
-  - They are read back converted to the working space, linear sRGB in Legacy.
+  - A readback returns them in the working space, which is linear sRGB under Legacy.
   - A colour without a space is sRGB on BaseColor (an sRGB8 channel) and Raw on the data channels (`export-ocio-encode-legacy` readbacks).
   - The float32 formula `((f32(v) + 0.055f) / 1.055f) ^ 2.4f` (power of float32 operands, one rounding) reproduces 6 of 7 recorded components bit-exactly. Painter reads 70/255 as 0.061246056, the formula gives 0.061246071: 2 ulp.
   - Multiplying by the reciprocal, exp2/log2, the measured GPU pow tables and double precision throughout each match 3 or fewer.
@@ -96,3 +96,5 @@ The model panel (cx/gpt-6-astra, kimi/kimi-k3, xai/grok-4.5) could not be consul
 - phase1.22 records the absent symbols as release gaps.
 - When phase1.18 merges, the Height map exclusions are dropped. When R-090 is fitted, the BaseColor ones are dropped.
 - When P20-A and P20-B are recorded, `DEFAULT_SOURCES`, `default_bitmap_space`, `available_bitmap_spaces` and the sRGB decode are fitted and their exclusions and refusals removed. Owner: phase1.14_compositor-core (decision 108).
+
+*Clean-room note (2026-10-19, decision 304): the uniform-colour readback line, which followed the documentation's wording, was rephrased for clean-room hygiene; the recorded reasoning is unchanged.*

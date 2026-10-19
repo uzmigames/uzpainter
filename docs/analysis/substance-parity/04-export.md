@@ -17,7 +17,7 @@ How Painter 12.1.0 exports textures and meshes from Python: the JSON export conf
 | `ExportStatus` | `Success`, `Cancelled`, `Warning`, `Error` | Fact | `PYSRC\export.py` |
 | Events | `event.ExportTexturesAboutToStart(textures)`, `event.ExportTexturesEnded(status, message, textures)` (also fired for UI-initiated exports; the event receives `Error` on failure) | Fact | `export.html` → "Events" |
 | `export.get_default_export_path()` | Application default export path (not project-specific) | Fact | `export.html` |
-| `export.list_predefined_export_presets() -> [PredefinedExportPreset(name, url)]` | Presets embedded in the application: "dynamic list of maps exported depending on the project", may have pre/post processes "that generates custom data (e.g. glTF)", not editable; `list_output_maps(stack)` needs an open project | Fact | `export.html` (`PredefinedExportPreset`) |
+| `export.list_predefined_export_presets() -> [PredefinedExportPreset(name, url)]` | Presets built into the application: the maps they export vary with the project, some run pre- or post-processing that writes extra data (glTF, for instance), and they cannot be edited; `list_output_maps(stack)` needs an open project | Fact | `export.html` (`PredefinedExportPreset`) |
 | `export.list_resource_export_presets() -> [ResourceExportPreset(resource_id)]` | Shelf presets (resource `Type.EXPORT`), user-editable; `list_output_maps()` returns the `maps` list in JSON-config format | Fact | `export.html` (`ResourceExportPreset`) |
 | Mesh export | `export.export_mesh(file_path, MeshExportOption) -> MeshExportResult(status, message)`; helpers `scene_is_triangulated()`, `scene_has_tessellation()` — see §9 | Fact | `export.html` → "Export Mesh" |
 
@@ -26,12 +26,12 @@ How Painter 12.1.0 exports textures and meshes from Python: the JSON export conf
 | Key | Type | Meaning | Label | Source |
 |---|---|---|---|---|
 | `exportPath` | str | Root output folder | Fact | `export.html` |
-| `exportShaderParams` | bool | "Whether to export shader instances to a JSON file" | Fact | same |
+| `exportShaderParams` | bool | when true, a JSON file of the shader instances is written too | Fact | same |
 | `defaultExportPreset` | str | Name of a preset in `exportPresets`, or a preset URL (`resource://starter_assets/PBR Metallic Roughness…` or a predefined preset URL) | Fact | same |
 | `exportPresets` | list | Inline presets `{name, maps: [...]}` | Fact | same |
 | `exportPresets[].maps[].fileName` | str | Output file name with wildcards (§5); may contain `/` sub-folders | Fact | same; folder use in `PRESETS\PBR Metallic Roughness (folders or PSD groups).spexp`, `KeyShot 9+.spexp` |
 | `exportPresets[].maps[].channels[]` | list | `{destChannel, srcChannel, srcMapType, srcMapName}`; Adobe's own configs also pass `srcPath: ''` | Fact (keys); `srcPath` semantics not documented | `export.html`; `MODS\automated_tests\test_export_fileformats_bitdepth.py` |
-| `destChannel` / `srcChannel` | `L`, `R`, `G`, `B`, `A` | "In addition to alpha channel, either R+G+B must be specified, or either L only"; `L` read from a color map "will generate a mix of R+G+B" | Fact | `export.html` |
+| `destChannel` / `srcChannel` | `L`, `R`, `G`, `B`, `A` | Besides `A`, a mapping gives either all of `R`, `G`, `B` or `L` alone; reading `L` from a colour map blends its `R`, `G` and `B` | Fact | `export.html` |
 | `srcMapType` | `documentMap`, `meshMap`, `virtualMap`, `defaultMap` | channel of the document, baked mesh map, generated (converted) map, constant | Fact | same |
 | `srcMapName` (documentMap) | `basecolor, height, specular, opacity, emissive, displacement, glossiness, roughness, anisotropylevel, anisotropyangle, transmissive, scattering, reflection, ior, metallic, normal, ambientOcclusion, diffuse, specularlevel, blendingmask, user0`…`user7` | doc list (does not mention OpenPBR names or `user8`–`user31`) | Fact (list); OpenPBR naming in export not confirmed | same |
 | `srcMapName` (meshMap) | str | `ambient_occlusion, id, curvature, normal_base, world_space_normals, position, thickness` (doc list); Adobe's "Mesh Maps" preset additionally outputs bent normals, height and opacity ([Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: PAINTER\resources\python\modules\engine_tests\test_baking.py.]) | Fact | `export.html`; `MODS\engine_tests\test_baking.py` |
@@ -51,7 +51,7 @@ How Painter 12.1.0 exports textures and meshes from Python: the JSON export conf
 | After all rules, every parameter of every file must be defined, otherwise the configuration is invalid; Adobe advises a global rule with defaults. | Fact | same |
 | `sizeLog2`: int = largest side, aspect ratio kept (10 → a 2048×4096 map exports as 512×1024); `[w, h]` ignores the aspect ratio; absent = project/Texture Set size. | Fact | same |
 | `paddingAlgorithm`: `passthrough`, `color`, `transparent`, `diffusion`, `infinite`; `dilationDistance` (pixels) is needed for `transparent`, `color`, `diffusion`. | Fact | same |
-| `bitDepth` must be supported by `fileFormat`. | Fact | same |
+| `fileFormat` has to accept the chosen `bitDepth`. | Fact | same |
 
 ## 3. File formats and bit depths
 
@@ -84,13 +84,13 @@ glTF preset composition: the executable contains, next to the glTF exporter mess
 
 | Token | Meaning | Label | Source |
 |---|---|---|---|
-| `$colorSpace` | current color space | Fact | `export.html` |
+| `$colorSpace` | the active colour space | Fact | `export.html` |
 | `$mesh` | file name of the imported mesh | Fact | same |
 | `$project` | project name | Fact | same |
 | `$sceneMaterial` | material name in the imported mesh | Fact | same |
-| `$textureSet` | Texture Set name | Fact | same |
-| `$udim` | current UV tile, e.g. `1001` | Fact | same |
-| `$uvTileName` | UV-tile name | Fact | same |
+| `$textureSet` | the Texture Set's name | Fact | same |
+| `$udim` | UDIM number of the tile being written, e.g. `1001` | Fact | same |
+| `$uvTileName` | the name given to the UV tile | Fact | same |
 | `( … )` groups | Shipped presets wrap optional parts: `$mesh_$textureSet_BaseColor(_$colorSpace)(.$udim)` | Fact (pattern); "dropped when the token is empty" Hypothesis | `PRESETS\*.spexp` |
 | Legacy UDIM naming | `Arnold UDIM Legacy` / `Vray Next UDIM Legacy` use `$mesh_BaseColor(_$colorSpace).$textureSet` (Texture Set name as the tile suffix in the TextureSetPerUVTile workflow) | Fact (pattern); intent Hypothesis | `PRESETS\Arnold UDIM Legacy (AiStandard).spexp`, `Vray Next UDIM Legacy (Metallic Roughness).spexp` |
 | Tile filter | `exportList[].filter.uvTiles` / `exportParameters[].filter.uvTiles` = `[[u, v], …]` | Fact | `export.html` |
@@ -99,7 +99,7 @@ glTF preset composition: the executable contains, next to the glTF exporter mess
 
 | Virtual map | Adobe definition | Label |
 |---|---|---|
-| Normal OpenGL / Normal DirectX | baked normal combined with the Texture Set normal channel, in OpenGL / DirectX convention | Fact |
+| `Normal_OpenGL` / `Normal_DirectX` | baked normal combined with the Texture Set normal channel, in OpenGL / DirectX convention | Fact |
 | Mixed AO (`AO_Mixed`) | baked ambient occlusion combined with the ambient-occlusion channel | Fact |
 | Diffuse | from Base Color and Metallic (metallic areas black) | Fact |
 | Specular | from Base Color and Metallic | Fact |

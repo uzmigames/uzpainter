@@ -6,7 +6,7 @@
 
 ## Context
 
-Bug B10 of the practical end-to-end run (`parity/reports/phase2/practical-e2e.md`) is a design question. Over MCP, `project_open p.uzp` → `layer_set {name: "x"}` → `project_close` → `project_open p.uzp` shows the layer named "x". `inspect` shows the current revision (21) above the last save (`save-20`). Painter's documented close loses unsaved data ("Any unsaved data will be lost").
+Bug B10 of the practical end-to-end run (`parity/reports/phase2/practical-e2e.md`) is a design question. Over MCP, `project_open p.uzp` → `layer_set {name: "x"}` → `project_close` → `project_open p.uzp` shows the layer named "x". `inspect` shows the current revision (21) above the last save (`save-20`). Painter's documented close discards whatever was not saved.
 
 Measured facts:
 
@@ -62,3 +62,5 @@ Option C, unanimous.
 - **Crash and retry.** A worker killed between the revert and the save leaves the file at the saved content with `needs_saving()` true. Repeating the same call reverts again (to the content the file already holds), saves and closes. The supervisor never replays the interrupted call by itself (02 §5).
 - **Lease (open, for the HTTP lease work).** `project_close` is not a mutating tool, like `project_save`, so in HTTP mode it needs no lease. With `discard: true` a client without the lease can now drop another client's unsaved revisions. They stay recoverable by `project_revert`. Making `project_close` and `project_save` need the lease is left to the lease work (B8 group), since it changes every HTTP client's close.
 - Tests: `tests/supervisor/test_typed_tools.py::test_close_keeps_every_commit_and_discard_returns_to_the_last_save` reproduces B10. The facade's own discard stays covered by `tests/python/test_pyapi_dispatcher.py::test_close_discards_what_was_not_saved`.
+
+*Clean-room note (2026-10-19, decision 304): the quoted close documentation in Context was rephrased for clean-room hygiene; the recorded reasoning is unchanged.*

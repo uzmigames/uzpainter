@@ -8,7 +8,7 @@
 
 Decision 148 left an orthographic camera in a `painter_viewport` capture as a release gap owned by phase2.3_realtime-preview, because the pass cast perspective rays only (`NotYetSupported`). The Assets3D render standard frames its reference renders with an orthographic camera.
 
-Painter's documented camera has `orthographic_height` ("the orthographic height of the camera"). How Painter maps it to the frame has not been recorded. The viewport is a preview, never parity evidence (decision 018), and `field_of_view` is already taken as the vertical angle by UzPainter's convention (decision 148).
+Painter's documented camera has `orthographic_height` (documented as the camera's height in orthographic projection). How Painter maps it to the frame has not been recorded. The viewport is a preview, never parity evidence (decision 018), and `field_of_view` is already taken as the vertical angle by UzPainter's convention (decision 148).
 
 The pass bins triangles on the CPU by their projected screen bounds into 16 × 16 tiles. Each pixel casts one ray against its tile and keeps the nearest hit with t > 0. Its regression goldens are keyed by the kernel source's hash, the adapter and the driver.
 
@@ -56,3 +56,5 @@ The pass bins triangles on the CPU by their projected screen bounds into 16 × 1
 - `uzpainter.render.capture` renders orthographic cameras. The capability note no longer lists the gap.
 - phase2.2's headless test no longer expects the orthographic refusal.
 - Found while testing, and present before this decision (the perspective images are byte-identical): perspective rays are not watertight. On the plane seen from above, five pixels on the two triangles' shared diagonal (row + column = 63 at 64 × 64) show the background, because a ray along the shared edge misses both triangles in the binary32 Möller-Trumbore test. The orthographic images have no such hole. The fix changes the perspective goldens, so it needs an owner (the viewport pass of phase2.1_preview-viewport-window is merged); it is not made here.
+
+*Clean-room note (2026-10-19, decision 304): the quoted `orthographic_height` documentation in Context was rephrased for clean-room hygiene; the recorded reasoning is unchanged.*

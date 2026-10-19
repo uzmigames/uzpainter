@@ -68,7 +68,7 @@ The conditions are adopted below, with one exception. C2's "pin the maps, not th
    - **Command.** `python -m tools.parity.recorder record-migration <request> --assets-root <Assets3D> [--launch]`.
 2. **The Tunic v10 request** (`--pilot tunic`, `tools/parity/recorder/tunic.py`).
    - It is `parity/envelopes/painter-12.1.5_js-api.1.1.20/requests/phase2/tier1/tunic-v10.json`. The project input is pinned at `c43db46a…`. A project that differs from the piece manifest's verified pin is refused.
-   - The export configuration is `parity/fixtures/tier1/tunic-v10/export-config.json`:
+   - The export configuration is in `parity/fixtures/tier1/tunic-v10/export-config.json`:
      - the shipped `Blender (Principled BSDF)` preset;
      - `DefaultMaterial`;
      - PNG 16-bit, `sizeLog2` 12, `infinite` padding, no dithering, no shader parameters.
@@ -84,7 +84,7 @@ The conditions are adopted below, with one exception. C2's "pin the maps, not th
      - the Normal mesh map;
      - the mesh (the FBX, labelled an assumption);
      - the double-sided value from the report;
-     - the export configuration.
+     - the export configuration file.
    - The 8 recovered masks and the Normal map resolve from the private store. Each is checked against the report's SHA-256 and resource versions.
    - The nine lost masks are expected back at their original paths `_tmp/claude/<name>.png`. A restored mask's SHA-1 is recorded, to be checked against the golden's readback.
    - Today the command refuses and lists the nine (`MissingInputs`).
@@ -115,3 +115,5 @@ The conditions are adopted below, with one exception. C2's "pin the maps, not th
 
 - The owner can record the Tunic golden in the next Painter session, independently of the lost masks.
 - The migration readback will give each layer's resource version. A restored mask can then be checked byte for byte against what the approved project binds.
+
+*Clean-room note (2026-10-19, decision 304): two short lines naming the export configuration, which matched documentation phrases whole, were rephrased for clean-room hygiene; the recorded reasoning is unchanged.*

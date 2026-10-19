@@ -42,7 +42,7 @@
 | CLIENT | MCP/src/substance_painter_mcp/client.py |
 | PIPE | E:/UzmiGames/Assets3D/Pipeline/mcp |
 
-**Fact:** In tables, “confirmed” means that the stated local source supports the claim, not that a live operation succeeded. Test definitions establish expected behavior, not a successful run. A byte offset is decimal and zero-based. Short HTML fragments such as #Stack.from_name expand to #substance_painter.textureset.Stack.from_name in that row's module; the inventory appendix supplies complete fragments.
+**Fact:** In tables, “confirmed” means that the stated local source supports the claim, not that a live operation succeeded. Test definitions establish expected behavior, not a successful run. A byte offset is decimal and zero-based. Short HTML fragments such as `#Stack.from_name` expand to `#substance_painter.textureset.Stack.from_name` in that row's module; the inventory appendix supplies complete fragments.
 
 **Recommendation:** Preserve three labels throughout downstream design: **Fact** for supported local observations, **Hypothesis** for unverified semantics or runtime behavior, and **Recommendation** for the proposed engineering decision. A public Python capability, a named MCP route, an optional raw-script route, and a Painter product capability are separate surfaces.
 
@@ -104,7 +104,7 @@
 | source | 58 |
 | textureset | 52 |
 | ui | 16 |
-| substance_painter_plugins | 11 |
+| `substance_painter_plugins` | 11 |
 | Total | 545 |
 
 ## Verdict by reviewed file
@@ -251,7 +251,7 @@
 | textureset | substance_painter.textureset.UVTile.u | Fact: inherited public field omitted at D01:692. Recommendation: add u: int. | P/textureset.py:330; PH/textureset/uvtile.html:831#substance_painter.textureset.UVTile |
 | textureset | substance_painter.textureset.UVTile.v | Fact: inherited public field omitted at D01:692. Recommendation: add v: int. | P/textureset.py:331; same class anchor |
 | textureset | substance_painter.textureset.TextureSet.material_id | Fact: inherited public field omitted at D01:711. Recommendation: add material_id: int. | P/textureset.py:805; PH/textureset/textureset.html:830#substance_painter.textureset.TextureSet |
-| textureset | substance_painter.textureset.UVTile constructor | Fact: inherited signature absent. Recommendation: add UVTile(u: int, v: int, _material_id: int). _material_id is not an additional public field. | P/textureset.py:328–335; PH/textureset/uvtile.html:831#substance_painter.textureset.UVTile |
+| textureset | substance_painter.textureset.UVTile constructor | Fact: inherited signature absent. Recommendation: add `UVTile(u: int, v: int, _material_id: int)`. `_material_id` is not an additional public field. | P/textureset.py:328–335; PH/textureset/uvtile.html:831#substance_painter.textureset.UVTile |
 | textureset | substance_painter.textureset.TextureSet constructor | Fact: inherited signature absent. Recommendation: add TextureSet(material_id: int). | P/textureset.py:803–808; PH/textureset/textureset.html:830#substance_painter.textureset.TextureSet |
 | layerstack | substance_painter.layerstack.CylindricalProjectionParams (private class attribute; [Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: P/layerstack.py.]) | Fact: D01:393 labels a private ClassVar as a dataclass field; it is private class metadata, excluded from constructor. Recommendation: remove from public fields or mark private metadata. | P/layerstack.py:1846; PH/layerstack/layereffect/fill.html:1746#substance_painter.layerstack.CylindricalProjectionParams |
 | layerstack | substance_painter.layerstack.FillParamsEditorMixin | Fact: non-underscore class explicitly marked :meta private:. Recommendation: mark implementation evidence, not supported public API. | P/layerstack.py:518; D01:299 |
@@ -262,9 +262,9 @@
 
 **Fact:** No enum-member transcription error was found in the 38 native and 11 Python enum rows. ResourceID's three anchored fields and ReloadMeshStatus's two anchored members already occur in aggregate rows. All 378 directly transcribed callable/property signatures match source AST after excluding implicit self/cls.
 
-**Fact:** P/layerstack.py:1530 annotates get_node_by_uid(node_id: int) as List[Union[HierarchicalNode, EffectNode]], and PH/layerstack/navigation.html:1010 renders that same list. It returns a single node; [Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: P/layerstack.py.] D01:67 already records this upstream discrepancy; it is not a transcription error. **Recommendation:** Preserve the shipped signature with the behavior-consistent single-node return noted separately.
+**Fact:** P/layerstack.py:1530 annotates `get_node_by_uid(node_id: int)` as `List[Union[HierarchicalNode, EffectNode]]`, and PH/layerstack/navigation.html:1010 renders that same list. It returns a single node; [Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: P/layerstack.py.] D01:67 already records this upstream discrepancy; it is not a transcription error. **Recommendation:** Preserve the shipped signature with the behavior-consistent single-node return noted separately.
 
-**Fact:** Five HTML/source signature differences reduce to equivalent defaults: project.create (P/project.py:824; PH/project.html:1133) uses Settings() versus its expanded instance representation; save/save_as/save_as_copy use a private module constant versus ProjectSaveMode.Incremental ([Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: P/project.py.]) (P/project.py:718/:684/:742; PH/project.html:1621/:1653/:1690); Shelf.resources uses StandardQuery.ALL_RESOURCES versus the empty string (P/resource.py:946; PH/resource.html:2485). HTML alias expansion, forward-reference formatting, module-prefix removal, and optionality inferred from None defaults do not create wrong signatures.
+**Fact:** Five HTML/source signature differences reduce to equivalent defaults: `project.create` (P/project.py:824; PH/project.html:1133) uses `Settings()` versus its expanded instance representation; `save`/`save_as`/`save_as_copy` use a private module constant versus `ProjectSaveMode.Incremental` ([Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: P/project.py.]) (P/project.py:718/:684/:742; PH/project.html:1621/:1653/:1690); `Shelf.resources` uses `StandardQuery.ALL_RESOURCES` versus the empty string (P/resource.py:946; PH/resource.html:2485). HTML alias expansion, forward-reference formatting, module-prefix removal, and optionality inferred from None defaults do not create wrong signatures.
 
 **Fact:** [Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: P/_utility.py; P/layerstack.py; P/project.py.] **Recommendation:** Preserve real default_factory expressions rather than copying display-only mutable lists or quoted class names into an implementation.
 
@@ -276,22 +276,22 @@
 
 | ID | Reviewed claim | Inspected source | Fact: validation result / Recommendation where stated |
 |---|---|---|---|
-| V01 | D02:17 ordinary versus layered stack names | PH/textureset/stack.html#substance_painter.textureset.Stack and #substance_painter.textureset.Stack.from_name | Confirmed by examples: ordinary stack unnamed; layered stacks named, e.g. Mask1. Stack.name prose contradicts those examples. Recommendation: annotate upstream inconsistency. |
+| V01 | D02:17 ordinary versus layered stack names | `PH/textureset/stack.html#substance_painter.textureset.Stack` and `#substance_painter.textureset.Stack.from_name` | Confirmed by examples: ordinary stack unnamed; layered stacks named, e.g. Mask1. Stack.name prose contradicts those examples. Recommendation: annotate upstream inconsistency. |
 | V02 | D02:18 one channel per type; no add_channel under material layering | Same file #substance_painter.textureset.Stack.add_channel | Confirmed; duplicate addition raises. |
-| V03 | D02:24 stable integer UID and stale ValueError | PH/layerstack/navigation.html#substance_painter.layerstack.Node, #substance_painter.layerstack.Node.uid, #substance_painter.layerstack.get_node_by_uid | Qualified: integer internal ID and invalidation are documented; persistence across reload/recreation/undo is not promised. |
+| V03 | D02:24 stable integer UID and stale ValueError | `PH/layerstack/navigation.html#substance_painter.layerstack.Node`, `#substance_painter.layerstack.Node.uid`, `#substance_painter.layerstack.get_node_by_uid` | Qualified: integer internal ID and invalidation are documented; persistence across reload/recreation/undo is not promised. |
 | V04 | D02:28–43 twelve node types | PH/layerstack/navigation.html#substance_painter.layerstack.NodeType; P/layerstack.py | Confirmed all 12 types. |
 | V05 | D02:42 instance synchronization/source-only editing | PH/layerstack/layereffect/instance.html introduction and #substance_painter.layerstack.instantiate | Qualified: synchronized content is source-driven; examples rename instances; mesh-dependent results can differ. |
 | V06 | D02:63–82 insertion rules | PH/layerstack/edition.html, both “Insertion rules” tables | Confirmed cell by cell: Paint/Fill all three contexts; CompareMask/ColorSelection/SmartMask mask-only; Group/SmartMaterial/Instance not relative to an effect. |
-| V07 | D02:88 mask colors and duplicate-mask failure | PH/layerstack/navigation.html#substance_painter.layerstack.MaskBackground and #substance_painter.layerstack.LayerNode.add_mask | Confirmed Black/White and ValueError for second mask. |
-| V08 | D02:91 monochannel mask Fill semantics | PH/layerstack/layereffect/fill.html#substance_painter.layerstack.FillEffectNode.set_source, #substance_painter.layerstack.FillEffectNode.source_mode, #substance_painter.layerstack.FillEffectNode.get_material_source | Confirmed None channel/mode; multichannel violation raises EditionContextException; material getter raises RuntimeError outside Material mode. |
-| V09 | D02:99–100 channel blend/opacity versus mask None | PH/layerstack/navigation.html#substance_painter.layerstack.Node.get_blending_mode, #substance_painter.layerstack.Node.set_blending_mode, #substance_painter.layerstack.Node.set_opacity | Confirmed; opacity 0..1 and wrong channel presence raises ValueError. |
+| V07 | D02:88 mask colors and duplicate-mask failure | `PH/layerstack/navigation.html#substance_painter.layerstack.MaskBackground` and `#substance_painter.layerstack.LayerNode.add_mask` | Confirmed Black/White and ValueError for second mask. |
+| V08 | D02:91 monochannel mask Fill semantics | `PH/layerstack/layereffect/fill.html#substance_painter.layerstack.FillEffectNode.set_source`, `#substance_painter.layerstack.FillEffectNode.source_mode`, `#substance_painter.layerstack.FillEffectNode.get_material_source` | Confirmed None channel/mode; multichannel violation raises EditionContextException; material getter raises RuntimeError outside Material mode. |
+| V09 | D02:99–100 channel blend/opacity versus mask None | `PH/layerstack/navigation.html#substance_painter.layerstack.Node.get_blending_mode`, `#substance_painter.layerstack.Node.set_blending_mode`, `#substance_painter.layerstack.Node.set_opacity` | Confirmed; opacity 0..1 and wrong channel presence raises ValueError. |
 | V10 | D02:102 blending modes and normal descriptions | PH/layerstack/navigation.html#substance_painter.layerstack.BlendingMode | Confirmed 32 modes; Combine/Detail/InverseDetail descriptions supported. Complete numerical formulas are not supplied. |
 | V11 | D02:111–114 OpenPBR/user/legacy channels | PH/textureset/index.html#substance_painter.textureset.ChannelType; P/textureset.py:136–173; H/index.html 0.3.7 changelog | Confirmed names and alias policy; exact native alias equality mapping remains unproved. |
 | V12 | D02:122–132 channel formats | PH/textureset/index.html#substance_painter.textureset.ChannelFormat; P/textureset.py:115–133 | Confirmed nine formats, color/grayscale, integer/float depth, and sRGB8 versus linear RGB8. |
 | V13 | D02:138 Texture Set/tile resolution rules | PH/textureset/index.html#substance_painter.textureset.Resolution | Confirmed powers of two and square tiles; no universal range established. Source-procedural limits are a different domain. |
 | V14 | D02:175 procedural boolean parameter caveat | PH/source/substance.html#substance_painter.source.SourceSubstance.set_parameters warning | Confirmed documented int32/bool caveat despite the annotation. |
 | V15 | D02:180 source resolution overrides | PH/source/index.html#substance_painter.source.ResolutionOverride and #substance_painter.source.ResolutionMode; PH/source/substance.html#substance_painter.source.SourceSubstance.resolution | Confirmed 128–4096/power-of-two, Auto log2, and filter restriction; text says deprecated Manual while enum says Custom. Not a global output cap. |
-| V16 | D02:207 symmetry bounds | PH/layerstack/layereffect/fill.html#substance_painter.layerstack.RadialSymmetryParams and #substance_painter.layerstack.MirrorSymmetryParams | Confirmed clamping: count 2..16, angle -360..360, axis position -10..10. |
+| V16 | D02:207 symmetry bounds | `PH/layerstack/layereffect/fill.html#substance_painter.layerstack.RadialSymmetryParams` and `#substance_painter.layerstack.MirrorSymmetryParams` | Confirmed clamping: count 2..16, angle -360..360, axis position -10..10. |
 | V17 | D02:258 user assets empty | C:/Users/Bolado/Documents/Adobe/Adobe Substance 3D Painter/assets, recursively inspected | Confirmed only README.txt in the inspected user asset tree. |
 | V18 | D03:13 ten bake maps | P/textureset.py:176–183; PH/baking.html | Confirmed ten MeshMapUsage names; does not establish internal baker-ID equivalence. |
 | V19 | D03:30 map source identifiers | E/test_baking.py:113–127; X/Mesh Maps.spexp | Confirmed all ten identifiers, with bent_normals/height/opacity naming differences. |
@@ -305,9 +305,9 @@
 | V27 | D03:90 no individual Normal/NormalWS/Opacity fields | CUBE ([Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: R/python/modules/automated_tests/resources/layerstack-cube.spp.]) | Confirmed for this saved specimen; does not prove no native options in every version/context. |
 | V28 | D03:92 AO examples versus defaults | J/alg.baking.html textureSetBakingParameters, around 1403–1429; CUBE | Confirmed examples are not defaults: the specimen value ([Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: R/python/modules/automated_tests/resources/layerstack-cube.spp.]) differs from JS example Max_Occluder_Distance 0.1. |
 | V29 | D03:119 creation-time common links | PH/baking.html example comment | Confirmed documented creation example; not an executed universal workflow guarantee. |
-| V30 | D03:120 async cancellation handle | PH/baking.html#substance_painter.baking.bake_async and #substance_painter.baking.bake_selected_textures_async | Confirmed StopSource return and BakingProcessEnded completion. |
-| V31 | D04:16 export failures/cancelled files | PH/export.html#substance_painter.export.export_project_textures | Confirmed documented exception/cancellation behavior and possible Error end event. |
-| V32 | D04:20–21 predefined versus resource presets | PH/export.html#substance_painter.export.PredefinedExportPreset and #substance_painter.export.ResourceExportPreset, list_output_maps methods | Confirmed dynamic/noneditable versus editable resource JSON distinction; predefined map listing requires open project/valid stack. |
+| V30 | D03:120 async cancellation handle | `PH/baking.html#substance_painter.baking.bake_async` and `#substance_painter.baking.bake_selected_textures_async` | Confirmed StopSource return and BakingProcessEnded completion. |
+| V31 | D04:16 export failures/cancelled files | `PH/export.html#substance_painter.export.export_project_textures` | Confirmed documented exception/cancellation behavior and possible Error end event. |
+| V32 | D04:20–21 predefined versus resource presets | `PH/export.html#substance_painter.export.PredefinedExportPreset` and `#substance_painter.export.ResourceExportPreset`, list_output_maps methods | Confirmed dynamic/noneditable versus editable resource JSON distinction; predefined map listing requires open project/valid stack. |
 | V33 | D04:34–39 packing JSON source families | PH/export.html “Full json_config dict possibilities” code | Confirmed transcription; legacy names, baseColor/basecolor inconsistency, and shorter mesh-map list mean it is not an exhaustive native schema. |
 | V34 | D04:53–56 overrides, size, padding | Same PH/export.html JSON block | Confirmed override rules, scalar/aspect and pair sizing, padding/dilation; D04 appropriately corrects apparent 4086 typo to 4096. |
 | V35 | D04:65–77 format/depth matrix | A/test_export_fileformats_bitdepth.py:118–284, AST | Confirmed defined cases and expectations; no claim of local test execution. |
@@ -322,8 +322,8 @@
 | V44 | D05:20 templates and setting overrides | R/starter_assets/templates; PH/project.html#substance_painter.project.create | Confirmed 26 templates, 12,826,593..13,170,192 bytes, and settings overriding template behavior. |
 | V45 | D05:22 project color configuration | PH/project.html#substance_painter.project.create | Confirmed OCIO/ACE/Legacy environment selection, OCIO precedence, and invalid ProjectError. |
 | V46 | D05:36/:38 units and unwrap omission | PH/project.html#substance_painter.project.Settings | Confirmed centimeters, zero/None file-unit semantics, None no unwrap, and UsdSettings/GltfSettings support. |
-| V47 | D05:46–48 auto-unwrap defaults/limits | PH/project.html#substance_painter.project.AutoUnwrapSettings, #substance_painter.project.AutoUnwrapUVTilesSettingsUVTilesCount, #substance_painter.project.AutoUnwrapUVTilesSettingsTexelDensity | Confirmed actual documented defaults, margin 0..20, tiles 1..1024, density .01..1e6, reference 128..4096, orientation fallback. |
-| V48 | D05:59 case-sensitive set/stack/resource names | PH/textureset/stack.html#substance_painter.textureset.Stack.from_name | Only set/stack case sensitivity supported. Recommendation: remove resource extension or provide resource-specific evidence. |
+| V47 | D05:46–48 auto-unwrap defaults/limits | `PH/project.html#substance_painter.project.AutoUnwrapSettings`, `#substance_painter.project.AutoUnwrapUVTilesSettingsUVTilesCount`, `#substance_painter.project.AutoUnwrapUVTilesSettingsTexelDensity` | Confirmed actual documented defaults, margin 0..20, tiles 1..1024, density .01..1e6, reference 128..4096, orientation fallback. |
+| V48 | D05:59 case-sensitive set/stack/resource names | `PH/textureset/stack.html#substance_painter.textureset.Stack.from_name` | Only set/stack case sensitivity supported. Recommendation: remove resource extension or provide resource-specific evidence. |
 | V49 | D05:86–87 Full versus Incremental save | PH/project.html#substance_painter.project.ProjectSaveMode; J/alg.project.html:1666–1670 | Confirmed Full rewrite and removal of incremental fragmentation; no codec/layout proof. |
 | V50 | D05:111 HDF5 family signatures | CUBE; R/samples/MeetMat.spp; R/starter_assets/templates/Unreal Engine.spt; R/starter_assets/smart-materials/Effect/Dirt.spsm; R/starter_assets/smart-masks/Cavity Rust.spmsk | Confirmed each inspected first-eight-byte signature 894844460d0a1a0a; not schema/compression/writability. |
 | V51 | D05:115 mesh storage strings | CUBE ([Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: R/python/modules/automated_tests/resources/layerstack-cube.spp.]) | Confirmed strings; entry extraction and layout remain unverified. |
@@ -470,7 +470,7 @@
 | Active channels | OPS:2217–2244; P/source.py:308–321 | State each supported node class and empty-set behavior, including false Paint assignment. |
 | Bake mutation/links/rollback | OPS:960–970/:989–1001 | Separate native property writes, linked Texture Set propagation, and rollback scope. |
 | Export filename tokens | PH/export.html:1322–1334 | Cover $project, $mesh, $textureSet, $sceneMaterial, $udim, $uvTileName, and $colorSpace; preset-driven availability differs from direct MCP template input. |
-| Export derivations/normal convention | PH/export.html:1350–1375 | Separate document/mesh/virtual/constant sources, Normal_OpenGL/Normal_DirectX, AO_Mixed, Glossiness, and f0 from mesh import normal format. |
+| Export derivations/normal convention | PH/export.html:1350–1375 | Separate document/mesh/virtual/constant sources, `Normal_OpenGL`/`Normal_DirectX`, `AO_Mixed`, Glossiness, and f0 from mesh import normal format. |
 | Rectangular export sizing | PH/export.html:1401–1415; OPS:3786/:3791 | Separate pair sizing from scalar/aspect behavior and MCP scalar limitations. |
 | Per-root presets | PH/export.html:1466–1470 exportList.exportPreset | Separate per-root preset selection from one MCP default and from parameter-rule overrides. |
 | Semantic snapshots | OPS:2014–2057 | Capture omitted material-producing values before using snapshots as an equivalence oracle. |
@@ -486,51 +486,51 @@
 
 | ID | Full HTML symbol / anchor | Fact: declaration or inherited signature | Fact: HTML line; source implementation |
 |---|---|---|---|
-| A01 | substance_painter.layerstack.FillLayerNode.active_channels | property active_channels: Set[ChannelType]; setter accepts channels: Set[ChannelType] | fill.html:943; P/source.py:308/:320 |
-| A02 | substance_painter.layerstack.FillLayerNode.get_material_source | get_material_source() -> SourceSubstance \| SourceReference | fill.html:959; P/source.py:398 |
-| A03 | substance_painter.layerstack.FillLayerNode.get_projection_mode | get_projection_mode() -> ProjectionMode | fill.html:980; P/layerstack.py:525 |
-| A04 | substance_painter.layerstack.FillLayerNode.get_projection_parameters | get_projection_parameters() -> ProjectionParams \| None | fill.html:994; P/layerstack.py:542 |
-| A05 | substance_painter.layerstack.FillLayerNode.get_source | get_source(channeltype: ChannelType \| None = None) -> Source | fill.html:1016; P/source.py:349 |
-| A06 | substance_painter.layerstack.FillLayerNode.get_symmetry_parameters | get_symmetry_parameters() -> SymmetryParams | fill.html:1041; P/layerstack.py:595 |
-| A07 | substance_painter.layerstack.FillLayerNode.is_symmetry_enabled | is_symmetry_enabled() -> bool | fill.html:1062; P/layerstack.py:573 |
-| A08 | substance_painter.layerstack.FillLayerNode.reset_material_source | reset_material_source() -> None | fill.html:1081; P/source.py:429 |
-| A09 | substance_painter.layerstack.FillLayerNode.reset_source | reset_source(channeltype: ChannelType \| None = None) -> None | fill.html:1095; P/source.py:388 |
-| A10 | substance_painter.layerstack.FillLayerNode.set_material_source | set_material_source(source: ResourceID \| layerstack.AnchorPointEffectNode) -> SourceSubstance \| SourceReference | fill.html:1113; P/source.py:409 |
-| A11 | substance_painter.layerstack.FillLayerNode.set_projection_mode | set_projection_mode(projection_mode: ProjectionMode) | fill.html:1136; P/layerstack.py:533 |
-| A12 | substance_painter.layerstack.FillLayerNode.set_projection_parameters | set_projection_parameters(projection_parameters: ProjectionParams) | fill.html:1150; P/layerstack.py:558 |
-| A13 | substance_painter.layerstack.FillLayerNode.set_source | set_source(channeltype: ChannelType \| None, source: ResourceID \| Color \| layerstack.AnchorPointEffectNode) -> Source | fill.html:1169; P/source.py:362 |
-| A14 | substance_painter.layerstack.FillLayerNode.set_sources_from_preset | set_sources_from_preset(preset: ResourceID) -> None | fill.html:1196; P/source.py:437 |
-| A15 | substance_painter.layerstack.FillLayerNode.set_symmetry_enabled | set_symmetry_enabled(enabled: bool) | fill.html:1213; P/layerstack.py:584 |
-| A16 | substance_painter.layerstack.FillLayerNode.set_symmetry_parameters | set_symmetry_parameters(symmetry_parameters: SymmetryParams) | fill.html:1229; P/layerstack.py:609 |
-| A17 | substance_painter.layerstack.FillLayerNode.source_mode | property source_mode: SourceMode | fill.html:1258; P/source.py:332 |
-| A18 | substance_painter.layerstack.FillEffectNode.active_channels | property active_channels: Set[ChannelType]; setter accepts channels: Set[ChannelType] | fill.html:1285; P/source.py:308/:320 |
-| A19 | substance_painter.layerstack.FillEffectNode.get_material_source | get_material_source() -> SourceSubstance \| SourceReference | fill.html:1301; P/source.py:398 |
-| A20 | substance_painter.layerstack.FillEffectNode.get_projection_mode | get_projection_mode() -> ProjectionMode | fill.html:1322; P/layerstack.py:525 |
-| A21 | substance_painter.layerstack.FillEffectNode.get_projection_parameters | get_projection_parameters() -> ProjectionParams \| None | fill.html:1336; P/layerstack.py:542 |
-| A22 | substance_painter.layerstack.FillEffectNode.get_source | get_source(channeltype: ChannelType \| None = None) -> Source | fill.html:1358; P/source.py:349 |
-| A23 | substance_painter.layerstack.FillEffectNode.get_symmetry_parameters | get_symmetry_parameters() -> SymmetryParams | fill.html:1383; P/layerstack.py:595 |
-| A24 | substance_painter.layerstack.FillEffectNode.is_symmetry_enabled | is_symmetry_enabled() -> bool | fill.html:1404; P/layerstack.py:573 |
-| A25 | substance_painter.layerstack.FillEffectNode.reset_material_source | reset_material_source() -> None | fill.html:1423; P/source.py:429 |
-| A26 | substance_painter.layerstack.FillEffectNode.reset_source | reset_source(channeltype: ChannelType \| None = None) -> None | fill.html:1437; P/source.py:388 |
-| A27 | substance_painter.layerstack.FillEffectNode.set_material_source | set_material_source(source: ResourceID \| layerstack.AnchorPointEffectNode) -> SourceSubstance \| SourceReference | fill.html:1455; P/source.py:409 |
-| A28 | substance_painter.layerstack.FillEffectNode.set_projection_mode | set_projection_mode(projection_mode: ProjectionMode) | fill.html:1478; P/layerstack.py:533 |
-| A29 | substance_painter.layerstack.FillEffectNode.set_projection_parameters | set_projection_parameters(projection_parameters: ProjectionParams) | fill.html:1492; P/layerstack.py:558 |
-| A30 | substance_painter.layerstack.FillEffectNode.set_source | set_source(channeltype: ChannelType \| None, source: ResourceID \| Color \| layerstack.AnchorPointEffectNode) -> Source | fill.html:1511; P/source.py:362 |
-| A31 | substance_painter.layerstack.FillEffectNode.set_sources_from_preset | set_sources_from_preset(preset: ResourceID) -> None | fill.html:1538; P/source.py:437 |
-| A32 | substance_painter.layerstack.FillEffectNode.set_symmetry_enabled | set_symmetry_enabled(enabled: bool) | fill.html:1555; P/layerstack.py:584 |
-| A33 | substance_painter.layerstack.FillEffectNode.set_symmetry_parameters | set_symmetry_parameters(symmetry_parameters: SymmetryParams) | fill.html:1571; P/layerstack.py:609 |
-| A34 | substance_painter.layerstack.FillEffectNode.source_mode | property source_mode: SourceMode | fill.html:1600; P/source.py:332 |
-| A35 | substance_painter.layerstack.FilterEffectNode.active_channels | property active_channels: Set[ChannelType]; inherited, D01:422 | PH/layerstack/layereffect/filter.html:957; P/source.py:308/:320 |
-| A36 | substance_painter.layerstack.GeneratorEffectNode.active_channels | property active_channels: Set[ChannelType]; inherited, D01:422 | PH/layerstack/layereffect/generator.html:952; P/source.py:308/:320 |
-| A37 | substance_painter.source.SourceBitmap.uid | uid() -> int; inherited | PH/source/bitmap.html:934; P/_utility.py:262 |
-| A38 | substance_painter.source.SourceFont.uid | uid() -> int; inherited | PH/source/font.html:912; P/_utility.py:262 |
-| A39 | substance_painter.source.SourceUniformColor.uid | uid() -> int; inherited | PH/source/uniformcolor.html:892; P/_utility.py:262 |
-| A40 | substance_painter.source.SourceVectorial.uid | uid() -> int; inherited | PH/source/vectorial.html:917; P/_utility.py:262 |
-| A41 | substance_painter.project.ReloadMeshStatus.ERROR | ERROR = 2; already in D01:491 enum row | PH/project.html:1910#substance_painter.project.ReloadMeshStatus.ERROR |
-| A42 | substance_painter.project.ReloadMeshStatus.SUCCESS | SUCCESS = 0; already in D01:491 enum row | PH/project.html:1916#substance_painter.project.ReloadMeshStatus.SUCCESS |
-| A43 | substance_painter.resource.ResourceID.context | context: str; already in class fields | PH/resource.html:1706#substance_painter.resource.ResourceID.context; P/resource.py:101 |
-| A44 | substance_painter.resource.ResourceID.name | name: str; already in class fields | PH/resource.html:1717#substance_painter.resource.ResourceID.name; P/resource.py:102 |
-| A45 | substance_painter.resource.ResourceID.version | version: str = None; already in class fields | PH/resource.html:1728#substance_painter.resource.ResourceID.version; P/resource.py:103 |
+| A01 | `substance_painter.layerstack.FillLayerNode.active_channels` | `property active_channels: Set[ChannelType]`; setter accepts `channels: Set[ChannelType]` | fill.html:943; P/source.py:308/:320 |
+| A02 | `substance_painter.layerstack.FillLayerNode.get_material_source` | `get_material_source() -> SourceSubstance \| SourceReference` | fill.html:959; P/source.py:398 |
+| A03 | `substance_painter.layerstack.FillLayerNode.get_projection_mode` | `get_projection_mode() -> ProjectionMode` | fill.html:980; P/layerstack.py:525 |
+| A04 | `substance_painter.layerstack.FillLayerNode.get_projection_parameters` | `get_projection_parameters() -> ProjectionParams \| None` | fill.html:994; P/layerstack.py:542 |
+| A05 | `substance_painter.layerstack.FillLayerNode.get_source` | `get_source(channeltype: ChannelType \| None = None) -> Source` | fill.html:1016; P/source.py:349 |
+| A06 | `substance_painter.layerstack.FillLayerNode.get_symmetry_parameters` | `get_symmetry_parameters() -> SymmetryParams` | fill.html:1041; P/layerstack.py:595 |
+| A07 | `substance_painter.layerstack.FillLayerNode.is_symmetry_enabled` | `is_symmetry_enabled() -> bool` | fill.html:1062; P/layerstack.py:573 |
+| A08 | `substance_painter.layerstack.FillLayerNode.reset_material_source` | `reset_material_source() -> None` | fill.html:1081; P/source.py:429 |
+| A09 | `substance_painter.layerstack.FillLayerNode.reset_source` | `reset_source(channeltype: ChannelType \| None = None) -> None` | fill.html:1095; P/source.py:388 |
+| A10 | `substance_painter.layerstack.FillLayerNode.set_material_source` | `set_material_source(source: ResourceID \| layerstack.AnchorPointEffectNode) -> SourceSubstance \| SourceReference` | fill.html:1113; P/source.py:409 |
+| A11 | `substance_painter.layerstack.FillLayerNode.set_projection_mode` | `set_projection_mode(projection_mode: ProjectionMode)` | fill.html:1136; P/layerstack.py:533 |
+| A12 | `substance_painter.layerstack.FillLayerNode.set_projection_parameters` | `set_projection_parameters(projection_parameters: ProjectionParams)` | fill.html:1150; P/layerstack.py:558 |
+| A13 | `substance_painter.layerstack.FillLayerNode.set_source` | `set_source(channeltype: ChannelType \| None, source: ResourceID \| Color \| layerstack.AnchorPointEffectNode) -> Source` | fill.html:1169; P/source.py:362 |
+| A14 | `substance_painter.layerstack.FillLayerNode.set_sources_from_preset` | `set_sources_from_preset(preset: ResourceID) -> None` | fill.html:1196; P/source.py:437 |
+| A15 | `substance_painter.layerstack.FillLayerNode.set_symmetry_enabled` | `set_symmetry_enabled(enabled: bool)` | fill.html:1213; P/layerstack.py:584 |
+| A16 | `substance_painter.layerstack.FillLayerNode.set_symmetry_parameters` | `set_symmetry_parameters(symmetry_parameters: SymmetryParams)` | fill.html:1229; P/layerstack.py:609 |
+| A17 | `substance_painter.layerstack.FillLayerNode.source_mode` | `property source_mode: SourceMode` | fill.html:1258; P/source.py:332 |
+| A18 | `substance_painter.layerstack.FillEffectNode.active_channels` | `property active_channels: Set[ChannelType]`; setter accepts `channels: Set[ChannelType]` | fill.html:1285; P/source.py:308/:320 |
+| A19 | `substance_painter.layerstack.FillEffectNode.get_material_source` | `get_material_source() -> SourceSubstance \| SourceReference` | fill.html:1301; P/source.py:398 |
+| A20 | `substance_painter.layerstack.FillEffectNode.get_projection_mode` | `get_projection_mode() -> ProjectionMode` | fill.html:1322; P/layerstack.py:525 |
+| A21 | `substance_painter.layerstack.FillEffectNode.get_projection_parameters` | `get_projection_parameters() -> ProjectionParams \| None` | fill.html:1336; P/layerstack.py:542 |
+| A22 | `substance_painter.layerstack.FillEffectNode.get_source` | `get_source(channeltype: ChannelType \| None = None) -> Source` | fill.html:1358; P/source.py:349 |
+| A23 | `substance_painter.layerstack.FillEffectNode.get_symmetry_parameters` | `get_symmetry_parameters() -> SymmetryParams` | fill.html:1383; P/layerstack.py:595 |
+| A24 | `substance_painter.layerstack.FillEffectNode.is_symmetry_enabled` | `is_symmetry_enabled() -> bool` | fill.html:1404; P/layerstack.py:573 |
+| A25 | `substance_painter.layerstack.FillEffectNode.reset_material_source` | `reset_material_source() -> None` | fill.html:1423; P/source.py:429 |
+| A26 | `substance_painter.layerstack.FillEffectNode.reset_source` | `reset_source(channeltype: ChannelType \| None = None) -> None` | fill.html:1437; P/source.py:388 |
+| A27 | `substance_painter.layerstack.FillEffectNode.set_material_source` | `set_material_source(source: ResourceID \| layerstack.AnchorPointEffectNode) -> SourceSubstance \| SourceReference` | fill.html:1455; P/source.py:409 |
+| A28 | `substance_painter.layerstack.FillEffectNode.set_projection_mode` | `set_projection_mode(projection_mode: ProjectionMode)` | fill.html:1478; P/layerstack.py:533 |
+| A29 | `substance_painter.layerstack.FillEffectNode.set_projection_parameters` | `set_projection_parameters(projection_parameters: ProjectionParams)` | fill.html:1492; P/layerstack.py:558 |
+| A30 | `substance_painter.layerstack.FillEffectNode.set_source` | `set_source(channeltype: ChannelType \| None, source: ResourceID \| Color \| layerstack.AnchorPointEffectNode) -> Source` | fill.html:1511; P/source.py:362 |
+| A31 | `substance_painter.layerstack.FillEffectNode.set_sources_from_preset` | `set_sources_from_preset(preset: ResourceID) -> None` | fill.html:1538; P/source.py:437 |
+| A32 | `substance_painter.layerstack.FillEffectNode.set_symmetry_enabled` | `set_symmetry_enabled(enabled: bool)` | fill.html:1555; P/layerstack.py:584 |
+| A33 | `substance_painter.layerstack.FillEffectNode.set_symmetry_parameters` | `set_symmetry_parameters(symmetry_parameters: SymmetryParams)` | fill.html:1571; P/layerstack.py:609 |
+| A34 | `substance_painter.layerstack.FillEffectNode.source_mode` | `property source_mode: SourceMode` | fill.html:1600; P/source.py:332 |
+| A35 | `substance_painter.layerstack.FilterEffectNode.active_channels` | `property active_channels: Set[ChannelType]`; inherited, D01:422 | PH/layerstack/layereffect/filter.html:957; P/source.py:308/:320 |
+| A36 | `substance_painter.layerstack.GeneratorEffectNode.active_channels` | `property active_channels: Set[ChannelType]`; inherited, D01:422 | PH/layerstack/layereffect/generator.html:952; P/source.py:308/:320 |
+| A37 | `substance_painter.source.SourceBitmap.uid` | `uid() -> int`; inherited | PH/source/bitmap.html:934; P/_utility.py:262 |
+| A38 | `substance_painter.source.SourceFont.uid` | `uid() -> int`; inherited | PH/source/font.html:912; P/_utility.py:262 |
+| A39 | `substance_painter.source.SourceUniformColor.uid` | `uid() -> int`; inherited | PH/source/uniformcolor.html:892; P/_utility.py:262 |
+| A40 | `substance_painter.source.SourceVectorial.uid` | `uid() -> int`; inherited | PH/source/vectorial.html:917; P/_utility.py:262 |
+| A41 | `substance_painter.project.ReloadMeshStatus.ERROR` | `ERROR = 2`; already in D01:491 enum row | PH/project.html:1910#substance_painter.project.ReloadMeshStatus.ERROR |
+| A42 | `substance_painter.project.ReloadMeshStatus.SUCCESS` | `SUCCESS = 0`; already in D01:491 enum row | PH/project.html:1916#substance_painter.project.ReloadMeshStatus.SUCCESS |
+| A43 | `substance_painter.resource.ResourceID.context` | `context: str`; already in class fields | PH/resource.html:1706#substance_painter.resource.ResourceID.context; P/resource.py:101 |
+| A44 | `substance_painter.resource.ResourceID.name` | `name: str`; already in class fields | PH/resource.html:1717#substance_painter.resource.ResourceID.name; P/resource.py:102 |
+| A45 | `substance_painter.resource.ResourceID.version` | `version: str = None`; already in class fields | PH/resource.html:1728#substance_painter.resource.ResourceID.version; P/resource.py:103 |
 
 **Fact:** The raw comparison against only simple symbol cells produces 46 differences because D01:420 appends explanatory text to Node.uid. Recognizing that explicitly named row yields the correct 45. PH/layerstack/navigation.html:1327#substance_painter.layerstack.Node.uid and P/_utility.py:262 support it.
 

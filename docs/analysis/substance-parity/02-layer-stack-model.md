@@ -13,33 +13,33 @@ How Painter 12.1.0 structures a texturing document — Texture Sets, stacks, cha
 | Level | Python object | Key facts | Label | Source |
 |---|---|---|---|---|
 | Project | `substance_painter.project` (module-level state; one open project at a time) | `create`/`open` raise `ProjectError` if a project is already open. | Fact | `PYDOC\substance_painter\project.html` (`create`, `open` raises) |
-| Texture Set | `textureset.TextureSet(material_id)` | One per material of the imported mesh (or per UV tile in the legacy `TextureSetPerUVTile` workflow). Has a resolution, one or more stacks, optional UV tiles, and a set of baked mesh-map slots (`MeshMapUsage`). Names must be unique; `original_name` keeps the import name. | Fact | `PYDOC\substance_painter\textureset\textureset.html`; `project.html` (`ProjectWorkflow`) |
-| Stack | `textureset.Stack(stack_id)` | Normally one stack, "transparent to the user"; a Texture Set using material layering (custom layering shader) has several named stacks (e.g. `"Mask1"`); the stack name is empty when material layering is not used. Upstream contradiction: the `Stack.name()` paragraph says the reverse ("A stack name is empty if the Texture Set it belongs to uses material layering"); this row follows the class examples and `Stack.from_name` ("Leave empty if the Texture Set does not use material layering"). | Fact (examples, `from_name`); which text is right not confirmed | `PYDOC\substance_painter\textureset\stack.html` |
+| Texture Set | `textureset.TextureSet(material_id)` | One per material of the imported mesh (or per UV tile in the legacy `TextureSetPerUVTile` workflow). Has a resolution, one or more stacks, optional UV tiles, and slots for baked mesh maps (`MeshMapUsage`). Names must be unique; `original_name` keeps the import name. | Fact | `PYDOC\substance_painter\textureset\textureset.html`; `project.html` (`ProjectWorkflow`) |
+| Stack | `textureset.Stack(stack_id)` | Normally one stack, which the user never sees; a Texture Set using material layering (custom layering shader) has several named stacks (e.g. `"Mask1"`); the stack name is empty when material layering is not used. Upstream contradiction: the `Stack.name()` paragraph says the reverse (an empty name when the owning set does layer materials); this row follows the class examples and `Stack.from_name` (whose text asks for an empty name when the set has no material layering). | Fact (examples, `from_name`); which text is right not confirmed | `PYDOC\substance_painter\textureset\stack.html` |
 | Channel | `textureset.Channel(channel_id)` | A stack holds at most one channel per `ChannelType`; each channel has a `ChannelFormat`; user channels `User0`..`User31` can carry a label. `add_channel`/`remove_channel` are not available with material layering. | Fact | `PYDOC\substance_painter\textureset\channel.html`; `stack.html` |
 | Layer stack | `layerstack.get_root_layer_nodes(stack)` | Root layers of one stack, ordered like the UI (top first). Requires an open project in edition state. | Fact | `PYDOC\substance_painter\layerstack\navigation.html`; `layerstack\index.html` |
 | Layer | `layerstack.LayerNode` subclasses | Lives in the main hierarchy (root or inside a group). Has a content-effect stack and an optional mask stack. | Fact | `layerstack\navigation.html` (`LayerNode`) |
 | Effect | `layerstack.*EffectNode` | Lives in a layer's content stack (`NodeStack.Content`) or mask stack (`NodeStack.Mask`). | Fact | `layerstack\edition.html` (`NodeStack`) |
 | UV tile | `textureset.UVTile(u, v)` | Belongs to a Texture Set using the UV-tile workflow; can override its resolution (square, power of 2). | Fact | `PYDOC\substance_painter\textureset\uvtile.html` |
 
-Every node has an integer internal uid (`Node.uid()`, "Get the object internal uid"), and `layerstack.get_node_by_uid(uid)` re-resolves it; calling a method with a uid that "no longer refers to existing data in the Layer Stack" raises `ValueError` (**Fact**, `layerstack\navigation.html` → `Node`, `Node.uid`). The docs do not promise that a uid survives project reload, node re-creation or undo/redo (**not confirmed**).
+Every node has an integer internal uid (`Node.uid()`), and `layerstack.get_node_by_uid(uid)` re-resolves it; calling a method with a uid whose node has gone from the layer stack raises `ValueError` (**Fact**, `layerstack\navigation.html` → `Node`, `Node.uid`). The docs do not promise that a uid survives project reload, node re-creation or undo/redo (**not confirmed**).
 
 ## 2. Node kinds
 
 `layerstack.NodeType` has 12 members; each maps to one Python class (**Fact**, `PYSRC\layerstack.py` → `NodeType` docstring and class definitions).
 
-| `NodeType` | Python class | Layer or effect | What it is (Adobe wording) | Insert with | Own API beyond `Node`/`LayerNode` |
+| `NodeType` | Python class | Layer or effect | What it is | Insert with | Own API beyond `Node`/`LayerNode` |
 |---|---|---|---|---|---|
-| `PaintLayer` | `PaintLayerNode` | layer | "can be painted on with brushes and particles" | `insert_paint(pos)` | none; "Strokes are not accessible from the Python API" |
+| `PaintLayer` | `PaintLayerNode` | layer | holds brush and particle painting | `insert_paint(pos)` | none; the Python API cannot read or write strokes |
 | `PaintEffect` | `PaintEffectNode` | effect | same, as an effect | `insert_paint(pos)` | none (strokes inaccessible) |
-| `FillLayer` | `FillLayerNode` | layer | "takes a material or resources as input" | `insert_fill(pos)` | sources, active channels, projection, symmetry (mixins) |
+| `FillLayer` | `FillLayerNode` | layer | fed by a material or by resources | `insert_fill(pos)` | sources, active channels, projection, symmetry (mixins) |
 | `FillEffect` | `FillEffectNode` | effect | same, as an effect | `insert_fill(pos)` | same as fill layer |
-| `GeneratorEffect` | `GeneratorEffectNode` | effect | takes a Generator substance (`Usage.GENERATOR`) | `insert_generator_effect(pos, res=None)` | `get_source`/`set_source(res)`/`remove_source`, `active_channels` |
-| `FilterEffect` | `FilterEffectNode` | effect | takes a Filter substance (`Usage.FILTER`) | `insert_filter_effect(pos, res=None)` | `get_source`/`set_source(res)`/`remove_source`, `active_channels` |
-| `LevelsEffect` | `LevelsEffectNode` | effect | "adjust the color ranges of an image" | `insert_levels_effect(pos)` | `affected_channel`, `get/set_parameters(LevelsParams)` |
+| `GeneratorEffect` | `GeneratorEffectNode` | effect | runs a generator substance (`Usage.GENERATOR`) | `insert_generator_effect(pos, res=None)` | `get_source`/`set_source(res)`/`remove_source`, `active_channels` |
+| `FilterEffect` | `FilterEffectNode` | effect | runs a filter substance (`Usage.FILTER`) | `insert_filter_effect(pos, res=None)` | `get_source`/`set_source(res)`/`remove_source`, `active_channels` |
+| `LevelsEffect` | `LevelsEffectNode` | effect | remaps the colour ranges of its input | `insert_levels_effect(pos)` | `affected_channel`, `get/set_parameters(LevelsParams)` |
 | `CompareMaskEffect` | `CompareMaskEffectNode` | effect (mask stack only) | compares two channels to produce a mask | `insert_compare_mask_effect(pos)` | `get/set_parameters(CompareMaskEffectParams)` |
 | `ColorSelectionEffect` | `ColorSelectionEffectNode` | effect (mask stack only) | extracts colors from a bitmap (usually the ID map) into a mask | `insert_color_selection_effect(pos)` | `get/set_parameters(ColorSelectionEffectParams)` |
-| `GroupLayer` | `GroupLayerNode` | layer | contains other layers | `insert_group(pos)` | `sub_layers()`, `is_collapsed()`/`set_collapsed()` |
-| `InstanceLayer` | `InstanceLayerNode` | layer | synchronizes a layer across layers/Texture Sets; "Only the source layer can be modified" — this covers the synchronized content: the same page's example renames instances (`instance1.set_name`), and instances "still generate a mesh dependent result" | `instantiate(pos, layer)` | `instance_source()`; the source exposes `LayerNode.instances()` |
+| `GroupLayer` | `GroupLayerNode` | layer | holds child layers | `insert_group(pos)` | `sub_layers()`, `is_collapsed()`/`set_collapsed()` |
+| `InstanceLayer` | `InstanceLayerNode` | layer | synchronizes a layer across layers/Texture Sets; only the source layer is editable — this covers the synchronized content: the same page's example renames instances (`instance1.set_name`), and each instance still gives a result that depends on its own mesh | `instantiate(pos, layer)` | `instance_source()`; the source exposes `LayerNode.instances()` |
 | `AnchorPointEffect` | `AnchorPointEffectNode` | effect | exposes an element of the stack for reuse elsewhere | `insert_anchor_point_effect(pos, name)` | none (referenced by `SourceReference`) |
 
 Sources: `PYDOC\substance_painter\layerstack\layereffect\{paint,fill,generator,filter,levels,comparemask,colorselection,group,instance,anchorpoint}.html` (**Fact**). Smart materials and smart masks are not node types: `insert_smart_material` returns a `GroupLayerNode`; `insert_smart_mask` returns the list of inserted effect nodes (**Fact**, `layereffect\smartmaterial.html`, `smartmask.html`).
@@ -98,7 +98,7 @@ When the reference node is an effect: Paint, Fill, Generator, Filter, Levels and
 |---|---|---|---|
 | Per-channel blending | Outside a mask stack, blend mode and opacity are per `ChannelType`: `get/set_blending_mode(mode, channel)`, `get/set_opacity(value 0.0–1.0, channel)`; passing no channel raises `ValueError`. | Fact | `navigation.html` (`Node.get_blending_mode` …) |
 | Mask-stack blending | Inside a mask stack blending is mono-channel; the channel argument must be `None`. | Fact | same |
-| Nodes without blending | `Node.has_blending()` tells whether a node carries blending; Adobe's example comment: "e.g.: Levels Effect does not". | Fact | `navigation.html`; `layereffect\paint.html` (example) |
+| Nodes without blending | `Node.has_blending()` tells whether a node carries blending; Adobe's example comment names the Levels effect as a node without it. | Fact | `navigation.html`; `layereffect\paint.html` (example) |
 | Blend modes | 32 members: `Normal, PassThrough, Disable, Replace, Multiply, Divide, InverseDivide, Darken, Lighten, LinearDodge, Subtract, InverseSubtract, Difference, Exclusion, SignedAddition, Overlay, Screen, LinearBurn, ColorBurn, ColorDodge, SoftLight, HardLight, VividLight, LinearLight, PinLight, Tint, Saturation, Color, Value, NormalMapCombine, NormalMapDetail, NormalMapInverseDetail`. Normal-map modes: Combine = "Whiteout Blending", Detail = "Reoriented Normal Mapping", InverseDetail = bottom layer reoriented to the top. Complete numerical blend formulas are not given in the shipped docs (**not confirmed**). | Fact | `PYSRC\layerstack.py` → `BlendingMode` docstring |
 | Serialization | [Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: PAINTER\resources\python\modules\automated_tests\resources\layerstack-cube.spp.] | — | — |
 
@@ -119,15 +119,15 @@ When the reference node is an effect: Paint, Fill, Generator, Filter, Levels and
 
 | Format | Type | Dynamic range | Bits/component | Storage |
 |---|---|---|---|---|
-| `sRGB8` | Color | normalized fixed point | 8 | sRGB |
-| `L8` | Grayscale | normalized fixed point | 8 | linear |
-| `RGB8` | Color | normalized fixed point | 8 | linear |
-| `L16` | Grayscale | normalized fixed point | 16 | linear |
-| `RGB16` | Color | normalized fixed point | 16 | linear |
-| `L16F` | Grayscale | HDR floating point | 16 | linear |
-| `RGB16F` | Color | HDR floating point | 16 | linear |
-| `L32F` | Grayscale | HDR floating point | 32 | linear |
-| `RGB32F` | Color | HDR floating point | 32 | linear |
+| `sRGB8` | Color | fixed point, normalised | 8 | sRGB |
+| `L8` | Grayscale | fixed point, normalised | 8 | linear |
+| `RGB8` | Color | fixed point, normalised | 8 | linear |
+| `L16` | Grayscale | fixed point, normalised | 16 | linear |
+| `RGB16` | Color | fixed point, normalised | 16 | linear |
+| `L16F` | Grayscale | floating point (HDR) | 16 | linear |
+| `RGB16F` | Color | floating point (HDR) | 16 | linear |
+| `L32F` | Grayscale | floating point (HDR) | 32 | linear |
+| `RGB32F` | Color | floating point (HDR) | 32 | linear |
 
 **Fact** — `PYSRC\textureset.py` → `ChannelFormat` docstring. `Channel.is_color()`, `is_floating()`, `bit_depth()` derive from the format (**Fact**, `textureset\channel.html`). Default channel set and default formats of a new project are not defined in the Python API (they come with the project template / shader): **not confirmed**; validate by creating a project from each `.spt` in `PAINTER\resources\starter_assets\templates\` and calling `Stack.all_channels()`.
 
@@ -135,7 +135,7 @@ When the reference node is an effect: Paint, Fill, Generator, Filter, Levels and
 
 | Rule | Label | Source |
 |---|---|---|
-| Texture Set and UV-tile resolutions must be powers of 2 "within the range of accepted resolutions"; UV-tile resolutions must be square. The exact accepted range is not stated. | Fact (rule); range not confirmed | `PYSRC\textureset.py` → `Resolution` docstring; `textureset\uvtile.html` (`set_resolution` raises) |
+| Texture Set and UV-tile resolutions must be powers of 2 inside a supported range; UV-tile resolutions must be square. The exact accepted range is not stated. | Fact (rule); range not confirmed | `PYSRC\textureset.py` → `Resolution` docstring; `textureset\uvtile.html` (`set_resolution` raises) |
 | `TextureSet.get/set_resolution`, `set_resolutions(list, res)`, per-tile overrides `get/set/reset_uvtiles_resolution`, `UVTile.get/set/reset_resolution`. | Fact | `textureset\textureset.html`, `uvtile.html` |
 
 ## 7. Sources — how layer content is set
@@ -159,10 +159,10 @@ A *source* is what produces a texture inside a fill layer/effect or a procedural
 | Value passed | Resulting source class | Notes | Source |
 |---|---|---|---|
 | `colormanagement.Color` | `SourceUniformColor` | `get_color`/`set_color`; a `Color` without color space is interpreted as sRGB on color-managed channels and Raw otherwise | `source\uniformcolor.html`; `PYDOC\substance_painter\colormanagement.html` |
-| `resource.ResourceID` of an image | `SourceBitmap` | `resource_id`; `get/set/reset_color_space`; `list_available_color_spaces()` | `source\bitmap.html` |
+| `resource.ResourceID` pointing to an image | `SourceBitmap` | `resource_id`; `get/set/reset_color_space`; `list_available_color_spaces()` | `source\bitmap.html` |
 | `ResourceID` of a vector file (`.ai`, `.svg`) | `SourceVectorial` | `SourceVectorialParams(artboard_id, scope, resolution, crop_area_mode, crop_area_value, fit_to_square)` | `source\vectorial.html` |
 | `ResourceID` of a font | `SourceFont` | `SourceFontParams(text, auto_size, size, horizontal/vertical_alignment, color, background_color, background_opacity, line_spacing, character_spacing, offset, resolution)` | `source\font.html` |
-| `ResourceID` of a substance (`.sbsar`) | `SourceSubstance` | parameters, presets, image inputs, outputs, resolution — §7.3 | `source\substance.html` |
+| `ResourceID` pointing to a substance (`.sbsar`) | `SourceSubstance` | parameters, presets, image inputs, outputs, resolution — §7.3 | `source\substance.html` |
 | `AnchorPointEffectNode` | `SourceReference` | `anchor`, `channel_mapping` (multi-channel) or `referenced_channel` (single), `alpha_matte` (`KeepAlpha`, `ExtractAlpha`, `DefaultBackgroundColor`), `get/set_levels(LevelsParams)` | `source\reference.html` |
 
 Cycles through anchor points are rejected with `ValueError` (**Fact**, changelog 0.3.1, `PYDOC\index.html`).
@@ -193,14 +193,14 @@ Cycles through anchor points are rejected with `ValueError` (**Fact**, changelog
 
 | `ProjectionMode` | Parameters dataclass | Fields | Label | Source |
 |---|---|---|---|---|
-| `Fill` | none (`get_projection_parameters()` returns `None`) | — ("match per UV Tile") | Fact | `layereffect\fill.html` |
+| `Fill` | none (`get_projection_parameters()` returns `None`) | — (each UV tile is matched separately) | Fact | `layereffect\fill.html` |
 | `UV` | `UVProjectionParams` | `filtering_mode`, `uv_wrapping_mode`, `uv_transformation` | Fact | same |
 | `Triplanar` | `TriplanarProjectionParams` | `filtering_mode`, `shape_crop_mode`, `hardness`, `uv_transformation`, `projection_3d` | Fact | same |
 | `Planar` | `PlanarProjectionParams` | `filtering_mode`, `uv_wrapping_mode`, `shape_crop_mode`, `depth_culling`, `backface_culling`, `backface_culling_angle` (45–135), `uv_transformation`, `projection_3d` | Fact | same |
 | `Spherical` | `SphericalProjectionParams` | `filtering_mode`, `uv_wrapping_mode`, `shape_crop_mode`, `uv_transformation` (only `ScaleMode.Factors`), `projection_3d` | Fact | same |
 | `Cylindrical` | `CylindricalProjectionParams` | `filtering_mode`, `uv_wrapping_mode`, `shape_crop_mode`, `angle`, `backface_culling`, `uv_transformation`, `projection_3d` | Fact | same |
 | `Warp` | `WarpProjectionParams` | `filtering_mode`, `uv_wrapping_mode`, `shape_crop_mode`, `projection_depth`, `depth_culling`, `uv_transformation`, `projection_3d` (warp grid points are not exposed) | Fact (fields); grid absence Fact (no grid field) | same |
-| `UVSetToUVSet` | `UVSetToUVSetProjectionParams` | `source_uv_set` (0 = no effect), `filtering_mode`, `uv_wrapping_mode`, `uv_transformation` | Fact | same |
+| `UVSetToUVSet` | `UVSetToUVSetProjectionParams` | `source_uv_set` (0 disables it), `filtering_mode`, `uv_wrapping_mode`, `uv_transformation` | Fact | same |
 
 Sub-structures (**Fact**, same page): `UVTransformationParams(scale_mode, scale, rotation, offset)` — `ScaleMode`: `Factors`, `MaterialPhysicalSize` (scale forced from the material's physical size), `CustomPhysicalSize` (scale in centimeters); offset unavailable for Triplanar. `Projection3DParams(offset, rotation, scale)`. `ProjectionCullingParams(enabled, hardness 0–1)`. Enums: `FilteringMode` (`BilinearHQ`, `BilinearSharp`, `Nearest`), `UVWrapMode` (`RepeatNone`, `RepeatHorizontally`, `RepeatVertically`, `Repeat`), `ShapeCropMode` (`CroppedToShape`, `ExtendsOutsideShape`).
 
@@ -212,7 +212,7 @@ Symmetry (**Fact**, same page): only for 3D projection modes (`is_3d_projection_
 |---|---|---|---|
 | Levels | `affected_channel: ChannelType`; `LevelsParamsMono(input_min, input_max, gamma, output_min, output_max, clamp)` for grayscale channels, `LevelsParamsRGB` (same fields as RGB tuples) for color channels | Fact | `layereffect\levels.html` |
 | Compare Mask | `CompareMaskEffectParams(channel, left_operand, right_operand, operation, constant, tolerance, hardness)`; operands `LayersBelow`, `ThisLayer`, `ThisMask`, `Constant`; operations `LesserThan`, `WithinTolerance`, `GreaterThan`; values in [0, 1] | Fact | `layereffect\comparemask.html` |
-| Color Selection | `ColorSelectionEffectParams(id_mask, output_value, hardness, tolerance, background_color, colors: List[Color])`; `id_mask` is a `Usage.TEXTURE` resource of the project ("Typically the ID Mask baked map"); background `Transparent`, `Black`, `White`, `Gray` | Fact | `layereffect\colorselection.html` |
+| Color Selection | `ColorSelectionEffectParams(id_mask, output_value, hardness, tolerance, background_color, colors: List[Color])`; `id_mask` is a `Usage.TEXTURE` resource of the project (usually the baked ID mask); background `Transparent`, `Black`, `White`, `Gray` | Fact | `layereffect\colorselection.html` |
 | Generator / Filter | the substance's own parameters through `get_source()` (`SourceSubstance`) | Fact | `layereffect\generator.html`, `filter.html` |
 | Anchor Point | name only | Fact | `layereffect\anchorpoint.html` |
 
@@ -230,7 +230,7 @@ Symmetry (**Fact**, same page): only for 3D projection modes (`is_3d_projection_
 
 | Item | Behaviour | Label | Source |
 |---|---|---|---|
-| Definition | Smart material = preset of layers that "adapt to the 3D model"; smart mask = preset of a mask effect stack. | Fact | `layereffect\smartmaterial.html`, `smartmask.html` |
+| Definition | Smart material = preset of layers that fit themselves to the 3D model; smart mask = preset of a mask effect stack. | Fact | `layereffect\smartmaterial.html`, `smartmask.html` |
 | Apply | `insert_smart_material(pos, res)` → `GroupLayerNode` (resource needs `Usage.SMART_MATERIAL`); `insert_smart_mask(pos, res)` → list of effects (needs `Usage.SMART_MASK`, mask stack only) | Fact | same |
 | Create into shelf | `create_smart_material(group, name)`, `create_smart_mask(layer, name)` → `Resource` | Fact | same |
 | Export to disk | `export_as_smart_material(group, name, path)`, `export_as_smart_mask(layer, name, path)` — file written to `path`, not added to a shelf; overwrites | Fact | same (0.3.6) |
@@ -263,7 +263,7 @@ Symmetry (**Fact**, same page): only for 3D projection modes (`is_3d_projection_
 |---|---|---|---|
 | Workflows | `ProjectWorkflow.Default` (no UDIM), `TextureSetPerUVTile` (legacy, one Texture Set per tile, no painting across tiles), `UVTile` (one Texture Set per material with several tiles sharing one stack) | Fact | `project.html` (`ProjectWorkflow`) |
 | Tile identity | `UVTile(u, v)` with integer coordinates; Adobe's example comments map `uv_tile(0, 0)` → UDIM 1001 and `uv_tile(1, 0)` → 1002 | Fact | `layerstack\navigation.html` (geometry-mask example) |
-| Tile metadata | `UVTile.name` (unique within the Texture Set), `description` | Fact | `textureset\uvtile.html` |
+| Tile metadata | `UVTile.name` (no two tiles of a set share one), `description` | Fact | `textureset\uvtile.html` |
 | Per-tile resolution | square power of 2; overrides via `TextureSet.set_uvtiles_resolution({tile: res})`, reset via `reset_uvtiles_resolution` | Fact | `textureset\textureset.html`, `uvtile.html` |
 | Baking per tile | `BakingParameters.is/set_uv_tile_enabled`, `get/set_enabled_uv_tiles` | Fact | `baking.html` |
 | Export per tile | `exportList[].filter.uvTiles` and `exportParameters[].filter.uvTiles` take `[[u, v], …]`; file names use `$udim` / `$uvTileName` | Fact | `export.html` → JSON configuration |

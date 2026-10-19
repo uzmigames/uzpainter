@@ -20,7 +20,7 @@ Facts that shaped the probes (A-PYDOC, Painter 12.1 python-doc; the recorder; th
 - Every `substance_painter.baking` member is a release gap (`phase3.5_embree-bakers`). `SourceMode.Material` needs a material source, and `set_material_source` refuses with `UnsupportedProcedural` (`phase3.2_proc-material-families`).
 - `project.get_uuid()` is new for every created project. `last_imported_mesh_path()` lies in the recorder's private run directory.
 - Painter 12.1 documents `TextureSet.original_name` and `TextureSet.description` as properties, and `description` has a setter. The facade (`python/uzpainter_facade/textureset.py`) implements both as methods, with no setter.
-- `ChannelType` has legacy alias members (Metallic, Roughness, Emissive, SpecularEdgeColor, Anisotropylevel, Scattering, ScatteringColor, Translucency, AbsorptionColor, SheenOpacity, SheenRoughness, SheenColor, CoatOpacity). A plane created without a template holds BaseColor, BaseMetalness, Height, Normal and SpecularRoughness.
+- `ChannelType` has legacy alias members (`Metallic`, `Roughness`, `Emissive`, `SpecularEdgeColor`, `Anisotropylevel`, `Scattering`, `ScatteringColor`, `Translucency`, `AbsorptionColor`, `SheenOpacity`, `SheenRoughness`, `SheenColor`, `CoatOpacity`). A plane created without a template holds BaseColor, BaseMetalness, Height, Normal and SpecularRoughness.
 - `Settings.tangent_space_mode`, `project_workflow` and `mesh_unit_scale` have no documented getter. `phase1-create-settings` made `Settings.normal_map_format` `supported` through the compared replay of a create that passes it.
 - Step arguments are scalars or lists of scalars (`golden-public.json`), so a dict value cannot be authored directly.
 
@@ -112,3 +112,5 @@ No P22-B probe reaches these four. Their manifest entries stay `pending-evidence
 - These eight requests exercise 80 of the group's 84 symbols, and the other four take the routes in §3. Decision 188's requests hold the remaining nine of the 93. No manifest entry changes until a recording is admitted and replayed (decision 189 §2).
 - `test_api_probes_phase1.py` now counts only the `phase1-*` requests, so P22-B requests can stage beside them.
 - RECORDER.md §9 describes the vocabulary, and §11.4 the recording.
+
+*Clean-room note (2026-10-19, decision 304): the `ChannelType` alias member names were marked as code for clean-room hygiene; no wording or reasoning changed.*

@@ -11,7 +11,7 @@ Task phase1.19 builds the native `uzpainter` module (`src/python/`) over the pro
 Measured facts:
 
 - **Store semantics.** The project store commits every API call durably as a revision; the commit is the autosave (`09-project-file-format.md` §4). `save()` writes a named checkpoint; `needs_saving()` is "current revision ≠ last named checkpoint"; reopening a file gives its current revision. `ProjectStore::SaveAs` refuses an existing target.
-- **Painter's documentation.** `close()`: "Any unsaved data will be lost". `save_as` creates missing folders. A never-saved project has `file_path()` None.
+- **Painter's documentation.** `close()` drops whatever was not saved. `save_as` creates missing folders. A never-saved project has `file_path()` None.
 - **Tier 0 probes** (private records, both recordings):
   - `fill-layer-readback` reads opacity 0.85 back as 0.8500000238418579 and a Raw uniform 0.35 as 0.3499999940395355, both float32 values.
   - `insert_fill` names its node "Fill", `insert_group` "Folder".
@@ -42,3 +42,5 @@ The model panel could not be consulted: the 9router proxy refused every connecti
 ## Consequences
 
 The facade (phase1.20) implements Painter's close semantics, colour conversions and the `exportPath` flat copy over these primitives. `phase4.1_nodes-paint-layers` owns the default "Layer 1". If the panel later disagrees with a point, it is re-opened through a new decision.
+
+*Clean-room note (2026-10-19, decision 304): the quoted `close()` documentation in Measured facts was rephrased for clean-room hygiene; the recorded reasoning is unchanged.*

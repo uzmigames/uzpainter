@@ -45,3 +45,30 @@ A model panel (GPT-6 Astra, Kimi K3) reviewed the proposal on 2026-10-19:
 - The check catches copying and close paraphrase of the compared pages. It does not prove independent authorship, and it does not cover 1- and 2-word cells or Adobe's web pages.
 - Adobe's web pages carry the same API text as the shipped python-doc.
 - No parity rule, product behaviour or git history changes.
+
+## Amendment (2026-10-19, item 2.3 and supervisor note SUP-021)
+
+**Scope.** `CHECKED_FILES` now holds the substance-parity analyses 01 to 08, `docs/analysis/reviews/substance-parity-astra-review.md`, every `.rulebook/decisions/*.md` and the capability inventory's `notes` and `justification`. Before the rewrite, the decision-304 checker found 150 cells in that scope: 136 in the analyses and the review, 14 in the decisions. After it, the full gate finds 0. The thresholds are unchanged: a 6-word run, a whole 3-to-5-word cell, 60% four-word coverage.
+- **Analyses 02 to 08.** Every quoted or closely paraphrased documentation span was rewritten in our own words. The two columns headed "Adobe wording" are now headed "What it is" and "Meaning". API symbols, signatures, parameter and enum names, numbers and labels are kept, and no line was added or removed, so the line numbers in `docs/analysis/clean-room-redactions.md` still hold.
+- **The review.** Its hits were API shape written outside code spans: symbol paths, signatures and anchors. They are now marked as code, and no wording changed. Its table of reviewed-file SHA-256 values records the review-time snapshot, which was already stale before this edit.
+- **Decisions 105, 107, 163, 194 and 244.** Only the quoted or matching span was rephrased. Each file ends with a dated one-line clean-room note.
+- **Decisions 295 and 297.** Their bare member lists were marked as code, also with a note.
+
+**Not prose.** Three kinds of text are cut out like code. Each is documented in the module.
+- **`NAME_ALLOWLIST`.** "Adobe Substance 3D Painter" and "Substance 3D Painter" are product names. The edition label "… 12.1.0 python-doc (Python API 0.3.5)" passes once the product name is cut. "PBR Metallic Roughness" is a shipped preset name. A name only splits its sentence: a documentation span beside it still fails.
+- **Number runs.** Windows and short cells made only of numbers, such as `(1.0, 1.0, 1.0)`, are measured facts.
+- **UI labels.** The "Likely UI label" column of `03-baking.md` holds Painter's UI labels, which are names.
+
+The JSON fields `product` and `edition` are labels, not prose, and the checker does not read them.
+
+**False passes closed (SUP-021).**
+- **Code spans.** A code span of several tokens is no longer skipped whole on any punctuation. Only its code tokens are cut: brackets, `=`, `|`, `/`, `->`, and `snake_case` or `dotted.name` identifiers. Two exceptions remain: a one-token span, and a span that lists single-token names separated by commas. Prose in backticks with a period, a comma or an apostrophe is checked.
+- **Unusable documentation.** A documentation root without a readable page is refused, and so is an empty root list (exit 2).
+- **One family missing.** The full gate needs both python-doc and javascript-doc. When only one is installed, it refuses (exit 2) and does not skip.
+- **Partial scans.** A run given `--doc-root` or explicit files says it is a partial scan. It exits 3 when nothing fails, and it never counts as the gate's approval.
+
+`tests/sources/test_doc_overlap.py` covers each of these cases.
+
+**Limits restated.** A lexical pass is not provenance admission, and it is not proof of independent authorship. The API columns stay as they are, the inventory's index entry stays quarantined (QH-SP-INVENTORY), and admitting a revision remains item 2.2's audit. The rest of item 2.3, the release-tree scan, stays open:
+- 13 cells in 10 Markdown files outside this scope still match;
+- shader-library, MDL, `.py` and binary-signature scans are not done.
