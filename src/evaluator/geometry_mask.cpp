@@ -10,16 +10,51 @@ namespace uzp::evaluator {
 
 namespace {
 
+/// A texel-space point (x = u W, y = (1 - v) H).
 struct Point {
-    double u = 0.0;
-    double v = 0.0;
+    double x = 0.0;
+    double y = 0.0;
 };
 
 double Cross(const Point& a, const Point& b, const Point& p) {
-    return (b.u - a.u) * (p.v - a.v) - (b.v - a.v) * (p.u - a.u);
+    return (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
 }
 
+// The coverage's vertex precision: 1/256 texel (decision 281).
+constexpr double kSubTexel = 256.0;
+
 }  // namespace
+
+void CoveredTexels(const std::array<std::array<float, 2>, 3>& uv, uint32_t width, uint32_t height,
+                   const std::function<void(uint32_t col, uint32_t row)>& cover) {
+    const double w = width;
+    const double h = height;
+    // Each vertex rounded to the nearest 1/256 texel (ties to even); the products and the edge
+    // functions below are exact in double for float32 UVs on tiles up to 2^16 texels.
+    std::array<Point, 3> p{};
+    for (size_t k = 0; k < 3; ++k) {
+        p[k] = {std::nearbyint(static_cast<double>(uv[k][0]) * w * kSubTexel) / kSubTexel,
+                std::nearbyint((1.0 - static_cast<double>(uv[k][1])) * h * kSubTexel) / kSubTexel};
+    }
+    const double area = Cross(p[0], p[1], p[2]);
+    if (area == 0.0) return;
+    // Texel centres (col + 1/2, row + 1/2) inside the bounds.
+    const double colLo = std::max(0.0, std::floor(std::min({p[0].x, p[1].x, p[2].x}) - 0.5));
+    const double colHi = std::min(w - 1.0, std::ceil(std::max({p[0].x, p[1].x, p[2].x}) - 0.5));
+    const double rowLo = std::max(0.0, std::floor(std::min({p[0].y, p[1].y, p[2].y}) - 0.5));
+    const double rowHi = std::min(h - 1.0, std::ceil(std::max({p[0].y, p[1].y, p[2].y}) - 0.5));
+    for (double row = rowLo; row <= rowHi; row += 1.0) {
+        for (double col = colLo; col <= colHi; col += 1.0) {
+            const Point centre{col + 0.5, row + 0.5};
+            const double w0 = Cross(p[0], p[1], centre);
+            const double w1 = Cross(p[1], p[2], centre);
+            const double w2 = Cross(p[2], p[0], centre);
+            const bool inside =
+                area > 0.0 ? (w0 >= 0.0 && w1 >= 0.0 && w2 >= 0.0) : (w0 <= 0.0 && w1 <= 0.0 && w2 <= 0.0);
+            if (inside) cover(static_cast<uint32_t>(col), static_cast<uint32_t>(row));
+        }
+    }
+}
 
 std::shared_ptr<const DecodedImage> RasterizeGeometryMask(const mesh::TexturingMesh& mesh,
                                                           const GeometryMaskQuery& query) {
@@ -35,41 +70,18 @@ std::shared_ptr<const DecodedImage> RasterizeGeometryMask(const mesh::TexturingM
     }
     if (material == UINT32_MAX || query.width == 0 || query.height == 0) return image;
     const std::set<std::string> items(query.items.begin(), query.items.end());
-    const double width = query.width;
-    const double height = query.height;
     for (const mesh::Object& object : mesh.objects) {
         if (items.contains(object.name) != query.inclusionList) continue;
         for (const mesh::Triangle& triangle : object.triangles) {
             if (mesh.corners[triangle.corners[0]].material != material) continue;
-            Point p[3];
-            for (int k = 0; k < 3; ++k) {
-                const mesh::Float2 uv = mesh.corners[triangle.corners[static_cast<size_t>(k)]].uv0;
-                p[k] = {static_cast<double>(uv.u), static_cast<double>(uv.v)};
+            std::array<std::array<float, 2>, 3> uv{};
+            for (size_t k = 0; k < 3; ++k) {
+                const mesh::Float2 corner = mesh.corners[triangle.corners[k]].uv0;
+                uv[k] = {corner.u, corner.v};
             }
-            const double area = Cross(p[0], p[1], p[2]);
-            if (area == 0.0) continue;
-            const double uMin = std::min({p[0].u, p[1].u, p[2].u});
-            const double uMax = std::max({p[0].u, p[1].u, p[2].u});
-            const double vMin = std::min({p[0].v, p[1].v, p[2].v});
-            const double vMax = std::max({p[0].v, p[1].v, p[2].v});
-            // Texel centres u = (col + 1/2) / W and v = 1 - (row + 1/2) / H inside the bounds.
-            const double colLo = std::max(0.0, std::floor(uMin * width - 0.5));
-            const double colHi = std::min(width - 1.0, std::ceil(uMax * width - 0.5));
-            const double rowLo = std::max(0.0, std::floor((1.0 - vMax) * height - 0.5));
-            const double rowHi = std::min(height - 1.0, std::ceil((1.0 - vMin) * height - 0.5));
-            for (double row = rowLo; row <= rowHi; row += 1.0) {
-                for (double col = colLo; col <= colHi; col += 1.0) {
-                    const Point centre{(col + 0.5) / width, 1.0 - (row + 0.5) / height};
-                    const double w0 = Cross(p[0], p[1], centre);
-                    const double w1 = Cross(p[1], p[2], centre);
-                    const double w2 = Cross(p[2], p[0], centre);
-                    const bool inside = area > 0.0 ? (w0 >= 0.0 && w1 >= 0.0 && w2 >= 0.0)
-                                                   : (w0 <= 0.0 && w1 <= 0.0 && w2 <= 0.0);
-                    if (inside) {
-                        image->values[static_cast<size_t>(row) * query.width + static_cast<size_t>(col)] = 0xFFFFu;
-                    }
-                }
-            }
+            CoveredTexels(uv, query.width, query.height, [&](uint32_t col, uint32_t row) {
+                image->values[size_t{row} * query.width + col] = 0xFFFFu;
+            });
         }
     }
     return image;

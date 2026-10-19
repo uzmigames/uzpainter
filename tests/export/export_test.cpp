@@ -700,13 +700,14 @@ bool SameBits(const std::vector<float>& a, const std::vector<float>& b) {
 /// The measured ring (padding.h `MeasuredRing`): per ring texel {"x", "y", "taps", "triangles",
 /// "fractions": [float32 bits], "candidates": [[x, y, distance, far]], "alternatives": [[...]],
 /// "undecided": the flags of the rule that are set (padding.h `RingTexel`), of "fold-bracket",
-/// "on-far-plane", "mixed-gates", "reach-bracket"}.
+/// "on-far-plane", "mixed-gates", "reach-bracket", "own-far-tie", "own-order", "far-fold",
+/// "far-order", "multi-facet"}.
 json::Value RingJson(const std::vector<exporter::RingTexel>& ring) {
     const auto taps = [](const std::vector<exporter::RingTap>& list) {
         json::Array out;
         for (const exporter::RingTap& t : list) {
             out.push_back(json::Array{static_cast<std::int64_t>(t.x), static_cast<std::int64_t>(t.y), t.distance,
-                                      t.far});
+                                      t.across_seam});
         }
         return out;
     };
@@ -721,6 +722,11 @@ json::Value RingJson(const std::vector<exporter::RingTexel>& ring) {
         if (r.onFarPlane) undecided.push_back("on-far-plane");
         if (r.mixedGates) undecided.push_back("mixed-gates");
         if (r.reachBracket) undecided.push_back("reach-bracket");
+        if (r.ownFarTie) undecided.push_back("own-far-tie");
+        if (r.ownOrder) undecided.push_back("own-order");
+        if (r.farFold) undecided.push_back("far-fold");
+        if (r.farOrder) undecided.push_back("far-order");
+        if (r.multiFacet) undecided.push_back("multi-facet");
         out.push_back(json::Object{{"x", static_cast<std::int64_t>(r.x)},
                                    {"y", static_cast<std::int64_t>(r.y)},
                                    {"taps", static_cast<std::int64_t>(r.taps)},

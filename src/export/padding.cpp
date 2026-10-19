@@ -1,5 +1,6 @@
 #include "export/padding.h"
 
+#include "evaluator/geometry_mask.h"
 #include "evaluator/hwmath.h"
 #include "export/encode.h"
 #include "mesh/texturing_mesh.h"
@@ -10,6 +11,7 @@
 #include <bit>
 #include <cmath>
 #include <cstddef>
+#include <deque>
 #include <functional>
 #include <limits>
 #include <map>
@@ -71,6 +73,33 @@ constexpr float kFoldHigh = 0.98501915f;
 // 279 open item (c)).
 constexpr double kReachCap = 1.8;
 constexpr double kReachLow = 1.7;
+// A tap in a planar face with no 3D edge to tau's face is developed along face paths of at most
+// this many hinges (decision 281).
+constexpr size_t kMaxHinges = 4;
+// Decision 280's fixed orders of exactly tied taps, as v-up offsets (du, dv): an own tap's from
+// the ring texel, a far tap's from its window's base (floor(f_u - 1/2), ceil(f_v - 1/2)).
+constexpr std::array<std::array<int, 2>, 8> kOwnOrder{
+    {{1, 0}, {-1, 0}, {0, -1}, {0, 1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}}};
+constexpr std::array<std::array<int, 2>, 9> kWindowOrder{
+    {{0, 0}, {1, 0}, {0, 1}, {1, 1}, {0, -1}, {1, -1}, {-1, 0}, {-1, 1}, {-1, -1}}};
+// Where those orders are not identified (decision 280 open item (c)): the rank pairs of kOwnOrder
+// that never tie visibly, and the rank pairs of kWindowOrder that the recorded ties order neither
+// directly nor through other ranks.
+bool OwnOrderOpen(size_t a, size_t b) {
+    const auto [lo, hi] = std::minmax(a, b);
+    return (lo == 0 && hi == 1) || (lo == 2 && hi == 3) || (lo == 5 && hi == 6);
+}
+bool WindowOrderOpen(size_t a, size_t b) {
+    const auto [lo, hi] = std::minmax(a, b);
+    if (hi <= 5) return false;             // the first six ranks: one chain of recorded ties
+    if (lo == 6 && hi == 7) return false;  // (-1, 0) before (-1, +1)
+    return !(hi == 8 && lo <= 2);          // (0, 0), (+1, 0) and (0, +1) before (-1, -1)
+}
+// Decision 280's tie classes that the data leave open, of a group of equal distances (`RingTexel`).
+constexpr uint8_t kTieOwnFar = 1;    // an own tap and a far tap (open item (d))
+constexpr uint8_t kTieOwnOrder = 2;  // own taps tied on the comparator, an open kOwnOrder pair
+constexpr uint8_t kTieFarFold = 4;   // far taps in different planar faces (open item (a))
+constexpr uint8_t kTieFarOrder = 8;  // far taps tied in float32, an open kWindowOrder pair or windows
 
 using Vec3 = std::array<double, 3>;
 
@@ -190,7 +219,7 @@ uint32_t Find(std::vector<uint32_t>& parent, uint32_t i) {
 struct SeamEdge {
     uint32_t own = 0;
     size_t edge = 0;
-    uint32_t far = 0;
+    uint32_t farTriangle = 0;
 };
 
 /// The coverage's triangles, their islands and planar faces, the UV seam edges of each island, and
@@ -207,13 +236,42 @@ public:
     std::map<std::pair<uint32_t, uint32_t>, std::vector<uint32_t>> edges;  // sorted vertex pair -> triangles
     std::map<uint32_t, std::vector<SeamEdge>> seams;  // island -> its triangles' seam edges, in mesh order
 
-    /// `p`, a point of triangle `k`, in tau's frame: as it is in tau's planar face, rotated about
-    /// an edge shared by the two faces, else as it is.
-    Vec3 Frame(const Vec3& p, uint32_t k, uint32_t tau) const;
+    /// `p`, a point of triangle `k`, in tau's frame for the ring point `q`: as it is in tau's planar
+    /// face, rotated about an edge shared by the two faces, else rotated hinge by hinge along the
+    /// fewest-hinge face paths (at most kMaxHinges) into tau's plane, the development nearest `q`
+    /// (decision 281), else as it is.
+    Vec3 Frame(const Vec3& p, uint32_t k, uint32_t tau, const Vec3& q) const;
+    /// Whether triangle `k`'s planar face is tau's or shares a 3D edge with it.
+    bool Hinged(uint32_t k, uint32_t tau) const;
+    /// `p`, decision 273's float32 position of a point of triangle `k`, rotated in float32 into the
+    /// plane of triangle `e`'s face about an edge shared by the two faces (decision 280 finding 3);
+    /// as it is in the same face or without such an edge.
+    std::array<float, 3> Unfold32(const std::array<float, 3>& p, uint32_t k, uint32_t e) const;
 
 private:
+    /// An edge (va, vb) shared by two planar faces: `own` a triangle of the first, `other` of the
+    /// second.
+    struct FaceEdge {
+        uint32_t own = 0;
+        uint32_t other = 0;
+        uint32_t va = 0;
+        uint32_t vb = 0;
+    };
+    struct FaceHinge {
+        FaceEdge edge;
+        Hinge hinge;
+    };
+    /// The first edge of face `to`'s triangles (in face order, then edge order) shared with face
+    /// `from`, and its hinge.
+    const std::optional<FaceHinge>& HingeOf(uint32_t to, uint32_t from) const;
+    /// The fewest-hinge simple face paths from face `from` to face `to`, breadth first.
+    const std::vector<std::vector<uint32_t>>& Paths(uint32_t from, uint32_t to) const;
+
     std::vector<std::vector<uint32_t>> m_faces;
-    mutable std::map<std::pair<uint32_t, uint32_t>, std::optional<Hinge>> m_hinges;
+    /// Per face, its neighbour faces in the order of `edges`, each with its first shared edge.
+    std::vector<std::vector<std::pair<uint32_t, FaceEdge>>> m_links;
+    mutable std::map<std::pair<uint32_t, uint32_t>, std::optional<FaceHinge>> m_hinges;
+    mutable std::map<std::pair<uint32_t, uint32_t>, std::vector<std::vector<uint32_t>>> m_paths;
 };
 
 RingGeometry::RingGeometry(const Coverage& coverage) : width(coverage.width), height(coverage.height) {
@@ -320,6 +378,22 @@ RingGeometry::RingGeometry(const Coverage& coverage) : width(coverage.width), he
         triangles[i].face = it->second;
         m_faces[it->second].push_back(i);
     }
+    // The face graph (decision 281): faces sharing an edge of the position-welded mesh.
+    m_links.resize(m_faces.size());
+    for (const auto& [key, list] : edges) {
+        for (const uint32_t i : list) {
+            for (const uint32_t j : list) {
+                const uint32_t fi = triangles[i].face;
+                const uint32_t fj = triangles[j].face;
+                auto& links = m_links[fi];
+                if (fi == fj ||
+                    std::any_of(links.begin(), links.end(), [&](const auto& l) { return l.first == fj; })) {
+                    continue;
+                }
+                links.push_back({fj, {i, j, key.first, key.second}});
+            }
+        }
+    }
     // Each island's seam edges: an edge whose other triangles there have other UVs.
     for (uint32_t i = 0; i < count; ++i) {
         const KernelTriangle& own = triangles[i];
@@ -336,33 +410,14 @@ RingGeometry::RingGeometry(const Coverage& coverage) : width(coverage.width), he
             }
         }
     }
-    // The covering triangle of each texel, by the coverage's own test (evaluator/geometry_mask.cpp).
+    // The covering triangle of each texel, by the coverage's own test (evaluator/geometry_mask.h).
     owner.assign(size_t{width} * height, -1);
     for (size_t i = 0; i < coverage.triangles.size(); ++i) {
         if (index[i] < 0) continue;
-        const auto& uv = coverage.triangles[i].uv;
-        std::array<std::array<double, 2>, 3> p{};
-        for (size_t c = 0; c < 3; ++c) p[c] = {static_cast<double>(uv[c][0]), static_cast<double>(uv[c][1])};
-        const auto cross = [](const std::array<double, 2>& a, const std::array<double, 2>& b, double u, double v) {
-            return (b[0] - a[0]) * (v - a[1]) - (b[1] - a[1]) * (u - a[0]);
-        };
-        const double area = cross(p[0], p[1], p[2][0], p[2][1]);
-        const double colLo = std::max(0.0, std::floor(std::min({p[0][0], p[1][0], p[2][0]}) * w - 0.5));
-        const double colHi = std::min(w - 1.0, std::ceil(std::max({p[0][0], p[1][0], p[2][0]}) * w - 0.5));
-        const double rowLo = std::max(0.0, std::floor((1.0 - std::max({p[0][1], p[1][1], p[2][1]})) * h - 0.5));
-        const double rowHi = std::min(h - 1.0, std::ceil((1.0 - std::min({p[0][1], p[1][1], p[2][1]})) * h - 0.5));
-        for (double row = rowLo; row <= rowHi; row += 1.0) {
-            for (double col = colLo; col <= colHi; col += 1.0) {
-                const double u = (col + 0.5) / w;
-                const double v = 1.0 - (row + 0.5) / h;
-                const double w0 = cross(p[0], p[1], u, v);
-                const double w1 = cross(p[1], p[2], u, v);
-                const double w2 = cross(p[2], p[0], u, v);
-                const bool inside = area > 0.0 ? (w0 >= 0.0 && w1 >= 0.0 && w2 >= 0.0) : (w0 <= 0.0 && w1 <= 0.0 && w2 <= 0.0);
-                const size_t t = static_cast<size_t>(row) * width + static_cast<size_t>(col);
-                if (inside && owner[t] < 0) owner[t] = index[i];
-            }
-        }
+        evaluator::CoveredTexels(coverage.triangles[i].uv, width, height, [&](uint32_t col, uint32_t row) {
+            int32_t& t = owner[size_t{row} * width + col];
+            if (t < 0) t = index[i];
+        });
     }
     for (size_t t = 0; t < owner.size(); ++t) {
         if ((owner[t] >= 0) != (coverage.covered[t] != 0)) {
@@ -371,10 +426,7 @@ RingGeometry::RingGeometry(const Coverage& coverage) : width(coverage.width), he
     }
 }
 
-Vec3 RingGeometry::Frame(const Vec3& p, uint32_t k, uint32_t tau) const {
-    const uint32_t from = triangles[k].face;
-    const uint32_t to = triangles[tau].face;
-    if (from == to) return p;
+const std::optional<RingGeometry::FaceHinge>& RingGeometry::HingeOf(uint32_t to, uint32_t from) const {
     const auto [it, added] = m_hinges.try_emplace({to, from});
     if (added) {
         for (const uint32_t i : m_faces[to]) {
@@ -383,24 +435,73 @@ Vec3 RingGeometry::Frame(const Vec3& p, uint32_t k, uint32_t tau) const {
                 const uint32_t b = triangles[i].vertex[(e + 2) % 3];
                 for (const uint32_t j : edges.at({std::min(a, b), std::max(a, b)})) {
                     if (triangles[j].face != from) continue;
-                    it->second = MakeHinge(triangles[i], triangles[j], a, b);
+                    it->second = FaceHinge{{i, j, a, b}, MakeHinge(triangles[i], triangles[j], a, b)};
                     break;
                 }
             }
             if (it->second) break;
         }
     }
-    return it->second ? Unfold(*it->second, p) : p;
+    return it->second;
 }
 
-/// The recording GPU's float32 distance of decision 273's comparator from the ring texel (rx, ry)
-/// to the tap (tx, ty) of triangle `k`, on a `width` x `height` tile. Both texel centres (u, v) =
-/// ((x + 1/2) / W, 1 - (y + 1/2) / H) take barycentrics from `k`'s UV inverse matrix based at its
-/// third corner, through the GPU's reciprocal of the determinant, and interpolate the
-/// mesh-box-normalised positions as fma(l2, P2, fma(l0, P0, l1 P1)); then the squared distance by
-/// FMA and the GPU's square root. Every other operation is one correctly rounded float32 operation.
-float CompareDistance(const KernelTriangle& k, uint32_t width, uint32_t height, uint32_t rx, uint32_t ry, uint32_t tx,
-                      uint32_t ty) {
+const std::vector<std::vector<uint32_t>>& RingGeometry::Paths(uint32_t from, uint32_t to) const {
+    const auto [it, added] = m_paths.try_emplace({from, to});
+    if (!added) return it->second;
+    std::deque<std::vector<uint32_t>> queue{{from}};
+    size_t best = 0;
+    while (!queue.empty()) {
+        std::vector<uint32_t> path = std::move(queue.front());
+        queue.pop_front();
+        if (best != 0 && path.size() > best) break;
+        if (path.back() == to) {
+            best = path.size();
+            it->second.push_back(std::move(path));
+            continue;
+        }
+        if (path.size() > kMaxHinges) continue;
+        for (const auto& link : m_links[path.back()]) {
+            if (std::find(path.begin(), path.end(), link.first) != path.end()) continue;
+            std::vector<uint32_t> longer = path;
+            longer.push_back(link.first);
+            queue.push_back(std::move(longer));
+        }
+    }
+    return it->second;
+}
+
+bool RingGeometry::Hinged(uint32_t k, uint32_t tau) const {
+    return triangles[k].face == triangles[tau].face || HingeOf(triangles[tau].face, triangles[k].face).has_value();
+}
+
+Vec3 RingGeometry::Frame(const Vec3& p, uint32_t k, uint32_t tau, const Vec3& q) const {
+    const uint32_t from = triangles[k].face;
+    const uint32_t to = triangles[tau].face;
+    if (from == to) return p;
+    if (const auto& h = HingeOf(to, from)) return Unfold(h->hinge, p);
+    std::optional<Vec3> nearest;
+    for (const std::vector<uint32_t>& path : Paths(from, to)) {
+        Vec3 r = p;
+        for (size_t i = 0; i + 1 < path.size(); ++i) {
+            // Into face path[i + 1]'s plane, about its first edge shared with face path[i].
+            const auto& links = m_links[path[i + 1]];
+            const FaceEdge& edge =
+                std::find_if(links.begin(), links.end(), [&](const auto& l) { return l.first == path[i]; })->second;
+            r = Unfold(MakeHinge(triangles[edge.own], triangles[edge.other], edge.va, edge.vb), r);
+        }
+        if (!nearest || Norm(Sub(q, r)) < Norm(Sub(q, *nearest))) nearest = r;
+    }
+    return nearest.value_or(p);
+}
+
+using Float3 = std::array<float, 3>;
+
+/// Decision 273's float32 position of texel (x, y)'s centre through triangle `k`, on a `width` x
+/// `height` tile: the centre (u, v) = ((x + 1/2) / W, 1 - (y + 1/2) / H) takes barycentrics from
+/// `k`'s UV inverse matrix based at its third corner, through the GPU's reciprocal of the
+/// determinant, and interpolates the mesh-box-normalised positions as fma(l2, P2, fma(l0, P0,
+/// l1 P1)). Every other operation is one correctly rounded float32 operation.
+Float3 Position32(const KernelTriangle& k, uint32_t width, uint32_t height, uint32_t x, uint32_t y) {
     const auto& U = k.uv;
     const float e0u = U[0][0] - U[2][0];
     const float e0v = U[0][1] - U[2][1];
@@ -415,34 +516,92 @@ float CompareDistance(const KernelTriangle& k, uint32_t width, uint32_t height, 
     const float m11 = e0u * r;
     const auto fw = static_cast<float>(width);
     const auto fh = static_cast<float>(height);
-    const auto position = [&](uint32_t x, uint32_t y) {
-        const float pu = (static_cast<float>(x) + 0.5f) / fw;
-        const float pv = 1.0f - (static_cast<float>(y) + 0.5f) / fh;
-        const float dx = pu - U[2][0];
-        const float dy = pv - U[2][1];
-        const float l0 = std::fma(m00, dx, m01 * dy);
-        const float l1 = std::fma(m10, dx, m11 * dy);
-        const float sum = l0 + l1;
-        const float l2 = 1.0f - sum;
-        std::array<float, 3> out{};
-        for (size_t c = 0; c < 3; ++c) {
-            const auto& n = k.normalised;
-            out[c] = std::fma(l2, n[2][c], std::fma(l0, n[0][c], l1 * n[1][c]));
-        }
-        return out;
-    };
-    const std::array<float, 3> q = position(rx, ry);
-    const std::array<float, 3> p = position(tx, ty);
+    const float pu = (static_cast<float>(x) + 0.5f) / fw;
+    const float pv = 1.0f - (static_cast<float>(y) + 0.5f) / fh;
+    const float dx = pu - U[2][0];
+    const float dy = pv - U[2][1];
+    const float l0 = std::fma(m00, dx, m01 * dy);
+    const float l1 = std::fma(m10, dx, m11 * dy);
+    const float sum = l0 + l1;
+    const float l2 = 1.0f - sum;
+    Float3 out{};
+    for (size_t c = 0; c < 3; ++c) {
+        const auto& n = k.normalised;
+        out[c] = std::fma(l2, n[2][c], std::fma(l0, n[0][c], l1 * n[1][c]));
+    }
+    return out;
+}
+
+/// The recording GPU's float32 distance: the squared distance by FMA, then its square root.
+float Distance32(const Float3& q, const Float3& p) {
     const float dx = q[0] - p[0];
     const float dy = q[1] - p[1];
     const float dz = q[2] - p[2];
     return evaluator::hw::Sqrt(std::fma(dz, dz, std::fma(dy, dy, dx * dx)));
 }
 
+/// Decision 273's comparator distance from the ring texel (rx, ry) to the tap (tx, ty), both
+/// through triangle `k`.
+float CompareDistance(const KernelTriangle& k, uint32_t width, uint32_t height, uint32_t rx, uint32_t ry, uint32_t tx,
+                      uint32_t ty) {
+    return Distance32(Position32(k, width, height, rx, ry), Position32(k, width, height, tx, ty));
+}
+
+// Float32 vector operations without contraction, each one correctly rounded operation.
+Float3 Sub32(const Float3& a, const Float3& b) { return {a[0] - b[0], a[1] - b[1], a[2] - b[2]}; }
+Float3 Add32(const Float3& a, const Float3& b) { return {a[0] + b[0], a[1] + b[1], a[2] + b[2]}; }
+Float3 Scale32(const Float3& a, float s) { return {a[0] * s, a[1] * s, a[2] * s}; }
+float Dot32(const Float3& a, const Float3& b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+Float3 Cross32(const Float3& a, const Float3& b) {
+    return {a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]};
+}
+/// `a` divided by its length, the GPU's square root of its float32 squared length.
+Float3 Unit32(const Float3& a) {
+    const float length = evaluator::hw::Sqrt(Dot32(a, a));
+    return {a[0] / length, a[1] / length, a[2] / length};
+}
+
+Float3 RingGeometry::Unfold32(const Float3& p, uint32_t k, uint32_t e) const {
+    const uint32_t from = triangles[k].face;
+    const uint32_t to = triangles[e].face;
+    if (from == to) return p;
+    const auto& h = HingeOf(to, from);
+    if (!h) return p;
+    // Decision 270's hinge over the box-normalised positions, in float32.
+    const KernelTriangle& own = triangles[h->edge.own];
+    const KernelTriangle& other = triangles[h->edge.other];
+    const auto local = [](const KernelTriangle& t, uint32_t v) {
+        return static_cast<size_t>(std::find(t.vertex.begin(), t.vertex.end(), v) - t.vertex.begin());
+    };
+    const size_t ia = local(own, h->edge.va);
+    const size_t ib = local(own, h->edge.vb);
+    const size_t ja = local(other, h->edge.va);
+    const size_t jb = local(other, h->edge.vb);
+    const Float3& a = own.normalised[ia];
+    const Float3 axis = Unit32(Sub32(own.normalised[ib], a));
+    const auto across = [&](const Float3& to3) {
+        const Float3 v = Sub32(to3, a);
+        return Unit32(Sub32(v, Scale32(axis, Dot32(v, axis))));
+    };
+    const Float3 inOwn = across(own.normalised[3 - ia - ib]);
+    const Float3 inOther = across(other.normalised[3 - ja - jb]);
+    const Float3 v = Sub32(p, a);
+    const float s = Dot32(v, axis);
+    const Float3 r = Sub32(v, Scale32(axis, s));
+    const Float3 toward = Scale32(inOwn, -1.0f);
+    const float along = Dot32(r, inOther);
+    const float out = Dot32(r, Cross32(axis, inOther));
+    return Add32(Add32(a, Scale32(axis, s)), Add32(Scale32(toward, along), Scale32(Cross32(axis, toward), out)));
+}
+
 struct Candidate {
     RingTap tap;
     size_t texel = 0;
     uint32_t triangle = 0;
+    uint32_t seam = 0;                 // a far tap: E, the own triangle of the first seam edge whose
+    std::array<int64_t, 2> window{};   // window holds it, and that window's base (col0, row0)
+    bool multiFacet = false;           // its distance develops it along a face path (decision 281)
+    uint8_t tie = 0;                   // the open tie classes of its group of equal distances (Ordered)
 };
 
 /// Decision 278's seam gate of one seam edge (tau's ring point q, the edge's own triangle E and far
@@ -474,29 +633,79 @@ double SegmentDistance(const KernelTriangle& k, size_t edge, double px, double p
     return std::hypot(px - a[0] - u * ex, py - a[1] - u * ey);
 }
 
-/// `out` in tap order: nearest first, equal distances by the comparator (own taps), then toward
-/// +u, +v; the first kKeptCandidates.
+/// The rank in `order` of the offset (du, dv).
+template <size_t N>
+size_t Rank(const std::array<std::array<int, 2>, N>& order, int64_t du, int64_t dv) {
+    for (size_t i = 0; i < N; ++i) {
+        if (order[i][0] == du && order[i][1] == dv) return i;
+    }
+    return N;
+}
+
+/// `out` in tap order: nearest first; within a group of equal distances (decision 280) own taps
+/// first, by decision 273's comparator, then kOwnOrder; far taps after them, by the float32
+/// distance |q_E - P| (q_E the ring texel's decision-273 position through E, P the tap's through its
+/// own triangle, rotated into E's face, Unfold32), then kWindowOrder. Each candidate's `tie` holds
+/// its group's open tie classes. The first kKeptCandidates.
 std::vector<Candidate> Ordered(const RingGeometry& g, uint32_t x, uint32_t y, std::vector<Candidate> out) {
     std::sort(out.begin(), out.end(), [](const Candidate& a, const Candidate& b) {
         return a.tap.distance != b.tap.distance ? a.tap.distance < b.tap.distance : a.texel < b.texel;
     });
+    struct Keyed {
+        float distance = 0.0f;
+        size_t rank = 0;
+        Candidate c;
+    };
     for (size_t first = 0; first < out.size();) {
         size_t last = first + 1;
         while (last < out.size() && out[last].tap.distance <= out[first].tap.distance * (1.0 + kEqualShare)) ++last;
         if (last - first > 1) {
-            std::vector<std::pair<float, Candidate>> group;
+            std::vector<Keyed> group;
             for (size_t i = first; i < last; ++i) {
                 const Candidate& c = out[i];
                 const KernelTriangle& k = g.triangles[c.triangle];
-                group.emplace_back(c.tap.far ? 0.0f : CompareDistance(k, g.width, g.height, x, y, c.tap.x, c.tap.y), c);
+                if (!c.tap.across_seam) {
+                    int64_t du = static_cast<int64_t>(c.tap.x) - x;  // x wraps
+                    if (du > 1) du -= g.width;
+                    if (du < -1) du += g.width;
+                    const int64_t dv = static_cast<int64_t>(y) - c.tap.y;
+                    group.push_back({CompareDistance(k, g.width, g.height, x, y, c.tap.x, c.tap.y),
+                                     Rank(kOwnOrder, du, dv), c});
+                } else {
+                    const Float3 qE = Position32(g.triangles[c.seam], g.width, g.height, x, y);
+                    const Float3 p = g.Unfold32(Position32(k, g.width, g.height, c.tap.x, c.tap.y), c.triangle, c.seam);
+                    group.push_back({Distance32(qE, p),
+                                     Rank(kWindowOrder, c.tap.x - c.window[0], c.window[1] - c.tap.y), c});
+                }
             }
-            std::stable_sort(group.begin(), group.end(), [](const auto& a, const auto& b) {
-                if (a.second.tap.far != b.second.tap.far) return !a.second.tap.far;
-                if (a.first != b.first) return a.first < b.first;
-                if (a.second.tap.x != b.second.tap.x) return a.second.tap.x > b.second.tap.x;
-                return a.second.tap.y < b.second.tap.y;
+            std::stable_sort(group.begin(), group.end(), [](const Keyed& a, const Keyed& b) {
+                if (a.c.tap.across_seam != b.c.tap.across_seam) return !a.c.tap.across_seam;
+                if (a.distance != b.distance) return a.distance < b.distance;
+                return a.rank < b.rank;
             });
-            for (size_t i = first; i < last; ++i) out[i] = group[i - first].second;
+            // The tie classes the data leave open (decision 280 decision 2).
+            uint8_t tie = 0;
+            for (size_t i = 0; i < group.size(); ++i) {
+                for (size_t j = i + 1; j < group.size(); ++j) {
+                    const Keyed& a = group[i];
+                    const Keyed& b = group[j];
+                    if (a.c.tap.across_seam != b.c.tap.across_seam) {
+                        tie |= kTieOwnFar;
+                    } else if (!a.c.tap.across_seam) {
+                        if (a.distance == b.distance && OwnOrderOpen(a.rank, b.rank)) tie |= kTieOwnOrder;
+                    } else {
+                        if (g.triangles[a.c.triangle].face != g.triangles[b.c.triangle].face) tie |= kTieFarFold;
+                        if (a.distance == b.distance && (a.c.seam != b.c.seam || a.c.window != b.c.window ||
+                                                         WindowOrderOpen(a.rank, b.rank))) {
+                            tie |= kTieFarOrder;
+                        }
+                    }
+                }
+            }
+            for (size_t i = first; i < last; ++i) {
+                out[i] = group[i - first].c;
+                out[i].tie = tie;
+            }
         }
         first = last;
     }
@@ -505,12 +714,14 @@ std::vector<Candidate> Ordered(const RingGeometry& g, uint32_t x, uint32_t y, st
 }
 
 /// The chain's number of taps over `candidates` (tap order): the 4 nearest, or 1 when the nearest
-/// lies at distance 0.
+/// lies at distance 0 relative to the nearest own candidate. A list without own candidates is never
+/// a copy (decision 280 finding 4): its scale is its farthest candidate.
 uint32_t TapCount(const std::vector<Candidate>& candidates) {
     double nearest = std::numeric_limits<double>::infinity();
     for (const Candidate& c : candidates) {
-        if (!c.tap.far) nearest = std::min(nearest, c.tap.distance);
+        if (!c.tap.across_seam) nearest = std::min(nearest, c.tap.distance);
     }
+    if (std::isinf(nearest)) nearest = candidates.back().tap.distance;
     return candidates[0].tap.distance > kZeroDistance * nearest
                ? static_cast<uint32_t>(std::min(kMaxTaps, candidates.size()))
                : 1u;
@@ -521,7 +732,7 @@ bool SameTaps(const std::vector<Candidate>& a, const std::vector<Candidate>& b) 
     const uint32_t n = TapCount(a);
     if (TapCount(b) != n) return false;
     for (uint32_t i = 0; i < n; ++i) {
-        if (a[i].texel != b[i].texel || a[i].tap.far != b[i].tap.far || a[i].tap.distance != b[i].tap.distance) {
+        if (a[i].texel != b[i].texel || a[i].tap.across_seam != b[i].tap.across_seam || a[i].tap.distance != b[i].tap.distance) {
             return false;
         }
     }
@@ -550,6 +761,7 @@ CandidateSet Candidates(const RingGeometry& g, uint32_t x, uint32_t y, const std
         double frame = 0.0;    // |q - P|, P in tau's frame: the distance of an own tap of tau's island or a far tap
         double outside = -1;   // an own neighbour outside tau's island: min(|q_k - P|, |q - P|) (decision 279)
         bool own = false;
+        bool multiFacet = false;    // in a face with no 3D edge to tau's face (decision 281)
         std::vector<uint32_t> via;  // the seam edges (indices into `edges`) whose window holds it
     };
     std::vector<Entry> pool;
@@ -564,7 +776,8 @@ CandidateSet Candidates(const RingGeometry& g, uint32_t x, uint32_t y, const std
         const double tx = static_cast<double>(texel % g.width) + 0.5;
         const double ty = static_cast<double>(texel / g.width) + 0.5;
         const Vec3 p = Point(k, TexelBary(k, tx, ty));
-        e.frame = Norm(Sub(q, g.Frame(p, e.triangle, tau)));
+        e.frame = Norm(Sub(q, g.Frame(p, e.triangle, tau, q)));
+        e.multiFacet = !g.Hinged(e.triangle, tau);
         if (k.chart != T.chart) {
             e.outside = std::min(Norm(Sub(Point(k, TexelBary(k, x + 0.5, y + 0.5)), p)), Norm(Sub(q, p)));
         }
@@ -584,6 +797,8 @@ CandidateSet Candidates(const RingGeometry& g, uint32_t x, uint32_t y, const std
     struct Edge {
         SeamGate gate;
         double reach = 0.0;
+        uint32_t own = 0;                // E
+        std::array<int64_t, 2> window{};  // the far window's base (col0, row0)
     };
     std::vector<Edge> edges;
     for (const uint32_t chart : charts) {
@@ -593,14 +808,14 @@ CandidateSet Candidates(const RingGeometry& g, uint32_t x, uint32_t y, const std
             const KernelTriangle& E = g.triangles[seam.own];
             const double reach = SegmentDistance(E, seam.edge, x + 0.5, y + 0.5);
             if (reach > kReachCap) continue;
-            const KernelTriangle& J = g.triangles[seam.far];
+            const KernelTriangle& J = g.triangles[seam.farTriangle];
             const uint32_t va = E.vertex[(seam.edge + 1) % 3];
             const uint32_t vb = E.vertex[(seam.edge + 2) % 3];
             const auto index = static_cast<uint32_t>(edges.size());
-            edges.push_back({GateOf(E, J, q, E.p[(seam.edge + 1) % 3]), reach});
-            const std::array<double, 2> far = TexelOf(J, Fold(MakeHinge(E, J, va, vb), q));
-            const auto col0 = static_cast<int64_t>(std::floor(far[0] - 0.5));
-            const auto row0 = static_cast<int64_t>(std::ceil(far[1] - 0.5));
+            const std::array<double, 2> farPoint = TexelOf(J, Fold(MakeHinge(E, J, va, vb), q));
+            const auto col0 = static_cast<int64_t>(std::floor(farPoint[0] - 0.5));
+            const auto row0 = static_cast<int64_t>(std::ceil(farPoint[1] - 0.5));
+            edges.push_back({GateOf(E, J, q, E.p[(seam.edge + 1) % 3]), reach, seam.own, {col0, row0}});
             for (int64_t row = row0 - kFarReach; row <= row0 + kFarReach; ++row) {
                 for (int64_t col = col0 - kFarReach; col <= col0 + kFarReach; ++col) {
                     if (row < 0 || col < 0 || row >= g.height || col >= g.width) continue;
@@ -623,9 +838,15 @@ CandidateSet Candidates(const RingGeometry& g, uint32_t x, uint32_t y, const std
             const auto ty = static_cast<uint32_t>(e.texel / g.width);
             const bool inside = e.own && e.outside < 0.0;
             if (!inside && std::any_of(e.via.begin(), e.via.end(), [&](uint32_t i) { return open(edges[i]); })) {
-                out.push_back({{tx, ty, e.frame, true}, e.texel, e.triangle});
+                const Edge& first = edges[e.via.front()];
+                out.push_back({{tx, ty, e.frame, true}, e.texel, e.triangle, first.own, first.window, e.multiFacet});
             } else if (e.own) {
-                out.push_back({{tx, ty, inside ? e.frame : e.outside, false}, e.texel, e.triangle});
+                out.push_back({{tx, ty, inside ? e.frame : e.outside, false},
+                               e.texel,
+                               e.triangle,
+                               0,
+                               {},
+                               inside && e.multiFacet});
             }
         }
         return Ordered(g, x, y, std::move(out));
@@ -643,7 +864,7 @@ CandidateSet Candidates(const RingGeometry& g, uint32_t x, uint32_t y, const std
     for (const std::vector<Candidate>* list : {&std::as_const(out.candidates), &ungated}) {
         const uint32_t n = TapCount(*list);
         for (uint32_t i = 0; i < n; ++i) {
-            if (!(*list)[i].tap.far) continue;
+            if (!(*list)[i].tap.across_seam) continue;
             for (const Entry& e : pool) {
                 if (e.texel != (*list)[i].texel) continue;
                 for (const uint32_t v : e.via) reaches[v] = 1;
@@ -753,6 +974,14 @@ std::vector<RingTexel> RingOf(const Coverage& coverage) {
             r.onFarPlane = set.onFarPlane;
             r.mixedGates = set.mixedGates;
             r.reachBracket = set.reachBracket;
+            for (uint32_t i = 0; i < r.taps; ++i) {
+                const Candidate& c = set.candidates[i];
+                r.ownFarTie = r.ownFarTie || (c.tie & kTieOwnFar) != 0;
+                r.ownOrder = r.ownOrder || (c.tie & kTieOwnOrder) != 0;
+                r.farFold = r.farFold || (c.tie & kTieFarFold) != 0;
+                r.farOrder = r.farOrder || (c.tie & kTieFarOrder) != 0;
+                r.multiFacet = r.multiFacet || c.multiFacet;
+            }
             for (size_t i = 1; i < triangles.size(); ++i) {
                 r.alternatives.push_back(Taps(Candidates(g, rx, ry, own, triangles[i]).candidates));
             }

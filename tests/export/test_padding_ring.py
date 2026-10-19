@@ -1,13 +1,15 @@
 """Synthetic cases of the measured `infinite` padding ring (src/export/padding.h; phase1.25 item
-2.7, decisions 267, 268, 270, 273, 275, 278 and 279), through `uzp-export-tests ring`.
+2.7, decisions 267, 268, 270, 273, 275, 278, 279, 280 and 281), through `uzp-export-tests ring`.
 
 Each case pads random float32 values over a small OBJ written here, and compares UzPainter's ring
 texels bit for bit with a reference of the rule: on a single island this file's own (the ring
 point extrapolated through the island's affine map, the covered 8-neighbours, the 4 nearest, the
 exact 1/d shares quantised to 10, 8 and 6 bits, the float32 FMA lerp chain and decision 206's
-rounding; equal shares ordered by decision 273's comparator, then toward +u, +v); across a UV seam
-`padding_reference` (the far window of decision 275 in padding.cpp's double arithmetic, decision
-278's seam gate and decision 279's ring point, neighbours and reach). No Painter data is read.
+rounding; equal shares ordered by decision 273's comparator, then decision 280's neighbour
+order); across a UV seam `padding_reference` (the far window of decision 275 in padding.cpp's
+double arithmetic, decision 278's seam gate, decision 279's ring point, neighbours and reach,
+decision 280's far tie order and tap count). The coverage snaps vertices to 1/256 texel (decision
+281). No Painter data is read.
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ import pytest
 from tests.export.padding_reference import (
     F32,
     NEIGHBOURS,
+    OWN_ORDER,
     Ring,
     box_normalised,
     chain,
@@ -58,13 +61,16 @@ class Mesh:
         self.normalised = [box_normalised(t, lo, hi) for t, _ in self.triangles]
         self.owner = -np.ones((size, size), int)
         for k, (_, tuv) in enumerate(self.triangles):
-            uvd = tuv.astype(np.float64)
+            # Vertices snapped to 1/256 texel (decision 281), v down, centres at + 1/2.
+            t = [
+                (round(float(u) * size * 256) / 256, round((1 - float(v)) * size * 256) / 256)
+                for u, v in tuv
+            ]
             for row in range(size):
                 for col in range(size):
-                    u, v = (col + 0.5) / size, 1 - (row + 0.5) / size
                     w = [
-                        (uvd[(i + 1) % 3][0] - uvd[i][0]) * (v - uvd[i][1])
-                        - (uvd[(i + 1) % 3][1] - uvd[i][1]) * (u - uvd[i][0])
+                        (t[(i + 1) % 3][0] - t[i][0]) * (row + 0.5 - t[i][1])
+                        - (t[(i + 1) % 3][1] - t[i][1]) * (col + 0.5 - t[i][0])
                         for i in range(3)
                     ]
                     if (all(x >= 0 for x in w) or all(x <= 0 for x in w)) and self.owner[
@@ -126,7 +132,7 @@ def reference(
     ]
 
     def key(c: tuple[float, bool, tuple[int, int]]) -> tuple[Any, ...]:
-        return (float(mesh.compare(ring, c[2])), -c[2][0], c[2][1])
+        return (float(mesh.compare(ring, c[2])), OWN_ORDER.index((c[2][0] - x, y - c[2][1])))
 
     cands.sort(key=lambda c: c[0])
     ordered: list[tuple[float, bool, tuple[int, int]]] = []
@@ -221,7 +227,8 @@ def test_straight_edge_ring_is_decision_273s_chain(export_tests: Path, tmp_path:
 
 def test_equal_diagonal_shares_follow_the_comparator(export_tests: Path, tmp_path: Path) -> None:
     """A square island on non-dyadic UVs and positions: the two diagonals' shares are equal, and the
-    strong one is decision 273's comparator's nearer one (an exact float32 tie: +x, -row)."""
+    strong one is decision 273's comparator's nearer one (an exact float32 tie: decision 280's
+    neighbour order)."""
     mesh = Mesh([flat_square(0.15, 0.85, 2.9)], 20)
     values, out, ring = run(export_tests, tmp_path, mesh, "square-odd", 2)
     away = 0
@@ -645,3 +652,84 @@ def test_padding_runs_in_the_document_format(
     assert 0 < covered.sum() < covered.size
     assert np.array_equal(document, expected)
     assert not np.array_equal(by_codes[~covered], expected[~covered])
+
+
+def test_far_ties_follow_the_window_order_and_all_far_lists_are_not_copies(
+    export_tests: Path, tmp_path: Path
+) -> None:
+    """Decision 280, against `padding_reference` bit for bit, candidates and flags included: island
+    A (4 x 4 texels, a quarter unit each) and island B beyond its edge x = 1 (16 x 16 texels, a
+    sixteenth each) share that edge. A's ring texels beyond the seam fold into B two B texels from
+    its edge, on a B texel corner: the 4 texels of the window's 2 x 2 block tie exactly (float32
+    |q_E - P| included) and are taken in the window order (0, 0), (+1, 0), (0, +1), (+1, +1) from
+    the base (floor(f_u - 1/2), ceil(f_v - 1/2)), v up, not toward +u, +v; and the 8 kept candidates
+    are all far texels, which no longer makes the chain a copy (finding 4)."""
+    mesh = Mesh(
+        [
+            _quad((0.0, 1.0), (1.0, 5.0), (12.0, 16.0), 16.0),
+            _quad((1.0, 2.0), (8.0, 24.0), (0.0, 16.0), 16.0, 1 / 16),
+        ],
+        32,
+    )
+    values, out, ring = run(export_tests, tmp_path, mesh, "far-ties", 280)
+    _matches_reference(tmp_path, "far-ties", values, out, ring)
+    seam = {r["y"]: r for r in ring if r["x"] == 5 and 12 <= r["y"] <= 15}
+    assert sorted(seam) == [12, 13, 14, 15]
+    for y, r in seam.items():
+        assert len(r["candidates"]) == 8 and all(c[3] for c in r["candidates"]), y
+        assert r["taps"] == 4, y
+        row = 4 * y - 46
+        assert [(c[0], c[1]) for c in r["candidates"][:4]] == [
+            (9, row),
+            (10, row),
+            (9, row - 1),
+            (10, row - 1),
+        ], y
+        assert r["undecided"] == [], y
+
+
+def test_own_ties_follow_the_neighbour_order(export_tests: Path, tmp_path: Path) -> None:
+    """Decision 280: at the inner corner of an L-shaped island, ring texel (8, 11) ties its side
+    along u (-1, 0) and its side along v (0, -1) exactly: the side along u comes first, where
+    toward +u, +v took the other. Its tied diagonals hold the open pair (+1, -1) / (-1, +1), which
+    is flagged "own-order". Equal to `padding_reference` bit for bit, flags included."""
+    mesh = Mesh(
+        [
+            _quad((1.0, 2.0), (4.0, 8.0), (8.0, 12.0), 16.0),
+            _quad((1.0, 2.0), (4.0, 8.0), (12.0, 16.0), 16.0),
+            _quad((2.0, 3.0), (8.0, 12.0), (12.0, 16.0), 16.0),
+        ],
+        32,
+    )
+    values, out, ring = run(export_tests, tmp_path, mesh, "own-ties", 280)
+    _matches_reference(tmp_path, "own-ties", values, out, ring)
+    corner = next(r for r in ring if (r["x"], r["y"]) == (8, 11))
+    assert [(c[0], c[1]) for c in corner["candidates"][:2]] == [(7, 11), (8, 12)]
+    assert corner["taps"] == 4
+    assert "own-order" in corner["undecided"]
+
+
+def test_coverage_snaps_vertices_to_a_256th_of_a_texel(export_tests: Path, tmp_path: Path) -> None:
+    """Decision 281: a texel centre 1/1000 texel outside an island's edge is covered (the edge
+    snaps onto it), one 3/1000 texel outside is not, in UzPainter's coverage, `padding_reference`'s
+    and tools/parity/coverage's alike."""
+    from tools.parity.coverage import coverage, obj_triangles
+
+    mesh = Mesh(
+        [
+            _quad((1.0, 2.12475), (4.0, 8.499), (12.0, 16.0), 16.0),
+            _quad((1.0, 2.12425), (4.0, 8.497), (20.0, 24.0), 16.0),
+        ],
+        32,
+    )
+    values, out, ring = run(export_tests, tmp_path, mesh, "snap", 281)
+    _matches_reference(tmp_path, "snap", values, out, ring)
+    reference = Ring(tmp_path / "snap.obj", "m", 32, 32)
+    covered = coverage(obj_triangles(tmp_path / "snap.obj", "m"), 32, 32)
+    assert np.array_equal(covered, reference.owner >= 0)
+    assert np.array_equal(covered, mesh.owner >= 0)
+    assert covered[12:16, 8].all() and not covered[12:16, 9].any()
+    assert not covered[20:24, 8].any()
+    ring_texels = {(r["x"], r["y"]) for r in ring}
+    assert {(9, y) for y in range(12, 16)} <= ring_texels
+    assert {(8, y) for y in range(20, 24)} <= ring_texels

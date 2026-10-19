@@ -4,7 +4,8 @@
 // decision 090): what a file holds outside the UV islands of its texture set.
 //
 // The coverage is the texture set's texel-centre UV coverage (evaluator/geometry_mask.h: a texel
-// is covered when its centre lies inside or on a triangle of the set's material). The evaluator
+// is covered when its centre lies inside or on a triangle of the set's material, its vertices
+// snapped to 1/256 texel, decision 281). The evaluator
 // fills the whole UV tile, so every texel of a raster holds the stack's value there.
 //
 // - Complete coverage (every texel covered, as on the grid meshes of the Tier 0 corpus): padding
@@ -26,7 +27,7 @@
 //   over the coverage's triangles (`IslandTriangles`); the export never does. Covered texels keep
 //   their evaluated values; the others are filled in two steps.
 //   1. The ring, every uncovered texel with a covered 8-neighbour (x wraps, y does not), is an FMA
-//      lerp chain over at most 4 taps (decisions 267, 268, 270, 273, 275, 278, 279):
+//      lerp chain over at most 4 taps (decisions 267, 268, 270, 273, 275, 278, 279, 280, 281):
 //      - the ring point q is the texel centre extrapolated through its own triangle tau, the
 //        triangle of its covered 8-neighbours; when they lie in several, the triangle of the one
 //        nearest under decision 273's comparator (below, through that neighbour's own triangle),
@@ -43,31 +44,44 @@
 //        (decision 278's gate);
 //      - a candidate in tau's planar face is used at its 3D position, one in a face sharing a 3D
 //        edge with that face is rotated about the edge into its plane, onto the far side, any other
-//        one is used at its 3D position; d is the distance from q. An own neighbour outside tau's
+//        one is rotated hinge by hinge along the fewest-hinge paths of faces sharing 3D edges (at
+//        most 4 hinges, breadth first), the development nearest q (decision 281; not exact, and
+//        flagged), else used at its 3D position; d is the distance from q. An own neighbour outside tau's
 //        island that no window holds is an own tap at min(|q_k - P|, |q - P|), q_k the texel centre
 //        extrapolated through the neighbour's own triangle and P its raw 3D position; one a window
 //        holds is a far tap (decision 279);
 //      - not identified, and flagged by the measured ring (`RingTexel`): Painter's reach cap, in
 //        (1.7, 1.8] texels; the gate's constant, in (0.98498905, 0.98501915], and whether it
 //        compares with <= or <; a ring point on J's plane; a texel reached across two seam edges
-//        with different gates;
-//      - the taps are the 4 nearest; a nearest at distance 0 is copied;
-//      - the tap order is the exact 1/d share, largest first; equal shares are ordered by decision
-//        273's comparator (each own tap's GPU-sqrt distance, squared by FMA, to q, both
-//        interpolated through that tap's own triangle: float32 texel-centre UVs, barycentrics from
-//        the UV inverse matrix based at the third corner with the GPU's reciprocal, and
-//        fma(l2, P2, fma(l0, P0, l1 P1)) over positions normalised by the mesh box as
-//        P r - c r, c = lo + ext / 2, r = 1 / (max(ext) / 2)), then toward +u, +v (far taps after
-//        own ones): exact on every recorded straight-edge tie but one (decision 273); the order of
-//        tied seam taps is not identified;
+//        with different gates; a chain tap developed along a face path; the tie classes below
+//        that the data leave open;
+//      - the taps are the 4 nearest; a nearest at distance 0 relative to the nearest own
+//        candidate is copied, and a list of 8 kept candidates without own ones is never a copy
+//        (decision 280);
+//      - the tap order is the exact 1/d share, largest first (decision 280 within equal shares):
+//        own taps first, ordered by decision 273's comparator (each own tap's GPU-sqrt distance,
+//        squared by FMA, to q, both interpolated through that tap's own triangle: float32
+//        texel-centre UVs, barycentrics from the UV inverse matrix based at the third corner with
+//        the GPU's reciprocal, and fma(l2, P2, fma(l0, P0, l1 P1)) over positions normalised by
+//        the mesh box as P r - c r, c = lo + ext / 2, r = 1 / (max(ext) / 2)), then by the offset
+//        (du, dv) from the ring texel, v up: (+1, 0), (-1, 0), (0, -1), (0, +1), (+1, +1),
+//        (+1, -1), (-1, +1), (-1, -1); far taps by the float32 distance |q_E - P| (q_E the ring
+//        texel through E, the own triangle of the first seam edge whose window holds the tap, P
+//        the tap through its own triangle, rotated in float32 into E's face about an edge shared
+//        with it), then by the offset from the window's base (floor(f_u - 1/2), ceil(f_v - 1/2)),
+//        v up: (0, 0), (+1, 0), (0, +1), (+1, +1), (0, -1), (+1, -1), (-1, 0), (-1, +1),
+//        (-1, -1). Not identified, and flagged: an own and a far tap at equal distance; own taps
+//        tied on the comparator at (+1, 0) / (-1, 0), (0, +1) / (0, -1) or (+1, -1) / (-1, +1);
+//        far taps at equal distance in different planar faces; far taps tied in float32 from
+//        different windows or at offsets the recorded ties do not order;
 //      - level l of the n - 1 levels codes tap l's share s among taps l..n with (k, L) = (4, 1023),
 //        (3, 255), (2, 63): u = round((s - 1/k) k / (k - 1) L) in [0, L], t = float32(1/k +
 //        (k - 1)/k u / L); the value is m = fma(1 - t, v_n - v_n-1, v_n-1) for the last level, then
 //        m = fma(t, v_l - m, m) outward, rounded through 1 - (1 - m) (decision 206).
 //      Painter's ring is not this at pole tap sets, on multi-facet bevels, on anisotropic
-//      islands, in the order of equal seam shares, at far points on an exact texel centre, on
-//      curved shared islands and at the Wand's convex seam texels whose Height no chain over these
-//      taps gives (decisions 267, 270, 273, 275, 277, 279).
+//      islands, at far points on an exact texel centre, at V-gap boundaries, across concave
+//      hinges, on curved shared islands and at the Wand's convex seam texels whose Height no chain
+//      over these taps gives (decisions 267, 270, 273, 275, 277, 279, 280, 281).
 //   2. Every other texel copies its seed found by a jump flood over the covered and ring texels
 //      (decision 197): steps k = max(width, height)/2 down to 1, eight offsets in a fixed order,
 //      the strictly nearest seed kept.
@@ -146,7 +160,7 @@ struct RingTap {
     uint32_t x = 0;
     uint32_t y = 0;
     double distance = 0.0;
-    bool far = false;
+    bool across_seam = false;
 };
 
 /// A ring texel of the measured `infinite` padding (above): its candidates in tap order, of which
@@ -154,13 +168,16 @@ struct RingTap {
 /// number of distinct triangles among its covered 8-neighbours. `alternatives` holds, for each of
 /// those triangles other than tau (in decreasing index), the candidates in tap order with q
 /// extrapolated through it instead: what a measurement of the V-gap position compares.
-/// The four flags mark where the rule above does not decide the taps: a seam edge whose window
+/// The flags mark where the rule above does not decide the chain: a seam edge whose window
 /// gives the chain a tap, with decision 278's gate or without it, has its faces' normal dot product
 /// inside the open bracket (0.98498905, 0.98501915] with q behind the far plane (`foldBracket`), or
 /// q exactly on the far plane with a dot product of at most 0.98501915 (`onFarPlane`); two such
 /// edges are gated differently (`mixedGates`); a reach cap of 1.7 instead of 1.8 texels changes the
-/// taps (`reachBracket`, decision 279). The taps are still those of the rule above (constant 0.985,
-/// gated per edge, cap 1.8).
+/// taps (`reachBracket`, decision 279). A group of equal distances holding a chain tap holds an own
+/// and a far tap (`ownFarTie`), an open own pair (`ownOrder`), far taps in different planar faces
+/// (`farFold`) or an open far pair (`farOrder`, decision 280). A chain tap's distance is developed
+/// along a face path (`multiFacet`, decision 281). The chain is still that of the rule above
+/// (constant 0.985, gated per edge, cap 1.8, the fixed orders, the nearer development).
 struct RingTexel {
     uint32_t x = 0;
     uint32_t y = 0;
@@ -173,6 +190,11 @@ struct RingTexel {
     bool onFarPlane = false;
     bool mixedGates = false;
     bool reachBracket = false;
+    bool ownFarTie = false;
+    bool ownOrder = false;
+    bool farFold = false;
+    bool farOrder = false;
+    bool multiFacet = false;
 };
 
 /// The ring of the measured `infinite` padding over `coverage` (which needs its triangles), rows

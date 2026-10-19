@@ -7,7 +7,9 @@ The convention of `src/evaluator/geometry_mask.h` and the OBJ reading of `src/me
   material `default`;
 - row 0 is the top of UV tile 1001 (v = 1); texel (col, row) has its centre at
   u = (col + 1/2) / W, v = 1 - (row + 1/2) / H, and is covered when that centre lies inside or on
-  the boundary of a non-degenerate triangle of the material.
+  the boundary of a triangle of the material whose vertices are first rounded in texel space
+  (u W, (1 - v) H) to the nearest 1/256 texel, ties to even, and which is not degenerate after
+  that rounding (decision 281).
 
 The coverage separates the texels inside the UV islands from the padding texels, which the Tier 1
 report publishes apart (exception EXC-007 excepted them until the owner withdrew it, decision
@@ -83,27 +85,33 @@ def _cross(
     return result
 
 
+SUB_TEXEL = 256  # the coverage's vertex precision, in texels (decision 281)
+
+
 def coverage(triangles: Triangles, width: int, height: int) -> Mask:
     """The covered texels (rows top first) of `triangles` at `width` x `height`."""
     covered = np.zeros((height, width), dtype=bool)
-    for p in triangles:
+    for uv in triangles:
+        p = np.empty((3, 2), dtype=np.float64)
+        p[:, 0] = np.round(uv[:, 0] * width * SUB_TEXEL) / SUB_TEXEL
+        p[:, 1] = np.round((1.0 - uv[:, 1]) * height * SUB_TEXEL) / SUB_TEXEL
         area = float(_cross(p[0], p[1], p[2][0], p[2][1]))
         if area == 0.0:
             continue
-        col_lo = max(0.0, np.floor(p[:, 0].min() * width - 0.5))
-        col_hi = min(width - 1.0, np.ceil(p[:, 0].max() * width - 0.5))
-        row_lo = max(0.0, np.floor((1.0 - p[:, 1].max()) * height - 0.5))
-        row_hi = min(height - 1.0, np.ceil((1.0 - p[:, 1].min()) * height - 0.5))
+        col_lo = max(0.0, np.floor(p[:, 0].min() - 0.5))
+        col_hi = min(width - 1.0, np.ceil(p[:, 0].max() - 0.5))
+        row_lo = max(0.0, np.floor(p[:, 1].min() - 0.5))
+        row_hi = min(height - 1.0, np.ceil(p[:, 1].max() - 0.5))
         if col_lo > col_hi or row_lo > row_hi:
             continue
         cols = np.arange(int(col_lo), int(col_hi) + 1, dtype=np.float64)
         rows = np.arange(int(row_lo), int(row_hi) + 1, dtype=np.float64)
-        pu = ((cols + 0.5) / width)[None, :]
-        pv = (1.0 - (rows + 0.5) / height)[:, None]
+        px = (cols + 0.5)[None, :]
+        py = (rows + 0.5)[:, None]
         w0, w1, w2 = (
-            _cross(p[0], p[1], pu, pv),
-            _cross(p[1], p[2], pu, pv),
-            _cross(p[2], p[0], pu, pv),
+            _cross(p[0], p[1], px, py),
+            _cross(p[1], p[2], px, py),
+            _cross(p[2], p[0], px, py),
         )
         if area > 0.0:
             inside = (w0 >= 0.0) & (w1 >= 0.0) & (w2 >= 0.0)

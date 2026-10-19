@@ -1,6 +1,6 @@
 """The measured `infinite` padding of src/export/padding.h (phase1.25 item 2.7; decisions 197, 206,
-267, 268, 270, 273, 275, 278, 279; measured only, decision 259), written again independently in
-Python for the tests: the ring over an OBJ's triangles, then the jump flood.
+267, 268, 270, 273, 275, 278, 279, 280, 281; measured only, decision 259), written again
+independently in Python for the tests: the ring over an OBJ's triangles, then the jump flood.
 
 The geometry (barycentrics, folds about seam edges, distances) is double precision with each
 operation in padding.cpp's order, so that a far point at an exact half-texel boundary, where
@@ -8,11 +8,13 @@ decision 275's window is not identified (its open item (b)), falls on the same s
 UzPainter. The comparator of equal shares (decision 273), the chain fractions (decision 268) and
 the lerp chain are float32, each operation correctly rounded, through the recording GPU's
 reciprocal and square root (tools/parity/fit/hwmath). So are decision 278's seam gate's face
-normals and their dot product. No Painter data is read.
+normals and their dot product, and decision 280's far-tap distance and its fold. The coverage
+snaps each vertex to 1/256 texel (decision 281). No Painter data is read.
 """
 
 from __future__ import annotations
 
+import itertools
 import math
 from collections.abc import Callable, Sequence
 from fractions import Fraction
@@ -41,6 +43,21 @@ FOLD_HIGH = F32(0.98501915)
 # (REACH_LOW, REACH_CAP].
 REACH_CAP = 1.8
 REACH_LOW = 1.7
+# Decision 281: the coverage's vertex precision (texels), and the most hinges of a face path.
+SUB_TEXEL = 256
+MAX_HINGES = 4
+# Decision 280's fixed orders of exactly tied taps, v-up offsets (du, dv): an own tap's from the
+# ring texel, a far tap's from its window's base (floor(f_u - 1/2), ceil(f_v - 1/2)).
+OWN_ORDER = ((1, 0), (-1, 0), (0, -1), (0, 1), (1, 1), (1, -1), (-1, 1), (-1, -1))
+WINDOW_ORDER = ((0, 0), (1, 0), (0, 1), (1, 1), (0, -1), (1, -1), (-1, 0), (-1, 1), (-1, -1))
+# The rank pairs those orders leave open (decision 280 open item (c)).
+OWN_OPEN = {(0, 1), (2, 3), (5, 6)}
+WINDOW_OPEN = {
+    (a, b)
+    for a in range(9)
+    for b in range(a + 1, 9)
+    if b > 5 and (a, b) != (6, 7) and not (b == 8 and a <= 2)
+}
 
 Vec = tuple[float, float, float]
 
@@ -132,9 +149,46 @@ def segment_distance(a: tuple[float, float], b: tuple[float, float], px: float, 
 
 
 def tap_count(cands: Sequence[tuple[float, bool, tuple[int, int]]]) -> int:
-    """The chain's number of taps over `cands` (tap order): 1 when the nearest is at distance 0."""
-    nearest = min((c[0] for c in cands if not c[1]), default=math.inf)
+    """The chain's number of taps over `cands` (tap order): 1 when the nearest is at distance 0
+    relative to the nearest own candidate, or to the farthest when none is own (decision 280)."""
+    nearest = min((c[0] for c in cands if not c[1]), default=cands[-1][0])
     return min(4, len(cands)) if cands[0][0] > ZERO_DISTANCE * nearest else 1
+
+
+def covered_texels(
+    uv: Sequence[tuple[float, float]], width: int, height: int
+) -> list[tuple[int, int]]:
+    """The texels (col, row) whose centre the triangle of float32 UVs `uv` (v up) covers: inside or
+    on its boundary, each vertex first rounded in texel space to the nearest 1/256 texel (decision
+    281), nothing when the snapped triangle is degenerate."""
+    t = [
+        (
+            round(u * width * SUB_TEXEL) / SUB_TEXEL,
+            round((1.0 - v) * height * SUB_TEXEL) / SUB_TEXEL,
+        )
+        for u, v in uv
+    ]
+
+    def edge(a: tuple[float, float], b: tuple[float, float], x: float, y: float) -> float:
+        return (b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0])
+
+    area = edge(t[0], t[1], t[2][0], t[2][1])
+    if area == 0.0:
+        return []
+    xs, ys = [c[0] for c in t], [c[1] for c in t]
+    out = []
+    for row in range(
+        int(max(0.0, math.floor(min(ys) - 0.5))),
+        int(min(height - 1.0, math.ceil(max(ys) - 0.5))) + 1,
+    ):
+        for col in range(
+            int(max(0.0, math.floor(min(xs) - 0.5))),
+            int(min(width - 1.0, math.ceil(max(xs) - 0.5))) + 1,
+        ):
+            w = [edge(t[i], t[(i + 1) % 3], col + 0.5, row + 0.5) for i in range(3)]
+            if all(e >= 0.0 for e in w) if area > 0.0 else all(e <= 0.0 for e in w):
+                out.append((col, row))
+    return out
 
 
 def box_normalised(positions: np.ndarray, lo: np.ndarray, hi: np.ndarray) -> np.ndarray:
@@ -148,6 +202,36 @@ def box_normalised(positions: np.ndarray, lo: np.ndarray, hi: np.ndarray) -> np.
     return result
 
 
+def position32(
+    uv: np.ndarray, normalised: np.ndarray, width: int, height: int, x: int, y: int
+) -> list[np.float32]:
+    """Decision 273's float32 position of texel (x, y)'s centre through the triangle of float32 UVs
+    `uv` (v up) and box-normalised corners `normalised`: the texel-centre UV, barycentrics from the
+    UV inverse matrix based at the third corner with the GPU reciprocal, fma(l2, P2, fma(l0, P0,
+    l1 P1))."""
+    u = [(f32(a), f32(b)) for a, b in uv]
+    e0u, e0v = f32(u[0][0] - u[2][0]), f32(u[0][1] - u[2][1])
+    e1u, e1v = f32(u[1][0] - u[2][0]), f32(u[1][1] - u[2][1])
+    det = f32(f32(e0u * e1v) - f32(e0v * e1u))
+    r = F32(hwmath.rcp(np.array([det], F32))[0])
+    m00, m01, m10, m11 = f32(e1v * r), f32(-e1u * r), f32(-e0v * r), f32(e0u * r)
+    n = normalised.astype(F32)
+    pu = f32(f32(x + 0.5) / f32(width))
+    pv = f32(f32(1) - f32(f32(y + 0.5) / f32(height)))
+    dx, dy = f32(pu - u[2][0]), f32(pv - u[2][1])
+    l0 = fma(m00, dx, f32(m01 * dy))
+    l1 = fma(m10, dx, f32(m11 * dy))
+    l2 = f32(f32(1) - f32(l0 + l1))
+    return [fma(l2, n[2][c], fma(l0, n[0][c], f32(l1 * n[1][c]))) for c in range(3)]
+
+
+def distance32(q: Sequence[np.float32], p: Sequence[np.float32]) -> np.float32:
+    """The FMA squared distance and the GPU square root."""
+    d = [f32(q[c] - p[c]) for c in range(3)]
+    squared = fma(d[2], d[2], fma(d[1], d[1], f32(d[0] * d[0])))
+    return F32(hwmath.sqrt(np.array([squared], F32))[0])
+
+
 def compare_distance(
     uv: np.ndarray,
     normalised: np.ndarray,
@@ -157,30 +241,40 @@ def compare_distance(
     tap: tuple[int, int],
 ) -> np.float32:
     """Decision 273's comparator distance from ring texel `ring` to `tap` = (x, y), both through the
-    triangle of float32 UVs `uv` (v up) and box-normalised corners `normalised`: texel-centre UVs,
-    barycentrics from the UV inverse matrix based at the third corner with the GPU reciprocal,
-    fma(l2, P2, fma(l0, P0, l1 P1)), the FMA squared distance and the GPU square root."""
-    u = [(f32(a), f32(b)) for a, b in uv]
-    e0u, e0v = f32(u[0][0] - u[2][0]), f32(u[0][1] - u[2][1])
-    e1u, e1v = f32(u[1][0] - u[2][0]), f32(u[1][1] - u[2][1])
-    det = f32(f32(e0u * e1v) - f32(e0v * e1u))
-    r = F32(hwmath.rcp(np.array([det], F32))[0])
-    m00, m01, m10, m11 = f32(e1v * r), f32(-e1u * r), f32(-e0v * r), f32(e0u * r)
-    n = normalised.astype(F32)
+    triangle of float32 UVs `uv` (v up) and box-normalised corners `normalised`."""
+    return distance32(
+        position32(uv, normalised, width, height, *ring),
+        position32(uv, normalised, width, height, *tap),
+    )
 
-    def position(x: int, y: int) -> list[np.float32]:
-        pu = f32(f32(x + 0.5) / f32(width))
-        pv = f32(f32(1) - f32(f32(y + 0.5) / f32(height)))
-        dx, dy = f32(pu - u[2][0]), f32(pv - u[2][1])
-        l0 = fma(m00, dx, f32(m01 * dy))
-        l1 = fma(m10, dx, f32(m11 * dy))
-        l2 = f32(f32(1) - f32(l0 + l1))
-        return [fma(l2, n[2][c], fma(l0, n[0][c], f32(l1 * n[1][c]))) for c in range(3)]
 
-    q, p = position(*ring), position(*tap)
-    d = [f32(q[c] - p[c]) for c in range(3)]
-    squared = fma(d[2], d[2], fma(d[1], d[1], f32(d[0] * d[0])))
-    return F32(hwmath.sqrt(np.array([squared], F32))[0])
+def _dot32(a: Sequence[np.float32], b: Sequence[np.float32]) -> np.float32:
+    return f32(f32(f32(a[0] * b[0]) + f32(a[1] * b[1])) + f32(a[2] * b[2]))
+
+
+def _cross32(a: Sequence[np.float32], b: Sequence[np.float32]) -> list[np.float32]:
+    return [
+        f32(f32(a[1] * b[2]) - f32(a[2] * b[1])),
+        f32(f32(a[2] * b[0]) - f32(a[0] * b[2])),
+        f32(f32(a[0] * b[1]) - f32(a[1] * b[0])),
+    ]
+
+
+def _unit32(a: Sequence[np.float32]) -> list[np.float32]:
+    length = F32(hwmath.sqrt(np.array([_dot32(a, a)], F32))[0])
+    return [f32(c / length) for c in a]
+
+
+def _sub32(a: Sequence[np.float32], b: Sequence[np.float32]) -> list[np.float32]:
+    return [f32(a[c] - b[c]) for c in range(3)]
+
+
+def _add32(a: Sequence[np.float32], b: Sequence[np.float32]) -> list[np.float32]:
+    return [f32(a[c] + b[c]) for c in range(3)]
+
+
+def _scale32(a: Sequence[np.float32], s: np.float32) -> list[np.float32]:
+    return [f32(c * s) for c in a]
 
 
 # ── Double-precision geometry, in padding.cpp's operation order ────────────
@@ -408,29 +502,20 @@ class Ring:
         for i, (_, uv) in enumerate(found):
             if index[i] < 0:
                 continue
-            c2 = [(float(u), float(v)) for u, v in uv]
-
-            def edge(a: tuple[float, float], b: tuple[float, float], u: float, v: float) -> float:
-                return (b[0] - a[0]) * (v - a[1]) - (b[1] - a[1]) * (u - a[0])
-
-            area = edge(c2[0], c2[1], c2[2][0], c2[2][1])
-            us, vs = [c[0] for c in c2], [c[1] for c in c2]
-            col_lo = max(0.0, math.floor(min(us) * width - 0.5))
-            col_hi = min(width - 1.0, math.ceil(max(us) * width - 0.5))
-            row_lo = max(0.0, math.floor((1.0 - max(vs)) * height - 0.5))
-            row_hi = min(height - 1.0, math.ceil((1.0 - min(vs)) * height - 0.5))
-            for row in range(int(row_lo), int(row_hi) + 1):
-                for col in range(int(col_lo), int(col_hi) + 1):
-                    u, v = (col + 0.5) / width, 1.0 - (row + 0.5) / height
-                    w = (
-                        edge(c2[0], c2[1], u, v),
-                        edge(c2[1], c2[2], u, v),
-                        edge(c2[2], c2[0], u, v),
-                    )
-                    inside = all(x >= 0.0 for x in w) if area > 0.0 else all(x <= 0.0 for x in w)
-                    if inside and self.owner[row, col] < 0:
-                        self.owner[row, col] = index[i]
-        self.hinges: dict[tuple[int, int], Hinge | None] = {}
+            for col, row in covered_texels(uv, width, height):
+                if self.owner[row, col] < 0:
+                    self.owner[row, col] = index[i]
+        # Decision 281's face graph: per face, its neighbour faces in edge order, each with its
+        # first shared edge (a triangle of the face, one of the neighbour, the edge's vertices).
+        self.links: list[dict[int, tuple[int, int, int, int]]] = [{} for _ in self.faces]
+        for (va, vb), lst in sorted(self.edges.items()):
+            for i in lst:
+                for j in lst:
+                    fi, fj = self.tris[i].face, self.tris[j].face
+                    if fi != fj and fj not in self.links[fi]:
+                        self.links[fi][fj] = (i, j, va, vb)
+        self.paths: dict[tuple[int, int], list[list[int]]] = {}
+        self.hinges: dict[tuple[int, int], tuple[tuple[int, int, int, int], Hinge] | None] = {}
         # Per ring texel (texels()): where decision 278's gate does not decide its taps.
         self.undecided: dict[tuple[int, int], set[str]] = {}
 
@@ -443,14 +528,10 @@ class Ring:
             return False
         return abs(dot(na, sub(b.p[0], a.p[0]))) / la <= COPLANAR * math.sqrt(la)
 
-    def frame(self, p: Vec, k: int, tau: int) -> Vec:
-        """`p` of triangle `k` in tau's frame: as is in tau's planar face, rotated about an edge
-        shared by the two faces, else as is."""
-        src, dst = self.tris[k].face, self.tris[tau].face
-        if src == dst:
-            return p
+    def _hinge(self, dst: int, src: int) -> tuple[tuple[int, int, int, int], Hinge] | None:
+        """The first edge of face `dst`'s triangles shared with face `src`, and its hinge."""
         if (dst, src) not in self.hinges:
-            found: Hinge | None = None
+            found: tuple[tuple[int, int, int, int], Hinge] | None = None
             for i in self.faces[dst]:
                 for e in range(3):
                     if found is not None:
@@ -458,20 +539,101 @@ class Ring:
                     a, b = self.tris[i].vertex[(e + 1) % 3], self.tris[i].vertex[(e + 2) % 3]
                     for j in self.edges[(min(a, b), max(a, b))]:
                         if self.tris[j].face == src:
-                            found = hinge(self.tris[i], self.tris[j], a, b)
+                            found = ((i, j, a, b), hinge(self.tris[i], self.tris[j], a, b))
                             break
                 if found is not None:
                     break
             self.hinges[(dst, src)] = found
-        h = self.hinges[(dst, src)]
-        return p if h is None else unfold(h, p)
+        return self.hinges[(dst, src)]
+
+    def hinged(self, k: int, tau: int) -> bool:
+        """Whether triangle `k`'s planar face is tau's or shares a 3D edge with it."""
+        src, dst = self.tris[k].face, self.tris[tau].face
+        return src == dst or self._hinge(dst, src) is not None
+
+    def _paths(self, src: int, dst: int) -> list[list[int]]:
+        """The fewest-hinge simple face paths from `src` to `dst` (at most MAX_HINGES), breadth
+        first."""
+        if (src, dst) not in self.paths:
+            out: list[list[int]] = []
+            queue = [[src]]
+            while queue:
+                path = queue.pop(0)
+                if out and len(path) > len(out[0]):
+                    break
+                if path[-1] == dst:
+                    out.append(path)
+                    continue
+                if len(path) > MAX_HINGES:
+                    continue
+                queue += [[*path, n] for n in self.links[path[-1]] if n not in path]
+            self.paths[(src, dst)] = out
+        return self.paths[(src, dst)]
+
+    def frame(self, p: Vec, k: int, tau: int, q: Vec) -> Vec:
+        """`p` of triangle `k` in tau's frame for ring point `q`: as is in tau's planar face,
+        rotated about an edge shared by the two faces, else hinge by hinge along the fewest-hinge
+        face paths, the development nearest `q` (decision 281), else as is."""
+        src, dst = self.tris[k].face, self.tris[tau].face
+        if src == dst:
+            return p
+        h = self._hinge(dst, src)
+        if h is not None:
+            return unfold(h[1], p)
+        best: Vec | None = None
+        for path in self._paths(src, dst):
+            r = p
+            for a, b in itertools.pairwise(path):
+                i, j, va, vb = self.links[b][a]
+                r = unfold(hinge(self.tris[i], self.tris[j], va, vb), r)
+            if best is None or norm(sub(q, r)) < norm(sub(q, best)):
+                best = r
+        return p if best is None else best
+
+    def unfold32(self, p: Sequence[np.float32], k: int, e: int) -> list[np.float32]:
+        """`p`, decision 273's float32 position of a point of triangle `k`, rotated in float32 into
+        triangle `e`'s face about an edge the faces share (decision 280); else as is."""
+        src, dst = self.tris[k].face, self.tris[e].face
+        h = None if src == dst else self._hinge(dst, src)
+        if h is None:
+            return list(p)
+        i, j, va, vb = h[0]
+        own, other = self.tris[i], self.tris[j]
+        ia, ib = own.vertex.index(va), own.vertex.index(vb)
+        ja, jb = other.vertex.index(va), other.vertex.index(vb)
+        n0, n1 = own.normalised.astype(F32), other.normalised.astype(F32)
+        a = list(n0[ia])
+        axis = _unit32(_sub32(n0[ib], a))
+
+        def across(to: Sequence[np.float32]) -> list[np.float32]:
+            v = _sub32(to, a)
+            return _unit32(_sub32(v, _scale32(axis, _dot32(v, axis))))
+
+        in_own, in_other = across(n0[3 - ia - ib]), across(n1[3 - ja - jb])
+        v = _sub32(p, a)
+        s = _dot32(v, axis)
+        r = _sub32(v, _scale32(axis, s))
+        toward = _scale32(in_own, F32(-1))
+        along, out = _dot32(r, in_other), _dot32(r, _cross32(axis, in_other))
+        return _add32(
+            _add32(a, _scale32(axis, s)),
+            _add32(_scale32(toward, along), _scale32(_cross32(axis, toward), out)),
+        )
 
     def _ordered(
-        self, x: int, y: int, cands: list[tuple[float, bool, tuple[int, int]]]
-    ) -> list[tuple[float, bool, tuple[int, int]]]:
-        """`cands` in tap order: nearest first, equal distances by the comparator (own), +u, +v."""
+        self,
+        x: int,
+        y: int,
+        cands: list[tuple[float, bool, tuple[int, int]]],
+        seam: dict[tuple[int, int], tuple[int, tuple[int, int]]],
+    ) -> tuple[list[tuple[float, bool, tuple[int, int]]], dict[tuple[int, int], set[str]]]:
+        """`cands` in tap order (decision 280): nearest first; within equal distances own taps by
+        decision 273's comparator, then OWN_ORDER; far taps (`seam`: texel -> E and its window's
+        base) by the float32 |q_E - P|, then WINDOW_ORDER. And per texel of a tied group, the open
+        tie classes of its group."""
         ordered = sorted(cands, key=lambda c: (c[0], c[2][1] * self.width + c[2][0]))
         result: list[tuple[float, bool, tuple[int, int]]] = []
+        ties: dict[tuple[int, int], set[str]] = {}
         while ordered:
             group = [ordered[0]]
             for c in ordered[1:]:
@@ -480,17 +642,53 @@ class Ring:
                 group.append(c)
             ordered = ordered[len(group) :]
             if len(group) > 1:
-
-                def key(c: tuple[float, bool, tuple[int, int]]) -> tuple[Any, ...]:
-                    if c[1]:
-                        return (True, 0.0, -c[2][0], c[2][1])
-                    k = self.tris[int(self.owner[c[2][1], c[2][0]])]
-                    d = compare_distance(k.uv, k.normalised, self.width, self.height, (x, y), c[2])
-                    return (False, float(d), -c[2][0], c[2][1])
-
-                group.sort(key=key)
+                keys: dict[tuple[int, int], tuple[bool, float, int]] = {}
+                for c in group:
+                    tx, ty = c[2]
+                    k = self.tris[int(self.owner[ty, tx])]
+                    if not c[1]:
+                        du = tx - x
+                        du = du - self.width if du > 1 else du + self.width if du < -1 else du
+                        d = compare_distance(
+                            k.uv, k.normalised, self.width, self.height, (x, y), c[2]
+                        )
+                        keys[c[2]] = (False, float(d), OWN_ORDER.index((du, y - ty)))
+                    else:
+                        e, (col0, row0) = seam[c[2]]
+                        E = self.tris[e]
+                        q_e = position32(E.uv, E.normalised, self.width, self.height, x, y)
+                        p = self.unfold32(
+                            position32(k.uv, k.normalised, self.width, self.height, tx, ty),
+                            int(self.owner[ty, tx]),
+                            e,
+                        )
+                        keys[c[2]] = (
+                            True,
+                            float(distance32(q_e, p)),
+                            WINDOW_ORDER.index((tx - col0, row0 - ty)),
+                        )
+                group.sort(key=lambda c: keys[c[2]])
+                tie: set[str] = set()
+                for i, a in enumerate(group):
+                    for b in group[i + 1 :]:
+                        ka, kb = keys[a[2]], keys[b[2]]
+                        pair = (min(ka[2], kb[2]), max(ka[2], kb[2]))
+                        if a[1] != b[1]:
+                            tie.add("own-far-tie")
+                        elif not a[1]:
+                            if ka[1] == kb[1] and pair in OWN_OPEN:
+                                tie.add("own-order")
+                        else:
+                            fa = self.tris[int(self.owner[a[2][1], a[2][0]])].face
+                            fb = self.tris[int(self.owner[b[2][1], b[2][0]])].face
+                            if fa != fb:
+                                tie.add("far-fold")
+                            if ka[1] == kb[1] and (seam[a[2]] != seam[b[2]] or pair in WINDOW_OPEN):
+                                tie.add("far-order")
+                for c in group:
+                    ties[c[2]] = tie
             result += group
-        return result[:KEPT]
+        return result[:KEPT], ties
 
     def candidates(
         self, x: int, y: int, own: list[tuple[int, int]], tau: int
@@ -512,7 +710,7 @@ class Ring:
                 outside = None
                 if K.chart != T.chart:
                     outside = min(norm(sub(K.point(K.bary(x + 0.5, y + 0.5)), p)), norm(sub(q, p)))
-                pool[(tx, ty)] = [norm(sub(q, self.frame(p, k, tau))), outside, False]
+                pool[(tx, ty)] = [norm(sub(q, self.frame(p, k, tau, q))), outside, False]
             return pool[(tx, ty)]
 
         for tx, ty in own:
@@ -522,6 +720,7 @@ class Ring:
         # island's covered texels of columns floor(f_u - 1/2) +- 1, rows ceil(f_v - 1/2) +- 1;
         # decision 278: the gate.
         edges: list[tuple[tuple[bool, bool, bool], float]] = []
+        windows: list[tuple[int, tuple[int, int]]] = []  # per edge: E and its window's base
         charts = sorted({self.tris[int(self.owner[ty, tx])].chart for tx, ty in own})
         for chart in charts:
             for e_index, edge, j in self.seams.get(chart, []):
@@ -533,6 +732,7 @@ class Ring:
                 edges.append((seam_gate(E.normal, J.normal, q, E.p[(edge + 1) % 3]), reach))
                 fu, fv = J.texel_of(fold(hinge(E, J, va, vb), q))
                 col0, row0 = math.floor(fu - 0.5), math.ceil(fv - 0.5)
+                windows.append((e_index, (col0, row0)))
                 for row in range(row0 - 1, row0 + 2):
                     for col in range(col0 - 1, col0 + 2):
                         if not (0 <= row < self.height and 0 <= col < self.width):
@@ -555,13 +755,21 @@ class Ring:
                     out.append((frame, True, texel))
                 elif is_own:
                     out.append((frame if inside else outside, False, texel))
-            return self._ordered(x, y, out)
+            ordered, ties[0] = self._ordered(x, y, out, {t: windows[v[0]] for t, v in via.items()})
+            return ordered
 
+        ties: list[dict[tuple[int, int], set[str]]] = [{}]
         result = build(lambda e: not e[0][0])
         undecided: set[str] = set()
+        n = tap_count(result)
+        for c in result[:n]:
+            undecided |= ties[0].get(c[2], set())
+            tx, ty = c[2]
+            framed = c[1] or self.tris[int(self.owner[ty, tx])].chart == T.chart
+            if framed and not self.hinged(int(self.owner[ty, tx]), tau):
+                undecided.add("multi-facet")
         if edges:
             inner = build(lambda e: not e[0][0] and e[1] <= REACH_LOW)
-            n = tap_count(result)
             if tap_count(inner) != n or inner[:n] != result[:n]:
                 undecided.add("reach-bracket")
             ungated = build(lambda e: True)

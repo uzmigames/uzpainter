@@ -9,12 +9,16 @@
 // (`src/render/uv_raster.h`): row 0 is the top of UV tile 1001 (v = 1), texel (col, row) has its
 // centre at u = (col + 1/2) / W, v = 1 - (row + 1/2) / H, and a texel is covered when its centre
 // lies inside or on the boundary of a non-degenerate triangle of the texture set's material that
-// belongs to an included object. A texel that included and excluded triangles both cover is
-// covered. `UVTile` geometry masks are a release gap (dag.h fails them explicitly).
+// belongs to an included object, each of the triangle's vertices first rounded in texel space
+// (u W, (1 - v) H) to the nearest 1/256 texel, ties to even (`CoveredTexels`; decision 281: the
+// sub-texel vertex precision of Painter's coverage). A texel that included and excluded triangles
+// both cover is covered. `UVTile` geometry masks are a release gap (dag.h fails them explicitly).
 
 #include "evaluator/tile_store.h"
 
+#include <array>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -63,6 +67,12 @@ private:
     mutable std::mutex m_mutex;
     mutable std::vector<std::pair<GeometryMaskQuery, std::shared_ptr<const DecodedImage>>> m_rasters;
 };
+
+/// Calls `cover(col, row)` for each texel of a `width` x `height` tile whose centre the triangle of
+/// UVs `uv` (v up) covers (above: its vertices snapped to 1/256 texel, the centre inside or on the
+/// boundary, nothing when the snapped triangle is degenerate), rows top first.
+void CoveredTexels(const std::array<std::array<float, 2>, 3>& uv, uint32_t width, uint32_t height,
+                   const std::function<void(uint32_t col, uint32_t row)>& cover);
 
 /// The texel-centre coverage of `query` over `mesh` (above): one 16-bit code per texel.
 [[nodiscard]] std::shared_ptr<const DecodedImage> RasterizeGeometryMask(
