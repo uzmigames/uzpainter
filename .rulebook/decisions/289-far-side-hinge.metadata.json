@@ -1,0 +1,13 @@
+{
+  "id": 289,
+  "slug": "289-far-side-hinge",
+  "title": "Three far-side hinge probes test how the infinite ring measures a far tap beyond a hinge of the far island (rigid rotation, development, or decision 282's per-hinge gate), and a fourth isolates decision 291's window side; designed, recording pending (the Painter lock stayed held)",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}

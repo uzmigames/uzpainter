@@ -15,6 +15,7 @@ import json
 import math
 import struct
 import zlib
+from fractions import Fraction
 from typing import Any
 
 import numpy as np
@@ -1330,11 +1331,18 @@ def fold_layout(
 ) -> tuple[list[tuple[FoldCopy, tuple[float, float], Vec3]], tuple[float, float]]:
     """Every copy with its UV slot's top-left texel (decision 272's shelves) and its 3D offset
     (whole centimetres, shelves along x then z, layers in y), and the anchors' UV slot."""
+    return _pack(fold_copies(probe))
+
+
+def _pack(
+    copies: list[Any],
+) -> tuple[list[tuple[Any, tuple[float, float], Vec3]], tuple[float, float]]:
+    """`fold_layout`'s packing of any copies with `size`, `bounds()` and `tris`."""
     limit = SWEEP_RESOLUTION - SWEEP_MARGIN
     column, row, shelf = SWEEP_MARGIN, SWEEP_MARGIN, 0
     x, z, depth, layer = -250.0, -250.0, 0.0, -60.0
     placed = []
-    for copy in fold_copies(probe):
+    for copy in copies:
         width, height = copy.size
         if column + width > limit:
             column, row, shelf = SWEEP_MARGIN, row + shelf + SWEEP_GAP, 0
@@ -1360,16 +1368,7 @@ def concave_fold(probe: str) -> bytes:
     """The decision 278 mesh of `probe`: positions as exact float32 decimals, the box fixed at
     [-256, 256] cm in x and z and [-64, 64] in y."""
     placed, anchors = fold_layout(probe)
-    tris: list[Tri] = []
-    for copy, (oc, orow), offset in placed:
-        tris += [
-            (
-                [_vec3([p[i] + offset[i] for i in range(3)]) for p in ps],
-                [(c + oc, r + orow) for c, r in uvs],
-            )
-            for ps, uvs in copy.tris
-        ]
-    data, faces = _sweep_obj_lines(tris, anchors, 256.0, (0.0, 0.0, 0.0))
+    data, faces = _packed_obj_lines(placed, anchors)
     what = {
         "fold": "the base pair folded concave 6 to 16 degrees, convex and flat controls, tilted "
         "and scaled copies",
@@ -1383,6 +1382,474 @@ def concave_fold(probe: str) -> bytes:
         f"Decision 278 concave seam-gate probe: {len(placed)} copies of one ratio-1 seam pair, "
         f"{what}.",
         [("uzp_concave_fold", faces)],
+        "".join(data),
+    )
+
+
+def _packed_obj_lines(
+    placed: list[tuple[Any, tuple[float, float], Vec3]], anchors: tuple[float, float]
+) -> tuple[list[str], list[str]]:
+    """The OBJ lines of packed copies: each moved to its UV slot and 3D offset, the box exactly
+    [-256, 256] cm in x and z and [-64, 64] in y."""
+    tris: list[Tri] = []
+    for copy, (oc, orow), offset in placed:
+        tris += [
+            (
+                [_vec3([p[i] + offset[i] for i in range(3)]) for p in ps],
+                [(c + oc, r + orow) for c, r in uvs],
+            )
+            for ps, uvs in copy.tris
+        ]
+    return _sweep_obj_lines(tris, anchors, 256.0, (0.0, 0.0, 0.0))
+
+
+# --- Decision 289: far-side hinge probes ------------------------------------------------------
+
+# Copies of decision 278's seam pair (A a 4 x 4 cm square at 1 texel per cm, B beyond A's seam
+# edge in its own UV island turned 90 degrees, the seam on the z axis from (0, 0, 0) to
+# (0, 0, -4)) whose islands are bent along hinges: each island is a list of bands from the seam
+# outward, `(uv_depth, angle, gap, stretch)`, a band hinged to the one before it by the signed
+# dihedral `angle` (degrees; positive concave: the band rises on the side of the previous band's
+# normal), `gap` texels of UV moved away from the previous band (a UV seam with shared 3D
+# vertices when non-zero) and `stretch` texels of UV per cm. B's first band is folded about the
+# seam by `fold`. A `sliver` (d, angle) replaces B's first two bands by a triangle J with
+# vertices (0, 0), (d, 4) and (0, 4) in (depth, along) and the rest of B hinged to it along
+# J's edge from (0, 0) to (d, 4). Positions are computed in each island's unfolded frame, the
+# hinges applied from the farthest in, so every hinge's near face is still in the frame's plane.
+HINGE_PROBES = ("far", "vary", "single")
+HINGE_FOLD = -6.0  # the seam fold of every family but econc and eflat: convex, below 278's gate
+HINGE_ANGLES = [s * a for a in range(2, 31, 2) for s in (1, -1)] + [0]
+HINGE_GAP = 1.0 / 16.0
+# Far-side hinges on both sides of decision 278's gate (about 9.94 degrees, bracket (9.930,
+# 9.940]), for decision 282's per-hinge gate: 9.935 lies inside the bracket.
+HINGE_GATE_ANGLES = [
+    s * a
+    for a in (9.0, 9.5, 9.75, 9.9, 9.92, 9.935, 9.95, 10.0, 10.25, 10.5, 11.0)
+    for s in (1, -1)
+]
+Band = tuple[float, float, float, float]
+
+
+def _band(depth: float, angle: float = 0.0, gap: float = 0.0, stretch: float = 1.0) -> Band:
+    return (depth, angle, gap, stretch)
+
+
+class HingeCopy:
+    """One hinge copy: A's and B's bands (A's sum to 4 texels of depth, B's to at most 4), the
+    seam `fold`, an optional `sliver`, the quads' diagonal `split` (as `_quad_tris`) and a
+    `tilt` of FOLD_TILTS. `tris` are A's then B's triangles in local cm with layout UVs from the
+    slot's top-left texel; `faces` group them by planar face (A's from the seam outward, then
+    B's), `hinges` are (near face, far face, designed signed angle), the seam first; `size` is
+    the UV slot."""
+
+    def __init__(
+        self,
+        name: str,
+        b: list[Band],
+        a: list[Band] | None = None,
+        fold: float = HINGE_FOLD,
+        sliver: tuple[float, float] | None = None,
+        split: int = 1,
+        tilt: str = "flat",
+    ) -> None:
+        self.name, self.fold, self.sliver, self.split, self.tilt = name, fold, sliver, split, tilt
+        a = a or [_band(FOLD_SIDE)]
+        side = float(FOLD_SIDE)
+        assert sum(band[0] for band in a) == side and sum(band[0] for band in b) <= side
+        # A: depth s from the seam toward -x, UV column 4.25 - s and row 4.125 - q.
+        a_tris = self._island(a, lambda s, q: (0.25 + side - s, 0.125 + side - q), -1.0)
+        b_depth = sum(band[0] + band[2] for band in b)
+        b_col = FOLD_B_COLUMN + 0.25 + side
+
+        def b_uv(s: float, q: float) -> tuple[float, float]:
+            return (b_col - q, 0.125 + b_depth - s)
+
+        if sliver is None:
+            b_tris = self._island(b, b_uv, 1.0)
+            b_faces = [[2 * k, 2 * k + 1] for k in range(len(b))]
+            b_angles = [band[1] for band in b[1:]]
+        else:
+            b_tris = self._sliver(b, b_uv, *sliver)
+            b_faces, b_angles = [[0], [1, 2]], [sliver[1]]
+        cos, sin = math.cos(math.radians(fold)), math.sin(math.radians(fold))
+        b_tris = [
+            ([(x * cos - y * sin, x * sin + y * cos, z) for x, y, z in ps], u) for ps, u in b_tris
+        ]
+        n, m = len(a_tris), len(a)
+        self.faces = [[2 * k, 2 * k + 1] for k in range(m)] + [[i + n for i in f] for f in b_faces]
+        self.hinges = [(0, m, fold)]
+        self.hinges += [(k - 1, k, band[1]) for k, band in enumerate(a) if k]
+        self.hinges += [(m + k, m + k + 1, angle) for k, angle in enumerate(b_angles)]
+        axis, degrees = FOLD_TILTS[tilt]
+        self.tris: list[Tri] = [
+            ([_turned(_vec3(p), axis, degrees) for p in ps], uvs) for ps, uvs in a_tris + b_tris
+        ]
+        self.size = (math.ceil(b_col), math.ceil(0.125 + max(side, b_depth)))
+
+    def _island(self, bands: list[Band], uv: Any, direction: float) -> list[Tri]:
+        """The bands' quads in the island's unfolded frame (depth s along x times `direction`,
+        y = 0, along q on -z), each band turned about its near edge with every band beyond it,
+        the farthest hinge first."""
+        side = float(FOLD_SIDE)
+        quads = []
+        s3 = s_uv = 0.0
+        for depth, _, gap, stretch in bands:
+            s_uv += gap
+            pq = [(s3, 0.0), (s3 + depth / stretch, 0.0), (s3 + depth / stretch, side), (s3, side)]
+            uvs = [(s_uv, 0.0), (s_uv + depth, 0.0), (s_uv + depth, side), (s_uv, side)]
+            quads.append(([(s * direction, 0.0, -q) for s, q in pq], [uv(s, q) for s, q in uvs]))
+            s3, s_uv = s3 + depth / stretch, s_uv + depth
+        points = [ps for ps, _ in quads]
+        for k in range(len(bands) - 1, 0, -1):
+            centre = points[k][0]
+            turned = _hinge_turn(points[k:], centre, (0.0, 0.0, -1.0), bands[k][1], points[k][1])
+            points[k:] = turned
+        # A's quads run clockwise in UV in this order: start them at their far edge instead.
+        order = [0, 1, 2, 3] if direction > 0 else [1, 0, 3, 2]
+        tris: list[Tri] = []
+        for ps, (_, uvs) in zip(points, quads, strict=True):
+            tris += _quad_tris([_vec3(ps[i]) for i in order], [uvs[i] for i in order], self.split)
+        return tris
+
+    def _sliver(self, bands: list[Band], uv: Any, d: float, angle: float) -> list[Tri]:
+        """J = (0, 0), (d, 4), (0, 4) and K = (0, 0), (depth, 0), (depth, 4), (d, 4) of B in
+        (depth, along), K hinged to J by `angle` about J's edge from (0, 0) to (d, 4)."""
+        side = float(FOLD_SIDE)
+        [(depth, _, gap, stretch)] = bands
+        assert gap == 0.0 and stretch == 1.0
+        j_pq = [(0.0, 0.0), (d, side), (0.0, side)]
+        k_pq = [(0.0, 0.0), (depth, 0.0), (depth, side), (d, side)]
+        [k3] = _hinge_turn(
+            [[(s, 0.0, -q) for s, q in k_pq]],
+            (0.0, 0.0, 0.0),
+            (d, 0.0, -side),
+            angle,
+            (depth, 0.0, 0.0),
+        )
+        j_tri: Tri = ([_vec3((s, 0.0, -q)) for s, q in j_pq], [uv(s, q) for s, q in j_pq])
+        k_tris = _quad_tris([_vec3(p) for p in k3], [uv(s, q) for s, q in k_pq], self.split)
+        return [j_tri, *k_tris]
+
+    def bounds(self) -> tuple[Vec3, Vec3]:
+        points = [p for ps, _ in self.tris for p in ps]
+        low = tuple(min(p[i] for p in points) for i in range(3))
+        high = tuple(max(p[i] for p in points) for i in range(3))
+        return _vec3(low), _vec3(high)
+
+
+def _hinge_turn(
+    groups: list[list[Vec3]], centre: Vec3, axis: Vec3, angle: float, ref: Vec3
+) -> list[list[Vec3]]:
+    """`groups` turned about the line through `centre` along `axis` (in the plane y = 0) by
+    `angle` degrees (Rodrigues), the sense chosen so that a positive angle lifts `ref`, a
+    point of y = 0 off the line, toward +y: concave for a near face in y = 0 with normal +y."""
+    if angle == 0:
+        return groups
+    norm = math.sqrt(sum(a * a for a in axis))
+    k = [a / norm for a in axis]
+    r = [ref[i] - centre[i] for i in range(3)]
+    lift = k[2] * r[0] - k[0] * r[2]  # (k x r)_y: the y rate of `ref` turned by +theta
+    assert abs(r[1]) < 1e-12 and abs(lift) > 1e-9
+    theta = math.radians(angle) * (1.0 if lift > 0 else -1.0)
+    cos, sin = math.cos(theta), math.sin(theta)
+
+    def turn(p: Vec3) -> Vec3:
+        rel = [p[i] - centre[i] for i in range(3)]
+        dot = sum(a * b for a, b in zip(k, rel, strict=True))
+        if max(abs(rel[i] - k[i] * dot) for i in range(3)) < 1e-12:
+            return p  # on the hinge: shared with the near face, so kept bit for bit
+        cross = (
+            k[1] * rel[2] - k[2] * rel[1],
+            k[2] * rel[0] - k[0] * rel[2],
+            k[0] * rel[1] - k[1] * rel[0],
+        )
+        return _vec3(
+            [
+                rel[i] * cos + cross[i] * sin + k[i] * dot * (1 - cos) + centre[i] + 0.0
+                for i in range(3)
+            ]
+        )
+
+    return [[turn(p) for p in group] for group in groups]
+
+
+def _strip(j: float, angle: float, rest: Band | None = None) -> list[Band]:
+    """B as J (depth `j`, at the seam) and K (the rest, hinged by `angle`)."""
+    return [_band(j), rest or _band(FOLD_SIDE - j, angle)]
+
+
+def hinge_copies(probe: str) -> list[Any]:
+    """The copies of the `far` probe (one far-side hinge beyond J at two J depths, two hinges,
+    a sliver J and a J-depth sweep), of the `vary` probe (the hinge across a UV seam, a
+    stretched K, a concave and a flat seam fold, a bent own island and own taps two faces
+    away) or of the `single` probe (decision 282's single-hinge fold sweep below the gate and
+    the base family's other diagonal and an oblique tilt, then far-side hinges on both sides of
+    decision 278's gate behind a 6 and a 20 degree convex seam)."""
+    copies: list[Any] = []
+    sweep = HINGE_ANGLES
+    if probe == "far":
+        copies += [HingeCopy(f"strip-a{a:+d}", _strip(0.4375, a)) for a in sweep]
+        copies += [HingeCopy(f"strip-fk-a{a:+d}", _strip(0.125, a)) for a in sweep]
+        copies += [
+            HingeCopy(f"two-a{a:+d}", [_band(0.3125), _band(0.1875, a), _band(3.5, a)])
+            for a in sweep
+        ]
+        copies += [HingeCopy(f"sliver-a{a:+d}", [_band(FOLD_SIDE)], sliver=(1.0, a)) for a in sweep]
+        copies += [
+            HingeCopy(f"jsweep-j{j:g}-a{a:+d}", _strip(j, a))
+            for j in (0.0625, 0.125, 0.1875, 0.3125, 0.4375, 0.5625)
+            for a in (-24, -12, 12, 24)
+        ]
+        return copies
+    if probe == "vary":
+        copies += [
+            HingeCopy(f"seam-a{a:+d}", _strip(0.4375, a, _band(3.5, a, HINGE_GAP))) for a in sweep
+        ]
+        copies += [
+            HingeCopy(f"stretch-a{a:+d}", _strip(0.4375, a, _band(3.5625, a, stretch=1.5)))
+            for a in sweep
+        ]
+        copies += [HingeCopy(f"econc-a{a:+d}", _strip(0.4375, a), fold=6.0) for a in sweep]
+        copies += [HingeCopy(f"eflat-a{a:+d}", _strip(0.4375, a), fold=0.0) for a in sweep]
+        copies += [
+            HingeCopy(f"ecurve-a{a:+d}", _strip(0.4375, a), a=[_band(0.1875), _band(3.8125, -6.0)])
+            for a in sweep
+        ]
+        copies += [
+            HingeCopy(
+                f"own-a{a:+d}", [_band(FOLD_SIDE)], a=[_band(2.0), _band(0.5, a), _band(1.5, a)]
+            )
+            for a in sweep
+        ]
+        return copies
+    for splits in ((1, 1), (0, 0)):
+        tag = f"s{splits[0]}{splits[1]}"
+        copies += [
+            FoldCopy(f"single-{tag}-a{a:+.1f}", a, splits=splits) for a in _steps(0.5, 9.5, 0.5)
+        ]
+    copies += [FoldCopy(f"single-a{-a:+.1f}", -a) for a in _steps(0.5, 9.5, 0.5)]
+    copies += [HingeCopy(f"strip-s0-a{a:+d}", _strip(0.4375, a), split=0) for a in sweep]
+    copies += [
+        HingeCopy(f"strip-oblique-a{a:+d}", _strip(0.4375, a), tilt="oblique") for a in sweep
+    ]
+    gate = HINGE_GATE_ANGLES
+    copies += [HingeCopy(f"gate-e6-a{a:+.3f}", _strip(0.4375, a)) for a in gate]
+    copies += [HingeCopy(f"gate-e20-a{a:+.3f}", _strip(0.4375, a), fold=-20.0) for a in gate]
+    copies += [HingeCopy(f"strip-e20-a{a:+d}", _strip(0.4375, a), fold=-20.0) for a in sweep]
+    copies += [
+        HingeCopy(
+            f"gate-two-e20-a{a:+.3f}", [_band(0.3125), _band(0.1875, a), _band(3.5, a)], fold=-20.0
+        )
+        for a in gate
+    ]
+    return copies
+
+
+def hinge_layout(
+    probe: str,
+) -> tuple[list[tuple[Any, tuple[float, float], Vec3]], tuple[float, float]]:
+    return _pack(hinge_copies(probe))
+
+
+def hinge_probe(probe: str) -> bytes:
+    """The decision 289 mesh of `probe`: positions as exact float32 decimals, the box fixed at
+    [-256, 256] cm in x and z and [-64, 64] in y."""
+    placed, anchors = hinge_layout(probe)
+    data, faces = _packed_obj_lines(placed, anchors)
+    what = {
+        "far": "a hinge beyond the far triangle swept convex and concave 2 to 30 degrees, at two "
+        "far-triangle depths, two hinges deep, a sliver far triangle, and a far-triangle depth "
+        "sweep",
+        "vary": "the far-side hinge across a UV seam, under a stretched UV, behind a concave and a "
+        "flat seam fold and a bent own island, and own taps two faces away",
+        "single": "decision 278's pair folded 0.5 to 9.5 degrees concave and convex, the hinge "
+        "sweep with the other diagonal and tilted, and far-side hinges of 9 to 11 degrees on both "
+        "sides of decision 278's gate behind 6 and 20 degree convex seams",
+    }[probe]
+    return obj(
+        "uzp_hinge",
+        f"Decision 289 far-side hinge probe: {len(placed)} copies of one ratio-1 seam pair, "
+        f"{what}.",
+        [("uzp_hinge", faces)],
+        "".join(data),
+    )
+
+
+# --- Decision 289 (for decision 291): window-side probe -------------------------------------
+
+# Flat seam pairs (A x in [-4, 0], B x in [0, 4], both q in [0, 4] cm, y = 0, 1 texel per cm)
+# whose islands map to UV by a proper rotation with a rational cosine and sine (Pythagorean
+# triples) and a translation chosen so that, in exact arithmetic, the far point f of two of A's
+# ring texels beyond the seam lies on a window boundary: f_u - 1/2 an integer for one, f_v - 1/2
+# for the other. The oblique island's UVs are not dyadic, so the written float32 UVs put f a few
+# 1e-5 texel to one side, and the decoded window reads Painter's side directly.
+SIDE_TRIPLES = (
+    (3, 4, 5),
+    (4, 3, 5),
+    (5, 12, 13),
+    (12, 5, 13),
+    (8, 15, 17),
+    (15, 8, 17),
+    (7, 24, 25),
+    (24, 7, 25),
+)
+SIDE_ORDERS = ((1, 0), (0, 0), (1, 1))  # (quad diagonal as `_quad_tris`, vertex rotation)
+Exact2 = tuple[Fraction, Fraction]
+
+
+def _side_turn(rot: Exact2, x: Fraction, q: Fraction) -> Exact2:
+    """(column, row) of the point (x, q) cm under an island's rotation, before its origin."""
+    c, s = rot
+    return (c * x - s * q, -(s * x + c * q))
+
+
+def _side_ring(uv: list[Exact2]) -> set[tuple[int, int]]:
+    """The uncovered 8-neighbours of a convex UV quad's covered texel centres, exactly."""
+
+    def inside(x: int, y: int) -> bool:
+        px, py = Fraction(2 * x + 1, 2), Fraction(2 * y + 1, 2)
+        sides = [
+            (q[0] - p[0]) * (py - p[1]) - (q[1] - p[1]) * (px - p[0])
+            for p, q in zip(uv, uv[1:] + uv[:1], strict=True)
+        ]
+        return all(v > 0 for v in sides) or all(v < 0 for v in sides)
+
+    lo_c, hi_c = math.floor(min(c for c, _ in uv)), math.ceil(max(c for c, _ in uv))
+    lo_r, hi_r = math.floor(min(r for _, r in uv)), math.ceil(max(r for _, r in uv))
+    cells = {(x, y) for x in range(lo_c, hi_c) for y in range(lo_r, hi_r) if inside(x, y)}
+    near = {(x + dx, y + dy) for x, y in cells for dx in (-1, 0, 1) for dy in (-1, 0, 1)}
+    return near - cells
+
+
+class SideCopy:
+    """One window-side copy: `oblique` "b" turns B by the triple (A axis-aligned, its UV box
+    at `offset`), "a" turns A (B axis-aligned); `cos` and `sin` are exact. `targets` are two of
+    A's ring texels beyond the seam, with the axis and the exact far coordinate (column or row,
+    texel centres at + 1/2) that lies on a window boundary; `tris` are A's then B's triangles in
+    local cm with layout UVs from the slot's top-left texel; `uv_exact` their exact corners."""
+
+    def __init__(
+        self,
+        name: str,
+        cos: Fraction,
+        sin: Fraction,
+        oblique: str,
+        offset: Exact2 = (Fraction(1, 4), Fraction(1, 8)),
+        order: tuple[int, int] = (1, 0),
+    ) -> None:
+        self.name, self.oblique, self.order = name, oblique, order
+        one, zero, side = Fraction(1), Fraction(0), Fraction(FOLD_SIDE)
+        a_rot, b_rot = ((one, zero), (cos, sin)) if oblique == "b" else ((cos, sin), (one, zero))
+        a_xq = [(-side, zero), (zero, zero), (zero, side), (-side, side)]
+        b_xq = [(zero, zero), (side, zero), (side, side), (zero, side)]
+        a_raw = [_side_turn(a_rot, x, q) for x, q in a_xq]
+        a_origin = (offset[0] - min(c for c, _ in a_raw), offset[1] - min(r for _, r in a_raw))
+        a_uv = [(c + a_origin[0], r + a_origin[1]) for c, r in a_raw]
+        beyond = []
+        for cell in sorted(_side_ring(a_uv)):
+            x, q = self.ring_point(a_rot, a_origin, cell)
+            if 0 < x < 1 and 0 < q < side:
+                beyond.append((x, q, cell))
+        beyond.sort()
+        (xu, qu, cu), (xv, qv, cv) = beyond[0], beyond[1]
+        b_raw = [_side_turn(b_rot, x, q) for x, q in b_xq]
+        fu, fv = _side_turn(b_rot, xu, qu)[0], _side_turn(b_rot, xv, qv)[1]
+        col0 = max(c for c, _ in a_uv) + 8 - min(c for c, _ in b_raw)
+        col0 += (Fraction(1, 2) - fu - col0) % 1  # f_u - 1/2 an integer, B at least 8 right of A
+        row0 = Fraction(1, 8) - min(r for _, r in b_raw)
+        row0 += (Fraction(1, 2) - fv - row0) % 1
+        b_uv = [(c + col0, r + row0) for c, r in b_raw]
+        self.targets = [(cu, "u", fu + col0), (cv, "v", fv + row0)]
+        split, rot = order
+        self.tris: list[Tri] = []
+        for xq, uv in ((a_xq, a_uv), (b_xq, b_uv)):
+            corners = [(float(x), 0.0, float(-q) + 0.0) for x, q in xq]
+            tris = _quad_tris(corners, [(float(c), float(r)) for c, r in uv], split)
+            self.tris += [(ps[rot:] + ps[:rot], us[rot:] + us[:rot]) for ps, us in tris]
+        self.uv_exact = a_uv + b_uv
+        self.size = (
+            math.ceil(max(c for c, _ in self.uv_exact)),
+            math.ceil(max(r for _, r in self.uv_exact)),
+        )
+
+    @staticmethod
+    def ring_point(rot: Exact2, origin: Exact2, cell: tuple[int, int]) -> Exact2:
+        """The (x, q) cm of texel `cell`'s centre through an island's map, exactly."""
+        c, s = rot
+        du = Fraction(2 * cell[0] + 1, 2) - origin[0]
+        dv = -(Fraction(2 * cell[1] + 1, 2) - origin[1])
+        return (c * du + s * dv, -s * du + c * dv)
+
+    def bounds(self) -> tuple[Vec3, Vec3]:
+        points = [p for ps, _ in self.tris for p in ps]
+        low = tuple(min(p[i] for p in points) for i in range(3))
+        high = tuple(max(p[i] for p in points) for i in range(3))
+        return _vec3(low), _vec3(high)
+
+
+# A's UV box corner, in sixteenths of a texel off the 1/8 grid, searched in this order.
+SIDE_OFFSETS = [
+    (Fraction(a, 16), Fraction(b, 16)) for a in range(1, 16, 2) for b in range(1, 16, 2)
+]
+SIDE_MARGIN = 1.0 / 64.0  # texel: every centre this far from every edge, beyond the 1/256 snap
+
+
+def side_margin(copy: SideCopy) -> float:
+    """The smallest texel distance from a texel centre to an edge of the copy's triangles."""
+    low = math.inf
+    for _, uvs in copy.tris:
+        cols, rows = [c for c, _ in uvs], [r for _, r in uvs]
+        for x in range(math.floor(min(cols)) - 1, math.ceil(max(cols)) + 1):
+            for y in range(math.floor(min(rows)) - 1, math.ceil(max(rows)) + 1):
+                for p, q in zip(uvs, uvs[1:] + uvs[:1], strict=True):
+                    ex, ey = q[0] - p[0], q[1] - p[1]
+                    t = ((x + 0.5 - p[0]) * ex + (y + 0.5 - p[1]) * ey) / (ex * ex + ey * ey)
+                    t = min(max(t, 0.0), 1.0)
+                    low = min(low, math.hypot(x + 0.5 - p[0] - t * ex, y + 0.5 - p[1] - t * ey))
+    return low
+
+
+def side_copies() -> list[SideCopy]:
+    """Every triple both ways round and with both signs of the sine: B turned with A's box at
+    the first two SIDE_OFFSETS that keep SIDE_MARGIN in all three orders, and A turned at the
+    first; each in the three diagonal and vertex orders of SIDE_ORDERS."""
+    copies: list[SideCopy] = []
+    for a, b, n in SIDE_TRIPLES:
+        for sign in (1, -1):
+            cos, sin, tag = Fraction(a, n), Fraction(sign * b, n), f"{a}-{sign * b}-{n}"
+            for oblique, wanted in (("b", 2), ("a", 1)):
+                found = 0
+                for k, offset in enumerate(SIDE_OFFSETS):
+                    trial = [
+                        SideCopy(
+                            f"{oblique}-{tag}-o{k}-s{o[0]}r{o[1]}", cos, sin, oblique, offset, o
+                        )
+                        for o in SIDE_ORDERS
+                    ]
+                    if min(map(side_margin, trial)) >= SIDE_MARGIN:
+                        copies += trial
+                        found += 1
+                        if found == wanted:
+                            break
+                assert found == wanted, (tag, oblique)
+    return copies
+
+
+def side_layout() -> tuple[list[tuple[Any, tuple[float, float], Vec3]], tuple[float, float]]:
+    return _pack(side_copies())
+
+
+def window_side() -> bytes:
+    """The window-side mesh: positions exact, the box fixed at [-256, 256] cm in x and z and
+    [-64, 64] in y."""
+    placed, anchors = side_layout()
+    data, faces = _packed_obj_lines(placed, anchors)
+    return obj(
+        "uzp_window_side",
+        f"Decision 289 window-side probe (decision 291): {len(placed)} flat seam pairs whose "
+        "oblique island is turned by a Pythagorean angle, so that two ring texels' far points lie "
+        "exactly on a window boundary in exact arithmetic and a few 1e-5 texel off it in float32.",
+        [("uzp_window_side", faces)],
         "".join(data),
     )
 

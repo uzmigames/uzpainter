@@ -282,6 +282,28 @@ for _probe in rf.FOLD_PROBES:
         f"{FIXTURE_DIR}/meshes/{concave_fold_mesh(_probe)}.obj",
         concave_fold_generator(_probe),
     )
+
+
+# Decision 289's far-side hinge meshes: copies of one ratio-1 seam pair bent along hinges.
+def hinge_generator(probe: str) -> Generate:
+    return lambda: rf.hinge_probe(probe)
+
+
+def hinge_mesh(probe: str) -> str:
+    return f"hinge-{probe}"
+
+
+for _probe in rf.HINGE_PROBES:
+    REQUEST_FIXTURES[hinge_mesh(_probe)] = (
+        "mesh",
+        f"{FIXTURE_DIR}/meshes/{hinge_mesh(_probe)}.obj",
+        hinge_generator(_probe),
+    )
+REQUEST_FIXTURES["window-side"] = (
+    "mesh",
+    f"{FIXTURE_DIR}/meshes/window-side.obj",
+    rf.window_side,
+)
 for _group, _probes in probe_groups().items():
     for _probe in _probes:
         REQUEST_FIXTURES[f"probe-{_group}-{_probe}"] = (
@@ -307,6 +329,8 @@ MESH_SETS = {
     kernel_atlas_mesh(1024, moved=True): ["uzp_kernel_atlas"],
     **{tie_sweep_mesh(f, b): ["uzp_tie_sweep"] for f in rf.SWEEP_FAMILIES for b in rf.SWEEP_BOXES},
     **{concave_fold_mesh(p): ["uzp_concave_fold"] for p in rf.FOLD_PROBES},
+    **{hinge_mesh(p): ["uzp_hinge"] for p in rf.HINGE_PROBES},
+    "window-side": ["uzp_window_side"],
 }
 
 
@@ -1431,6 +1455,76 @@ def padding_concave_fold_probes() -> list[Golden]:
     ]
 
 
+# --- Decision 289: far-side hinge probes -------------------------------------------------------
+
+HINGE_PROBES = {
+    "far": (
+        "148 copies of one seam pair (A and B 4 x 4 texels at 1 cm per texel, B its own UV "
+        "island turned 90 degrees, folded 6 degrees convex about the seam) whose B is bent along "
+        "a hinge beyond the far triangle, swept convex and concave from 2 to 30 degrees: the "
+        "far triangle 0.4375 and 0.125 texel deep, two hinges deep, a sliver far triangle "
+        "touching the seam's end, and a far-triangle depth sweep from 0.0625 to 0.5625 texel"
+    ),
+    "vary": (
+        "186 copies of the hinged seam pair, the far-side hinge swept convex and concave from 2 "
+        "to 30 degrees: across a UV seam, under a 1.5 stretched UV, behind a concave and a "
+        "flat seam fold, with A bent next to the seam, and A bent twice so own taps lie two "
+        "faces away"
+    ),
+    "single": (
+        "216 copies: decision 278's seam pair folded concave from 0.5 to 9.5 degrees with both "
+        "quad diagonals and convex from 0.5 to 9.5 degrees; the hinged seam pair with the other "
+        "diagonal and tilted 37 degrees about (1, 2, 3); and far-side hinges of 9 to 11 degrees "
+        "on both sides of decision 278's gate (9.935 inside its bracket), behind a 6 and a 20 "
+        "degree convex seam, one and two hinges deep, with the 2 to 30 degree sweep behind the "
+        "20 degree seam"
+    ),
+}
+
+
+def padding_hinge_probes() -> list[Golden]:
+    """Decision 289's far-side hinge probes: how a far tap beyond a hinge is measured."""
+    resolution = rf.SWEEP_RESOLUTION
+    return [
+        Golden(
+            f"export-padding-hinge-{probe}",
+            EXPORT_DOMAIN,
+            "Decision 289's far-side hinge probe (phase1.25_pilot-wand item 2.7: whether the "
+            "infinite ring measures a far tap beyond a hinge of the far island rigidly or "
+            f"unfolded), exploratory: {what}; each copy its own 3D piece, mesh box exactly "
+            f"[-256, 256] cm in x and z and [-64, 64] in y; document resolution {resolution}. "
+            + KERNEL_TAIL,
+            hinge_mesh(probe),
+            [hinge_mesh(probe), *kernel_bitmaps(resolution)],
+            kernel_probe(hinge_mesh(probe), resolution),
+        )
+        for probe, what in HINGE_PROBES.items()
+    ]
+
+
+def padding_window_side_probe() -> Golden:
+    """Decision 289's window-side probe for decision 291: Painter's side of the far window when
+    the far point lies on a window boundary in exact arithmetic."""
+    resolution = rf.SWEEP_RESOLUTION
+    return Golden(
+        "export-padding-window-side",
+        EXPORT_DOMAIN,
+        "Decision 289's window-side probe for decision 291 (phase1.25_pilot-wand item 2.7: on "
+        "which side of decision 275's far window boundary Painter puts a far point that lies on "
+        "the boundary in exact arithmetic), exploratory: 144 flat seam pairs (A and B 4 x 4 cm "
+        "at 1 texel per cm, separate UV islands) whose oblique island is turned by a "
+        "Pythagorean angle (3-4-5, 5-12-13, 8-15-17, 7-24-25, both ways round and both signs), "
+        "so that two ring texels' far points lie exactly on a u and a v window boundary while "
+        "the written float32 UVs are not dyadic; B turned at two sub-texel box offsets of A, "
+        "and A turned; each in three diagonal and vertex orders; each copy its own 3D piece, "
+        "mesh box exactly [-256, 256] cm in x and z and [-64, 64] in y; document resolution "
+        f"{resolution}. " + KERNEL_TAIL,
+        "window-side",
+        ["window-side", *kernel_bitmaps(resolution)],
+        kernel_probe("window-side", resolution),
+    )
+
+
 # --- Decision 174 item 6: bilinear minification of an sRGB bitmap ------------------------------
 
 SRGB_MINIFY_SOURCES = ("srgb8-ramp", "field-a")
@@ -1604,7 +1698,9 @@ def later_goldens() -> list[Golden]:
     then the padding probes decision 160 voids under their new names (decision 166), then
     decision 174's sRGB minification and decision 169's L8 material channels, then decision
     216's ring-sign and seam probes, then decision 225's sRGB minification on random content,
-    then decision 266's kernel-code padding probes, then decision 272's tie-order sweeps."""
+    then decision 266's kernel-code padding probes, then decision 272's tie-order sweeps, then
+    decision 278's concave seam-gate probes and decision 289's far-side hinge and
+    window-side probes."""
     return [
         srgb_bitmap_variants(),
         *(template_base(t) for t in INFERRED_BASE_TEMPLATES),
@@ -1621,6 +1717,8 @@ def later_goldens() -> list[Golden]:
         *padding_kernel_probes(),
         *padding_tie_sweep_probes(),
         *padding_concave_fold_probes(),
+        *padding_hinge_probes(),
+        padding_window_side_probe(),
     ]
 
 

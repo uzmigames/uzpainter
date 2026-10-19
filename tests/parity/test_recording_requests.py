@@ -8,6 +8,7 @@ import json
 import math
 import struct
 import zlib
+from fractions import Fraction
 from pathlib import Path
 
 import numpy as np
@@ -453,3 +454,139 @@ def test_fold_copies_share_their_seam_and_fold_by_their_angle(probe: str) -> Non
         assert math.degrees(math.acos(min(cos, 1.0))) == pytest.approx(abs(copy.angle), abs=1e-3)
         lift = normal @ (far - b[shared[0]])
         assert (lift > 1e-6) == (copy.angle > 0) and (lift < -1e-6) == (copy.angle < 0), copy.name
+
+
+@pytest.mark.parametrize("probe", rf.HINGE_PROBES)
+def test_hinge_copies_share_their_hinges_and_bend_by_their_angles(probe: str) -> None:
+    """Decision 289: each copy's A and B cover 16 texel centres each, none on an edge; the
+    copies lie at least 7 texels apart in UV and apart in 3D; across every designed hinge (the
+    seam first) the two planar faces share exactly two mesh vertices, and the written float32
+    positions bend the far face by the hinge's angle, on the near face's normal side exactly
+    when it is positive (concave); the box is [-256, 256] x [-64, 64] x [-256, 256]."""
+    owner: dict[tuple[int, int], int] = {}
+    placed, _ = rf.hinge_layout(probe)
+    for index, (copy, (oc, orow), _) in enumerate(placed):
+        cells = [covered_centres([(c + oc, r + orow) for c, r in uvs]) for _, uvs in copy.tris]
+        union = set().union(*cells)
+        assert sum(map(len, cells)) == len(union) == 32, copy.name
+        owner |= dict.fromkeys(union, index)
+    for (x, y), index in owner.items():
+        near = {owner.get((x + dx, y + dy), index) for dx in range(-6, 7) for dy in range(-6, 7)}
+        assert near == {index}, placed[index][0].name
+    bounds = [
+        tuple(tuple(b + o for b, o in zip(corner, offset, strict=True)) for corner in copy.bounds())
+        for copy, _, offset in placed
+    ]
+    for i, (lo, hi) in enumerate(bounds):
+        for lo2, hi2 in bounds[i + 1 :]:
+            assert any(hi[a] < lo2[a] or hi2[a] < lo[a] for a in range(3)), placed[i][0].name
+    vertices, _, faces = obj_uvs(f"hinge-{probe}")
+    low = tuple(min(c) for c in zip(*vertices, strict=True))
+    high = tuple(max(c) for c in zip(*vertices, strict=True))
+    assert (low, high) == ((-256.0, -64.0, -256.0), (256.0, 64.0, 256.0))
+    refs = [[int(ref.split("/")[0]) - 1 for ref in line.split()[1:]] for line in faces]
+    first = 0
+    for copy, _, _ in placed:
+        if isinstance(copy, rf.HingeCopy):
+            groups, hinges = copy.faces, copy.hinges
+        else:
+            groups, hinges = [[0, 1], [2, 3]], [(0, 1, copy.angle)]
+        assert sum(map(len, groups)) == len(copy.tris)
+        tris = refs[first : first + len(copy.tris)]
+        first += len(copy.tris)
+        for inner, outer, angle in hinges:
+            a = {v for t in groups[inner] for v in tris[t]}
+            b = {v for t in groups[outer] for v in tris[t]}
+            assert len(a & b) == 2, (copy.name, inner, outer)
+            p = [np.array(vertices[v]) for v in tris[groups[inner][0]]]
+            normal = np.cross(p[1] - p[0], p[2] - p[0])
+            normal /= np.linalg.norm(normal)
+            for t in groups[outer]:
+                r = [np.array(vertices[v]) for v in tris[t]]
+                other = np.cross(r[1] - r[0], r[2] - r[0])
+                cos = normal @ other / np.linalg.norm(other)
+                bend = math.degrees(math.acos(min(cos, 1.0)))
+                # Thin bands (0.1875 cm) carry up to about 2e-3 degrees of float32 rounding.
+                assert bend == pytest.approx(abs(angle), abs=5e-3), (copy.name, inner, outer)
+            lift = max((normal @ (np.array(vertices[v]) - p[0]) for v in b - a), key=abs)
+            # A flat hinge's off-hinge vertices sit within float32 rounding of the near plane.
+            assert (lift > 1e-4) == (angle > 0) and (lift < -1e-4) == (angle < 0), copy.name
+    assert first == len(refs) - 2  # the two box anchors
+
+
+def _through(
+    texel: list[list[tuple[float, float]]],
+    point: list[list[np.ndarray]],
+    src: int,
+    dst: int,
+    at: np.ndarray,
+) -> np.ndarray:
+    """`at` in flat triangle `src`'s texel space, mapped through 3D to triangle `dst`'s texels."""
+    u = np.array(texel[src])
+    w = np.linalg.solve(np.array([u[1] - u[0], u[2] - u[0]]).T, at - u[0])
+    p = (
+        point[src][0]
+        + w[0] * (point[src][1] - point[src][0])
+        + w[1] * (point[src][2] - point[src][0])
+    )
+    g = np.array(point[dst])
+    k = np.linalg.solve(np.array([g[1] - g[0], g[2] - g[0]]).T, p - g[0])
+    v = np.array(texel[dst])
+    result: np.ndarray = v[0] + k[0] * (v[1] - v[0]) + k[1] * (v[2] - v[0])
+    return result
+
+
+def test_window_side_copies_put_far_points_on_window_boundaries() -> None:
+    """Decision 289 for decision 291: each copy's islands cover their texel centres, none within
+    1/64 texel of an edge; copies lie at least 7 texels apart in UV and apart in 3D; A and B are
+    flat and share the two seam vertices; each target ring texel's far point lies exactly on a
+    u or v window boundary (f - 1/2 an integer) in exact arithmetic, and within 1e-4 texel of it
+    through the written mesh (float UVs that are not all dyadic)."""
+    owner: dict[tuple[int, int], int] = {}
+    placed, _ = rf.side_layout()
+    for index, (copy, (oc, orow), _) in enumerate(placed):
+        assert rf.side_margin(copy) >= rf.SIDE_MARGIN, copy.name
+        cells = [covered_centres([(c + oc, r + orow) for c, r in uvs]) for _, uvs in copy.tris]
+        union = set().union(*cells)
+        assert sum(map(len, cells)) == len(union), copy.name
+        assert min(len(cells[0] | cells[1]), len(cells[2] | cells[3])) >= 15, copy.name
+        owner |= dict.fromkeys(union, index)
+    for (x, y), index in owner.items():
+        near = {owner.get((x + dx, y + dy), index) for dx in range(-6, 7) for dy in range(-6, 7)}
+        assert near == {index}, placed[index][0].name
+    bounds = [
+        tuple(tuple(b + o for b, o in zip(corner, offset, strict=True)) for corner in copy.bounds())
+        for copy, _, offset in placed
+    ]
+    for i, (lo, hi) in enumerate(bounds):
+        for lo2, hi2 in bounds[i + 1 :]:
+            assert any(hi[a] < lo2[a] or hi2[a] < lo[a] for a in range(3)), placed[i][0].name
+    vertices, uvs, faces = obj_uvs("window-side")
+    refs = [
+        [tuple(int(i) - 1 for i in ref.split("/")[:2]) for ref in ln.split()[1:]] for ln in faces
+    ]
+    first = 0
+    oblique = 0
+    for copy, (oc, orow), _ in placed:
+        tris = refs[first : first + 4]
+        first += 4
+        a_v = {v for t in tris[:2] for v, _ in t}
+        b_v = {v for t in tris[2:] for v, _ in t}
+        assert len(a_v & b_v) == 2 and len({vertices[v][1] for v in a_v | b_v}) == 1, copy.name
+        texel = [
+            [(uvs[t][0] * 512 - oc, (1 - uvs[t][1]) * 512 - orow) for _, t in tri] for tri in tris
+        ]
+        point = [[np.array(vertices[v])[[0, 2]] for v, _ in tri] for tri in tris]
+        exact = copy.uv_exact
+        written = [corner for tri in texel for corner in tri]
+        assert all(
+            min(math.hypot(w[0] - float(e[0]), w[1] - float(e[1])) for e in exact) < 1e-6
+            for w in written
+        )
+        oblique += any((c * (1 << 24)) % 1 for tri in tris for _, t in tri for c in uvs[t])
+
+        for (cx, cy), axis, f in copy.targets:
+            assert (f - Fraction(1, 2)).denominator == 1, copy.name
+            got = _through(texel, point, 0, 2, np.array([cx + 0.5, cy + 0.5]))[int(axis == "v")]
+            assert abs(got - float(f)) < 1e-4, (copy.name, axis, got, f)
+    assert oblique == len(placed)
