@@ -29,6 +29,11 @@
 //       `SrgbEncodedRead`), "append_opaque_alpha"? (an alpha of 1 appended)}: the source's values as the
 //       raster of an L, L+A, RGB or RGB+A file, encoded by EncodeFile; prints one JSON line per case
 //       {"target", "equal", "layout", "size", "target_size"}.
+//   uzp-export-tests ring <cases.json>
+//       (phase1.25 item 2.7) A list of cases {"mesh": an OBJ path, "material", "width", "height",
+//       "channels": 1 or 3, "values": raw float32 texels, rows top first, "out": a path}: the values
+//       padded `infinite` over the material's coverage and triangles, measured (padding.h), written
+//       raw to "out"; prints one JSON line per case {"ring": the measured ring (`RingJson`)}.
 //   uzp-export-tests roundtrip <out dir>
 //       (phase1.16) Encodes synthetic PNG16 and OpenEXR 32f images twice (ramps, runs, noise, signed
 //       zero, infinities, NaN payloads, odd sizes), decodes them back and writes the files; prints
@@ -686,6 +691,69 @@ bool SameBits(const std::vector<float>& a, const std::vector<float>& b) {
            });
 }
 
+/// The measured ring (padding.h `MeasuredRing`): per ring texel {"x", "y", "taps", "triangles",
+/// "fractions": [float32 bits], "candidates": [[x, y, distance, far]], "alternatives": [[...]]}.
+json::Value RingJson(const std::vector<exporter::RingTexel>& ring) {
+    const auto taps = [](const std::vector<exporter::RingTap>& list) {
+        json::Array out;
+        for (const exporter::RingTap& t : list) {
+            out.push_back(json::Array{static_cast<std::int64_t>(t.x), static_cast<std::int64_t>(t.y), t.distance,
+                                      t.far});
+        }
+        return out;
+    };
+    json::Array out;
+    for (const exporter::RingTexel& r : ring) {
+        json::Array fractions;
+        for (const float t : r.fractions) fractions.push_back(static_cast<std::int64_t>(std::bit_cast<uint32_t>(t)));
+        json::Array alternatives;
+        for (const auto& list : r.alternatives) alternatives.push_back(taps(list));
+        out.push_back(json::Object{{"x", static_cast<std::int64_t>(r.x)},
+                                   {"y", static_cast<std::int64_t>(r.y)},
+                                   {"taps", static_cast<std::int64_t>(r.taps)},
+                                   {"triangles", static_cast<std::int64_t>(r.triangles)},
+                                   {"fractions", std::move(fractions)},
+                                   {"candidates", taps(r.candidates)},
+                                   {"alternatives", std::move(alternatives)}});
+    }
+    return out;
+}
+
+/// `ring`: synthetic measured `infinite` padding over a mesh (test_export_encoders.py).
+int RunRing(const fs::path& casesPath) {
+    for (const json::Value& value : Arr(json::Parse(ReadText(casesPath)), "cases")) {
+        const json::Object& c = Obj(value, "case");
+        const auto width = static_cast<uint32_t>(Num(Key(c, "width"), "width"));
+        const auto height = static_cast<uint32_t>(Num(Key(c, "height"), "height"));
+        const auto channels = static_cast<uint32_t>(Num(Key(c, "channels"), "channels"));
+        const std::string material = Str(Key(c, "material"), "material");
+        const mesh::TexturingMesh mesh = mesh::ImportMeshFile(Str(Key(c, "mesh"), "mesh"), {}).mesh;
+        const auto mask =
+            evaluator::RasterizeGeometryMask(mesh, evaluator::GeometryMaskQuery{material, false, {}, width, height});
+        exporter::Coverage coverage{width, height, {}};
+        for (const uint16_t v : mask->values) coverage.covered.push_back(v != 0 ? 1 : 0);
+        exporter::IslandTriangles(coverage, mesh, material);
+        const std::string raw = ReadText(Str(Key(c, "values"), "values"));
+        std::vector<float> values(raw.size() / sizeof(float));
+        std::memcpy(values.data(), raw.data(), values.size() * sizeof(float));
+        exporter::PlannedFile file;
+        file.relativePath = "ring";
+        file.width = width;
+        file.height = height;
+        file.layout = channels == 1 ? exporter::FileLayout::L : exporter::FileLayout::RGB;
+        exporter::ResolvedParameters parameters;
+        parameters.fileFormat = exporter::FileFormat::exr;
+        parameters.bitDepth = exporter::BitDepth::f32;
+        file.parameters = parameters;
+        exporter::ApplyPadding(file, coverage, channels, values, exporter::InexactPadding::measure);
+        std::ofstream(Str(Key(c, "out"), "out"), std::ios::binary)
+            .write(reinterpret_cast<const char*>(values.data()),
+                   static_cast<std::streamsize>(values.size() * sizeof(float)));
+        std::cout << json::WriteCanonical(json::Object{{"ring", RingJson(exporter::MeasuredRing(coverage))}}) << "\n";
+    }
+    return 0;
+}
+
 /// `process`: Painter's own file of a map as the raster, through EncodeFile with the case's
 /// processing; compared with Painter's file of that processing.
 int RunProcess(const fs::path& casesPath) {
@@ -763,8 +831,9 @@ int RunProcess(const fs::path& casesPath) {
                                           std::move(values), std::nullopt, std::nullopt,
                                           std::move(srgbEncoded)};
         // `mesh` (and `material`): the case is padded `infinite` over that mesh's texel-centre
-        // coverage first (padding.h), measured: the export refuses that padding (decision 259);
-        // `coverage_out` receives the coverage, one byte per texel.
+        // coverage and triangles first (padding.h), measured: the export refuses that padding
+        // (decision 259); `coverage_out` receives the coverage, one byte per texel, and `ring_out`
+        // the measured ring (`RingJson`).
         std::int64_t coveredTexels = -1;
         std::optional<exporter::Coverage> padding;
         if (c.contains("mesh")) {
@@ -773,11 +842,16 @@ int RunProcess(const fs::path& casesPath) {
                 mesh, evaluator::GeometryMaskQuery{Str(Key(c, "material"), "material"), false, {}, width, height});
             exporter::Coverage coverage{width, height, {}};
             for (const uint16_t value : mask->values) coverage.covered.push_back(value != 0 ? 1 : 0);
+            exporter::IslandTriangles(coverage, mesh, Str(Key(c, "material"), "material"));
             coveredTexels = std::count(coverage.covered.begin(), coverage.covered.end(), uint8_t{1});
             if (c.contains("coverage_out")) {
                 std::ofstream(Str(c.at("coverage_out"), "coverage_out"), std::ios::binary)
                     .write(reinterpret_cast<const char*>(coverage.covered.data()),
                            static_cast<std::streamsize>(coverage.covered.size()));
+            }
+            if (c.contains("ring_out") && !coverage.Complete()) {
+                std::ofstream(Str(c.at("ring_out"), "ring_out"), std::ios::binary)
+                    << json::WriteCanonical(RingJson(exporter::MeasuredRing(coverage)));
             }
             padding = std::move(coverage);
         }
@@ -1101,6 +1175,7 @@ int main(int argc, char** argv) {
         if (args.size() == 2 && args[0] == "reencode") return RunReencode(args[1]);
         if (args.size() == 2 && args[0] == "roundtrip") return RunRoundtrip(args[1]);
         if (args.size() == 2 && args[0] == "process") return RunProcess(args[1]);
+        if (args.size() == 2 && args[0] == "ring") return RunRing(args[1]);
         if (args.size() == 3 && args[0] == "presets") return RunPresets(args[1], args[2]);
         if (args.size() == 1 && args[0] == "aliases") return RunAliases();
     } catch (const std::exception& e) {

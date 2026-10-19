@@ -19,29 +19,41 @@
 //   Painter's r1 and r2 differ on 37095 of 37214 uncovered texels; owner phase1.25_pilot-wand
 //   item 2.7, decision 245). A combined virtual normal is refused before that (below).
 // - `infinite` with incomplete coverage: refused with `core::NotYetSupported` naming R-090 and
-//   decision 259, before anything is written. The rule below (decision 223's coverage-only rule)
-//   is not Painter's outside the islands, and the owner withdrew exception EXC-007, which had
-//   excepted those texels (decision 259: every texel identical). It is applied only when a caller
-//   asks to measure it against Painter (`InexactPadding::measure`, the exact hunt of
-//   phase1.25_pilot-wand item 2.7); the export never does. Covered texels keep their evaluated
-//   values; the others are filled in two steps.
-//   1. The ring, every uncovered texel with a covered 8-neighbour (x wraps, y does not), takes the
-//      mean of those neighbours: weight 1 for a side neighbour and f/(1 - f) for a diagonal,
-//      f = 0.4142245 (decisions 176, 206). On a straight edge (three covered neighbours in one
-//      row or column) one diagonal is weakened so that the mean moves 24.875 * 2^-15 texel: +x
-//      on horizontal edges, -row on vertical edges. The mean is rounded to float32 and through
-//      1 - (1 - v); a mean of equal values is that value.
+//   decision 259, before anything is written. The rule below is not proven to be Painter's outside
+//   the islands, and the owner withdrew exception EXC-007, which had excepted those texels
+//   (decision 259: every texel identical). It is applied only when a caller asks to measure it
+//   against Painter (`InexactPadding::measure`, the exact hunt of phase1.25_pilot-wand item 2.7),
+//   over the coverage's triangles (`IslandTriangles`); the export never does. Covered texels keep
+//   their evaluated values; the others are filled in two steps.
+//   1. The ring, every uncovered texel with a covered 8-neighbour (x wraps, y does not), is an FMA
+//      lerp chain over at most 4 taps (decisions 267, 268, 270):
+//      - the ring point q is the texel centre extrapolated through its own triangle tau, the
+//        triangle of its covered 8-neighbours (the highest-index one when they lie in several:
+//        decision 270's V-gap majority);
+//      - the candidates are the covered 8-neighbours and, across each UV seam edge of tau that q
+//        lies beyond, the covered texels of the far island around q unfolded into it; a candidate
+//        in tau's planar face is used at its 3D position, one in a face sharing a 3D edge with that
+//        face is rotated about the edge into its plane, onto the far side, any other one is used at
+//        its 3D position; d is the distance from q;
+//      - the taps are the 4 nearest; a nearest at distance 0 is copied;
+//      - the tap order is the exact 1/d share, largest first; equal shares are ordered by decision
+//        267's comparator (each own tap's GPU-sqrt distance in mesh-box-normalised float32 object
+//        space to q extrapolated through that tap's own triangle), then toward +u, +v (far taps
+//        after own ones): the best known order, not exact on non-dyadic UVs (decision 271);
+//      - level l of the n - 1 levels codes tap l's share s among taps l..n with (k, L) = (4, 1023),
+//        (3, 255), (2, 63): u = round((s - 1/k) k / (k - 1) L) in [0, L], t = float32(1/k +
+//        (k - 1)/k u / L); the value is m = fma(1 - t, v_n - v_n-1, v_n-1) for the last level, then
+//        m = fma(t, v_l - m, m) outward, rounded through 1 - (1 - m) (decision 206).
+//      Painter's ring is not this at V-gap positions, at pole tap sets, on multi-facet bevels, on
+//      anisotropic islands and in the order of equal shares (decisions 267, 270, 271).
 //   2. Every other texel copies its seed found by a jump flood over the covered and ring texels
 //      (decision 197): steps k = max(width, height)/2 down to 1, eight offsets in a fixed order,
 //      the strictly nearest seed kept.
 //   The padding acts on the values the file stores, after the encode: OpenEXR floats, and PNG
 //   codes as UNORM operands (a padded code is written back with the UNORM write rule). A PNG 16
 //   sRGB channel under OCIO stores Painter's recorded codes (encode.h `OcioSrgbPng16Code`), which
-//   a mean of linear values would leave; decision 223 measured the Wand on its PNG 16 codes.
-//   This is Painter's rule on straight edges away from seams only. Painter's ring across UV seams,
-//   at seam corners and at poles is not identified (decision 220), so outside the islands the
-//   values differ from Painter's, already on the ring (decision 223, measurements); the exact rule
-//   stays open (phase1.25_pilot-wand item 2.7), and the refusal is lifted only when it is exact.
+//   a lerp of linear values would leave; decision 223 measured the Wand on its PNG 16 codes.
+//   The refusal is lifted only when the rule is exact (phase1.25_pilot-wand item 2.7).
 // - A combined virtual normal (`Normal_OpenGL`, `Normal_DirectX`, or a diagnosticMap that
 //   isolates, compares or summarises one) with incomplete coverage, under every padding and in
 //   statistics files (decision 245): its island-edge texels, the covered texels with an
@@ -54,13 +66,25 @@
 //   recording shows what Painter's empty Height reads outside the islands, and its other virtual
 //   maps read an empty channel as a constant that is not the channel's base (R-092).
 
+#include <array>
 #include <cstdint>
 #include <string>
 #include <vector>
 
 #include "export/plan.h"
 
+namespace uzp::mesh {
+struct TexturingMesh;
+}
+
 namespace uzp::exporter {
+
+/// A triangle of a texture set's material, as the mesh stores it: its corners' first UV set (v
+/// up) and 3D positions.
+struct IslandTriangle {
+    std::array<std::array<float, 2>, 3> uv{};
+    std::array<std::array<float, 3>, 3> position{};
+};
 
 /// A texture set's texel-centre UV coverage, rows top first: non-zero where a triangle covers the
 /// texel's centre.
@@ -68,9 +92,47 @@ struct Coverage {
     uint32_t width = 0;
     uint32_t height = 0;
     std::vector<uint8_t> covered;
+    /// The measured `infinite` padding's geometry (`IslandTriangles`): the set's triangles in mesh
+    /// order and the bounding box of the whole mesh's positions. Empty when not known; the
+    /// measured padding then refuses to run (std::invalid_argument).
+    std::vector<IslandTriangle> triangles{};
+    std::array<float, 3> boxMin{};
+    std::array<float, 3> boxMax{};
 
     [[nodiscard]] bool Complete() const;
 };
+
+/// The triangles of `material` in `mesh` (every object, in mesh order, each corner's position moved
+/// by its object's transform) and the box of every triangle corner of the mesh, into `coverage`.
+void IslandTriangles(Coverage& coverage, const mesh::TexturingMesh& mesh, const std::string& material);
+
+/// One candidate tap of a ring texel of the measured `infinite` padding: its texel, its distance d
+/// from the ring point (above), and whether it lies across a UV seam.
+struct RingTap {
+    uint32_t x = 0;
+    uint32_t y = 0;
+    double distance = 0.0;
+    bool far = false;
+};
+
+/// A ring texel of the measured `infinite` padding (above): its candidates in tap order, of which
+/// the first `taps` are the chain's (1 for a copy), the chain's fractions t per level, and the
+/// number of distinct triangles among its covered 8-neighbours. `alternatives` holds, for each of
+/// those triangles other than tau (in decreasing index), the candidates in tap order with q
+/// extrapolated through it instead: what a measurement of the V-gap position compares.
+struct RingTexel {
+    uint32_t x = 0;
+    uint32_t y = 0;
+    std::vector<RingTap> candidates;
+    uint32_t taps = 0;
+    std::vector<float> fractions;
+    uint32_t triangles = 0;
+    std::vector<std::vector<RingTap>> alternatives;
+};
+
+/// The ring of the measured `infinite` padding over `coverage` (which needs its triangles), rows
+/// top first. Throws std::invalid_argument when the coverage has no triangles or is not theirs.
+[[nodiscard]] std::vector<RingTexel> MeasuredRing(const Coverage& coverage);
 
 /// Whether an `infinite` padding on incomplete coverage, which is not exact (above), is refused, as
 /// the export always does, or written to be measured against Painter (decision 259).
