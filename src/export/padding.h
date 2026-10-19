@@ -28,14 +28,15 @@
 //   their evaluated values; the others are filled in two steps.
 //   1. The ring, every uncovered texel with a covered 8-neighbour (x wraps, y does not), is an FMA
 //      lerp chain over at most 4 taps (decisions 267, 268, 270, 273, 275, 278 to 282, 285, 288,
-//      290 to 292):
+//      290 to 292, 294):
 //      - the ring point q is the texel centre extrapolated through its own triangle tau, the
 //        triangle of its covered 8-neighbours; when they lie in several, the triangle of the one
 //        nearest under decision 273's comparator (below, through that neighbour's own triangle),
 //        an exact tie toward +u, then +v (decision 279);
 //      - the candidates are the covered 8-neighbours and the far windows of the UV seam edges of
 //        every island that owns one of them, whose UV segment lies within 1.78 texels of the texel
-//        centre, whichever side of it q lies on (decisions 275, 279, 285): q folded about the edge into
+//        centre (decision 294's corner edges: 1.0 or 1.15, below), whichever side of it q lies on
+//        (decisions 275, 279, 285): q folded about the edge into
 //        the far triangle, f its point in that triangle's texel space (v down, centres at + 1/2),
 //        and the far island's covered texels in the 3 x 3 block of columns floor(f_u - 1/2) +- 1
 //        and rows ceil(f_v - 1/2) +- 1. A seam edge (E, J), E its triangle on the near side and J
@@ -45,7 +46,12 @@
 //        (decision 278's gate, with tau's normal: decision 292). A seam edge whose far triangle is
 //        tau (decision 288), or whose two UV ends both lie on u = 0 or both on u = 1 (decision
 //        290), gives none. Triangles share an edge or a corner when their positions and UVs are
-//        equal by value, -0 = +0 (decision 288);
+//        equal by value, -0 = +0 (decision 288). A corner edge (decision 294), a seam edge of a
+//        triangle outside tau's planar face whose nearest point to the texel centre is an end V
+//        (the centre's projection onto its UV segment outside it) and whose UV |sin| with every
+//        other seam edge of its island ending at V exceeds 1e-3, reaches only within 1.0 texel
+//        when another seam edge reaching the texel (within 1.787242 texels) ending at V is gated,
+//        else within 1.15;
 //      - a candidate in tau's planar face is used at its 3D position, one in a face sharing a 3D
 //        edge with that face is rotated about the edge into its plane, onto the far side, any other
 //        one is rotated hinge by hinge along the fewest-hinge paths of faces sharing 3D edges (at
@@ -62,7 +68,9 @@
 //        centre extrapolated through the neighbour's own triangle; one a window holds is a far tap
 //        (decision 279);
 //      - not identified, and flagged by the measured ring (`RingTexel`): Painter's reach cap, in
-//        [1.772004, 1.787242) texels; the gate's constant, in (0.98498905, 0.98501915], and whether it
+//        [1.772004, 1.787242) texels; its corner caps, in [0.974615, 1.020004) and [1.0759265,
+//        1.208074), and its collinear threshold, in [1e-6, 0.0305); the gate's constant, in
+//        (0.98498905, 0.98501915], and whether it
 //        compares with <= or <; a ring point on J's plane; a texel reached across two seam edges
 //        with different gates; a chain tap developed along a face path; the tie classes below
 //        that the data leave open; a far point f within 1e-4 texel of a window boundary (f - 1/2
@@ -73,20 +81,22 @@
 //        (decision 280);
 //      - the tap order is the 1/d share, largest first, distances within 1e-5 relative tied
 //        (decision 282, which holds decision 288's float32-precision ties; decision 280 within
-//        them):
-//        own taps first, ordered by decision 273's comparator (each own tap's GPU-sqrt distance,
-//        squared by FMA, to q, both interpolated through that tap's own triangle: float32
+//        them), each tie by its taps' float32 distances, an own tap before a far one at an equal
+//        one (decision 294 (b)): an own tap's is decision 273's comparator (each own tap's GPU-sqrt
+//        distance, squared by FMA, to q, both interpolated through that tap's own triangle: float32
 //        texel-centre UVs, barycentrics from the UV inverse matrix based at the third corner with
 //        the GPU's reciprocal, and fma(l2, P2, fma(l0, P0, l1 P1)) over positions normalised by
-//        the mesh box as P r - c r, c = lo + ext / 2, r = 1 / (max(ext) / 2)), then by the offset
-//        (du, dv) from the ring texel, v up: (+1, 0), (-1, 0), (0, -1), (0, +1), (+1, +1),
-//        (+1, -1), (-1, +1), (-1, -1); far taps by the float32 distance |fold(q_E) - P| (q_E the
-//        ring texel through E, the own triangle of the first seam edge whose window holds the tap,
+//        the mesh box as P r - c r, c = lo + ext / 2, r = 1 / (max(ext) / 2)), equal ones ordered
+//        by the offset (du, dv) from the ring texel, v up: (+1, 0), (-1, 0), (0, -1), (0, +1),
+//        (+1, +1), (+1, -1), (-1, +1), (-1, -1); a far tap's is |fold(q_E) - P| (q_E the ring
+//        texel through E, the own triangle of the first seam edge whose window holds the tap,
 //        rotated in float32 about that edge into its far triangle's plane when the edge is folded
-//        past 0.985; P the tap through its own triangle, not rotated; decision 282), then by the
-//        offset from the window's base (floor(f_u - 1/2), ceil(f_v - 1/2)),
+//        past 0.985; P the tap through its own triangle, not rotated; decision 282), equal ones
+//        ordered by the offset from the window's base (floor(f_u - 1/2), ceil(f_v - 1/2)),
 //        v up: (0, 0), (+1, 0), (0, +1), (+1, +1), (0, -1), (+1, -1), (-1, 0), (-1, +1),
-//        (-1, -1). Not identified, and flagged: an own and a far tap at equal distance; own taps
+//        (-1, -1). Then adjacent own taps whose distances lie within 1e-4 relative are ordered
+//        by the comparator, then the offset (decision 294 (c)). Not identified, and flagged: an
+//        own and a far tap at equal float32 distance; own taps
 //        tied on the comparator at (+1, 0) / (-1, 0), (0, +1) / (0, -1) or (+1, -1) / (-1, +1);
 //        far taps at equal distance in different planar faces; far taps tied in float32 from
 //        different windows or at offsets the recorded ties do not order;
@@ -190,13 +200,18 @@ struct RingTap {
 /// inside the open bracket (0.98498905, 0.98501915] with q behind the far plane (`foldBracket`), or
 /// q exactly on the far plane with a dot product of at most 0.98501915 (`onFarPlane`); two such
 /// edges are gated differently (`mixedGates`); a reach cap anywhere in [1.772004, 1.787242) texels
-/// instead of 1.78 changes the taps (`reachBracket`, decision 285); some seam edge's far point lies
+/// instead of 1.78 changes the taps (`reachBracket`, decision 285); a corner cap anywhere in
+/// [0.974615, 1.020004) instead of 1.0 or in [1.0759265, 1.208074) instead of 1.15, or a collinear
+/// threshold anywhere in [1e-6, 0.0305) instead of 1e-3, changes them (`cornerReachBracket`,
+/// decision 294); some seam edge's far point lies
 /// within 1e-4 texel of a window boundary and the window on its other side changes the taps
 /// (`windowSide`, decision 291). A group of equal distances holding a chain tap holds an own
-/// and a far tap (`ownFarTie`), an open own pair (`ownOrder`), far taps in different planar faces
+/// and a far tap at equal float32 distances (`ownFarTie`), an open own pair tied on the comparator
+/// (`ownOrder`, also between adjacent own taps within 1e-4), far taps in different planar faces
 /// (`farFold`) or an open far pair (`farOrder`, decision 280). A chain tap's distance is developed
 /// along a face path (`multiFacet`, decision 281). The chain is still that of the rule above
-/// (constant 0.985, gated per edge, cap 1.78, the fixed orders, the nearer development).
+/// (constant 0.985, gated per edge, caps 1.78, 1.0 and 1.15, threshold 1e-3, the fixed orders, the
+/// nearer development).
 struct RingTexel {
     uint32_t x = 0;
     uint32_t y = 0;
@@ -209,6 +224,7 @@ struct RingTexel {
     bool onFarPlane = false;
     bool mixedGates = false;
     bool reachBracket = false;
+    bool cornerReachBracket = false;
     bool windowSide = false;
     bool ownFarTie = false;
     bool ownOrder = false;

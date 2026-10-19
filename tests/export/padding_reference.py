@@ -1,6 +1,6 @@
 """The measured `infinite` padding of src/export/padding.h (phase1.25 item 2.7; decisions 197, 206,
-267, 268, 270, 273, 275, 278 to 282, 285, 288, 290, 291; measured only, decision 259), written again
-independently in Python for the tests: the ring over an OBJ's triangles, then the jump flood.
+267, 268, 270, 273, 275, 278 to 282, 285, 288, 290, 291, 294; measured only, decision 259), written
+again independently in Python for the tests: the ring over an OBJ's triangles, then the jump flood.
 
 The geometry (barycentrics, folds about seam edges, distances) is double precision with each
 operation in padding.cpp's order, so that a far point at an exact half-texel boundary, where
@@ -47,6 +47,30 @@ FOLD_HIGH = F32(0.98501915)
 REACH_CAP = 1.78
 REACH_LOW = 1.7720044
 REACH_HIGH = 1.787242
+# Decision 294's corner reach: a seam edge of a triangle outside tau's planar face whose nearest
+# point to the ring texel's centre is an end V, and which is not collinear (UV |sin| at most
+# COLLINEAR) with another seam edge of the island ending at V, reaches CORNER_GATED texels when
+# another seam edge of the ring texel ending at V is gated, else CORNER_OPEN. Painter's caps lie in
+# [CORNER_GATED_LOW, CORNER_GATED_HIGH) and [CORNER_OPEN_LOW, CORNER_OPEN_HIGH), its collinear
+# threshold below COLLINEAR_HIGH (flagged from COLLINEAR_LOW: an exact continuation is exempt).
+# The bounds round the Wand's edges inward: kept at 0.97461490 (274, 1989) and 1.07592644
+# (634, 1418), dropped at 1.02000402 (175, 1101) and 1.20807410 (566, 1439); decision 294 writes
+# the open low end 1.075926, which would drop (634, 1418)'s edge.
+CORNER_GATED = 1.0
+CORNER_GATED_LOW = 0.974615
+CORNER_GATED_HIGH = 1.020004
+CORNER_OPEN = 1.15
+CORNER_OPEN_LOW = 1.0759265
+CORNER_OPEN_HIGH = 1.208074
+COLLINEAR = 1e-3
+COLLINEAR_LOW = 1e-6
+COLLINEAR_HIGH = 0.0305
+# The reaches of `Ring.candidates` (decision 285's cap, decision 294's two corner caps and its
+# collinear threshold), as Painter's are taken.
+REACHES = (REACH_CAP, CORNER_GATED, CORNER_OPEN, COLLINEAR)
+# Decision 294: adjacent own taps whose distances lie within OWN_BAND relative are ordered by
+# decision 273's comparator.
+OWN_BAND = 1e-4
 # Decision 291: a far point within WINDOW_SIDE texel of a window boundary (f - 1/2 integral) on
 # some axis; at most WINDOW_SIDES such axes are tried both ways (more are flagged untried).
 WINDOW_SIDE = 1e-4
@@ -643,15 +667,22 @@ class Ring:
         cands: list[tuple[float, bool, tuple[int, int]]],
         seam: dict[tuple[int, int], tuple[int, tuple[int, int], int, int]],
     ) -> tuple[list[tuple[float, bool, tuple[int, int]]], dict[tuple[int, int], set[str]]]:
-        """`cands` in tap order (decisions 280, 282): nearest first; within distances equal to
-        EQUAL_SHARE relative, own taps by decision 273's comparator, then OWN_ORDER; far taps
-        (`seam`: texel -> E, its window's base, the seam edge and its far triangle J) by the
-        float32 |fold(q_E) - P|, q_E folded into J's plane when the edge is folded past the gate,
-        P not rotated, then WINDOW_ORDER. And per texel of a tied group, the open tie classes of its
-        group."""
+        """`cands` in tap order (decisions 280, 282, 294): nearest first; within distances equal to
+        EQUAL_SHARE relative, by the float32 distance (an own tap's decision 273 comparator, a far
+        tap's |fold(q_E) - P|: `seam` maps a texel to E, its window's base, the seam edge and its
+        far triangle J; q_E folded into J's plane when the edge is folded past the gate, P not
+        rotated), then own before far, then OWN_ORDER or WINDOW_ORDER; then adjacent own taps
+        within OWN_BAND relative by the comparator, then OWN_ORDER. And per texel of a tied group,
+        the open tie classes of its group."""
         ordered = sorted(cands, key=lambda c: (c[0], c[2][1] * self.width + c[2][0]))
         result: list[tuple[float, bool, tuple[int, int]]] = []
         ties: dict[tuple[int, int], set[str]] = {}
+
+        def own_rank(texel: tuple[int, int]) -> int:
+            du = texel[0] - x
+            du = du - self.width if du > 1 else du + self.width if du < -1 else du
+            return OWN_ORDER.index((du, y - texel[1]))
+
         while ordered:
             group = [ordered[0]]
             for c in ordered[1:]:
@@ -665,12 +696,10 @@ class Ring:
                     tx, ty = c[2]
                     k = self.tris[int(self.owner[ty, tx])]
                     if not c[1]:
-                        du = tx - x
-                        du = du - self.width if du > 1 else du + self.width if du < -1 else du
                         d = compare_distance(
                             k.uv, k.normalised, self.width, self.height, (x, y), c[2]
                         )
-                        keys[c[2]] = (False, float(d), OWN_ORDER.index((du, y - ty)))
+                        keys[c[2]] = (False, float(d), own_rank(c[2]))
                     else:
                         e, (col0, row0), edge, j = seam[c[2]]
                         E = self.tris[e]
@@ -683,14 +712,16 @@ class Ring:
                             float(distance32(q_e, p)),
                             WINDOW_ORDER.index((tx - col0, row0 - ty)),
                         )
-                group.sort(key=lambda c: keys[c[2]])
+                # Decision 294 (b): the float32 distance first, own before far only at equal ones.
+                group.sort(key=lambda c: (keys[c[2]][1], keys[c[2]][0], keys[c[2]][2]))
                 tie: set[str] = set()
                 for i, a in enumerate(group):
                     for b in group[i + 1 :]:
                         ka, kb = keys[a[2]], keys[b[2]]
                         pair = (min(ka[2], kb[2]), max(ka[2], kb[2]))
                         if a[1] != b[1]:
-                            tie.add("own-far-tie")
+                            if ka[1] == kb[1]:
+                                tie.add("own-far-tie")
                         elif not a[1]:
                             if ka[1] == kb[1] and pair in OWN_OPEN:
                                 tie.add("own-order")
@@ -706,6 +737,31 @@ class Ring:
                 for c in group:
                     ties[c[2]] = tie
             result += group
+        # Decision 294 (c): adjacent own taps within OWN_BAND relative, by the comparator, then
+        # OWN_ORDER (an open pair tied on the comparator flagged).
+        compared: dict[tuple[int, int], tuple[float, int]] = {}
+
+        def own_key(texel: tuple[int, int]) -> tuple[float, int]:
+            if texel not in compared:
+                k = self.tris[int(self.owner[texel[1], texel[0]])]
+                d = compare_distance(k.uv, k.normalised, self.width, self.height, (x, y), texel)
+                compared[texel] = (float(d), own_rank(texel))
+            return compared[texel]
+
+        changed = True
+        while changed:
+            changed = False
+            for i in range(len(result) - 1):
+                a, b = result[i], result[i + 1]
+                if a[1] or b[1] or b[0] > a[0] * (1.0 + OWN_BAND):
+                    continue
+                oa, ob = own_key(a[2]), own_key(b[2])
+                if oa[0] == ob[0] and (min(oa[1], ob[1]), max(oa[1], ob[1])) in OWN_OPEN:
+                    for t in (a[2], b[2]):
+                        ties[t] = ties.get(t, set()) | {"own-order"}
+                if ob < oa:
+                    result[i], result[i + 1] = b, a
+                    changed = True
         return result[:KEPT], ties
 
     def candidates(
@@ -717,7 +773,7 @@ class Ring:
         flip: frozenset[tuple[int, int]] = frozenset(),
     ) -> tuple[list[tuple[float, bool, tuple[int, int]]], set[str]]:
         """Ring texel (x, y)'s candidates (distance, far, texel) in tap order, through `tau`, and
-        where the rule (decisions 278, 279, 285, 291) does not decide them. `flip` holds the
+        where the rule (decisions 278, 279, 285, 291, 294) does not decide them. `flip` holds the
         (edge, axis) pairs whose far window is taken on the other side of a boundary (decision
         291); with any, only the candidates are computed."""
         T = self.tris[tau]
@@ -797,18 +853,56 @@ class Ring:
                         lst = via.setdefault((col, row), [])
                         if not lst or lst[-1] != len(edges) - 1:
                             lst.append(len(edges) - 1)
+        # Decision 294 (a): per edge, when E lies outside tau's planar face and the edge's nearest
+        # point to the texel centre is an end V (its projection outside [0, 1]): whether another
+        # edge of `edges` ending at V is gated, and the least UV |sin| with another seam edge of
+        # E's island ending at V (infinite when none); else None.
+        px, py = x + 0.5, y + 0.5
+        ends = [
+            (self.tris[w[0]].t[(w[2] + 1) % 3], self.tris[w[0]].t[(w[2] + 2) % 3]) for w in windows
+        ]
+        corners: list[tuple[bool, float] | None] = []
+        for i, (e_index, _, edge, _) in enumerate(windows):
+            E = self.tris[e_index]
+            a, b = ends[i]
+            ex, ey = b[0] - a[0], b[1] - a[1]
+            along = ((px - a[0]) * ex + (py - a[1]) * ey) / (ex * ex + ey * ey)
+            if E.face == T.face or 0.0 <= along <= 1.0:
+                corners.append(None)
+                continue
+            v = a if along < 0.0 else b
+            sine = math.inf
+            for f_index, f_edge, _ in self.seams[E.chart]:
+                F = self.tris[f_index]
+                fa, fb = F.t[(f_edge + 1) % 3], F.t[(f_edge + 2) % 3]
+                if (f_index, f_edge) == (e_index, edge) or v not in (fa, fb):
+                    continue
+                fx, fy = fb[0] - fa[0], fb[1] - fa[1]
+                length = math.sqrt(ex * ex + ey * ey) * math.sqrt(fx * fx + fy * fy)
+                sine = min(sine, abs(ex * fy - ey * fx) / length)
+            gated = any(edges[k][0][0] for k in range(len(edges)) if k != i and v in ends[k])
+            corners.append((gated, sine))
+
+        def within(e: int, reaches: Sequence[float]) -> bool:
+            """Whether edge `e` reaches the texel under `reaches` (as REACHES)."""
+            cap, gated_cap, open_cap, collinear = reaches
+            corner = corners[e]
+            if corner is not None and corner[1] > collinear:
+                return edges[e][1] <= (gated_cap if corner[0] else open_cap)
+            return edges[e][1] <= cap
 
         def build(
             is_open: Callable[[tuple[tuple[bool, bool, bool], float]], bool],
-            cap: float = REACH_CAP,
+            reaches: Sequence[float] = REACHES,
         ) -> list[tuple[float, bool, tuple[int, int]]]:
-            """The candidates when the edges within `cap` that are `is_open` feed the far windows;
-            a far tap's E and window are the first edge's within `cap` that holds it."""
+            """The candidates when the edges that reach the texel under `reaches` and are
+            `is_open` feed the far windows; a far tap's E and window are the first reaching edge's
+            that holds it."""
             out = []
             first: dict[tuple[int, int], tuple[int, tuple[int, int], int, int]] = {}
             for texel, (frame, outside, is_own) in pool.items():
                 inside = is_own and outside is None
-                held = [e for e in via.get(texel, []) if edges[e][1] <= cap]
+                held = [e for e in via.get(texel, []) if within(e, reaches)]
                 if held:
                     first[texel] = windows[held[0]]
                 if not inside and any(is_open(edges[e]) for e in held):
@@ -844,14 +938,26 @@ class Ring:
             if framed and c[2] not in through and not self.hinged(int(self.owner[ty, tx]), tau):
                 undecided.add("multi-facet")
         if edges:
-            # Decision 285: a cap anywhere in [REACH_LOW, REACH_HIGH) (REACH_LOW, or an edge's
-            # reach above it) that changes the taps.
-            for cap in [REACH_LOW] + [e[1] for e in edges if e[1] > REACH_LOW]:
-                if all((e[1] <= cap) == (e[1] <= REACH_CAP) for e in edges):
-                    continue
-                other = build(lambda e: not e[0][0], cap)
-                if tap_count(other) != n or other[:n] != result[:n]:
-                    undecided.add("reach-bracket")
+            # Decision 285: a cap anywhere in [REACH_LOW, REACH_HIGH) that changes the taps;
+            # decision 294: a corner cap anywhere in its bracket, or a collinear threshold anywhere
+            # in [COLLINEAR_LOW, COLLINEAR_HIGH). Each is tried at its bracket's low end and at
+            # each edge's value inside it (the settings that differ).
+            sines = [c[1] for c in corners if c is not None]
+            reaches = [e[1] for e in edges]
+            for slot, low, high, values, flag in (
+                (0, REACH_LOW, REACH_HIGH, reaches, "reach-bracket"),
+                (1, CORNER_GATED_LOW, CORNER_GATED_HIGH, reaches, "corner-reach-bracket"),
+                (2, CORNER_OPEN_LOW, CORNER_OPEN_HIGH, reaches, "corner-reach-bracket"),
+                (3, COLLINEAR_LOW, COLLINEAR_HIGH, sines, "corner-reach-bracket"),
+            ):
+                for value in [low] + [v for v in values if low < v < high]:
+                    tried = (*REACHES[:slot], value, *REACHES[slot + 1 :])
+                    if all(within(e, tried) == within(e, REACHES) for e in range(len(edges))):
+                        continue
+                    other = build(lambda e: not e[0][0], tried)
+                    if tap_count(other) != n or other[:n] != result[:n]:
+                        undecided.add(flag)
+                        break
             ungated = build(lambda e: True)
             reaching = {
                 e
@@ -859,7 +965,7 @@ class Ring:
                 for c in lst[: tap_count(lst)]
                 if c[1]
                 for e in via[c[2]]
-                if edges[e][1] <= REACH_CAP
+                if within(e, REACHES)
             }
             if any(edges[e][0][1] for e in reaching):
                 undecided.add("fold-bracket")

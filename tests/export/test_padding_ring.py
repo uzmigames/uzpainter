@@ -1053,3 +1053,95 @@ def test_far_point_on_a_window_boundary_is_flagged(export_tests: Path, tmp_path:
         assert flagged[name] <= far, name
     assert flagged["offset"] == set()
     assert {(0, y) for y in range(13, 16)} <= flagged["aligned"]
+
+
+def _corner(vrow: float, bend: float, fold: float) -> Mesh:
+    """Island A: A1 (texel columns 4 to 8, rows `vrow` to 16, on the plane y = 0) and A2 above it
+    (rows 8 to `vrow`, its right edge from (8, vrow) to (8 + `bend`, 8)), turned 5 degrees about
+    their shared edge: two planar faces meeting at A's UV corner V = (8, vrow). Island B1 (columns
+    16 to 20, 0.3 row lower) beyond A1's right edge, turned concave by `fold` degrees about it;
+    island B (columns 24 to 28, rows 8 to 16) beyond A2's right edge, in A2's plane. A quarter unit
+    per texel."""
+    s = 1 / 32
+    h = (16 - vrow) * 0.25
+    sa, ca = math.sin(math.radians(5.0)), math.cos(math.radians(5.0))
+    sb, cb = math.sin(math.radians(fold)), math.cos(math.radians(fold))
+
+    def a1(col: float, row: float) -> tuple[float, float, float]:
+        return ((col - 4) * 0.25, 0.0, (16 - row) * 0.25)
+
+    def a2(col: float, row: float) -> tuple[float, float, float]:
+        d = (vrow - row) * 0.25
+        return ((col - 4) * 0.25, d * sa, h + d * ca)
+
+    def b1(col: float, row: float) -> tuple[float, float, float]:
+        w = (col - 16) * 0.25
+        return (1.0 + w * cb, -w * sb, (16.3 - row) * 0.25)
+
+    def b(col: float, row: float) -> tuple[float, float, float]:
+        d = (vrow - row) * 0.25
+        return (1.0 + (col - 24) * 0.25, d * sa, h + d * ca)
+
+    def quad(f: Any, corners: list[tuple[float, float]]) -> Quad:
+        return [f(c, r) for c, r in corners], [(c * s, 1 - r * s) for c, r in corners]
+
+    return Mesh(
+        [
+            quad(a1, [(4, 16), (8, 16), (8, vrow), (4, vrow)]),
+            quad(a2, [(4, vrow), (8, vrow), (8 + bend, 8), (4, 8)]),
+            quad(b1, [(16, 16.3), (20, 16.3), (20, vrow + 0.3), (16, vrow + 0.3)]),
+            quad(b, [(24, vrow), (28, vrow), (28, 8), (24 + bend, 8)]),
+            quad(b, [(24, 16), (28, 16), (28, vrow), (24, vrow)]),
+        ],
+        32,
+    )
+
+
+def test_corner_edge_reach_follows_decision_294(
+    export_tests: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Decision 294 (a): ring texel (8, 13), beyond A1's right edge in `_corner`, reaches A2's right
+    edge only through its end V, A's UV corner, and A2 lies outside its triangle's planar face.
+    - With B1 folded concave by 30 degrees, A1's edge ending at V is gated: A2's edge, 1.1002 texels
+      away, is beyond the 1.0-texel cap and gives no far tap of B.
+    - With B1 flat, A1's edge is open and the cap is 1.15 texels: at 1.1002 texels B's taps are
+      kept, and flagged "corner-reach-bracket" (in [1.0759265, 1.208074)); at 1.3928 texels (V at
+      row 12.2) B gives none, where decision 285's 1.78-texel reach takes B's taps.
+    - With A2's edge collinear with A1's at V (no bend), it is exempt and keeps that reach: B's
+      taps stay, and capping it would drop them.
+    Each case equals `padding_reference` bit for bit, candidates and flags included."""
+    from tests.export import padding_reference
+
+    cases = {
+        "gated": (12.52, 1.0, 30.0),
+        "bracket": (12.52, 1.0, 0.0),
+        "open": (12.2, 1.0, 0.0),
+        "collinear": (12.2, 0.0, 0.0),
+    }
+    texel: dict[str, dict[str, Any]] = {}
+    for label, (vrow, bend, fold) in cases.items():
+        name = f"corner-{label}"
+        values, out, ring = run(export_tests, tmp_path, _corner(vrow, bend, fold), name, 294)
+        _matches_reference(tmp_path, name, values, out, ring)
+        texel[label] = next(r for r in ring if (r["x"], r["y"]) == (8, 13))
+
+    def of_b(candidates: list[Any]) -> bool:
+        """Whether any candidate is a texel of island B (columns 24 to 27)."""
+        return any(c[0] >= 24 for c in candidates)
+
+    def reference_of_b(label: str, reaches: tuple[float, float, float, float]) -> bool:
+        with monkeypatch.context() as m:
+            m.setattr(padding_reference, "REACHES", reaches)
+            rows = Ring(tmp_path / f"corner-{label}.obj", "m", 32, 32).texels()
+        return of_b(
+            [(*c[2], c[0], c[1]) for x, y, cands, _ in rows if (x, y) == (8, 13) for c in cands]
+        )
+
+    uncapped = (REACH_CAP, REACH_CAP, REACH_CAP, padding_reference.COLLINEAR)
+    assert not of_b(texel["gated"]["candidates"]) and reference_of_b("gated", uncapped)
+    assert of_b(texel["bracket"]["candidates"][: texel["bracket"]["taps"]])
+    assert "corner-reach-bracket" in texel["bracket"]["undecided"]
+    assert not of_b(texel["open"]["candidates"]) and reference_of_b("open", uncapped)
+    assert "corner-reach-bracket" not in texel["open"]["undecided"]
+    assert of_b(texel["collinear"]["candidates"][: texel["collinear"]["taps"]])
+    assert not reference_of_b("collinear", (*padding_reference.REACHES[:3], -1.0))
