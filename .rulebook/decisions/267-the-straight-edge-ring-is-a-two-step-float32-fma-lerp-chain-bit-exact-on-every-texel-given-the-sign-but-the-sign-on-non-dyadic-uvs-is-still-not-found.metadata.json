@@ -1,0 +1,13 @@
+{
+  "id": 267,
+  "slug": "the-straight-edge-ring-is-a-two-step-float32-fma-lerp-chain-bit-exact-on-every-texel-given-the-sign-but-the-sign-on-non-dyadic-uvs-is-still-not-found",
+  "title": "The straight-edge ring is a two-step float32 FMA lerp chain, bit-exact on all 18,056 texels given the sign; extrapolating through each diagonal's own triangle closes tie, but the sign on non-dyadic UVs is still not found",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}
