@@ -271,6 +271,10 @@
       "documented_as": "substance_painter.event.DISPATCHER",
       "page": "substance_painter/event.html"
     },
+    "substance_painter.event.DISPATCHER.connect_strong": {
+      "documented_as": "substance_painter.event.DISPATCHER",
+      "page": "substance_painter/event.html"
+    },
     "substance_painter.event.DISPATCHER.disconnect": {
       "documented_as": "substance_painter.event.DISPATCHER",
       "page": "substance_painter/event.html"
@@ -279,12 +283,20 @@
       "documented_as": "substance_painter.event.Dispatcher.connect",
       "page": "substance_painter/event.html"
     },
+    "substance_painter.event.Dispatcher.connect_strong": {
+      "documented_as": "substance_painter.event.Dispatcher.connect_strong",
+      "page": "substance_painter/event.html"
+    },
     "substance_painter.event.EngineComputationsStatusChanged": {
       "documented_as": "substance_painter.event.EngineComputationsStatusChanged",
       "page": "substance_painter/event.html"
     },
     "substance_painter.event.EngineComputationsStatusChanged.engine_computations_enabled": {
       "documented_as": "substance_painter.event.EngineComputationsStatusChanged",
+      "page": "substance_painter/event.html"
+    },
+    "substance_painter.event.Event": {
+      "documented_as": "substance_painter.event.Event",
       "page": "substance_painter/event.html"
     },
     "substance_painter.event.ExportTexturesAboutToStart": {
@@ -411,8 +423,32 @@
       "documented_as": "substance_painter.event.TextureStateEvent",
       "page": "substance_painter/event.html"
     },
+    "substance_painter.event.TextureStateEvent.action": {
+      "documented_as": "substance_painter.event.TextureStateEvent",
+      "page": "substance_painter/event.html"
+    },
+    "substance_painter.event.TextureStateEvent.cache_key": {
+      "documented_as": "substance_painter.event.TextureStateEvent",
+      "page": "substance_painter/event.html"
+    },
     "substance_painter.event.TextureStateEvent.cache_key_invalidation_throttling_period": {
       "documented_as": "substance_painter.event.TextureStateEvent.cache_key_invalidation_throttling_period",
+      "page": "substance_painter/event.html"
+    },
+    "substance_painter.event.TextureStateEvent.channel_type": {
+      "documented_as": "substance_painter.event.TextureStateEvent",
+      "page": "substance_painter/event.html"
+    },
+    "substance_painter.event.TextureStateEvent.set_cache_key_invalidation_throttling_period": {
+      "documented_as": "substance_painter.event.TextureStateEvent.set_cache_key_invalidation_throttling_period",
+      "page": "substance_painter/event.html"
+    },
+    "substance_painter.event.TextureStateEvent.stack_id": {
+      "documented_as": "substance_painter.event.TextureStateEvent",
+      "page": "substance_painter/event.html"
+    },
+    "substance_painter.event.TextureStateEvent.tile_indices": {
+      "documented_as": "substance_painter.event.TextureStateEvent",
       "page": "substance_painter/event.html"
     },
     "substance_painter.event.TextureStateEventAction.ADD": {
@@ -1283,6 +1319,22 @@
       "documented_as": "substance_painter.logging",
       "page": "substance_painter/logging.html"
     },
+    "substance_painter.logging.error": {
+      "documented_as": "substance_painter.logging.error",
+      "page": "substance_painter/logging.html"
+    },
+    "substance_painter.logging.info": {
+      "documented_as": "substance_painter.logging.info",
+      "page": "substance_painter/logging.html"
+    },
+    "substance_painter.logging.log": {
+      "documented_as": "substance_painter.logging.log",
+      "page": "substance_painter/logging.html"
+    },
+    "substance_painter.logging.warning": {
+      "documented_as": "substance_painter.logging.warning",
+      "page": "substance_painter/logging.html"
+    },
     "substance_painter.project": {
       "documented_as": "substance_painter.project",
       "page": "substance_painter/project.html"
@@ -1559,6 +1611,10 @@
       "documented_as": "substance_painter.resource.ResourceID.context",
       "page": "substance_painter/resource.html"
     },
+    "substance_painter.resource.ResourceID.from_project": {
+      "documented_as": "substance_painter.resource.ResourceID.from_project",
+      "page": "substance_painter/resource.html"
+    },
     "substance_painter.resource.ResourceID.from_url": {
       "documented_as": "substance_painter.resource.ResourceID.from_url",
       "page": "substance_painter/resource.html"
@@ -1627,12 +1683,20 @@
       "documented_as": "substance_painter.resource.Shelves.exists",
       "page": "substance_painter/resource.html"
     },
+    "substance_painter.resource.Shelves.refresh_all": {
+      "documented_as": "substance_painter.resource.Shelves.refresh_all",
+      "page": "substance_painter/resource.html"
+    },
     "substance_painter.resource.Shelves.remove": {
       "documented_as": "substance_painter.resource.Shelves.remove",
       "page": "substance_painter/resource.html"
     },
     "substance_painter.resource.Shelves.user_shelf": {
       "documented_as": "substance_painter.resource.Shelves.user_shelf",
+      "page": "substance_painter/resource.html"
+    },
+    "substance_painter.resource.ShelvesListFilter": {
+      "documented_as": "substance_painter.resource.ShelvesListFilter",
       "page": "substance_painter/resource.html"
     },
     "substance_painter.resource.Usage.COLOR_LUT": {
@@ -1665,6 +1729,10 @@
     },
     "substance_painter.resource.is_reload_modified_resources_running": {
       "documented_as": "substance_painter.resource.is_reload_modified_resources_running",
+      "page": "substance_painter/resource.html"
+    },
+    "substance_painter.resource.list_project_resources": {
+      "documented_as": "substance_painter.resource.list_project_resources",
       "page": "substance_painter/resource.html"
     },
     "substance_painter.resource.reload_modified_resources_async": {
@@ -2370,6 +2438,42 @@
     "substance_painter.ui.switch_to_mode": {
       "documented_as": "substance_painter.ui.switch_to_mode",
       "page": "substance_painter/ui.html"
+    },
+    "substance_painter_plugins.close_plugin": {
+      "documented_as": "substance_painter_plugins.close_plugin",
+      "page": "plugins/substance_painter_plugins.html"
+    },
+    "substance_painter_plugins.is_plugin_started": {
+      "documented_as": "substance_painter_plugins.is_plugin_started",
+      "page": "plugins/substance_painter_plugins.html"
+    },
+    "substance_painter_plugins.path": {
+      "documented_as": "substance_painter_plugins.path",
+      "page": "plugins/substance_painter_plugins.html"
+    },
+    "substance_painter_plugins.plugin_module_names": {
+      "documented_as": "substance_painter_plugins.plugin_module_names",
+      "page": "plugins/substance_painter_plugins.html"
+    },
+    "substance_painter_plugins.plugins": {
+      "documented_as": "substance_painter_plugins.plugins",
+      "page": "plugins/substance_painter_plugins.html"
+    },
+    "substance_painter_plugins.reload_plugin": {
+      "documented_as": "substance_painter_plugins.reload_plugin",
+      "page": "plugins/substance_painter_plugins.html"
+    },
+    "substance_painter_plugins.start_plugin": {
+      "documented_as": "substance_painter_plugins.start_plugin",
+      "page": "plugins/substance_painter_plugins.html"
+    },
+    "substance_painter_plugins.startup_module_names": {
+      "documented_as": "substance_painter_plugins.startup_module_names",
+      "page": "plugins/substance_painter_plugins.html"
+    },
+    "substance_painter_plugins.update_sys_path": {
+      "documented_as": "substance_painter_plugins.update_sys_path",
+      "page": "plugins/substance_painter_plugins.html"
     }
   }
 }

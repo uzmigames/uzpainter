@@ -27,7 +27,7 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 # Painter's runtime package: tools/parity/recorder/painter_side.py runs only inside Painter.
-module = ["substance_painter", "substance_painter.*"]
+module = ["substance_painter", "substance_painter.*", "substance_painter_plugins"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

@@ -400,7 +400,8 @@ def test_navigation_records_the_selection_and_the_scoped_modification(
 def test_node_kinds_record_paint_filter_generator_and_instances(
     probe_fake: types.ModuleType, fake: types.ModuleType, tmp_path: Path
 ) -> None:
-    for recording in recorded(probe_fake, fake, KINDS, tmp_path):
+    first, second = recorded(probe_fake, fake, KINDS, tmp_path)
+    for index, recording in enumerate((first, second)):
         types_read = [o["value"] for o in by_call(recording, LS + "Node.get_type")]
         assert types_read == [
             "PaintEffect",
@@ -411,9 +412,42 @@ def test_node_kinds_record_paint_filter_generator_and_instances(
         ]
         source = by_call(recording, LS + "InstanceLayerNode.instance_source")[0]["value"]
         assert source == {"name": "uzp fill", "node_type": "FillLayer"}
+        # Step 17 instantiates in both recordings and r1's instance is saved with the project, so
+        # the instances accumulate by design (SUP-013, decision 296 item 4): s16 holds r1 = 0,
+        # r2 = 1 (the saved instance found again right after reopen, before the second
+        # instantiate), and s20 holds r1 = 1, r2 = 2.
         instances = [o["value"] for o in by_call(recording, LS + "LayerNode.instances")]
-        assert instances[0] == [] and [i["node_type"] for i in instances[1]] == ["InstanceLayer"]
+        assert [len(found) for found in instances] == [index, index + 1]
+        assert {i["node_type"] for found in instances for i in found} <= {"InstanceLayer"}
         assert by_call(recording, LS + "get_selection_type")[0]["value"] == "Properties"
+    saved = by_call(first, LS + "LayerNode.instances")[1]["value"]
+    assert by_call(second, LS + "LayerNode.instances")[0]["value"] == saved
+
+
+def test_an_instance_keeps_its_source_across_save_and_reopen(
+    probe_fake: types.ModuleType, fake: types.ModuleType, tmp_path: Path
+) -> None:
+    """SUP-013: the fake saves the instance-source relation and remaps it to the reloaded nodes'
+    uids, checked directly after one reopen (no second instantiate to hide a loss)."""
+    world = probe_fake.ProbeWorld()
+    with fake.installed(world):
+        layerstack = world.modules[LS.rstrip(".")]
+        project = world.modules["substance_painter.project"]
+        mesh = REPO_ROOT / "parity" / "fixtures" / "meshes" / "plane.obj"
+        project.create(mesh_file_path=str(mesh), settings=project.Settings())
+        stack = world.modules["substance_painter.textureset"].get_active_stack()
+        fill = layerstack.insert_fill(layerstack.InsertPosition.from_textureset_stack(stack))
+        fill.set_name("uzp fill")
+        instance = layerstack.instantiate(layerstack.InsertPosition.below_node(fill), fill)
+        path = (tmp_path / "instance.spp").as_posix()
+        project.save_as(path, project.ProjectSaveMode.Full)
+        project.close()
+        project.open(path)
+        roots = layerstack.get_root_layer_nodes(stack)
+        assert [n.get_type().name for n in roots] == ["FillLayer", "InstanceLayer"]
+        assert roots[1].uid() != instance.uid()  # the fake renumbers on reopen
+        assert roots[1].instance_source().get_name() == "uzp fill"
+        assert [n.uid() for n in roots[0].instances()] == [roots[1].uid()]
 
 
 def test_levels_record_the_class_and_every_field(

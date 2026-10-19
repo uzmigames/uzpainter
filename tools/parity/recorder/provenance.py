@@ -7,7 +7,8 @@ Rules over every `tools/parity/recorder/*.py`:
 3. Every `substance_painter` symbol used — attribute chains on imported `substance_painter`
    modules and their aliases, and dotted `substance_painter.*` names in string constants (the
    instruction vocabulary) — is listed in `documented_symbols.json`, whose entries each name the
-   object of Painter's public Python API documentation (A-PYDOC) that documents them.
+   object of Painter's public Python API documentation (A-PYDOC) that documents them. The same
+   holds for the documented `substance_painter_plugins` module (decision 297).
 4. In files that import `substance_painter`: every attribute read on any other object is either
    a member name of a listed symbol or a member of a builtin Python type in `PYTHON_MEMBERS`,
    and dynamic attribute access (`getattr`, `setattr`, `delattr`, `__import__`) is refused.
@@ -30,7 +31,8 @@ from pathlib import Path
 RECORDER_DIR = Path(__file__).resolve().parent
 SYMBOLS_PATH = RECORDER_DIR / "documented_symbols.json"
 ROOT = "substance_painter"
-SYMBOL_PATTERN = re.compile(r"^substance_painter(\.[A-Za-z_][A-Za-z0-9_]*)+$")
+ROOTS = (ROOT, "substance_painter_plugins")
+SYMBOL_PATTERN = re.compile(r"^substance_painter(_plugins)?(\.[A-Za-z_][A-Za-z0-9_]*)+$")
 BRIDGE_MARKERS = ("mcp",)
 BRIDGE_TEXT = re.compile(
     r"substance[_-]?painter[_-]?mcp|painter[_-]?mcp|mcp[_-]?client", re.IGNORECASE
@@ -82,17 +84,18 @@ def module_bindings(tree: ast.Module) -> tuple[dict[str, str], set[str]]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name == ROOT or alias.name.startswith(ROOT + "."):
+                root = alias.name.split(".")[0]
+                if root in ROOTS:
                     if alias.asname:
                         painter[alias.asname] = alias.name
                     else:
-                        painter[ROOT] = ROOT
+                        painter[root] = root
                 else:
                     others.add(alias.asname or alias.name.split(".")[0])
         elif isinstance(node, ast.ImportFrom) and node.module:
             for alias in node.names:
                 target = alias.asname or alias.name
-                if node.module == ROOT or node.module.startswith(ROOT + "."):
+                if node.module.split(".")[0] in ROOTS:
                     painter[target] = f"{node.module}.{alias.name}"
                 else:
                     others.add(target)

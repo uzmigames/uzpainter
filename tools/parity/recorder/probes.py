@@ -115,15 +115,24 @@ def probe_constants() -> dict[str, Any]:
 
 
 CONSTANTS = probe_constants()
-# With the P22-B blocks of `painter_probes.py` (decision 295: texture sets, channels, project).
-EDIT_CALLS: frozenset[str] = frozenset(CONSTANTS["EDIT_CALLS"]) | frozenset(
-    CONSTANTS["P295_EDIT_CALLS"]
+# With the P22-B blocks of `painter_probes.py` (decision 295: texture sets, channels, project;
+# decision 297: the host modules).
+EDIT_CALLS: frozenset[str] = (
+    frozenset(CONSTANTS["EDIT_CALLS"])
+    | frozenset(CONSTANTS["P295_EDIT_CALLS"])
+    | frozenset(CONSTANTS["HOST_EDIT_CALLS"])
 )
-GETTER_CALLS: frozenset[str] = frozenset(CONSTANTS["GETTER_CALLS"]) | frozenset(
-    CONSTANTS["P295_GETTER_CALLS"]
+GETTER_CALLS: frozenset[str] = (
+    frozenset(CONSTANTS["GETTER_CALLS"])
+    | frozenset(CONSTANTS["P295_GETTER_CALLS"])
+    | frozenset(CONSTANTS["HOST_GETTER_CALLS"])
 )
 INSERT_CALLS: frozenset[str] = frozenset(CONSTANTS["INSERT_CALLS"])
-VALUE_ARGS: dict[str, str] = {**CONSTANTS["VALUE_ARGS"], **CONSTANTS["P295_VALUE_ARGS"]}
+VALUE_ARGS: dict[str, str] = {
+    **CONSTANTS["VALUE_ARGS"],
+    **CONSTANTS["P295_VALUE_ARGS"],
+    **CONSTANTS["HOST_VALUE_ARGS"],
+}
 IMPORT_RESOURCE: str = CONSTANTS["IMPORT_RESOURCE"]
 EVENT_CONNECT: str = CONSTANTS["EVENT_CONNECT"]
 PROJECT_SAVE_AS: str = CONSTANTS["PROJECT_SAVE_AS"]
@@ -136,6 +145,22 @@ RELOAD_MESH: str = CONSTANTS["RELOAD_MESH"]
 RELOAD_RESOURCES: str = CONSTANTS["RELOAD_RESOURCES"]
 SHELVES_ADD: str = CONSTANTS["SHELVES_ADD"]
 GET_NODE_BY_UID = "substance_painter.layerstack.get_node_by_uid"
+# Plugin probes (decision 297): `plugins.path` with `folder` adds a plugin root the host writes
+# under the run's private directory, shared by both recordings; the plugin calls name one of its
+# throwaway modules by `module`.
+PLUGINS_PATH: str = CONSTANTS["PLUGINS_PATH"]
+PROBE_PLUGIN_MODULES: tuple[str, ...] = CONSTANTS["PROBE_PLUGIN_MODULES"]
+PLUGIN_HOOK_LOG: str = CONSTANTS["PLUGIN_HOOK_LOG"]
+PLUGIN_CALLS = frozenset(
+    {
+        CONSTANTS["START_PLUGIN"],
+        CONSTANTS["CLOSE_PLUGIN"],
+        CONSTANTS["RELOAD_PLUGIN"],
+        CONSTANTS["IS_PLUGIN_STARTED"],
+    }
+)
+PLUGIN_FOLDER, PLUGIN_MODULE = "folder", "module"
+PLUGIN_HOOKS = ("start_plugin", "close_plugin", "reload_plugin")
 
 # Step arguments naming an input by input_id; the recorder passes the staged file's path.
 INPUT_ARGS = {ps.CREATE: "mesh", IMPORT_RESOURCE: "image", RELOAD_MESH: "mesh"}
@@ -275,6 +300,7 @@ def check_input_arg(step: Step, inputs: dict[str, Path]) -> None:
             f"step {step.step}: `Shelves.add` takes `{SHELF_FOLDER}` (a plain folder name) and "
             f"`{SHELF_INPUTS}` (inputs with a path, copied into it)"
         )
+    check_plugin_args(step)
     rewrite = [step.args.get(key) for key in REWRITE_ARGS]
     if step.call == RELOAD_RESOURCES and any(rewrite) and not all(r in inputs for r in rewrite):
         raise RecorderError(
@@ -286,6 +312,18 @@ def check_input_arg(step: Step, inputs: dict[str, Path]) -> None:
         return  # a reload of a file that does not exist (the failing path)
     if key is not None and step.args.get(key) not in inputs:
         raise RecorderError(f"step {step.step}: `{key}` must name an input with a path")
+
+
+def check_plugin_args(step: Step) -> None:
+    """A plugin root is a plain folder name; a plugin call names a probe module (decision 297)."""
+    folder = step.args.get(PLUGIN_FOLDER)
+    if step.call == PLUGINS_PATH and folder is not None and not is_plain_name(folder):
+        raise RecorderError(f"step {step.step}: `{PLUGIN_FOLDER}` must be a plain folder name")
+    if step.call in PLUGIN_CALLS and step.args.get(PLUGIN_MODULE) not in PROBE_PLUGIN_MODULES:
+        raise RecorderError(
+            f"step {step.step}: `{PLUGIN_MODULE}` must name a probe plugin module "
+            f"({', '.join(PROBE_PLUGIN_MODULES)})"
+        )
 
 
 def check_create_args(step: Step, inputs: dict[str, Path]) -> None:
@@ -445,6 +483,38 @@ def shelf_folder(step: ProbeStep, staged: dict[str, Path], work_dir: Path) -> Pa
     return folder
 
 
+def plugin_module_source(name: str) -> str:
+    """A throwaway plugin module: each hook (and the import) appends a line to the file the
+    environment variable names, which the probe reads back."""
+    lines = [
+        "import os",
+        "",
+        "",
+        "def _hook(entry):",
+        f"    path = os.environ.get({PLUGIN_HOOK_LOG!r})",
+        "    if path:",
+        "        with open(path, 'a', encoding='utf-8') as log:",
+        f"            log.write({name!r} + '.' + entry + '\\n')",
+        "",
+        "",
+        *(f"def {hook}():\n    _hook({hook!r})\n\n" for hook in PLUGIN_HOOKS),
+        "_hook('import')",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def plugin_root(step: ProbeStep, work_dir: Path) -> Path:
+    """The probe's plugin root (`plugins/`, `startup/`, `modules/`) under the run's private
+    directory, the same for both recordings, with the throwaway modules written in it."""
+    root: Path = work_dir.parents[1] / "plugin-roots" / str(step.args[PLUGIN_FOLDER])
+    for sub in ("plugins", "startup", "modules"):
+        (root / sub).mkdir(parents=True, exist_ok=True)
+    plugin, startup = PROBE_PLUGIN_MODULES
+    (root / "plugins" / f"{plugin}.py").write_text(plugin_module_source(plugin), encoding="utf-8")
+    (root / "startup" / f"{startup}.py").write_text(plugin_module_source(startup), encoding="utf-8")
+    return root
+
+
 def run_step(
     session: PainterSession, step: ProbeStep, staged: dict[str, Path], work_dir: Path
 ) -> dict[str, Any]:
@@ -457,6 +527,8 @@ def run_step(
         resolved[WORK_FILE] = (work_dir / step.args[WORK_FILE]).as_posix()
     if step.call == SHELVES_ADD:
         resolved["shelf_path"] = shelf_folder(step, staged, work_dir).as_posix()
+    if step.call == PLUGINS_PATH and PLUGIN_FOLDER in step.args:
+        resolved["plugin_root"] = plugin_root(step, work_dir).as_posix()
     if step.call == RELOAD_RESOURCES and REWRITE_ARGS[0] in step.args:
         target, source = (step.args[name] for name in REWRITE_ARGS)
         shutil.copyfile(staged[source], staged[target])

@@ -1,0 +1,14 @@
+{
+  "id": 297,
+  "slug": "297-p22b-host-modules",
+  "title": "P22-B for the host modules: four requests exercise 64 pending symbols, and 19 take another evidence route",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.24_python-api-facade",
+    "phase3.5_embree-bakers",
+    "phase2.1_preview-display-presets",
+    "phase2.3_realtime-preview"
+  ],
+  "supersededBy": null
+}

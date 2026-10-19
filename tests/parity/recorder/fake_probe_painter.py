@@ -16,7 +16,9 @@ from __future__ import annotations
 
 import datetime
 import enum
+import importlib
 import json
+import sys
 import types
 import uuid
 from collections.abc import Callable, Iterator
@@ -910,6 +912,7 @@ def extend_modules(world: ProbeWorld) -> None:
     extend_async(world, events)
     extend_host(world, events)
     extend_p295(world, events)
+    extend_host_modules(world, events)
 
     root = modules["substance_painter"]
     root.layerstack = modules["substance_painter.layerstack"]
@@ -1402,8 +1405,9 @@ def extend_layerstack_p22b(
     sources, instances, filter and generator effects, `levels` and `Color.sRGB`/`Color.value`.
 
     Authored rules of the fake: selection and collapse live in the session (lost on reopen), an
-    instance forgets its source on reopen, `get_material_source` raises (no fill of the fake is in
-    material mode), and the search finds one filter or generator for a query naming its usage.
+    instance keeps its source across save and reopen (SUP-013), `get_material_source` raises (no
+    fill of the fake is in material mode), and the search finds one filter or generator for a query
+    naming its usage.
     """
     modules = world.modules
     layerstack = modules["substance_painter.layerstack"]
@@ -1476,6 +1480,41 @@ def extend_layerstack_p22b(
         node = place(position, NodeType.InstanceLayer, None)
         instance_sources[node.node_uid] = layer.node_uid
         return node
+
+    # The instance-source relation is saved with the project by tree place (container, index),
+    # and remapped to the reloaded nodes' new uids once the tree is loaded (SUP-013).
+    def place_of(item: Item) -> list[Any]:
+        path: list[Any] = []
+        while True:
+            path.insert(0, [item.container, world.siblings(item).index(item)])
+            if item.parent is None:
+                return path
+            item = item.parent
+
+    def item_at(path: list[Any]) -> Item:
+        item: Item = world.roots[path[0][1]]
+        for container, index in path[1:]:
+            item = item.children[container][index]
+        return item
+
+    snapshot_before, restore_before = world.snapshot, world.restore
+
+    def snapshot() -> dict[str, Any]:
+        data: dict[str, Any] = snapshot_before()
+        data["instance_sources"] = [
+            [place_of(world.item(uid)), place_of(world.item(source))]
+            for uid, source in sorted(instance_sources.items())
+            if uid in world.items and source in world.items
+        ]
+        return data
+
+    def restore(data: dict[str, Any]) -> None:
+        restore_before(data)
+        instance_sources.clear()
+        for instance, source in data.get("instance_sources", []):
+            instance_sources[item_at(instance).uid] = item_at(source).uid
+
+    world.snapshot, world.restore = snapshot, restore  # type: ignore[method-assign]
 
     def insert_filter_effect(position: Any, filter_id: Any) -> Any:
         return place(position, None, NodeType.FilterEffect)
@@ -1559,3 +1598,269 @@ def extend_layerstack_p22b(
     Color.value_raw = property(color_value_raw)
     Color.sRGB = property(color_srgb, set_color_srgb)
     Color.value = property(color_value)
+
+
+# --- Host-module probes (decision 297) ------------------------------------------------------
+
+
+class ResourceNotFoundError(Exception):
+    pass
+
+
+class ServiceNotFoundError(Exception):
+    pass
+
+
+class TextureStateEventAction(enum.Enum):
+    ADD = 0
+    UPDATE = 1
+    REMOVE = 2
+
+
+class Usage(enum.Enum):
+    """The fake's resource usages, with the two the base fake does not model."""
+
+    ENVIRONMENT = 1
+    TEXTURE = 2
+    COLOR_LUT = 3
+    GENERATOR = 4
+    SMART_MATERIAL = 5
+
+
+# The fake's authored answers of `js.evaluate` (stand-ins for the JavaScript API's values).
+JS_ANSWERS = {
+    "alg.version.painter": "12.1.5",
+    "alg.mapexport.channelIdentifiers()": ["basecolor", "height", "normal"],
+    "alg.mapexport.convertedMapIdentifiers()": ["normal", "diffuse"],
+    "alg.mapexport.meshMapIdentifiers()": ["normal_base", "ambient_occlusion"],
+}
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+
+def extend_host_modules(world: ProbeWorld, events: dict[str, type]) -> None:
+    """logging, exception, js, plugins, strong connections, texture-state events and their
+    throttling, the project resource list, resource ids from a project name, the shelf refresh
+    and reload errors (the host-module probes of decision 297). The fake's rules are authored:
+    GENERATOR and SMART_MATERIAL refuse any file, a reload of a listed resource whose file is not
+    a PNG reports an error, and a TextureStateEvent is dispatched for each channel `set_source`
+    (UPDATE) and for each project channel when a project opens (ADD) or closes (REMOVE)."""
+    modules = world.modules
+    root = modules["substance_painter"]
+    resource = modules["substance_painter.resource"]
+    project = modules["substance_painter.project"]
+    display = modules["substance_painter.display"]
+    event = modules["substance_painter.event"]
+    layerstack = modules["substance_painter.layerstack"]
+    world.log_lines = []
+    world.throttling = datetime.timedelta(seconds=1)
+    world.project_resources = {}  # url -> (resource id, imported file)
+    world.cache_key = 0
+
+    def log(severity: int, channel: str, message: str) -> None:
+        if severity not in range(6):
+            raise ValueError(f"unknown severity {severity!r}")
+        world.log_lines.append((severity, channel, message))
+
+    logging = module(
+        "substance_painter.logging",
+        INFO=0,
+        WARNING=1,
+        ERROR=2,
+        DBG_INFO=3,
+        DBG_WARNING=4,
+        DBG_ERROR=5,
+        log=log,
+        info=lambda message: log(0, "Python", message),
+        warning=lambda message: log(1, "Python", message),
+        error=lambda message: log(2, "Python", message),
+    )
+    exception = module(
+        "substance_painter.exception",
+        ProjectError=ProjectError,
+        ResourceNotFoundError=ResourceNotFoundError,
+        ServiceNotFoundError=ServiceNotFoundError,
+    )
+    for name, mod in (("logging", logging), ("exception", exception)):
+        modules[f"substance_painter.{name}"] = mod
+        setattr(root, name, mod)
+
+    evaluate_before = modules["substance_painter.js"].evaluate
+
+    def evaluate(code: str) -> Any:
+        if code == "alg.project.isOpen()":
+            return world.project_open
+        if code == "alg.project.name()":
+            return project.name() if world.project_open else None
+        if code in JS_ANSWERS:
+            return JS_ANSWERS[code]
+        return evaluate_before(code)
+
+    modules["substance_painter.js"].evaluate = evaluate
+
+    # Events: the base class, strong connections, texture-state events and their throttling.
+    class Event:
+        pass
+
+    class TextureStateEvent(Event):
+        def __init__(
+            self, action: Any, stack_id: int, tile_indices: Any, channel_type: Any, cache_key: int
+        ) -> None:
+            self.action, self.stack_id, self.tile_indices = action, stack_id, tile_indices
+            self.channel_type, self.cache_key = channel_type, cache_key
+
+        @staticmethod
+        def cache_key_invalidation_throttling_period() -> datetime.timedelta:
+            period: datetime.timedelta = world.throttling
+            return period
+
+        @staticmethod
+        def set_cache_key_invalidation_throttling_period(period: datetime.timedelta) -> None:
+            if period < datetime.timedelta(milliseconds=500):
+                raise ValueError("the period can't be lower than 500ms")
+            world.throttling = period
+
+    events["TextureStateEvent"] = TextureStateEvent
+    event.Event, event.TextureStateEvent = Event, TextureStateEvent
+    event.TextureStateEventAction = TextureStateEventAction
+    event.Dispatcher.connect_strong = event.Dispatcher.connect
+
+    def texture_states(action: TextureStateEventAction, channels: Any) -> None:
+        for channel in sorted(channels, key=lambda c: c.name):
+            world.cache_key += 1
+            world.emit(TextureStateEvent(action, 1, (0, 0), channel, world.cache_key))
+
+    set_source_before = layerstack.FillLayerNode.set_source
+
+    def set_source(self: Any, channel: Any, source: Any) -> Any:
+        made = set_source_before(self, channel, source)
+        if channel is not None:
+            texture_states(TextureStateEventAction.UPDATE, [channel])
+        return made
+
+    layerstack.FillLayerNode.set_source = set_source
+    close_before, open_before = project.close, project.open
+
+    def close() -> None:
+        world.require_open()
+        texture_states(TextureStateEventAction.REMOVE, world.channels)
+        close_before()
+
+    def open_(path: str) -> None:
+        open_before(path)
+        texture_states(TextureStateEventAction.ADD, world.channels)
+
+    project.close, project.open = close, open_
+
+    # Resources: usages, project resources, ids from a project name, the environment check.
+    class ShelvesListFilter:
+        def __init__(self, shelves: list[Any]) -> None:
+            self.shelves = shelves
+
+    class ReloadedResourceError:
+        def __init__(self, resource_id: Any, error_msg: str) -> None:
+            self.resource_id, self.error_msg = resource_id, error_msg
+
+    resource_id = resource.ResourceID
+
+    def import_project_resource(path: str, usage: Usage) -> Any:
+        world.require_open()
+        if usage in (Usage.GENERATOR, Usage.SMART_MATERIAL):
+            raise ValueError(f"the file is not a valid {usage.name} resource")
+        stem = Path(path).stem
+        texture = usage == Usage.TEXTURE
+        rid = resource_id(stem + ".image", image=True) if texture else resource_id(stem)
+        world.project_resources[rid.url()] = (rid, path)
+        return resource.Resource(rid, usage)
+
+    def list_project_resources() -> list[Any]:
+        world.require_open()
+        return [rid for rid, _ in world.project_resources.values()]
+
+    def from_project(name: str, version: str | None = None) -> Any:
+        return resource_id(name, "project0", False, version)
+
+    def refresh_all() -> None:
+        for shelf in resource.Shelves.all():
+            shelf.refresh()
+
+    resource_id.from_project = staticmethod(from_project)
+    resource.Usage = Usage
+    resource.ShelvesListFilter = ShelvesListFilter
+    resource.import_project_resource = import_project_resource
+    resource.list_project_resources = list_project_resources
+    resource.Shelves.refresh_all = staticmethod(refresh_all)
+    environment_before = display.set_environment_resource
+
+    def set_environment_resource(rid: Any) -> None:
+        if rid.url() not in world.project_resources:
+            raise ResourceNotFoundError(f"the environment map {rid.url()} is not found")
+        environment_before(rid)
+
+    display.set_environment_resource = set_environment_resource
+    reload_before = resource.reload_modified_resources_async
+
+    def not_an_image(rid: Any) -> bool:
+        known = world.project_resources.get(rid.url())
+        return known is not None and not Path(known[1]).read_bytes().startswith(PNG_SIGNATURE)
+
+    def reload_modified_resources_async(resource_filter: Any) -> bool:
+        listed = isinstance(resource_filter, ResourcesListFilter)
+        broken = [rid for rid in resource_filter.resources if not_an_image(rid)] if listed else []
+        if not broken or world.reloading:
+            return bool(reload_before(resource_filter))
+        world.reloading = True
+        world.emit(events["ReloadResourcesStarted"](resource_filter))
+        errors = [ReloadedResourceError(rid, "the file is not a valid image") for rid in broken]
+
+        def finish() -> None:
+            world.reloading = False
+            world.emit(events["ReloadResourcesEnded"](resource_filter, [], errors))
+
+        world.deferred.append(finish)
+        return True
+
+    resource.reload_modified_resources_async = reload_modified_resources_async
+
+    # substance_painter_plugins over the documented plugins/, startup/ and modules/ folders.
+    roots: list[str] = []
+    started: dict[str, types.ModuleType] = {}
+
+    def update_sys_path() -> None:
+        for entry in roots:
+            for sub in ("plugins", "startup", "modules"):
+                folder = str(Path(entry) / sub)
+                if folder not in sys.path:
+                    sys.path.append(folder)
+
+    def names(sub: str) -> list[str]:
+        return sorted(f.stem for entry in roots for f in (Path(entry) / sub).glob("*.py"))
+
+    def start_plugin(mod: types.ModuleType) -> None:
+        if mod.__name__ not in started:
+            mod.start_plugin()
+            started[mod.__name__] = mod
+
+    def close_plugin(mod: types.ModuleType, gc_collect: bool = True) -> None:
+        if started.pop(mod.__name__, None) is not None:
+            mod.close_plugin()
+
+    def reload_plugin(mod: types.ModuleType) -> types.ModuleType:
+        close_plugin(mod)
+        if hasattr(mod, "reload_plugin"):
+            mod.reload_plugin()
+        reloaded = importlib.reload(mod)
+        start_plugin(reloaded)
+        return reloaded
+
+    modules["substance_painter_plugins"] = module(
+        "substance_painter_plugins",
+        path=roots,
+        plugins=started,
+        update_sys_path=update_sys_path,
+        plugin_module_names=lambda: names("plugins"),
+        startup_module_names=lambda: names("startup"),
+        start_plugin=start_plugin,
+        close_plugin=close_plugin,
+        reload_plugin=reload_plugin,
+        is_plugin_started=lambda mod: mod.__name__ in started,
+    )

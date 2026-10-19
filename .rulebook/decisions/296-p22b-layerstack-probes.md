@@ -64,6 +64,12 @@ The model panel was not consulted. Each route follows the text of decisions 112 
    - (b) **`layerstack.EffectNode` is a documented alias.** It is settled by the exact compared readbacks `s47` to `s53/EffectNode` of `phase1-layer-navigation`, the `isinstance` checks on every node kind. The trace cannot attribute an `isinstance` check, so when that golden is admitted, its manifest entry cites the golden by hand. The conformance check then takes this one entry from the compared output instead of the trace (decision 112 §1 and §2 apply to every other symbol).
    - (c) **Pending symbols reachable only through release gaps** are `NodeType.PaintEffect`, `FilterEffect`, `GeneratorEffect` and `InstanceLayer`, and `InstanceLayerNode.instance_source`. `phase1-layer-node-kinds` records Painter's behaviour for them. UzPainter's replay refuses the calls that create their nodes, so the replay does not settle them. They stay `pending-evidence` until the release gaps of `insert_paint`, `instantiate`, `insert_filter_effect` and `insert_generator_effect` close and that golden's replay passes. Release G5 treats them as open, as decision 112 §3 already says.
 
+4. **Amendment (SUP-013, 2026-10-19): `phase1-layer-node-kinds` changes the saved project on purpose.** Step 17 (`instantiate`) is a probe step, so it runs in both recordings, and r1's instance is saved with the project. The instances accumulate. That is the creation and persistence this request measures:
+   - `LayerNode.instances` of the fill reads 0 at s16 and 1 at s20 in r1. In r2 it reads 1 at s16 and 2 at s20. r2's s16 is the saved instance found again right after reopen, before the second instantiate can hide a loss.
+   - `InstanceLayerNode.instance_source` at s19 stays the original fill.
+   - The fake used to keep the relation only by uid, and lost it at reopen. That hid the accumulation: both recordings read 0 then 1. The fake now saves the relation by tree place and remaps it after the tree loads. `test_an_instance_keeps_its_source_across_save_and_reopen` checks one reopen directly.
+   - The stability classifier compares the same output across r1 and r2. These differences are the programmed state change, not `oracle_instability`, and no global normalisation may erase the instances. Repeatability is checked by comparing independent cycles in the same condition.
+
 ## Alternatives Considered
 
 - **A Property probe through `BakingParameters.common()`.** Rejected. It repeats the recorded baking defaults, and the UzPainter replay refuses it.

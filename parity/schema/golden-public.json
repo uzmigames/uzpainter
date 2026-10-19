@@ -189,7 +189,7 @@
       },
       "else": {
         "properties": {
-          "steps": { "items": { "properties": { "call": { "pattern": "^substance_painter(\\.[A-Za-z_][A-Za-z0-9_]*)+$" } } } }
+          "steps": { "items": { "properties": { "call": { "pattern": "^substance_painter(_plugins)?(\\.[A-Za-z_][A-Za-z0-9_]*)+$" } } } }
         }
       }
     },

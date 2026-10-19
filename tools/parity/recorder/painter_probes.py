@@ -18,8 +18,10 @@ from __future__ import annotations
 import dataclasses
 import datetime
 import enum
+import importlib
 import json
 import os
+import sys
 import threading
 import time
 import uuid
@@ -32,12 +34,16 @@ import substance_painter.colormanagement
 import substance_painter.display
 import substance_painter.event
 import substance_painter.export
+import substance_painter.js
 import substance_painter.layerstack
 import substance_painter.levels
+import substance_painter.logging
 import substance_painter.project
 import substance_painter.resource
 import substance_painter.source
 import substance_painter.textureset
+import substance_painter.ui
+import substance_painter_plugins
 
 if TYPE_CHECKING:
     # At run time these names come from the copy of `painter_side.py`'s namespace.
@@ -46,6 +52,7 @@ if TYPE_CHECKING:
         CHANNEL_FORMATS,
         OPERATIONS,
         TONE_MAPPINGS,
+        UI_MODES,
         channel_type,
         color_of,
         create_project,
@@ -463,6 +470,10 @@ BITMAP_COLOR_SPACES = {
 RESOURCE_USAGES = {
     "TEXTURE": lambda: substance_painter.resource.Usage.TEXTURE,
     "ENVIRONMENT": lambda: substance_painter.resource.Usage.ENVIRONMENT,
+    # Host-module probes (decision 297).
+    "COLOR_LUT": lambda: substance_painter.resource.Usage.COLOR_LUT,
+    "GENERATOR": lambda: substance_painter.resource.Usage.GENERATOR,
+    "SMART_MATERIAL": lambda: substance_painter.resource.Usage.SMART_MATERIAL,
 }
 
 # textureset.MeshMapUsage members.
@@ -517,6 +528,8 @@ RESOURCE_FILTERS = {
     "ResourcesListFilter": lambda: substance_painter.resource.ResourcesListFilter,
     "ResourcesUsedByProjectFilter": lambda: substance_painter.resource.ResourcesUsedByProjectFilter,
     "SessionFilter": lambda: substance_painter.resource.SessionFilter,
+    # Host-module probes (decision 297): takes the shelves named by `shelves`.
+    "ShelvesListFilter": lambda: substance_painter.resource.ShelvesListFilter,
 }
 
 # layerstack.SelectionType members (P22-B, decision 296).
@@ -526,6 +539,98 @@ SELECTION_TYPES = {
     "GeometryMask": lambda: substance_painter.layerstack.SelectionType.GeometryMask,
     "Properties": lambda: substance_painter.layerstack.SelectionType.Properties,
 }
+
+# --- Host-module probes (decision 297; phase1.24 item 3.4, P22-B) ---------------------------
+# application, logging, js and ui; event (strong connections, the base class, texture-state
+# events and their throttling period); resource (project resources, resource ids, shelves,
+# reload filters); substance_painter_plugins on throwaway modules the host writes in the run's
+# private directory. Every name of this block is listed in HOST_EDIT_CALLS or HOST_GETTER_CALLS.
+APPLICATION_VERSION = "substance_painter.application.version"
+APPLICATION_VERSION_INFO = "substance_painter.application.version_info"
+LOG_INFO = "substance_painter.logging.info"
+LOG_WARNING = "substance_painter.logging.warning"
+LOG_ERROR = "substance_painter.logging.error"
+LOG = "substance_painter.logging.log"
+JS_EVALUATE = "substance_painter.js.evaluate"
+UI_CURRENT_MODE = "substance_painter.ui.get_current_mode"
+UI_SWITCH_MODE = "substance_painter.ui.switch_to_mode"
+EVENT_CONNECT_STRONG = "substance_painter.event.Dispatcher.connect_strong"
+SET_THROTTLING_PERIOD = (
+    "substance_painter.event.TextureStateEvent.set_cache_key_invalidation_throttling_period"
+)
+LIST_PROJECT_RESOURCES = "substance_painter.resource.list_project_resources"
+RESOURCE_FROM_PROJECT = "substance_painter.resource.ResourceID.from_project"
+RESOURCE_FROM_URL = "substance_painter.resource.ResourceID.from_url"
+SHELVES_REFRESH_ALL = "substance_painter.resource.Shelves.refresh_all"
+SHELVES_REMOVE = "substance_painter.resource.Shelves.remove"
+PLUGINS_PATH = "substance_painter_plugins.path"
+PLUGINS_UPDATE_SYS_PATH = "substance_painter_plugins.update_sys_path"
+PLUGIN_MODULE_NAMES = "substance_painter_plugins.plugin_module_names"
+STARTUP_MODULE_NAMES = "substance_painter_plugins.startup_module_names"
+START_PLUGIN = "substance_painter_plugins.start_plugin"
+CLOSE_PLUGIN = "substance_painter_plugins.close_plugin"
+RELOAD_PLUGIN = "substance_painter_plugins.reload_plugin"
+IS_PLUGIN_STARTED = "substance_painter_plugins.is_plugin_started"
+STARTED_PLUGINS = "substance_painter_plugins.plugins"
+
+HOST_EDIT_CALLS = (
+    "substance_painter.logging.info",
+    "substance_painter.logging.warning",
+    "substance_painter.logging.error",
+    "substance_painter.logging.log",
+    "substance_painter.ui.switch_to_mode",
+    "substance_painter.event.Dispatcher.connect_strong",
+    "substance_painter.event.TextureStateEvent.set_cache_key_invalidation_throttling_period",
+    "substance_painter.resource.Shelves.refresh_all",
+    "substance_painter.resource.Shelves.remove",
+    "substance_painter_plugins.path",
+    "substance_painter_plugins.update_sys_path",
+    "substance_painter_plugins.start_plugin",
+    "substance_painter_plugins.close_plugin",
+    "substance_painter_plugins.reload_plugin",
+)
+HOST_GETTER_CALLS = (
+    "substance_painter.application.version",
+    "substance_painter.application.version_info",
+    "substance_painter.logging.INFO",
+    "substance_painter.logging.WARNING",
+    "substance_painter.logging.ERROR",
+    "substance_painter.logging.DBG_INFO",
+    "substance_painter.logging.DBG_WARNING",
+    "substance_painter.logging.DBG_ERROR",
+    "substance_painter.js.evaluate",
+    "substance_painter.ui.get_current_mode",
+    "substance_painter.resource.list_project_resources",
+    "substance_painter.resource.ResourceID.from_project",
+    "substance_painter.resource.ResourceID.from_url",
+    "substance_painter_plugins.path",
+    "substance_painter_plugins.plugin_module_names",
+    "substance_painter_plugins.startup_module_names",
+    "substance_painter_plugins.is_plugin_started",
+    "substance_painter_plugins.plugins",
+)
+# `plugins.path` with `folder` appends the probe's plugin root; without it, reads.
+HOST_VALUE_ARGS = {"substance_painter_plugins.path": "folder"}
+
+# logging severities, each read back or passed to `log` by name.
+LOG_SEVERITIES = {
+    "INFO": lambda: substance_painter.logging.INFO,
+    "WARNING": lambda: substance_painter.logging.WARNING,
+    "ERROR": lambda: substance_painter.logging.ERROR,
+    "DBG_INFO": lambda: substance_painter.logging.DBG_INFO,
+    "DBG_WARNING": lambda: substance_painter.logging.DBG_WARNING,
+    "DBG_ERROR": lambda: substance_painter.logging.DBG_ERROR,
+}
+# Event classes a strong connection may name besides EVENT_CLASSES.
+HOST_EVENT_CLASSES = {
+    "Event": lambda: substance_painter.event.Event,
+    "TextureStateEvent": lambda: substance_painter.event.TextureStateEvent,
+}
+# The throwaway plugin modules (the host writes them; RECORDER.md 9) and the environment variable
+# naming the file their hooks append to.
+PROBE_PLUGIN_MODULES = ("uzp_probe_plugin", "uzp_probe_startup")
+PLUGIN_HOOK_LOG = "UZP_PROBE_PLUGIN_LOG"
+NEWLINE = chr(10)
 
 
 def raised(error: Exception) -> dict[str, str]:
@@ -976,6 +1081,8 @@ def resource_filter(args: dict[str, Any]) -> Any:
     kind = member(RESOURCE_FILTERS, "reload filter", args["filter"])
     if args["filter"] == "ResourcesListFilter":
         return kind([PROBE_RESOURCES[int(step)] for step in args["resource_steps"]])
+    if args["filter"] == "ShelvesListFilter":  # decision 297
+        return kind([shelf_named(str(name)) for name in args["shelves"]])
     return kind()
 
 
@@ -1234,6 +1341,8 @@ def edit(step: int, call: str, args: dict[str, Any], resolved: dict[str, Any]) -
     """Apply one edit call; returns what the documented call returned."""
     if call in P295_EDIT_CALLS or call in P295_VALUE_ARGS:
         return p295_edit(call, args)
+    if call in HOST_EDIT_CALLS:  # decision 297
+        return host_edit(step, call, args, resolved)
     layerstack = substance_painter.layerstack
     if call == INSERT_FILL:
         return layerstack.insert_fill(insert_position(args))
@@ -1367,6 +1476,8 @@ def read(call: str, args: dict[str, Any]) -> Any:
     """Evaluate one readback call; returns the raw documented value."""
     if call in P295_GETTER_CALLS:
         return p295_read(call, args)
+    if call in HOST_GETTER_CALLS:  # decision 297
+        return host_read(call, args)
     if call == ROOT_LAYERS:
         stack = substance_painter.textureset.get_active_stack()
         return [tree(node) for node in substance_painter.layerstack.get_root_layer_nodes(stack)]
@@ -1538,6 +1649,25 @@ def active_texture_set() -> Any:
     return substance_painter.textureset.get_active_stack().material()
 
 
+def call_form(attribute: Any) -> dict[str, Any]:
+    """How a TextureSet member documented as a property reads (SUP-012): whether the attribute
+    is callable or a string, the value through the form that works (the call when callable, else
+    the attribute), and the other form's outcome when it is the call of a non-callable. The
+    python-doc labels `name`, `original_name` and `description` as properties while its own
+    examples, and the pipeline scripts Painter ran, call `name()`; the recording settles it."""
+    callable_ = callable(attribute)
+    form: dict[str, Any] = {"callable": callable_, "is_str": isinstance(attribute, str)}
+    if callable_:
+        return {"value": attempt(attribute), "form": form}
+    form["called"] = attempt(attribute)
+    return {"value": describe(attribute), "form": form}
+
+
+def texture_set_name(texture_set: Any) -> Any:
+    """`TextureSet.name` through the form Painter offers (`call_form`)."""
+    return call_form(texture_set.name)
+
+
 def channel_record(channel: Any) -> dict[str, Any]:
     """A `Channel` as its documented type, format and label."""
     return {
@@ -1622,16 +1752,20 @@ def p295_read(call: str, args: dict[str, Any]) -> Any:
         stack = textureset.get_active_stack()
         return channel_record(stack.get_channel(channel_type(args["channel"])))
     if call == P295_FROM_NAME:
-        return {"texture_set": textureset.TextureSet.from_name(str(args["texture_set"])).name()}
+        return {
+            "texture_set": texture_set_name(
+                textureset.TextureSet.from_name(str(args["texture_set"]))
+            )
+        }
     if call == P295_ORIGINAL_NAME:
-        return active_texture_set().original_name
+        return call_form(active_texture_set().original_name)
     if call == P295_DESCRIPTION:
-        return active_texture_set().description
+        return call_form(active_texture_set().description)
     if call == P295_IS_LAYERED:
         return active_texture_set().is_layered_material()
     if call == P295_GET_ACTIVE_STACK:
         stack = textureset.get_active_stack()
-        return {"texture_set": stack.material().name(), "stack": stack.name()}
+        return {"texture_set": texture_set_name(stack.material()), "stack": stack.name()}
     if call == P295_METADATA_LIST:
         return project.Metadata(str(args["context"])).list()
     if call == P295_METADATA_GET:
@@ -1644,10 +1778,10 @@ def p295_read(call: str, args: dict[str, Any]) -> Any:
 
 
 def is_read(call: str, args: dict[str, Any]) -> bool:
-    values = {**VALUE_ARGS, **P295_VALUE_ARGS}
+    values = {**VALUE_ARGS, **P295_VALUE_ARGS, **HOST_VALUE_ARGS}
     if call in values:
         return values[call] not in args
-    return call in GETTER_CALLS or call in P295_GETTER_CALLS
+    return call in GETTER_CALLS or call in P295_GETTER_CALLS or call in HOST_GETTER_CALLS
 
 
 def probe_step(args: dict[str, Any]) -> dict[str, Any]:
@@ -1888,7 +2022,7 @@ def probe_finish(args: dict[str, Any]) -> dict[str, Any]:
         substance_painter.application.enable_engine_computations(True)
         ENGINE["disabled_by_probe"] = False
     events_disconnect(args)
-    return {"engine_reenabled": reenabled}
+    return {"engine_reenabled": reenabled, **host_finish()}
 
 
 def probe_cleanup(args: dict[str, Any]) -> dict[str, Any]:
@@ -1899,7 +2033,7 @@ def probe_cleanup(args: dict[str, Any]) -> dict[str, Any]:
         removed[name] = attempt(partial(substance_painter.resource.Shelves.remove, name))
     SHELVES_ADDED.clear()
     SHELF_CRAWLS.clear()
-    return {"removed": removed}
+    return {"removed": removed, **host_cleanup()}
 
 
 def timing_ms() -> float:
@@ -1954,6 +2088,285 @@ def timing_take(args: dict[str, Any]) -> dict[str, Any]:
         "poll_count": TIMING["count"],
         "edition_entered_ms": TIMING["entered_ms"],
     }
+
+
+# --- Host-module probes (decision 297) --------------------------------------------------------
+# Strong connections by event name (Painter never drops them: `probe_finish` disconnects them),
+# the throttling period read before a probe first set it (restored by `probe_finish`), and the
+# plugin roots, modules and hook log of the plugin probes (removed by `probe_cleanup`).
+STRONG_CALLBACKS: dict[str, Any] = {}
+THROTTLING: dict[str, Any] = {"before": None, "set": False}
+PLUGIN_STATE: dict[str, Any] = {"roots": [], "modules": {}, "log": None}
+
+
+def strong_class(name: str) -> Any:
+    if name in HOST_EVENT_CLASSES:
+        return member(HOST_EVENT_CLASSES, "event", name)
+    return member(EVENT_CLASSES, "event", name)
+
+
+def dispatched_name(event: Any) -> str:
+    """The documented class of a dispatched event (the subclasses first, then the base)."""
+    for name in (*EVENT_CLASSES, "TextureStateEvent", "Event"):
+        if isinstance(event, strong_class(name)):
+            return name
+    return "unlisted"
+
+
+def strong_callback(name: str) -> Callable[[Any], None]:
+    def callback(event: Any) -> None:
+        entry: dict[str, Any] = {
+            "event": name,
+            "connection": "strong",
+            "dispatched": dispatched_name(event),
+            **project_state(),
+        }
+        if CURRENT["step"] is not None:
+            entry["during_step"] = CURRENT["step"]
+        if isinstance(event, substance_painter.event.TextureStateEvent):
+            entry["action_argument"] = describe(event.action)
+            entry["stack_id_argument"] = event.stack_id
+            entry["tile_indices_argument"] = describe(event.tile_indices)
+            entry["channel_type_argument"] = describe(event.channel_type)
+            entry["cache_key_argument"] = event.cache_key
+        EVENT_LOG.append(entry)
+
+    return callback
+
+
+def connect_strong(args: dict[str, Any]) -> dict[str, Any]:
+    """`Dispatcher.connect_strong` of each named event; a name connected again is disconnected
+    first, so every recording makes the call."""
+    for name in args["events"]:
+        cls = strong_class(name)
+        if name in STRONG_CALLBACKS:
+            substance_painter.event.DISPATCHER.disconnect(cls, STRONG_CALLBACKS[name])
+            del STRONG_CALLBACKS[name]
+        callback = strong_callback(name)
+        substance_painter.event.DISPATCHER.connect_strong(cls, callback)
+        STRONG_CALLBACKS[name] = callback
+    return {"connected_strong": sorted(STRONG_CALLBACKS)}
+
+
+def set_throttling(args: dict[str, Any]) -> Any:
+    """`set_cache_key_invalidation_throttling_period` (global to the session): the period read
+    before the first set of the golden is kept, and `probe_finish` sets it again."""
+    texture_state = substance_painter.event.TextureStateEvent
+    if not THROTTLING["set"]:
+        THROTTLING["before"] = optional(texture_state.cache_key_invalidation_throttling_period)
+        THROTTLING["set"] = True
+    period = datetime.timedelta(milliseconds=float(args["milliseconds"]))
+    return texture_state.set_cache_key_invalidation_throttling_period(period)
+
+
+def sorted_described(values: Any) -> list[Any]:
+    return sorted((describe(v) for v in values), key=lambda e: json.dumps(e, sort_keys=True))
+
+
+def resource_id(step: int, value: Any) -> Any:
+    """A resource id a probe built, kept by step number for later steps (`resource_step`)."""
+    PROBE_RESOURCES[step] = value
+    return value
+
+
+def refresh_all_shelves(step: int) -> Any:
+    """`Shelves.refresh_all`: every shelf's crawl stays pending while it crawls."""
+    returned = substance_painter.resource.Shelves.refresh_all()
+    for shelf in substance_painter.resource.Shelves.all():
+        watch_shelf(step, shelf.name())
+    return returned
+
+
+def plugin_roots() -> Any:
+    """The documented plugin search path (a list the probe appends its root to)."""
+    return substance_painter_plugins.path
+
+
+def run_entries(paths: Any) -> list[Any]:
+    """The entries of a path list that lie under the run's private directory (the others belong
+    to the installation and the owner's machine, and are not recorded)."""
+    # A path on another drive, or a relative one, cannot lie under it (`run_path` raises).
+    entries = [optional(partial(run_path, p)) for p in paths]
+    return [e for e in entries if isinstance(e, dict) and "run_relative" in e]
+
+
+def probe_module(name: str) -> Any:
+    """A throwaway plugin module of the probe, imported (once) from the probe's plugin root."""
+    if name not in PROBE_PLUGIN_MODULES:
+        raise ValueError(f"{name!r} is not a probe plugin module")
+    if name not in PLUGIN_STATE["modules"]:
+        PLUGIN_STATE["modules"][name] = importlib.import_module(name)
+    return PLUGIN_STATE["modules"][name]
+
+
+def take_hooks() -> list[str]:
+    """The hooks the probe modules ran since the last plugin step (their log is emptied)."""
+    path = PLUGIN_STATE["log"]
+    if path is None or not os.path.isfile(path):
+        return []
+    with open(path, encoding="utf-8") as log:
+        lines = [line.split(NEWLINE)[0] for line in log if line.split(NEWLINE)[0]]
+    with open(path, "w", encoding="utf-8"):
+        pass
+    return lines
+
+
+def add_plugin_root(resolved: dict[str, Any]) -> dict[str, Any]:
+    """Append the probe's plugin root to `substance_painter_plugins.path` (once) and point the
+    probe modules' hook log at a file in it."""
+    root = str(resolved["plugin_root"])
+    if root not in plugin_roots():
+        plugin_roots().append(root)
+    if root not in PLUGIN_STATE["roots"]:
+        PLUGIN_STATE["roots"].append(root)
+    PLUGIN_STATE["log"] = os.path.join(root, "hooks.log")
+    os.environ[PLUGIN_HOOK_LOG] = PLUGIN_STATE["log"]
+    return {"probe_roots": run_entries(plugin_roots())}
+
+
+def plugin_call(call: str, args: dict[str, Any]) -> dict[str, Any]:
+    """A plugin edit on a probe module: what it returned, and the hooks the module ran."""
+    plugins = substance_painter_plugins
+    module = probe_module(str(args["module"]))
+    if call == START_PLUGIN:
+        returned = plugins.start_plugin(module)
+    elif call == CLOSE_PLUGIN and "gc_collect" in args:
+        returned = plugins.close_plugin(module, gc_collect=bool(args["gc_collect"]))
+    elif call == CLOSE_PLUGIN:
+        returned = plugins.close_plugin(module)
+    else:
+        reloaded = plugins.reload_plugin(module)
+        PLUGIN_STATE["modules"][str(args["module"])] = reloaded
+        returned = {"is_the_loaded_module": reloaded is sys.modules.get(str(args["module"]))}
+    return {"returned": describe(returned), "hooks": take_hooks()}
+
+
+def module_names(names: Any) -> list[str]:
+    """The probe's own names among the listed plugin or startup modules."""
+    return sorted(n for n in names if isinstance(n, str) and n.startswith("uzp_probe_"))
+
+
+def started_plugins() -> Any:
+    """The documented dict of started plugins."""
+    return substance_painter_plugins.plugins
+
+
+def started_entries() -> dict[str, Any]:
+    """How `substance_painter_plugins.plugins` holds each imported probe module."""
+    started = started_plugins()
+    return {
+        name: {
+            "name_is_key": name in started,
+            "module_is_key": any(key is module for key in started),
+            "module_is_value": any(value is module for value in started.values()),
+        }
+        for name, module in sorted(PLUGIN_STATE["modules"].items())
+    }
+
+
+def host_edit(step: int, call: str, args: dict[str, Any], resolved: dict[str, Any]) -> Any:
+    """Apply one host-module edit (decision 297); returns what the documented call returned."""
+    if call == LOG_INFO:
+        return substance_painter.logging.info(str(args["message"]))
+    if call == LOG_WARNING:
+        return substance_painter.logging.warning(str(args["message"]))
+    if call == LOG_ERROR:
+        return substance_painter.logging.error(str(args["message"]))
+    if call == LOG:
+        severity = member(LOG_SEVERITIES, "logging severity", args["severity"])
+        return substance_painter.logging.log(severity, str(args["channel"]), str(args["message"]))
+    if call == UI_SWITCH_MODE:
+        return substance_painter.ui.switch_to_mode(member(UI_MODES, "UIMode", args["mode"]))
+    if call == EVENT_CONNECT_STRONG:
+        return connect_strong(args)
+    if call == SET_THROTTLING_PERIOD:
+        return set_throttling(args)
+    if call == SHELVES_REFRESH_ALL:
+        return refresh_all_shelves(step)
+    if call == SHELVES_REMOVE:
+        return substance_painter.resource.Shelves.remove(str(args["name"]))
+    if call == PLUGINS_PATH:
+        return add_plugin_root(resolved)
+    if call == PLUGINS_UPDATE_SYS_PATH:
+        returned = substance_painter_plugins.update_sys_path()
+        return {"returned": describe(returned), "probe_folders": run_entries(sys.path)}
+    return plugin_call(call, args)
+
+
+def host_read(call: str, args: dict[str, Any]) -> Any:
+    """Evaluate one host-module readback (decision 297); returns the documented value."""
+    if call == APPLICATION_VERSION:
+        return substance_painter.application.version()
+    if call == APPLICATION_VERSION_INFO:
+        return substance_painter.application.version_info()
+    if call.startswith("substance_painter.logging."):
+        return member(LOG_SEVERITIES, "logging severity", call.split(".")[-1])
+    if call == JS_EVALUATE:
+        return substance_painter.js.evaluate(str(args["code"]))
+    if call == UI_CURRENT_MODE:
+        return substance_painter.ui.get_current_mode()
+    if call == LIST_PROJECT_RESOURCES:
+        return sorted_described(substance_painter.resource.list_project_resources())
+    if call == RESOURCE_FROM_PROJECT:
+        ids = substance_painter.resource.ResourceID
+        return resource_id(CURRENT["step"], ids.from_project(str(args["name"])))
+    if call == RESOURCE_FROM_URL:
+        ids = substance_painter.resource.ResourceID
+        url = args["url"] if "url" in args else PROBE_RESOURCES[int(args["resource_step"])].url()
+        return resource_id(CURRENT["step"], ids.from_url(str(url)))
+    if call == PLUGINS_PATH:
+        return {"probe_roots": run_entries(plugin_roots())}
+    if call == PLUGIN_MODULE_NAMES:
+        return module_names(substance_painter_plugins.plugin_module_names())
+    if call == STARTUP_MODULE_NAMES:
+        return module_names(substance_painter_plugins.startup_module_names())
+    if call == IS_PLUGIN_STARTED:
+        return substance_painter_plugins.is_plugin_started(probe_module(str(args["module"])))
+    if call == STARTED_PLUGINS:
+        return started_entries()
+    raise ValueError(f"readback {call!r} is not in the probe vocabulary")
+
+
+def host_finish() -> dict[str, Any]:
+    """End of a golden: the strong connections are disconnected and the throttling period a
+    probe set is set back to the value read before."""
+    for name, callback in STRONG_CALLBACKS.items():
+        substance_painter.event.DISPATCHER.disconnect(strong_class(name), callback)
+    STRONG_CALLBACKS.clear()
+    restored = None
+    if THROTTLING["set"] and THROTTLING["before"] is not None:
+        texture_state = substance_painter.event.TextureStateEvent
+        restore = texture_state.set_cache_key_invalidation_throttling_period
+        restored = attempt(partial(restore, THROTTLING["before"]))
+    THROTTLING["before"], THROTTLING["set"] = None, False
+    return {"throttling_restored": restored}
+
+
+def under_roots(entry: Any, roots: list[str]) -> bool:
+    """Whether a `sys.path` entry is one of the probe roots' folders (however it is spelled)."""
+    path = os.path.normcase(os.path.normpath(str(entry)))
+    for root in roots:
+        base = os.path.normcase(os.path.normpath(root))
+        if path == base or path.startswith(base + os.sep):
+            return True
+    return False
+
+
+def host_cleanup() -> dict[str, Any]:
+    """After the project is closed: the probe plugin modules are closed and forgotten, and their
+    roots leave the plugin path and their folders `sys.path`."""
+    closed = {}
+    for name, module in sorted(PLUGIN_STATE["modules"].items()):
+        if optional(partial(substance_painter_plugins.is_plugin_started, module)):
+            closed[name] = attempt(partial(substance_painter_plugins.close_plugin, module, False))
+        sys.modules.pop(name, None)
+    roots = PLUGIN_STATE["roots"]
+    plugin_roots()[:] = [entry for entry in plugin_roots() if entry not in roots]
+    sys.path[:] = [entry for entry in sys.path if not under_roots(entry, roots)]
+    os.environ.pop(PLUGIN_HOOK_LOG, None)
+    PLUGIN_STATE["roots"] = []
+    PLUGIN_STATE["modules"], PLUGIN_STATE["log"] = {}, None
+    return {"plugins_closed": closed}
 
 
 PROBE_OPERATIONS = {

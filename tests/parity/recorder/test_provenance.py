@@ -111,7 +111,9 @@ def test_vocabulary_calls_are_documented_symbols() -> None:
 def test_symbol_entries_name_their_documenting_object() -> None:
     for symbol, entry in documented_symbols().items():
         anchor = entry["documented_as"]
-        assert entry["page"].startswith("substance_painter/") and entry["page"].endswith(".html")
+        # The plugins page documents `substance_painter_plugins` (decision 297).
+        page = entry["page"]
+        assert page.startswith(("substance_painter/", "plugins/")) and page.endswith(".html")
         assert (
             symbol == anchor
             or symbol.startswith(anchor + ".")

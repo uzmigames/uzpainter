@@ -1,0 +1,422 @@
+"""P22-B API probes of decision 297 (phase1.24 item 3.4): the host modules (application, logging,
+js, ui, event, resource, exception, async_utils, display and substance_painter_plugins). The
+requests are staged, unrecorded, under the envelope's `requests/` root; each must validate, load
+as an observed probe job, name the pending Painter symbols it exercises, and record `r1` and `r2`
+end to end against the fake Painter (`fake_probe_painter.py`).
+"""
+
+from __future__ import annotations
+
+import datetime
+import importlib.util
+import json
+import os
+import sys
+import types
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from tools.parity.recorder.probes import (
+    ProbeSession,
+    load_probe_job,
+    manifest_symbol_problems,
+    probe_job_from_manifest,
+    record_probe_golden,
+)
+from tools.parity.recorder.session import RecorderError
+from tools.parity.schemas import REPO_ROOT, load_json, record_problems
+
+ENVELOPE = REPO_ROOT / "parity" / "envelopes" / "painter-12.1.5_js-api.1.1.20"
+REQUEST_DIR = ENVELOPE / "requests" / "tier0" / "api-probes"
+INVENTORY = REPO_ROOT / "tools" / "capabilities" / "painter-api-inventory.json"
+STEMS = [
+    "p22b-host-application",
+    "p22b-host-events",
+    "p22b-host-plugins",
+    "p22b-host-resources",
+]
+SOFTWARE = {
+    "product": "Adobe Substance 3D Painter",
+    "version": "12.1.5",
+    "build_id": "12.1.5+js-api.1.1.20",
+}
+SP = "substance_painter."
+PLUGINS = "substance_painter_plugins"
+# The modules of decision 297's group.
+MODULES = (
+    "event",
+    "resource",
+    "ui",
+    "logging",
+    "application",
+    "async_utils",
+    "exception",
+    "display",
+    "js",
+)
+# Symbols decision 297 routes to another evidence route than a P22-B request, with the route.
+G5 = "G5 owner scope decision"
+BAKERS = "phase3.5_embree-bakers"
+ROUTED = {
+    f"{SP}event.BakingProcessAboutToStart": BAKERS,
+    f"{SP}event.BakingProcessProgress": BAKERS,
+    f"{SP}event.BakingProcessEnded": BAKERS,
+    f"{SP}async_utils": BAKERS,
+    f"{SP}async_utils.StopSource": BAKERS,
+    f"{SP}async_utils.StopSource.request_stop": BAKERS,
+    f"{SP}async_utils.StopSource.stop_requested": BAKERS,
+    f"{PLUGINS}.load_startup_modules": G5,
+    f"{PLUGINS}.close_all_plugins": G5,
+    f"{SP}ui.ApplicationMenu": G5,
+    **{
+        f"{SP}ui.ApplicationMenu.{name}": G5
+        for name in ("File", "Edit", "Mode", "Window", "Viewport", "Help")
+    },
+    f"{SP}exception.ServiceNotFoundError": G5,
+    f"{SP}resource.AllResourcesFilter": G5,
+    f"{SP}display": "decision 188's display requests (R-132-D, phase2.1_preview-display-presets)",
+}
+# Decision 188's requests exercise these (decision 189 §2).
+REQUESTED_BY_188 = {
+    f"{SP}event.CameraPropertiesChanged",
+    f"{SP}event.ShelfCrawlingStarted",
+    f"{SP}event.ShelfCrawlingEnded",
+    f"{SP}event.TextureStateEvent",
+    f"{SP}resource.Resource.gui_name",
+    f"{SP}resource.Resource.usages",
+    f"{SP}resource.Shelf",
+    *(f"{SP}resource.Shelf.{m}" for m in ("is_crawling", "name", "path", "refresh")),
+    f"{SP}resource.Shelves",
+    *(f"{SP}resource.Shelves.{m}" for m in ("add", "all", "exists")),
+    f"{SP}resource.Usage.ENVIRONMENT",
+}
+# What a request reaches besides its calls and the members its arguments name: the events its
+# connections receive, the classes a reload reports, the documented errors its probes provoke and
+# the modules whose members it calls.
+REACHED = {
+    "p22b-host-application": {f"{SP}ui", f"{SP}logging", f"{SP}js"},
+    "p22b-host-events": {
+        f"{SP}event.DISPATCHER.connect_strong",
+        f"{SP}event.TextureStateEventAction",
+        *(f"{SP}event.TextureStateEventAction.{a}" for a in ("ADD", "UPDATE", "REMOVE")),
+    },
+    "p22b-host-plugins": {PLUGINS},
+    "p22b-host-resources": {
+        f"{SP}event.ReloadedResourceResult",
+        f"{SP}event.ReloadedResourceError",
+        f"{SP}exception",
+        f"{SP}exception.ProjectError",
+        f"{SP}exception.ResourceNotFoundError",
+    },
+}
+PROBE_FAKE = "uzp_recorder_fake_probe_painter"
+
+
+def steps_of(stem: str) -> list[dict[str, Any]]:
+    steps: list[dict[str, Any]] = load_json(REQUEST_DIR / f"{stem}.json")["instruction_sequence"][
+        "steps"
+    ]
+    return steps
+
+
+def exercised() -> dict[str, set[str]]:
+    """Each symbol a request exercises, with the requests: the calls it makes, the enum members,
+    filters and event classes its arguments name, and what it reaches (`REACHED`)."""
+    found: dict[str, set[str]] = {}
+
+    def note(symbol: str, stem: str) -> None:
+        found.setdefault(symbol, set()).add(stem)
+
+    for stem in STEMS:
+        for symbol in REACHED[stem]:
+            note(symbol, stem)
+        for step in steps_of(stem):
+            call, args = step["call"], step.get("args", {})
+            note(call, stem)
+            if "severity" in args:
+                note(f"{SP}logging.{args['severity']}", stem)
+            if "mode" in args and call == f"{SP}ui.switch_to_mode":
+                note(f"{SP}ui.UIMode", stem)
+                note(f"{SP}ui.UIMode.{args['mode']}", stem)
+            if "usage" in args:
+                note(f"{SP}resource.Usage.{args['usage']}", stem)
+            if "filter" in args:
+                note(f"{SP}resource.{args['filter']}", stem)
+            for name in args.get("events", []):
+                note(f"{SP}event.{name}", stem)
+    return found
+
+
+def pending_of_the_group() -> set[str]:
+    """The pending Painter symbols of the group that decision 188's requests do not exercise."""
+    pending = set()
+    for e in load_json(INVENTORY)["entries"]:
+        parts = e["symbol"].split(".")
+        mine = parts[0] == PLUGINS or (len(parts) > 1 and parts[1] in MODULES)
+        notes = e.get("notes") or ""
+        owned = "P22-B" in notes or "decision 297" in notes
+        if e["status"] == "pending-evidence" and mine and owned:
+            pending.add(e["symbol"])
+    return pending - REQUESTED_BY_188
+
+
+# --- requests --------------------------------------------------------------------------------
+
+
+def test_the_requests_are_staged_unrecorded_observed_probe_jobs() -> None:
+    assert {p.stem for p in REQUEST_DIR.glob("p22b-host-*.json")} == set(STEMS)
+    for stem in STEMS:
+        path = REQUEST_DIR / f"{stem}.json"
+        manifest = load_json(path)
+        job = load_probe_job(path)  # validates against golden-public.json first
+        assert job.golden_id == f"tier0/api-probes/{stem}"
+        assert manifest["private_records"] == []
+        assert manifest["software"]["painter"] == SOFTWARE
+        assert manifest_symbol_problems(manifest) == []
+        assert job.observed and not job.lifecycle and not job.exports
+        assert not [s for s in manifest["applied_settings"] if s["name"] == "OCIO"]  # Legacy
+
+
+def test_every_pending_symbol_of_the_group_is_requested_or_routed() -> None:
+    pending = pending_of_the_group()
+    assert len(pending) == 83
+    covered = set(exercised())
+    assert pending - covered - set(ROUTED) == set()
+    assert set(ROUTED) <= pending and not set(ROUTED) & covered
+
+
+def test_every_routed_symbol_names_its_route_in_the_manifest() -> None:
+    notes = {e["symbol"]: e.get("notes") or "" for e in load_json(INVENTORY)["entries"]}
+    owners = {BAKERS: BAKERS, G5: "G5's explicit owner scope decision"}
+    for symbol, route in ROUTED.items():
+        assert "decision 297" in notes[symbol], symbol
+        assert owners.get(route, "phase2.1_preview-display-presets") in notes[symbol], symbol
+
+
+def test_the_requests_name_the_symbols_they_exercise() -> None:
+    pending = pending_of_the_group()
+    for symbol, stems in exercised().items():
+        if symbol not in pending:
+            continue
+        for stem in stems:
+            description = load_json(REQUEST_DIR / f"{stem}.json")["description"]
+            assert symbol.rsplit(".", 1)[-1] in description, (stem, symbol)
+
+
+def edited(stem: str, call: str, **changes: Any) -> dict[str, Any]:
+    manifest: dict[str, Any] = load_json(REQUEST_DIR / f"{stem}.json")
+    step = next(s for s in manifest["instruction_sequence"]["steps"] if s["call"] == call)
+    step["args"].update(changes)
+    return manifest
+
+
+def test_a_plugin_call_names_a_probe_module_and_a_root_a_plain_folder() -> None:
+    manifest = edited("p22b-host-plugins", f"{PLUGINS}.start_plugin", module="os")
+    with pytest.raises(RecorderError, match="must name a probe plugin module"):
+        probe_job_from_manifest(manifest)
+    manifest = edited("p22b-host-plugins", f"{PLUGINS}.path", folder="../outside")
+    with pytest.raises(RecorderError, match="must be a plain folder name"):
+        probe_job_from_manifest(manifest)
+
+
+# --- recording against the fake --------------------------------------------------------------
+
+
+@pytest.fixture
+def probe_fake(fake: types.ModuleType) -> types.ModuleType:
+    """`fake_probe_painter.py`, loaded by path after `fake_painter.py` (which it extends)."""
+    if PROBE_FAKE not in sys.modules:
+        spec = importlib.util.spec_from_file_location(
+            PROBE_FAKE, Path(__file__).with_name("fake_probe_painter.py")
+        )
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[PROBE_FAKE] = module
+        spec.loader.exec_module(module)
+    return sys.modules[PROBE_FAKE]
+
+
+def record(
+    probe_fake: types.ModuleType, fake: types.ModuleType, stem: str, tmp_path: Path
+) -> tuple[Any, dict[str, Any], dict[str, Any]]:
+    world = probe_fake.ProbeWorld()
+    world.version, world.version_info = SOFTWARE["version"], (12, 1, 5)
+    session = ProbeSession(
+        fake.LocalTransport(world),
+        sleep=lambda s: None,
+        allowed_builds=lambda: frozenset({SOFTWARE["build_id"]}),
+    )
+    job = load_probe_job(REQUEST_DIR / f"{stem}.json")
+    run = record_probe_golden(session, job, tmp_path / "work", tmp_path / "inbox")
+    data = json.loads((run / "record.json").read_text(encoding="utf-8"))
+    assert record_problems(data) == []
+    assert [r["condition"] for r in data["recordings"]] == ["same_session", "after_save_reopen"]
+    first, second = (
+        {o["output_id"]: o for o in recording["outputs"]} for recording in data["recordings"]
+    )
+    for recording in (first, second):
+        assert {s.output_id for s in job.probe_steps} <= set(recording)
+        assert not [k for k in recording if k.endswith("/pending")]
+    return world, first, second
+
+
+@pytest.fixture(autouse=True)
+def legacy(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OCIO", raising=False)
+    monkeypatch.delenv("PAINTER_ACE_CONFIG", raising=False)
+
+
+@pytest.mark.parametrize("stem", STEMS)
+def test_every_request_records_r1_and_r2(
+    probe_fake: types.ModuleType, fake: types.ModuleType, stem: str, tmp_path: Path
+) -> None:
+    record(probe_fake, fake, stem, tmp_path)
+
+
+def test_application_logging_js_and_ui_modes_read_back(
+    probe_fake: types.ModuleType, fake: types.ModuleType, tmp_path: Path
+) -> None:
+    world, first, second = record(probe_fake, fake, "p22b-host-application", tmp_path)
+    for recording in (first, second):
+        assert recording["s3/version"]["value"] == "12.1.5"
+        assert recording["s4/version_info"]["value"] == [12, 1, 5]
+        assert [
+            recording[f"s{n}/{s}"]["value"]
+            for n, s in zip(
+                range(5, 11),
+                ("INFO", "WARNING", "ERROR", "DBG_INFO", "DBG_WARNING", "DBG_ERROR"),
+                strict=True,
+            )
+        ] == [0, 1, 2, 3, 4, 5]  # the fake's values
+        for n in range(11, 20):
+            logged = recording[f"s{n}/{'log' if n > 13 else ('info', 'warning', 'error')[n - 11]}"]
+            assert logged["value"] is None and "raised" not in logged
+        assert recording["s20/evaluate"]["value"] == "12.1.5"
+        assert recording["s21/evaluate"]["value"] is True
+        modes = [recording[f"s{n}/get_current_mode"]["value"] for n in (26, 28, 30, 32)]
+        assert modes == ["Edition", "Baking", "Visualisation", "Edition"]
+    assert len(world.log_lines) == 2 * 9
+    assert ("uzp_probe" in {channel for _, channel, _ in world.log_lines}) is True
+
+
+def test_strong_connections_texture_states_and_the_throttling_period(
+    probe_fake: types.ModuleType, fake: types.ModuleType, tmp_path: Path
+) -> None:
+    world, first, second = record(probe_fake, fake, "p22b-host-events", tmp_path)
+    for recording in (first, second):
+        assert recording["s6/connect_strong"]["value"] == {
+            "connected_strong": [
+                "EngineComputationsStatusChanged",
+                "Event",
+                "ProjectSaved",
+                "TextureStateEvent",
+            ]
+        }
+        updated = [e for e in recording["s7/events"]["value"] if e.get("connection") == "strong"]
+        seen = [(e["event"], e["action_argument"], e["channel_type_argument"]) for e in updated]
+        assert seen == [("TextureStateEvent", "UPDATE", "BaseColor")]
+        assert updated[0]["tile_indices_argument"] == [0, 0]
+        toggled = recording["s9/events"]["value"]
+        assert {(e["event"], e.get("connection")) for e in toggled} == {
+            ("EngineComputationsStatusChanged", None),
+            ("EngineComputationsStatusChanged", "strong"),
+        }
+        assert recording["s15/set_cache_key_invalidation_throttling_period"]["raised"]["type"] == (
+            "ValueError"
+        )
+        period = "cache_key_invalidation_throttling_period"
+        # The period is global to the session: r2 starts with the 750 ms r1 set.
+        before = 1000.0 if recording is first else 750.0
+        assert recording[f"s14/{period}"]["value"] == {"timedelta_ms": before}
+        assert recording[f"s16/{period}"]["value"] == {"timedelta_ms": before}
+        assert recording[f"s18/{period}"]["value"] == {"timedelta_ms": 750.0}
+        saved = [e["event"] for e in recording["s19/events"]["value"]]
+        assert saved.count("ProjectSaved") == 2  # the weak and the strong connection
+        closed = [e for e in recording["s20/events"]["value"] if e.get("connection") == "strong"]
+        assert {e["action_argument"] for e in closed} == {"REMOVE"}
+        opened = [e for e in recording["s21/events"]["value"] if e.get("connection") == "strong"]
+        assert {e["action_argument"] for e in opened} == {"ADD"}
+        assert all(e["dispatched"] == "TextureStateEvent" for e in opened)
+        assert "uniform_color_working" in recording["s22/get_source"]["value"]
+    assert world.throttling == datetime.timedelta(seconds=1)  # restored when the golden ended
+    assert not any(callbacks for callbacks in world.listeners.values())  # all disconnected
+
+
+def test_resources_reload_filters_errors_and_the_closed_project(
+    probe_fake: types.ModuleType, fake: types.ModuleType, tmp_path: Path
+) -> None:
+    world, first, second = record(probe_fake, fake, "p22b-host-resources", tmp_path)
+    assert first["s6/import_project_resource"]["raised"]["type"] == "ValueError"  # GENERATOR
+    assert "raised" not in first["s5/import_project_resource"]  # COLOR_LUT
+    for recording in (first, second):
+        listed = recording["s9/list_project_resources"]["value"]
+        assert len(listed) == 3
+        assert recording["s11/from_project"]["value"]["resource"]["name"] == (
+            "uzp_missing_environment"
+        )
+        assert recording["s12/from_url"]["value"]["resource"]["name"] == "checker.image"
+        assert recording["s13/from_url"]["raised"]["type"] == "ValueError"
+        missing = recording["s14/set_environment_resource"]["raised"]
+        assert missing["type"] == "ResourceNotFoundError"
+        refreshed = [e["shelf_name_argument"] for e in recording["s17/events"]["value"]]
+        assert sorted(set(refreshed)) == ["starter_assets", "uzp_probe_host_shelf", "your_assets"]
+        assert recording["s18/remove"]["raised"]["type"] == "ProjectError"
+        shelves = recording["s23/events"]["value"][0]["filter_argument"]
+        assert shelves == "ShelvesListFilter"
+        ended = recording["s24/events"]["value"][-1]
+        assert ended["event"] == "ReloadResourcesEnded"
+        if recording is first:  # r2 rewrites the same bytes again
+            assert [e["error_msg"] for e in ended["resource_errors_argument"]] == [
+                "the file is not a valid image"
+            ]
+        assert recording["s27/list_project_resources"]["raised"]["type"] == "ProjectError"
+        assert "raised" not in recording["s28/remove"]
+        assert recording["s29/exists"]["value"] is False
+        assert recording["s30/rebind"]["value"]["found_by"] == {}
+    assert world.shelves == {}
+
+
+def test_plugins_run_their_hooks_and_leave_no_trace(
+    probe_fake: types.ModuleType, fake: types.ModuleType, tmp_path: Path
+) -> None:
+    path_before, modules_before = list(sys.path), set(sys.modules)
+    world, first, second = record(probe_fake, fake, "p22b-host-plugins", tmp_path)
+    root = {"run_relative": ["plugin-roots", "uzp-plugins"]}
+    for recording in (first, second):
+        assert recording["s3/path"]["value"] == {
+            "probe_roots": [] if recording is first else [root]
+        }
+        assert recording["s4/path"]["value"] == {"probe_roots": [root]}
+        assert "raised" not in recording["s5/update_sys_path"]
+        folders = recording["s5/update_sys_path"]["value"]["probe_folders"]
+        assert [f["run_relative"][-1] for f in folders] == ["plugins", "startup", "modules"]
+        assert recording["s7/plugin_module_names"]["value"] == ["uzp_probe_plugin"]
+        assert recording["s8/startup_module_names"]["value"] == ["uzp_probe_startup"]
+        started = recording["s9/start_plugin"]["value"]
+        hooks = ["uzp_probe_plugin.start_plugin"]
+        imported = ["uzp_probe_plugin.import"] if recording is first else []
+        assert started["hooks"] == [*imported, *hooks]
+        assert recording["s10/is_plugin_started"]["value"] is True
+        assert recording["s11/plugins"]["value"]["uzp_probe_plugin"] == {
+            "name_is_key": True,
+            "module_is_key": False,
+            "module_is_value": True,
+        }
+        assert recording["s12/reload_plugin"]["value"] == {
+            "returned": {"is_the_loaded_module": True},
+            "hooks": [
+                "uzp_probe_plugin.close_plugin",
+                "uzp_probe_plugin.reload_plugin",
+                "uzp_probe_plugin.import",
+                "uzp_probe_plugin.start_plugin",
+            ],
+        }
+        assert recording["s14/close_plugin"]["value"]["hooks"] == ["uzp_probe_plugin.close_plugin"]
+        assert recording["s15/is_plugin_started"]["value"] is False
+        assert recording["s19/is_plugin_started"]["value"] is False
+    plugins = world.modules[PLUGINS]
+    assert plugins.path == [] and plugins.plugins == {}
+    assert sys.path == path_before and set(sys.modules) <= modules_before | {PROBE_FAKE}
+    assert "UZP_PROBE_PLUGIN_LOG" not in os.environ

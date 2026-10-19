@@ -287,7 +287,7 @@
           "description": "The documented substance_painter call read back; or uzmigames.pipeline.run_script: the `result` a UzmiGames pipeline script assigned, run byte-unchanged under the uzmigames_pipeline_scripts interface (decision 099).",
           "type": "string",
           "anyOf": [
-            { "pattern": "^substance_painter(\\.[A-Za-z_][A-Za-z0-9_]*)+$" },
+            { "pattern": "^substance_painter(_plugins)?(\\.[A-Za-z_][A-Za-z0-9_]*)+$" },
             { "const": "uzmigames.pipeline.run_script" }
           ]
         },

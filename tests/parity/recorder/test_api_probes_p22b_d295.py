@@ -294,15 +294,41 @@ def test_texture_set_description_resolution_and_active_stack_read_back(
         invalid = recording[output(stem, f"{TS}TextureSet.set_resolution", width=300)]
         assert invalid["raised"]["type"] == "ValueError"
         found = recording[output(stem, f"{TS}TextureSet.from_name", texture_set="uzp_plane")]
-        assert found["value"] == {"texture_set": "uzp_plane"}
+        assert "raised" not in found
+        assert found["value"] == {"texture_set": {"value": "uzp_plane", "form": CALLED}}
         missing = recording[output(stem, f"{TS}TextureSet.from_name", texture_set="uzp_missing")]
         assert missing["raised"]["type"] == "ValueError"
-        assert recording[output(stem, f"{TS}TextureSet.original_name")]["value"] == "uzp_plane"
+        original = recording[output(stem, f"{TS}TextureSet.original_name")]
+        assert original["value"] == {"value": "uzp_plane", "form": attribute_form("TypeError")}
         description = recording[output(stem, f"{TS}TextureSet.description")]
-        assert description["value"] == "uzp probe texture set"
+        assert description["value"] == {
+            "value": "uzp probe texture set",
+            "form": attribute_form("TypeError"),
+        }
         assert recording[output(stem, f"{TS}TextureSet.is_layered_material")]["value"] is False
-        active = recording[output(stem, f"{TS}get_active_stack")]["value"]
-        assert active == {"texture_set": "uzp_plane", "stack": ""}
+        active = recording[output(stem, f"{TS}get_active_stack")]
+        assert "raised" not in active
+        assert active["value"] == {
+            "texture_set": {"value": "uzp_plane", "form": CALLED},
+            "stack": "",
+        }
+
+
+# The call form of a TextureSet member the python-doc labels a property (SUP-012): the fake models
+# `name` as Painter's examples and pipeline scripts call it, `original_name` and `description` as
+# attributes; the probe records the form it met and reads through the form that works, so a caught
+# TypeError is never taken as the readback.
+CALLED = {"callable": True, "is_str": False}
+
+
+def attribute_form(error: str) -> dict[str, Any]:
+    """A string attribute, whose call raises `error` (Python's own message)."""
+    message = "'str' object is not callable"
+    return {
+        "callable": False,
+        "is_str": True,
+        "called": {"raised": {"type": error, "message": message}},
+    }
 
 
 def test_project_metadata_uuid_and_mesh_path_read_back(
