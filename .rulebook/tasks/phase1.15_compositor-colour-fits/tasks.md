@@ -1,3 +1,5 @@
+> **Not archived: final acceptance pending (SUP-020, 2026-10-19).** Commit 3a200d0 archived this task before the full suite was green. AGENTS.md rule 1, the quality spec and `.rulebook/specs/orchestration.md` require a green full suite before any archive. CLAUDE.md's test-time override of 2026-10-12 asks only for the affected tests at archive; the supervisor's correction applies the stricter rule here. The first full suite stands at 6 failed, 2 876 passed, 4 skipped and 1 xfail, and the export publisher is still pending. The task is back under `.rulebook/tasks/`. Every implementation and test tick keeps its evidence. Item 4.1 (acceptance) is unticked. It and the archive wait for the next coordinated full suite to be green; the focused CPU and DX12 batches below do not replace it.
+
 ## 1. Prerequisites
 - [x] 1.1 Prerequisite accepted: phase1.14_compositor-core (archived 2026-10-12)
 
@@ -84,6 +86,12 @@
 - [x] 3.1 Every fitted output exact against both recordings on CPU and DX12; the refusals of what stays unrecorded still fire before any mutation and name this task
   - Done 2026-10-19, after 2.1-2.9 (`parity/reports/phase1/compositor-colour-fits.md`). Logs are in the session scratchpad `t115/`.
     - CPU against Painter, both recordings: 31 passed, exit code 0 (`cpu-batch.log`). This covers every export comparison of decisions 145, 152, 174, 190, 203, 208 and 219, the facade's P20-B, Session O and colour-rule readbacks (decisions 202, 214, 240) and the lifecycle probes. P20-A on its own: 1 passed, exit code 0 (`facade-p20a.log`).
+    - Exact means r1 everywhere and r2 over the stable comparison domain. The named r2 exceptions, all on set s5's BaseColor, have exact r1:
+      - `test_ocio_encode_equals_painter_files` leaves out 5 unstable r2 comparisons: steps 46, 47, 48 and probes 50, 51. 251 of 256 are compared.
+      - `test_srgb_variants_equal_painter_files` leaves out 3: steps 78, 80, 82. 381 of 384 are compared.
+      - `test_srgb8_bitmap_equals_painter_files` judges its 3 Legacy r2 comparisons (steps 46, 47, 48) through EXC-006.
+      - The first two rest on decision 032 alone. Neither golden has an entry in `parity/exceptions.json`, though decision 032 asks for one; that stays open (report, "The r2 exceptions").
+    - Tested tree: the uncommitted worktree of `wt/t-1.15` on 39d8d7b, later committed as bd1439b. It was rebased to 18cea94 and squashed as e698b8c, and no test ran on those two. The binaries' and logs' SHA-256 and the edits made after the runs are in the report, section "Tested tree".
     - DX12 = CPU: 37 passed, exit code 0, 291 s (`dx12-batch.log`).
       - `test_lifted_colour_fits_gpu_equals_cpu`: 30 of 30 lifted texture sets, now with `srgb-bitmap-minification` s0, s2, s4-s7 and `export-l8-material` s0, s1.
       - New `test_fill_channel_defaults_gpu_equals_cpu`: P20-A's four exact maps are GPU = CPU, and their CPU export equals Painter's on 65 536 of 65 536 texels, r1 and r2.
@@ -104,8 +112,9 @@
     - OCIO cache-key fix (97f8302): its GPU twin in `projection-gpu-vs-cpu` passes. After a legacy evaluation, the warm DX12 evaluator refuses an sRGB bitmap at scale 2 under OCIO for the same reason a fresh evaluator does, and stores a Raw bitmap's OCIO codes at 1:1, not the legacy ones.
 
 ## 4. Acceptance
-- [x] 4.1 Local DX12 run on the owner's machine exact for every lifted case (decision 028); `compositor:ocio` and `compositor:srgb-unrecorded` registered `supported` only for what is exact
-  - Done 2026-10-19 on the RTX 4090; the gated hardware cases ran instead of skipping. Every case lifted by 2.1-2.9 is exact on DX12 (3.1's evidence; report `parity/reports/phase1/compositor-colour-fits.md`).
+- [ ] 4.1 Local DX12 run on the owner's machine exact for every lifted case (decision 028); `compositor:ocio` and `compositor:srgb-unrecorded` registered `supported` only for what is exact
+  - Unticked 2026-10-19 (SUP-020). The local DX12 run below stands, but acceptance also needs the next coordinated full suite to be green; the tick returns with it.
+  - Run 2026-10-19 on the RTX 4090; the gated hardware cases ran instead of skipping. Every case lifted by 2.1-2.9 is exact on DX12 (3.1's evidence; report `parity/reports/phase1/compositor-colour-fits.md`).
   - `tools/capabilities/compositor-capabilities.json`:
     - `compositor:ocio` stays `supported` for what Session O records. Its evidence now adds the four `phase1-srgb-uniform-decode-ocio` probes and the facade's decision 202 fit.
     - `compositor:ocio-unrecorded` stays a release gap.
