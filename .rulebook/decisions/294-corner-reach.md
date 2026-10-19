@@ -219,3 +219,7 @@ So of the 25 targets, 17 are exact; the 11 left are listed above.
   - per-tap and per-chart gate forms;
   - a single reach cap or a single endpoint cap for E ≠ τ edges;
   - an endpoint cap on edges in τ's own planar face.
+
+## Erratum (2026-10-19, wiring commit cdd10b0)
+
+The open-corner bracket's lower bound is 1.0759265, not 1.075926. Like the other three bounds, it is rounded inward from the Wand edge that decides it: (634, 1418) is kept at 1.07592644. With 1.075926 that texel would be a third refusal, which contradicts this decision's own count of two. The outputs are identical under either value.
