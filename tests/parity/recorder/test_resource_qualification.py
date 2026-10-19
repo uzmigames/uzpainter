@@ -440,8 +440,26 @@ def one_path_missing(evidence: dict[str, Any]) -> None:
     del evidence["sources_absent"][SOLE]
 
 
+def absent_without_path(evidence: dict[str, Any]) -> None:
+    del evidence["sources_absent"][SOLE]["path"]
+
+
+def absent_at_another_path(evidence: dict[str, Any]) -> None:
+    evidence["sources_absent"][SOLE]["path"] = "sources/elsewhere.png"
+
+
 @pytest.mark.parametrize(
-    "mutate", [no_flag, false_flag, text_flag, no_paths, one_path_present, one_path_missing]
+    "mutate",
+    [
+        no_flag,
+        false_flag,
+        text_flag,
+        no_paths,
+        one_path_present,
+        one_path_missing,
+        absent_without_path,
+        absent_at_another_path,
+    ],
 )
 def test_condition_b_needs_verified_source_removal(
     tmp_path: Path, mutate: Callable[[dict[str, Any]], None]
@@ -452,6 +470,22 @@ def test_condition_b_needs_verified_source_removal(
     outcome = analysis["outcome"]
     assert outcome["verdict"] == "INCONCLUSIVE"
     assert outcome["qualified_forms"] == [] and not outcome["pilot_forms_exact"]
+
+
+def test_nothing_written_with_the_source_then_exact_is_not_re_encoded(tmp_path: Path) -> None:
+    """No file in A and exact bytes in B for every case: no export was re-encoded."""
+
+    def only_without_source(condition: str, data: bytes, target: Path) -> str:
+        if condition == rq.CONDITION_B:
+            (target / "exported.bin").write_bytes(data)
+        return "Export resource"
+
+    result = run(tmp_path, only_without_source)
+    row = result["analysis"]["cases"][SOLE]
+    assert [row[c]["status"] for c in rq.CONDITIONS] == [rq.NO_FILE, rq.EXACT]
+    outcome = result["analysis"]["outcome"]
+    assert outcome["verdict"] == "INCONCLUSIVE"
+    assert outcome["qualified_forms"] == [] and outcome["exact_cases"] == []
 
 
 def test_a_source_present_before_b_refuses_the_run(tmp_path: Path) -> None:

@@ -158,6 +158,7 @@ The Codex supervisor's joint findings SUP-018 and SUP-019 (`tmp/claude-supervisi
   - **Re-encoded.** A case is `re-encoded` only when its one fenced file has other bytes that decode as an image here. Other bytes that do not decode are `other-bytes-undecoded`.
   - **RE_ENCODED and SOURCE_DEPENDENT.** They need failures that establish them: `re-encoded`, `no-file`, `menu-absent` or `menu-disabled`.
   - **Failures that prove nothing.** These are `exact-bytes-version-differs`, `stale-or-link`, `not-project`, `multiple-files`, `other-bytes-undecoded`, and exact bytes with an unstable version. They are listed in `unresolved_cases`. With no exact case, they make the run `INCONCLUSIVE`, under item 5's re-run cap; they never make it `RE_ENCODED`.
+- **SUP-025 (2026-10-19).** `sources_removal_verified` also needs each case's recorded `path` to be `sources/<file name>` (a missing or other path fails), and `RE_ENCODED` needs every status to be an established failure with at least one `re-encoded` export; any other unmatched combination, such as `no-file` in A and `exact` in B, is `INCONCLUSIVE`.
 
 ## Alternatives Considered
 

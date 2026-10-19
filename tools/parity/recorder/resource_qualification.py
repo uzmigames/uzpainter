@@ -975,13 +975,20 @@ def analyse(directory: Path) -> dict[str, Any]:
 
 def sources_removal_verified(evidence: dict[str, Any]) -> bool:
     """Whether the evidence shows every case's staged source absent before condition B: the
-    run's flag is literally true and the per-path record names every case, each absent."""
+    run's flag is literally true and the per-path record names every case, each at its staged
+    path `sources/<file name>` and absent."""
     absent = evidence.get("sources_absent")
     return (
         evidence.get("sources_removed") is True
         and isinstance(absent, dict)
         and set(absent) == {case.case_id for case in CASES}
-        and all(isinstance(v, dict) and v.get("absent") is True for v in absent.values())
+        and all(
+            isinstance(v, dict)
+            and v.get("path") == f"sources/{case.file_name}"
+            and v.get("absent") is True
+            for case in CASES
+            for v in [absent[case.case_id]]
+        )
     )
 
 
@@ -991,7 +998,8 @@ def outcome(
     """The run's verdict (`OUTCOMES`). Condition B qualifies only when it ran in a freshly
     started Painter process after every staged source was verified absent; otherwise the run is
     inconclusive. PARTIAL needs exact cases (a whole format class need not be exact); RE_ENCODED
-    and SOURCE_DEPENDENT need failures that establish them (`ESTABLISHED_FAILURES`)."""
+    and SOURCE_DEPENDENT need failures that establish them (`ESTABLISHED_FAILURES`), and
+    RE_ENCODED at least one `re-encoded` export; any other combination is INCONCLUSIVE."""
     statuses = {c: [rows[c][k]["status"] for k in CONDITIONS] for c in rows}
     exact = {c for c, s in statuses.items() if s == [EXACT, EXACT] and rows[c]["version_stable"]}
     classes = sorted({rows[c]["format_class"] for c in rows})
@@ -1016,7 +1024,9 @@ def outcome(
         verdict = "UNAVAILABLE"
     elif exact:
         verdict = "PARTIAL"
-    elif not unresolved:
+    elif all(x in ESTABLISHED_FAILURES for s in statuses.values() for x in s) and any(
+        RE_ENCODED in s for s in statuses.values()
+    ):
         verdict = "RE_ENCODED"
     else:
         verdict = "INCONCLUSIVE"
