@@ -1,5 +1,5 @@
 """Synthetic cases of the measured `infinite` padding ring (src/export/padding.h; phase1.25 item
-2.7, decisions 267, 268, 270, 273, 275, 278, 279, 280 and 281), through `uzp-export-tests ring`.
+2.7, decisions 267, 268, 270, 273, 275, 278 to 281, 285 and 288), through `uzp-export-tests ring`.
 
 Each case pads random float32 values over a small OBJ written here, and compares UzPainter's ring
 texels bit for bit with a reference of the rule: on a single island this file's own (the ring
@@ -8,8 +8,9 @@ exact 1/d shares quantised to 10, 8 and 6 bits, the float32 FMA lerp chain and d
 rounding; equal shares ordered by decision 273's comparator, then decision 280's neighbour
 order); across a UV seam `padding_reference` (the far window of decision 275 in padding.cpp's
 double arithmetic, decision 278's seam gate, decision 279's ring point, neighbours and reach,
-decision 280's far tie order and tap count). The coverage snaps vertices to 1/256 texel (decision
-281). No Painter data is read.
+decision 280's far tie order and tap count, decisions 285 and 288's distances, reach and welding),
+and the gutter's clamped jump flood (decision 285). The coverage snaps vertices to 1/256 texel
+(decision 281). No Painter data is read.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ import pytest
 
 from tests.export.padding_reference import (
     F32,
+    FLOOD,
     NEIGHBOURS,
     OWN_ORDER,
     Ring,
@@ -153,7 +155,7 @@ def reference(
 
 
 def run(
-    exe: Path, tmp: Path, mesh: Mesh, name: str, seed: int
+    exe: Path, tmp: Path, mesh: Mesh | Triangles, name: str, seed: int
 ) -> tuple[np.ndarray, np.ndarray, list[dict[str, Any]]]:
     size = mesh.size
     values = np.random.default_rng(seed).random((size, size, 3)).astype(F32)
@@ -474,10 +476,10 @@ def test_ring_point_neighbours_and_reach_follow_decision_279(
       both, the other island's at min(|q_k - P|, |q - P|), and their ring point comes from the
       triangle of the neighbour nearest under decision 273's comparator, which on some of them is
       not the highest-index triangle;
-    - a seam edge that ends 1.72 texels from a ring texel (A's right edge only along its upper part,
-      shared with B, whose UV island continues below it): the ring texel (8, 15) takes B's texels
-      through that edge's window, and is flagged "reach-bracket", since a cap of 1.7 texels would
-      drop them."""
+    - a seam edge that ends 1.7768 texels from a ring texel (A's right edge only along its upper
+      part, shared with B, whose UV island continues below it): the ring texel (8, 15) takes B's
+      texels through that edge's window (decision 285's cap, 1.78 texels), and is flagged
+      "reach-bracket", since a cap at the bracket's low end, 1.772004 texels, would drop them."""
     from tests.export.padding_reference import Ring
 
     vgap = Mesh(
@@ -506,11 +508,11 @@ def test_ring_point_neighbours_and_reach_follow_decision_279(
 
     reach = Mesh(
         [
-            _quad((0.0, 0.875), (4.0, 7.5), (12.0, 13.85), 16.0),
-            _quad((0.875, 1.0), (7.5, 8.0), (12.0, 13.85), 16.0),
-            _quad((0.0, 0.875), (4.0, 7.5), (13.85, 16.0), 16.0),
-            _quad((1.0, 2.0), (16.25, 20.25), (12.3, 14.15), 16.3),
-            _quad((1.0, 2.0), (16.25, 20.25), (14.15, 16.3), 16.3),
+            _quad((0.0, 0.875), (4.0, 7.5), (12.0, 13.795), 16.0),
+            _quad((0.875, 1.0), (7.5, 8.0), (12.0, 13.795), 16.0),
+            _quad((0.0, 0.875), (4.0, 7.5), (13.795, 16.0), 16.0),
+            _quad((1.0, 2.0), (16.25, 20.25), (12.3, 14.095), 16.3),
+            _quad((1.0, 2.0), (16.25, 20.25), (14.095, 16.3), 16.3),
         ],
         32,
     )
@@ -519,6 +521,169 @@ def test_ring_point_neighbours_and_reach_follow_decision_279(
     flagged = {(r["x"], r["y"]): r for r in ring if "reach-bracket" in r["undecided"]}
     assert list(flagged) == [(8, 15)]
     assert (16, 15) in [(c[0], c[1]) for c in flagged[(8, 15)]["candidates"] if c[3]]
+
+
+class Triangles:
+    """Single triangles on a W x H tile, each written with its own vertices (the ring welds them by
+    value): the OBJ that `run` pads."""
+
+    def __init__(self, triangles: list[Quad], size: int) -> None:
+        self.triangles = triangles
+        self.size = size
+
+    def obj(self, path: Path) -> Path:
+        lines = ["usemtl m"]
+        for p, uv in self.triangles:
+            lines += [f"v {float(F32(a))!r} {float(F32(b))!r} {float(F32(c))!r}" for a, b, c in p]
+            lines += [f"vt {float(F32(u))!r} {float(F32(v))!r}" for u, v in uv]
+        for i in range(len(self.triangles)):
+            b = 3 * i
+            lines.append(f"f {b + 1}/{b + 1} {b + 2}/{b + 2} {b + 3}/{b + 3}")
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return path
+
+
+def _fan(last_centre_x: float) -> Triangles:
+    """Three triangles around a raised centre at UV (1/2, 1/2), spanning 0 to 100, 100 to 200 and
+    200 to 300 degrees: one island with a V-gap between its first and last triangles. The last
+    triangle writes the centre's x as `last_centre_x` (0.0 or -0.0), the others as 0.0."""
+    rim = [math.radians(a) for a in (0, 100, 200, 300)]
+    tris: list[Quad] = []
+    for i in range(3):
+        a, b = rim[i], rim[i + 1]
+        tris.append(
+            (
+                [
+                    (last_centre_x if i == 2 else 0.0, 0.3, 0.0),
+                    (math.cos(a), 0.0, math.sin(a)),
+                    (math.cos(b), 0.0, math.sin(b)),
+                ],
+                [
+                    (0.5, 0.5),
+                    (0.5 + 0.25 * math.cos(a), 0.5 + 0.25 * math.sin(a)),
+                    (0.5 + 0.25 * math.cos(b), 0.5 + 0.25 * math.sin(b)),
+                ],
+            )
+        )
+    return Triangles(tris, 32)
+
+
+def test_own_tap_across_a_uv_edge_is_measured_through_its_triangle(
+    export_tests: Path, tmp_path: Path
+) -> None:
+    """Decision 285: on a quad folded about its diagonal (two faces of one island sharing that UV
+    edge), an own tap in the triangle K that is not tau is at |q_K - P|, the ring texel's centre
+    extrapolated through K, not at its distance unfolded into tau's face (which differs on some).
+    Against `padding_reference` bit for bit, candidates and flags included."""
+    s = 1 / 32
+    folded = Mesh(
+        [
+            (
+                [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 0.0, 1.0), (0.0, 0.4, 1.0)],
+                [(8 * s, 12 * s), (20 * s, 12 * s), (20 * s, 24 * s), (8 * s, 24 * s)],
+            )
+        ],
+        32,
+    )
+    values, out, ring = run(export_tests, tmp_path, folded, "folded", 285)
+    _matches_reference(tmp_path, "folded", values, out, ring)
+    reference = Ring(tmp_path / "folded.obj", "m", 32, 32)
+    covered = reference.owner >= 0
+    checked = differing = 0
+    for r in ring:
+        x, y = r["x"], r["y"]
+        own = [
+            ((x + dx) % 32, y + dy)
+            for dy, dx in NEIGHBOURS
+            if 0 <= y + dy < 32 and covered[y + dy, (x + dx) % 32]
+        ]
+        tau = reference.tau(x, y, own)
+        T = reference.tris[tau]
+        q = T.point(T.bary(x + 0.5, y + 0.5))
+        for tx, ty, d, far in r["candidates"][: r["taps"]]:
+            k = int(reference.owner[ty, tx])
+            if far or k == tau:
+                continue
+            K = reference.tris[k]
+            assert K.face != T.face and len(set(K.corner) & set(T.corner)) == 2
+            p = K.point(K.bary(tx + 0.5, ty + 0.5))
+            through = float(np.linalg.norm(np.subtract(K.point(K.bary(x + 0.5, y + 0.5)), p)))
+            unfolded = float(np.linalg.norm(np.subtract(q, reference.frame(p, k, tau, q))))
+            assert math.isclose(d, through, rel_tol=1e-12), (x, y, tx, ty)
+            checked += 1
+            differing += abs(through - unfolded) > 1e-6 * through
+    assert checked > 0 and differing > 0, (checked, differing)
+
+
+def test_vertices_weld_by_value(export_tests: Path, tmp_path: Path) -> None:
+    """Decision 288: a fan whose last triangle writes the shared centre as x = -0.0 is one island,
+    padded exactly as the same fan written with 0.0 everywhere (bit for bit, ring candidates
+    included), and equal to `padding_reference`."""
+    _, out_zero, ring_zero = run(export_tests, tmp_path, _fan(0.0), "fan-zero", 288)
+    values, out_signed, ring_signed = run(export_tests, tmp_path, _fan(-0.0), "fan-signed", 288)
+    assert "v -0.0 0.30000001192092896 0.0" in (tmp_path / "fan-signed.obj").read_text()
+    _matches_reference(tmp_path, "fan-signed", values, out_signed, ring_signed)
+    assert ring_signed == ring_zero
+    assert out_signed.view(np.uint32).tolist() == out_zero.view(np.uint32).tolist()
+    reference = Ring(tmp_path / "fan-signed.obj", "m", 32, 32)
+    assert len({t.chart for t in reference.tris}) == 1
+
+
+def _flood(seed: np.ndarray, clamp: bool) -> tuple[np.ndarray, np.ndarray]:
+    """Decision 197's jump flood over `seed` (rows top first): each texel's seed (row, column),
+    reads outside the tile clamped to its edge (decision 285) or skipped (decision 197)."""
+    height, width = seed.shape
+    ys, xs = np.mgrid[0:height, 0:width]
+    sy, sx = np.where(seed, ys, -1), np.where(seed, xs, -1)
+    big = np.iinfo(np.int64).max
+    k = max(width, height) // 2
+    while k >= 1:
+        by, bx = sy.copy(), sx.copy()
+        best = np.where(by >= 0, (by - ys) ** 2 + (bx - xs) ** 2, big)
+        for dy, dx in FLOOD:
+            rows, cols = np.arange(height) + dy * k, np.arange(width) + dx * k
+            cy = sy[np.clip(rows, 0, height - 1)][:, np.clip(cols, 0, width - 1)]
+            cx = sx[np.clip(rows, 0, height - 1)][:, np.clip(cols, 0, width - 1)]
+            if not clamp:
+                inside = ((rows >= 0) & (rows < height))[:, None] & ((cols >= 0) & (cols < width))
+                cy, cx = np.where(inside, cy, -1), np.where(inside, cx, -1)
+            d = np.where(cy >= 0, (cy - ys) ** 2 + (cx - xs) ** 2, big)
+            better = d < best
+            by, bx = np.where(better, cy, by), np.where(better, cx, bx)
+            best = np.where(better, d, best)
+        sy, sx = by, bx
+        k //= 2
+    return sy, sx
+
+
+def test_gutter_flood_clamps_reads_to_the_tile_edge(export_tests: Path, tmp_path: Path) -> None:
+    """Decision 285: the gutter's jump flood reads a neighbour outside the tile at the nearest edge
+    texel and takes its seed, where decision 197 skipped the read. Two rectangular islands (columns
+    23 to 25, rows 10 to 14; columns 16 and 17, rows 22 to 26): some gutter texels find a strictly
+    nearer seed through a clamped read, every gutter texel copies its clamped flood seed, and the
+    whole tile equals `padding_reference.padding` bit for bit."""
+    from tests.export.padding_reference import padding
+
+    mesh = Mesh(
+        [
+            _quad((0.0, 0.75), (23.0, 26.0), (10.0, 15.0), 16.0),
+            _quad((2.0, 2.5), (16.0, 18.0), (22.0, 27.0), 28.0),
+        ],
+        32,
+    )
+    values, out, ring = run(export_tests, tmp_path, mesh, "flood", 285)
+    expected = padding(values, tmp_path / "flood.obj", "m")
+    assert out.view(np.uint32).tolist() == expected.view(np.uint32).tolist()
+    seed = mesh.owner >= 0
+    for r in ring:
+        seed[r["y"], r["x"]] = True
+    (cy, cx), (sy, sx) = _flood(seed, True), _flood(seed, False)
+    ys, xs = np.nonzero(~seed)
+    nearer = (cy[ys, xs] - ys) ** 2 + (cx[ys, xs] - xs) ** 2 < (sy[ys, xs] - ys) ** 2 + (
+        sx[ys, xs] - xs
+    ) ** 2
+    assert nearer.any()
+    assert np.array_equal(out[ys, xs].view(np.uint32), out[cy[ys, xs], cx[ys, xs]].view(np.uint32))
 
 
 def _source_table(path: str, name: str) -> list[int]:

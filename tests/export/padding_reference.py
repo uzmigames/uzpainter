@@ -39,10 +39,12 @@ KEPT = 8
 FOLD_GATE = F32(0.985)
 FOLD_LOW = F32(0.98498905)
 FOLD_HIGH = F32(0.98501915)
-# Decision 279's seam reach: UV segment distance at most REACH_CAP texels; Painter's cap lies in
-# (REACH_LOW, REACH_CAP].
-REACH_CAP = 1.8
-REACH_LOW = 1.7
+# Decisions 279 and 285's seam reach: UV segment distance at most REACH_CAP texels; Painter's cap
+# lies in [REACH_LOW, REACH_HIGH) (bevelled-cube-256 (4, 234)'s edge at 1.77200433 included, the
+# Wand's (740, 1459) edge at 1.78724202 excluded, rounded inward).
+REACH_CAP = 1.78
+REACH_LOW = 1.7720044
+REACH_HIGH = 1.787242
 # Decision 281: the coverage's vertex precision (texels), and the most hinges of a face path.
 SUB_TEXEL = 256
 MAX_HINGES = 4
@@ -309,7 +311,8 @@ def unit(a: Vec) -> Vec:
 
 
 def bits(x: float) -> int:
-    return int(np.array([x], F32).view(np.uint32)[0])
+    """The float32 bits of `x`, -0 as +0: vertices weld by value (decision 288)."""
+    return int(np.array([float(x) + 0.0], F32).view(np.uint32)[0])
 
 
 Hinge = tuple[Vec, Vec, Vec, Vec]  # a point of the edge, the edge's unit, toward own, toward other
@@ -713,12 +716,22 @@ class Ring:
                 pool[(tx, ty)] = [norm(sub(q, self.frame(p, k, tau, q))), outside, False]
             return pool[(tx, ty)]
 
+        # Decision 285: an own neighbour of tau's island in another triangle K sharing a UV edge
+        # (two corners) with tau is measured through K, |q_K - P|; one sharing a corner only keeps
+        # tau's frame (decision 279).
+        through: set[tuple[int, int]] = set()
         for tx, ty in own:
             put(tx, ty)[2] = True
-        # Decision 279: the seam edges of every island owning an own neighbour, within REACH_CAP
-        # texels (UV segment distance); decision 275: q folded into the far triangle, the far
-        # island's covered texels of columns floor(f_u - 1/2) +- 1, rows ceil(f_v - 1/2) +- 1;
-        # decision 278: the gate.
+            k = int(self.owner[ty, tx])
+            K = self.tris[k]
+            if k != tau and K.chart == T.chart and len(set(K.corner) & set(T.corner)) >= 2:
+                p = K.point(K.bary(tx + 0.5, ty + 0.5))
+                pool[(tx, ty)][0] = norm(sub(K.point(K.bary(x + 0.5, y + 0.5)), p))
+                through.add((tx, ty))
+        # Decisions 279 and 285: the seam edges of every island owning an own neighbour, within
+        # REACH_CAP texels (UV segment distance; those within REACH_HIGH kept for the reach flag);
+        # decision 275: q folded into the far triangle, the far island's covered texels of columns
+        # floor(f_u - 1/2) +- 1, rows ceil(f_v - 1/2) +- 1; decision 278: the gate.
         edges: list[tuple[tuple[bool, bool, bool], float]] = []
         windows: list[tuple[int, tuple[int, int]]] = []  # per edge: E and its window's base
         charts = sorted({self.tris[int(self.owner[ty, tx])].chart for tx, ty in own})
@@ -726,7 +739,7 @@ class Ring:
             for e_index, edge, j in self.seams.get(chart, []):
                 E, J = self.tris[e_index], self.tris[j]
                 reach = segment_distance(E.t[(edge + 1) % 3], E.t[(edge + 2) % 3], x + 0.5, y + 0.5)
-                if reach > REACH_CAP:
+                if reach >= REACH_HIGH:
                     continue
                 va, vb = E.vertex[(edge + 1) % 3], E.vertex[(edge + 2) % 3]
                 edges.append((seam_gate(E.normal, J.normal, q, E.p[(edge + 1) % 3]), reach))
@@ -747,15 +760,22 @@ class Ring:
 
         def build(
             is_open: Callable[[tuple[tuple[bool, bool, bool], float]], bool],
+            cap: float = REACH_CAP,
         ) -> list[tuple[float, bool, tuple[int, int]]]:
+            """The candidates when the edges within `cap` that are `is_open` feed the far windows;
+            a far tap's E and window are the first edge's within `cap` that holds it."""
             out = []
+            first: dict[tuple[int, int], tuple[int, tuple[int, int]]] = {}
             for texel, (frame, outside, is_own) in pool.items():
                 inside = is_own and outside is None
-                if not inside and any(is_open(edges[e]) for e in via.get(texel, [])):
+                held = [e for e in via.get(texel, []) if edges[e][1] <= cap]
+                if held:
+                    first[texel] = windows[held[0]]
+                if not inside and any(is_open(edges[e]) for e in held):
                     out.append((frame, True, texel))
                 elif is_own:
                     out.append((frame if inside else outside, False, texel))
-            ordered, ties[0] = self._ordered(x, y, out, {t: windows[v[0]] for t, v in via.items()})
+            ordered, ties[0] = self._ordered(x, y, out, first)
             return ordered
 
         ties: list[dict[tuple[int, int], set[str]]] = [{}]
@@ -766,12 +786,17 @@ class Ring:
             undecided |= ties[0].get(c[2], set())
             tx, ty = c[2]
             framed = c[1] or self.tris[int(self.owner[ty, tx])].chart == T.chart
-            if framed and not self.hinged(int(self.owner[ty, tx]), tau):
+            if framed and c[2] not in through and not self.hinged(int(self.owner[ty, tx]), tau):
                 undecided.add("multi-facet")
         if edges:
-            inner = build(lambda e: not e[0][0] and e[1] <= REACH_LOW)
-            if tap_count(inner) != n or inner[:n] != result[:n]:
-                undecided.add("reach-bracket")
+            # Decision 285: a cap anywhere in [REACH_LOW, REACH_HIGH) (REACH_LOW, or an edge's
+            # reach above it) that changes the taps.
+            for cap in [REACH_LOW] + [e[1] for e in edges if e[1] > REACH_LOW]:
+                if all((e[1] <= cap) == (e[1] <= REACH_CAP) for e in edges):
+                    continue
+                other = build(lambda e: not e[0][0], cap)
+                if tap_count(other) != n or other[:n] != result[:n]:
+                    undecided.add("reach-bracket")
             ungated = build(lambda e: True)
             reaching = {
                 e
@@ -779,6 +804,7 @@ class Ring:
                 for c in lst[: tap_count(lst)]
                 if c[1]
                 for e in via[c[2]]
+                if edges[e][1] <= REACH_CAP
             }
             if any(edges[e][0][1] for e in reaching):
                 undecided.add("fold-bracket")
@@ -826,7 +852,8 @@ class Ring:
 def padding(values: np.ndarray, path: Path, material: str) -> np.ndarray:
     """`values` (rows top first, float32, H x W x C) padded over the coverage of `material`'s
     triangles in the OBJ at `path`: covered texels kept, the ring's chains, then every other texel
-    a copy of its seed of the jump flood over the covered and ring texels (decision 197)."""
+    a copy of its seed of the jump flood over the covered and ring texels (decision 197), its reads
+    outside the image clamped to the nearest edge texel (decision 285)."""
     height, width, channels = values.shape
     ring = Ring(path, material, width, height)
     covered = ring.owner >= 0
@@ -846,11 +873,9 @@ def padding(values: np.ndarray, path: Path, material: str) -> np.ndarray:
         by, bx = sy.copy(), sx.copy()
         best = np.where(by >= 0, (by - ys) ** 2 + (bx - xs) ** 2, big)
         for dy, dx in FLOOD:
-            cy, cx = np.full_like(sy, -1), np.full_like(sx, -1)
-            y0, y1 = max(0, -dy * k), min(height, height - dy * k)
-            x0, x1 = max(0, -dx * k), min(width, width - dx * k)
-            cy[y0:y1, x0:x1] = sy[y0 + dy * k : y1 + dy * k, x0 + dx * k : x1 + dx * k]
-            cx[y0:y1, x0:x1] = sx[y0 + dy * k : y1 + dy * k, x0 + dx * k : x1 + dx * k]
+            rows = np.clip(np.arange(height) + dy * k, 0, height - 1)
+            cols = np.clip(np.arange(width) + dx * k, 0, width - 1)
+            cy, cx = sy[rows][:, cols], sx[rows][:, cols]
             d = np.where(cy >= 0, (cy - ys) ** 2 + (cx - xs) ** 2, big)
             better = d < best
             by, bx = np.where(better, cy, by), np.where(better, cx, bx)
