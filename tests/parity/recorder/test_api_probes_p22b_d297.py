@@ -19,6 +19,7 @@ from typing import Any
 import pytest
 
 from tools.parity.recorder.probes import (
+    CleanupFailed,
     ProbeSession,
     load_probe_job,
     manifest_symbol_problems,
@@ -238,9 +239,7 @@ def probe_fake(fake: types.ModuleType) -> types.ModuleType:
     return sys.modules[PROBE_FAKE]
 
 
-def record(
-    probe_fake: types.ModuleType, fake: types.ModuleType, stem: str, tmp_path: Path
-) -> tuple[Any, dict[str, Any], dict[str, Any]]:
+def fake_session(probe_fake: types.ModuleType, fake: types.ModuleType) -> tuple[Any, ProbeSession]:
     world = probe_fake.ProbeWorld()
     world.version, world.version_info = SOFTWARE["version"], (12, 1, 5)
     session = ProbeSession(
@@ -248,6 +247,13 @@ def record(
         sleep=lambda s: None,
         allowed_builds=lambda: frozenset({SOFTWARE["build_id"]}),
     )
+    return world, session
+
+
+def record(
+    probe_fake: types.ModuleType, fake: types.ModuleType, stem: str, tmp_path: Path
+) -> tuple[Any, dict[str, Any], dict[str, Any]]:
+    world, session = fake_session(probe_fake, fake)
     job = load_probe_job(REQUEST_DIR / f"{stem}.json")
     run = record_probe_golden(session, job, tmp_path / "work", tmp_path / "inbox")
     data = json.loads((run / "record.json").read_text(encoding="utf-8"))
@@ -420,3 +426,306 @@ def test_plugins_run_their_hooks_and_leave_no_trace(
     assert plugins.path == [] and plugins.plugins == {}
     assert sys.path == path_before and set(sys.modules) <= modules_before | {PROBE_FAKE}
     assert "UZP_PROBE_PLUGIN_LOG" not in os.environ
+
+
+# --- isolation and cleanup (SUP-016, SUP-017) -------------------------------------------------
+
+SHELF = "uzp_probe_host_shelf"
+HOOK_LOG = "UZP_PROBE_PLUGIN_LOG"
+EVENT = "substance_painter.event"
+
+
+def with_steps(stem: str, **changes: dict[str, Any]) -> dict[str, Any]:
+    """The request with the arguments of the numbered steps (`s<n>=`) changed."""
+    manifest: dict[str, Any] = load_json(REQUEST_DIR / f"{stem}.json")
+    for step in manifest["instruction_sequence"]["steps"]:
+        step["args"].update(changes.get(f"s{step['step']}", {}))
+    return manifest
+
+
+def published(tmp_path: Path) -> list[Path]:
+    return sorted((tmp_path / "inbox").rglob("record.json"))
+
+
+def attempt_recording(session: ProbeSession, manifest: dict[str, Any], tmp_path: Path) -> None:
+    job = probe_job_from_manifest(manifest)
+    record_probe_golden(session, job, tmp_path / "work", tmp_path / "inbox")
+
+
+def unchanged_host(world: Any, tmp_path: Path) -> None:
+    """A run refused before any change: no project, connection or golden."""
+    assert not world.project_open
+    assert not any(world.listeners.values())
+    assert published(tmp_path) == []
+
+
+def test_an_existing_shelf_of_the_probe_name_refuses_the_run_untouched(
+    probe_fake: types.ModuleType, fake: types.ModuleType, tmp_path: Path
+) -> None:
+    world, session = fake_session(probe_fake, fake)
+    owner = (tmp_path / "owner-shelf").as_posix()
+    world.shelves[SHELF] = owner
+    with pytest.raises(RecorderError, match=f"shelf named '{SHELF}' exists already"):
+        attempt_recording(session, load_json(REQUEST_DIR / "p22b-host-resources.json"), tmp_path)
+    assert world.shelves == {SHELF: owner} and world.crawling == set()
+    assert not world.reloading
+    unchanged_host(world, tmp_path)
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"s18": {"name": "owner_shelf"}},
+        {"s23": {"shelves": ["owner_shelf"]}},
+    ],
+    ids=["remove", "shelves-filter"],
+)
+def test_a_shelf_the_run_did_not_add_is_never_removed_or_reloaded(
+    probe_fake: types.ModuleType,
+    fake: types.ModuleType,
+    tmp_path: Path,
+    changes: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    world, session = fake_session(probe_fake, fake)
+    owner = (tmp_path / "owner-shelf").as_posix()
+    world.shelves["owner_shelf"] = owner
+    resource = world.modules["substance_painter.resource"]
+    reload_before, filters = resource.reload_modified_resources_async, []
+
+    def reload(resource_filter: Any) -> Any:
+        filters.append(type(resource_filter).__name__)
+        return reload_before(resource_filter)
+
+    monkeypatch.setattr(resource, "reload_modified_resources_async", reload)
+    manifest = with_steps("p22b-host-resources", **changes)
+    with pytest.raises(RecorderError, match="'owner_shelf' was not added by this probe run"):
+        attempt_recording(session, manifest, tmp_path)
+    assert "ShelvesListFilter" not in filters
+    assert world.shelves == {"owner_shelf": owner}  # the run's own shelf was removed again
+    assert published(tmp_path) == []
+
+
+def test_a_shelf_replaced_under_the_run_name_is_kept_and_nothing_is_published(
+    probe_fake: types.ModuleType,
+    fake: types.ModuleType,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Another shelf takes the run's name after its add: the run never removes it, and the failed
+    cleanup is added to the recording error, whose cause stays the original one."""
+    world, session = fake_session(probe_fake, fake)
+    shelves = world.modules["substance_painter.resource"].Shelves
+    add_before, other = shelves.add, (tmp_path / "other-shelf").as_posix()
+
+    def add(name: str, path: str) -> Any:
+        added = add_before(name, path)
+        world.shelves[name] = other
+        return added
+
+    monkeypatch.setattr(shelves, "add", staticmethod(add))
+    with pytest.raises(CleanupFailed) as refused:
+        attempt_recording(session, load_json(REQUEST_DIR / "p22b-host-resources.json"), tmp_path)
+    message = str(refused.value)
+    assert f"shelf '{SHELF}' is not the one this probe run added" in message
+    assert f"probe_cleanup shelf/{SHELF}: ProbeGuardError" in message
+    assert "ProbeGuardError" in str(refused.value.__cause__)
+    assert world.shelves == {SHELF: other}
+    assert published(tmp_path) == []
+
+
+def owner_module(calls: list[str]) -> types.ModuleType:
+    owner = types.ModuleType("uzp_probe_plugin")
+    for hook in ("start_plugin", "close_plugin", "reload_plugin"):
+        setattr(owner, hook, lambda hook=hook: calls.append(hook))
+    return owner
+
+
+def shadow_folder(tmp_path: Path) -> tuple[Path, Path]:
+    """A folder with another `uzp_probe_plugin.py`, which leaves a marker when imported."""
+    folder, marker = tmp_path / "owner-lib", tmp_path / "imported.marker"
+    folder.mkdir()
+    source = f"open({marker.as_posix()!r}, 'w').close()\ndef start_plugin():\n    pass\n"
+    (folder / "uzp_probe_plugin.py").write_text(source, encoding="utf-8")
+    return folder, marker
+
+
+def plugins_untouched(world: Any) -> None:
+    plugins = world.modules[PLUGINS]
+    assert plugins.path == [] and plugins.plugins == {}
+    assert HOOK_LOG not in os.environ
+    assert not [p for p in sys.path if "plugin-roots" in str(p)]
+
+
+def test_an_imported_module_of_the_probe_name_refuses_the_run_untouched(
+    probe_fake: types.ModuleType,
+    fake: types.ModuleType,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    world, session = fake_session(probe_fake, fake)
+    calls: list[str] = []
+    owner = owner_module(calls)
+    monkeypatch.setitem(sys.modules, "uzp_probe_plugin", owner)
+    with pytest.raises(RecorderError, match="'uzp_probe_plugin' is imported already"):
+        attempt_recording(session, load_json(REQUEST_DIR / "p22b-host-plugins.json"), tmp_path)
+    assert calls == [] and sys.modules["uzp_probe_plugin"] is owner
+    plugins_untouched(world)
+    unchanged_host(world, tmp_path)
+
+
+def test_a_shadowing_module_on_the_path_refuses_the_run_untouched(
+    probe_fake: types.ModuleType,
+    fake: types.ModuleType,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    world, session = fake_session(probe_fake, fake)
+    folder, marker = shadow_folder(tmp_path)
+    monkeypatch.syspath_prepend(str(folder))
+    with pytest.raises(RecorderError, match="'uzp_probe_plugin' is importable from"):
+        attempt_recording(session, load_json(REQUEST_DIR / "p22b-host-plugins.json"), tmp_path)
+    assert not marker.exists() and "uzp_probe_plugin" not in sys.modules
+    assert str(folder) in sys.path and (folder / "uzp_probe_plugin.py").is_file()
+    plugins_untouched(world)
+    unchanged_host(world, tmp_path)
+
+
+def test_a_module_shadowed_during_the_run_is_never_imported_and_the_run_cleans_up(
+    probe_fake: types.ModuleType,
+    fake: types.ModuleType,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A folder put ahead on `sys.path` after the preflight: the origin check refuses the start,
+    the other module is never imported, and the run's own path entries leave again."""
+    world, session = fake_session(probe_fake, fake)
+    folder, marker = shadow_folder(tmp_path)
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    plugins = world.modules[PLUGINS]
+    update_before = plugins.update_sys_path
+
+    def update_sys_path() -> None:
+        update_before()
+        sys.path.insert(0, str(folder))
+
+    monkeypatch.setattr(plugins, "update_sys_path", update_sys_path)
+    with pytest.raises(RecorderError, match="'uzp_probe_plugin' would import from"):
+        attempt_recording(session, load_json(REQUEST_DIR / "p22b-host-plugins.json"), tmp_path)
+    assert not marker.exists() and "uzp_probe_plugin" not in sys.modules
+    assert sys.path[0] == str(folder)  # not the run's entry: it stays
+    plugins_untouched(world)
+    assert published(tmp_path) == []
+
+
+def test_an_existing_hook_log_value_is_restored(
+    probe_fake: types.ModuleType,
+    fake: types.ModuleType,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(HOOK_LOG, "owner-value")
+    record(probe_fake, fake, "p22b-host-plugins", tmp_path)
+    assert os.environ[HOOK_LOG] == "owner-value"
+
+
+def watched_setter(world: Any, monkeypatch: pytest.MonkeyPatch, broken: list[bool]) -> list[Any]:
+    """The fake's throttling setter, logging each period; while `broken[0]`, setting the period
+    back to the fake's 1 s raises."""
+    state = world.modules[EVENT].TextureStateEvent
+    setter, periods = state.set_cache_key_invalidation_throttling_period, []
+
+    def set_period(period: datetime.timedelta) -> None:
+        periods.append(period)
+        if broken[0] and period == datetime.timedelta(seconds=1):
+            raise RuntimeError("the period could not be set")
+        setter(period)
+
+    monkeypatch.setattr(state, "set_cache_key_invalidation_throttling_period", set_period)
+    return periods
+
+
+def test_a_throttling_getter_that_raises_changes_nothing(
+    probe_fake: types.ModuleType,
+    fake: types.ModuleType,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    world, session = fake_session(probe_fake, fake)
+    periods = watched_setter(world, monkeypatch, [False])
+
+    def unreadable() -> datetime.timedelta:
+        raise RuntimeError("the period is unreadable")
+
+    state = world.modules[EVENT].TextureStateEvent
+    monkeypatch.setattr(state, "cache_key_invalidation_throttling_period", unreadable)
+    with pytest.raises(RecorderError, match="could not be read before setting it"):
+        attempt_recording(session, load_json(REQUEST_DIR / "p22b-host-events.json"), tmp_path)
+    assert periods == [] and world.throttling == datetime.timedelta(seconds=1)
+    assert published(tmp_path) == []
+
+
+def test_a_failed_disconnect_still_restores_the_throttling_period(
+    probe_fake: types.ModuleType,
+    fake: types.ModuleType,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    world, session = fake_session(probe_fake, fake)
+    finishing = [False]
+    call_before = session.call
+
+    def call(operation: str, **args: Any) -> Any:
+        finishing[0] = finishing[0] or operation == "probe_finish"
+        return call_before(operation, **args)
+
+    dispatcher = world.modules[EVENT].DISPATCHER
+    disconnect_before = dispatcher.disconnect
+
+    def disconnect(event_cls: type, callback: Any) -> None:
+        if finishing[0]:
+            raise RuntimeError("the dispatcher refused")
+        disconnect_before(event_cls, callback)
+
+    monkeypatch.setattr(session, "call", call)
+    monkeypatch.setattr(dispatcher, "disconnect", disconnect)
+    with pytest.raises(CleanupFailed, match="disconnect_strong/Event: RuntimeError"):
+        attempt_recording(session, load_json(REQUEST_DIR / "p22b-host-events.json"), tmp_path)
+    assert world.throttling == datetime.timedelta(seconds=1)  # restored after the failures
+    assert published(tmp_path) == []
+
+
+@pytest.mark.parametrize("recording_fails", [False, True], ids=["recorded", "recording-failed"])
+def test_a_failed_restore_keeps_the_snapshot_and_publishes_nothing(
+    probe_fake: types.ModuleType,
+    fake: types.ModuleType,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    recording_fails: bool,
+) -> None:
+    world, session = fake_session(probe_fake, fake)
+    broken = [True]
+    watched_setter(world, monkeypatch, broken)
+    if recording_fails:  # the host's save before r2 fails, after r1 set the period
+        project = world.modules["substance_painter.project"]
+        save_as_before = project.save_as
+
+        def save_as(path: str, mode: Any) -> None:
+            if path.endswith("probe.spp"):
+                raise RuntimeError("disk full")
+            save_as_before(path, mode)
+
+        monkeypatch.setattr(project, "save_as", save_as)
+    with pytest.raises(CleanupFailed) as refused:
+        attempt_recording(session, load_json(REQUEST_DIR / "p22b-host-events.json"), tmp_path)
+    message = str(refused.value)
+    assert "probe_finish throttling: RuntimeError: the period could not be set" in message
+    assert ("disk full" in message) is recording_fails
+    assert ("disk full" in str(refused.value.__cause__)) is recording_fails
+    assert world.throttling == datetime.timedelta(milliseconds=750)
+    assert published(tmp_path) == []
+    broken[0] = False  # the snapshot was kept: a later finish restores the period read first
+    finished = session.call("probe_finish")
+    assert finished["throttling_restored"] == {"timedelta_ms": 1000.0}
+    assert finished["cleanup_failures"] == []
+    assert world.throttling == datetime.timedelta(seconds=1)

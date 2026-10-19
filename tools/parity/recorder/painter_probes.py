@@ -19,6 +19,7 @@ import dataclasses
 import datetime
 import enum
 import importlib
+import importlib.util
 import json
 import os
 import sys
@@ -87,10 +88,11 @@ EVENT_LOG: list[dict[str, Any]] = []
 CALLBACKS: dict[str, Any] = {}
 
 # The run's private directory (paths under it are recorded relative to it); the shelves a probe
-# added (removed again once the project is closed, as `Shelves.remove` requires); the pending keys
-# of a shelf crawl (shelf name) and of a project being opened (P21-D, P21-G; decision 110).
+# added, by name with the folder that identifies them (removed again once the project is closed,
+# as `Shelves.remove` requires; kept until their removal is confirmed, SUP-016/017); the pending
+# keys of a shelf crawl (shelf name) and of a project being opened (P21-D, P21-G; decision 110).
 ROOT: dict[str, Any] = {"dir": None}
-SHELVES_ADDED: list[str] = []
+SHELVES_ADDED: dict[str, str] = {}
 SHELF_CRAWLS: dict[str, str] = {}
 OPENING: dict[str, bool] = {}
 CLOSED: dict[str, Any] = {"path": None}
@@ -629,8 +631,20 @@ HOST_EVENT_CLASSES = {
 # The throwaway plugin modules (the host writes them; RECORDER.md 9) and the environment variable
 # naming the file their hooks append to.
 PROBE_PLUGIN_MODULES = ("uzp_probe_plugin", "uzp_probe_startup")
+# The folder of the plugin root each probe module is written in (its only accepted origin).
+PROBE_PLUGIN_FOLDERS = {"uzp_probe_plugin": "plugins", "uzp_probe_startup": "startup"}
 PLUGIN_HOOK_LOG = "UZP_PROBE_PLUGIN_LOG"
 NEWLINE = chr(10)
+
+
+class ProbeGuardError(Exception):
+    """A guard refusing a host change the run cannot own or undo (SUP-016, SUP-017): a shelf or
+    module of the probe's name it did not make, a module that would import from elsewhere, an old
+    value it could not read. Never the outcome of a probe step: it aborts the recording."""
+
+
+def normal_path(value: Any) -> str:
+    return os.path.normcase(os.path.normpath(str(value)))
 
 
 def raised(error: Exception) -> dict[str, str]:
@@ -944,6 +958,33 @@ def shelf_named(name: str) -> Any:
     raise ValueError(f"no shelf named {name!r}")
 
 
+def owned_shelf(name: str) -> Any:
+    """The shelf this run added under that name, identified by its name and folder, or None once
+    it is gone; a shelf of that name the run did not add is refused (SUP-016)."""
+    if name not in SHELVES_ADDED:
+        raise ProbeGuardError(f"shelf {name!r} was not added by this probe run")
+    for shelf in substance_painter.resource.Shelves.all():
+        if shelf.name() == name:
+            if normal_path(shelf.path()) != SHELVES_ADDED[name]:
+                raise ProbeGuardError(f"shelf {name!r} is not the one this probe run added")
+            return shelf
+    return None
+
+
+def owned_shelf_named(name: str) -> Any:
+    shelf = owned_shelf(name)
+    if shelf is None:
+        raise ValueError(f"no shelf named {name!r}")
+    return shelf
+
+
+def remove_shelf(name: str) -> Any:
+    """`Shelves.remove` of a shelf this run added; once it is gone the call still goes to Painter
+    (its answer for a removed name is the evidence), but never for a shelf it did not add."""
+    owned_shelf(name)
+    return substance_painter.resource.Shelves.remove(name)
+
+
 def shelf_crawling(name: str) -> bool:
     return bool(shelf_named(name).is_crawling())
 
@@ -957,8 +998,10 @@ def watch_shelf(step: int, name: str) -> None:
 
 def add_shelf(step: int, args: dict[str, Any], resolved: dict[str, Any]) -> Any:
     name = str(args["name"])
+    if substance_painter.resource.Shelves.exists(name):
+        raise ProbeGuardError(f"a shelf named {name!r} exists already; the probe never adds it")
     shelf = substance_painter.resource.Shelves.add(name, resolved["shelf_path"])
-    SHELVES_ADDED.append(name)
+    SHELVES_ADDED[name] = normal_path(resolved["shelf_path"])
     watch_shelf(step, name)
     return shelf
 
@@ -1082,7 +1125,7 @@ def resource_filter(args: dict[str, Any]) -> Any:
     if args["filter"] == "ResourcesListFilter":
         return kind([PROBE_RESOURCES[int(step)] for step in args["resource_steps"]])
     if args["filter"] == "ShelvesListFilter":  # decision 297
-        return kind([shelf_named(str(name)) for name in args["shelves"]])
+        return kind([owned_shelf_named(str(name)) for name in args["shelves"]])
     return kind()
 
 
@@ -1800,6 +1843,8 @@ def probe_step(args: dict[str, Any]) -> dict[str, Any]:
             if call in INSERT_CALLS:
                 PROBE_NODES[step] = value
                 outcome["defaults"] = node_defaults(value)
+    except ProbeGuardError:
+        raise
     except Exception as error:
         outcome["value"] = None
         outcome["raised"] = raised(error)
@@ -1943,12 +1988,20 @@ def events_take(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def events_disconnect(args: dict[str, Any]) -> dict[str, Any]:
-    for name, callback in CALLBACKS.items():
-        substance_painter.event.DISPATCHER.disconnect(
-            member(EVENT_CLASSES, "event", name), callback
-        )
-    CALLBACKS.clear()
+    """Disconnect every connected callback, each whatever the others did; one that could not be
+    disconnected stays listed and the call raises (SUP-017)."""
+    failed = []
+    for name, callback in list(CALLBACKS.items()):
+        try:
+            cls = member(EVENT_CLASSES, "event", name)
+            substance_painter.event.DISPATCHER.disconnect(cls, callback)
+        except Exception as error:
+            failed.append(f"{name}: {raised(error)['type']}: {error}")
+        else:
+            del CALLBACKS[name]
     EVENT_LOG.clear()
+    if failed:
+        raise RuntimeError(f"events not disconnected: {failed}")
     return {"disconnected": True}
 
 
@@ -2014,26 +2067,113 @@ def probe_export(args: dict[str, Any]) -> dict[str, Any]:
         CURRENT["step"] = None
 
 
+def cleanup_stage(failures: list[dict[str, Any]], stage: str, function: Callable[[], Any]) -> bool:
+    """Run one restoring stage of `probe_finish` or `probe_cleanup`; a failure is listed (the
+    host then publishes nothing, SUP-017) and the next stages still run."""
+    try:
+        function()
+    except Exception as error:
+        failures.append({"stage": stage, "raised": raised(error)})
+        return False
+    return True
+
+
+def reenable_engine() -> None:
+    substance_painter.application.enable_engine_computations(True)
+    ENGINE["disabled_by_probe"] = False
+
+
 def probe_finish(args: dict[str, Any]) -> dict[str, Any]:
-    """End of a probe golden: engine computations a probe disabled are enabled again, and the
-    connected event callbacks are disconnected."""
+    """End of a probe golden: engine computations a probe disabled are enabled again, the
+    connected event callbacks are disconnected and the host-module state restored, each stage
+    whatever the others did; `cleanup_failures` lists the stages that failed."""
+    failures: list[dict[str, Any]] = []
     reenabled = ENGINE["disabled_by_probe"]
     if reenabled:
-        substance_painter.application.enable_engine_computations(True)
-        ENGINE["disabled_by_probe"] = False
-    events_disconnect(args)
-    return {"engine_reenabled": reenabled, **host_finish()}
+        cleanup_stage(failures, "enable_engine_computations", reenable_engine)
+    cleanup_stage(failures, "events_disconnect", partial(events_disconnect, args))
+    host = host_finish()
+    return {
+        "engine_reenabled": reenabled,
+        "throttling_restored": host["throttling_restored"],
+        "cleanup_failures": failures + host["failures"],
+    }
+
+
+def remove_owned_shelf(name: str) -> str:
+    """Remove a shelf this run added if it is still there, and confirm it is gone; only then is
+    it forgotten (SUP-016, SUP-017)."""
+    if owned_shelf(name) is None:
+        outcome = "already_removed"
+    else:
+        substance_painter.resource.Shelves.remove(name)
+        if owned_shelf(name) is not None:
+            raise RuntimeError(f"shelf {name!r} is still there after Shelves.remove")
+        outcome = "removed"
+    del SHELVES_ADDED[name]
+    return outcome
 
 
 def probe_cleanup(args: dict[str, Any]) -> dict[str, Any]:
     """After the project is closed: remove the shelves a probe added (`Shelves.remove` needs no
-    open project; an added shelf only lives for the session anyway)."""
+    open project; an added shelf only lives for the session anyway), then the plugin state, each
+    stage whatever the others did; `cleanup_failures` lists the stages that failed."""
+    failures: list[dict[str, Any]] = []
     removed: dict[str, Any] = {}
     for name in list(SHELVES_ADDED):
-        removed[name] = attempt(partial(substance_painter.resource.Shelves.remove, name))
-    SHELVES_ADDED.clear()
+
+        def remove(name: str = name) -> None:
+            removed[name] = remove_owned_shelf(name)
+
+        cleanup_stage(failures, f"shelf/{name}", remove)
     SHELF_CRAWLS.clear()
-    return {"removed": removed, **host_cleanup()}
+    host = host_cleanup()
+    return {
+        "removed": removed,
+        "plugins_closed": host["plugins_closed"],
+        "cleanup_failures": failures + host["failures"],
+    }
+
+
+def probe_preflight(args: dict[str, Any]) -> dict[str, Any]:
+    """Before the run changes anything (SUP-016): no shelf it adds exists already, and no probe
+    plugin module it uses is imported, importable (the import system finds it without importing
+    it) or present in a plugin root's folder (it would shadow the run's file or be shadowed by
+    it); else the run is refused."""
+    collisions = [
+        f"a shelf named {name!r} exists already"
+        for name in args.get("shelves", [])
+        if substance_painter.resource.Shelves.exists(str(name))
+    ]
+    folders = [
+        os.path.join(str(root), sub)
+        for root in plugin_roots()
+        for sub in ("plugins", "startup", "modules")
+    ]
+    for name in args.get("modules", []):
+        if name in sys.modules:
+            collisions.append(f"a module named {name!r} is imported already")
+            continue
+        spec = importlib.util.find_spec(name)
+        if spec is not None:
+            collisions.append(f"{name!r} is importable from {spec.origin!r}")
+        collisions += [f"{name!r} is found at {found!r}" for found in homonyms(folders, name)]
+    if collisions:
+        raise ProbeGuardError(f"probe run refused before any change: {collisions}")
+    return {"collisions": []}
+
+
+def homonyms(folders: list[str], name: str) -> list[str]:
+    """Files or folders of these folders a later `update_sys_path` would make importable as
+    module `name` (`name.py`, `name.pyc`, an extension `name.<tag>.pyd`, a package folder)."""
+    found = []
+    for folder in folders:
+        try:
+            entries = os.listdir(folder)
+        except OSError:
+            continue  # a missing or unreadable folder: the import system finds nothing there
+        found += [os.path.join(folder, e) for e in entries if e.split(".", 1)[0] == name]
+    return found
 
 
 def timing_ms() -> float:
@@ -2096,7 +2236,15 @@ def timing_take(args: dict[str, Any]) -> dict[str, Any]:
 # plugin roots, modules and hook log of the plugin probes (removed by `probe_cleanup`).
 STRONG_CALLBACKS: dict[str, Any] = {}
 THROTTLING: dict[str, Any] = {"before": None, "set": False}
-PLUGIN_STATE: dict[str, Any] = {"roots": [], "modules": {}, "log": None}
+# `appended`: the run appended its root to the plugin path; `environment`: the hook-log
+# variable's value before the run set it (None: unset), restored by `probe_cleanup`.
+PLUGIN_STATE: dict[str, Any] = {
+    "roots": [],
+    "appended": False,
+    "modules": {},
+    "log": None,
+    "environment": {},
+}
 
 
 def strong_class(name: str) -> Any:
@@ -2153,8 +2301,17 @@ def set_throttling(args: dict[str, Any]) -> Any:
     before the first set of the golden is kept, and `probe_finish` sets it again."""
     texture_state = substance_painter.event.TextureStateEvent
     if not THROTTLING["set"]:
-        THROTTLING["before"] = optional(texture_state.cache_key_invalidation_throttling_period)
-        THROTTLING["set"] = True
+        # The old value must be read before anything changes (SUP-017).
+        try:
+            before = texture_state.cache_key_invalidation_throttling_period()
+        except Exception as error:
+            raise ProbeGuardError(
+                f"the throttling period could not be read before setting it ({error}); "
+                "nothing was changed"
+            ) from error
+        if before is None:
+            raise ProbeGuardError("the throttling period read None; nothing was changed")
+        THROTTLING["before"], THROTTLING["set"] = before, True
     period = datetime.timedelta(milliseconds=float(args["milliseconds"]))
     return texture_state.set_cache_key_invalidation_throttling_period(period)
 
@@ -2190,13 +2347,35 @@ def run_entries(paths: Any) -> list[Any]:
     return [e for e in entries if isinstance(e, dict) and "run_relative" in e]
 
 
+def own_module(name: str) -> Any:
+    """Before any import, start, reload or close of a probe module (SUP-016): the file Python
+    imports under that name is the run's (in its plugin root's folder for it), and a module of
+    that name already imported is the one the run imported (its spec, which `find_spec` then
+    returns, names that file too). Returns that module, or None."""
+    if not PLUGIN_STATE["roots"]:
+        raise ProbeGuardError(f"no plugin root of this run holds {name!r}")
+    root = PLUGIN_STATE["roots"][0]
+    expected = normal_path(os.path.join(root, PROBE_PLUGIN_FOLDERS[name], f"{name}.py"))
+    own = PLUGIN_STATE["modules"].get(name)
+    present = sys.modules.get(name)
+    if present is not None and present is not own:
+        raise ProbeGuardError(f"the imported module {name!r} is not the probe run's")
+    spec = importlib.util.find_spec(name)
+    origin = None if spec is None else spec.origin
+    if origin is None or normal_path(origin) != expected:
+        raise ProbeGuardError(f"{name!r} would import from {origin!r}, not the run's plugin root")
+    return own
+
+
 def probe_module(name: str) -> Any:
     """A throwaway plugin module of the probe, imported (once) from the probe's plugin root."""
     if name not in PROBE_PLUGIN_MODULES:
         raise ValueError(f"{name!r} is not a probe plugin module")
-    if name not in PLUGIN_STATE["modules"]:
-        PLUGIN_STATE["modules"][name] = importlib.import_module(name)
-    return PLUGIN_STATE["modules"][name]
+    own = own_module(name)
+    if own is None:
+        own = PLUGIN_STATE["modules"][name] = importlib.import_module(name)
+        own_module(name)
+    return own
 
 
 def take_hooks() -> list[str]:
@@ -2215,10 +2394,14 @@ def add_plugin_root(resolved: dict[str, Any]) -> dict[str, Any]:
     """Append the probe's plugin root to `substance_painter_plugins.path` (once) and point the
     probe modules' hook log at a file in it."""
     root = str(resolved["plugin_root"])
+    if PLUGIN_STATE["roots"] not in ([], [root]):
+        raise ProbeGuardError("a probe run writes its plugin modules in one plugin root")
+    if not PLUGIN_STATE["environment"]:
+        PLUGIN_STATE["environment"] = {PLUGIN_HOOK_LOG: os.environ.get(PLUGIN_HOOK_LOG)}
     if root not in plugin_roots():
         plugin_roots().append(root)
-    if root not in PLUGIN_STATE["roots"]:
-        PLUGIN_STATE["roots"].append(root)
+        PLUGIN_STATE["appended"] = True
+    PLUGIN_STATE["roots"] = [root]
     PLUGIN_STATE["log"] = os.path.join(root, "hooks.log")
     os.environ[PLUGIN_HOOK_LOG] = PLUGIN_STATE["log"]
     return {"probe_roots": run_entries(plugin_roots())}
@@ -2284,7 +2467,7 @@ def host_edit(step: int, call: str, args: dict[str, Any], resolved: dict[str, An
     if call == SHELVES_REFRESH_ALL:
         return refresh_all_shelves(step)
     if call == SHELVES_REMOVE:
-        return substance_painter.resource.Shelves.remove(str(args["name"]))
+        return remove_shelf(str(args["name"]))
     if call == PLUGINS_PATH:
         return add_plugin_root(resolved)
     if call == PLUGINS_UPDATE_SYS_PATH:
@@ -2327,19 +2510,35 @@ def host_read(call: str, args: dict[str, Any]) -> Any:
     raise ValueError(f"readback {call!r} is not in the probe vocabulary")
 
 
+def disconnect_strong(name: str) -> None:
+    substance_painter.event.DISPATCHER.disconnect(strong_class(name), STRONG_CALLBACKS[name])
+    del STRONG_CALLBACKS[name]
+
+
+def restore_throttling() -> None:
+    """Set the period read before the first set back, and read it again; the snapshot is only
+    dropped once the readback equals it (SUP-017)."""
+    texture_state = substance_painter.event.TextureStateEvent
+    texture_state.set_cache_key_invalidation_throttling_period(THROTTLING["before"])
+    now = texture_state.cache_key_invalidation_throttling_period()
+    if now != THROTTLING["before"]:
+        raise RuntimeError(f"the throttling period reads {now!r} after restoring it")
+    THROTTLING["before"], THROTTLING["set"] = None, False
+
+
 def host_finish() -> dict[str, Any]:
     """End of a golden: the strong connections are disconnected and the throttling period a
-    probe set is set back to the value read before."""
-    for name, callback in STRONG_CALLBACKS.items():
-        substance_painter.event.DISPATCHER.disconnect(strong_class(name), callback)
-    STRONG_CALLBACKS.clear()
+    probe set is set back to the value read before, each whatever the others did; a stage that
+    failed keeps its connection or snapshot and is listed in `failures`."""
+    failures: list[dict[str, Any]] = []
+    for name in list(STRONG_CALLBACKS):
+        cleanup_stage(failures, f"disconnect_strong/{name}", partial(disconnect_strong, name))
     restored = None
-    if THROTTLING["set"] and THROTTLING["before"] is not None:
-        texture_state = substance_painter.event.TextureStateEvent
-        restore = texture_state.set_cache_key_invalidation_throttling_period
-        restored = attempt(partial(restore, THROTTLING["before"]))
-    THROTTLING["before"], THROTTLING["set"] = None, False
-    return {"throttling_restored": restored}
+    if THROTTLING["set"]:
+        before = describe(THROTTLING["before"])
+        if cleanup_stage(failures, "throttling", restore_throttling):
+            restored = before
+    return {"throttling_restored": restored, "failures": failures}
 
 
 def under_roots(entry: Any, roots: list[str]) -> bool:
@@ -2352,21 +2551,52 @@ def under_roots(entry: Any, roots: list[str]) -> bool:
     return False
 
 
-def host_cleanup() -> dict[str, Any]:
-    """After the project is closed: the probe plugin modules are closed and forgotten, and their
-    roots leave the plugin path and their folders `sys.path`."""
-    closed = {}
-    for name, module in sorted(PLUGIN_STATE["modules"].items()):
-        if optional(partial(substance_painter_plugins.is_plugin_started, module)):
-            closed[name] = attempt(partial(substance_painter_plugins.close_plugin, module, False))
-        sys.modules.pop(name, None)
+def forget_module(name: str, closed: dict[str, Any]) -> None:
+    """Close a probe module the run imported if it is started, then drop it from `sys.modules`
+    only while that entry is still the run's module (SUP-016)."""
+    module = PLUGIN_STATE["modules"][name]
+    if substance_painter_plugins.is_plugin_started(module):
+        closed[name] = describe(substance_painter_plugins.close_plugin(module, False))
+        if substance_painter_plugins.is_plugin_started(module):
+            raise RuntimeError(f"{name!r} is still started after close_plugin")
+    if sys.modules.get(name) is module:
+        del sys.modules[name]
+    del PLUGIN_STATE["modules"][name]
+
+
+def restore_paths() -> None:
+    """The run's root leaves the plugin path (if the run appended it) and its folders `sys.path`;
+    every other entry stays."""
     roots = PLUGIN_STATE["roots"]
-    plugin_roots()[:] = [entry for entry in plugin_roots() if entry not in roots]
+    if PLUGIN_STATE["appended"]:
+        plugin_roots()[:] = [entry for entry in plugin_roots() if entry not in roots]
+        PLUGIN_STATE["appended"] = False
     sys.path[:] = [entry for entry in sys.path if not under_roots(entry, roots)]
-    os.environ.pop(PLUGIN_HOOK_LOG, None)
-    PLUGIN_STATE["roots"] = []
-    PLUGIN_STATE["modules"], PLUGIN_STATE["log"] = {}, None
-    return {"plugins_closed": closed}
+
+
+def restore_environment() -> None:
+    """The hook-log variable gets its value from before the run back (unset if it had none)."""
+    for name, value in PLUGIN_STATE["environment"].items():
+        if value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = value
+    PLUGIN_STATE["environment"] = {}
+
+
+def host_cleanup() -> dict[str, Any]:
+    """After the project is closed: the probe plugin modules are closed and forgotten, their root
+    leaves the plugin path and its folders `sys.path`, and the hook-log variable is restored,
+    each whatever the others did; what failed stays recorded and is listed in `failures`."""
+    failures: list[dict[str, Any]] = []
+    closed: dict[str, Any] = {}
+    for name in sorted(PLUGIN_STATE["modules"]):
+        cleanup_stage(failures, f"plugin/{name}", partial(forget_module, name, closed))
+    paths = cleanup_stage(failures, "plugin_paths", restore_paths)
+    cleanup_stage(failures, "plugin_environment", restore_environment)
+    if paths and not PLUGIN_STATE["modules"]:
+        PLUGIN_STATE["roots"], PLUGIN_STATE["log"] = [], None
+    return {"plugins_closed": closed, "failures": failures}
 
 
 PROBE_OPERATIONS = {
@@ -2383,6 +2613,7 @@ PROBE_OPERATIONS = {
     "probe_export": probe_export,
     "probe_finish": probe_finish,
     "probe_cleanup": probe_cleanup,
+    "probe_preflight": probe_preflight,
     "timed_call": timed_call,
     "timing_take": timing_take,
 }

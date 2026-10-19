@@ -43,7 +43,6 @@ from __future__ import annotations
 import argparse
 import ast
 import base64
-import contextlib
 import shutil
 import sys
 from collections.abc import Callable, Sequence
@@ -150,6 +149,7 @@ GET_NODE_BY_UID = "substance_painter.layerstack.get_node_by_uid"
 # throwaway modules by `module`.
 PLUGINS_PATH: str = CONSTANTS["PLUGINS_PATH"]
 PROBE_PLUGIN_MODULES: tuple[str, ...] = CONSTANTS["PROBE_PLUGIN_MODULES"]
+PROBE_PLUGIN_FOLDERS: dict[str, str] = CONSTANTS["PROBE_PLUGIN_FOLDERS"]
 PLUGIN_HOOK_LOG: str = CONSTANTS["PLUGIN_HOOK_LOG"]
 PLUGIN_CALLS = frozenset(
     {
@@ -509,9 +509,9 @@ def plugin_root(step: ProbeStep, work_dir: Path) -> Path:
     root: Path = work_dir.parents[1] / "plugin-roots" / str(step.args[PLUGIN_FOLDER])
     for sub in ("plugins", "startup", "modules"):
         (root / sub).mkdir(parents=True, exist_ok=True)
-    plugin, startup = PROBE_PLUGIN_MODULES
-    (root / "plugins" / f"{plugin}.py").write_text(plugin_module_source(plugin), encoding="utf-8")
-    (root / "startup" / f"{startup}.py").write_text(plugin_module_source(startup), encoding="utf-8")
+    for name in PROBE_PLUGIN_MODULES:
+        source = plugin_module_source(name)
+        (root / PROBE_PLUGIN_FOLDERS[name] / f"{name}.py").write_text(source, encoding="utf-8")
     return root
 
 
@@ -813,15 +813,42 @@ def run_directory(job: ProbeJob, identity: PainterIdentity, work: Path, now: Now
     return directory / run_name(identity.session_id, now())
 
 
-def finish_quietly(session: PainterSession) -> None:
-    """Re-enable engine computations a probe disabled, disconnect the events, discard the
-    throwaway project, then remove the shelves a probe added; a failure here must not hide the
-    original error."""
-    with contextlib.suppress(RecorderError):
-        session.call("probe_finish")
-    close_quietly(session)
-    with contextlib.suppress(RecorderError):
-        session.call("probe_cleanup")
+class CleanupFailed(RecorderError):
+    """Painter's state was not all restored after a probe golden (SUP-017): nothing was written
+    to the inbox. A recording error the cleanup followed is the exception's cause."""
+
+
+def preflight(session: PainterSession, job: ProbeJob) -> None:
+    """Before the run changes anything, Painter refuses it if a shelf it adds exists already or a
+    probe plugin module it uses could be someone else's (SUP-016); the refusal is the recorder's
+    failure, never evidence."""
+    steps = (*job.state_steps, *job.probe_steps)
+    shelves = sorted({str(s.args["name"]) for s in steps if s.call == SHELVES_ADD})
+    plugins = any(s.call == PLUGINS_PATH or s.call in PLUGIN_CALLS for s in steps)
+    if shelves or plugins:
+        modules = list(PROBE_PLUGIN_MODULES) if plugins else []
+        session.call("probe_preflight", shelves=shelves, modules=modules)
+
+
+def finish_probe(session: PainterSession) -> list[str]:
+    """Re-enable engine computations a probe disabled, disconnect the events and restore the
+    host-module state, discard the throwaway project, then remove the shelves and plugin state a
+    probe added. Every stage runs whatever an earlier one did; returns what failed (SUP-017)."""
+    failures: list[str] = []
+    for operation in ("probe_finish", "close_project", "probe_cleanup"):
+        try:
+            result = session.call(operation)
+        except RecorderError as error:
+            failures.append(f"{operation}: {error}")
+            continue
+        for failure in result.get("cleanup_failures", []):
+            what = failure["raised"]
+            failures.append(f"{operation} {failure['stage']}: {what['type']}: {what['message']}")
+    return failures
+
+
+def cleanup_refusal(failures: list[str]) -> str:
+    return "Painter's state was not restored, nothing was written: " + "; ".join(failures)
 
 
 def record_api_probe(
@@ -831,6 +858,7 @@ def record_api_probe(
     require_colour_management(job, identity)
     directory = run_directory(job, identity, work, now)
     staged = stage_inputs(job.inputs, directory / "inputs")
+    preflight(session, job)
     try:
         session.call("probe_reset", root=directory.as_posix())
         defaults, outcomes = apply_state(session, job, staged, directory / "r1" / "work-files")
@@ -865,8 +893,17 @@ def record_api_probe(
             now,
             staged,
         )
-    finally:
-        finish_quietly(session)
+    except BaseException as error:
+        # The recording error stays the one raised; a failed cleanup is added to it.
+        failures = finish_probe(session)
+        if failures and isinstance(error, RecorderError):
+            raise CleanupFailed(f"{error}; {cleanup_refusal(failures)}") from error
+        if failures:
+            error.add_note(cleanup_refusal(failures))
+        raise
+    failures = finish_probe(session)
+    if failures:
+        raise CleanupFailed(cleanup_refusal(failures))
     key = golden_key(job, identity, defaults, defaults["colour_management"])
     record = private_record(job, key, [first, second])
     return write_run(

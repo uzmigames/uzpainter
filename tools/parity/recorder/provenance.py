@@ -10,8 +10,9 @@ Rules over every `tools/parity/recorder/*.py`:
    object of Painter's public Python API documentation (A-PYDOC) that documents them. The same
    holds for the documented `substance_painter_plugins` module (decision 297).
 4. In files that import `substance_painter`: every attribute read on any other object is either
-   a member name of a listed symbol or a member of a builtin Python type in `PYTHON_MEMBERS`,
-   and dynamic attribute access (`getattr`, `setattr`, `delattr`, `__import__`) is refused.
+   a member name of a listed symbol or a member of a builtin or standard-library Python type in
+   `PYTHON_MEMBERS`, and dynamic attribute access (`getattr`, `setattr`, `delattr`,
+   `__import__`) is refused.
 
 `documented_symbols.json` is checked against the shipped python-doc's Sphinx inventory
 (`objects.inv`) by `inventory_problems` when that documentation is available.
@@ -40,8 +41,21 @@ BRIDGE_TEXT = re.compile(
 DYNAMIC_ACCESS = frozenset({"getattr", "setattr", "delattr", "__import__"})
 
 # Members of builtin Python types (dict, list, str, bytes, float) used on plain values.
+# `origin`: `importlib.machinery.ModuleSpec.origin`, where a probe plugin module imports from
+# (decision 297, SUP-016).
 PYTHON_MEMBERS = frozenset(
-    {"append", "clear", "decode", "get", "index", "items", "startswith", "split", "values"}
+    {
+        "append",
+        "clear",
+        "decode",
+        "get",
+        "index",
+        "items",
+        "origin",
+        "startswith",
+        "split",
+        "values",
+    }
 )
 
 
