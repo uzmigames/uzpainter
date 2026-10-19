@@ -705,9 +705,12 @@
       "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
       "upstream_blob_sha1": "2bd554ff735da731e9560b1242a9ae894989e869",
       "upstream_sha256": "bf664eb3c4c7fd84d8a656da8737e59ac80ca786abbab2a69cad5fb076376b84",
-      "vendored_sha256": "bf664eb3c4c7fd84d8a656da8737e59ac80ca786abbab2a69cad5fb076376b84",
-      "status": "verbatim",
-      "modifications": []
+      "vendored_sha256": "d42c5cec1881e22e0ef1d3de5e37d81658c3afd0e3cd9517a35c0218e1593514",
+      "status": "modified",
+      "modifications": [
+        "UZP-MOD-011",
+        "UZP-MOD-012"
+      ]
     },
     {
       "upstream_path": "runtime/engine/rhi/vulkan/vulkan_command_list.h",
@@ -715,9 +718,11 @@
       "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
       "upstream_blob_sha1": "6164f102e85162a118d3f6a727887a6504bb051b",
       "upstream_sha256": "ed950e1d7477b1e9f4e659df24ba930ee95cb622992e9d4c28eddcd913f850a6",
-      "vendored_sha256": "ed950e1d7477b1e9f4e659df24ba930ee95cb622992e9d4c28eddcd913f850a6",
-      "status": "verbatim",
-      "modifications": []
+      "vendored_sha256": "2588e4b4c31a3b99f0f16515c10cf2e68d683aab169788da347f017cd603a308",
+      "status": "modified",
+      "modifications": [
+        "UZP-MOD-011"
+      ]
     },
     {
       "upstream_path": "runtime/engine/rhi/vulkan/vulkan_device.cpp",
@@ -725,9 +730,11 @@
       "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
       "upstream_blob_sha1": "63f512fe6c9f806757e074e5293314e3a44ac885",
       "upstream_sha256": "b899c6f3079035d800d5ed1ad67231ff6adbae4f300b5cabfe3d84ff37fa362c",
-      "vendored_sha256": "b899c6f3079035d800d5ed1ad67231ff6adbae4f300b5cabfe3d84ff37fa362c",
-      "status": "verbatim",
-      "modifications": []
+      "vendored_sha256": "ec1b2f578afe5d5b63af779e871a601e0d2880783467ff143bfa3652b924f64d",
+      "status": "modified",
+      "modifications": [
+        "UZP-MOD-012"
+      ]
     },
     {
       "upstream_path": "runtime/engine/rhi/vulkan/vulkan_device.h",
@@ -745,10 +752,11 @@
       "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
       "upstream_blob_sha1": "d6e4c92816797bb151f8f64eb4f7e218811674fe",
       "upstream_sha256": "8a05e8591843babd1ba2ea0765dddff70ef698baf86893aa135f684fb35316c2",
-      "vendored_sha256": "8b9870cb3ab9db1d6f915f4051229d0ad0390aa2fe97a9eb4a050f99560aa9b7",
+      "vendored_sha256": "9d4a0862f7653550be9b8893302ca130e71dfcbc78e7814de16c5e3934adbe90",
       "status": "modified",
       "modifications": [
-        "UZP-MOD-003"
+        "UZP-MOD-003",
+        "UZP-MOD-011"
       ]
     },
     {
@@ -757,10 +765,11 @@
       "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
       "upstream_blob_sha1": "80a6c635c7524ca9702cd3c50201e96620af6b96",
       "upstream_sha256": "63cb4a48c2970552644f6143543997eb6a07afd83e5f50b2669477d835f5d024",
-      "vendored_sha256": "0c9fb8b2534c1169e2a74f44bc92e62236b3bf19d7b27a12c80d899eed1a0bd0",
+      "vendored_sha256": "e29fd21d34467fd4d75b610cd46c54e95f33c0e56c4a467b59ac0ddcbb60c455",
       "status": "modified",
       "modifications": [
-        "UZP-MOD-003"
+        "UZP-MOD-003",
+        "UZP-MOD-011"
       ]
     },
     {

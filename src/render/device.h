@@ -30,7 +30,9 @@ struct DeviceOptions {
 };
 
 /// The device of `options.backend`, or `gpu_backend_unavailable {backend, reason}`.
-/// Only DX12 is implemented; a Vulkan request is reported unavailable, never served by DX12.
+/// Only DX12 serves product paths; a Vulkan request is reported unavailable, never served by DX12
+/// (the qualified Vulkan device of vulkan_backend.h is created only by the selftest Vulkan slice
+/// and the qualification tests, decision 310).
 [[nodiscard]] Result<std::unique_ptr<IDevice>> CreateDevice(const DeviceOptions& options);
 
 /// "DXGI_ERROR_DEVICE_REMOVED (0x887A0005)" for a device-removed reason; the hex value alone for

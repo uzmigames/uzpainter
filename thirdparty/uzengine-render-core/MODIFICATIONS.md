@@ -129,6 +129,32 @@ below against the selected commit, and runs the covering tests.
 | Author | UzmiGames (practical end-to-end fixes, group cli-unicode, branch `wt/e2e-cli`) |
 | Covering test | `tests/supervisor/test_worker_pipe.py::test_crash_reports_go_to_a_crash_dir_outside_the_code_page`, `tests/toolchain/test_selftest.py::test_out_dir_outside_the_code_page` |
 
+## UZP-MOD-011 — Vulkan submission results readable
+
+| Field | Value |
+|---|---|
+| Id | UZP-MOD-011 |
+| Files | `engine/rhi/vulkan/vulkan_command_list.h`, `engine/rhi/vulkan/vulkan_command_list.cpp`, `engine/rhi/vulkan/vulkan_fence.h`, `engine/rhi/vulkan/vulkan_fence.cpp` |
+| Reason | defect |
+| Description | `VulkanCommandList::Execute` and `VulkanFence::Signal` keep the `VkResult` of their `vkQueueSubmit`, read back through the new `VulkanCommandList::LastSubmitResult()` and `VulkanFence::LastSignalResult()` (`VK_SUCCESS` before the first call); a `Signal` on an uninitialised fence records `VK_ERROR_INITIALIZATION_FAILED`. The log lines stay. The `IRHICommandList` and `IRHIFence` interfaces are unchanged: UzPainter's Vulkan queue (`src/render/vulkan_backend.cpp`, decision 310) reads the results after each submission and fails the submission with `device_removed` (`VK_ERROR_DEVICE_LOST`) or `request_failed` (any other error) instead of reporting it later as a timeout, or as a success when the fence signal went through after the command buffer was refused. |
+| Upstream behaviour | `engine/rhi/vulkan/vulkan_command_list.cpp:270-273` only logs a failed `vkQueueSubmit`; `engine/rhi/vulkan/vulkan_fence.cpp:77-80` only logs a failed signal submission; `engine/rhi/vulkan/vulkan_fence.cpp:63` returns silently from a signal on an uninitialised fence |
+| Date | 2026-10-19 |
+| Author | UzmiGames (rulebook task `phase3.1_vulkan-compute-parity`, decision 310, branch `wt/vk-qual`) |
+| Covering test | `tests/vendoring/test_modifications.py::test_vulkan_submission_results_are_readable` |
+
+## UZP-MOD-012 — Vulkan 1.2 entry points, extended storage-image formats
+
+| Field | Value |
+|---|---|
+| Id | UZP-MOD-012 |
+| Files | `engine/rhi/vulkan/vulkan_command_list.cpp`, `engine/rhi/vulkan/vulkan_device.cpp` |
+| Reason | defect |
+| Description | The command list records its barriers with `vkCmdPipelineBarrier2KHR` and its render passes with `vkCmdBeginRenderingKHR` / `vkCmdEndRenderingKHR`, the entry points of the `VK_KHR_synchronization2` and `VK_KHR_dynamic_rendering` extensions the device enables. The instance asks for Vulkan 1.2, so the core 1.3 names (`vkCmdPipelineBarrier2`, `vkCmdBeginRendering`, `vkCmdEndRendering`) are outside the effective API version and `vkGetDeviceProcAddr` need not resolve them; volk loads the core and the KHR names separately, without aliasing. `vkCreateDevice` also enables `shaderStorageImageExtendedFormats` when the device supports it, so a shader may declare an extended storage-image format such as `R16f` (SPIR-V capability `StorageImageExtendedFormats`). UzPainter's qualification (`src/render/vulkan_qualification.cpp`, decision 310) requires the feature and checks that the KHR entry points resolve on the created device before anything is submitted. |
+| Upstream behaviour | `engine/rhi/vulkan/vulkan_command_list.cpp:860` records barriers with the core 1.3 `vkCmdPipelineBarrier2`; `engine/rhi/vulkan/vulkan_command_list.cpp:1333` begins rendering with the core 1.3 `vkCmdBeginRendering`; `engine/rhi/vulkan/vulkan_device.cpp:499-501` enables only `fillModeNonSolid` and `samplerAnisotropy` |
+| Date | 2026-10-19 |
+| Author | UzmiGames (rulebook task `phase3.1_vulkan-compute-parity`, decision 310, branch `wt/vk-qual`) |
+| Covering test | `tests/vendoring/test_modifications.py::test_vulkan_entry_points_match_the_enabled_extensions` |
+
 ## Behaviours kept on purpose
 
 - `DX12CommandList::FatalErrorLoop` still aborts the process after repeated RHI errors

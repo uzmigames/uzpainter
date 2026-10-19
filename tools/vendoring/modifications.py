@@ -495,6 +495,52 @@ UPSTREAM_CITATIONS: tuple[Citation, ...] = (
         r"rotating_file_sink_mt>\(\s*resolvedPath, 10 \* 1024 \* 1024, 3\);",
         "the file sink is opened with the narrow path",
     ),
+    # UZP-MOD-011
+    _cite(
+        "engine/rhi/vulkan/vulkan_command_list.cpp",
+        270,
+        273,
+        r"VkResult result = vkQueueSubmit\(m_device->GetGraphicsQueue\(\)[\s\S]*"
+        r"vkQueueSubmit failed, result=",
+        "a failed command-list submission is only logged",
+    ),
+    _cite(
+        "engine/rhi/vulkan/vulkan_fence.cpp",
+        77,
+        80,
+        r"VkResult result = vkQueueSubmit\(m_device->GetGraphicsQueue\(\)[\s\S]*"
+        r"VulkanFence::Signal -- vkQueueSubmit failed",
+        "a failed fence-signal submission is only logged",
+    ),
+    _cite(
+        "engine/rhi/vulkan/vulkan_fence.cpp",
+        63,
+        63,
+        r"if \(!m_device \|\| m_timelineSemaphore == VK_NULL_HANDLE\) return;",
+        "a signal on an uninitialised fence returns silently",
+    ),
+    # UZP-MOD-012
+    _cite(
+        "engine/rhi/vulkan/vulkan_command_list.cpp",
+        860,
+        860,
+        r"vkCmdPipelineBarrier2\(m_commandBuffers",
+        "barriers through the core 1.3 entry point",
+    ),
+    _cite(
+        "engine/rhi/vulkan/vulkan_command_list.cpp",
+        1333,
+        1333,
+        r"vkCmdBeginRendering\(m_commandBuffers",
+        "dynamic rendering through the core 1.3 entry point",
+    ),
+    _cite(
+        "engine/rhi/vulkan/vulkan_device.cpp",
+        499,
+        501,
+        r"VkPhysicalDeviceFeatures deviceFeatures = \{\};[\s\S]*samplerAnisotropy = VK_TRUE;",
+        "only fillModeNonSolid and samplerAnisotropy are enabled",
+    ),
     # Kept on purpose
     _cite(
         "engine/rhi/dx12/dx12_command_list.cpp",

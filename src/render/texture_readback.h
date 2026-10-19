@@ -41,6 +41,23 @@ inline constexpr uint32_t kReadbackPitchAlignment = 256;
            kReadbackPitchAlignment;
 }
 
+/// The row pitch of rows of `bytesPerTexel`-byte texels: the next multiple of both 256 (DX12's
+/// pitch alignment) and the texel size, so the pitch is also a whole number of texels — Vulkan's
+/// `bufferRowLength` is counted in texels (`vulkan_command_list.cpp` divides the pitch by the texel
+/// size). For the power-of-two texel sizes this is `ReadbackRowPitch(rowBytes)`; for `RGB32Float`
+/// (12 bytes) it is a multiple of 768.
+[[nodiscard]] constexpr uint64_t ReadbackRowPitch(uint64_t rowBytes, uint32_t bytesPerTexel) {
+    uint64_t a = kReadbackPitchAlignment;
+    uint64_t b = bytesPerTexel == 0 ? 1 : bytesPerTexel;
+    while (b != 0) {
+        const uint64_t r = a % b;
+        a = b;
+        b = r;
+    }
+    const uint64_t alignment = kReadbackPitchAlignment / a * (bytesPerTexel == 0 ? 1 : bytesPerTexel);
+    return (rowBytes + alignment - 1) / alignment * alignment;
+}
+
 /// How a readable format stores a texel: `channels` channels of `bytesPerChannel` bytes each.
 struct TexelLayout {
     uint32_t channels = 0;

@@ -8,6 +8,9 @@
 #include "hardware_slice.h"
 #include "json_text.h"
 #include "probes.h"
+#include "vulkan_slice.h"
+
+#include "render/vulkan_backend.h"
 
 #include "log.h"
 #include "paths.h"
@@ -211,12 +214,24 @@ int Selftest::Run(SelftestContext& context) {
     bool failed = false;
     bool sliceFailed = false;
     bool sliceSkipped = false;
+    bool vulkanRan = false;
+    bool vulkanFailed = false;
+    bool vulkanSkipped = false;
     for (const StageRecord& r : m_records) {
         if (r.spec.mandatory && r.outcome.status == StageStatus::Failed) failed = true;
         if (r.spec.hardwareSlice && r.outcome.status == StageStatus::Failed) sliceFailed = true;
         if (r.spec.hardwareSlice && r.outcome.status == StageStatus::Skipped) sliceSkipped = true;
+        if (r.spec.vulkanHardwareSlice) {
+            vulkanRan = true;
+            if (r.outcome.status == StageStatus::Failed) vulkanFailed = true;
+            if (r.outcome.status == StageStatus::Skipped) vulkanSkipped = true;
+        }
     }
     const char* slice = sliceFailed ? "failed" : sliceSkipped ? "skipped" : "passed";
+    // Reported apart from the DX12 slice and the availability probe; never mandatory (decision 310).
+    const char* vulkanSlice = vulkanFailed                   ? "failed"
+                              : (vulkanSkipped || !vulkanRan) ? "skipped"
+                                                              : "passed";
     const int exitCode = failed ? kExitFailed : kExitPassed;
 
     std::ostringstream out;
@@ -235,6 +250,8 @@ int Selftest::Run(SelftestContext& context) {
         out << "      \"mandatory\": " << (r.spec.mandatory ? "true" : "false") << ",\n";
         out << "      \"needs_gpu\": " << (r.spec.needsGpu ? "true" : "false") << ",\n";
         out << "      \"hardware_slice\": " << (r.spec.hardwareSlice ? "true" : "false") << ",\n";
+        out << "      \"vulkan_hardware_slice\": " << (r.spec.vulkanHardwareSlice ? "true" : "false")
+            << ",\n";
         out << "      \"status\": " << JsonString(StatusName(r.outcome.status)) << ",\n";
         out << "      \"reason\": " << JsonString(r.outcome.reason) << ",\n";
         out << "      \"duration_ms\": " << duration << ",\n";
@@ -249,6 +266,7 @@ int Selftest::Run(SelftestContext& context) {
     }
     out << (context.probeReports.empty() ? "]" : "\n  ]") << ",\n";
     out << "  \"hardware_slice\": " << JsonString(slice) << ",\n";
+    out << "  \"vulkan_hardware_slice\": " << JsonString(vulkanSlice) << ",\n";
     out << "  \"result\": " << JsonString(failed ? "failed" : "passed") << ",\n";
     out << "  \"exit_code\": " << exitCode << "\n}\n";
 
@@ -262,6 +280,7 @@ int Selftest::Run(SelftestContext& context) {
                      Utf8(context.options.reportPath.wstring()).c_str());
         return kExitFailed;
     }
+    std::printf("selftest: Vulkan hardware slice %s (not mandatory, decision 310)\n", vulkanSlice);
     std::printf("selftest: %s; DX12 hardware slice %s; report %s\n", failed ? "failed" : "passed",
                 slice, Utf8(context.options.reportPath.wstring()).c_str());
     std::fflush(stdout);
@@ -344,6 +363,7 @@ int RunSelftestCommand(const std::vector<std::string>& args) {
     Selftest selftest;
     RegisterHardwareSlice(selftest);
     RegisterProbes(selftest);
+    RegisterVulkanSlice(selftest);
     RegisterCpythonStages(selftest);
     const int code = selftest.Run(context);
     uz::LogFlushAll();
@@ -353,6 +373,7 @@ int RunSelftestCommand(const std::vector<std::string>& args) {
         std::fflush(nullptr);
         TerminateProcess(GetCurrentProcess(), static_cast<UINT>(code));
     }
+    TeardownVulkanSlice(context);
     TeardownHardwareSlice(context);
     TeardownCpython();
     uz::LogShutdown();

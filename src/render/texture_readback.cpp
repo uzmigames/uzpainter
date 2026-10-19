@@ -85,7 +85,8 @@ Result<ReadbackId> TextureReadback::Request(const ReadbackDesc& desc) {
     pending.channels = channels;
     pending.width = std::max(1u, texture->width >> desc.mipLevel);
     pending.height = std::max(1u, texture->height >> desc.mipLevel);
-    pending.rowPitch = ReadbackRowPitch(uint64_t{pending.width} * layout->BytesPerTexel());
+    pending.rowPitch =
+        ReadbackRowPitch(uint64_t{pending.width} * layout->BytesPerTexel(), layout->BytesPerTexel());
 
     uz::RHIBufferDesc bufferDesc;
     bufferDesc.sizeBytes = pending.rowPitch * pending.height;
@@ -116,7 +117,9 @@ Result<ReadbackId> TextureReadback::Request(const ReadbackDesc& desc) {
         }
     });
     if (!fence) {
-        // Nothing reached the GPU: the buffer can go at once.
+        // Either nothing reached the GPU and the buffer can go at once, or the submission failed
+        // after its command list was accepted: that device is then failed and its DestroyBuffer
+        // keeps the buffer (vulkan_backend.h).
         m_device.DestroyBuffer(pending.staging);
         return Unexpected(std::move(fence.error()));
     }

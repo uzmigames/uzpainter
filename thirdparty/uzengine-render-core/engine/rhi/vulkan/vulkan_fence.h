@@ -1,4 +1,4 @@
-// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-003. Original: UzEngine runtime/engine/rhi/vulkan/vulkan_fence.h at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-003, UZP-MOD-011. Original: UzEngine runtime/engine/rhi/vulkan/vulkan_fence.h at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
 
 #pragma once
 
@@ -53,6 +53,11 @@ public:
     /// Signals the fence by submitting a timeline semaphore signal to the GPU queue.
     void Signal(uint64_t value) override;
 
+    /// The `VkResult` of the last `Signal()`'s `vkQueueSubmit` (`VK_SUCCESS` before the
+    /// first): a failed signal never reaches its value, so a caller fails instead of waiting
+    /// for it (UZP-MOD-011).
+    VkResult LastSignalResult() const { return m_lastSignalResult; }
+
     /// Waits with `vkWaitSemaphores` until the timeline semaphore reaches `value`, `deadline`
     /// passes or the wait reports an error. `VK_TIMEOUT` returns `Timeout`;
     /// `VK_ERROR_DEVICE_LOST` (or any other error) returns `DeviceLost` with that `VkResult`.
@@ -67,6 +72,7 @@ public:
 private:
     VulkanDevice*    m_device = nullptr;
     VkSemaphore      m_timelineSemaphore = VK_NULL_HANDLE;
+    VkResult         m_lastSignalResult = VK_SUCCESS;
 };
 
 } // namespace uz

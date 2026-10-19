@@ -1,0 +1,14 @@
+{
+  "id": 310,
+  "slug": "310-vulkan-qualification",
+  "title": "Vulkan device qualification lands as a slice of phase3.1: a qualified Vulkan device for the selftest and the native tests only, explicit criteria judged before any work, bounded waits with abandon-on-failure teardown, and no parity claim",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase3.1_vulkan-compute-parity",
+    "phase3.3_vulkan-backend-ray-tracing",
+    "phase1.4_render-core-layer",
+    "phase0.7_toolchain-probes"
+  ],
+  "supersededBy": null
+}

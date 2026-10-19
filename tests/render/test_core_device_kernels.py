@@ -42,6 +42,8 @@ GPU_CASES = frozenset(
         "image-resample",
         "image-mips",
         "image-repeat",
+        "vulkan-device",
+        "vulkan-faults",
     }
 )
 

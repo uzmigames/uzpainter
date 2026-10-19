@@ -1,4 +1,10 @@
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-011, UZP-MOD-012. Original: UzEngine runtime/engine/rhi/vulkan/vulkan_command_list.cpp at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+
 /// Vulkan Command List Implementation
+///
+/// Barriers and dynamic rendering go through the VK_KHR_synchronization2 and
+/// VK_KHR_dynamic_rendering entry points the device enables: the instance asks for Vulkan 1.2,
+/// so the core 1.3 names need not resolve (UZP-MOD-012).
 ///
 /// Records GPU commands into VkCommandBuffer, submits via vkQueueSubmit.
 /// Uses VK_KHR_dynamic_rendering for render passes and VK_KHR_synchronization2
@@ -268,6 +274,7 @@ void VulkanCommandList::Execute() {
     }
 
     VkResult result = vkQueueSubmit(m_device->GetGraphicsQueue(), 1, &submitInfo, VK_NULL_HANDLE);
+    m_lastSubmitResult = result;  // UZP-MOD-011: read back through LastSubmitResult()
     if (result != VK_SUCCESS) {
         UZ_LOG(RHI, Error, "vkQueueSubmit failed, result={}", static_cast<int>(result));
     }
@@ -857,7 +864,7 @@ void VulkanCommandList::ResourceBarrier(const RHIBarrierDesc* barriers, uint32_t
             depInfo.imageMemoryBarrierCount = 1;
             depInfo.pImageMemoryBarriers = &imgBarrier;
 
-            vkCmdPipelineBarrier2(m_commandBuffers[m_frameIndex], &depInfo);
+            vkCmdPipelineBarrier2KHR(m_commandBuffers[m_frameIndex], &depInfo);
 
             // Update tracked layout
             tex->currentLayout = imgBarrier.newLayout;
@@ -883,7 +890,7 @@ void VulkanCommandList::ResourceBarrier(const RHIBarrierDesc* barriers, uint32_t
             depInfo.bufferMemoryBarrierCount = 1;
             depInfo.pBufferMemoryBarriers = &bufBarrier;
 
-            vkCmdPipelineBarrier2(m_commandBuffers[m_frameIndex], &depInfo);
+            vkCmdPipelineBarrier2KHR(m_commandBuffers[m_frameIndex], &depInfo);
         }
     }
 }
@@ -920,7 +927,7 @@ void VulkanCommandList::ClearRenderTarget(RHITextureHandle texture, const float 
         dep.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
         dep.imageMemoryBarrierCount = 1;
         dep.pImageMemoryBarriers = &barrier;
-        vkCmdPipelineBarrier2(m_commandBuffers[m_frameIndex], &dep);
+        vkCmdPipelineBarrier2KHR(m_commandBuffers[m_frameIndex], &dep);
         tex->currentLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
     }
 
@@ -968,7 +975,7 @@ void VulkanCommandList::ClearDepthStencil(RHITextureHandle texture, float depth,
         dep.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
         dep.imageMemoryBarrierCount = 1;
         dep.pImageMemoryBarriers = &barrier;
-        vkCmdPipelineBarrier2(m_commandBuffers[m_frameIndex], &dep);
+        vkCmdPipelineBarrier2KHR(m_commandBuffers[m_frameIndex], &dep);
         tex->currentLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
     }
 
@@ -1071,7 +1078,7 @@ void VulkanCommandList::CopyBufferToTexture(RHIBufferHandle srcBuffer, uint64_t 
         depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
         depInfo.imageMemoryBarrierCount = 1;
         depInfo.pImageMemoryBarriers = &preBarrier;
-        vkCmdPipelineBarrier2(m_commandBuffers[m_frameIndex], &depInfo);
+        vkCmdPipelineBarrier2KHR(m_commandBuffers[m_frameIndex], &depInfo);
 
         tex->currentLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
     }
@@ -1133,7 +1140,7 @@ void VulkanCommandList::CopyBufferToTexture(RHIBufferHandle srcBuffer, uint64_t 
     postDep.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
     postDep.imageMemoryBarrierCount = 1;
     postDep.pImageMemoryBarriers = &postBarrier;
-    vkCmdPipelineBarrier2(m_commandBuffers[m_frameIndex], &postDep);
+    vkCmdPipelineBarrier2KHR(m_commandBuffers[m_frameIndex], &postDep);
 
     tex->currentLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 }
@@ -1278,7 +1285,7 @@ void VulkanCommandList::BeginRenderPass(const RHIRenderPassDesc& desc) {
                 depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
                 depInfo.imageMemoryBarrierCount = 1;
                 depInfo.pImageMemoryBarriers = &dsBarrier;
-                vkCmdPipelineBarrier2(m_commandBuffers[m_frameIndex], &depInfo);
+                vkCmdPipelineBarrier2KHR(m_commandBuffers[m_frameIndex], &depInfo);
                 depthTex->currentLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
             }
 
@@ -1330,13 +1337,13 @@ void VulkanCommandList::BeginRenderPass(const RHIRenderPassDesc& desc) {
         }());
     renderingInfo.pStencilAttachment = hasStencil ? &depthAttachment : nullptr;
 
-    vkCmdBeginRendering(m_commandBuffers[m_frameIndex], &renderingInfo);
+    vkCmdBeginRenderingKHR(m_commandBuffers[m_frameIndex], &renderingInfo);
     m_inRenderPass = true;
 }
 
 void VulkanCommandList::EndRenderPass() {
     if (m_inRenderPass) {
-        vkCmdEndRendering(m_commandBuffers[m_frameIndex]);
+        vkCmdEndRenderingKHR(m_commandBuffers[m_frameIndex]);
         m_inRenderPass = false;
     }
 

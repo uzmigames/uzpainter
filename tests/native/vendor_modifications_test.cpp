@@ -5,6 +5,10 @@
 // Usage: uzp-vendor-tests <case> [args]
 //   factory              UZP-MOD-001/002: only DX12 and Vulkan are created
 //   fence dx12|vulkan    UZP-MOD-003: timeout, signaled and device_lost on one backend
+//   submit-results       UZP-MOD-011: a refused Vulkan submission's VkResult is readable from
+//                        the command list and the fence
+//   khr-entry-points     UZP-MOD-012: the KHR barrier and dynamic-rendering entry points resolve
+//                        on the Vulkan 1.2 device and a barrier recorded through them executes
 //   rayquery-decision    UZP-MOD-004: DXR tier / shader model decision
 //   agility              UZP-MOD-005: Agility SDK runtime loaded from D3D12\ beside the exe
 //   spirv <out-dir>      UZP-MOD-006: writes plain.spv and rayquery.spv for inspection
@@ -29,7 +33,9 @@
 #include "rhi_backend.h"
 #include "rhi_config.h"
 #include "shader_compiler.h"
+#include "vulkan_command_list.h"
 #include "vulkan_device.h"
+#include "vulkan_fence.h"
 
 #include <spdlog/sinks/callback_sink.h>
 
@@ -265,6 +271,105 @@ int RunFenceVulkan() {
     Check(elapsed < 5000ms, "vulkan device_lost returns before the deadline",
           "returned after " + Ms(elapsed));
     device->DestroyFence(pending);
+    return g_failures == 0 ? 0 : 1;
+}
+
+// ── UZP-MOD-011 ──────────────────────────────────────────────────────────────
+
+/// Stand-in for vkQueueSubmit installed in volk's function table: the queue refuses the batch.
+VKAPI_ATTR VkResult VKAPI_CALL RefusedQueueSubmit(VkQueue, uint32_t, const VkSubmitInfo*, VkFence) {
+    return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+}
+
+int RunSubmitResults() {
+    using namespace std::chrono_literals;
+    LogCapture log;
+    auto device = CreateDevice(RHIBackend::Vulkan);
+    if (!device) {
+        Info("no Vulkan device");
+        return kExitSkip;
+    }
+    IRHICommandList* list = device->CreateCommandList(RHIQueueType::Graphics);
+    IRHIFence* fence = device->CreateFence();
+    Check(list != nullptr && fence != nullptr, "vulkan command list and fence created");
+    if (!list || !fence) return 1;
+    auto* vkList = static_cast<VulkanCommandList*>(list);
+    auto* vkFence = static_cast<VulkanFence*>(fence);
+    Check(vkList->LastSubmitResult() == VK_SUCCESS && vkFence->LastSignalResult() == VK_SUCCESS,
+          "both results are VK_SUCCESS before the first submission");
+
+    list->Begin();
+    list->End();
+    list->Execute();
+    fence->Signal(1);
+    Check(vkList->LastSubmitResult() == VK_SUCCESS, "an accepted submission reads VK_SUCCESS",
+          std::to_string(static_cast<int>(vkList->LastSubmitResult())));
+    Check(vkFence->LastSignalResult() == VK_SUCCESS, "an accepted signal reads VK_SUCCESS",
+          std::to_string(static_cast<int>(vkFence->LastSignalResult())));
+    Check(fence->WaitCPU(1, Clock::now() + 5000ms).status == FenceWaitStatus::Signaled,
+          "the accepted signal is reached");
+
+    const PFN_vkQueueSubmit original = vkQueueSubmit;
+    vkQueueSubmit = &RefusedQueueSubmit;
+    list->Begin();
+    list->End();
+    list->Execute();
+    fence->Signal(2);
+    vkQueueSubmit = original;
+    Check(vkList->LastSubmitResult() == VK_ERROR_OUT_OF_DEVICE_MEMORY,
+          "a refused command-list submission reads its VkResult",
+          std::to_string(static_cast<int>(vkList->LastSubmitResult())));
+    Check(vkFence->LastSignalResult() == VK_ERROR_OUT_OF_DEVICE_MEMORY,
+          "a refused fence signal reads its VkResult",
+          std::to_string(static_cast<int>(vkFence->LastSignalResult())));
+    Check(log.Contains("vkQueueSubmit failed"), "the refusal is still logged");
+    Check(!fence->IsComplete(2), "the refused signal's value is never reached");
+
+    VulkanFence unset;
+    unset.Signal(1);
+    Check(unset.LastSignalResult() == VK_ERROR_INITIALIZATION_FAILED,
+          "a signal on an uninitialised fence reads VK_ERROR_INITIALIZATION_FAILED",
+          std::to_string(static_cast<int>(unset.LastSignalResult())));
+    device->DestroyFence(fence);
+    device->DestroyCommandList(list);
+    return g_failures == 0 ? 0 : 1;
+}
+
+// ── UZP-MOD-012 ──────────────────────────────────────────────────────────────
+
+int RunKhrEntryPoints() {
+    using namespace std::chrono_literals;
+    LogCapture log;
+    auto device = CreateDevice(RHIBackend::Vulkan);
+    if (!device) {
+        Info("no Vulkan device");
+        return kExitSkip;
+    }
+    Check(vkCmdPipelineBarrier2KHR != nullptr, "vkCmdPipelineBarrier2KHR resolves");
+    Check(vkCmdBeginRenderingKHR != nullptr && vkCmdEndRenderingKHR != nullptr,
+          "vkCmdBeginRenderingKHR and vkCmdEndRenderingKHR resolve");
+    RHITextureDesc desc;
+    desc.width = 4;
+    desc.height = 4;
+    desc.format = RHIFormat::R16Float;
+    desc.usage = RHITextureUsage::UnorderedAccess | RHITextureUsage::CopySrc;
+    const RHITextureHandle texture = device->CreateTexture(desc);
+    IRHICommandList* list = device->CreateCommandList(RHIQueueType::Graphics);
+    IRHIFence* fence = device->CreateFence();
+    Check(texture.IsValid() && list && fence, "an R16Float storage texture, a command list and a fence");
+    if (!texture.IsValid() || !list || !fence) return 1;
+    list->Begin();
+    const RHIBarrierDesc barrier{texture, RHIBufferHandle::Invalid(), RHIResourceState::Common,
+                                 RHIResourceState::UnorderedAccess};
+    list->ResourceBarrier(&barrier, 1);
+    list->End();
+    list->Execute();
+    fence->Signal(1);
+    Check(fence->WaitCPU(1, Clock::now() + 5000ms).status == FenceWaitStatus::Signaled,
+          "a barrier recorded through vkCmdPipelineBarrier2KHR executes");
+    device->DestroyFence(fence);
+    device->DestroyCommandList(list);
+    device->DestroyTexture(texture);
     return g_failures == 0 ? 0 : 1;
 }
 
@@ -563,12 +668,15 @@ int main(int argc, char** argv) {
     if (mode == "factory") return RunFactory();
     if (mode == "fence" && argc > 2 && std::string_view(argv[2]) == "dx12") return RunFenceDX12();
     if (mode == "fence" && argc > 2 && std::string_view(argv[2]) == "vulkan") return RunFenceVulkan();
+    if (mode == "submit-results") return RunSubmitResults();
+    if (mode == "khr-entry-points") return RunKhrEntryPoints();
     if (mode == "rayquery-decision") return RunRayQueryDecision();
     if (mode == "agility") return RunAgility();
     if (mode == "spirv" && argc > 2) return RunSpirv(argv[2]);
     if (mode == "ieee" && argc > 2) return RunIeee(argv[2]);
     std::fprintf(stderr,
-                 "usage: uzp-vendor-tests factory | fence dx12|vulkan | rayquery-decision | "
+                 "usage: uzp-vendor-tests factory | fence dx12|vulkan | submit-results | khr-entry-points | "
+                 "rayquery-decision | "
                  "agility | spirv <out-dir> | ieee <out-dir>\n");
     return 2;
 }

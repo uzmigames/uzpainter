@@ -1,4 +1,4 @@
-// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-003. Original: UzEngine runtime/engine/rhi/vulkan/vulkan_fence.cpp at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-003, UZP-MOD-011. Original: UzEngine runtime/engine/rhi/vulkan/vulkan_fence.cpp at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
 
 /// Vulkan Fence Implementation
 ///
@@ -64,7 +64,10 @@ bool VulkanFence::Init(VulkanDevice* device) {
 
 void VulkanFence::Signal(uint64_t value) {
     UZ_PROFILE_FUNCTION();
-    if (!m_device || m_timelineSemaphore == VK_NULL_HANDLE) return;
+    if (!m_device || m_timelineSemaphore == VK_NULL_HANDLE) {
+        m_lastSignalResult = VK_ERROR_INITIALIZATION_FAILED;  // UZP-MOD-011
+        return;
+    }
 
     // Submit an empty command with a timeline semaphore signal
     VkTimelineSemaphoreSubmitInfo timelineInfo = {};
@@ -79,6 +82,7 @@ void VulkanFence::Signal(uint64_t value) {
     submitInfo.pSignalSemaphores = &m_timelineSemaphore;
 
     VkResult result = vkQueueSubmit(m_device->GetGraphicsQueue(), 1, &submitInfo, VK_NULL_HANDLE);
+    m_lastSignalResult = result;  // UZP-MOD-011: read back through LastSignalResult()
     if (result != VK_SUCCESS) {
         UZ_LOG(RHI, Error, "VulkanFence::Signal -- vkQueueSubmit failed, result={}", static_cast<int>(result));
     }

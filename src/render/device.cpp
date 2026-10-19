@@ -57,9 +57,11 @@ std::string DeviceRemovedReasonText(int32_t hresult) {
 
 Result<std::unique_ptr<IDevice>> CreateDevice(const DeviceOptions& options) {
     if (options.backend == Backend::Vulkan) {
+        // Decision 310: the qualified Vulkan device (vulkan_backend.h) serves only the selftest
+        // Vulkan slice and the qualification tests until phase3.1 qualifies Vulkan outputs.
         return Fail(ErrorCode::GpuBackendUnavailable, Backend::Vulkan,
-                    "this build's render layer implements DX12 only; Vulkan devices are not "
-                    "available and DX12 is not used in their place");
+                    "this build's render layer serves no product path on Vulkan (decision 310); "
+                    "Vulkan devices are not available here and DX12 is not used in their place");
     }
 
     // The adapter is looked up first, so a missing one is reported by index rather than as a

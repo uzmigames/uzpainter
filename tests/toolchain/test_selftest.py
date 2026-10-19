@@ -24,6 +24,7 @@ from tools.toolchain.dll_closure import VC_RUNTIME, check_folder
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HARDWARE_SLICE = ("dx12-device", "shader-compile", "compute-readback", "png16", "embree")
 GPU_STAGES = ("dx12-device", "compute-readback")
+VULKAN_SLICE = ("vulkan-device", "vulkan-compute-readback", "vulkan-png16")
 WIDTH, HEIGHT = 100, 64
 
 
@@ -136,6 +137,52 @@ def test_hardware_slice_green(painter_bin: Path, tmp_path: Path) -> None:
     assert by_name["embree"]["details"]["embree_version"] == "4.4.1"
 
 
+# ── Vulkan hardware slice (phase3.1_vulkan-compute-parity 2.8, 3.8; decision 310) ──────────
+
+
+def test_vulkan_hardware_slice_green(painter_bin: Path, tmp_path: Path) -> None:
+    """2.8, 3.8: on the owner's machine the Vulkan slice qualifies the device at adapter index 0
+    (every criterion passed), reads the three qualification kernels back bit for bit, the 16-bit
+    pattern equal to the CPU pattern and to the DX12 readback, and round-trips it through a 16-bit
+    PNG. It is reported as `vulkan_hardware_slice`, apart from the DX12 slice and the
+    `vulkan-availability` probe, and no stage of it is mandatory."""
+    if os.environ.get("UZP_NO_GPU") == "1":
+        pytest.skip(
+            "UZP_NO_GPU=1: no GPU on this runner (decision 028); runs on the owner's machine"
+        )
+    code, output, report = run_selftest(painter_bin / "UzPainter.exe", tmp_path)
+    assert code == 0, output
+    assert report["vulkan_hardware_slice"] == "passed", output
+    assert report["hardware_slice"] == "passed"
+    by_name = stages(report)
+    assert [n for n, s in by_name.items() if s["vulkan_hardware_slice"]] == list(VULKAN_SLICE)
+    for name in VULKAN_SLICE:
+        stage = by_name[name]
+        assert stage["status"] == "passed", stage
+        assert not stage["mandatory"] and not stage["hardware_slice"] and stage["needs_gpu"]
+    device = by_name["vulkan-device"]["details"]
+    checks = [v for k, v in device.items() if k.startswith("check.")]
+    assert checks and all(v.startswith("passed: ") for v in checks), checks
+    assert device["device.name"] and device["device.driver_version"]
+    assert device["device.device_uuid"]
+    assert device["device.feature.shaderStorageImageExtendedFormats"] == "true"
+    assert device["qualification"].startswith("qualified: device 0 ")
+    readback = by_name["vulkan-compute-readback"]["details"]
+    for kernel in ("pattern16", "hash32", "ieee32"):
+        assert readback[f"{kernel}.mismatches"] == "0"
+        assert readback[f"{kernel}.odd.mismatches"] == "0"
+    assert readback["pattern16.equals_cpu_pattern"] == "yes"
+    assert readback["pattern16.equals_dx12_readback"] == "yes"
+    png = by_name["vulkan-png16"]["details"]
+    assert png["source"] == "vulkan-readback"
+    width, height, samples = decode_png16_gray(
+        (tmp_path / "selftest-vulkan-pattern16.png").read_bytes()
+    )
+    assert (width, height) == (WIDTH, HEIGHT)
+    assert samples == [pattern_value(x, y) for y in range(HEIGHT) for x in range(WIDTH)]
+    assert "selftest: Vulkan hardware slice passed (not mandatory, decision 310)" in output
+
+
 # ── Hosted CI: GPU stages skipped with an explicit reason ─────────────────────────────────
 
 
@@ -152,6 +199,9 @@ def test_no_gpu_run_skips_gpu_stages_with_reason(painter_bin: Path, tmp_path: Pa
         else:
             assert stage["status"] == "passed", stage
     assert "SKIP dx12-device: no GPU" in output
+    assert report["vulkan_hardware_slice"] == "skipped"
+    for name in VULKAN_SLICE:
+        assert stages(report)[name]["needs_gpu"] and stages(report)[name]["status"] == "skipped"
 
 
 def test_uzp_no_gpu_environment_skips_with_reason(painter_bin: Path, tmp_path: Path) -> None:

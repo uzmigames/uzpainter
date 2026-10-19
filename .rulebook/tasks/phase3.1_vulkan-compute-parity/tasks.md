@@ -38,3 +38,11 @@
   - `phase2.4_supervisor-worker` 3.4 and 4.1: Vulkan `device_lost` and `gpu_stall` in `supervisor-settling.json`, and the §7 suite re-run with a Vulkan device (item 3.4 here);
   - `phase2.3_realtime-preview` 4.1: the five Vulkan entries of `preview-settling.json` (item 2.7 here).
   They stay `pending` in those reports until settled here, and reach G3 through `phase3.3_vulkan-backend-ray-tracing` and G5 through P5-REPORT (DX12 and Vulkan). `python -m tools.planning.acceptance_graph` checks that the open tasks' acceptance graph has no cycle.
+- Decision 310 (2026-10-19): device-qualification slice landed early, as decision 221 §3 allows. It is deferred G3 work and accepts nothing; no item above is checked.
+  - In part: 2.1, the qualified device and queue (`src/render/vulkan_backend.h`). It is reachable only from the `selftest` Vulkan slice and `uzp-render-tests`; `render::CreateDevice(Vulkan)` still refuses every product path.
+  - In part: 2.2, bounded waits; refused and partial submissions fail; `VK_ERROR_DEVICE_LOST` maps to `device_removed {backend: vulkan, reason}`; teardown abandons the device on failure.
+  - In part: 2.6, the capability record, qualification criteria, and the descriptor, VRAM and admission model (`src/render/vulkan_qualification.h`). Wiring into the engine thread's startup query stays open.
+  - In part: 2.8, the `vulkan-device`, `vulkan-compute-readback` and `vulkan-png16` stages; they are not mandatory yet.
+  - In part: 3.1, readback pitch in whole texels.
+  - In part: 3.4, in-process fault cases (`vulkan-faults`). The supervisor device-loss and stall cases and the §7 settling re-run stay `pending`.
+  - Vendored modifications: UZP-MOD-011 and UZP-MOD-012.

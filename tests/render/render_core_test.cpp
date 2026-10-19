@@ -20,6 +20,7 @@
 //   readback-kernel  a kernel compiled through the cache, dispatched, then 64 readbacks drained
 //                    (phase1.4_render-core-layer)
 //   uv-raster-*      the UV-space raster pass (phase1.3_core-uv-raster, uv_raster_test.cpp)
+//   vulkan-*         the Vulkan device qualification (phase3.1 slice, decision 310, vulkan_test.cpp)
 //   image-*          the image passes (phase1.3_core-image-passes, image_passes_test.cpp)
 //
 // Output: `PASS <check>` / `FAIL <check>: <detail>` lines, `INFO` lines and, for
@@ -656,6 +657,10 @@ int RunDeviceRemoved(const fs::path& dir) {
 
 bool Loaded(const wchar_t* module) { return GetModuleHandleW(module) != nullptr; }
 
+// Two cases, neither a stand-in for the other: a DX12 adapter index that does not exist (the
+// deterministic unavailable-device fixture) and a Vulkan request, which the product path refuses
+// by design (decision 310) without loading the Vulkan loader. The qualified Vulkan device and its
+// refusal of an unqualified device are the `vulkan-*` cases (vulkan_test.cpp).
 int RunUnavailable(const fs::path& dir) {
     Check(!Loaded(L"D3D12Core.dll") && !Loaded(L"vulkan-1.dll"),
           "no GPU runtime is loaded before the test");
@@ -977,6 +982,28 @@ int RunReadbackLayout() {
               ReadbackRowPitch(257) == 512 && ReadbackRowPitch(1023 * 8) == 8192 &&
               ReadbackRowPitch(4097 * 2) == 8448,
           "row pitch is the row size rounded up to 256 bytes");
+    {
+        // Texel-aware pitch: a multiple of 256 and of the texel size, the 12-byte RGB32F texel
+        // included, for odd widths (supervisor audit SUP-044 item 1).
+        bool whole = true;
+        for (const uint32_t texel : {1u, 2u, 4u, 8u, 12u, 16u}) {
+            for (const uint32_t width : {1u, 3u, 5u, 1023u, 4097u}) {
+                const uint64_t rowBytes = uint64_t{width} * texel;
+                const uint64_t pitch = ReadbackRowPitch(rowBytes, texel);
+                const bool ok = pitch >= rowBytes && pitch % 256 == 0 && pitch % texel == 0 &&
+                                pitch - rowBytes < 256u * texel &&
+                                (std::has_single_bit(texel) ? pitch == ReadbackRowPitch(rowBytes) : true);
+                if (!ok) {
+                    whole = false;
+                    Check(false, "texel " + std::to_string(texel) + " width " + std::to_string(width) +
+                                     ": pitch " + std::to_string(pitch));
+                }
+            }
+        }
+        Check(whole, "row pitch is a multiple of 256 bytes and of the texel size, for odd widths");
+        Check(ReadbackRowPitch(12, 12) == 768 && ReadbackRowPitch(1023 * 12, 12) == 12288,
+              "RGB32F rows are a whole number of 12-byte texels (768-byte steps)");
+    }
     bool sized = true;
     for (const uz::RHIFormat format : kReadableFormats) {
         const std::optional<TexelLayout> layout = ReadbackLayout(format);
@@ -1051,15 +1078,20 @@ int RunReadbackPitch(const fs::path& dir) {
                     Check(false, what + ": texture uploaded", filled.error().Describe());
                     continue;
                 }
-                // The pitch the readback uses is the one D3D12 reports for the copy footprint.
-                const uint64_t rowBytes = uint64_t{width} * filled->layout.BytesPerTexel();
+                // The pitch the readback uses holds the D3D12 copy footprint's row, is a multiple
+                // of 256 and a whole number of texels (Vulkan counts rows in texels): for
+                // power-of-two texels it is the footprint's own pitch.
+                const uint32_t texel = filled->layout.BytesPerTexel();
+                const uint64_t rowBytes = uint64_t{width} * texel;
+                const uint64_t pitch = ReadbackRowPitch(rowBytes, texel);
                 const std::optional<Footprint> footprint = CopyFootprint(device, filled->texture, 0);
-                const bool pitchOk = footprint && footprint->layout.Footprint.RowPitch ==
-                                                      ReadbackRowPitch(rowBytes);
+                const bool pitchOk =
+                    footprint && pitch % kReadbackPitchAlignment == 0 && pitch % texel == 0 &&
+                    pitch >= footprint->layout.Footprint.RowPitch &&
+                    (std::has_single_bit(texel) ? pitch == footprint->layout.Footprint.RowPitch : true);
                 allPitches = allPitches && pitchOk;
-                if (!pitchOk) Check(false, what + ": readback pitch equals the D3D12 footprint");
-                Info(what + ": row " + std::to_string(rowBytes) + " bytes, pitch " +
-                     std::to_string(ReadbackRowPitch(rowBytes)));
+                if (!pitchOk) Check(false, what + ": readback pitch fits the D3D12 footprint and the texel");
+                Info(what + ": row " + std::to_string(rowBytes) + " bytes, pitch " + std::to_string(pitch));
 
                 TextureReadback readback(context);
                 ReadbackDesc desc;
@@ -1646,6 +1678,8 @@ int RunReadbackKernel(const fs::path& dir) {
 
 /// The `uv-raster-*` cases (tests/render/uv_raster_test.cpp); -1 for any other mode.
 int RunUvRasterCase(std::string_view mode, const fs::path& dir);
+/// The `vulkan-*` cases (tests/render/vulkan_test.cpp); -1 for any other mode.
+int RunVulkanCase(std::string_view mode, const fs::path& dir);
 
 int main(int argc, char** argv) {
     const std::string_view mode = argc > 1 ? argv[1] : "";
@@ -1653,12 +1687,13 @@ int main(int argc, char** argv) {
     if (mode == "admission") return RunAdmission();
     if (mode == "readback-layout") return RunReadbackLayout();
     if (mode == "image-reference") return RunImagePassCase(mode, {});
+    if (mode == "vulkan-qualify") return RunVulkanCase(mode, {});
     if (argc < 3) {
         std::fprintf(stderr,
                      "usage: uzp-render-tests xxhash | admission | readback-layout | kernel-cache | "
                      "dispatch | deadline | device-removed | unavailable | capabilities | "
                      "readback-pitch | readback-exact | readback-drain | readback-failure | "
-                     "readback-kernel | uv-raster-* | "
+                     "readback-kernel | uv-raster-* | vulkan-qualify | vulkan-device | vulkan-faults | "
                      "image-* "
                      "<work-dir>\n");
         return 2;
@@ -1681,6 +1716,7 @@ int main(int argc, char** argv) {
     else if (mode == "readback-failure") code = RunReadbackFailure(dir);
     else if (mode == "readback-kernel") code = RunReadbackKernel(dir);
     else if (const int uv = RunUvRasterCase(mode, dir); uv >= 0) code = uv;
+    else if (const int vulkan = RunVulkanCase(mode, dir); vulkan >= 0) code = vulkan;
     else if (const int image = RunImagePassCase(mode, dir); image >= 0) code = image;
     else std::fprintf(stderr, "unknown case %.*s\n", static_cast<int>(mode.size()), mode.data());
     uz::LogShutdown();

@@ -271,7 +271,8 @@ std::string CapabilityReport::ToJson() const {
 Result<CapabilityReport> QueryCapabilities(IDevice& device, const AdmissionPolicy& policy) {
     if (device.GetBackend() != Backend::Dx12) {
         return Fail(ErrorCode::GpuBackendUnavailable, device.GetBackend(),
-                    "this build queries capabilities on DX12 devices only");
+                    "this build queries capabilities on DX12 devices only; a Vulkan device's are "
+                    "its VulkanDeviceRecord (render/vulkan_qualification.h, decision 310)");
     }
     return QueryDx12(static_cast<Dx12Device&>(device), policy);
 }

@@ -197,6 +197,7 @@ const app_sources = [_][]const u8{
     "selftest/probes.cpp",
     "selftest/dx12_probes.cpp",
     "selftest/vulkan_probes.cpp",
+    "selftest/vulkan_slice.cpp",
     "selftest/cpython_stages.cpp",
     "python/interpreter.cpp",
     "python/uzpainter_module.cpp",
@@ -261,6 +262,9 @@ const render_sources = [_][]const u8{
     "render/resample.cpp",
     "render/texture_readback.cpp",
     "render/uv_raster.cpp",
+    "render/vulkan_backend.cpp",
+    "render/vulkan_kernels.cpp",
+    "render/vulkan_qualification.cpp",
     "render/xxhash64.cpp",
 };
 /// The preview viewport (`src/preview/`, phase2.1_preview-viewport-window), relative to `src/`: the
@@ -823,6 +827,7 @@ pub fn build(b: *std.Build) void {
             "render_core_test.cpp",
             "uv_raster_test.cpp",
             "image_passes_test.cpp",
+            "vulkan_test.cpp",
             "reference/image_reference.cpp",
         },
         .flags = &(cxx_flags ++ own_warning_flags),

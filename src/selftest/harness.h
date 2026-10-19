@@ -19,6 +19,10 @@ namespace uz {
 class IRHIDevice;
 }
 
+namespace uzp::render {
+class VulkanDevice;
+}
+
 namespace uzp::selftest {
 
 struct VulkanProbeState;
@@ -74,6 +78,11 @@ struct SelftestContext {
     /// The 16-bit pattern read back from the GPU (stage `compute-readback`), row-major.
     std::vector<uint16_t> readback;
 
+    /// The qualified Vulkan device (stage `vulkan-device`, vulkan_slice.h) and the 16-bit pattern
+    /// its compute readback returned (stage `vulkan-compute-readback`).
+    std::unique_ptr<uzp::render::VulkanDevice> vulkanDevice;
+    std::vector<uint16_t> vulkanReadback;
+
     /// What the Vulkan availability probe gathered (stage `vulkan-availability`, probes.h).
     std::shared_ptr<VulkanProbeState> vulkan;
     /// The probe reports of the run as JSON objects (probe_report.h), written as the report's
@@ -90,6 +99,7 @@ struct StageSpec {
     bool hardwareSlice = false;     ///< Part of the DX12 hardware slice (13 §4.2).
     std::vector<std::string> dependsOn;  ///< Skipped when one of these did not pass.
     StageFn run;
+    bool vulkanHardwareSlice = false;  ///< Part of the Vulkan hardware slice (vulkan_slice.h).
 };
 
 struct StageRecord {

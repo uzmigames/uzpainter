@@ -46,7 +46,7 @@ ZIG = shutil.which("zig")
 PINNED_ZIG = "0.15.2"
 EXIT_SKIP = 77
 # Native cases that create a DX12 or Vulkan device, and the flag hosted CI sets (no GPU).
-ADAPTER_CASES = frozenset({"factory", "fence", "agility"})
+ADAPTER_CASES = frozenset({"factory", "fence", "submit-results", "khr-entry-points", "agility"})
 NO_GPU_ENV = "UZP_NO_GPU"
 TEST_SOURCE = REPO_ROOT / "tests" / "native" / "vendor_modifications_test.cpp"
 ABSOLUTE_PATH_RE = re.compile(r"[A-Za-z]:[\\/][^\s\"'<>|]*")
@@ -285,6 +285,54 @@ def test_fence_wait_is_bounded_and_truthful(build: Build, tmp_path: Path, backen
     assert reason in passed
 
 
+# ── UZP-MOD-011 ───────────────────────────────────────────────────────────────────────────
+
+
+def test_vulkan_submission_results_are_readable(build: Build, tmp_path: Path) -> None:
+    """UZP-MOD-011: `VulkanCommandList::LastSubmitResult` and `VulkanFence::LastSignalResult`
+    read `VK_SUCCESS` for accepted submissions and the `VkResult` of a refused one (a refusal
+    injected through volk's function table), whose fence value is never reached; a signal on an
+    uninitialised fence reads `VK_ERROR_INITIALIZATION_FAILED`."""
+    passed, _, _ = _run(build, tmp_path, "submit-results")
+    assert {
+        "both results are VK_SUCCESS before the first submission",
+        "an accepted submission reads VK_SUCCESS",
+        "an accepted signal reads VK_SUCCESS",
+        "the accepted signal is reached",
+        "a refused command-list submission reads its VkResult",
+        "a refused fence signal reads its VkResult",
+        "the refusal is still logged",
+        "the refused signal's value is never reached",
+        "a signal on an uninitialised fence reads VK_ERROR_INITIALIZATION_FAILED",
+    } <= passed
+
+
+def test_vulkan_entry_points_match_the_enabled_extensions(build: Build, tmp_path: Path) -> None:
+    """UZP-MOD-012: the Vulkan backend calls no core 1.3 command (its instance asks for 1.2), only
+    the `VK_KHR_synchronization2` / `VK_KHR_dynamic_rendering` names, which resolve on the device
+    and record a barrier that executes; `vkCreateDevice` enables
+    `shaderStorageImageExtendedFormats` when supported."""
+    core13 = re.compile(
+        r"\b(vkCmdPipelineBarrier2|vkCmdBeginRendering|vkCmdEndRendering|vkQueueSubmit2)\s*\("
+    )
+    for source in sorted((VENDORED / "engine" / "rhi" / "vulkan").glob("*.cpp")):
+        assert not core13.findall(source.read_text(encoding="utf-8")), source.name
+    device = (VENDORED / "engine" / "rhi" / "vulkan" / "vulkan_device.cpp").read_text(
+        encoding="utf-8"
+    )
+    enabled = (
+        "deviceFeatures.shaderStorageImageExtendedFormats = "
+        "supported.shaderStorageImageExtendedFormats;"
+    )
+    assert enabled in device
+    passed, _, _ = _run(build, tmp_path, "khr-entry-points")
+    assert {
+        "vkCmdPipelineBarrier2KHR resolves",
+        "vkCmdBeginRenderingKHR and vkCmdEndRenderingKHR resolve",
+        "a barrier recorded through vkCmdPipelineBarrier2KHR executes",
+    } <= passed
+
+
 # ── UZP-MOD-004 (3.4) ─────────────────────────────────────────────────────────────────────
 
 
@@ -419,7 +467,7 @@ def test_notices_log_and_manifest_agree() -> None:
     that exists, and its manifest entry carries the logged ids and its current hash."""
     log = load_log(REPO_ROOT)
     # UZP-MOD-007 (Vulkan acceleration structures) is planned for phase3.3 and not applied yet.
-    assert [m.id for m in log] == [f"UZP-MOD-{n:03d}" for n in (1, 2, 3, 4, 5, 6, 8, 9, 10)]
+    assert [m.id for m in log] == [f"UZP-MOD-{n:03d}" for n in (1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12)]
     manifest = load(VENDORED / "MANIFEST.json")
     assert problems(REPO_ROOT, manifest, log) == []
     modified = {e.vendored_path for e in manifest.files if e.status == "modified"}

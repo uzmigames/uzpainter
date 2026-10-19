@@ -1,3 +1,5 @@
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-012. Original: UzEngine runtime/engine/rhi/vulkan/vulkan_device.cpp at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+
 /// Vulkan Device Implementation
 ///
 /// Initializes the Vulkan 1.2+ stack: instance, validation layer, physical device,
@@ -499,6 +501,13 @@ bool VulkanDevice::CreateLogicalDevice() {
     VkPhysicalDeviceFeatures deviceFeatures = {};
     deviceFeatures.fillModeNonSolid = VK_TRUE; // Wireframe support
     deviceFeatures.samplerAnisotropy = VK_TRUE;
+    // UZP-MOD-012: storage images of the extended formats (R16_SFLOAT, ...) when supported; a
+    // shader declaring them needs the StorageImageExtendedFormats capability.
+    {
+        VkPhysicalDeviceFeatures supported = {};
+        vkGetPhysicalDeviceFeatures(m_physicalDevice, &supported);
+        deviceFeatures.shaderStorageImageExtendedFormats = supported.shaderStorageImageExtendedFormats;
+    }
 
     VkDeviceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;

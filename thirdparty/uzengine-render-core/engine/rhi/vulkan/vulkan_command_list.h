@@ -1,3 +1,5 @@
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-011. Original: UzEngine runtime/engine/rhi/vulkan/vulkan_command_list.h at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+
 #pragma once
 
 /// Vulkan backend implementation of IRHICommandList.
@@ -71,6 +73,10 @@ public:
     /// Submits the command buffer to the graphics queue via `vkQueueSubmit`
     /// and rotates the frame index for triple-buffered pool rotation.
     void Execute() override;
+
+    /// The `VkResult` of the last `Execute()`'s `vkQueueSubmit` (`VK_SUCCESS` before the
+    /// first), so a caller can fail a submission instead of waiting for it (UZP-MOD-011).
+    VkResult LastSubmitResult() const { return m_lastSubmitResult; }
 
     /// Binds a graphics or compute pipeline via `vkCmdBindPipeline`.
     void SetPipeline(RHIPipelineHandle pipeline) override;
@@ -180,6 +186,7 @@ private:
     VkCommandBuffer      m_commandBuffers[kVulkanFrameCount] = {};
     VkDescriptorSet      m_descriptorSets[kVulkanFrameCount] = {};
     uint32_t             m_frameIndex = 0;
+    VkResult             m_lastSubmitResult = VK_SUCCESS;
     RHIQueueType         m_queueType = RHIQueueType::Graphics;
     bool                 m_inRenderPass = false;
     bool                 m_descriptorsDirty = false;
