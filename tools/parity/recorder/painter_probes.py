@@ -19,7 +19,6 @@ import dataclasses
 import datetime
 import enum
 import importlib
-import importlib.util
 import json
 import os
 import sys
@@ -628,12 +627,12 @@ HOST_EVENT_CLASSES = {
     "Event": lambda: substance_painter.event.Event,
     "TextureStateEvent": lambda: substance_painter.event.TextureStateEvent,
 }
-# The throwaway plugin modules (the host writes them; RECORDER.md 9) and the environment variable
-# naming the file their hooks append to.
+# The throwaway plugin modules (the host writes them; RECORDER.md 9) and the file of their plugin
+# root their hooks append to (its path is written into each module: SUP-028).
 PROBE_PLUGIN_MODULES = ("uzp_probe_plugin", "uzp_probe_startup")
 # The folder of the plugin root each probe module is written in (its only accepted origin).
 PROBE_PLUGIN_FOLDERS = {"uzp_probe_plugin": "plugins", "uzp_probe_startup": "startup"}
-PLUGIN_HOOK_LOG = "UZP_PROBE_PLUGIN_LOG"
+PLUGIN_HOOK_LOG_FILE = "hooks.log"
 NEWLINE = chr(10)
 
 
@@ -2154,7 +2153,7 @@ def probe_preflight(args: dict[str, Any]) -> dict[str, Any]:
         if name in sys.modules:
             collisions.append(f"a module named {name!r} is imported already")
             continue
-        spec = importlib.util.find_spec(name)
+        spec = fresh_spec(name)
         if spec is not None:
             collisions.append(f"{name!r} is importable from {spec.origin!r}")
         collisions += [f"{name!r} is found at {found!r}" for found in homonyms(folders, name)]
@@ -2236,15 +2235,8 @@ def timing_take(args: dict[str, Any]) -> dict[str, Any]:
 # plugin roots, modules and hook log of the plugin probes (removed by `probe_cleanup`).
 STRONG_CALLBACKS: dict[str, Any] = {}
 THROTTLING: dict[str, Any] = {"before": None, "set": False}
-# `appended`: the run appended its root to the plugin path; `environment`: the hook-log
-# variable's value before the run set it (None: unset), restored by `probe_cleanup`.
-PLUGIN_STATE: dict[str, Any] = {
-    "roots": [],
-    "appended": False,
-    "modules": {},
-    "log": None,
-    "environment": {},
-}
+# `appended`: the run appended its root to the plugin path.
+PLUGIN_STATE: dict[str, Any] = {"roots": [], "appended": False, "modules": {}, "log": None}
 
 
 def strong_class(name: str) -> Any:
@@ -2347,11 +2339,22 @@ def run_entries(paths: Any) -> list[Any]:
     return [e for e in entries if isinstance(e, dict) and "run_relative" in e]
 
 
+def fresh_spec(name: str) -> Any:
+    """The spec the import system would find for module `name` now, asking each `sys.meta_path`
+    finder as an import or a reload does, without `sys.modules` and without executing anything
+    (`importlib.util.find_spec` would return a loaded module's cached spec instead: SUP-028)."""
+    for finder in sys.meta_path:
+        spec = finder.find_spec(name, None)
+        if spec is not None:
+            return spec
+    return None
+
+
 def own_module(name: str) -> Any:
     """Before any import, start, reload or close of a probe module (SUP-016): the file Python
-    imports under that name is the run's (in its plugin root's folder for it), and a module of
-    that name already imported is the one the run imported (its spec, which `find_spec` then
-    returns, names that file too). Returns that module, or None."""
+    would import under that name now is the run's (in its plugin root's folder for it), and a
+    module of that name already imported is the one the run imported. Returns that module, or
+    None."""
     if not PLUGIN_STATE["roots"]:
         raise ProbeGuardError(f"no plugin root of this run holds {name!r}")
     root = PLUGIN_STATE["roots"][0]
@@ -2360,7 +2363,7 @@ def own_module(name: str) -> Any:
     present = sys.modules.get(name)
     if present is not None and present is not own:
         raise ProbeGuardError(f"the imported module {name!r} is not the probe run's")
-    spec = importlib.util.find_spec(name)
+    spec = fresh_spec(name)
     origin = None if spec is None else spec.origin
     if origin is None or normal_path(origin) != expected:
         raise ProbeGuardError(f"{name!r} would import from {origin!r}, not the run's plugin root")
@@ -2391,19 +2394,16 @@ def take_hooks() -> list[str]:
 
 
 def add_plugin_root(resolved: dict[str, Any]) -> dict[str, Any]:
-    """Append the probe's plugin root to `substance_painter_plugins.path` (once) and point the
-    probe modules' hook log at a file in it."""
+    """Append the probe's plugin root to `substance_painter_plugins.path` (once); the probe
+    modules' hook log is the file in it whose path the host wrote into them."""
     root = str(resolved["plugin_root"])
     if PLUGIN_STATE["roots"] not in ([], [root]):
         raise ProbeGuardError("a probe run writes its plugin modules in one plugin root")
-    if not PLUGIN_STATE["environment"]:
-        PLUGIN_STATE["environment"] = {PLUGIN_HOOK_LOG: os.environ.get(PLUGIN_HOOK_LOG)}
     if root not in plugin_roots():
         plugin_roots().append(root)
         PLUGIN_STATE["appended"] = True
     PLUGIN_STATE["roots"] = [root]
-    PLUGIN_STATE["log"] = os.path.join(root, "hooks.log")
-    os.environ[PLUGIN_HOOK_LOG] = PLUGIN_STATE["log"]
+    PLUGIN_STATE["log"] = os.path.join(root, PLUGIN_HOOK_LOG_FILE)
     return {"probe_roots": run_entries(plugin_roots())}
 
 
@@ -2574,26 +2574,16 @@ def restore_paths() -> None:
     sys.path[:] = [entry for entry in sys.path if not under_roots(entry, roots)]
 
 
-def restore_environment() -> None:
-    """The hook-log variable gets its value from before the run back (unset if it had none)."""
-    for name, value in PLUGIN_STATE["environment"].items():
-        if value is None:
-            os.environ.pop(name, None)
-        else:
-            os.environ[name] = value
-    PLUGIN_STATE["environment"] = {}
-
-
 def host_cleanup() -> dict[str, Any]:
-    """After the project is closed: the probe plugin modules are closed and forgotten, their root
-    leaves the plugin path and its folders `sys.path`, and the hook-log variable is restored,
-    each whatever the others did; what failed stays recorded and is listed in `failures`."""
+    """After the project is closed: the probe plugin modules are closed and forgotten, and their
+    root leaves the plugin path and its folders `sys.path`, each whatever the others did; what
+    failed stays recorded and is listed in `failures`. A module kept for a retry still logs to
+    the run's own file (its path is written in it), never to anything outside the run."""
     failures: list[dict[str, Any]] = []
     closed: dict[str, Any] = {}
     for name in sorted(PLUGIN_STATE["modules"]):
         cleanup_stage(failures, f"plugin/{name}", partial(forget_module, name, closed))
     paths = cleanup_stage(failures, "plugin_paths", restore_paths)
-    cleanup_stage(failures, "plugin_environment", restore_environment)
     if paths and not PLUGIN_STATE["modules"]:
         PLUGIN_STATE["roots"], PLUGIN_STATE["log"] = [], None
     return {"plugins_closed": closed, "failures": failures}

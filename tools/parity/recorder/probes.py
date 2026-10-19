@@ -150,7 +150,7 @@ GET_NODE_BY_UID = "substance_painter.layerstack.get_node_by_uid"
 PLUGINS_PATH: str = CONSTANTS["PLUGINS_PATH"]
 PROBE_PLUGIN_MODULES: tuple[str, ...] = CONSTANTS["PROBE_PLUGIN_MODULES"]
 PROBE_PLUGIN_FOLDERS: dict[str, str] = CONSTANTS["PROBE_PLUGIN_FOLDERS"]
-PLUGIN_HOOK_LOG: str = CONSTANTS["PLUGIN_HOOK_LOG"]
+PLUGIN_HOOK_LOG_FILE: str = CONSTANTS["PLUGIN_HOOK_LOG_FILE"]
 PLUGIN_CALLS = frozenset(
     {
         CONSTANTS["START_PLUGIN"],
@@ -483,18 +483,14 @@ def shelf_folder(step: ProbeStep, staged: dict[str, Path], work_dir: Path) -> Pa
     return folder
 
 
-def plugin_module_source(name: str) -> str:
-    """A throwaway plugin module: each hook (and the import) appends a line to the file the
-    environment variable names, which the probe reads back."""
+def plugin_module_source(name: str, log: Path) -> str:
+    """A throwaway plugin module: each hook (and the import) appends a line to the run's hook log,
+    whose path is written in it (no process-wide setting points it anywhere: SUP-028), and the
+    probe reads the log back."""
     lines = [
-        "import os",
-        "",
-        "",
         "def _hook(entry):",
-        f"    path = os.environ.get({PLUGIN_HOOK_LOG!r})",
-        "    if path:",
-        "        with open(path, 'a', encoding='utf-8') as log:",
-        f"            log.write({name!r} + '.' + entry + '\\n')",
+        f"    with open({log.as_posix()!r}, 'a', encoding='utf-8') as log:",
+        f"        log.write({name!r} + '.' + entry + '\\n')",
         "",
         "",
         *(f"def {hook}():\n    _hook({hook!r})\n\n" for hook in PLUGIN_HOOKS),
@@ -510,7 +506,7 @@ def plugin_root(step: ProbeStep, work_dir: Path) -> Path:
     for sub in ("plugins", "startup", "modules"):
         (root / sub).mkdir(parents=True, exist_ok=True)
     for name in PROBE_PLUGIN_MODULES:
-        source = plugin_module_source(name)
+        source = plugin_module_source(name, root / PLUGIN_HOOK_LOG_FILE)
         (root / PROBE_PLUGIN_FOLDERS[name] / f"{name}.py").write_text(source, encoding="utf-8")
     return root
 
@@ -836,14 +832,16 @@ def finish_probe(session: PainterSession) -> list[str]:
     probe added. Every stage runs whatever an earlier one did; returns what failed (SUP-017)."""
     failures: list[str] = []
     for operation in ("probe_finish", "close_project", "probe_cleanup"):
+        # Any failure of a stage, the transport's or a malformed reply's too (SUP-028), is listed
+        # and the next stage still runs; the caller publishes nothing then.
         try:
             result = session.call(operation)
-        except RecorderError as error:
-            failures.append(f"{operation}: {error}")
-            continue
-        for failure in result.get("cleanup_failures", []):
-            what = failure["raised"]
-            failures.append(f"{operation} {failure['stage']}: {what['type']}: {what['message']}")
+            failures += [
+                f"{operation} {f['stage']}: {f['raised']['type']}: {f['raised']['message']}"
+                for f in result.get("cleanup_failures", [])
+            ]
+        except Exception as error:
+            failures.append(f"{operation}: {error!r}")
     return failures
 
 

@@ -13,6 +13,7 @@ import json
 import os
 import sys
 import types
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -542,10 +543,13 @@ def owner_module(calls: list[str]) -> types.ModuleType:
 
 
 def shadow_folder(tmp_path: Path) -> tuple[Path, Path]:
-    """A folder with another `uzp_probe_plugin.py`, which leaves a marker when imported."""
+    """A folder with another `uzp_probe_plugin.py`, which leaves a marker when imported and
+    when any of its hooks runs."""
     folder, marker = tmp_path / "owner-lib", tmp_path / "imported.marker"
     folder.mkdir()
-    source = f"open({marker.as_posix()!r}, 'w').close()\ndef start_plugin():\n    pass\n"
+    touch = f"open({marker.as_posix()!r}, 'a').close()"
+    hooks = "".join(f"def {h}():\n    {touch}\n" for h in ("start_plugin", "close_plugin"))
+    source = f"{touch}\n{hooks}def reload_plugin():\n    {touch}\n"
     (folder / "uzp_probe_plugin.py").write_text(source, encoding="utf-8")
     return folder, marker
 
@@ -618,15 +622,94 @@ def test_a_module_shadowed_during_the_run_is_never_imported_and_the_run_cleans_u
     assert published(tmp_path) == []
 
 
-def test_an_existing_hook_log_value_is_restored(
+def test_a_module_shadowed_between_start_and_reload_is_never_imported(
     probe_fake: types.ModuleType,
     fake: types.ModuleType,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv(HOOK_LOG, "owner-value")
-    record(probe_fake, fake, "p22b-host-plugins", tmp_path)
-    assert os.environ[HOOK_LOG] == "owner-value"
+    """A folder put ahead on `sys.path` once the run's module is imported and started: the
+    import system's fresh resolution, not the loaded module's cached spec, is checked, so no
+    later step reloads the other file (SUP-028)."""
+    world, session = fake_session(probe_fake, fake)
+    folder, marker = shadow_folder(tmp_path)
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    plugins = world.modules[PLUGINS]
+    start_before, reload_before, reloads = plugins.start_plugin, plugins.reload_plugin, []
+
+    def start_plugin(module: types.ModuleType) -> None:
+        start_before(module)
+        if str(folder) not in sys.path:
+            sys.path.insert(0, str(folder))
+
+    def reload_plugin(module: types.ModuleType) -> types.ModuleType:
+        reloads.append(module)
+        reloaded: types.ModuleType = reload_before(module)
+        return reloaded
+
+    monkeypatch.setattr(plugins, "start_plugin", start_plugin)
+    monkeypatch.setattr(plugins, "reload_plugin", reload_plugin)
+    with pytest.raises(RecorderError, match="'uzp_probe_plugin' would import from"):
+        attempt_recording(session, load_json(REQUEST_DIR / "p22b-host-plugins.json"), tmp_path)
+    assert reloads == [] and not marker.exists()  # no foreign import and no foreign hook
+    assert "uzp_probe_plugin" not in sys.modules and plugins.plugins == {}
+    plugins_untouched(world)
+    assert published(tmp_path) == []
+
+
+def without_closes(stem: str) -> dict[str, Any]:
+    """The plugin request with its two `close_plugin` steps read `is_plugin_started` instead, so
+    both modules are still started when the golden ends."""
+    manifest: dict[str, Any] = load_json(REQUEST_DIR / f"{stem}.json")
+    for step in manifest["instruction_sequence"]["steps"]:
+        if step["call"] == f"{PLUGINS}.close_plugin":
+            step["call"], step["args"] = (
+                f"{PLUGINS}.is_plugin_started",
+                {"module": step["args"]["module"]},
+            )
+    return manifest
+
+
+def test_the_hooks_log_only_to_the_run_file_even_when_a_close_is_retried(
+    probe_fake: types.ModuleType,
+    fake: types.ModuleType,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The first cleanup cannot close one module, which stays pending; its close hook runs at the
+    retry. An earlier log of the owner's never receives a line, and its setting is untouched."""
+    sentinel = tmp_path / "owner.log"
+    monkeypatch.setenv(HOOK_LOG, str(sentinel))
+    world, session = fake_session(probe_fake, fake)
+    plugins = world.modules[PLUGINS]
+    close_before, refuse = plugins.close_plugin, [False]
+    call_before = session.call
+
+    def call(operation: str, **args: Any) -> Any:
+        retry = args.pop("retry", False)
+        refuse[0] = refuse[0] or (operation == "probe_cleanup" and not retry)
+        return call_before(operation, **args)
+
+    def close_plugin(module: types.ModuleType, gc_collect: bool = True) -> None:
+        if refuse[0]:
+            refuse[0] = False
+            raise RuntimeError("the close was refused")
+        close_before(module, gc_collect)
+
+    monkeypatch.setattr(session, "call", call)
+    monkeypatch.setattr(plugins, "close_plugin", close_plugin)
+    with pytest.raises(CleanupFailed, match="probe_cleanup plugin/uzp_probe_plugin: RuntimeError"):
+        attempt_recording(session, without_closes("p22b-host-plugins"), tmp_path)
+    assert published(tmp_path) == []
+    assert "uzp_probe_plugin" in plugins.plugins and "uzp_probe_startup" not in plugins.plugins
+    retried = session.call("probe_cleanup", retry=True)
+    assert retried["cleanup_failures"] == [] and plugins.plugins == {}
+    assert "uzp_probe_plugin" not in sys.modules
+    (log,) = (tmp_path / "work").rglob("hooks.log")
+    lines = log.read_text(encoding="utf-8").splitlines()
+    assert lines[-2:] == ["uzp_probe_startup.close_plugin", "uzp_probe_plugin.close_plugin"]
+    assert not sentinel.exists() and os.environ[HOOK_LOG] == str(sentinel)
+    assert plugins.path == [] and not [p for p in sys.path if "plugin-roots" in str(p)]
 
 
 def watched_setter(world: Any, monkeypatch: pytest.MonkeyPatch, broken: list[bool]) -> list[Any]:
@@ -693,6 +776,60 @@ def test_a_failed_disconnect_still_restores_the_throttling_period(
         attempt_recording(session, load_json(REQUEST_DIR / "p22b-host-events.json"), tmp_path)
     assert world.throttling == datetime.timedelta(seconds=1)  # restored after the failures
     assert published(tmp_path) == []
+
+
+TRANSPORT_FAILURES: dict[str, Callable[[], Exception]] = {
+    "os-error": lambda: OSError("the connection was reset"),
+    "timeout": lambda: TimeoutError("no reply in 30 s"),
+    "undecodable": lambda: json.JSONDecodeError("not JSON", "<html>", 0),
+}
+
+
+@pytest.mark.parametrize("failure", [*TRANSPORT_FAILURES, "malformed"])
+@pytest.mark.parametrize("recording_fails", [False, True], ids=["recorded", "recording-failed"])
+def test_a_transport_failure_at_the_first_cleanup_stage_still_runs_the_others(
+    probe_fake: types.ModuleType,
+    fake: types.ModuleType,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+    recording_fails: bool,
+) -> None:
+    """`probe_finish` never answers (the transport fails, or the reply is not the expected
+    object): `close_project` and `probe_cleanup` still run, nothing is published, an earlier
+    recording error stays the cause, and Painter keeps the snapshot to restore (SUP-028)."""
+    world, session = fake_session(probe_fake, fake)
+    call_before, calls = session.call, []
+
+    def call(operation: str, **args: Any) -> Any:
+        calls.append(operation)
+        if operation != "probe_finish":
+            return call_before(operation, **args)
+        if failure == "malformed":
+            return ["not", "an", "object"]
+        raise TRANSPORT_FAILURES[failure]()
+
+    if recording_fails:  # the host's save before r2 fails, after r1 set the period
+        project = world.modules["substance_painter.project"]
+        save_as_before = project.save_as
+
+        def save_as(path: str, mode: Any) -> None:
+            if path.endswith("probe.spp"):
+                raise RuntimeError("disk full")
+            save_as_before(path, mode)
+
+        monkeypatch.setattr(project, "save_as", save_as)
+    monkeypatch.setattr(session, "call", call)
+    with pytest.raises(CleanupFailed, match="probe_finish: ") as refused:
+        attempt_recording(session, load_json(REQUEST_DIR / "p22b-host-events.json"), tmp_path)
+    finish = calls.index("probe_finish")
+    assert calls[finish:] == ["probe_finish", "close_project", "probe_cleanup"]
+    assert ("disk full" in str(refused.value.__cause__)) is recording_fails
+    assert not world.project_open and published(tmp_path) == []
+    assert world.throttling == datetime.timedelta(milliseconds=750)  # never restored
+    finished = call_before("probe_finish")  # the snapshot was kept
+    assert finished["throttling_restored"] == {"timedelta_ms": 1000.0}
+    assert world.throttling == datetime.timedelta(seconds=1)
 
 
 @pytest.mark.parametrize("recording_fails", [False, True], ids=["recorded", "recording-failed"])

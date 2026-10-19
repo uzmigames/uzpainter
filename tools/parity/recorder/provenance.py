@@ -41,13 +41,14 @@ BRIDGE_TEXT = re.compile(
 DYNAMIC_ACCESS = frozenset({"getattr", "setattr", "delattr", "__import__"})
 
 # Members of builtin Python types (dict, list, str, bytes, float) used on plain values.
-# `origin`: `importlib.machinery.ModuleSpec.origin`, where a probe plugin module imports from
-# (decision 297, SUP-016).
+# `origin`: `importlib.machinery.ModuleSpec.origin`, where a probe plugin module imports from, and
+# `find_spec`: the finder method of `sys.meta_path` that resolves it (decision 297, SUP-016/028).
 PYTHON_MEMBERS = frozenset(
     {
         "append",
         "clear",
         "decode",
+        "find_spec",
         "get",
         "index",
         "items",
