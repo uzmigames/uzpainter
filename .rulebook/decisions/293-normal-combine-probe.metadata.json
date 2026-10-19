@@ -1,0 +1,13 @@
+{
+  "id": 293,
+  "slug": "293-normal-combine-probe",
+  "title": "Decision 276 item 5's recording: one Tier 0 probe whose two texture sets differ only in a bound Normal mesh map, with Height and Normal-channel content alone, in pairs and all together, to pin the float32 form and the order of the gutter's mesh-map combination; designed, recording pending",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.12_compositor-height-normal"
+  ],
+  "supersededBy": null
+}

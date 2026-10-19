@@ -26,6 +26,7 @@ from tools.parity.tier0_semantics.fixtures import (
     PROBE_PRESET,
     Config,
     Pixel,
+    code,
     fmt,
     obj,
     png16,
@@ -1851,6 +1852,146 @@ def window_side() -> bytes:
         "exactly on a window boundary in exact arithmetic and a few 1e-5 texel off it in float32.",
         [("uzp_window_side", faces)],
         "".join(data),
+    )
+
+
+# --- Decision 293: the Normal mesh-map combination probe --------------------------------------
+
+# Two texture sets with the same UV layout: the Normal mesh map is bound on `uzp_nc_mesh` only,
+# so `uzp_nc_free` pads the mesh-free normal of the same content. Each set holds four 48 x 48
+# texel islands, one centred in each quadrant of the 256 px tile, their borders on texel
+# boundaries (dyadic UVs). Island (qx, qy), qx and qy 0 or 1 from the top-left: the Height ramp
+# when qx = 1, the Normal-channel patch when qy = 1.
+COMBINE_SETS = ("uzp_nc_mesh", "uzp_nc_free")
+COMBINE_SIZE = 256
+COMBINE_QUADRANT = 128
+COMBINE_ISLAND = 48
+COMBINE_MARGIN = 40  # texels from the quadrant's top-left corner to the island's
+# The Height of a ramp island is constant on its top and left COMBINE_BAND texels: every Height
+# tap that a covered texel's Sharp stencil reads outside the island (left and up) is a padded
+# copy of that constant, so every covered normal is independent of the Height ring.
+COMBINE_BAND = 24
+COMBINE_FLOOR = -0.95  # the signed Height everywhere but a ramp island's ramp
+COMBINE_RAMP = 0.0035  # the ramp's signed Height per texel squared: floor + COMBINE_RAMP u v
+
+
+def combine_island(qx: int, qy: int) -> tuple[int, int]:
+    """The top-left texel (column, row from the top) of island (qx, qy)."""
+    return qx * COMBINE_QUADRANT + COMBINE_MARGIN, qy * COMBINE_QUADRANT + COMBINE_MARGIN
+
+
+def combine_mesh() -> bytes:
+    """Eight 4.8 cm quads in the XZ plane (normal +Y), one per island of each set; the free
+    set's copies lie 20 cm further along z."""
+    data: list[str] = ["vn 0.0 1.0 0.0\n"]
+    groups: list[tuple[str, list[str]]] = []
+    for index_set, name in enumerate(COMBINE_SETS):
+        faces: list[str] = []
+        for qy in (0, 1):
+            for qx in (0, 1):
+                index = index_set * 4 + qy * 2 + qx
+                cx, cz, s = (qy * 2 + qx) * 6.0, index_set * 20.0, 2.4
+                quad = [
+                    (cx - s, 0.0, cz + s),
+                    (cx + s, 0.0, cz + s),
+                    (cx + s, 0.0, cz - s),
+                    (cx - s, 0.0, cz - s),
+                ]
+                # UV corners in texels from the bottom-left, counter-clockwise like the quad.
+                x0, row = combine_island(qx, qy)
+                x1, y1 = x0 + COMBINE_ISLAND, COMBINE_SIZE - row
+                y0 = y1 - COMBINE_ISLAND
+                corners = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+                uvs = [(x / COMBINE_SIZE, y / COMBINE_SIZE) for x, y in corners]
+                lines, quad_faces = quad_obj_lines(quad, uvs, index * 4)
+                data += lines
+                faces += quad_faces
+        groups.append((name, faces))
+    return obj(
+        "uzp_normal_combine",
+        "Decision 293 Normal mesh-map combination probe: two texture sets (uzp_nc_mesh, "
+        "uzp_nc_free) with the same four 48 x 48 texel islands at 256 px, one per quadrant.",
+        groups,
+        "".join(data),
+    )
+
+
+def _encoded(theta: float, phi: float) -> Pixel:
+    """The 16-bit codes of the unit normal tilted `theta` degrees toward azimuth `phi`."""
+    t, p = math.radians(theta), math.radians(phi)
+    n = (math.sin(t) * math.cos(p), math.sin(t) * math.sin(p), math.cos(t))
+    return tuple(code(c * 0.5 + 0.5) for c in n)
+
+
+# Per quadrant (qx, qy): the mesh map's tilt at its left column and its azimuth at its top row,
+# in degrees; across the quadrant the tilt grows by 20 degrees along x and the azimuth by 60
+# along y, so every texel holds its own normal and no two quadrants share one.
+COMBINE_MESH_TILT = {(0, 0): 15.0, (1, 0): 20.0, (0, 1): 25.0, (1, 1): 10.0}
+COMBINE_MESH_AZIMUTH = {(0, 0): 0.0, (1, 0): 90.0, (0, 1): 180.0, (1, 1): 270.0}
+
+
+def combine_mesh_map() -> bytes:
+    """The Normal mesh map (16-bit RGB, OpenGL, n * 0.5 + 0.5): per quadrant its own smooth
+    field of tilted normals."""
+
+    def texel(x: int, y: int) -> Pixel:
+        q = (x // COMBINE_QUADRANT, y // COMBINE_QUADRANT)
+        fx = (x % COMBINE_QUADRANT) / (COMBINE_QUADRANT - 1)
+        fy = (y % COMBINE_QUADRANT) / (COMBINE_QUADRANT - 1)
+        return _encoded(COMBINE_MESH_TILT[q] + 20.0 * fx, COMBINE_MESH_AZIMUTH[q] + 60.0 * fy)
+
+    return png16(COMBINE_SIZE, COMBINE_SIZE, 3, texel)
+
+
+def combine_height_signed(x: int, y: int) -> float:
+    """The signed Height (2t - 1) of texel (x, y): COMBINE_FLOOR, plus on the quadrants of the
+    ramp islands (qx = 1) COMBINE_RAMP u v, with u and v the texels past COMBINE_BAND from the
+    island's left and top borders (0 to 23 on the island, clamped beyond it). The Sharp gradient
+    on the island's right column below the band is (-COMBINE_RAMP v, 23 COMBINE_RAMP), on its
+    bottom row right of the band (-23 COMBINE_RAMP, COMBINE_RAMP u): up to 16 degrees of tilt,
+    in a direction that changes from texel to texel."""
+    qx, qy = x // COMBINE_QUADRANT, y // COMBINE_QUADRANT
+    if qx != 1:
+        return COMBINE_FLOOR
+    x0, y0 = combine_island(qx, qy)
+    top = COMBINE_ISLAND - COMBINE_BAND - 1
+    u = min(max(x - x0 - COMBINE_BAND, 0), top)
+    v = min(max(y - y0 - COMBINE_BAND, 0), top)
+    return COMBINE_FLOOR + COMBINE_RAMP * u * v
+
+
+def combine_height() -> bytes:
+    """The Height bitmap (16-bit grey, t = (h + 1) / 2 of `combine_height_signed`)."""
+    return png16(
+        COMBINE_SIZE,
+        COMBINE_SIZE,
+        1,
+        lambda x, y: (code((combine_height_signed(x, y) + 1.0) * 0.5),),
+    )
+
+
+def combine_channel() -> bytes:
+    """The Normal-channel bitmap (16-bit RGB, n * 0.5 + 0.5): tilted 20 degrees at the top row
+    of each quadrant to 35 at its bottom row, the azimuth from 45 degrees (plus 45 when qx = 1)
+    at the left column, growing by 90 across the quadrant."""
+
+    def texel(x: int, y: int) -> Pixel:
+        qx = x // COMBINE_QUADRANT
+        fx = (x % COMBINE_QUADRANT) / (COMBINE_QUADRANT - 1)
+        fy = (y % COMBINE_QUADRANT) / (COMBINE_QUADRANT - 1)
+        return _encoded(20.0 + 15.0 * fy, 45.0 + 45.0 * qx + 90.0 * fx)
+
+    return png16(COMBINE_SIZE, COMBINE_SIZE, 3, texel)
+
+
+def combine_mask() -> bytes:
+    """The Normal-channel fill's mask (16-bit grey): 1 on the bottom quadrants (qy = 1), else 0,
+    so the channel's coverage is exactly 1 on the patch islands and 0 on the others."""
+    return png16(
+        COMBINE_SIZE,
+        COMBINE_SIZE,
+        1,
+        lambda x, y: (0xFFFF if y >= COMBINE_QUADRANT else 0,),
     )
 
 

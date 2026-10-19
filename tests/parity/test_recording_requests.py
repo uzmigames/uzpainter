@@ -26,6 +26,7 @@ from tools.parity.tier0_semantics.recording_requests import (
     OCIO_SETTING,
     REQUEST_FIXTURES,
     ocio_goldens,
+    padding_normal_combine_probe,
     probe_groups,
     request_dir,
     request_root,
@@ -590,3 +591,50 @@ def test_window_side_copies_put_far_points_on_window_boundaries() -> None:
             got = _through(texel, point, 0, 2, np.array([cx + 0.5, cy + 0.5]))[int(axis == "v")]
             assert abs(got - float(f)) < 1e-4, (copy.name, axis, got, f)
     assert oblique == len(placed)
+
+
+def test_normal_combine_probe_separates_the_mesh_map_height_and_channel() -> None:
+    """Decision 293: the two sets share four texel-aligned 48 x 48 islands, one per quadrant,
+    at least 40 texels from the tile border; only uzp_nc_mesh binds the 16-bit mesh map; the
+    Height has no gradient but on the right-hand islands past their top and left 24 texels; the
+    channel's mask is exactly 1 on the bottom quadrants and 0 elsewhere; the mesh map's
+    quadrants share no normal."""
+    _, uvs, faces = obj_uvs("normal-combine")
+    assert len(uvs) == 32 and len(faces) == 16
+    texels = [(u * 256.0, (1.0 - v) * 256.0) for u, v in uvs]
+    assert texels[:16] == texels[16:]  # the free set repeats the mesh set's UVs exactly
+    for index in range(4):
+        corners = texels[index * 4 : index * 4 + 4]
+        x0, y0 = rf.combine_island(index % 2, index // 2)
+        assert {c for c, _ in corners} == {x0, x0 + 48} and {r for _, r in corners} == {y0, y0 + 48}
+        assert min(x0, y0) >= 40 and max(x0, y0) + 48 <= 216
+    steps = padding_normal_combine_probe().sequence.steps
+    bound = [s["args"] for s in steps if s["call"].endswith("set_mesh_map_resource")]
+    assert bound == [{"usage": "Normal", "resource_step": 2, "texture_set": "uzp_nc_mesh"}]
+
+    _, _, depth, height = bitmap("normal-combine-height")
+    h = np.asarray(height, np.int64).reshape(256, 256)
+    assert depth == 16
+    gx, gy = np.diff(h, axis=1), np.diff(h, axis=0)
+    for qx in (0, 1):
+        for qy in (0, 1):
+            x0, y0 = rf.combine_island(qx, qy)
+            ramp = qx == 1
+            # Every tap a covered Sharp stencil reads (left, up), and two texels beyond, is flat
+            # in the bands; past them the ramp tilts.
+            assert not gx[y0 - 2 : y0 + 48, x0 - 3 : x0 + 24].any()
+            assert not gy[y0 - 3 : y0 + 24, x0 - 2 : x0 + 48].any()
+            assert bool(gx[y0 + 25 : y0 + 48, x0 + 24 : x0 + 47].all()) == ramp
+            assert bool(gy[y0 + 24 : y0 + 47, x0 + 25 : x0 + 48].all()) == ramp
+    _, _, _, mask = bitmap("normal-combine-mask")
+    m = np.asarray(mask, np.int64).reshape(256, 256)
+    assert (m[:128] == 0).all() and (m[128:] == 65535).all()
+    _, _, depth, mesh_map = bitmap("normal-combine-mesh-map")
+    f = np.asarray(mesh_map, np.int64).reshape(256, 256, 3)
+    assert depth == 16
+    quadrants = [
+        {tuple(t) for t in f[r : r + 128, c : c + 128].reshape(-1, 3)}
+        for r in (0, 128)
+        for c in (0, 128)
+    ]
+    assert all(not (a & b) for i, a in enumerate(quadrants) for b in quadrants[i + 1 :])

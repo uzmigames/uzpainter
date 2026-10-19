@@ -15,7 +15,8 @@ Later decisions add requests the same way (`later_goldens`): decision 145's sRGB
 and P-tie (decision 157), the other 21 inferred template bases (decision 168), decision 174's
 sRGB bitmap minification and decision 169's L8 material channels, decision 210's ring-sign probes
 and a position-encoded seam probe (decision 216), decision 225's sRGB minification on random
-content, decision 266's kernel-code padding probes and decision 272's tie-order sweeps.
+content, decision 266's kernel-code padding probes, decision 272's tie-order sweeps and decision
+293's Normal mesh-map combination probe.
 
 Colour management: every golden runs under Legacy (Painter started without `OCIO`) except the
 two that name `OCIO` in `applied_settings` (`export-ocio-encode`, `export-presets-ocio`), which
@@ -304,6 +305,23 @@ REQUEST_FIXTURES["window-side"] = (
     f"{FIXTURE_DIR}/meshes/window-side.obj",
     rf.window_side,
 )
+# Decision 293's Normal mesh-map combination probe: the twin-set mesh and its four bitmaps.
+REQUEST_FIXTURES["normal-combine"] = (
+    "mesh",
+    f"{FIXTURE_DIR}/meshes/normal-combine.obj",
+    rf.combine_mesh,
+)
+for _name, _kind, _generate in (
+    ("mesh-map", "image", rf.combine_mesh_map),
+    ("height", "image", rf.combine_height),
+    ("channel", "image", rf.combine_channel),
+    ("mask", "mask", rf.combine_mask),
+):
+    REQUEST_FIXTURES[f"normal-combine-{_name}"] = (
+        _kind,
+        f"{FIXTURE_DIR}/bitmaps/normal-combine-{_name}.png",
+        _generate,
+    )
 for _group, _probes in probe_groups().items():
     for _probe in _probes:
         REQUEST_FIXTURES[f"probe-{_group}-{_probe}"] = (
@@ -331,6 +349,7 @@ MESH_SETS = {
     **{concave_fold_mesh(p): ["uzp_concave_fold"] for p in rf.FOLD_PROBES},
     **{hinge_mesh(p): ["uzp_hinge"] for p in rf.HINGE_PROBES},
     "window-side": ["uzp_window_side"],
+    "normal-combine": list(rf.COMBINE_SETS),
 }
 
 
@@ -1525,6 +1544,68 @@ def padding_window_side_probe() -> Golden:
     )
 
 
+# --- Decision 293: the Normal mesh-map combination probe --------------------------------------
+
+COMBINE_EXR_MAPS = [
+    "virtualMap/Normal_OpenGL:RGB",
+    "documentMap/height:L",
+    "documentMap/normal:RGB",
+]
+COMBINE_BITMAPS = (
+    "normal-combine-mesh-map",
+    "normal-combine-height",
+    "normal-combine-channel",
+    "normal-combine-mask",
+)
+
+
+def padding_normal_combine_probe() -> Golden:
+    """Decision 276 item 5's recording: the float32 form (item 4 (b)) and the order (item 4 (c))
+    of Painter's gutter combination of a bound Normal mesh map with the padded mesh-free normal,
+    from two texture sets that differ only in the binding."""
+    s = start("normal-combine")
+    res = s.imports(*COMBINE_BITMAPS)
+    mesh_set, _ = rf.COMBINE_SETS
+    s.add(
+        ps.SET_MESH_MAP,
+        usage="Normal",
+        resource_step=res["normal-combine-mesh-map"],
+        texture_set=mesh_set,
+    )
+    for texture_set in rf.COMBINE_SETS:
+        fill(s, {"Height": "normal-combine-height"}, res, position="top", texture_set=texture_set)
+        patch = fill(
+            s, {"Normal": "normal-combine-channel"}, res, position="top", texture_set=texture_set
+        )
+        masked(s, patch, res["normal-combine-mask"])
+    export(s, COMBINE_EXR_MAPS, EXR32F, "infinite")
+    export(s, ["virtualMap/Normal_OpenGL:RGB"], PNG16, "infinite")
+    return Golden(
+        "export-padding-normal-combine",
+        EXPORT_DOMAIN,
+        "Decision 293's Normal mesh-map combination probe (decision 276 item 5, "
+        "phase1.25_pilot-wand item 2.7: how Painter combines a bound Normal mesh map with the "
+        "padded mesh-free normal outside the islands), exploratory, under Legacy at 256 px, "
+        "OpenGL. The authored mesh has two texture sets with the same UV layout, uzp_nc_mesh and "
+        "uzp_nc_free, each four 48 x 48 texel islands centred in the quadrants of the tile, "
+        "their borders on texel boundaries; the authored 16-bit Normal mesh map (per quadrant "
+        "its own smooth field of normals tilted 10 to 45 degrees) is bound on uzp_nc_mesh only. "
+        "On both sets: one fill with only Height active, the authored Height bitmap (flat, but "
+        "a u v ramp on the two right-hand islands, constant on their top and left 24 texels), "
+        "Normal at opacity 1; above it one fill with only Normal active, the authored "
+        "Normal-channel bitmap (tilted 20 to 35 degrees), Normal at opacity 1, under a black "
+        "mask whose fill effect is the authored mask (1 on the two bottom quadrants, 0 "
+        "elsewhere). So uzp_nc_mesh holds the mesh map alone, with the Height ramp, with the "
+        "channel patch and with both, and uzp_nc_free the same islands without the mesh map. "
+        "Normal_OpenGL, Height and the Normal channel at OpenEXR 32f, and Normal_OpenGL at "
+        "PNG 16, with infinite padding, no dithering, every export step done twice in the "
+        "session.",
+        "normal-combine",
+        ["normal-combine", *COMBINE_BITMAPS],
+        s,
+    )
+
+
 # --- Decision 174 item 6: bilinear minification of an sRGB bitmap ------------------------------
 
 SRGB_MINIFY_SOURCES = ("srgb8-ramp", "field-a")
@@ -1700,7 +1781,7 @@ def later_goldens() -> list[Golden]:
     216's ring-sign and seam probes, then decision 225's sRGB minification on random content,
     then decision 266's kernel-code padding probes, then decision 272's tie-order sweeps, then
     decision 278's concave seam-gate probes and decision 289's far-side hinge and
-    window-side probes."""
+    window-side probes, then decision 293's Normal mesh-map combination probe."""
     return [
         srgb_bitmap_variants(),
         *(template_base(t) for t in INFERRED_BASE_TEMPLATES),
@@ -1719,6 +1800,7 @@ def later_goldens() -> list[Golden]:
         *padding_concave_fold_probes(),
         *padding_hinge_probes(),
         padding_window_side_probe(),
+        padding_normal_combine_probe(),
     ]
 
 
