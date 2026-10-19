@@ -164,3 +164,70 @@ def test_a_mixed_plan_blocks_the_whole_batch(export_tests: Path, tmp_path: Path)
     assert blocked["references"] == ["R-090", "decision 103"], blocked
     assert result["export"] == {"error": "NotYetSupported", "message": blocked["reason"]}
     assert files_under(out) == {}
+
+
+def test_normal_statistics_without_coverage_need_evaluation(
+    export_tests: Path, tmp_path: Path
+) -> None:
+    """SUP-039: a statistics file of the combined normal (regionStats/Normal_OpenGL) reads the
+    island-edge texels, so it needs its set's UV coverage. When the project's texturing mesh does
+    not re-derive (its bytes are not stored), it is `needs_evaluation` with the re-derive's own
+    error, never `no_known_blocker`, while the export, which has the coverage, refuses it; when
+    the mesh re-derives, the island check blocks it with the export's message. A statistics file
+    of another map needs no coverage, and a project with no texturing mesh at all has no UV
+    islands, as the export reads it."""
+
+    def stats(name: str, mesh: Path | None, reference: str | None) -> tuple[Path, str]:
+        root = "uzp_sphere" if mesh else "s0"
+        path = spec(tmp_path / name, mesh, root)
+        document = json.loads(path.read_text(encoding="utf-8"))
+        document["layers"][0]["uid"] = 501
+        if reference is not None:
+            document["mesh_reference"] = reference
+        path.write_text(json.dumps(document), encoding="utf-8")
+        return path, root
+
+    def stats_config(out: Path, root: str) -> dict[str, Any]:
+        cfg = config(out, root=root, paddingAlgorithm="passthrough")
+        cfg["exportPresets"][0]["maps"] = [
+            {"fileName": f"$textureSet_{name}", "channels": [chan("L", "diagnosticMap", source)]}
+            for name, source in (
+                ("n", "regionStats/Normal_OpenGL/501"),
+                ("b", "regionStats/BaseColor/501"),
+            )
+        ]
+        cfg["exportParameters"] = cfg["exportParameters"][:1]
+        return cfg
+
+    def by_map(result: dict[str, Any]) -> dict[str, dict[str, Any]]:
+        return {f["map"]: f for f in result["preflight"]["files"]}
+
+    missing, root = stats("missing", SPHERE, "missing")
+    out = tmp_path / "out-missing"
+    result = preflight(export_tests, missing, stats_config(out, root), tmp_path / "run-missing")
+    files = by_map(result)
+    normal, base = files["$textureSet_n"], files["$textureSet_b"]
+    assert result["mesh_reads"] >= 1, result
+    assert normal["status"] == "needs_evaluation", normal
+    assert "the texturing mesh does not re-derive" in normal["reason"], normal
+    assert "is not stored" in normal["reason"], normal
+    assert base["status"] == "no_known_blocker", base
+    assert result["preflight"]["status"] == "needs_evaluation"
+    assert result["export"]["error"] == "NotYetSupported", result["export"]
+    assert ISLAND_NORMAL in result["export"]["message"]
+    assert files_under(out) == {}
+
+    stored, root = stats("stored", SPHERE, "stored")
+    result = preflight(
+        export_tests, stored, stats_config(tmp_path / "out-stored", root), tmp_path / "run-stored"
+    )
+    normal = by_map(result)["$textureSet_n"]
+    assert result["mesh_reads"] >= 1, result
+    assert normal["status"] == "blocked" and ISLAND_NORMAL in normal["reason"], normal
+    assert result["export"] == {"error": "NotYetSupported", "message": normal["reason"]}
+
+    absent, root = stats("absent", None, None)
+    result = preflight(
+        export_tests, absent, stats_config(tmp_path / "out-absent", root), tmp_path / "run-absent"
+    )
+    assert {f["status"] for f in result["preflight"]["files"]} == {"no_known_blocker"}, result

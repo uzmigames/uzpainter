@@ -20,6 +20,7 @@
 // The whole preflight is `blocked` when any file is: the export is all or nothing, so one refusal
 // refuses every file of the plan.
 
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -69,11 +70,39 @@ struct ExportPreflight {
     std::vector<FilePreflight> files;
 };
 
+/// Why the preflight has no UV coverage (`SourceInputs::geometry` null).
+struct CoverageGap {
+    /// True: the project has no texturing mesh, so it has no UV islands, as the export reads a null
+    /// geometry (a statistics file then needs no coverage). False: a texturing mesh exists and its
+    /// coverage could not be obtained, so the island checks are unknown, a statistics file of a
+    /// combined virtual normal included.
+    bool meshAbsent = false;
+    /// Why there is no coverage: the reason of a `needs_evaluation`.
+    std::string reason;
+};
+
+/// The preflight's coverage source for a project.
+struct PreflightCoverage {
+    /// Only `geometry` is set: the masks of the revision's texturing mesh, or null.
+    SourceInputs inputs;
+    /// Why `inputs.geometry` is null, when it is.
+    CoverageGap gap;
+};
+
+/// The texturing mesh of `project` re-derived from its stored bytes (`read` returns the bytes of a
+/// stored resource; mesh/reload.h `RederiveMesh`) into objects of this call alone: no image read,
+/// no evaluation. Without a mesh, `gap.meshAbsent`; a mesh that does not re-derive is a gap with
+/// its error, never taken for an absent mesh.
+[[nodiscard]] PreflightCoverage CoverageForPreflight(const core::Project& project,
+                                                     const std::function<std::string(const std::string&)>& read);
+
 /// The preflight of `plan`, compiled from `project` (above). The coverage is `inputs.geometry`'s
-/// (`CoverageOf`); without it a file that needs it is `needs_evaluation`, `unavailable` saying why.
-/// Reads nothing else of `inputs`: no image is decoded and no tile is evaluated.
+/// (`CoverageOf`); without it a file that needs it is `needs_evaluation`, `gap.reason` saying why.
+/// A statistics file needs the coverage only when it reads a combined virtual normal, and then not
+/// when `gap.meshAbsent`. Reads nothing else of `inputs`: no image is decoded and no tile is
+/// evaluated.
 [[nodiscard]] ExportPreflight PreflightExport(const core::Project& project, const ExportPlan& plan,
-                                              const SourceInputs& inputs, std::string_view unavailable);
+                                              const SourceInputs& inputs, const CoverageGap& gap);
 
 /// `{status, note, files: [{root_path, map, relative_path, status, type?, reason?, references?}]}`:
 /// a blocked file's `type` is `NotYetSupported` and its `references` the tasks, recordings and

@@ -1076,25 +1076,15 @@ python::JobBody Worker::Export(const json::Object& arguments) {
             const exporter::ExportPlan plan = exporter::CompilePlan(*project, text, context);
             // The preflight's UV coverage, from the revision's own mesh re-derived from its stored
             // bytes into objects of this call alone: no image, no evaluation, no kept cache.
-            exporter::SourceInputs coverage;
-            std::string unavailable = "the project has no texturing mesh";
-            if (project->mesh) {
-                store::ProjectStore* store = open->store.get();
-                try {
-                    mesh::ImportResult mesh = mesh::RederiveMesh(
-                        *project, [store](const std::string& sha256) { return store->ReadResource(sha256); });
-                    coverage.geometry = std::make_shared<evaluator::MeshGeometryMasks>(
-                        std::make_shared<const mesh::TexturingMesh>(std::move(mesh.mesh)));
-                } catch (const std::exception& error) {
-                    unavailable = std::string("the texturing mesh does not re-derive: ") + error.what();
-                }
-            }
+            store::ProjectStore* store = open->store.get();
+            const exporter::PreflightCoverage coverage = exporter::CoverageForPreflight(
+                *project, [store](const std::string& sha256) { return store->ReadResource(sha256); });
             json::Object result{{"dry_run", true},
                                 {"revision", snapshot.revision},
                                 {"plan", exporter::PlanJson(plan)},
                                 {"textures", std::move(textures)},
-                                {"preflight", exporter::PreflightJson(
-                                                  exporter::PreflightExport(*project, plan, coverage, unavailable))}};
+                                {"preflight", exporter::PreflightJson(exporter::PreflightExport(
+                                                  *project, plan, coverage.inputs, coverage.gap))}};
             job.NoOp();
             return result;
         };

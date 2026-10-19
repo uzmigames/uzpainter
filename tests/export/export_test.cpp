@@ -59,7 +59,11 @@
 //       that counts every read, then the export (`WriteExport`); prints {"preflight", "plan":
 //       PlanJson before and "plan_after" after the preflight, "resource_reads": reads during the
 //       preflight, "written_before_export": whether exportPath existed after it, "export":
-//       {"written": [relativePath...]} or {"error": class, "message": text}}.
+//       {"written": [relativePath...]} or {"error": class, "message": text}}. With "mesh_reference"
+//       in the spec ("stored" or "missing"), the project records its "mesh" as its texturing mesh
+//       and the preflight's coverage is `CoverageForPreflight` over it, the mesh's bytes read
+//       ("stored") or not stored ("missing": the re-derive fails); "mesh_reads" counts their reads.
+//       Without it the coverage is the spec's mesh, or a known-absent mesh.
 //   uzp-export-tests [--fault <point>[:<n>]] publish <templates dir> <spec.json> <config.json>
 //       (phase1.17) As `export`, through `PublishExport`: the files and the receipt published as a
 //       new generation under exportPath; the spec's mesh is also the project's imported mesh (a
@@ -1270,8 +1274,30 @@ int RunPreflight(const fs::path& templatesDir, const fs::path& specPath, const f
             return std::nullopt;
         });
     counted.geometry = spec.geometry;
-    result["preflight"] =
-        exporter::PreflightJson(exporter::PreflightExport(spec.project, plan, counted, "the spec has no mesh"));
+    exporter::CoverageGap gap{!spec.geometry, "the spec has no mesh"};
+    const json::Value document = json::Parse(ReadText(specPath));
+    const json::Object& o = Obj(document, "spec");
+    if (o.contains("mesh_reference")) {
+        const std::string stored = Str(o.at("mesh_reference"), "mesh_reference");
+        const fs::path meshPath(Str(Key(o, "mesh"), "mesh"));
+        std::string bytes = ReadText(meshPath);
+        const std::string sha = core::Sha256Hex(bytes);
+        core::Project project = spec.project;
+        project.mesh = core::MeshReference{sha, mesh::ImportMeshFile(meshPath, {}).report, {}};
+        size_t meshReads = 0;
+        exporter::PreflightCoverage coverage =
+            exporter::CoverageForPreflight(project, [&](const std::string& wanted) -> std::string {
+                ++meshReads;
+                if (stored != "stored" || wanted != sha) {
+                    throw std::runtime_error("resource " + wanted + " is not stored");
+                }
+                return bytes;
+            });
+        result["mesh_reads"] = static_cast<std::int64_t>(meshReads);
+        counted.geometry = coverage.inputs.geometry;
+        gap = coverage.gap;
+    }
+    result["preflight"] = exporter::PreflightJson(exporter::PreflightExport(spec.project, plan, counted, gap));
     result["resource_reads"] = static_cast<std::int64_t>(*reads);
     result["plan_after"] = exporter::PlanJson(plan);
     result["written_before_export"] = fs::exists(exporter::Utf8Path(plan.exportPath));

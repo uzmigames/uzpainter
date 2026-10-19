@@ -1,8 +1,11 @@
 #include "export/guards.h"
 
+#include "evaluator/geometry_mask.h"
 #include "evaluator/sources.h"
 #include "export/encode.h"
 #include "export/write.h"
+#include "mesh/reload.h"
+#include "mesh/texturing_mesh.h"
 
 #include <algorithm>
 #include <map>
@@ -222,8 +225,25 @@ std::string_view PreflightStatusName(PreflightStatus status) {
     return "";
 }
 
+PreflightCoverage CoverageForPreflight(const core::Project& project,
+                                       const std::function<std::string(const std::string&)>& read) {
+    PreflightCoverage coverage;
+    if (!project.mesh) {
+        coverage.gap = {true, "the project has no texturing mesh"};
+        return coverage;
+    }
+    try {
+        mesh::ImportResult imported = mesh::RederiveMesh(project, read);
+        coverage.inputs.geometry = std::make_shared<evaluator::MeshGeometryMasks>(
+            std::make_shared<const mesh::TexturingMesh>(std::move(imported.mesh)));
+    } catch (const std::exception& error) {
+        coverage.gap = {false, std::string("the texturing mesh does not re-derive: ") + error.what()};
+    }
+    return coverage;
+}
+
 ExportPreflight PreflightExport(const core::Project& project, const ExportPlan& plan, const SourceInputs& inputs,
-                                std::string_view unavailable) {
+                                const CoverageGap& gap) {
     ExportPreflight preflight;
     std::map<core::Id, std::optional<Coverage>> coverages;
     for (const PlannedFile& file : plan.files) {
@@ -239,17 +259,21 @@ ExportPreflight PreflightExport(const core::Project& project, const ExportPlan& 
         };
         if (blocked(ProcessingRefusal(project, file))) continue;
         // As `EncodeExport` step 1: a statistics file needs the coverage only for a combined
-        // virtual normal, and only when there is a texturing mesh.
-        if (file.layout == FileLayout::Statistics && (!ReadsCombinedNormal(file) || !inputs.geometry)) continue;
-        if (!coverages.contains(file.textureSetId)) {
-            const core::TextureSet& set = SetOf(project, file);
-            coverages.emplace(file.textureSetId, CoverageOf(set, inputs));
+        // virtual normal, and only when there is a texturing mesh. A mesh whose coverage could
+        // not be obtained is not an absent one: its island checks are unknown.
+        if (file.layout == FileLayout::Statistics &&
+            (!ReadsCombinedNormal(file) || (!inputs.geometry && gap.meshAbsent))) {
+            continue;
         }
+        const core::TextureSet& set = SetOf(project, file);
+        if (!coverages.contains(file.textureSetId)) coverages.emplace(file.textureSetId, CoverageOf(set, inputs));
         const std::optional<Coverage>& coverage = coverages.at(file.textureSetId);
         if (!coverage) {
+            const std::string why =
+                inputs.geometry ? "the texturing mesh gives no coverage of the material \"" + set.material_id + "\""
+                                : gap.reason;
             entry.status = PreflightStatus::needs_evaluation;
-            entry.reason = "the UV coverage of the texture set \"" + file.textureSet + "\" is not available (" +
-                           std::string(unavailable) +
+            entry.reason = "the UV coverage of the texture set \"" + file.textureSet + "\" is not available (" + why +
                            "): the island normal and padding checks (decisions 245, 259) did not run";
             continue;
         }
