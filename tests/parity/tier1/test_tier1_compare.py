@@ -356,6 +356,8 @@ def test_a_register_bound_on_the_normal_angle_judges_a_normal_map(
         **entry,
         "tier": "1",
         "domain": {**entry["domain"], "selector": MANIFEST["domain"]},
+        # The golden is stable: an oracle-instability entry never covers it (SUP-036).
+        "evidence": {**entry["evidence"], "basis": "irreducible_difference"},
         "bounds": [{"metric": "normal_angular_max_deg", "scope": "whole", "max": bound}],
     }
     report = compare(subject(), resolved, store, runs, IDENTITY, [entry])

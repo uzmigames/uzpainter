@@ -42,6 +42,14 @@ def bake_entry() -> dict[str, Any]:
     return entry
 
 
+def stable_entry() -> dict[str, Any]:
+    """The bake sample with a basis that may except a stable oracle (an oracle-instability entry
+    never does, SUP-036)."""
+    entry = bake_entry()
+    entry["evidence"]["basis"] = "irreducible_difference"
+    return entry
+
+
 def render_entry() -> dict[str, Any]:
     entry: dict[str, Any] = load_json(ENTRIES / "tier3-render-entry.json")
     return entry
@@ -73,7 +81,7 @@ def test_missing_oracle_blob_is_oracle_unavailable_not_a_pass() -> None:
 
 
 def test_covering_entry_passes_and_is_listed() -> None:
-    entry = bake_entry()
+    entry = stable_entry()
     domain = entry["domain"]["selector"]
     oracle = [10.0] * 1000
     candidate = list(oracle)
@@ -84,7 +92,7 @@ def test_covering_entry_passes_and_is_listed() -> None:
 
 
 def test_entry_whose_bound_does_not_hold_fails() -> None:
-    entry = bake_entry()
+    entry = stable_entry()
     oracle = [10.0] * 1000
     candidate = list(oracle)
     candidate[0] = 14.0  # max |delta| 4 > bound 3
@@ -93,7 +101,7 @@ def test_entry_whose_bound_does_not_hold_fails() -> None:
 
 
 def test_entry_never_covers_another_tier_or_domain() -> None:
-    entry = bake_entry()
+    entry = stable_entry()
     oracle, candidate = [10.0] * 1000, [10.0] * 999 + [11.0]
     same = evaluate(Comparison("2b", entry["domain"]["selector"], oracle, candidate), [entry])
     assert same.outcome is Outcome.PASS
@@ -191,8 +199,8 @@ def test_tier3_rejects_a_candidate_without_the_parity_display_state() -> None:
 
 
 def test_superseded_version_is_not_in_force() -> None:
-    v1 = bake_entry()
-    v2 = bake_entry()
+    v1 = stable_entry()
+    v2 = stable_entry()
     v2["version"] = 2
     v2["bounds"] = [{"metric": "max_abs_diff", "scope": "whole", "max": 1}]
     register = {"schema": "uzpainter/parity/exceptions/1", "entries": [v1, v2]}
@@ -302,6 +310,38 @@ def test_unstable_oracle_is_blocked_without_an_instability_entry() -> None:
     irreducible["evidence"]["basis"] = "irreducible_difference"
     other = evaluate(Comparison("2b", domain, [1.0], [1.0], oracle_stable=False), [irreducible])
     assert other.outcome is Outcome.BLOCKED
+
+
+def test_an_instability_entry_never_covers_a_stable_oracle() -> None:
+    """SUP-036 (decision 307 amendment): decision 032 excepts an unstable oracle's residuals,
+    never a difference from a stable oracle. A small in-bounds difference against a stable oracle
+    fails through an unscoped (EXC-001..005 style) and a scoped (EXC-008 style) instability entry,
+    which still cover the same difference against an unstable oracle."""
+    unscoped = bake_entry()
+    oracle, candidate = [10.0] * 1000, [11.0] + [10.0] * 999
+    stable = Comparison("2b", unscoped["domain"]["selector"], oracle, candidate)
+    unstable = Comparison(
+        "2b", unscoped["domain"]["selector"], oracle, candidate, oracle_stable=False
+    )
+    assert evaluate(stable, [unscoped]).outcome is Outcome.FAIL
+    assert evaluate(unstable, [unscoped]).exceptions_relied_on == (("EXC-001", 1),)
+
+    register: list[dict[str, Any]] = load_json(REGISTER_PATH)["entries"]
+    scoped = next(e for e in in_force(register) if e["exception_id"] == "EXC-008")
+    golden, output = scoped["domain"]["goldens"][0], scoped["domain"]["outputs"][0]
+    r1 = [float(1000 + i) for i in range(64)]
+    off = list(r1)
+    off[7] += 1.0  # one code, within every bound of the entry
+    case: Case = {"golden_id": golden, "output_id": output}
+    stable_scoped = Comparison("0", OCIO_DOMAIN, r1, off, **case)
+    unstable_scoped = Comparison("0", OCIO_DOMAIN, r1, off, oracle_stable=False, **case)
+    for entries in ([scoped], register):
+        verdict = evaluate(stable_scoped, entries)
+        assert verdict.outcome is Outcome.FAIL
+        assert verdict.exceptions_relied_on == ()
+        assert evaluate(unstable_scoped, entries).exceptions_relied_on == (("EXC-008", 1),)
+    exact = evaluate(Comparison("0", OCIO_DOMAIN, r1, list(r1), **case), [scoped])
+    assert exact.outcome is Outcome.PASS and exact.reason == "exact equality"
 
 
 def test_tier3_noise_floor_entry_covers_an_unstable_iray_oracle() -> None:

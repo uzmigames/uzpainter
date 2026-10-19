@@ -11,6 +11,9 @@
   true. Any other state, or none, is rejected as render evidence: `fail`, nothing compared.
 - An unstable oracle passes only through a covering entry whose evidence is the oracle
   instability or, in Tier 3, the noise floor (which includes Iray's run-to-run difference).
+- An oracle-instability entry never covers a stable oracle (SUP-036, decision 307 amendment):
+  decision 032 excepts the residuals of an unstable oracle, never a difference from a stable
+  one, whatever the entry's domain, goldens, outputs or bounds.
 - Without a covering entry, Tier 3 and comparisons against an unstable oracle are `blocked`;
   every other difference `fail`s. A shape mismatch is structural and fails in every tier.
 - Decision 032: against an unstable Painter oracle (Tiers 0-2b) the same-session recording r1 is
@@ -251,6 +254,16 @@ def _scope_holds(entry: Mapping[str, Any], comparison: Comparison) -> bool:
 _UNSTABLE_BASES = {False: {"oracle_instability"}, True: {"oracle_instability", "noise_floor"}}
 
 
+def _basis_eligible(entry: Mapping[str, Any], comparison: Comparison) -> bool:
+    """The entry's evidence may except this comparison: against an unstable oracle only the
+    instability (or, in Tier 3, the noise floor); against a stable one any basis but the
+    instability, which decision 032 grants for an unstable oracle's residuals only (SUP-036)."""
+    basis = entry["evidence"]["basis"]
+    if comparison.oracle_stable:
+        return bool(basis != "oracle_instability")
+    return basis in _UNSTABLE_BASES[comparison.tier == "3"]
+
+
 def _exact_target(
     comparison: Comparison, diagnostics: Diagnostics, register_entries: Sequence[Mapping[str, Any]]
 ) -> Verdict:
@@ -324,7 +337,7 @@ def _evaluate(
         for entry in in_force(register_entries)
         if entry["tier"] == comparison.tier
         and _scope_holds(entry, comparison)
-        and (stable or entry["evidence"]["basis"] in _UNSTABLE_BASES[comparison.tier == "3"])
+        and _basis_eligible(entry, comparison)
         and all(_bound_holds(bound, comparison, metrics) for bound in entry["bounds"])
     ]
     if covering:
