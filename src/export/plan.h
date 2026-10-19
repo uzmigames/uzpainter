@@ -256,6 +256,11 @@ struct FileRaster {
     /// OCIO with Painter's substance config (decision 190): a PNG 16 writes an sRGB-encoded
     /// channel through `OcioSrgbPng16Code` (encode.h).
     bool ocio = false;
+    /// Per channel, the stack channel's format when the channel reads one component of a
+    /// documentMap source (not its luma): its values are that format's operands. Empty or nullopt
+    /// for every other channel. The measured `infinite` padding pads such a channel in that format
+    /// (padding.h, decision 274).
+    std::vector<std::optional<core::ChannelFormat>> documentFormat;
 };
 
 /// True for the material channels Painter exports sRGB-encoded when they are stored as sRGB8:

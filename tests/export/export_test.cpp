@@ -26,7 +26,10 @@
 //       "format": png|exr, "bit_depth": 8|16|16f|32f, "dithering"?, "height"? (the channel is
 //       Height), "srgb8_material"? (an sRGB8 BaseColor, Specular or Emissive: every channel
 //       sRGB-encoded in a PNG), "l8_material"? (an L8 one, each channel read through its own letter:
-//       `SrgbEncodedRead`), "append_opaque_alpha"? (an alpha of 1 appended)}: the source's values as the
+//       `SrgbEncodedRead`), "append_opaque_alpha"? (an alpha of 1 appended), "ocio"? (OCIO with
+//       Painter's substance config), "document_format"? (every channel a documentMap stored in that
+//       ChannelFormat: a PNG source's codes read back as its operands, `DocumentOperands`)}: the
+//       source's values as the
 //       raster of an L, L+A, RGB or RGB+A file, encoded by EncodeFile; prints one JSON line per case
 //       {"target", "equal", "layout", "size", "target_size"}.
 //   uzp-export-tests ring <cases.json>
@@ -85,7 +88,9 @@
 
 #include "evaluator/admission.h"
 #include "evaluator/arith.h"
+#include "evaluator/cpu_store.h"
 #include "evaluator/evaluator.h"
+#include "evaluator/formats.h"
 #include "evaluator/profile.h"
 #include "evaluator/sources.h"
 #include "evaluator/templates.h"
@@ -116,6 +121,7 @@
 #include <array>
 #include <bit>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -754,6 +760,72 @@ int RunRing(const fs::path& casesPath) {
     return 0;
 }
 
+/// The values of `png`, which `file` writes from documentMap channels stored as `format`: per
+/// channel and code, the operand of `format` that EncodeFile writes as that code (each UNORM or
+/// sRGB8 code's operand, or each finite half, written once through the channel's encode). When
+/// several write one code (a 16-bit float Height near 0), the one nearest the code's UNORM operand
+/// u (2u - 1 for a Height) is taken, the lower on a tie. Throws when a code has none.
+std::vector<float> DocumentOperands(const exporter::PlannedFile& file, const std::vector<uint8_t>& srgbEncoded,
+                                    bool ocio, ChannelFormat format, const exporter::PngImage& png) {
+    const uint32_t bits = file.parameters->bitDepth == exporter::BitDepth::u8 ? 8 : 16;
+    if (file.parameters->fileFormat != exporter::FileFormat::png || png.bitDepth != bits ||
+        png.channels != file.channels.size()) {
+        throw std::invalid_argument("process: document_format reads a PNG source of the case's depth and channels");
+    }
+    const evaluator::TileFormat tile = evaluator::TileFormatOf(format);
+    std::vector<float> candidates;
+    switch (tile.encoding) {
+        case render::TexelEncoding::Unorm8:
+        case render::TexelEncoding::Unorm16:
+            for (uint32_t k = 0; k < (tile.encoding == render::TexelEncoding::Unorm8 ? 256u : 65536u); ++k) {
+                candidates.push_back(evaluator::OperandOf(k, tile, 0));
+            }
+            break;
+        case render::TexelEncoding::Float16:
+            for (uint32_t h = 0; h < 65536; ++h) {
+                const float v = evaluator::arith::HalfToFloat(static_cast<uint16_t>(h));
+                if (std::isfinite(v)) candidates.push_back(v);
+            }
+            break;
+        case render::TexelEncoding::Float32:
+            throw std::invalid_argument("process: a 32-bit float document_format needs an OpenEXR source");
+    }
+    std::vector<float> values(png.samples.size());
+    for (uint32_t c = 0; c < png.channels; ++c) {
+        exporter::PlannedFile one = file;
+        one.width = static_cast<uint32_t>(candidates.size());
+        one.height = 1;
+        one.layout = exporter::FileLayout::L;
+        one.channels = {file.channels[c]};
+        const exporter::FileRaster row{one.width, 1, 1, candidates, std::nullopt, std::nullopt,
+                                       {srgbEncoded[c]}, ocio, {}};
+        const exporter::PngImage written = DecodePng(exporter::EncodeFile(one, row).bytes);
+        const bool height = file.channels[c].source.channel == ChannelType::Height;
+        std::map<uint32_t, float> operand;
+        for (size_t i = 0; i < candidates.size(); ++i) {
+            const uint32_t code = written.samples[i];
+            const double u = evaluator::arith::UnormOperand(code, bits);
+            const double target = height ? 2.0 * u - 1.0 : u;
+            const auto it = operand.find(code);
+            if (it == operand.end() || std::abs(candidates[i] - target) < std::abs(it->second - target) ||
+                (std::abs(candidates[i] - target) == std::abs(it->second - target) && candidates[i] < it->second)) {
+                operand[code] = candidates[i];
+            }
+        }
+        for (size_t t = 0; t < size_t{png.width} * png.height; ++t) {
+            const uint32_t code = png.samples[t * png.channels + c];
+            const auto it = operand.find(code);
+            if (it == operand.end()) {
+                throw std::invalid_argument("process: the code " + std::to_string(code) + " of " + file.relativePath +
+                                            " is not written from any " + std::string(core::ToString(format)) +
+                                            " operand");
+            }
+            values[t * png.channels + c] = it->second;
+        }
+    }
+    return values;
+}
+
 /// `process`: Painter's own file of a map as the raster, through EncodeFile with the case's
 /// processing; compared with Painter's file of that processing.
 int RunProcess(const fs::path& casesPath) {
@@ -827,9 +899,29 @@ int RunProcess(const fs::path& casesPath) {
         for (uint32_t i = 0; l8Material && i < channels; ++i) {
             srgbEncoded[i] = exporter::SrgbEncodedRead(ChannelType::Specular, ChannelFormat::L8, kLetters[channels][i]);
         }
-        const exporter::FileRaster raster{width,        height,       channels,
-                                          std::move(values), std::nullopt, std::nullopt,
-                                          std::move(srgbEncoded)};
+        const bool ocio = c.contains("ocio") && std::get<bool>(c.at("ocio").data);
+        // `document_format` (with a PNG source): every channel reads a documentMap stored in that
+        // format (decision 274's padding domain), so each code is read back as the operand of that
+        // format whose write gives it (`DocumentOperands`).
+        std::vector<std::optional<ChannelFormat>> documentFormat;
+        if (c.contains("document_format")) {
+            const std::string name = Str(c.at("document_format"), "document_format");
+            const std::optional<ChannelFormat> format = core::FromString<ChannelFormat>(name);
+            if (!format) throw std::invalid_argument("process: unknown document_format " + name);
+            documentFormat.assign(channels, *format);
+            if (source.starts_with("\x89PNG")) {
+                values = DocumentOperands(file, srgbEncoded, ocio, *format, DecodePng(source));
+            }
+        }
+        const exporter::FileRaster raster{width,
+                                          height,
+                                          channels,
+                                          std::move(values),
+                                          std::nullopt,
+                                          std::nullopt,
+                                          std::move(srgbEncoded),
+                                          ocio,
+                                          std::move(documentFormat)};
         // `mesh` (and `material`): the case is padded `infinite` over that mesh's texel-centre
         // coverage and triangles first (padding.h), measured: the export refuses that padding
         // (decision 259); `coverage_out` receives the coverage, one byte per texel, and `ring_out`

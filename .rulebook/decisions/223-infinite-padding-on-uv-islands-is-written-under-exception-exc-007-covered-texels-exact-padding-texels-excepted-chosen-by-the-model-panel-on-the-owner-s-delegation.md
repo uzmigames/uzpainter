@@ -4,6 +4,7 @@
 **Date**: 2026-10-13
 **Related Tasks**: phase1.25_pilot-wand, phase1.18_export-engine, phase1.16_export-processing-encoders
 **Superseded in part by**: decision 259 (2026-10-18). The owner rejected EXC-007 himself ("Não, tudo idêntico"). Its version 2 withdraws it, and `infinite` padding on UV islands is refused again until exact. The measurements stand, and the coverage-only rule is kept for measurement only.
+**Corrected in part by**: decision 274 (2026-10-19). The padding works in each channel's document format, not on the PNG 16 codes this decision padded. On the Wand, the exact ring texels rise from 3 to 3,935 on BaseColor, from 2,632 to 4,926 on Roughness and from 4,439 to 5,301 on Metallic.
 
 ## Context
 

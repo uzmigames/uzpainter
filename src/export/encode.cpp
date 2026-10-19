@@ -1,6 +1,8 @@
 #include "export/encode.h"
 
 #include "evaluator/arith.h"
+#include "evaluator/cpu_store.h"
+#include "evaluator/formats.h"
 #include "evaluator/hwmath.h"
 #include "evaluator/sources.h"
 #include "export/exr_writer.h"
@@ -177,6 +179,19 @@ constexpr uint16_t kOcioSrgbPng16[256] = {
 constexpr float kOcioEmptyBaseColor = 0.8f;
 constexpr uint16_t kOcioEmptyBaseColorPng16 = 59396;
 
+/// The value a channel stored as `format` holds for `v`: the document's store of `v` read back as
+/// its operand (cpu_store.h `StoreValue`, `OperandOf`), where the measured padding writes a padded
+/// value (decision 274).
+float DocumentValue(float v, core::ChannelFormat format) {
+    const evaluator::TileFormat tile = evaluator::TileFormatOf(format);
+    return evaluator::OperandOf(evaluator::StoreValue(v, tile, 0), tile, 0);
+}
+
+/// The document format of channel `c` of `raster`, when it has one (`FileRaster::documentFormat`).
+std::optional<core::ChannelFormat> DocumentFormat(const FileRaster& raster, uint32_t c) {
+    return c < raster.documentFormat.size() ? raster.documentFormat[c] : std::nullopt;
+}
+
 /// True when every alpha (last component) of `raster` is 1.
 bool OpaqueAlpha(const FileRaster& raster) {
     const size_t texels = size_t{raster.width} * raster.height;
@@ -210,6 +225,10 @@ EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster, const
         raster.values.size() != size_t{raster.width} * raster.height * components) {
         throw std::invalid_argument("export: the raster of " + file.relativePath + " does not match its size and layout");
     }
+    if (!raster.documentFormat.empty() && raster.documentFormat.size() != components) {
+        throw std::invalid_argument("export: the document formats of " + file.relativePath +
+                                    " do not match its layout");
+    }
     // An alpha of 1 everywhere is dropped (recordings R-085 P6/P7 for RGB+A, R-090 P6 for L+A).
     const bool alpha = file.layout == FileLayout::LA || file.layout == FileLayout::RGBA;
     const bool drop = alpha && OpaqueAlpha(raster);
@@ -228,8 +247,28 @@ EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster, const
                 image.values.push_back(half ? evaluator::arith::HalfToFloat(evaluator::arith::HalfTowardZero(v)) : v);
             }
         }
-        if (coverage != nullptr && ApplyPadding(file, *coverage, written, image.values, inexact) && half) {
-            for (float& v : image.values) v = evaluator::arith::HalfToFloat(evaluator::arith::HalfTowardZero(v));
+        if (coverage != nullptr) {
+            // Each channel padded on its document operands (decision 274), or on the stored floats
+            // when it has no document format; a filled texel stored as the document stores it, then
+            // written as above.
+            std::vector<float> operands(image.values);
+            for (size_t t = 0; t < texels; ++t) {
+                for (uint32_t c = 0; c < written; ++c) {
+                    if (DocumentFormat(raster, c)) operands[t * written + c] = raster.values[t * components + c];
+                }
+            }
+            if (ApplyPadding(file, *coverage, written, operands, inexact)) {
+                for (size_t t = 0; t < texels; ++t) {
+                    if (coverage->covered[t] != 0) continue;
+                    for (uint32_t c = 0; c < written; ++c) {
+                        const std::optional<core::ChannelFormat> format = DocumentFormat(raster, c);
+                        float v = operands[t * written + c];
+                        if (format) v = DocumentValue(v, *format);
+                        image.values[t * written + c] =
+                            half ? evaluator::arith::HalfToFloat(evaluator::arith::HalfTowardZero(v)) : v;
+                    }
+                }
+            }
         }
         return {EncodeExr(image), layout};
     }
@@ -239,33 +278,43 @@ EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster, const
         throw std::invalid_argument("export: the sRGB flags of " + file.relativePath + " do not match its layout");
     }
     const uint32_t bits = p.bitDepth == BitDepth::u8 ? 8 : 16;
+    const auto sample = [&](uint32_t c, float value) -> uint16_t {
+        float v = PngValue(file.channels[c], value);
+        const bool encoded = !raster.srgbEncoded.empty() && raster.srgbEncoded[c] != 0;
+        if (encoded && raster.ocio && bits == 16) {
+            // OCIO: Painter's recorded code (EvaluateFileOn refused every other value).
+            const std::optional<uint16_t> code = OcioSrgbPng16Code(v);
+            if (!code) throw std::invalid_argument("export: an unrecorded OCIO sRGB value in " + file.relativePath);
+            return *code;
+        }
+        if (encoded) v = SrgbExportEncode(v);
+        return static_cast<uint16_t>(evaluator::arith::WriteUnorm(v, bits));
+    };
     PngImage image{raster.width, raster.height, written, bits, {}};
     image.samples.reserve(texels * written);
     for (size_t t = 0; t < texels; ++t) {
-        for (uint32_t c = 0; c < written; ++c) {
-            float v = PngValue(file.channels[c], raster.values[t * components + c]);
-            const bool encoded = !raster.srgbEncoded.empty() && raster.srgbEncoded[c] != 0;
-            if (encoded && raster.ocio && bits == 16) {
-                // OCIO: Painter's recorded code (EvaluateFileOn refused every other value).
-                const std::optional<uint16_t> code = OcioSrgbPng16Code(v);
-                if (!code) throw std::invalid_argument("export: an unrecorded OCIO sRGB value in " + file.relativePath);
-                image.samples.push_back(*code);
-                continue;
-            }
-            if (encoded) v = SrgbExportEncode(v);
-            image.samples.push_back(static_cast<uint16_t>(evaluator::arith::WriteUnorm(v, bits)));
-        }
+        for (uint32_t c = 0; c < written; ++c) image.samples.push_back(sample(c, raster.values[t * components + c]));
     }
     if (coverage != nullptr) {
-        // The codes as UNORM operands, padded; the filled texels written back by the write rule.
-        std::vector<float> stored(image.samples.size());
-        for (size_t i = 0; i < stored.size(); ++i) stored[i] = evaluator::arith::UnormOperand(image.samples[i], bits);
-        if (ApplyPadding(file, *coverage, written, stored, inexact)) {
+        // Each channel padded on its document operands (decision 274), a filled texel stored as the
+        // document stores it, then written as above; a channel without a document format padded on
+        // its codes as UNORM operands, a filled texel written back by the write rule.
+        std::vector<float> operands(image.samples.size());
+        for (size_t t = 0; t < texels; ++t) {
+            for (uint32_t c = 0; c < written; ++c) {
+                const size_t i = t * written + c;
+                operands[i] = DocumentFormat(raster, c) ? raster.values[t * components + c]
+                                                        : evaluator::arith::UnormOperand(image.samples[i], bits);
+            }
+        }
+        if (ApplyPadding(file, *coverage, written, operands, inexact)) {
             for (size_t t = 0; t < texels; ++t) {
                 if (coverage->covered[t] != 0) continue;
                 for (uint32_t c = 0; c < written; ++c) {
-                    image.samples[t * written + c] =
-                        static_cast<uint16_t>(evaluator::arith::WriteUnorm(stored[t * written + c], bits));
+                    const size_t i = t * written + c;
+                    const std::optional<core::ChannelFormat> format = DocumentFormat(raster, c);
+                    image.samples[i] = format ? sample(c, DocumentValue(operands[i], *format))
+                                              : static_cast<uint16_t>(evaluator::arith::WriteUnorm(operands[i], bits));
                 }
             }
         }

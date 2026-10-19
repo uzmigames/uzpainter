@@ -12,6 +12,7 @@ chain and decision 206's rounding; equal shares ordered by decision 267's compar
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from fractions import Fraction
 from pathlib import Path
@@ -20,6 +21,7 @@ from typing import Any
 import numpy as np
 import pytest
 
+from tools.parity.feasibility import png
 from tools.parity.fit import hwmath
 
 F32 = np.float32
@@ -363,3 +365,136 @@ def test_seam_ring_reads_the_far_island(export_tests: Path, tmp_path: Path, offs
         if offset != 0.0 and 12 <= y <= 15:
             assert r["taps"] == 4 and any(c[3] for c in r["candidates"][:4])
             assert any(not c[3] for c in r["candidates"][:4])
+
+
+def _source_table(path: str, name: str) -> list[int]:
+    """The integer table `name` of the C++ source `path` (repo root relative)."""
+    text = (Path(__file__).resolve().parents[2] / path).read_text(encoding="utf-8")
+    body = text[text.index(name) :]
+    body = body[body.index("{") + 1 : body.index("};")]
+    return [int(x.rstrip("uU"), 0) for x in re.findall(r"0x[0-9A-Fa-f]+u?|\d+u?", body)]
+
+
+def _unorm_write(v: np.ndarray, bits: int) -> np.ndarray:
+    """arith::WriteUnorm: v clamped to [0, 1], j = floor(v 2^(n+4)), then
+    (j (2^n - 1) + 2^(n+3) - 1) >> (n+4)."""
+    c = np.clip(np.nan_to_num(v.astype(F32)), 0, 1).astype(F32)
+    j = (c * F32(1 << (bits + 4))).astype(np.int64)
+    return (j * ((1 << bits) - 1) + (1 << (bits + 3)) - 1) >> (bits + 4)
+
+
+def _half_toward_zero(v: np.ndarray) -> np.ndarray:
+    h = v.astype(np.float16)
+    over = np.abs(h.astype(F32)) > np.abs(v)
+    h[over] = np.nextafter(h[over], np.float16(0))
+    return h.astype(F32)
+
+
+@pytest.mark.parametrize("domain", ["L8", "sRGB8-ocio", "L16F-height"])
+def test_padding_runs_in_the_document_format(
+    export_tests: Path, tmp_path: Path, domain: str
+) -> None:
+    """Decision 274: a documentMap channel is padded on its document operands, each filled texel
+    stored as its format stores it (L8: the 8-bit UNORM write; sRGB8: the GPU's float-to-sRGB8
+    conversion; L16F: the half toward zero) and then written as the file writes the channel (PNG
+    16: the UNORM write, the OCIO sRGB8 code table, a Height's v * 0.5 + 0.5). Synthetic codes over
+    two islands sharing a seam: `process` with `document_format` equals `ring`'s padding of the
+    operands passed through that store and write on every texel; the same codes padded as UNORM
+    operands of the file's codes (decision 223's domain) differ from it."""
+    s = 1 / 32
+    a = (
+        [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 0.0, 1.0), (0.0, 0.0, 1.0)],
+        [(4 * s, 16 * s), (8 * s, 16 * s), (8 * s, 20 * s), (4 * s, 20 * s)],
+    )
+    b = (
+        [(1.0, 0.0, 0.0), (2.0, 0.0, 0.0), (2.0, 0.0, 1.0), (1.0, 0.0, 1.0)],
+        [(16 * s, 16.3 * s), (20 * s, 16.3 * s), (20 * s, 20.3 * s), (16 * s, 20.3 * s)],
+    )
+    mesh = Mesh([a, b], 32)
+    rng = np.random.default_rng(274)
+    channels = 3 if domain == "sRGB8-ocio" else 1
+    shape = (32, 32, channels)
+    case: dict[str, Any] = {"format": "png", "bit_depth": "16"}
+    if domain == "L8":
+        k = rng.integers(0, 256, shape)
+        operands = (k / 255.0).astype(F32)
+        codes = k * 257
+
+        def store_and_write(p: np.ndarray) -> np.ndarray:
+            return _unorm_write(p, 8) * 257
+
+        case["document_format"] = "L8"
+    elif domain == "sRGB8-ocio":
+        arith = "src/evaluator/arith.cpp"
+        decode = np.array(_source_table(arith, "kSrgb8DecodeBits[256]"), np.uint32).view(F32)
+        thresholds = np.array(_source_table(arith, "kSrgb8ThresholdBits[255]"), np.uint32)
+        thresholds = thresholds.view(F32).astype(np.float64)
+        table = np.array(_source_table("src/export/encode.cpp", "kOcioSrgbPng16[256]"), np.int64)
+        k = rng.integers(0, 256, shape)
+        operands = decode[k]
+        codes = table[k]
+
+        def store_and_write(p: np.ndarray) -> np.ndarray:
+            c = np.clip(np.nan_to_num(p.astype(F32)), 0, 1).astype(np.float64)
+            return table[np.searchsorted(thresholds, c, side="right")]
+
+        case.update(document_format="sRGB8", srgb8_material=True, ocio=True)
+    else:
+        operands = _half_toward_zero(rng.uniform(0.5, 1.0, shape).astype(F32))
+        codes = _unorm_write((operands * F32(0.5) + F32(0.5)).astype(F32), 16)
+
+        def store_and_write(p: np.ndarray) -> np.ndarray:
+            return _unorm_write((_half_toward_zero(p) * F32(0.5) + F32(0.5)).astype(F32), 16)
+
+        case.update(document_format="L16F", height=True)
+    obj = mesh.obj(tmp_path / "mesh.obj")
+    (tmp_path / "operands.f32").write_bytes(operands.astype(F32).tobytes())
+    ring_case = {
+        "mesh": str(obj),
+        "material": "m",
+        "width": 32,
+        "height": 32,
+        "channels": channels,
+        "values": str(tmp_path / "operands.f32"),
+        "out": str(tmp_path / "padded.f32"),
+    }
+    (tmp_path / "ring.json").write_text(json.dumps([ring_case]), encoding="utf-8")
+    proc = subprocess.run(
+        [str(export_tests), "ring", str(tmp_path / "ring.json")],
+        capture_output=True,
+        text=True,
+        timeout=600,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    padded = np.frombuffer((tmp_path / "padded.f32").read_bytes(), F32).reshape(shape)
+    covered = mesh.owner >= 0
+    expected = np.where(covered[..., None], codes, store_and_write(padded))
+
+    source = tmp_path / "source.png"
+    png.write(source, codes.astype(np.int64), 16)
+    common = {"source": str(source), "target": str(source), "mesh": str(obj), "material": "m"}
+    cases = [
+        dict(case, **common, out=str(tmp_path / "document.png")),
+        {
+            **common,
+            "format": "png",
+            "bit_depth": "16",
+            "out": str(tmp_path / "codes.png"),
+            **({"height": True} if domain == "L16F-height" else {}),
+        },
+    ]
+    (tmp_path / "process.json").write_text(json.dumps(cases), encoding="utf-8")
+    proc = subprocess.run(
+        [str(export_tests), "process", str(tmp_path / "process.json")],
+        capture_output=True,
+        text=True,
+        timeout=600,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    document = png.read(tmp_path / "document.png").astype(np.int64).reshape(shape)
+    by_codes = png.read(tmp_path / "codes.png").astype(np.int64).reshape(shape)
+    assert 0 < covered.sum() < covered.size
+    assert np.array_equal(document, expected)
+    assert not np.array_equal(by_codes[~covered], expected[~covered])

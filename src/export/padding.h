@@ -49,10 +49,16 @@
 //   2. Every other texel copies its seed found by a jump flood over the covered and ring texels
 //      (decision 197): steps k = max(width, height)/2 down to 1, eight offsets in a fixed order,
 //      the strictly nearest seed kept.
-//   The padding acts on the values the file stores, after the encode: OpenEXR floats, and PNG
-//   codes as UNORM operands (a padded code is written back with the UNORM write rule). A PNG 16
-//   sRGB channel under OCIO stores Painter's recorded codes (encode.h `OcioSrgbPng16Code`), which
-//   a lerp of linear values would leave; decision 223 measured the Wand on its PNG 16 codes.
+//   Each channel is padded in its document format (decision 274, which corrects decision 223's
+//   padding of the PNG 16 codes). A channel that reads a documentMap is padded on the operands of
+//   its stack channel's format (`FileRaster::documentFormat`): an sRGB8 channel's linear operands,
+//   an 8- or 16-bit UNORM channel's operands, a float channel's floats. Each filled texel is stored
+//   as that format stores it (evaluator/cpu_store.h `StoreValue`: the GPU's float-to-sRGB8
+//   conversion, the UNORM write, the half toward zero) and written as the file writes the
+//   channel's other texels (encode.h). Any other channel (a mesh map, a virtual map, a luma, a
+//   constant) is padded on the values the file stores, as decision 223 did: OpenEXR floats, and
+//   PNG codes as UNORM operands written back with the UNORM write rule. No recording shows
+//   Painter's domain for those.
 //   The refusal is lifted only when the rule is exact (phase1.25_pilot-wand item 2.7).
 // - A combined virtual normal (`Normal_OpenGL`, `Normal_DirectX`, or a diagnosticMap that
 //   isolates, compares or summarises one) with incomplete coverage, under every padding and in

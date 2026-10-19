@@ -1009,6 +1009,7 @@ render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int
     const size_t texels = size_t{raster.width} * raster.height;
     raster.values.resize(texels * raster.channels);
     raster.srgbEncoded.assign(raster.channels, 0);
+    raster.documentFormat.assign(raster.channels, std::nullopt);
     for (uint32_t c = 0; c < raster.channels; ++c) {
         const PlannedChannel& channel = file.channels[c];
         const PlannedSource& s = channel.source;
@@ -1020,6 +1021,7 @@ render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int
         const auto format = stored.find(key);
         raster.srgbEncoded[c] =
             format != stored.end() && SrgbEncodedRead(*s.channel, format->second, channel.src) ? 1 : 0;
+        if (format != stored.end() && !channel.luma) raster.documentFormat[c] = format->second;
         const DiagnosticMap& map = evaluated.at(key);
         if (map.width != raster.width || map.height != raster.height || channel.component >= map.components) {
             return evaluator::EvalFail(evaluator::EvalErrorKind::Internal,

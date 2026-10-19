@@ -1,0 +1,13 @@
+{
+  "id": 274,
+  "slug": "274-padding-document-format",
+  "title": "The measured infinite padding works in each channel's document format, not on the PNG 16 export codes, correcting decision 223's padding domain",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}
