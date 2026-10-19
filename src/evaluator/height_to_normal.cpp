@@ -1,7 +1,11 @@
 #include "evaluator/height_to_normal.h"
 
+#include <algorithm>
+#include <bit>
+#include <cstddef>
 #include <cstring>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 
@@ -222,6 +226,15 @@ std::array<float, 3> VirtualNormalTexel(const std::array<float, 3>& v, const Nor
     return {arith::Fma(n[0], 0.5f, 0.5f), arith::Fma(y, 0.5f, 0.5f), arith::Fma(n[2], 0.5f, 0.5f)};
 }
 
+std::array<float, 3> MeshOnPaddedNormal(const std::array<float, 3>& mesh, bool meshDirectX,
+                                        const std::array<float, 3>& free, core::NormalMapFormat convention) {
+    Vec3 f = arith::NormalDecode(mesh);
+    if (meshDirectX) f[1] = -f[1];
+    const Vec3 n = arith::NormalNormalise(arith::NormalReoriented(f, arith::NormalDecode(free)));
+    const float y = convention == core::NormalMapFormat::DirectX ? -n[1] : n[1];
+    return {arith::Fma(n[0], 0.5f, 0.5f), arith::Fma(y, 0.5f, 0.5f), arith::Fma(n[2], 0.5f, 0.5f)};
+}
+
 render::Result<VirtualNormalResult> EvaluateVirtualNormalOn(const core::Project& project, std::int64_t revision,
                                                             const VirtualNormalRequest& request,
                                                             const TemplateLibrary& templates, ITileStore& store,
@@ -250,7 +263,8 @@ render::Result<VirtualNormalResult> EvaluateVirtualNormalOn(const core::Project&
     // resolution.
     std::shared_ptr<const DecodedImage> meshImage;
     bool meshDirectX = false;
-    if (const auto binding = set->mesh_maps.find(core::MeshMapUsage::Normal); binding != set->mesh_maps.end()) {
+    if (const auto binding = set->mesh_maps.find(core::MeshMapUsage::Normal);
+        binding != set->mesh_maps.end() && !request.withoutMesh) {
         render::Result<std::shared_ptr<const DecodedImage>> fetched = MeshImage(binding->second, request);
         if (!fetched) return render::Unexpected(fetched.error());
         meshImage = *fetched;
@@ -307,10 +321,10 @@ render::Result<VirtualNormalResult> EvaluateVirtualNormalOn(const core::Project&
     meshKey.Str("normal-mesh-map").Str(meshImage ? set->mesh_maps.at(core::MeshMapUsage::Normal).resource : std::string());
     const Digest meshDigest = meshKey.Finish();
     readoutKey.Sub(meshDigest).U32(meshDirectX ? 1u : 0u).F32(HeightZ(set->height_to_normal_method, width));
-    const Digest key = readoutKey.Finish();
+    Digest key = readoutKey.Finish();
     const TileGrid grid{width, height};
-    // Held by this tile cache: read there (result_cache.h).
-    render::DiskCache* persistent = cache.persistent();
+    // Held by this tile cache: read there (result_cache.h). A padded Height is never persisted.
+    render::DiskCache* persistent = request.heightPadding ? nullptr : cache.persistent();
     if (persistent != nullptr && cache.Contains(CacheKey{stack->id, CacheKind::Readout, key, 0, 0})) persistent = nullptr;
     if (persistent != nullptr) {
         const ChannelDag* dags[] = {heightDag ? &*heightDag : nullptr, normalDag ? &*normalDag : nullptr};
@@ -338,6 +352,72 @@ render::Result<VirtualNormalResult> EvaluateVirtualNormalOn(const core::Project&
                 pins.Hold(*readout);
                 Accumulate(result.stats, stats);
                 heights[size_t{ty} * grid.TilesX() + tx] = *readout;
+            }
+        }
+    }
+    if (request.heightPadding) {
+        // The diagnostic measure export (decision 308): the whole set's read-out, padded, in tiles
+        // keyed by the padded content, and the result keyed by it too.
+        std::vector<float> whole(size_t{width} * height);
+        for (uint32_t ty = 0; ty < grid.TilesY(); ++ty) {
+            for (uint32_t tx = 0; tx < grid.TilesX(); ++tx) {
+                const Operand& tile = heights[size_t{ty} * grid.TilesX() + tx];
+                const uint32_t x0 = tx * kTileSize;
+                const uint32_t y0 = ty * kTileSize;
+                if (tile.kind != Operand::Kind::Tile) {
+                    for (uint32_t y = 0; y < grid.TileHeight(ty); ++y) {
+                        std::fill_n(whole.begin() + static_cast<std::ptrdiff_t>(size_t{y0 + y} * width + x0),
+                                    grid.TileWidth(tx), tile.value[0]);
+                    }
+                    continue;
+                }
+                render::Result<TileImage> image = store.Read(tile.tile);
+                if (!image) return render::Unexpected(image.error());
+                if (image->format.encoding != render::TexelEncoding::Float32 || image->format.channels != 1) {
+                    return EvalFail(EvalErrorKind::Internal, "the Height read-out is a grey 32-bit float tile");
+                }
+                for (uint32_t y = 0; y < image->height; ++y) {
+                    std::memcpy(&whole[size_t{y0 + y} * width + x0],
+                                image->texels.data() + size_t{y} * image->width * sizeof(float),
+                                size_t{image->width} * sizeof(float));
+                }
+            }
+        }
+        request.heightPadding(whole);
+        if (whole.size() != size_t{width} * height) {
+            return EvalFail(EvalErrorKind::Internal, "the Height padding changed the set's size");
+        }
+        HashWriter padded;
+        padded.Str("padded-height").Sub(key).Bytes(
+            std::string_view(reinterpret_cast<const char*>(whole.data()), whole.size() * sizeof(float)));
+        key = padded.Finish();
+        DecodedImage image;
+        image.width = width;
+        image.height = height;
+        image.channels = 1;
+        image.encoding = render::TexelEncoding::Float32;
+        image.values.reserve(whole.size());
+        for (const float value : whole) image.values.push_back(std::bit_cast<uint32_t>(value));
+        TileFormat format;
+        format.encoding = render::TexelEncoding::Float32;
+        format.channels = 1;
+        for (uint32_t ty = 0; ty < grid.TilesY(); ++ty) {
+            for (uint32_t tx = 0; tx < grid.TilesX(); ++tx) {
+                const CacheKey heightKey{stack->id, CacheKind::Content, key, tx, ty};
+                std::optional<TileHandle> tile = cache.Lookup(heightKey);
+                if (!tile) {
+                    render::Result<TileHandle> allocated =
+                        cache.Allocate(heightKey, format, grid.TileWidth(tx), grid.TileHeight(ty), store);
+                    if (!allocated) return render::Unexpected(allocated.error());
+                    render::Result<void> uploaded = store.Upload(*allocated, image, tx * kTileSize, ty * kTileSize);
+                    if (!uploaded) {
+                        cache.Unpin(*allocated);
+                        return render::Unexpected(uploaded.error());
+                    }
+                    tile = *allocated;
+                }
+                pins.Hold(Operand::Of(*tile));
+                heights[size_t{ty} * grid.TilesX() + tx] = Operand::Of(*tile);
             }
         }
     }

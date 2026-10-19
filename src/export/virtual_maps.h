@@ -11,6 +11,22 @@
 //   The fits hold on every texel of a fully covered set and on the interior of UV islands; the
 //   island-edge texels read the Height outside the islands, so an export refuses them there
 //   (padding.h `CheckIslandNormal`, decision 245).
+// - The diagnostic measure export (write.h; `VirtualMapRequest::islandNormal`, decision 308)
+//   computes them on UV islands by Painter's recorded rule instead, not proven exact:
+//   1. the stencil reads the Height read-out on the covered texels and, outside them, the
+//      measured ring over the Height's stored operands without its 1 - (1 - m) step, then the
+//      flood (padding.h `PadIslandHeight`; decisions 263, 288 (a));
+//   2. the covered texels are the combined normal of that Height;
+//   3. the mesh-free normal (the same without the mesh map, decision 276), padded by decision
+//      287's ring copy and the clamped flood (padding.h `PadIslandNormal`); a ring texel whose
+//      covered neighbours all lie across the x border keeps the flat height normal combined
+//      with the Normal channel there (decision 287 §4);
+//   4. without a Normal mesh map, the uncovered texels are that padded normal (decision 287
+//      §5); with one, each is `MeshOnPaddedNormal` of the mesh map at the texel and the padded
+//      encoded normal, the best-known form, flagged undecided (decision 276 items 4 (b), (c)).
+//   A measurement reads the float32 Height before and after step 1 when the environment variable
+//   `UZP_DIAGNOSTIC_NORMAL_DUMP` names a directory (`<set>-height-readout.f32`,
+//   `<set>-height-padded.f32`, raw rows top first); nothing else reads it.
 // - The geometry-only pass-through is the meshMap `normal_base` (the bound Normal mesh map,
 //   green inverted across conventions), tagged `geometry_only` (EXP-09).
 // - `AO_Mixed`: the best model of the opacity sweep (the AO mesh map times the AO channel before
@@ -49,6 +65,8 @@
 
 namespace uzp::exporter {
 
+struct Coverage;
+
 /// The documented virtual maps, in documentation order.
 enum class VirtualMap : uint8_t {
     Normal_OpenGL, Normal_DirectX, AO_Mixed, Diffuse, Specular, Glossiness, Unity4Diff, Unity4Gloss,
@@ -81,12 +99,22 @@ struct VirtualMapRequest {
     /// The bytes of bitmap sources and mesh maps.
     std::shared_ptr<const evaluator::IResourceProvider> resources;
     std::shared_ptr<const evaluator::IGeometryMaskProvider> geometry;
+    /// The diagnostic measure export only (write.h, decision 308), never production: the UV
+    /// coverage (with its triangles) over which `Normal_OpenGL` and `Normal_DirectX` are computed
+    /// and padded as Painter computes them (below). Null: the whole-tile evaluation.
+    const Coverage* islandNormal = nullptr;
 };
 
 struct VirtualMapResult {
     evaluator::DiagnosticMap values;
     /// Normal_OpenGL, Normal_DirectX and the normal_base pass-through: the EXP-09 tag.
     std::optional<evaluator::NormalTag> tag;
+    /// `islandNormal` on incomplete coverage: the uncovered texels hold the map's own padding,
+    /// which the export's padding must not replace.
+    bool padded = false;
+    /// The texels of it whose form is not recorded (decision 276 items 4 (b) and (c)): every
+    /// uncovered texel when a Normal mesh map is bound, else none.
+    uint64_t undecided = 0;
 };
 
 /// Evaluates a supported virtual map of revision `revision` of `project` on `store` with `cache`.

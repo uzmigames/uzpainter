@@ -941,13 +941,15 @@ render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int
                                           const SourceInputs& inputs, const evaluator::TemplateLibrary& templates,
                                           evaluator::ITileStore& store, evaluator::TileCache& cache) {
     using evaluator::DiagnosticMap;
-    const VirtualMapRequest request{file.textureSetId, file.stackId, inputs.templateId, inputs.resources,
-                                    inputs.geometry};
+    VirtualMapRequest request{file.textureSetId, file.stackId, inputs.templateId, inputs.resources,
+                              inputs.geometry};
+    request.islandNormal = inputs.islandNormal;
     const evaluator::DiagnosticRequest diagnostic{file.textureSetId, file.stackId, inputs.templateId, inputs.resources,
                                                   inputs.geometry, inputs.materialViews};
     FileRaster raster;
     std::map<std::string, DiagnosticMap> evaluated;  // by srcMapType/srcMapName
     std::map<std::string, core::ChannelFormat> stored;  // documentMap sources: the channel's format
+    std::set<std::string> padded;                       // sources that padded themselves
     for (const PlannedChannel& channel : file.channels) {
         const PlannedSource& s = channel.source;
         const std::string key = std::string(SourceTypeName(s.type)) + "/" + s.name;
@@ -980,6 +982,8 @@ render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int
                         : EvaluateVirtualMapOn(project, revision, *s.virtualMap, request, templates, store, cache);
                 if (!result) return render::Unexpected(result.error());
                 if (result->tag) raster.normalTag = result->tag;
+                if (result->padded) padded.insert(key);
+                raster.undecided += result->undecided;
                 evaluated[key] = std::move(result->values);
                 break;
             }
@@ -1010,6 +1014,7 @@ render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int
     raster.values.resize(texels * raster.channels);
     raster.srgbEncoded.assign(raster.channels, 0);
     raster.documentFormat.assign(raster.channels, std::nullopt);
+    raster.padded.assign(raster.channels, 0);
     for (uint32_t c = 0; c < raster.channels; ++c) {
         const PlannedChannel& channel = file.channels[c];
         const PlannedSource& s = channel.source;
@@ -1018,6 +1023,8 @@ render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int
             continue;
         }
         const std::string key = std::string(SourceTypeName(s.type)) + "/" + s.name;
+        // A luma of a padded source is computed from its padded values, so it is padded too.
+        raster.padded[c] = padded.contains(key) ? 1 : 0;
         const auto format = stored.find(key);
         raster.srgbEncoded[c] =
             format != stored.end() && SrgbEncodedRead(*s.channel, format->second, channel.src) ? 1 : 0;

@@ -77,6 +77,9 @@ std::optional<core::ChannelFormat> DocumentFormat(const FileRaster& raster, uint
     return c < raster.documentFormat.size() ? raster.documentFormat[c] : std::nullopt;
 }
 
+/// True when channel `c` of `raster` was padded by its source (`FileRaster::padded`).
+bool SourcePadded(const FileRaster& raster, uint32_t c) { return c < raster.padded.size() && raster.padded[c] != 0; }
+
 /// True when every alpha (last component) of `raster` is 1.
 bool OpaqueAlpha(const FileRaster& raster) {
     const size_t texels = size_t{raster.width} * raster.height;
@@ -146,6 +149,7 @@ EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster, const
                 for (size_t t = 0; t < texels; ++t) {
                     if (coverage->covered[t] != 0) continue;
                     for (uint32_t c = 0; c < written; ++c) {
+                        if (SourcePadded(raster, c)) continue;
                         const std::optional<core::ChannelFormat> format = DocumentFormat(raster, c);
                         float v = operands[t * written + c];
                         if (format) v = DocumentValue(v, *format);
@@ -196,6 +200,7 @@ EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster, const
             for (size_t t = 0; t < texels; ++t) {
                 if (coverage->covered[t] != 0) continue;
                 for (uint32_t c = 0; c < written; ++c) {
+                    if (SourcePadded(raster, c)) continue;
                     const size_t i = t * written + c;
                     const std::optional<core::ChannelFormat> format = DocumentFormat(raster, c);
                     image.samples[i] = format ? sample(c, DocumentValue(operands[i], *format))

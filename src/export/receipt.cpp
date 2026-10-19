@@ -349,10 +349,19 @@ json::Object BuildReceipt(const ReceiptInputs& in) {
                 bypassed.push_back(json::Object{{"path", plan.files[i].relativePath}, {"refusal", refusal}});
             }
         }
+        json::Array undecided;
+        for (size_t i = 0; i < plan.files.size(); ++i) {
+            if (in.encoded[i].undecided == 0) continue;
+            undecided.push_back(json::Object{{"path", plan.files[i].relativePath},
+                                             {"texels", static_cast<int64_t>(in.encoded[i].undecided)},
+                                             {"rule", std::string(kUndecidedNormalRule)}});
+        }
         openItems.emplace_back(std::string(kNonConformantNote));
-        nonConformant = json::Object{{"mode", std::string(kDiagnosticMeasureMode)},
-                                     {"decision", "286"},
-                                     {"bypassed", std::move(bypassed)}};
+        json::Object marked{{"mode", std::string(kDiagnosticMeasureMode)},
+                            {"decision", "286"},
+                            {"bypassed", std::move(bypassed)}};
+        if (!undecided.empty()) marked["undecided"] = std::move(undecided);
+        nonConformant = std::move(marked);
     }
     json::Array skipped;
     for (const SkippedMap& s : plan.skipped) {

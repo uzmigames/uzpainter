@@ -48,6 +48,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -93,6 +94,16 @@ struct NormalInputs {
 [[nodiscard]] std::array<float, 3> VirtualNormalTexel(const std::array<float, 3>& v, const NormalInputs& inputs,
                                                       core::NormalMapFormat convention);
 
+/// The diagnostic measure export's normal outside the UV islands (export/write.h, decisions 276 and
+/// 308): the mesh map's operands `mesh` (its y negated when `meshDirectX`) combined with the
+/// padded mesh-free normal `free`, encoded in the OpenGL convention, as normalise(reoriented(
+/// decode(mesh), decode(free))), stored n / 2 + 1/2 in `convention`. Painter's float32 form and
+/// combination order there are not recorded (decision 276 items 4 (b) and (c)): this is the
+/// best-known form, not an exact one.
+[[nodiscard]] std::array<float, 3> MeshOnPaddedNormal(const std::array<float, 3>& mesh, bool meshDirectX,
+                                                      const std::array<float, 3>& free,
+                                                      core::NormalMapFormat convention);
+
 /// What a virtual normal source is.
 enum class NormalSourceKind : uint8_t {
     Combined,      ///< Normal_OpenGL / Normal_DirectX: mesh normal, channel normal and height.
@@ -131,6 +142,14 @@ struct VirtualNormalRequest {
     std::shared_ptr<const IResourceProvider> resources;
     /// The rasters of `Mesh` geometry masks; may be null when the stacks have none.
     std::shared_ptr<const IGeometryMaskProvider> geometry;
+    /// The diagnostic measure export only (export/write.h, decision 308), never production: the
+    /// whole set's float32 Height read-out (rows top first, the constant where the stack has no
+    /// Height layer) is passed through this before the stencil reads it. Not persisted; the tile
+    /// cache keys the result by the padded Height's content.
+    std::function<void(std::vector<float>& heights)> heightPadding;
+    /// The diagnostic measure export only: the combined map without the bound Normal mesh map (F
+    /// the flat normal), Painter's mesh-free normal (decision 276).
+    bool withoutMesh = false;
 };
 
 struct VirtualNormalResult {

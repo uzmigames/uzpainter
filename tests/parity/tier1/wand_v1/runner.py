@@ -39,10 +39,11 @@ it.
 
 `measured(painter, work)` is the diagnostic measure mode (decision 286), never the test's: both
 rebuilds export with `UzPainter.exe run --diagnostic-measure-export` (through the adapter client),
-which writes past those two refusals: `InexactPadding::measure` over the islands, and the Normal as
-the evaluator gives it, padded as its stored values. Its maps are NOT conformant (each rebuild's
-receipt must say `non_conformant`, and a conformant rebuild's must not), so its report is no
-verdict and is never written as the Tier 1 report. It returns the report and, per map, the texels
+which writes past those two refusals: `InexactPadding::measure` over the islands, and the Normal by
+Painter's recorded island rule (decision 308: the stencil on the padded Height, decision 287's ring
+copy, the flood under the mesh map; src/export/virtual_maps.h). Its maps are NOT conformant (each
+rebuild's receipt must say `non_conformant`, and a conformant rebuild's must not), so its report is
+no verdict and is never written as the Tier 1 report. It returns the report and, per map, the texels
 of the first rebuild that differ from Painter's r1 (in any component), per class: `interior` (the
 covered texels), `edge` (the covered texels with an uncovered 8-neighbour, a part of `interior`),
 `ring` (the uncovered texels with a covered 8-neighbour, x wrapping as the ring does) and `gutter`

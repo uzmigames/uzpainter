@@ -138,7 +138,8 @@
 //   values nor the stencil of the padded Height (decision 276): each gutter texel is the bound
 //   Normal mesh map at that texel combined with the mesh-free normal of its flood seed in the
 //   ring. Measuring a Normal file with this padding is therefore wrong wherever a mesh map is
-//   bound, whatever the ring.
+//   bound, whatever the ring. The diagnostic measure export pads it by that rule instead
+//   (`PadIslandNormal`, below; virtual_maps.h, decision 308).
 
 #include <array>
 #include <cstdint>
@@ -267,5 +268,26 @@ void CheckIslandNormal(const PlannedFile& file, const Coverage& coverage);
 /// admitted case keeps the values. Returns whether any texel was filled.
 bool ApplyPadding(const PlannedFile& file, const Coverage& coverage, uint32_t channels, std::vector<float>& stored,
                   InexactPadding inexact = InexactPadding::refuse);
+
+// The diagnostic measure export's combined virtual normal on UV islands (write.h, decision 308),
+// never production: Painter's rule as recorded, not proven exact.
+
+/// The Height the virtual normal's stencil reads (decisions 263, 288 (a)): `operands`, one per
+/// texel of `coverage` (which needs its triangles), with every uncovered texel filled by the
+/// measured ring above without its 1 - (1 - m) step, then the flood. Throws as ApplyPadding does.
+void PadIslandHeight(const Coverage& coverage, std::vector<float>& operands);
+
+/// Whether `coverage` has a ring texel whose covered 8-neighbours all lie across the x border:
+/// one that keeps its unpadded mesh-free normal (decision 287 §4).
+[[nodiscard]] bool NormalRingAcrossBorder(const Coverage& coverage);
+
+/// The padding of the mesh-free normal (decision 287): `normals`, three per texel, holds the
+/// evaluated normal on the covered texels and the unpadded one elsewhere. Each ring texel (an
+/// uncovered texel with a covered 8-neighbour, x wrapping) copies its nearest covered 8-neighbour
+/// without wrap-around (texel distance, ties in decision 197's offset order (dy, dx): (0, 1),
+/// (0, -1), (-1, 0), (1, 0), (-1, 1), (1, -1), (-1, -1), (1, 1)), or keeps its value when its
+/// covered neighbours all lie across the x border; every other uncovered texel copies its seed in
+/// decision 197's flood over the covered and ring texels, reads clamped (decision 285).
+void PadIslandNormal(const Coverage& coverage, std::vector<float>& normals);
 
 }  // namespace uzp::exporter

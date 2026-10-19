@@ -79,7 +79,8 @@ struct EncodedImage {
 /// The bytes of `file` from its evaluated raster (CheckProcessing must have passed): the PNG or
 /// OpenEXR file, or the statistics JSON of a statistics file. With `coverage`, the values are
 /// padded over it (padding.h `ApplyPadding`, with `inexact`) before they are written, each channel
-/// in its document format when it has one (`FileRaster::documentFormat`, decision 274). Throws
+/// in its document format when it has one (`FileRaster::documentFormat`, decision 274), except a
+/// channel whose source padded itself (`FileRaster::padded`), written as it is. Throws
 /// std::invalid_argument when the raster or the coverage does not match the file's size and layout.
 [[nodiscard]] EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster,
                                       const Coverage* coverage = nullptr,

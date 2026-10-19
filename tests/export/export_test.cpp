@@ -16,6 +16,10 @@
 //       material per texture set gives the UV coverage), compiles the configuration and writes its
 //       files with `WriteExport`; prints {"plan": PlanJson, "list": the dry run, "written":
 //       [{rootPath, relativePath, path, size, sha256}]} or {"error": class, "message": text}.
+//   uzp-export-tests export-diagnostic <templates dir> <spec.json> <config.json>
+//       (decisions 286, 308) As `export`, through the diagnostic measure export (`EncodeExport`
+//       with `DiagnosticMeasure`): prints {"written": [{relativePath, path, bypassed: [refusal],
+//       undecided: texels}]} or {"error": class, "message": text}. Not conformant.
 //   uzp-export-tests reencode <list.txt>
 //       (phase1.16) Each line a PNG or OpenEXR file: decoded at native depth (spng; DecodeExr) and
 //       encoded again with EncodePng / EncodeExr; prints one JSON line per file {"path", "format",
@@ -443,6 +447,8 @@ struct Spec {
     std::shared_ptr<evaluator::DecodingResourceProvider> resources;
     /// The texturing mesh's coverage ("mesh": an OBJ path), null without one.
     std::shared_ptr<const evaluator::IGeometryMaskProvider> geometry;
+    /// That mesh, null without one.
+    std::shared_ptr<const mesh::TexturingMesh> mesh;
 };
 
 Spec ParseSpec(const fs::path& path) {
@@ -478,6 +484,7 @@ Spec ParseSpec(const fs::path& path) {
     set.uv_tiles.push_back(core::UVTile{project.AllocateId(), 1001, {}});
     if (o.contains("mesh")) {
         auto mesh = std::make_shared<mesh::TexturingMesh>(mesh::ImportMeshFile(Str(o.at("mesh"), "mesh"), {}).mesh);
+        spec.mesh = mesh;
         spec.geometry = std::make_shared<evaluator::MeshGeometryMasks>(std::move(mesh));
     }
     if (o.contains("height_to_normal_method")) {
@@ -595,6 +602,52 @@ int RunExport(const fs::path& templatesDir, const fs::path& specPath, const fs::
             }
             result["plan"] = exporter::PlanJson(plan);
             result["list"] = ListJson(exporter::FilesByStack(plan));
+            result["written"] = std::move(files);
+        }
+    } catch (const core::ValueError& e) {
+        result["error"] = "ValueError";
+        result["message"] = std::string(e.what());
+    } catch (const core::NotYetSupported& e) {
+        result["error"] = "NotYetSupported";
+        result["message"] = std::string(e.what());
+    }
+    std::cout << json::WriteCanonical(result) << "\n";
+    return 0;
+}
+
+/// `export-diagnostic`: as `export`, through `EncodeExport` with the diagnostic measure export
+/// (write.h, decisions 286 and 308), each file written under exportPath at its relativePath.
+int RunExportDiagnostic(const fs::path& templatesDir, const fs::path& specPath, const fs::path& configPath) {
+    const Spec spec = ParseSpec(specPath);
+    json::Object result;
+    try {
+        const exporter::ExportPlan plan = exporter::CompilePlan(spec.project, ReadText(configPath));
+        auto templates = std::make_shared<const evaluator::TemplateLibrary>(evaluator::TemplateLibrary::Load(templatesDir));
+        evaluator::CpuEvaluator cpu(templates, evaluator::AdmissionLimits{64ull << 30, 1 << 20});
+        exporter::SourceInputs inputs;
+        inputs.templateId = spec.templateId;
+        inputs.resources = spec.resources;
+        inputs.geometry = spec.geometry;
+        const exporter::DiagnosticMeasure diagnostic{spec.mesh};
+        render::Result<std::vector<exporter::EncodedFile>> encoded = exporter::EncodeExport(
+            spec.project, 1, plan, inputs, *templates, cpu.store(), cpu.cache(), &diagnostic);
+        if (!encoded) {
+            result["error"] = "Failure";
+            result["message"] = encoded.error().reason;
+        } else {
+            json::Array files;
+            for (size_t i = 0; i < plan.files.size(); ++i) {
+                const fs::path path = fs::path(plan.exportPath) / fs::path(plan.files[i].relativePath);
+                fs::create_directories(path.parent_path());
+                std::ofstream(path, std::ios::binary)
+                    .write((*encoded)[i].bytes.data(), static_cast<std::streamsize>((*encoded)[i].bytes.size()));
+                json::Array bypassed;
+                for (const std::string& refusal : (*encoded)[i].bypassed) bypassed.push_back(refusal);
+                files.push_back(json::Object{{"relativePath", plan.files[i].relativePath},
+                                             {"path", path.generic_string()},
+                                             {"bypassed", std::move(bypassed)},
+                                             {"undecided", static_cast<std::int64_t>((*encoded)[i].undecided)}});
+            }
             result["written"] = std::move(files);
         }
     } catch (const core::ValueError& e) {
@@ -1339,6 +1392,7 @@ int main(int argc, char** argv) {
         if (args.size() == 2 && args[0] == "plan") return RunPlan(args[1]);
         if (args.size() == 5 && args[0] == "files") return RunFiles(args[1], args[2], args[3], args[4]);
         if (args.size() == 4 && args[0] == "export") return RunExport(args[1], args[2], args[3]);
+        if (args.size() == 4 && args[0] == "export-diagnostic") return RunExportDiagnostic(args[1], args[2], args[3]);
         if (args.size() == 2 && args[0] == "reencode") return RunReencode(args[1]);
         if (args.size() == 2 && args[0] == "roundtrip") return RunRoundtrip(args[1]);
         if (args.size() == 2 && args[0] == "process") return RunProcess(args[1]);
@@ -1351,7 +1405,8 @@ int main(int argc, char** argv) {
         return 2;
     }
     std::cerr << "usage: uzp-export-tests plan <cases.json> | files <templates> <spec.json> <config.json> <out> | "
-                 "export <templates> <spec.json> <config.json> | reencode <list.txt> | roundtrip <out> | "
+                 "export <templates> <spec.json> <config.json> | "
+                 "export-diagnostic <templates> <spec.json> <config.json> | reencode <list.txt> | roundtrip <out> | "
                  "[--fault <point>[:<n>]] publish <templates> <spec.json> <config.json> | "
                  "[--fault <point>[:<n>]] fixed-copy <exportPath> <dir> | consume-pinned <exportPath> | "
                  "consume-locked <exportPath> <dir> | receipt <project.json> <config.json> | hold-lock <exportPath> <ms> | recover --recover <exportPath> [--fixed-names <dir>]... | "

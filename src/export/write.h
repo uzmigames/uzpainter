@@ -22,11 +22,15 @@
 // writes what production refuses on a UV-islanded set so that the whole pipeline can be scored
 // against Painter: step 1 records the refusals of CheckIslandNormal and of CheckPadding instead of
 // throwing them (`EncodedFile::bypassed`; every other check still throws), and step 2 pads with
-// `InexactPadding::measure` over the coverage and its triangles. A combined virtual normal is
-// written as the evaluator gives it (EvaluateFileOn over the whole tile), then padded as its stored
-// values: its island-edge texels are known to differ (decision 245) and so is its gutter wherever a
-// mesh map is bound (decision 276). The receipt marks such a generation `non_conformant`
-// (receipt.h).
+// `InexactPadding::measure` over the coverage and its triangles. A combined virtual normal
+// (`Normal_OpenGL`, `Normal_DirectX`) is computed and padded by Painter's recorded rule
+// (virtual_maps.h `VirtualMapRequest::islandNormal`, decision 308): its stencil reads the padded
+// Height at the island edge (decisions 263, 288), its ring copies the nearest covered mesh-free
+// normal (decision 287) and its gutter floods it, under the mesh map at each uncovered texel
+// (decisions 276, 285). With a mesh map bound, that combination's form is not recorded: its texels
+// are counted as undecided (`EncodedFile::undecided`). A diagnosticMap of a virtual normal keeps
+// the whole-tile evaluation, padded as its stored values. The receipt marks such a generation
+// `non_conformant` (receipt.h).
 
 #include <cstdint>
 #include <memory>
@@ -66,6 +70,9 @@ struct EncodedFile {
     bool diagnostic = false;
     /// The production refusals that export bypassed for this file, their messages in check order.
     std::vector<std::string> bypassed{};
+    /// The diagnostic measure export: the file's texels whose form is not recorded, written by the
+    /// best-known rule (`FileRaster::undecided`, decision 308).
+    uint64_t undecided = 0;
 };
 
 /// Steps 1 and 2 above: every file of `plan` (compiled from revision `revision` of `project`)

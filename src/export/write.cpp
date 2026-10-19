@@ -108,7 +108,16 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
         if (inputs.beforeFile && !inputs.beforeFile(i, plan.files.size())) {
             return ExportFail("stopped before " + file.relativePath);
         }
-        render::Result<FileRaster> raster = EvaluateFileOn(project, revision, file, inputs, templates, store, cache);
+        // The diagnostic measure export computes a combined virtual normal on the file's islands as
+        // Painter does (virtual_maps.h, decision 308).
+        SourceInputs measured;
+        if (diagnostic != nullptr && file.layout != FileLayout::Statistics) {
+            measured = inputs;
+            measured.islandNormal = &coverages.at(file.textureSetId);
+        }
+        render::Result<FileRaster> raster =
+            EvaluateFileOn(project, revision, file, measured.islandNormal != nullptr ? measured : inputs, templates,
+                           store, cache);
         if (!raster) return render::Unexpected(raster.error());
         try {
 #if defined(UZP_EXPORT_FAULT_HOOKS)
@@ -118,8 +127,8 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
                 file.layout != FileLayout::Statistics ? &coverages.at(file.textureSetId) : nullptr;
             EncodedImage image = EncodeFile(file, *raster, coverage,
                                             diagnostic != nullptr ? InexactPadding::measure : InexactPadding::refuse);
-            encoded.push_back(
-                {std::move(image.bytes), raster->normalTag, image.layout, diagnostic != nullptr, std::move(bypassed[i])});
+            encoded.push_back({std::move(image.bytes), raster->normalTag, image.layout, diagnostic != nullptr,
+                               std::move(bypassed[i]), raster->undecided});
         } catch (const std::exception& e) {
             return ExportFail("encoding " + file.relativePath + " failed: " + e.what());
         }

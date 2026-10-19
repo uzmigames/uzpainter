@@ -1,0 +1,13 @@
+{
+  "id": 308,
+  "slug": "308-island-normal-measure",
+  "title": "The diagnostic measure export computes the Normal on UV islands by Painter's recorded rule: the Wand's Normal goes from 1,071 covered, 6,334 ring and 3,679,663 gutter misses to 49, 78 and 51,515; production refusals unchanged",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.12_compositor-height-normal"
+  ],
+  "supersededBy": null
+}

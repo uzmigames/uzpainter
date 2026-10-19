@@ -130,8 +130,12 @@ def fractions(distances: Sequence[float]) -> list[np.float32]:
     return out
 
 
-def chain(values: Sequence[np.float32], t: Sequence[np.float32]) -> np.float32:
-    """Decision 268's FMA lerp chain over `values` in tap order, then decision 206's 1 - (1 - m)."""
+def chain(
+    values: Sequence[np.float32], t: Sequence[np.float32], rounded: bool = True
+) -> np.float32:
+    """Decision 268's FMA lerp chain over `values` in tap order, then decision 206's 1 - (1 - m)
+    when `rounded` (the Height the virtual normal's stencil reads is the raw chain, decision 288
+    (a))."""
     n = len(values)
     m = values[0]
     if n > 1:
@@ -139,6 +143,8 @@ def chain(values: Sequence[np.float32], t: Sequence[np.float32]) -> np.float32:
         m = fma(last, f32(values[n - 1] - values[n - 2]), values[n - 2])
         for level in range(n - 3, -1, -1):
             m = fma(t[level], f32(values[level] - m), m)
+    if not rounded:
+        return F32(m)
     return f32(f32(1) - f32(f32(1) - m))
 
 
@@ -1010,11 +1016,12 @@ class Ring:
         return out
 
 
-def padding(values: np.ndarray, path: Path, material: str) -> np.ndarray:
+def padding(values: np.ndarray, path: Path, material: str, rounded: bool = True) -> np.ndarray:
     """`values` (rows top first, float32, H x W x C) padded over the coverage of `material`'s
-    triangles in the OBJ at `path`: covered texels kept, the ring's chains, then every other texel
-    a copy of its seed of the jump flood over the covered and ring texels (decision 197), its reads
-    outside the image clamped to the nearest edge texel (decision 285)."""
+    triangles in the OBJ at `path`: covered texels kept, the ring's chains (`chain` with
+    `rounded`), then every other texel a copy of its seed of the jump flood over the covered and
+    ring texels (decision 197), its reads outside the image clamped to the nearest edge texel
+    (decision 285)."""
     height, width, channels = values.shape
     ring = Ring(path, material, width, height)
     covered = ring.owner >= 0
@@ -1024,8 +1031,43 @@ def padding(values: np.ndarray, path: Path, material: str) -> np.ndarray:
         chosen = cands[:taps]
         t = fractions([c[0] for c in chosen])
         for c in range(channels):
-            out[y, x, c] = chain([F32(values[ty, tx, c]) for _, _, (tx, ty) in chosen], t)
+            out[y, x, c] = chain([F32(values[ty, tx, c]) for _, _, (tx, ty) in chosen], t, rounded)
         seed[y, x] = True
+    return flood(out, seed)
+
+
+def island_normal(values: np.ndarray, covered: np.ndarray) -> np.ndarray:
+    """Decision 287's padding of the mesh-free normal `values` (H x W x 3, float32) over `covered`:
+    each ring texel (an uncovered texel with a covered 8-neighbour, x wrapping) copies its nearest
+    covered 8-neighbour without wrap-around, ties in the flood's offset order, or keeps its value
+    when its covered neighbours all lie across the x border; then the flood over the covered and
+    ring texels."""
+    height, width, _ = values.shape
+    out = values.astype(F32).copy()
+    seed = covered.copy()
+    for y in range(height):
+        for x in range(width):
+            if covered[y, x]:
+                continue
+            ring = [
+                (dy, dx)
+                for dy, dx in NEIGHBOURS
+                if 0 <= y + dy < height and covered[y + dy, (x + dx) % width]
+            ]
+            if not ring:
+                continue
+            seed[y, x] = True
+            for dy, dx in FLOOD:  # sides first, then diagonals
+                if 0 <= x + dx < width and (dy, dx) in ring:
+                    out[y, x] = values[y + dy, x + dx]
+                    break
+    return flood(out, seed)
+
+
+def flood(out: np.ndarray, seed: np.ndarray) -> np.ndarray:
+    """Decision 197's jump flood: every texel of `out` (H x W x C) that is not a `seed` copies its
+    seed's values, reads outside the image clamped to the nearest edge texel (decision 285)."""
+    height, width = seed.shape
     ys, xs = np.mgrid[0:height, 0:width]
     sy, sx = np.where(seed, ys, -1), np.where(seed, xs, -1)
     big = np.iinfo(np.int64).max

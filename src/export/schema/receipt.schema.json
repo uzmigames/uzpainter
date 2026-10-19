@@ -138,6 +138,34 @@
               }
             }
           }
+        },
+        "undecided": {
+          "description": "Per file, the texels written by a rule whose form is not recorded (decision 308): the uncovered texels of a combined virtual normal with a bound Normal mesh map.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "path",
+              "texels",
+              "rule"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "texels": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "rule": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
         }
       }
     }

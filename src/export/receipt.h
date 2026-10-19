@@ -20,7 +20,9 @@
 //
 // A generation of the diagnostic measure export (write.h, decision 286) also carries
 // `non_conformant`: {mode: "diagnostic-measure", decision: "286", bypassed: [{path, refusal}]}, the
-// production refusals it bypassed per file, and its manifest export block names it in `open_items`
+// production refusals it bypassed per file, with `undecided: [{path, texels, rule}]` when a file
+// holds texels written by a rule whose form is not recorded (decision 308), and its manifest
+// export block names it in `open_items`
 // (`kNonConformantNote`). A conformant generation has no `non_conformant`.
 //
 // resource_hashes is the set of resources the planned files read: the bitmaps of every channel DAG
@@ -48,6 +50,12 @@ inline constexpr std::string_view kDiagnosticMeasureMode = "diagnostic-measure";
 inline constexpr std::string_view kNonConformantNote =
     "NON-CONFORMANT: diagnostic measure export (decision 286), written past production's refusals; "
     "not Painter's output, never deliver it";
+/// `non_conformant.undecided[].rule`: the uncovered texels of a combined virtual normal with a
+/// bound Normal mesh map (write.h, decision 308).
+inline constexpr std::string_view kUndecidedNormalRule =
+    "decision 276 items 4 (b) and (c): the mesh map at the texel combined with the padded mesh-free normal "
+    "encoded in OpenGL, normalise(reoriented(decode(F), decode(M))), is the best-known form, not recorded "
+    "(decision 308)";
 
 /// The application that publishes: ARC-11's app version and build, supplied by the caller (the
 /// application or the test harness), never empty.

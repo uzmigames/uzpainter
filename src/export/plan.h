@@ -235,6 +235,10 @@ struct SourceInputs {
     /// The material views already computed for one material of the exported revision, which its
     /// diagnosticMap sources read (`evaluator::DiagnosticRequest::materialViews`); may be null.
     std::shared_ptr<const evaluator::MaterialViews> materialViews;
+    /// The diagnostic measure export only (write.h, decision 308): the file's UV coverage, over
+    /// which its combined virtual normals are computed and padded as Painter computes them
+    /// (virtual_maps.h `VirtualMapRequest::islandNormal`). Null in production.
+    const Coverage* islandNormal = nullptr;
 };
 
 /// A planned file's content before processing: its channels in destination order, float32
@@ -261,6 +265,11 @@ struct FileRaster {
     /// for every other channel. The measured `infinite` padding pads such a channel in that format
     /// (padding.h, decision 274).
     std::vector<std::optional<core::ChannelFormat>> documentFormat;
+    /// Per channel, 1 where the source padded its own uncovered texels (`VirtualMapResult::padded`):
+    /// the export's padding leaves them (encode.h). Empty: none.
+    std::vector<uint8_t> padded{};
+    /// The texels of those channels' sources whose form is not recorded (`VirtualMapResult::undecided`).
+    uint64_t undecided = 0;
 };
 
 /// True for the material channels Painter exports sRGB-encoded when they are stored as sRGB8:

@@ -1109,14 +1109,16 @@ std::vector<RingTap> Taps(const std::vector<Candidate>& candidates) {
 }
 
 /// The value of the chain over `v` (the taps' values in tap order) with fractions `t`, rounded
-/// through 1 - (1 - m) (decision 206).
-float Chain(const std::array<float, kMaxTaps>& v, uint32_t n, const std::vector<float>& t) {
+/// through 1 - (1 - m) (decision 206) when `rounded`; the Height the virtual normal's stencil reads
+/// is the chain's raw value (decision 288 (a)).
+float Chain(const std::array<float, kMaxTaps>& v, uint32_t n, const std::vector<float>& t, bool rounded = true) {
     float m = v[0];
     if (n > 1) {
         const float last = 1.0f - t[n - 2];
         m = std::fma(last, v[n - 1] - v[n - 2], v[n - 2]);
         for (uint32_t level = n - 2; level-- > 0;) m = std::fma(t[level], v[level] - m, m);
     }
+    if (!rounded) return m;
     const float complement = 1.0f - m;
     return 1.0f - complement;
 }
@@ -1199,41 +1201,17 @@ std::vector<RingTexel> RingOf(const Coverage& coverage) {
 }
 
 
-// `infinite` padding over incomplete coverage (padding.h): the ring, then the jump flood.
-void InfinitePadding(const Coverage& coverage, uint32_t channels, std::vector<float>& values) {
+/// The jump flood (padding.h step 2): every texel that is not a `seed` copies the `channels` values
+/// of its seed among them; each step reads the previous step's seeds, clamped to the image.
+void JumpFlood(const Coverage& coverage, const std::vector<uint8_t>& seed, uint32_t channels,
+               std::vector<float>& values) {
     const int width = static_cast<int>(coverage.width);
     const int height = static_cast<int>(coverage.height);
-    if (channels == 0 || channels > 4 || values.size() != size_t{coverage.width} * coverage.height * channels) {
-        throw std::invalid_argument("export: infinite padding takes 1 to 4 values per texel");
-    }
-    const std::vector<uint8_t>& covered = coverage.covered;
     const auto index = [&](auto y, auto x) { return static_cast<size_t>(y) * coverage.width + static_cast<size_t>(x); };
     const auto copy = [&](size_t from, size_t to) {
         std::copy_n(values.begin() + static_cast<std::ptrdiff_t>(from * channels), channels,
                     values.begin() + static_cast<std::ptrdiff_t>(to * channels));
     };
-    // 1. The ring, from the covered texels only.
-    std::vector<uint8_t> seed(covered);
-    const std::vector<RingTexel> ringTexels = RingOf(coverage);
-    std::vector<float> ring;
-    ring.reserve(ringTexels.size() * channels);
-    for (const RingTexel& r : ringTexels) {
-        for (uint32_t c = 0; c < channels; ++c) {
-            std::array<float, kMaxTaps> v{};
-            for (uint32_t i = 0; i < r.taps; ++i) {
-                v[i] = values[index(r.candidates[i].y, r.candidates[i].x) * channels + c];
-            }
-            ring.push_back(Chain(v, r.taps, r.fractions));
-        }
-    }
-    for (size_t i = 0; i < ringTexels.size(); ++i) {
-        const size_t texel = index(ringTexels[i].y, ringTexels[i].x);
-        std::copy_n(ring.begin() + static_cast<std::ptrdiff_t>(i * channels), channels,
-                    values.begin() + static_cast<std::ptrdiff_t>(texel * channels));
-        seed[texel] = 1;
-    }
-    // 2. The jump flood over the covered and ring texels; each step reads the previous step's seeds,
-    // clamped to the image.
     const size_t texels = size_t{coverage.width} * coverage.height;
     std::vector<int32_t> seedY(texels, -1);
     std::vector<int32_t> seedX(texels, -1);
@@ -1282,6 +1260,74 @@ void InfinitePadding(const Coverage& coverage, uint32_t channels, std::vector<fl
     for (size_t t = 0; t < texels; ++t) {
         if (seed[t] == 0 && seedY[t] >= 0) copy(index(seedY[t], seedX[t]), t);
     }
+}
+
+void CheckValues(const Coverage& coverage, uint32_t channels, const std::vector<float>& values) {
+    if (channels == 0 || channels > 4 || values.size() != size_t{coverage.width} * coverage.height * channels) {
+        throw std::invalid_argument("export: infinite padding takes 1 to 4 values per texel");
+    }
+}
+
+// `infinite` padding over incomplete coverage (padding.h): the ring, then the jump flood; the
+// ring's chain rounded through 1 - (1 - m) when `rounded`.
+void InfinitePadding(const Coverage& coverage, uint32_t channels, std::vector<float>& values, bool rounded = true) {
+    CheckValues(coverage, channels, values);
+    const auto index = [&](auto y, auto x) { return static_cast<size_t>(y) * coverage.width + static_cast<size_t>(x); };
+    // 1. The ring, from the covered texels only.
+    std::vector<uint8_t> seed(coverage.covered);
+    const std::vector<RingTexel> ringTexels = RingOf(coverage);
+    std::vector<float> ring;
+    ring.reserve(ringTexels.size() * channels);
+    for (const RingTexel& r : ringTexels) {
+        for (uint32_t c = 0; c < channels; ++c) {
+            std::array<float, kMaxTaps> v{};
+            for (uint32_t i = 0; i < r.taps; ++i) {
+                v[i] = values[index(r.candidates[i].y, r.candidates[i].x) * channels + c];
+            }
+            ring.push_back(Chain(v, r.taps, r.fractions, rounded));
+        }
+    }
+    for (size_t i = 0; i < ringTexels.size(); ++i) {
+        const size_t texel = index(ringTexels[i].y, ringTexels[i].x);
+        std::copy_n(ring.begin() + static_cast<std::ptrdiff_t>(i * channels), channels,
+                    values.begin() + static_cast<std::ptrdiff_t>(texel * channels));
+        seed[texel] = 1;
+    }
+    // 2. The jump flood over the covered and ring texels.
+    JumpFlood(coverage, seed, channels, values);
+}
+
+/// The Normal's ring classes (decision 287), per texel: 0 covered; 1 a ring texel with a covered
+/// 8-neighbour without wrap-around; 2 a ring texel whose covered 8-neighbours all lie across the
+/// x border (x wraps for the ring, as for the Height's); 3 any other texel.
+std::vector<uint8_t> NormalRingClasses(const Coverage& coverage) {
+    const int width = static_cast<int>(coverage.width);
+    const int height = static_cast<int>(coverage.height);
+    std::vector<uint8_t> classes(coverage.covered.size(), 3);
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            const size_t t = static_cast<size_t>(y) * coverage.width + static_cast<size_t>(x);
+            if (coverage.covered[t] != 0) {
+                classes[t] = 0;
+                continue;
+            }
+            bool direct = false;
+            bool wrapped = false;
+            for (const auto& [dy, dx] : kNeighbours) {
+                const int yy = y + dy;
+                if (yy < 0 || yy >= height) continue;
+                const int xx = ((x + dx) % width + width) % width;
+                if (coverage.covered[static_cast<size_t>(yy) * coverage.width + static_cast<size_t>(xx)] == 0) continue;
+                if (x + dx < 0 || x + dx >= width) {
+                    wrapped = true;
+                } else {
+                    direct = true;
+                }
+            }
+            classes[t] = direct ? 1 : wrapped ? 2 : 3;
+        }
+    }
+    return classes;
 }
 
 }  // namespace
@@ -1357,6 +1403,49 @@ void CheckIslandNormal(const PlannedFile& file, const Coverage& coverage) {
     if (std::optional<std::string> refusal = IslandNormalFileRefusal(file, coverage)) {
         throw core::NotYetSupported(*refusal);
     }
+}
+
+void PadIslandHeight(const Coverage& coverage, std::vector<float>& operands) {
+    InfinitePadding(coverage, 1, operands, false);
+}
+
+bool NormalRingAcrossBorder(const Coverage& coverage) {
+    const std::vector<uint8_t> classes = NormalRingClasses(coverage);
+    return std::find(classes.begin(), classes.end(), uint8_t{2}) != classes.end();
+}
+
+void PadIslandNormal(const Coverage& coverage, std::vector<float>& normals) {
+    constexpr uint32_t kChannels = 3;
+    CheckValues(coverage, kChannels, normals);
+    const int width = static_cast<int>(coverage.width);
+    const int height = static_cast<int>(coverage.height);
+    const std::vector<uint8_t> classes = NormalRingClasses(coverage);
+    std::vector<uint8_t> seed(classes.size(), 0);
+    // 1. The ring (decision 287): a copy of the nearest covered 8-neighbour without wrap-around,
+    // in the flood's offset order (its side neighbours come before its diagonal ones, so the
+    // first covered one is the nearest, ties in that order); a ring texel whose covered
+    // neighbours all lie across the x border keeps its value. Both seed the gutter.
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            const size_t t = static_cast<size_t>(y) * coverage.width + static_cast<size_t>(x);
+            if (classes[t] == 3) continue;
+            seed[t] = 1;
+            if (classes[t] != 1) continue;
+            for (const auto& [dy, dx] : kFloodOffsets) {
+                const int yy = y + dy;
+                const int xx = x + dx;
+                if (yy < 0 || yy >= height || xx < 0 || xx >= width) continue;
+                const size_t from = static_cast<size_t>(yy) * coverage.width + static_cast<size_t>(xx);
+                if (coverage.covered[from] == 0) continue;
+                std::copy_n(normals.begin() + static_cast<std::ptrdiff_t>(from * kChannels), kChannels,
+                            normals.begin() + static_cast<std::ptrdiff_t>(t * kChannels));
+                break;
+            }
+        }
+    }
+    // 2. The gutter: decision 197's flood over the covered and ring texels, its reads clamped
+    // (decision 285).
+    JumpFlood(coverage, seed, kChannels, normals);
 }
 
 bool ApplyPadding(const PlannedFile& file, const Coverage& coverage, uint32_t channels, std::vector<float>& stored,
