@@ -78,7 +78,12 @@ class HeldOutSpent(Exception):
 
 
 class CandidateChanged(Exception):
-    """The candidate's fingerprint changed between fitting and certification."""
+    """The candidate's fingerprint changed between fitting and certification, or while it
+    evaluated the cases."""
+
+
+class StaleReport(Exception):
+    """A stored report whose identity is not the current batch's, or not the ledger's spend."""
 
 
 class Candidate(Protocol):
@@ -186,15 +191,19 @@ class CertificationRun:
         name = f"{self.batch.asset.replace('/', '__')}@{self.batch.asset_version}"
         return self.reports_dir / name / f"{self.batch.held_out.sha256[:16]}.json"
 
+    def _candidate_sha256(self, candidate: Candidate, what: str) -> str:
+        """The candidate's fingerprint; the caller holds the fence (it runs candidate code)."""
+        try:
+            return candidate_sha256(candidate, self.project_root)
+        except HeldOutAccessError as error:
+            raise FitRefused(f"{what} reached a fenced root: {error}") from error
+        except FingerprintError as error:
+            raise FitRefused(str(error)) from error
+
     def _fingerprint(self, candidate: Candidate, what: str) -> str:
-        """The candidate's fingerprint, computed behind the fence (it runs candidate code)."""
+        """The candidate's fingerprint, computed behind the fence."""
         with fenced(self._fence_roots(), f"fingerprinting {self.batch.asset}") as fence:
-            try:
-                sha = candidate_sha256(candidate, self.project_root)
-            except HeldOutAccessError as error:
-                raise FitRefused(f"{what} reached a fenced root: {error}") from error
-            except FingerprintError as error:
-                raise FitRefused(str(error)) from error
+            sha = self._candidate_sha256(candidate, what)
         _refuse_if_breached(fence, what)
         return sha
 
@@ -273,11 +282,58 @@ class CertificationRun:
                         outputs[case.case_id] = str(error)
                     except Exception as error:  # fails the case; a fence breach refuses the run
                         outputs[case.case_id] = f"candidate raised {type(error).__name__}: {error}"
+            # Evaluation must not change the fitted identity: the outputs, the spend and the
+            # report all name the fingerprint taken at fit.
+            after = self._candidate_sha256(fit.candidate, "the candidate's fingerprint")
         _refuse_if_breached(fence, "the candidate")
+        if after != fit.candidate_sha256:
+            raise CandidateChanged(
+                "the candidate's fingerprint changed while it evaluated the cases; state that "
+                "evaluation changes must stay out of the declared fitted identity"
+            )
         self._reserve(path, fit)
         report = self._report(current, fit, sets, inputs, outputs)
         text = json.dumps(report, sort_keys=True, indent=2) + "\n"
         path.write_text(text, encoding="utf-8", newline="\n")  # the same bytes on every platform
+        return report
+
+    def stored_report(self) -> dict[str, Any] | None:
+        """The stored report of this batch, admitted only when its whole identity is the current
+        batch's (batch, domain, matrix, both case lists) and the ledger records its held-out set
+        as spent on its candidate; None when there is no report, else `StaleReport`."""
+        path = self.report_path()
+        if not path.is_file():
+            return None
+        report: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+        batch = self.batch
+        sets: dict[str, Any] = report["sets"] if isinstance(report.get("sets"), dict) else {}
+        expected: dict[str, tuple[Any, Any]] = {
+            "schema": (report.get("schema"), REPORT_SCHEMA),
+            "asset": (report.get("asset"), batch.asset),
+            "asset_version": (report.get("asset_version"), batch.asset_version),
+            "batch_sha256": (report.get("batch_sha256"), batch.sha256),
+            "domain_sha256": (report.get("domain_sha256"), batch.domain.sha256()),
+            "matrix": (report.get("matrix"), batch.matrix.summary()),
+        }
+        for which in (batch.calibration, batch.held_out):
+            entry = sets.get(which.name)
+            stored: dict[str, Any] = entry if isinstance(entry, dict) else {}
+            expected[f"sets.{which.name}.cases_sha256"] = (stored.get("cases_sha256"), which.sha256)
+        expected["candidate_sha256 (the ledger's spend)"] = (
+            report.get("candidate_sha256"),
+            self.ledger.spent_on(batch.held_out.sha256),
+        )
+        problems = [
+            f"{name} is {found!r}, expected {wanted!r}"
+            for name, (found, wanted) in expected.items()
+            if found != wanted or found is None
+        ]
+        if report.get("outcome") == "reserved":
+            problems.append("the report is a reservation: its certification did not finish")
+        if problems:
+            raise StaleReport(
+                f"{path} is not a report of the current batch: " + "; ".join(problems)
+            )
         return report
 
     def _refuse_spent(self, spent_on: str | None, fit: FitResult) -> None:

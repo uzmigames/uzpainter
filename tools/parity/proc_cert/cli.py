@@ -5,7 +5,10 @@
                                            fingerprint; the held-out set is not spent
     certify  BATCH --fitter M:F --reports D   fit, then certify on both sets: spends the held-out
                                            set on the candidate and writes the report
-    report   BATCH --reports D             print the report and the ledger entry of the batch
+    report   BATCH --reports D             print the report and the ledger entry of the batch;
+                                           a report whose batch, domain, matrix, case lists or
+                                           candidate is not the current batch's and the ledger's
+                                           spend is refused (exit 2), never shown as certified
 
 `--store` names the private store (default: this machine's, `UZP_PARITY_STORE`); `--no-store`
 runs without one, so every case is `oracle_unavailable`. `--ledger` defaults to the committed
@@ -30,6 +33,7 @@ from tools.parity.proc_cert.harness import (
     CertificationRun,
     FitRefused,
     HeldOutSpent,
+    StaleReport,
 )
 from tools.parity.proc_cert.ledger import DEFAULT_LEDGER, Ledger, LedgerError
 from tools.parity.store.store import OracleStore, StoreError, locate
@@ -41,6 +45,7 @@ REFUSALS = (
     FitRefused,
     HeldOutSpent,
     CandidateChanged,
+    StaleReport,
     LedgerError,
     StoreError,
     OSError,
@@ -124,14 +129,13 @@ def _run(args: argparse.Namespace) -> int:
         args.batch, _store(args) if args.command != "report" else None, args.reports, ledger
     )
     if args.command == "report":
-        path = run.report_path()
         spent_on = ledger.spent_on(run.batch.held_out.sha256)
-        if not path.is_file():
+        stored = run.stored_report()  # StaleReport unless its identity is the current batch's
+        if stored is None:
             _print({"report": None, "held_out_spent_on": spent_on})
             return 1
-        report = json.loads(path.read_text(encoding="utf-8"))
-        _print({**_summary(report, path), "held_out_spent_on": spent_on})
-        return 0 if report.get("certified") is True else 1
+        _print({**_summary(stored, run.report_path()), "held_out_spent_on": spent_on})
+        return 0 if stored.get("certified") is True else 1
     fit = run.fit(run.import_fitter(args.fitter))
     if args.command == "fit":
         _print(

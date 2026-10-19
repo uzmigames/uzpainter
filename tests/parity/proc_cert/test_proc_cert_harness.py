@@ -53,6 +53,7 @@ from tools.parity.proc_cert.harness import (
     CertificationRun,
     FitRefused,
     HeldOutSpent,
+    StaleReport,
 )
 from tools.parity.proc_cert.ledger import (
     DEFAULT_LEDGER,
@@ -1407,3 +1408,97 @@ def test_the_cli_runs_as_a_module(tmp_path: Path) -> None:
     )
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)["asset"] == "synthetic/affine-ramp"
+
+
+# --- SUP-032: a stored report is admitted only for its own batch; evaluation keeps the identity --
+
+
+@pytest.mark.parametrize("change", ["domain", "calibration", "ledger"])
+def test_a_report_of_another_batch_with_the_same_held_out_set_is_refused(
+    tmp_path: Path, change: str
+) -> None:
+    """Certify batch A; batch B keeps asset, version and held-out set but changes its domain
+    or calibration (or the ledger names another candidate): B's report must not certify."""
+    built = build(tmp_path, "ramp")
+    batch = str(built.batch_path)
+    common = ("--reports", str(tmp_path / "reports"), "--ledger", str(built.ledger))
+    fitter = "tests.parity.proc_cert.test_proc_cert_harness:fit_ramp"
+    code, out, _ = _cli(
+        "certify", batch, "--fitter", fitter, *common, "--store", str(built.store.root)
+    )
+    assert code == 0 and out["certified"] is True
+    before = load_batch(built.batch_path)
+    if change == "domain":
+        document = json.loads(built.batch_path.read_text(encoding="utf-8"))
+        document["domain"]["constraints"][0]["max"] = 101
+        built.batch_path.write_text(json.dumps(document), encoding="utf-8")
+    elif change == "calibration":
+        rewrite(built, "calibration", lambda cases: cases.reverse())
+    else:
+        built.ledger.write_bytes(render({before.held_out.sha256: "0" * 64}))
+    after = load_batch(built.batch_path)
+    assert (after.asset, after.asset_version) == (before.asset, before.asset_version)
+    assert after.held_out.sha256 == before.held_out.sha256
+    run = CertificationRun(built.batch_path, None, tmp_path / "reports", Ledger(built.ledger))
+    assert run.report_path().is_file()  # the same report file is found
+    with pytest.raises(StaleReport, match="not a report of the current batch"):
+        run.stored_report()
+    code, out, err = _cli("report", batch, *common)
+    assert code == 2 and out is None and "StaleReport" in err
+    wrong = "candidate_sha256" if change == "ledger" else "batch_sha256"
+    assert wrong in err
+
+
+def test_a_reservation_is_not_admitted_as_a_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    built = build(tmp_path, "ramp")
+    run = built.run(tmp_path / "reports")
+    fit = run.fit(fit_ramp)
+
+    def crash(*args: Any, **kwargs: Any) -> Any:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(CertificationRun, "_report", crash)
+    with pytest.raises(KeyboardInterrupt):
+        run.certify(fit)
+    monkeypatch.undo()
+    with pytest.raises(StaleReport, match="reservation"):
+        run.stored_report()
+
+
+def test_a_candidate_that_changes_its_fitted_identity_while_evaluating_is_refused(
+    tmp_path: Path,
+) -> None:
+    @dataclass
+    class Drifting(RampCandidate):
+        def evaluate(self, case: Case, inputs: Mapping[str, Raster]) -> Raster:
+            output = ramp(case, self.bias)
+            self.bias += 1  # a declared fitted parameter, changed by evaluation
+            return output
+
+    built = build(tmp_path, "ramp")
+    run = built.run(tmp_path / "reports")
+    fit = run.fit(lambda access: Drifting(fit_ramp(access).bias))
+    with pytest.raises(CandidateChanged, match="while it evaluated the cases"):
+        run.certify(fit)
+    assert not run.report_path().exists()  # no held-out oracle was loaded, nothing reported
+    assert Ledger(built.ledger).read() == {}  # and nothing spent
+
+
+def test_a_scratch_cache_outside_the_fitted_identity_still_certifies(tmp_path: Path) -> None:
+    @dataclass
+    class Caching(RampCandidate):
+        cache: dict[bytes, U16] = field(default_factory=dict)  # not part of fingerprint()
+
+        def evaluate(self, case: Case, inputs: Mapping[str, Raster]) -> Raster:
+            key = case.signature()
+            if key not in self.cache:
+                self.cache[key] = ramp(case, self.bias).astype(np.uint16)
+            return self.cache[key]
+
+    built = build(tmp_path, "ramp")
+    report = certify(built, tmp_path / "reports", lambda access: Caching(fit_ramp(access).bias))
+    assert report["outcome"] == "exact"
+    run = built.run(tmp_path / "reports")
+    assert run.stored_report() == report

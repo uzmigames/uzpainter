@@ -45,7 +45,7 @@ Code: `tools/parity/proc_cert/` (`batch.py`, `fence.py`, `fingerprint.py`, `ledg
    - The fingerprint is the SHA-256 of three things: the candidate's declared identity, its class name, and the bytes of every project module in the import closure of the modules that define the class and its bases. The closure is read from the source with `ast`, imports inside functions included, without importing anything. Modules outside the project tree are not hashed.
    - The declared identity must name every piece of fitted state that changes the candidate's outputs. The harness cannot see state that the declaration leaves out. The spend guarantee is therefore only as complete as that declaration.
    - Before any oracle is loaded, `certify` spends the set in the ledger, then creates the report file exclusively as a reservation. A run that stops after that point still leaves the set spent. Of two runs racing for one set, the second is refused.
-   - A different candidate against a spent set raises `HeldOutSpent`, whether the ledger or the report records the spend. The same candidate may run again and gets identical bytes. A fingerprint that changes between fit and certify raises `CandidateChanged`.
+   - A different candidate against a spent set raises `HeldOutSpent`, whether the ledger or the report records the spend. The same candidate may run again and gets identical bytes. A fingerprint that changes between fit and certify raises `CandidateChanged`. So does one that changes while the candidate evaluates the cases. It is checked again under the evaluation's fence after the last `evaluate`, before the set is spent or any held-out oracle is loaded. State that evaluation changes, such as a scratch cache, must stay out of the declared identity.
 4. **Bit-exact outcomes.**
    - Each case is one of:
      - `exact`: every channel of every texel is equal;
@@ -79,7 +79,7 @@ Code: `tools/parity/proc_cert/` (`batch.py`, `fence.py`, `fingerprint.py`, `ledg
    - `validate` loads and checks a batch;
    - `fit` fits behind the fence and prints the candidate's fingerprint without spending the set;
    - `certify` fits and certifies, spending the set and writing the report;
-   - `report` prints a batch's report and its ledger entry.
+   - `report` prints a batch's report and its ledger entry. A stored report is admitted only when its whole identity is the current batch's: asset, version, batch, domain, matrix and both case lists. The committed ledger must also record its held-out set as spent on the report's candidate. Any mismatch, or a report that is only a reservation, is refused (`StaleReport`). It is never shown as certified.
 
    Output is JSON. The exit code is 0 when done (for `certify`, when the asset is exact), 1 when there is no exact asset or no report, and 2 when refused.
 
