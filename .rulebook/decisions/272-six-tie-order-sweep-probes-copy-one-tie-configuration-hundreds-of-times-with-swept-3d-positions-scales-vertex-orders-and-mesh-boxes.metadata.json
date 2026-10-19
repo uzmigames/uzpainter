@@ -1,0 +1,13 @@
+{
+  "id": 272,
+  "slug": "272-six-tie-order-sweep-probes-copy-one-tie-configuration-hundreds-of-times-with-swept-3d-positions-scales-vertex-orders-and-mesh-boxes",
+  "title": "Six tie-order sweep probes copy one tie configuration hundreds of times with swept 3D positions, scales, vertex orders and mesh boxes",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}

@@ -10,6 +10,7 @@ import struct
 import zlib
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from tools.parity.envelope.registry import current_envelope
@@ -364,3 +365,42 @@ def test_kernel_atlas_covers_its_configurations_apart_at_every_resolution() -> N
         assert q == pytest.approx(
             [c * rf.ATLAS_MOVED_SCALE + o for c, o in zip(p, offset, strict=True)]
         )
+
+
+@pytest.mark.parametrize("family", rf.SWEEP_FAMILIES)
+def test_tie_sweep_copies_are_apart_and_the_boxes_differ_only_as_designed(family: str) -> None:
+    """Decision 272: every copy covers its unit's texel centres with none on an edge, copies lie
+    at least 7 texels apart in UV and apart in 3D; the centred box is exactly [-256, 256] in x
+    and z, offcentre moves every vertex by (256, 0, 256) (rounded to float32) and box320 only
+    moves the anchors to +-320, all three with the same UVs and faces."""
+    expected = {"row-8": 8, "row-16": 16, "column-8": 8, "column-16": 16, "seam": 80, "vgap": 32}
+    owner: dict[tuple[int, int], int] = {}
+    placed, _ = rf.sweep_layout(family)
+    for index, (copy, (oc, orow)) in enumerate(placed):
+        cells = [covered_centres([(c + oc, r + orow) for c, r in uvs]) for _, uvs in copy.tris]
+        union = set().union(*cells)
+        assert sum(map(len, cells)) == len(union) == expected[copy.unit], copy.name
+        owner |= dict.fromkeys(union, index)
+    for (x, y), index in owner.items():
+        near = {owner.get((x + dx, y + dy), index) for dx in range(-6, 7) for dy in range(-6, 7)}
+        assert near == {index}, placed[index][0].name
+    bounds = [copy.bounds() for copy, _ in placed]
+    for i, (lo, hi) in enumerate(bounds):
+        for lo2, hi2 in bounds[i + 1 :]:
+            assert any(hi[a] < lo2[a] or hi2[a] < lo[a] for a in range(3)), placed[i][0].name
+    meshes = {box: obj_uvs(f"tie-sweep-{family}-{box}") for box in rf.SWEEP_BOXES}
+    vertices, uvs, faces = meshes["centred"]
+    low = tuple(min(c) for c in zip(*vertices, strict=True))
+    high = tuple(max(c) for c in zip(*vertices, strict=True))
+    assert (low, high) == ((-256.0, -64.0, -256.0), (256.0, 64.0, 256.0))
+    moved, moved_uvs, moved_faces = meshes["offcentre"]
+    assert (moved_uvs, moved_faces) == (uvs, faces)
+    for p, q in zip(vertices, moved, strict=True):
+        assert q == tuple(float(np.float32(c + s)) for c, s in zip(p, (256, 0, 256), strict=True))
+    wide, wide_uvs, wide_faces = meshes["box320"]
+    assert (wide_uvs, wide_faces) == (uvs, faces)
+    changed = [(p, q) for p, q in zip(vertices, wide, strict=True) if p != q]
+    assert len(changed) == 6
+    for p, q in changed:
+        shift = 64.0 if p[0] > 0 else -64.0
+        assert q == (p[0] + shift, p[1], p[2] + shift)

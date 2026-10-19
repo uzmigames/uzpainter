@@ -10,6 +10,7 @@ top row; a UV `(u, v)` covers texel column `u * N`, row `(1 - v) * N` of an N px
 
 from __future__ import annotations
 
+import decimal
 import json
 import math
 import struct
@@ -787,6 +788,386 @@ def kernel_atlas(resolution: int, moved: bool = False) -> bytes:
         f"Decision 266 kernel atlas at {resolution} px:{what} separate pieces of single texels, "
         "pairs, gaps, rows, blocks, UV seams, cube corners and poles.",
         [("uzp_kernel_atlas", faces)],
+        "".join(data),
+    )
+
+
+# --- Decision 272: tie-order sweep probes -----------------------------------------------------
+
+# Many copies of one UV configuration whose 3D placement sweeps systematically, to map where the
+# order of two exactly tied 1/d shares flips. Every copy is its own 3D piece and its own UV
+# island; its sub-texel UV phase is the same in every copy, only its whole-texel slot changes.
+# Layout units are texels of a 512 px tile (u = column / 512, v = 1 - row / 512). A unit's local
+# 3D is isometric, (column, 0, row) cm, then scaled per axis, turned about +y by a multiple of
+# 90 degrees and moved so that its centre lands on a target. Copies whose 3D boxes would meet
+# are stacked in y (flat copies; y rounding cannot reach the distance comparison at these sizes,
+# and the y-control copies test that). Two families (strips: straight-edge ties; seams: seam
+# own-diagonal ties and fan V-gaps) are each written under three mesh boxes: `centred`
+# ([-256, 256] in x and z, so normalised positions are p / 256), `offcentre` (every vertex
+# moved by (256, 0, 256): the same normalised values reached through fl(p/h) in [0, 2]) and
+# `box320` (anchors at +-320: normalised binades no longer sit on world binades).
+SWEEP_RESOLUTION = 512
+SWEEP_MARGIN = 16
+SWEEP_GAP = 6
+SWEEP_FAMILIES = ("strips", "seams")
+SWEEP_BOXES = ("centred", "offcentre", "box320")
+SWEEP_HALF = {"centred": 256.0, "offcentre": 256.0, "box320": 320.0}
+SWEEP_SHIFT: dict[str, Vec3] = {
+    "centred": (0.0, 0.0, 0.0),
+    "offcentre": (256.0, 0.0, 256.0),
+    "box320": (0.0, 0.0, 0.0),
+}
+SWEEP_Y_HALF = 64.0
+# Bases of the ulp, scale and order sweeps (x, z in cm), away from every world binade and from
+# the binades of box320 and offcentre over the whole unit.
+SWEEP_BASES: dict[str, tuple[float, float]] = {
+    "A": (100.0, 52.0),
+    "B": (48.0, 100.0),
+    "C": (-150.0, -44.0),
+    "V": (-100.0, 100.0),
+}
+# Straddled boundaries (cm): x' = 0, +-1/16 ... +-3/4 of the centred box (and fl(p/h) = 0.25,
+# 0.5, 1 of offcentre), then x' = +-1/8, +-1/4, +-1/2 of box320.
+WORLD_BOUNDARIES = (0.0, 16.0, -16.0, 32.0, -32.0, 64.0, -64.0, 128.0, -128.0, 192.0, -192.0)
+BOX320_BOUNDARIES = (40.0, -40.0, 80.0, -80.0, 160.0, -160.0)
+SWEEP_STEPS = 16  # k = 0 .. 15 ulps
+UNIFORM_SCALES = (0.5, 0.75, 1.25, 1.5, 1.7, 2.0, 3.0)
+AXIS_SCALES: tuple[tuple[float, float], ...] = (
+    (1.7, 1.0),
+    (1.0, 1.7),
+    (2.0, 1.0),
+    (1.0, 2.0),
+    (1.5, 1.0),
+    (1.0, 1.5),
+)
+AXIS_SCALES += ((0.75, 1.0), (1.0, 0.75))
+SEAM_SIDE = 8.0
+SEAM_RATIO = 2.0
+VGAP_HALF = 4
+
+Tri = tuple[list[Vec3], list[tuple[float, float]]]  # 3 corners: 3D, layout (column, row)
+
+
+class SweepCopy:
+    """One copy: its unit, placement and vertex order (`split` picks a quad's diagonal, `rot`
+    rotates every triangle's vertex list, `order` 1 reverses the face order), its triangles in
+    world cm before the box shift, and its UV slot size."""
+
+    def __init__(
+        self,
+        name: str,
+        unit: str,
+        target: Vec3,
+        theta: int = 0,
+        scale: Vec3 = (1.0, 1.0, 1.0),
+        perm: tuple[int, int, int] = (1, 0, 0),
+        fold: tuple[float, float] = (1.0, 0.0),
+    ) -> None:
+        self.name, self.unit, self.target, self.theta = name, unit, target, theta
+        self.scale, self.perm, self.fold = scale, perm, fold
+        local, centre = _sweep_unit(unit, perm[0], fold)
+        cos, sin = ((1, 0), (0, 1), (-1, 0), (0, -1))[theta // 90]
+
+        def place(p: Vec3) -> Vec3:
+            x, y, z = (p[i] * scale[i] for i in range(3))
+            return (x * cos + z * sin, y, -x * sin + z * cos)
+
+        c = place(centre)
+        offset = tuple(t - q for t, q in zip(target, c, strict=True))
+        tris = [
+            ([tuple(a + o for a, o in zip(place(p), offset, strict=True)) for p in ps], uvs)
+            for ps, uvs in local
+        ]
+        rot = perm[1]
+        tris = [(ps[rot:] + ps[:rot], uvs[rot:] + uvs[:rot]) for ps, uvs in tris]
+        self.tris: list[Tri] = [
+            (list(map(_vec3, ps)), uvs) for ps, uvs in (tris[::-1] if perm[2] else tris)
+        ]
+        self.size = (
+            math.ceil(max(c for _, uvs in local for c, _ in uvs)),
+            math.ceil(max(r for _, uvs in local for _, r in uvs)),
+        )
+
+    def bounds(self) -> tuple[Vec3, Vec3]:
+        points = [p for ps, _ in self.tris for p in ps]
+        low = tuple(min(p[i] for p in points) for i in range(3))
+        high = tuple(max(p[i] for p in points) for i in range(3))
+        return _vec3(low), _vec3(high)
+
+
+def _vec3(p: Any) -> Vec3:
+    return (float(p[0]), float(p[1]), float(p[2]))
+
+
+def _quad_tris(corners3: list[Vec3], uvs: list[tuple[float, float]], split: int) -> list[Tri]:
+    """A counter-clockwise (v up) quad as two triangles: `split` 1 fans from corner 0 (the kernel
+    atlas's diagonal), 0 from corner 1 (the other diagonal)."""
+    s = 1 - split
+    idx = [(s, s + 1, s + 2), (s, s + 2, (s + 3) % 4)]
+    return [([corners3[i] for i in t], [uvs[i] for i in t]) for t in idx]
+
+
+def _sweep_unit(unit: str, split: int, fold: tuple[float, float]) -> tuple[list[Tri], Vec3]:
+    """A unit's triangles in local 3D and layout coordinates, and its local centre."""
+    kind, _, size = unit.partition("-")
+    if kind in ("row", "column"):
+        length = int(size)
+        w, h = (length, 1) if kind == "row" else (1, length)
+        i = 0.25
+        uvs = [(i, h - i), (w - i, h - i), (w - i, i), (i, i)]  # BL, BR, TR, TL
+        return _quad_tris([(c, 0.0, r) for c, r in uvs], uvs, split), (w / 2, 0.0, h / 2)
+    if kind == "seam":
+        side = SEAM_SIDE
+        a_face = _frame_face((0.0, 0.0, side), X_AXIS, MINUS_Z, side, side, 1.0, 0.0)
+        a3, a_uv = _moved_uv(a_face, 0.0, 0.125)
+        e1 = (fold[0], -fold[1], 0.0)
+        b_face = _frame_face((side, 0.0, side), e1, MINUS_Z, side, side, SEAM_RATIO, 90.0)
+        b3, b_uv = _moved_uv(b_face, side + 1 + SWEEP_GAP + 0.125, 0.0)
+        tris = _quad_tris(a3, a_uv, split) + _quad_tris(b3, b_uv, split)
+        return tris, (side, 0.0, side / 2)
+    if kind == "vgap":
+        half = float(VGAP_HALF)
+        rim = [(-half, 0.0, half), (half, 0.0, half), (half, 0.0, -half)]
+        apex: Vec3 = (0.0, 0.0, 0.0)
+        base = 0.125 + half
+        tris = []
+        for k in range(2):
+            left = 0.375 + 2 * half * k
+            layout = [(left, base), (left + 2 * half, base), (left + half, base - half)]
+            tris.append(([rim[k], rim[k + 1], apex], layout))
+        return tris, apex
+    raise ValueError(unit)
+
+
+def _ulp(value: float) -> float:
+    return float(np.spacing(np.float32(abs(value))))
+
+
+def _sweeps(prefix: str, unit: str, base: str, y0: float, **kw: Any) -> list[SweepCopy]:
+    """k-ulp translations of `unit` at base `base`: across x (k = 0..15, y = y0 + k), then
+    along z (k = 1..15, y = -(y0 + k))."""
+    bx, bz = SWEEP_BASES[base]
+    copies = [
+        SweepCopy(f"{prefix}-x+{k}", unit, (bx + k * _ulp(bx), y0 + k, bz), **kw)
+        for k in range(SWEEP_STEPS)
+    ]
+    copies += [
+        SweepCopy(f"{prefix}-z+{k}", unit, (bx, -(y0 + k), bz + k * _ulp(bz)), **kw)
+        for k in range(1, SWEEP_STEPS)
+    ]
+    return copies
+
+
+PERMS = [(s, r, o) for s in (1, 0) for r in (0, 1, 2) for o in (0, 1)]
+
+
+def strip_copies() -> list[SweepCopy]:
+    """The strips family: straight-edge ties along rows (u ties) and columns (v ties)."""
+    copies: list[SweepCopy] = []
+    # F1: 16-texel strips straddling binade boundaries, along x and along z in 3D.
+    for unit, theta, axis in (
+        ("row-16", 0, "x"),
+        ("column-16", 90, "x"),
+        ("row-16", 90, "z"),
+        ("column-16", 0, "z"),
+    ):
+        shift = 0.0 if unit.startswith("row") else 2.0
+        for bounds, lines in (
+            (WORLD_BOUNDARIES, (52.0, -148.0)),
+            (BOX320_BOUNDARIES, (58.0, -142.0)),
+        ):
+            for line in lines:
+                for b in bounds:
+                    at = line + shift
+                    target = (b, 0.0, at) if axis == "x" else (at, 0.0, b)
+                    copies.append(
+                        SweepCopy(f"f1-{unit}-t{theta}-{axis}{b:+g}-at{at:+g}", unit, target, theta)
+                    )
+    # F2: k-ulp translations at bases A, B, C (rows) and A (columns).
+    for base in ("A", "B", "C"):
+        copies += _sweeps(f"f2-row-8-{base}", "row-8", base, 0.0)
+    copies += _sweeps("f2-column-8-A", "column-8", "A", 20.0)
+    ax, az = SWEEP_BASES["A"]
+    # F3: the y control, base A unshifted at six heights.
+    copies += [
+        SweepCopy(f"f3-row-8-A-y{y:+g}", "row-8", (ax, y, az))
+        for y in (40.0, 44.0, 48.0, -40.0, -44.0, -48.0)
+    ]
+    # F4: uniform and per-axis scales at base A.
+    scales = [(s, s, s) for s in UNIFORM_SCALES] + [(sx, 1.0, sz) for sx, sz in AXIS_SCALES]
+    copies += [
+        SweepCopy(f"f4-row-8-A-s{sx:g}x{sz:g}", "row-8", (ax, -50.0 - j, az), scale=(sx, sy, sz))
+        for j, (sx, sy, sz) in enumerate(scales)
+    ]
+    # F5: vertex orders (diagonal, rotation, face order) at base A (rows) and B (columns).
+    rows = [p for p in PERMS if p != (1, 0, 0)]
+    copies += [
+        SweepCopy(f"f5-row-8-A-p{s}{r}{o}", "row-8", (ax, 50.0 + j, az), perm=(s, r, o))
+        for j, (s, r, o) in enumerate(rows)
+    ]
+    bx, bz = SWEEP_BASES["B"]
+    copies += [
+        SweepCopy(f"f5-column-8-B-p{s}{r}{o}", "column-8", (bx, 20.0 + j, bz), perm=(s, r, o))
+        for j, (s, r, o) in enumerate(PERMS)
+    ]
+    return copies
+
+
+SEAM_TARGETS: tuple[tuple[float, float], ...] = (
+    (100.0, -100.0),
+    (40.0, 160.0),
+    (-150.0, 90.0),
+    (-24.0, -30.0),
+)
+SEAM_TARGETS += ((180.0, 200.0), (-200.0, -180.0))
+VGAP_TARGETS: tuple[tuple[float, float], ...] = (
+    (140.0, -100.0),
+    (60.0, 200.0),
+    (-110.0, 60.0),
+    (20.0, -40.0),
+)
+VGAP_TARGETS += ((220.0, 130.0), (-180.0, -120.0))
+FOLDS = {"90": FOLD_90, "53": FOLD_53}
+
+
+def seam_copies() -> list[SweepCopy]:
+    """The seams family: ratio-2 seam pairs (A 8 x 8 texels, B 4 x 4 turned 90 degrees, as the
+    P-ramp r2; both seam edges on texel boundaries as at r2-p0, the other edges 1/8 texel off so
+    that no texel centre lies on a diagonal) and two-triangle fan V-gaps (pole-4's spoke at
+    half-size 4)."""
+    copies: list[SweepCopy] = []
+    # G1 / H1: four turns at six positions, the turns stacked in y.
+    for prefix, unit, targets in (("g1", "seam", SEAM_TARGETS), ("h1", "vgap", VGAP_TARGETS)):
+        for x, z in targets:
+            for j, theta in enumerate((0, 90, 180, 270)):
+                name = f"{prefix}-{unit}-t{theta}-x{x:+g}-z{z:+g}"
+                copies.append(SweepCopy(name, unit, (x, 12.0 * j, z), theta))
+    # G2: folded seams, B hanging 90 or atan(4/3) degrees down, two turns at two positions.
+    j = 0
+    for fold in ("90", "53"):
+        for theta in (0, 90):
+            for x, z in (SEAM_TARGETS[0], SEAM_TARGETS[2]):
+                name = f"g2-seam-fold{fold}-t{theta}-x{x:+g}-z{z:+g}"
+                y = -20.0 - 10.0 * (j // 2)
+                copies.append(SweepCopy(name, "seam", (x, y, z), theta, fold=FOLDS[fold]))
+                j += 1
+    # G3 / H3: k-ulp translations.
+    copies += _sweeps("g3-seam-A", "seam", "A", 0.0)
+    copies += _sweeps("h3-vgap-V", "vgap", "V", 0.0)
+    ax, az = SWEEP_BASES["A"]
+    vx, vz = SWEEP_BASES["V"]
+    # G4 / H4: scales.
+    seam_scales = [(s, s, s) for s in (0.75, 1.5, 1.7, 2.0)]
+    seam_scales += [(1.7, 1.0, 1.0), (2.0, 1.0, 1.0), (1.0, 1.0, 1.7), (1.0, 1.0, 2.0)]
+    copies += [
+        SweepCopy(f"g4-seam-A-s{sx:g}x{sz:g}", "seam", (ax, 20.0 + 2 * j, az), scale=(sx, sy, sz))
+        for j, (sx, sy, sz) in enumerate(seam_scales)
+    ]
+    copies += [
+        SweepCopy(f"h4-vgap-V-s{s:g}", "vgap", (vx, -20.0 - 2 * j, vz), scale=(s, s, s))
+        for j, s in enumerate((0.75, 1.5, 1.7, 2.0))
+    ]
+    # G5 / H2: vertex orders. Seams: both quads' diagonal and the face order, then the two
+    # rotations; V-gaps: rotation and face order at two turns.
+    seam_perms = [(s, 0, o) for s in (1, 0) for o in (0, 1)] + [(1, 1, 0), (1, 2, 0)]
+    seam_perms += [(0, 1, 0), (0, 2, 1), (1, 1, 1)]
+    copies += [
+        SweepCopy(f"g5-seam-A-p{s}{r}{o}", "seam", (ax, -20.0 - 2 * j, az), perm=(s, r, o))
+        for j, (s, r, o) in enumerate(p for p in seam_perms if p != (1, 0, 0))
+    ]
+    vgap_perms = [(1, r, o) for r in (0, 1, 2) for o in (0, 1) if (r, o) != (0, 0)]
+    copies += [
+        SweepCopy(
+            f"h2-vgap-V-t{theta}-p1{r}{o}", "vgap", (vx, 20.0 + 2 * j, vz), theta, perm=(1, r, o)
+        )
+        for j, (theta, (_, r, o)) in enumerate((theta, p) for theta in (0, 90) for p in vgap_perms)
+    ]
+    return copies
+
+
+def sweep_copies(family: str) -> list[SweepCopy]:
+    return strip_copies() if family == "strips" else seam_copies()
+
+
+def sweep_layout(
+    family: str,
+) -> tuple[list[tuple[SweepCopy, tuple[float, float]]], tuple[float, float]]:
+    """Every copy with its slot's top-left texel (shelves left to right, top to bottom), and the
+    slot of the two box anchors below the last shelf."""
+    limit = SWEEP_RESOLUTION - SWEEP_MARGIN
+    column, row, shelf = SWEEP_MARGIN, SWEEP_MARGIN, 0
+    placed = []
+    for copy in sweep_copies(family):
+        width, height = copy.size
+        if column + width > limit:
+            column, row, shelf = SWEEP_MARGIN, row + shelf + SWEEP_GAP, 0
+        placed.append((copy, (float(column), float(row))))
+        column += width + SWEEP_GAP
+        shelf = max(shelf, height)
+    anchors = (float(SWEEP_MARGIN), float(row + shelf + SWEEP_GAP))
+    assert anchors[1] + 1 <= limit, "the sweep copies do not fit their tile"
+    return placed, anchors
+
+
+def _f32(value: float) -> str:
+    """The exact decimal of fl32(`value`)."""
+    text = format(decimal.Decimal(float(np.float32(value))), "f")
+    text = text.rstrip("0") if "." in text else text + "."
+    text = text + "0" if text.endswith(".") else text
+    return "0.0" if text == "-0.0" else text
+
+
+def tie_sweep(family: str, box: str) -> bytes:
+    """The decision 272 sweep mesh of `family` under mesh box `box`: positions written as exact
+    float32 decimals, anchors fixing the box at +-half in x and z and +-64 cm in y."""
+    half = SWEEP_HALF[box]
+    shift = SWEEP_SHIFT[box]
+    placed, (anchor_column, anchor_row) = sweep_layout(family)
+    tris: list[Tri] = []
+    for copy, (oc, orow) in placed:
+        tris += [(ps, [(c + oc, r + orow) for c, r in uvs]) for ps, uvs in copy.tris]
+    for k, sign in enumerate((-1.0, 1.0)):
+        corner = sign * half
+        step = -0.25 * sign
+        y = sign * SWEEP_Y_HALF
+        ps = [(corner, y, corner), (corner + step, y, corner), (corner, y, corner + step)]
+        c = anchor_column + k
+        layout = [(c + 0.625, anchor_row + 0.875), (c + 0.875, anchor_row + 0.875)]
+        layout.append((c + 0.625, anchor_row + 0.625))
+        tris.append((ps, layout))
+    data: list[str] = []
+    faces: list[str] = []
+    positions: dict[Vec3, int] = {}
+    normals: dict[str, int] = {}
+    uv_count = 0
+    for ps, uvs in tris:
+        area = sum(
+            uvs[i][0] * -uvs[(i + 1) % 3][1] - uvs[(i + 1) % 3][0] * -uvs[i][1] for i in range(3)
+        )
+        assert area > 0, "every sweep triangle is counter-clockwise in UV"
+        n = _normal(*ps)
+        text = f"vn {_number(n[0])} {_number(n[1])} {_number(n[2])}\n"
+        if text not in normals:
+            data.append(text)
+            normals[text] = len(normals) + 1
+        refs = []
+        for p, (c, r) in zip(ps, uvs, strict=True):
+            q = (p[0] + shift[0], p[1] + shift[1], p[2] + shift[2])
+            if q not in positions:
+                data.append(f"v {_f32(q[0])} {_f32(q[1])} {_f32(q[2])}\n")
+                positions[q] = len(positions) + 1
+            data.append(
+                f"vt {_number(c / SWEEP_RESOLUTION)} {_number(1.0 - r / SWEEP_RESOLUTION)}\n"
+            )
+            uv_count += 1
+            refs.append(f"{positions[q]}/{uv_count}/{normals[text]}")
+        faces.append(f"f {' '.join(refs)}\n")
+    what = {"strips": "straight-edge strips", "seams": "ratio-2 seam pairs and fan V-gaps"}[family]
+    return obj(
+        "uzp_tie_sweep",
+        f"Decision 272 tie-order sweep, {what}, mesh box {box}: {len(placed)} copies of one UV "
+        "configuration at swept 3D positions, scales and vertex orders.",
+        [("uzp_tie_sweep", faces)],
         "".join(data),
     )
 

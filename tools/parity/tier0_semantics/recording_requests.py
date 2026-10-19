@@ -15,7 +15,7 @@ Later decisions add requests the same way (`later_goldens`): decision 145's sRGB
 and P-tie (decision 157), the other 21 inferred template bases (decision 168), decision 174's
 sRGB bitmap minification and decision 169's L8 material channels, decision 210's ring-sign probes
 and a position-encoded seam probe (decision 216), decision 225's sRGB minification on random
-content and decision 266's kernel-code padding probes.
+content, decision 266's kernel-code padding probes and decision 272's tie-order sweeps.
 
 Colour management: every golden runs under Legacy (Painter started without `OCIO`) except the
 two that name `OCIO` in `applied_settings` (`export-ocio-encode`, `export-presets-ocio`), which
@@ -247,6 +247,24 @@ for _size, _moved in [*((n, False) for n in rf.ATLAS_RESOLUTIONS), (1024, True)]
         f"{FIXTURE_DIR}/meshes/{kernel_atlas_mesh(_size, _moved)}.obj",
         kernel_atlas_generator(_size, _moved),
     )
+
+
+# Decision 272's tie-order sweep meshes: two families of copies, each under three mesh boxes.
+def tie_sweep_generator(family: str, box: str) -> Generate:
+    return lambda: rf.tie_sweep(family, box)
+
+
+def tie_sweep_mesh(family: str, box: str) -> str:
+    return f"tie-sweep-{family}-{box}"
+
+
+for _family in rf.SWEEP_FAMILIES:
+    for _box in rf.SWEEP_BOXES:
+        REQUEST_FIXTURES[tie_sweep_mesh(_family, _box)] = (
+            "mesh",
+            f"{FIXTURE_DIR}/meshes/{tie_sweep_mesh(_family, _box)}.obj",
+            tie_sweep_generator(_family, _box),
+        )
 for _group, _probes in probe_groups().items():
     for _probe in _probes:
         REQUEST_FIXTURES[f"probe-{_group}-{_probe}"] = (
@@ -270,6 +288,7 @@ MESH_SETS = {
     "seam-ramp-r1-p0-box17": ["uzp_seam"],
     **{kernel_atlas_mesh(n): ["uzp_kernel_atlas"] for n in rf.ATLAS_RESOLUTIONS},
     kernel_atlas_mesh(1024, moved=True): ["uzp_kernel_atlas"],
+    **{tie_sweep_mesh(f, b): ["uzp_tie_sweep"] for f in rf.SWEEP_FAMILIES for b in rf.SWEEP_BOXES},
 }
 
 
@@ -1304,6 +1323,55 @@ def padding_kernel_probes() -> list[Golden]:
     ]
 
 
+# --- Decision 272: tie-order sweep probes -----------------------------------------------------
+
+TIE_SWEEP_FAMILIES = {
+    "strips": (
+        "304 straight 8- and 16-texel strips (rows and columns, one quad each) whose ring "
+        "texels' two diagonals tie: strips straddling the binades of the normalised and world "
+        "positions along x and along z, k-ulp translations (k = 0..15) across and along at three "
+        "bases, a y control, uniform and per-axis scales, and every diagonal, vertex rotation "
+        "and face order"
+    ),
+    "seams": (
+        "79 ratio-2 seam pairs (A 8 x 8 texels, B 4 x 4 turned 90 degrees, as the P-ramp r2) "
+        "and 69 two-triangle fan V-gaps (pole-4's spoke): four turns at six positions, folds of "
+        "90 and atan(4/3) degrees, k-ulp translations across and along, scales and vertex orders"
+    ),
+}
+TIE_SWEEP_BOXES = {
+    "centred": "mesh box exactly [-256, 256] cm in x and z and [-64, 64] in y",
+    "offcentre": (
+        "every vertex of the centred mesh moved by (256, 0, 256) cm (box [0, 512]): the same "
+        "normalised positions reached through other rounding"
+    ),
+    "box320": (
+        "the centred mesh with its box anchors at +-320 cm, so that the normalised binades no "
+        "longer sit on world binades"
+    ),
+}
+
+
+def padding_tie_sweep_probes() -> list[Golden]:
+    """Decision 272's tie-order sweeps: many copies of one tie configuration, their 3D swept."""
+    resolution = rf.SWEEP_RESOLUTION
+    return [
+        Golden(
+            f"export-padding-tie-sweep-{family}-{box}",
+            EXPORT_DOMAIN,
+            "Decision 272's tie-order sweep (phase1.25_pilot-wand item 2.7: which of two equal "
+            f"1/d shares leads the infinite ring's lerp chain), exploratory: {what}; {where}; "
+            f"each copy its own 3D piece and UV island; document resolution {resolution}. "
+            + KERNEL_TAIL,
+            tie_sweep_mesh(family, box),
+            [tie_sweep_mesh(family, box), *kernel_bitmaps(resolution)],
+            kernel_probe(tie_sweep_mesh(family, box), resolution),
+        )
+        for family, what in TIE_SWEEP_FAMILIES.items()
+        for box, where in TIE_SWEEP_BOXES.items()
+    ]
+
+
 # --- Decision 174 item 6: bilinear minification of an sRGB bitmap ------------------------------
 
 SRGB_MINIFY_SOURCES = ("srgb8-ramp", "field-a")
@@ -1477,7 +1545,7 @@ def later_goldens() -> list[Golden]:
     then the padding probes decision 160 voids under their new names (decision 166), then
     decision 174's sRGB minification and decision 169's L8 material channels, then decision
     216's ring-sign and seam probes, then decision 225's sRGB minification on random content,
-    then decision 266's kernel-code padding probes."""
+    then decision 266's kernel-code padding probes, then decision 272's tie-order sweeps."""
     return [
         srgb_bitmap_variants(),
         *(template_base(t) for t in INFERRED_BASE_TEMPLATES),
@@ -1492,12 +1560,13 @@ def later_goldens() -> list[Golden]:
         *padding_sign_probes(),
         srgb_bitmap_minification_random(),
         *padding_kernel_probes(),
+        *padding_tie_sweep_probes(),
     ]
 
 
 # Goldens that the Painter sessions of 2026-10-12, 2026-10-13 and 2026-10-19 recorded and the
-# store admitted (decisions 101, 160, 167, 172, 180, 198, 216 and 266): their manifests live under
-# the envelope's `manifests/`, and their requests are deleted.
+# store admitted (decisions 101, 160, 167, 172, 180, 198, 216, 266 and 272): their manifests live
+# under the envelope's `manifests/`, and their requests are deleted.
 ADMITTED = frozenset(
     {
         "export-bit-depth",
@@ -1548,6 +1617,12 @@ ADMITTED = frozenset(
         "export-padding-ramp-r1-p0-box17",
         # Decision 266's kernel-code probes (Painter session of 2026-10-19, 09:58, Legacy).
         *(f"export-padding-kernel-{name}" for name in KERNEL_PROBES),
+        # Decision 272's tie-order sweeps (Painter session of 2026-10-19, 11:23, Legacy).
+        *(
+            f"export-padding-tie-sweep-{family}-{box}"
+            for family in rf.SWEEP_FAMILIES
+            for box in rf.SWEEP_BOXES
+        ),
     }
 )
 
