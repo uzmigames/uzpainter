@@ -1,0 +1,13 @@
+{
+  "id": 284,
+  "slug": "284-multi-facet-distance",
+  "title": "Multi-facet tap distances: a far tap with no hinge to the ring face is measured after one rigid rotation about the seam edge, not along a surface path; best on the cube, better on the Wand ring, still not exact",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}
