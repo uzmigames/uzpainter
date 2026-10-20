@@ -41,6 +41,7 @@
 #include "bake/mesh_inputs.h"
 #include "bake/position_baker.h"
 #include "bake/sampling.h"
+#include "bake/thickness_baker.h"
 #include "bake_fixtures.h"
 #include "uzp_core/manifest/sha256.h"
 #include "uzp_core/types/errors.h"
@@ -347,19 +348,19 @@ void CaseCapabilityErrors() {
     CHECK(baker.caps().parity_owner_task == "phase3.4_baker-ao");
     CHECK(baker.caps().embree_version == "4.4.1");
     const Capabilities capabilities = baker.caps();
-    CHECK(capabilities.usages.size() == 7);
+    CHECK(capabilities.usages.size() == 8);
     for (MeshMapUsage usage : {MeshMapUsage::AO, MeshMapUsage::Normal, MeshMapUsage::WorldSpaceNormal,
-                               MeshMapUsage::Position, MeshMapUsage::ID, MeshMapUsage::Height,
-                               MeshMapUsage::Opacity}) {
+                               MeshMapUsage::Position, MeshMapUsage::ID, MeshMapUsage::Thickness,
+                               MeshMapUsage::Height, MeshMapUsage::Opacity}) {
         CHECK(std::find(capabilities.usages.begin(), capabilities.usages.end(), usage) != capabilities.usages.end());
     }
     CHECK(capabilities.parity_owner_tasks.at(MeshMapUsage::AO) == "phase3.4_baker-ao");
     CHECK(capabilities.parity_owner_tasks.at(MeshMapUsage::Normal) == "phase3.2_baker-normal");
 
     BakeRequest request = PlaneRequest(low);
-    request.usages = {MeshMapUsage::AO, MeshMapUsage::Thickness};
+    request.usages = {MeshMapUsage::AO, MeshMapUsage::BentNormals};
     message = ExpectThrow<CapabilityError>([&] { baker.bake(request); });
-    CHECK(Contains(message, "phase3.4_baker-thickness"));
+    CHECK(Contains(message, "phase3.4_baker-bent-normals"));
 
     request = PlaneRequest(low);
     request.usages = {MeshMapUsage::Curvature};
@@ -1661,6 +1662,7 @@ void CaseCageFileThreadsInProcess() {
 #include "id_bake_cases.h"
 #include "opacity_bake_cases.h"
 #include "height_bake_cases.h"
+#include "thickness_bake_cases.h"
 
 const std::vector<std::pair<std::string, std::function<void()>>>& Cases() {
     static const std::vector<std::pair<std::string, std::function<void()>>> cases = {
@@ -1742,6 +1744,13 @@ const std::vector<std::pair<std::string, std::function<void()>>>& Cases() {
         {"height_record", CaseHeightRecord},
         {"height_refusals", CaseHeightRefusals},
         {"height_parameters", CaseHeightParameters},
+        {"thickness_plane", CaseThicknessPlane},
+        {"thickness_sphere", CaseThicknessSphere},
+        {"thickness_bevel", CaseThicknessBevel},
+        {"thickness_threads_in_process", CaseThicknessThreadsInProcess},
+        {"thickness_record", CaseThicknessRecord},
+        {"thickness_refusals", CaseThicknessRefusals},
+        {"thickness_parameters", CaseThicknessParameters},
     };
     return cases;
 }
@@ -1791,7 +1800,8 @@ std::string Json(const BakeResult& r, const Capabilities& caps, const std::strin
 /// bevelled cube with highs and every path of decision 306 on) and `cage_file` (the cube, its
 /// high and its cage from OBJ files with relative AO distances and a unit scale, decision 311),
 /// `normal`, `world_normal`, `position` and `id` (the bevelled cube's WorldSpaceNormal, Position and
-/// ID labels, decision 337), `opacity` and `height` (its Opacity and signed Height, decision 341).
+/// ID labels, decision 337), `opacity`, `height` and `thickness` (its Opacity, signed Height and
+/// per-ray Thickness evidence, decision 341).
 int BakeCommand(int argc, char** argv) {
     if (argc < 4) throw ValueError("bake needs <fixture> <threads>");
     const std::string fixture = argv[2];
@@ -1843,6 +1853,8 @@ int BakeCommand(int argc, char** argv) {
         request = OpacityRequest(bevel.Request(0.07f));
     } else if (fixture == "height") {
         request = HeightRequest(bevel.Request(0.07f));
+    } else if (fixture == "thickness") {
+        request = ThicknessRequest(bevel.Request(0.07f), 8, 1e-4f, 1.5f);
     } else if (fixture == "cage_file") {
         request = cage_file.emplace().Request();
     } else {

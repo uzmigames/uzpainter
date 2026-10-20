@@ -220,7 +220,7 @@ void RefuseUnstored(MeshMapUsage usage, const std::string& what) {
 
 bool StoresBakerValues(MeshMapUsage usage) {
     return usage == MeshMapUsage::AO || usage == MeshMapUsage::Position || usage == MeshMapUsage::ID ||
-           usage == MeshMapUsage::Height;
+           usage == MeshMapUsage::Thickness || usage == MeshMapUsage::Height;
 }
 
 const std::vector<PropertySpec>& PropertySpecs() { return TheCatalog().specs; }
@@ -239,7 +239,8 @@ struct ParameterStore {
     /// The set's own values of the other stored bakers (decision 337): never in a link group.
     std::shared_ptr<ParameterSlot> position = std::make_shared<ParameterSlot>();
     std::shared_ptr<ParameterSlot> id = std::make_shared<ParameterSlot>();
-    std::shared_ptr<ParameterSlot> height = std::make_shared<ParameterSlot>();  // decision 341
+    std::shared_ptr<ParameterSlot> thickness = std::make_shared<ParameterSlot>();  // decision 341
+    std::shared_ptr<ParameterSlot> height = std::make_shared<ParameterSlot>();     // decision 341
     /// Shared by the texture sets of one session; null for a set outside a session.
     std::shared_ptr<std::uint64_t> revision;
 
@@ -250,6 +251,7 @@ struct ParameterStore {
             case MeshMapUsage::AO: return ao.get();
             case MeshMapUsage::Position: return position.get();
             case MeshMapUsage::ID: return id.get();
+            case MeshMapUsage::Thickness: return thickness.get();
             case MeshMapUsage::Height: return height.get();
             default: return nullptr;
         }
@@ -638,7 +640,7 @@ core::BakeSettings ToBakeSettings(const BakingParameters& parameters) {
 }
 
 void LoadBakeSettings(const BakingParameters& parameters, const core::BakeSettings& settings) {
-    ParameterSlot common, ao, position, id, height;
+    ParameterSlot common, ao, position, id, thickness, height;
     const auto load = [](const json::Object& object, PropertyGroup group, MeshMapUsage usage, const std::string& where,
                          ParameterSlot& into) {
         for (const auto& [key, value] : object) {
@@ -661,6 +663,8 @@ void LoadBakeSettings(const BakingParameters& parameters, const core::BakeSettin
                 load(object, PropertyGroup::Baker, usage, where, position);
             } else if (usage == MeshMapUsage::ID) {
                 load(object, PropertyGroup::Baker, usage, where, id);
+            } else if (usage == MeshMapUsage::Thickness) {
+                load(object, PropertyGroup::Baker, usage, where, thickness);
             } else if (usage == MeshMapUsage::Height) {
                 load(object, PropertyGroup::Baker, usage, where, height);
             } else if (!object.empty()) {
@@ -674,6 +678,7 @@ void LoadBakeSettings(const BakingParameters& parameters, const core::BakeSettin
     store.ao->values = std::move(ao.values);
     store.position->values = std::move(position.values);
     store.id->values = std::move(id.values);
+    store.thickness->values = std::move(thickness.values);
     store.height->values = std::move(height.values);
     Advance({&store});
 }
@@ -780,6 +785,25 @@ MappedRequest RequestFromParameters(const BakingParameters& parameters, BakeRequ
         r.id.generator = generator == "Random"      ? IdColorGenerator::Random
                          : generator == "Hue shift" ? IdColorGenerator::HueShift
                                                     : IdColorGenerator::Grayscale;
+    }
+    if (std::find(r.usages.begin(), r.usages.end(), MeshMapUsage::Thickness) != r.usages.end()) {
+        // The ray keys map as AO's do, with AO's refusals; the normalisation always maps and the
+        // baker refuses it (decision 341).
+        const std::map<std::string, Property> thickness = parameters.baker(MeshMapUsage::Thickness);
+        const std::string owner = UsageOwnerTask(MeshMapUsage::Thickness);
+        only(thickness, "FilterMethodSecondary", "Always", owner);
+        if (std::get<double>(value(thickness, "Spread")) != 180.0) {
+            throw NotYetSupported("Spread: the CPU baker casts over the whole hemisphere only, 180 degrees (" + owner + ")");
+        }
+        r.thickness.secondary_rays = static_cast<std::uint32_t>(std::get<std::int64_t>(value(thickness, "NbSecondary")));
+        r.thickness.min_distance = real(thickness, "MinDistance");
+        r.thickness.max_distance = real(thickness, "MaxDistance");
+        r.thickness.relative_to_bounding_box = boolean(thickness, "MaxDistanceRelativeScale");
+        r.thickness.distribution = label(thickness, "Distribution") == "Cosine" ? Distribution::Cosine : Distribution::Uniform;
+        const std::string range = label(thickness, "MaximizeRange");
+        r.thickness.normalization = range == "Relative to ray distances"            ? ThicknessNormalization::RelativeToRayDistances
+                                    : range == "Relative to min/max (per UV tile)" ? ThicknessNormalization::RelativeToMinMax
+                                                                                   : ThicknessNormalization::None;
     }
     if (std::find(r.usages.begin(), r.usages.end(), MeshMapUsage::Height) != r.usages.end()) {
         // Both keys map, the normalisation always; the baker refuses what it does not establish

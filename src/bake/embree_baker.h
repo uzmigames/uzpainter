@@ -3,8 +3,8 @@
 // `EmbreeBaker`, the CPU baker of phase3.1_baker-request-model (`docs/architecture/06-baking.md`
 // §1-§4, decisions 302 and 306): a deterministic ray-cast core on the vendored Embree 4.4.1 and
 // AO, tangent-space Normal, WorldSpaceNormal (`world_normal_baker.h`), Position
-// (`position_baker.h`), ID (`id_baker.h`), Height (`height_baker.h`) and Opacity
-// (`opacity_baker.h`) usages on it, behind `IBaker`.
+// (`position_baker.h`), ID (`id_baker.h`), Thickness (`thickness_baker.h`), Height
+// (`height_baker.h`) and Opacity (`opacity_baker.h`) usages on it, behind `IBaker`.
 //
 // Determinism: the BVH is built by one Embree thread; texels are cast in fixed 16 x 16 tiles that
 // any number of workers take in any order, each texel's sub-samples and rays are addressed by

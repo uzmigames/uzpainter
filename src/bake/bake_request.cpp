@@ -43,6 +43,29 @@ std::string UsageOwnerTask(MeshMapUsage usage) {
     return "phase3.5_embree-bakers";
 }
 
+double BoundingBoxSize(const BakeRequest& request) {
+    if (!request.project_bounds) {
+        throw ValueError("a distance relative to the bounding box needs the project mesh's bounds");
+    }
+    const BoundingBox& box = *request.project_bounds;
+    const double ex = static_cast<double>(box.upper.x) - box.lower.x;
+    const double ey = static_cast<double>(box.upper.y) - box.lower.y;
+    const double ez = static_cast<double>(box.upper.z) - box.lower.z;
+    if (!(std::isfinite(ex) && std::isfinite(ey) && std::isfinite(ez)) || ex < 0.0 || ey < 0.0 || ez < 0.0) {
+        throw ValueError("the project mesh's bounds need finite corners with lower <= upper");
+    }
+    if (!request.box_size_metric) {
+        throw NotYetSupported(
+            "the size of the bounding box a relative distance is measured against (its diagonal or its "
+            "largest extent) is not established: a Painter recording settles it (decision 311; owner "
+            "phase3.5_embree-bakers, decision 323)");
+    }
+    const double size = *request.box_size_metric == BoxSizeMetric::Diagonal ? std::sqrt(ex * ex + ey * ey + ez * ez)
+                                                                           : std::max({ex, ey, ez});
+    if (!(size > 0.0)) throw ValueError("the project mesh's bounding box has size 0");
+    return size;
+}
+
 DistanceRecord EffectiveDistances(const BakeRequest& request) {
     DistanceRecord d;
     const double scale = request.scale_to_internal;
@@ -56,26 +79,8 @@ DistanceRecord EffectiveDistances(const BakeRequest& request) {
     const bool has_ao = std::find(request.usages.begin(), request.usages.end(), MeshMapUsage::AO) != request.usages.end();
     d.ao_relative = has_ao && request.ao.relative_to_bounding_box;
     if (d.detail_relative || d.ao_relative) {
-        if (!request.project_bounds) {
-            throw ValueError("a distance relative to the bounding box needs the project mesh's bounds");
-        }
-        const BoundingBox& box = *request.project_bounds;
-        const double ex = static_cast<double>(box.upper.x) - box.lower.x;
-        const double ey = static_cast<double>(box.upper.y) - box.lower.y;
-        const double ez = static_cast<double>(box.upper.z) - box.lower.z;
-        if (!(std::isfinite(ex) && std::isfinite(ey) && std::isfinite(ez)) || ex < 0.0 || ey < 0.0 || ez < 0.0) {
-            throw ValueError("the project mesh's bounds need finite corners with lower <= upper");
-        }
-        if (!request.box_size_metric) {
-            throw NotYetSupported(
-                "the size of the bounding box a relative distance is measured against (its diagonal or its "
-                "largest extent) is not established: a Painter recording settles it (decision 311; owner "
-                "phase3.5_embree-bakers, decision 323)");
-        }
+        d.box_size = BoundingBoxSize(request);
         d.box_size_metric = *request.box_size_metric;
-        d.box_size = d.box_size_metric == BoxSizeMetric::Diagonal ? std::sqrt(ex * ex + ey * ey + ez * ez)
-                                                                  : std::max({ex, ey, ez});
-        if (!(d.box_size > 0.0)) throw ValueError("the project mesh's bounding box has size 0");
     }
     const auto effective = [&](float value, bool relative, const char* name) {
         const double mesh_units = relative ? static_cast<double>(value) * d.box_size : static_cast<double>(value) / scale;
@@ -186,6 +191,25 @@ std::string SerializeResult(const BakeResult& result) {
         PutLe(out, std::bit_cast<std::uint64_t>(h.scale_to_internal), 8);
         PutLe(out, result.height_map.size(), 8);
         for (float v : result.height_map) PutLe(out, std::bit_cast<std::uint32_t>(v), 4);
+    }
+    if (!result.thickness_ray_class.empty()) {
+        const ThicknessRecord& t = result.thickness;
+        out += "THK1";
+        PutLe(out, t.settings.secondary_rays, 4);
+        PutLe(out, t.settings.distribution == Distribution::Cosine ? 1 : 0, 1);
+        PutLe(out, t.settings.relative_to_bounding_box ? 1 : 0, 1);
+        PutLe(out, t.settings.normalization ? 1u + static_cast<std::uint64_t>(*t.settings.normalization) : 0u, 1);
+        for (float v : {t.settings.min_distance, t.settings.max_distance, t.min_distance, t.max_distance}) {
+            PutLe(out, std::bit_cast<std::uint32_t>(v), 4);
+        }
+        PutLe(out, std::bit_cast<std::uint64_t>(t.box_size), 8);
+        PutLe(out, std::bit_cast<std::uint64_t>(t.scale_to_internal), 8);
+        for (std::uint64_t v : {t.rays.escaped, t.rays.front_hit, t.rays.back_face_hit, t.rays.self_hit}) {
+            PutLe(out, v, 8);
+        }
+        PutLe(out, result.thickness_ray_class.size(), 8);
+        for (std::uint8_t v : result.thickness_ray_class) PutLe(out, v, 1);
+        for (float v : result.thickness_ray_distance) PutLe(out, std::bit_cast<std::uint32_t>(v), 4);
     }
     return out;
 }

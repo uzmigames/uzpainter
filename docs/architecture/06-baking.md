@@ -170,6 +170,20 @@ binding's `baked.effective_normalization`. Block tag: `HGT1`. Height's values ar
 set in `bake_settings.per_baker.Height`, with no link group. Painter's Height has no secondary-ray
 keys (decision 323's record), so none is read.
 
+**Thickness** (`thickness_baker.*`, phase3.4_baker-thickness, decision 341). At each hit, `NbSecondary`
+rays are cast inward from the high point, over the hemisphere opposite the high normal by
+`Distribution`, from `MinDistance` to `MaxDistance` (absolute, or relative to the bounding box under
+decision 311's rule). The samples are decision 302's. The baker keeps the per-ray evidence: each ray's
+class (escaped, front, back face, its own triangle; `NotCast` off hits) in `thickness_ray_class` and
+its hit distance in centimetres in `thickness_ray_distance`. No per-texel thickness is computed: how
+the ray distances combine is not recorded. So every `MaximizeRange` value is refused, Painter's
+default "Relative to min/max (per UV tile)" included, and only a request without a normalisation
+bakes. `Spread` other than 180 and `FilterMethodSecondary` other than Always are refused as for AO.
+The evidence is bounded at 2^26 rays. `ThicknessRecord` holds the settings, the effective distances
+and the ray totals (apart from AO's); `ThicknessRecordJson` gives it for the binding. Block tag:
+`THK1`. Thickness's values are stored per texture set in `bake_settings.per_baker.Thickness`, with
+no link group.
+
 Parity is `pending-evidence` for every map. Python and MCP expose no bake.
 
 ## 4. Outputs and evidence

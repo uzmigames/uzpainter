@@ -45,7 +45,7 @@ struct BakeMesh {
 };
 
 /// Painter's ten `MeshMapUsage` bakers (`06-baking.md` §2). CPU: AO, Normal, WorldSpaceNormal, Position, ID,
-/// Height and Opacity.
+/// Thickness, Height and Opacity.
 enum class MeshMapUsage {
     Normal,
     WorldSpaceNormal,
@@ -145,6 +145,25 @@ struct IdSettings {
     std::optional<IdColorGenerator> generator = IdColorGenerator::HueShift;
 };
 
+/// Thickness `MaximizeRange` ("Normalization") (decision 341), by Painter's labels: "Relative to ray
+/// distances", "Relative to min/max (per UV tile)" and "None".
+enum class ThicknessNormalization { RelativeToRayDistances, RelativeToMinMax, None };
+
+/// Thickness settings (decision 341): `secondary_rays` inward rays per primary hit (`NbSecondary`)
+/// over the hemisphere opposite the high normal, by `distribution`, each searched from
+/// `min_distance` to `max_distance`: centimetres or, with `relative_to_bounding_box`
+/// (`MaxDistanceRelativeScale`), fractions of the bounding-box size. The defaults are Painter's
+/// (`assets/defaults/baking.json`).
+struct ThicknessSettings {
+    std::uint32_t secondary_rays = 64;
+    float min_distance = 1e-5f;
+    float max_distance = 0.1f;
+    bool relative_to_bounding_box = true;
+    Distribution distribution = Distribution::Cosine;
+    /// Absent: the per-ray evidence only, no thickness value (an evidence request no parameter makes).
+    std::optional<ThicknessNormalization> normalization = ThicknessNormalization::RelativeToMinMax;
+};
+
 /// Height `MaximizeRange` ("Normalization") and `Divisor` ("Scaling divisor") (decision 341), by
 /// Painter's labels: "Relative to ray distances", "Relative to low mesh (per UV tile)",
 /// "Relative to min/max (per UV tile)" and "Manual". The defaults are Painter's
@@ -189,6 +208,7 @@ struct BakeRequest {
     PositionSettings position;
     IdSettings id;
     HeightSettings height;
+    ThicknessSettings thickness;
     /// The texture set's low mesh parts. Where UV islands overlap, the lowest part index, then
     /// the lowest triangle index, wins.
     std::vector<const BakeMesh*> low;
@@ -284,6 +304,11 @@ struct DistanceRecord {
     float ao_max_distance = 0.0f;
 };
 
+/// The size of the project mesh's bounding box under the request's metric (mesh units), which a
+/// distance relative to the bounding box is a fraction of. Raises `uzp::core::ValueError` (no or
+/// invalid box) or `NotYetSupported` (no size metric).
+double BoundingBoxSize(const BakeRequest& request);
+
 /// The effective mesh-unit distances of `request`: absolute distances divided by
 /// `scale_to_internal`, relative ones multiplied by the bounding-box size. Raises
 /// `uzp::core::ValueError` (no or invalid scale, no or invalid box) or `NotYetSupported` (a
@@ -298,6 +323,22 @@ struct PositionNormalizationRecord {
     std::uint32_t channels = 0;
     double scale_to_internal = 0.0;
     bool bounds_applied = false;
+};
+
+/// The class of a Thickness ray (decision 341), stored per ray: `NotCast` on a texel without a hit
+/// (no ray is cast); otherwise the classes of decision 302 §4.
+enum class ThicknessRayClass : std::uint8_t { NotCast = 0, Escaped = 1, FrontHit = 2, BackFaceHit = 3, SelfHit = 4 };
+
+/// What a Thickness bake cast (decision 341): the settings, the unit scale, the bounding-box size
+/// (mesh units; 0 when the distances are absolute), the effective mesh-unit distances and the
+/// totals of the inward rays by class, apart from AO's `BakeResult::rays`.
+struct ThicknessRecord {
+    ThicknessSettings settings;
+    double scale_to_internal = 0.0;
+    double box_size = 0.0;
+    float min_distance = 0.0f;
+    float max_distance = 0.0f;
+    RayClassCounts rays;
 };
 
 /// What a Height bake applied (`baked.effective_normalization`, decision 341): the settings, the
@@ -350,6 +391,13 @@ struct BakeResult {
     /// (towards the ray's origin), in centimetres, float32 and unnormalised; zero on non-hit texels.
     std::vector<float> height_map;
     HeightNormalizationRecord height_normalization;
+    /// Thickness (decision 341): the per-ray evidence, `thickness.settings.secondary_rays` slots per
+    /// texel. `thickness_ray_class` holds each inward ray's class and `thickness_ray_distance` the
+    /// distance of its first hit in centimetres (float32; 0 when it escapes or was not cast). No
+    /// per-texel thickness value exists: how the rays combine is not recorded.
+    std::vector<std::uint8_t> thickness_ray_class;
+    std::vector<float> thickness_ray_distance;
+    ThicknessRecord thickness;
     core::TangentSpace tangent_space = core::TangentSpace::PerVertex;
     core::NormalMapFormat normal_format = core::NormalMapFormat::OpenGL;
     std::vector<std::uint8_t> texel_class;
@@ -371,7 +419,7 @@ struct BakeResult {
 /// `UZPBAKE4` with usage flags, mode, format and RGB maps before the existing sizes/maps/counts,
 /// then the distance record; each geometry map present, and only then, follows as a tagged block:
 /// `WSN1` for WorldSpaceNormal, `POS1` for Position, `IDM1` for ID, `OPA1` for Opacity, `HGT1` for
-/// Height): what the
+/// Height, `THK1` for Thickness): what the
 /// determinism proof compares across thread counts.
 /// `threads_used` is not part of it.
 std::string SerializeResult(const BakeResult& result);

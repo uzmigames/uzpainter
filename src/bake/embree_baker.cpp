@@ -19,6 +19,7 @@
 #include "bake/id_baker.h"
 #include "bake/opacity_baker.h"
 #include "bake/position_baker.h"
+#include "bake/thickness_baker.h"
 #include "bake/world_normal_baker.h"
 #include "mesh/tangents.h"
 #include "uzp_core/types/errors.h"
@@ -95,7 +96,7 @@ std::string VersionText(long version) {
 
 EmbreeBaker::EmbreeBaker(BakerConfig config) : config_(std::move(config)), core_(std::make_shared<Core>()) {
     caps_.usages = {MeshMapUsage::AO, MeshMapUsage::Normal, MeshMapUsage::WorldSpaceNormal, MeshMapUsage::Position,
-                    MeshMapUsage::ID, MeshMapUsage::Height, MeshMapUsage::Opacity};
+                    MeshMapUsage::ID, MeshMapUsage::Thickness, MeshMapUsage::Height, MeshMapUsage::Opacity};
     caps_.max_output_size_log2 = kMaxOutputSizeLog2;
     caps_.determinism_class = "repeatable-on-one-build-and-cpu-isa";
     caps_.isa = kQualifiedIsa;
@@ -104,7 +105,7 @@ EmbreeBaker::EmbreeBaker(BakerConfig config) : config_(std::move(config)), core_
     caps_.parity_owner_tasks = {{MeshMapUsage::AO, "phase3.4_baker-ao"},
                                 {MeshMapUsage::Normal, "phase3.2_baker-normal"}};
     for (MeshMapUsage usage : {MeshMapUsage::WorldSpaceNormal, MeshMapUsage::Position, MeshMapUsage::ID,
-                               MeshMapUsage::Height, MeshMapUsage::Opacity}) {
+                               MeshMapUsage::Thickness, MeshMapUsage::Height, MeshMapUsage::Opacity}) {
         caps_.parity_owner_tasks[usage] = UsageOwnerTask(usage);
     }
 
@@ -253,6 +254,7 @@ DistanceRecord ValidateRequest(const Capabilities& caps, const BakeRequest& requ
     if (HasUsage(request, MeshMapUsage::WorldSpaceNormal)) ValidateWorldSpaceNormal(request);
     if (HasUsage(request, MeshMapUsage::Position)) ValidatePosition(request);
     if (HasUsage(request, MeshMapUsage::ID)) ValidateId(request);
+    if (HasUsage(request, MeshMapUsage::Thickness)) ValidateThickness(request);
     if (HasUsage(request, MeshMapUsage::Height)) ValidateHeight(request);
     if (HasUsage(request, MeshMapUsage::Opacity)) ValidateOpacity(request);
     for (std::uint32_t log2 : request.output_size_log2) {
@@ -771,6 +773,22 @@ Float3 TangentNormal(const BakeMesh& low, std::uint32_t tri, const UvWeights& w,
     return {normal.x, normal.y, normal.z};
 }
 
+/// The first hit of a secondary ray from `origin` along `dir` in [tnear, tfar], classed as AO's rays
+/// are (decision 302 §4) against the origin triangle (`origin_geom`, `origin_prim`): a Thickness ray.
+SecondaryHit CastSecondary(const Context& ctx, const Vec3d& origin, const Vec3d& dir, float tnear, float tfar,
+                           unsigned origin_geom, unsigned origin_prim) {
+    RTCRayHit ray = MakeRay(origin, dir, tnear, tfar);
+    ctx.api.intersect1(ctx.scene, &ray, nullptr);
+    if (ray.hit.geomID == RTC_INVALID_GEOMETRY_ID) return {ThicknessRayClass::Escaped, 0.0f};
+    ThicknessRayClass cls = ThicknessRayClass::FrontHit;
+    if (ray.hit.geomID == origin_geom && ray.hit.primID == origin_prim) {
+        cls = ThicknessRayClass::SelfHit;
+    } else if (Dot(dir, FaceNormal(*ctx.high[ray.hit.geomID], ray.hit.primID)) >= 0.0) {
+        cls = ThicknessRayClass::BackFaceHit;
+    }
+    return {cls, ray.ray.tfar};
+}
+
 void BakeTexel(const Context& ctx, std::uint32_t x, std::uint32_t y, TileCounts& counts) {
     BakeResult& out = ctx.result;
     const BakeRequest& request = ctx.request;
@@ -891,6 +909,11 @@ void BakeTexel(const Context& ctx, std::uint32_t x, std::uint32_t y, TileCounts&
             if (!out.id_labels.empty()) WriteId(out, index, origin_geom);
             if (!out.opacity.empty()) WriteOpacity(out, index);
             if (!out.height_map.empty()) WriteHeight(out, index, surface_t - primary.ray.tfar);
+            if (!out.thickness_ray_class.empty()) {
+                CastThickness(out, index, ph, nh, [&](const Vec3d& o, const Vec3d& d, float tnear, float tfar_) {
+                    return CastSecondary(ctx, o, d, tnear, tfar_, origin_geom, origin_prim);
+                });
+            }
             if (!has_ao) continue;
             // AO secondary rays, in sample order; one Hammersley set over the texel's sub-samples.
             const std::uint32_t texel_rays = ao.secondary_rays * k * k;
@@ -1067,6 +1090,7 @@ BakeResult RunBake(EmbreeBaker::Core& core, const BakerConfig& config, const Job
     }
     if (HasUsage(request, MeshMapUsage::WorldSpaceNormal)) PrepareWorldSpaceNormal(result);
     if (HasUsage(request, MeshMapUsage::Position)) PreparePosition(request, result);
+    if (HasUsage(request, MeshMapUsage::Thickness)) PrepareThickness(request, result);
     if (HasUsage(request, MeshMapUsage::Height)) PrepareHeight(request, result);
     if (HasUsage(request, MeshMapUsage::Opacity)) PrepareOpacity(result);
     result.texel_class.assign(texels, 0);
@@ -1159,6 +1183,7 @@ BakeResult RunBake(EmbreeBaker::Core& core, const BakerConfig& config, const Job
         Add(result.subsamples, counts.subsamples);
         Add(result.rays, counts.rays);
     }
+    if (HasUsage(request, MeshMapUsage::Thickness)) CountThickness(result);
     if (has_ao) result.dilated_texels = Dilate(result, request.common.dilation_width, control);
     if (has_normal) result.normal = result.normal_raw;
     return result;

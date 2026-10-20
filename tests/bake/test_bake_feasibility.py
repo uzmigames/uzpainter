@@ -101,6 +101,13 @@ NATIVE_CASES = (
     "height_record",  # Height: the record, its JSON, Divisor not applied, AO unchanged
     "height_refusals",  # Height: every MaximizeRange, SubSampling, DilationWidth refused
     "height_parameters",  # Height: stored, saved, loaded and mapped through the model
+    "thickness_plane",  # Thickness: inward rays through a slab, 0.25 / cos, both distributions
+    "thickness_sphere",  # Thickness: sphere chords from inside; the open ground's rays escape
+    "thickness_bevel",  # Thickness: exits from the chamfered cube's planes; the knob escapes
+    "thickness_threads_in_process",  # Thickness (one ISA): identical bytes at 1, 4 and N threads
+    "thickness_record",  # Thickness: relative distances, the record and JSON, AO unchanged
+    "thickness_refusals",  # Thickness: every MaximizeRange, SubSampling, dilation, bounds refused
+    "thickness_parameters",  # Thickness: stored, saved, loaded, mapped; Spread and filter refused
 )
 
 
@@ -160,6 +167,7 @@ def test_native_case(bake_tests: Path, case: str) -> None:
         ("id", 32),
         ("opacity", 32),
         ("height", 32),
+        ("thickness", 32),
     ],
 )
 def test_bytes_equal_across_thread_counts(
