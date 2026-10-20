@@ -25,3 +25,11 @@ The normal baker MUST NOT replace any texel because of a low or negative normal 
 Given a part whose high-poly normal yields Z < 0 texels
 When the bake completes
 Then the texels MUST keep their baked values and the count MUST appear in the report
+
+#### Scenario: Comparison inspection at native depth
+Given a candidate normal map with finite vectors whose decoded Z is negative, zero or positive, and non-finite vectors
+When the comparison tool produces the map's normal diagnostics
+Then `negative_z_count` MUST count only wholly finite candidate vectors with Z < 0 across the whole map, using n = 2c/max - 1 for integer channels and the stored values for float channels
+And zero-Z and non-finite vectors MUST NOT contribute to that count; non-finite vectors remain in `non_finite_count`
+And the diagnostic MUST NOT change any sample, encoded file, equality verdict or exception metric
+And historical comparison reports without the new field MUST remain valid

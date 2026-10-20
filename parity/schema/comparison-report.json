@@ -351,7 +351,12 @@
             "angular_max_deg": { "type": "number", "minimum": 0 },
             "angular_mean_deg": { "type": "number", "minimum": 0 },
             "non_finite_count": { "type": "integer", "minimum": 0 },
-            "unnormalised_count": { "type": "integer", "minimum": 0 }
+            "unnormalised_count": { "type": "integer", "minimum": 0 },
+            "negative_z_count": {
+              "description": "Finite candidate normal vectors with decoded Z < 0, over the whole map. Inspection only: values and verdicts are unchanged. Optional for reports written before this diagnostic existed.",
+              "type": "integer",
+              "minimum": 0
+            }
           }
         },
         "exact_checks": {

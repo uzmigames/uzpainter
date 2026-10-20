@@ -36,7 +36,9 @@ outside every mask count in the whole-map numbers only, and a mask applies to ma
 resolution only). For the maps the caller names as
 tangent-space normals: the angle between the oracle and candidate vectors (max and mean, over the
 texels where both are finite and non-zero) and the candidate's non-finite and unnormalised texel
-counts. A texel is unnormalised when its length differs from 1 by more than rounding a unit vector
+counts. Finite candidate vectors with Z < 0 are counted separately as `negative_z_count`:
+an inspection signal only, never a repair or an exception metric. A texel is unnormalised when
+its length differs from 1 by more than rounding a unit vector
 to the stored values can produce: sqrt(3)/max for integer codes (n = 2c/max - 1), sqrt(3)·eps of
 the stored type for float maps. A differing integer map's |Δ| image (a PNG at its stored depth)
 goes into the private store only, so the guard's store-hash rule blocks it, and the report names
@@ -239,7 +241,7 @@ def unit_length_bound(decoded: Decoded) -> float:
 
 def normal_diagnostics(oracle: Decoded, candidate: Decoded) -> dict[str, float]:
     """Angular difference (degrees, atan2 of |a x b| and a . b, so equal vectors give 0) and the
-    candidate's non-finite and unnormalised texel counts."""
+    candidate's non-finite, unnormalised and finite negative-Z texel counts."""
     a, b = _vectors(oracle), _vectors(candidate)
     length = np.linalg.norm(b, axis=-1)
     finite = np.isfinite(b).all(axis=-1)
@@ -256,6 +258,7 @@ def normal_diagnostics(oracle: Decoded, candidate: Decoded) -> dict[str, float]:
         "angular_mean_deg": mean_deg,
         "non_finite_count": float(np.count_nonzero(~finite)),
         "unnormalised_count": float(np.count_nonzero(unnormalised)),
+        "negative_z_count": float(np.count_nonzero(finite & (b[..., 2] < 0))),
     }
 
 
@@ -324,6 +327,7 @@ def map_entry(
             "angular_mean_deg": normal["angular_mean_deg"],
             "non_finite_count": int(normal["non_finite_count"]),
             "unnormalised_count": int(normal["unnormalised_count"]),
+            "negative_z_count": int(normal["negative_z_count"]),
         }
     if difference_map is not None:
         entry["private_difference_map_sha256"] = difference_map
@@ -497,7 +501,11 @@ def equality(
                 domain,
                 oracle.values,
                 candidate.values,
-                extra_metrics={f"normal_{name}": value for name, value in (normal or {}).items()},
+                extra_metrics={
+                    f"normal_{name}": value
+                    for name, value in (normal or {}).items()
+                    if name != "negative_z_count"
+                },
                 region_metrics={name: d.metrics() for name, d in regions.items()},
                 oracle_stable=stable[key],
                 exact_target=not stable[key],

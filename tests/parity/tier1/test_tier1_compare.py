@@ -21,6 +21,7 @@ from tests.adapters.assets3d.wand import Call
 from tests.parity.tier1.wand_v1.runner import refusal
 from tools.parity.envelope.registry import current_envelope
 from tools.parity.feasibility import png
+from tools.parity.fit.decode import Decoded, decode
 from tools.parity.guard.guard import Snapshot, run_guard
 from tools.parity.schemas import REPO_ROOT, Schema, is_valid, load_json, validation_errors
 from tools.parity.store.store import OracleStore
@@ -34,9 +35,10 @@ from tools.parity.tier1.compare import (
     file_storage_format,
     flip_available,
     material_regions,
+    normal_diagnostics,
     write_report,
 )
-from tools.parity.verdict import ResolvedGolden
+from tools.parity.verdict import ResolvedGolden, evaluate
 
 SET = "Wand"
 BASE, ROUGH, NORMAL = "W_BaseColor", "W_Roughness", "W_Normal"
@@ -185,6 +187,7 @@ def test_rebuilds_equal_to_a_stable_golden_pass_and_are_repeatable(tmp_path: Pat
         "angular_mean_deg": 0.0,
         "non_finite_count": 0,
         "unnormalised_count": 0,
+        "negative_z_count": 0,
     }
     assert all("private_difference_map_sha256" not in e for e in entries.values())
 
@@ -218,6 +221,84 @@ def test_a_divergent_rebuild_fails_with_whole_region_and_normal_diagnostics(
     assert normal["angular_max_deg"] == pytest.approx(90.0, abs=0.01)
     assert normal["unnormalised_count"] == 1 and normal["non_finite_count"] == 0
     assert "private_difference_map_sha256" not in entries[f"{SET}/{ROUGH}"]
+
+
+@pytest.mark.parametrize("bits", [8, 16])
+def test_negative_z_diagnostic_at_integer_midpoint_preserves_codes(bits: int) -> None:
+    middle = 1 << (bits - 1)
+    values = np.full((1, 4, 3), middle, dtype=np.uint16)
+    values[0, :, 2] = [0, middle - 1, middle, (1 << bits) - 1]
+    encoded = png.encode(values, bits)
+    decoded = decode(encoded)
+    before = decoded.values.tobytes()
+    diagnostics = normal_diagnostics(decoded, decoded)
+    assert diagnostics["negative_z_count"] == 2
+    assert diagnostics["non_finite_count"] == 0
+    assert diagnostics["angular_max_deg"] == diagnostics["angular_mean_deg"] == 0
+    assert decoded.values.tobytes() == before
+    assert png.encode(decoded.values, bits) == encoded
+
+
+@pytest.mark.parametrize("bits", [16, 32])
+def test_negative_z_diagnostic_excludes_zero_and_nonfinite_vectors(bits: int) -> None:
+    values = np.array(
+        [
+            [
+                (0, 0, -1),
+                (1, 0, -0.0001),
+                (1, 0, -0.0),
+                (0, 0, 0),
+                (0, 0, 1),
+                (np.nan, 0, -1),
+                (0, np.inf, -1),
+                (0, 0, -np.inf),
+            ]
+        ],
+        dtype=np.float16 if bits == 16 else np.float32,
+    ).astype(np.float64)
+    decoded = Decoded(values, False, bits)
+    before = values.tobytes()
+    diagnostics = normal_diagnostics(decoded, decoded)
+    assert diagnostics["negative_z_count"] == 2
+    assert diagnostics["non_finite_count"] == 3
+    assert diagnostics["unnormalised_count"] == 1
+    assert diagnostics["angular_max_deg"] == diagnostics["angular_mean_deg"] == 0
+    assert values.tobytes() == before
+
+
+@pytest.mark.parametrize("matching", [True, False])
+def test_negative_z_report_is_inspection_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, matching: bool
+) -> None:
+    changed = maps()
+    changed[NORMAL][0, 0] = (32768, 32768, 0)
+    target = changed if matching else maps()
+    resolved, store = golden(tmp_path, {"r1": target, "r1-repeat": target, "r2": target})
+    runs = (candidate(tmp_path / "a", changed), candidate(tmp_path / "b", changed))
+    before = {path: path.read_bytes() for run in runs for path in run.files.values()}
+    checked = 0
+
+    def inspect_metrics(comparison: Any, entries: Any) -> Any:
+        nonlocal checked
+        assert "normal_negative_z_count" not in comparison.extra_metrics
+        checked += 1
+        return evaluate(comparison, entries)
+
+    monkeypatch.setattr("tools.parity.tier1.compare.evaluate", inspect_metrics)
+    report = report_of(resolved, store, runs)
+    assert checked > 0
+    assert report["equality_to_painter"]["outcome"] == ("pass" if matching else "fail")
+    assert report["uzpainter_repeatability"]["status"] == "repeatable"
+    normal = by_id(report["equality_to_painter"]["maps"])[f"{SET}/{NORMAL}"]["normal"]
+    assert normal["negative_z_count"] == 1
+    assert normal["angular_max_deg"] == pytest.approx(0 if matching else 180, abs=0.01)
+    assert {path: path.read_bytes() for path in before} == before
+    # Historical reports remain valid; new counts accept only nonnegative integers.
+    normal.pop("negative_z_count")
+    assert validation_errors(report, Schema.COMPARISON_REPORT) == []
+    for invalid in (-1, 0.5, "1"):
+        normal["negative_z_count"] = invalid
+        assert validation_errors(report, Schema.COMPARISON_REPORT)
 
 
 # --- padding (decision 223) ---------------------------------------------------------------------
