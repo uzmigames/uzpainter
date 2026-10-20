@@ -11,11 +11,16 @@ each rule still has a reason to exist:
 
 - `.painter_lock`: only the suffix of the project's lock is mapped to UzPainter's `.lock`
   (decision 319 §9a). The lock's presence, base name and phase stay compared.
-- Texture states (decision 297 §3.3): each event list's `TextureStateEvent` dispatches are
-  compared as the distinct (action, channel type) pairs of the step, in a sibling output
-  `<output id>/texture_states`; the other events keep their order and states and stay
-  compared exactly. UzPainter emits no `TextureStateEvent` yet, a release gap
-  (`TEXTURE_STATES`): no `TextureStateEventAction` member gets credit from these outputs.
+- Texture states (decision 332, amending 297 §3.3), in `test_host_texture_states_equal_painter`:
+  ADD and REMOVE dispatches stay in their step's event list and are compared exactly, in order
+  with the other events; the UPDATE dispatches of the causative window (`UPDATE_WINDOWS`, s7-s8)
+  are compared, both recordings, as the distinct (action, channel type) pairs of the whole
+  window in the output `s7-s8/texture_updates`, since Painter attributes them asynchronously
+  (s8 in r1, s7 in r2); an UPDATE outside the window stays in its list. Cache keys and texture
+  ids are not claimed (`TEXTURE_IDS`). UzPainter emits no texture event until its observer lands:
+  that test is an expected failure (`TEXTURE_GAP`), and passes unchanged once the events arrive.
+  `test_host_probe_equals_painter` compares every other event of those lists exactly, without
+  the `TextureStateEvent` dispatches, which only the texture test compares.
 - Shelf crawls of shelves the run did not add are left out of the crawl events. Painter's
   installed and user shelves are Adobe content that UzPainter never ships (decision 006, as
   `phase1-shelves`).
@@ -53,10 +58,9 @@ HOST_VERSION = (
     "host difference (decision 330): UzPainter reports its own version, never Painter's; no "
     "parity credit"
 )
-TEXTURE_STATES = (
-    "release gap: UzPainter emits no TextureStateEvent (emission owner phase2.3_realtime-preview "
-    "per decision 297; an open seam of phase1.24_python-api-facade item 4.1, decision 330); "
-    "compared as distinct (action, channel type) pairs (decision 297 §3.3)"
+TEXTURE_GAP = (
+    "release gap, decision 332, owner phase1.24_python-api-facade item 4.1: UzPainter emits no "
+    "TextureStateEvent until its texture observer lands"
 )
 
 # Outputs that cannot equal Painter's, by probe: output key (`<output id>` for both recordings,
@@ -65,13 +69,7 @@ EXCLUDED: dict[str, dict[str, str]] = {
     "p22b-host-application": dict.fromkeys(
         ("s3/version", "s4/version_info", "s20/evaluate"), HOST_VERSION
     ),
-    "p22b-host-events": {
-        **dict.fromkeys(("s20/events/texture_states", "s21/events/texture_states"), TEXTURE_STATES),
-        "same_session s8/events/texture_states": TEXTURE_STATES,
-        # Painter's UPDATE lands one step earlier in its second recording (decision 330).
-        "after_save_reopen s7/events/texture_states": TEXTURE_STATES,
-        "after_save_reopen start/events/texture_states": TEXTURE_STATES,
-    },
+    "p22b-host-events": {},
     "p22b-host-plugins": {},
     "p22b-host-resources": {
         "s5/import_project_resource": (
@@ -102,6 +100,11 @@ UNORDERED: dict[str, list[str]] = {"p22b-host-resources": ["after_save_reopen s2
 PAINTER_LOCK, LOCK = ".painter_lock", ".lock"
 VIEWER_DEFAULTS = {("viewer", "open-pbr"), ("viewer", "panorama")}
 TEXTURE_STATE = "TextureStateEvent"
+UPDATE = "UPDATE"
+# Decision 332: the event outputs of each probe's causative window of an UPDATE.
+UPDATE_WINDOWS: dict[str, tuple[str, ...]] = {"p22b-host-events": ("s7/events", "s8/events")}
+# Fields of a texture event whose parity is not claimed (decisions 297 and 332).
+TEXTURE_IDS = ("cache_key_argument", "stack_id_argument")
 SHELF_EVENTS = ("ShelfCrawlingStarted", "ShelfCrawlingEnded")
 INCOMPATIBLE = re.compile(r"^Resource '(?P<root>.+)/inputs/(?P<file>[^/']+)' is incompatible")
 RESOURCE_CONTEXT = re.compile(r"resource://project(\d+)/")
@@ -140,16 +143,29 @@ def map_lock(files: list[Any]) -> list[Any]:
     return mapped
 
 
-def texture_states(events: list[Any]) -> tuple[list[Any], list[list[Any]]]:
-    """The events without their `TextureStateEvent` dispatches, and the distinct (action, channel
-    type) pairs of those dispatches (decision 297 §3.3)."""
-    kept = [e for e in events if e.get("event") != TEXTURE_STATE]
-    pairs = {
-        (e.get("action_argument"), e.get("channel_type_argument"))
-        for e in events
-        if e.get("event") == TEXTURE_STATE
-    }
-    return kept, [list(pair) for pair in sorted(pairs, key=repr)]
+def window_output(probe: str) -> str:
+    """The output id of a probe's UPDATE window: `s7-s8/texture_updates`."""
+    steps = [output_id.split("/")[0] for output_id in UPDATE_WINDOWS[probe]]
+    return f"{steps[0]}-{steps[-1]}/texture_updates"
+
+
+def texture_events(
+    events: list[Any], textures: bool, in_window: bool, window: set[tuple[Any, Any]]
+) -> list[Any]:
+    """One event list as the comparison reads it. Without `textures`, no texture dispatch.
+    With it, every texture dispatch without its unclaimed ids, except the UPDATEs of an output in
+    the window, whose (action, channel type) pairs go to `window`."""
+    kept = []
+    for e in events:
+        if e.get("event") != TEXTURE_STATE:
+            kept.append(e)
+        elif not textures:
+            continue
+        elif in_window and e.get("action_argument") == UPDATE:
+            window.add((e.get("action_argument"), e.get("channel_type_argument")))
+        else:
+            kept.append({k: v for k, v in e.items() if k not in TEXTURE_IDS})
+    return kept
 
 
 def without_viewer_defaults(listed: list[Any]) -> list[Any]:
@@ -169,15 +185,18 @@ def without_viewer_defaults(listed: list[Any]) -> list[Any]:
 
 
 def comparable(
-    probe: str, golden: dict[str, Any], replayed: dict[str, Any], run: Path
+    probe: str, golden: dict[str, Any], replayed: dict[str, Any], run: Path, textures: bool = False
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Copies of the golden and the replay with the rules of the module applied, each checked to
-    still have a reason to exist."""
+    still have a reason to exist; `textures` selects decision 332's texture comparison."""
     golden, replayed = copy.deepcopy(golden), copy.deepcopy(replayed)
-    split = stripped_shelves = viewer_lists = 0
+    dispatched = stripped_shelves = viewer_lists = 0
+    window_ids = UPDATE_WINDOWS.get(probe, ())
     for condition in CONDITIONS:
         ours = replayed[condition]["outputs"]
         theirs = outputs(golden, condition)
+        painter_window: set[tuple[Any, Any]] = set()
+        our_window: set[tuple[Any, Any]] = set()
         added = {
             o["value"]["shelf"]
             for o in theirs
@@ -192,14 +211,15 @@ def comparable(
                 output["value"] = without_viewer_defaults(value)
                 viewer_lists += 1
             if output_id.endswith("/events") and isinstance(value, list):
-                kept, pairs = texture_states(value)
-                mine_kept, mine_pairs = texture_states(ours.get(output_id, {}).get("value") or [])
-                if pairs or mine_pairs:
-                    split += 1
-                    sibling = f"{output_id}/texture_states"
-                    theirs.append({"kind": "api_readback", "output_id": sibling, "value": pairs})
-                    ours[sibling] = {"value": mine_pairs}
-                    ours[output_id] = {**ours[output_id], "value": mine_kept}
+                dispatched += sum(e.get("event") == TEXTURE_STATE for e in value)
+                in_window = output_id in window_ids
+                kept = texture_events(value, textures, in_window, painter_window)
+                if output_id in ours:
+                    mine = ours[output_id].get("value") or []
+                    ours[output_id] = {
+                        **ours[output_id],
+                        "value": texture_events(mine, textures, in_window, our_window),
+                    }
                 if added:
                     foreign = [
                         e
@@ -218,8 +238,14 @@ def comparable(
                     start, end = incompatible.span("root")
                     message = message[:start] + run.as_posix() + message[end:]
                 raised["message"] = message
+        if textures and window_ids:
+            assert painter_window, f"{condition}: Painter dispatched no UPDATE in the window"
+            output_id = window_output(probe)
+            pairs = [list(pair) for pair in sorted(painter_window, key=repr)]
+            theirs.append({"kind": "api_readback", "output_id": output_id, "value": pairs})
+            ours[output_id] = {"value": [list(pair) for pair in sorted(our_window, key=repr)]}
     if probe == "p22b-host-events":
-        assert split > 0, "no step dispatched a TextureStateEvent: drop the rule"
+        assert dispatched > 0, "Painter dispatched no TextureStateEvent: drop the rule"
     if probe == "p22b-host-resources":
         assert stripped_shelves > 0, "Painter crawled no shelf of its own: drop the rule"
         assert viewer_lists > 0, "Painter listed no project resources: drop the rule"
@@ -250,8 +276,8 @@ def unordered_differences(probe: str, ours: dict[str, Any], expected: dict[str, 
 
 @pytest.mark.parametrize("probe", sorted(EXCLUDED))
 def test_host_probe_equals_painter(facade: Run, tmp_path: Path, probe: str) -> None:
-    """Item 4.1: the P22-B host golden is exact apart from the named exclusions and the
-    blocked outputs, both recordings."""
+    """Item 4.1: the P22-B host golden is exact apart from the named exclusions, both
+    recordings (texture events: `test_host_texture_states_equal_painter`)."""
     replayed, golden, job = replay_observed(facade, probe, tmp_path)
     excluded = EXCLUDED[probe]
     expected, ours = comparable(probe, golden, replayed, tmp_path / "run")
@@ -262,3 +288,18 @@ def test_host_probe_equals_painter(facade: Run, tmp_path: Path, probe: str) -> N
     assert differences == [], "\n".join(differences)
     symbols = observed_symbols(replayed, golden, excluded)
     check_observed_trace(f"facade-observed/{probe}", golden["golden_id"], symbols)
+
+
+@pytest.mark.xfail(reason=TEXTURE_GAP, strict=False)
+def test_host_texture_states_equal_painter(facade: Run, tmp_path: Path) -> None:
+    """Decision 332: the texture events of `p22b-host-events` equal Painter's, ADD and REMOVE
+    in their step and the UPDATE pairs within their window, both recordings, with every other
+    output exact as well."""
+    probe = "p22b-host-events"
+    replayed, golden, job = replay_observed(facade, probe, tmp_path)
+    excluded = EXCLUDED[probe]
+    expected, ours = comparable(probe, golden, replayed, tmp_path / "run", textures=True)
+    differences = compare_observed(ours, expected, job, tmp_path, excluded)
+    save_trace(f"facade-observed-textures/{probe}", golden, replayed, excluded, differences)
+    assert replayed["cleanup_failures"] == [], replayed["cleanup_failures"]
+    assert differences == [], "\n".join(differences)
