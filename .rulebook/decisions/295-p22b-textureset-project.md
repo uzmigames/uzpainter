@@ -93,7 +93,9 @@ No P22-B probe reaches these four. Their manifest entries stay `pending-evidence
 
 **Fallback for `ExportStatus.Error`.** If `p22b-export-error-status` records Painter refusing before `ExportTexturesEnded`, or that event carrying another status, `Error` takes `Warning`'s observed-only route.
 
-### 4. Notes for the replay owner (item 3.4 replays; not done here)
+### 4. Notes for the replay owner (item 4.1 acceptance; not done here)
+
+Editorial clarification: item 3.4 closes the vocabulary, fake tests, request authoring and evidence-route judgments of decision 189 section 3. Recording, admission and compared replay remain mandatory under item 4.1 and decision 112; this clarification promotes no capability.
 
 - The facade's `TextureSet.original_name()` and `description()` are methods. Painter's are properties, and `description` has a setter. The replay of `p22b-textureset-texture-set` cannot match until the facade follows A-PYDOC.
 - The replay must reproduce `export_path_blocked`: a regular file at the export path.

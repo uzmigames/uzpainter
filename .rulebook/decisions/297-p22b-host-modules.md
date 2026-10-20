@@ -101,8 +101,10 @@ The Codex supervisor found that the host probes could act on the owner's state a
 
 ## Consequences
 
+Editorial clarification: item 3.4 is the authoring work specified by decision 189 section 3. Its completion does not settle any recording or capability: recording, admission and the compared replays remain mandatory under item 4.1 and decision 112.
+
 - The next Painter batch records four more Legacy requests (`parity/RECORDER.md` §11.4). Report the recording if it shows no ADD or REMOVE texture state, or no `ReloadedResourceError`.
-- The replay owner (item 3.4) adds the four replays, trace amendments §3.3 and §3.4, and a normalisation of the plugin outputs if UzPainter's paths differ.
+- The replay owner (item 4.1 acceptance) adds the four replays, trace amendments §3.3 and §3.4, and a normalisation of the plugin outputs if UzPainter's paths differ.
 - Decision 295's `p22b-textureset-texture-set` outputs change shape (value plus form facts). It is unrecorded, so no record is invalidated.
 
 *Clean-room note (2026-10-19, decision 304): the symbol lists of the `p22b-host-application` and `p22b-host-events` requests were marked as code for clean-room hygiene; no wording or reasoning changed.*
