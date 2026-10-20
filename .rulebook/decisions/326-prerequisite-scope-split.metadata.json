@@ -1,7 +1,7 @@
 {
   "id": 326,
   "slug": "326-prerequisite-scope-split",
-  "title": "A complete task whose only open item is its prerequisite phase1.25_pilot-wand closes on a recorded scope split, because phase1.25 is blocked only by Painter recordings",
+  "title": "A complete task whose only open item is its prerequisite phase1.25_pilot-wand closes on a recorded scope split, because phase1.25's open work is the Wand's own parity, not these deliverables",
   "status": "accepted",
   "date": "2026-10-20",
   "relatedTasks": [

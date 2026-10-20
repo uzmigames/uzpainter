@@ -1,5 +1,5 @@
 ## 1. Prerequisites
-- [x] 1.1 Prerequisites accepted: phase1.25_pilot-wand, phase2.1_supervisor-ipc-worker — checked as a recorded scope split (decision 326): phase1.25_pilot-wand is not accepted; its open items (2.7 `infinite` padding and 3.1-4.1) are blocked only by Painter recordings; this task's deliverables do not read the Wand's maps
+- [x] 1.1 Prerequisites accepted: phase1.25_pilot-wand, phase2.1_supervisor-ipc-worker — checked as a recorded scope split (decision 326): phase1.25_pilot-wand is not accepted; its open items (2.7 `infinite` padding and 3.1-4.1) are the Wand's own parity work: recordings plus fit; this task's deliverables do not read the Wand's maps
 
 ## 2. Implementation
 - [x] 2.1 Per-project mutation lease in the supervisor (`lease_held {holder, since, active_job}` for a mutating call without the lease); reads served from committed snapshots without a lease

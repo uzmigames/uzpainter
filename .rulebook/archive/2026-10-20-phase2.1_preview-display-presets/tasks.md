@@ -1,5 +1,5 @@
 ## 1. Prerequisites
-- [x] 1.1 Prerequisites accepted: phase1.25_pilot-wand — checked as a recorded scope split (decision 326): phase1.25_pilot-wand is not accepted; its open items (2.7 `infinite` padding and 3.1-4.1) are blocked only by Painter recordings; this task's deliverables do not read the Wand's maps
+- [x] 1.1 Prerequisites accepted: phase1.25_pilot-wand — checked as a recorded scope split (decision 326): phase1.25_pilot-wand is not accepted; its open items (2.7 `infinite` padding and 3.1-4.1) are the Wand's own parity work: recordings plus fit; this task's deliverables do not read the Wand's maps
 
 ## 2. Implementation
 - [x] 2.1 Display preset schema and serialisation, separate from presentation snapshots; display configuration pinned to OCIO (Painter's substance config by hash, view `Default - sRGB`) by decision 038
