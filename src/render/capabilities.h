@@ -3,7 +3,8 @@
 // Capability query of the active backend and the tile admission budget derived from it
 // (docs/architecture/13-engine-integration.md §6, 04-layer-stack-and-compositing.md §7): formats
 // and their usages, ray-query support, descriptor capacities and the VRAM budget (DX12: the DXGI
-// memory-budget query). Run on the engine thread at startup (engine_thread.h).
+// memory-budget query; Vulkan: the qualified device's capability record, `VulkanCapabilityReport`
+// in vulkan_qualification.h). Run on the engine thread at startup (engine_thread.h).
 
 #include "render/backend.h"
 

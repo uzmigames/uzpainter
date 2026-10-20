@@ -230,4 +230,14 @@ struct VulkanVram {
 [[nodiscard]] AdmissionBudget DeriveVulkanAdmissionBudget(const VulkanVram& vram,
                                                           const AdmissionPolicy& policy);
 
+/// The capability report of a Vulkan device, what `QueryCapabilities` returns for it (item 2.6):
+/// its identity; the recorded formats (`VulkanRecordedFormats`) with their usages from the
+/// optimal-tiling features (none for a format without any, such as RGB32F on the RTX 4090); the
+/// descriptors one dispatch binds (`VulkanDescriptorModel`: sampled images, uniform buffers and
+/// storage images as `shaderResources`; samplers); the VRAM of `DeriveVulkanVram` (dedicated =
+/// the device-local heaps, shared = the others); and the admission of
+/// `DeriveVulkanAdmissionBudget`. No ray tracing is reported (phase3.2).
+[[nodiscard]] CapabilityReport VulkanCapabilityReport(const VulkanDeviceRecord& device,
+                                                      const AdmissionPolicy& policy);
+
 }  // namespace uzp::render

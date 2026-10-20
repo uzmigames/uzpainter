@@ -310,6 +310,32 @@ int RunQualify() {
               "admission = (budget - usage - reserve) x 50 %, no descriptor bound on live tiles",
               std::to_string(admission.bytes));
     }
+    // The capability report the engine thread's startup query returns on Vulkan.
+    {
+        VulkanDeviceRecord r = GoodRecord();
+        r.memoryBudget = true;
+        r.heaps[0].budgetBytes = 20ull << 30;
+        r.heaps[0].usageBytes = 2ull << 30;
+        r.formats.push_back({"R32G32B32_SFLOAT", VK_FORMAT_R32G32B32_SFLOAT, 0, 0, 0});
+        const CapabilityReport report = VulkanCapabilityReport(r, AdmissionPolicy{});
+        const AdmissionBudget expected = DeriveVulkanAdmissionBudget(DeriveVulkanVram(r), AdmissionPolicy{});
+        Check(report.backend == Backend::Vulkan && report.adapter == "Fabricated dGPU" &&
+                  report.admission.bytes == expected.bytes &&
+                  report.admission.maxTilesByDescriptors == expected.maxTilesByDescriptors &&
+                  report.vram.budgetBytes == (20ull << 30) && report.vram.usageBytes == (2ull << 30) &&
+                  report.vram.dedicatedVideoMemoryBytes == (24ull << 30) &&
+                  report.vram.sharedSystemMemoryBytes == (32ull << 30),
+              "the Vulkan capability report carries the record's identity, VRAM and admission budget",
+              report.ToJson());
+        const FormatCapability* tile = report.Find(uz::RHIFormat::RGBA32Float);
+        const FormatCapability* rgb = report.Find(uz::RHIFormat::RGB32Float);
+        Check(tile != nullptr && tile->texture2D && tile->shaderResource && tile->unorderedAccess &&
+                  tile->unorderedAccessLoad && rgb != nullptr && !rgb->texture2D && rgb->Usages().empty(),
+              "the report's format usages come from the optimal-tiling features (none for RGB32F without any)",
+              report.ToJson());
+        Check(report.descriptors.shaderResources == 48 && report.descriptors.samplers == 16,
+              "the report's descriptors are what one dispatch binds");
+    }
     // Report forms.
     {
         const VulkanDeviceRecord r = GoodRecord();

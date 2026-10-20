@@ -1,13 +1,14 @@
 """The compositor kernels on Vulkan (phase3.1_vulkan-compute-parity item 2.3; decision 313).
 
 `vulkan-kernel-spirv` needs DXC only: every generated compositor kernel compiles to SPIR-V in the
-fixed-slot model of the vendored Vulkan layout. `vulkan-kernel-sweep` runs the DX12 blend sweep on
-the qualified Vulkan device (adapter index 0, through `EngineOptions::createDevice`; product paths
-still refuse Vulkan, decision 310) and compares every result with the CPU reference and with a DX12
-engine's, subnormal float32 operands included; it skips under `UZP_NO_GPU=1` and when no qualified
-Vulkan device exists (exit code 77). The Levels, virtual normal, UV projection and raw blend kernels
-are refused on Vulkan until their sweeps run (their cases evaluate through the engine's capability
-query, item 2.6). None of this is parity evidence for a Painter-visible output.
+fixed-slot model of the vendored Vulkan layout. The `vulkan-<case>` cases run a DX12 GPU case on the
+qualified Vulkan device (adapter index 0, through `EngineOptions::createDevice`; product paths
+still refuse Vulkan, decision 310) and compare every result with the CPU reference and with a DX12
+engine's: `vulkan-kernel-sweep` the blend kernels, subnormal float32 operands included;
+`vulkan-projection-gpu-vs-cpu` the UV projection kernel; `vulkan-masks-gpu-vs-cpu` the Levels
+kernel; `vulkan-height-normal-gpu-vs-cpu` the virtual normal and raw blend kernels. They skip under
+`UZP_NO_GPU=1` and when no qualified Vulkan device exists (exit code 77). None of this is parity
+evidence for a Painter-visible output.
 """
 
 from __future__ import annotations
@@ -38,6 +39,7 @@ def _run(exe: Path, case: str, work: Path, *, needs_gpu: bool) -> set[str]:
         check=False,
     )
     output = proc.stdout + proc.stderr
+    print(output)  # the case's PASS/INFO lines are the evidence (pytest -rP shows them)
     if proc.returncode == EXIT_SKIP:
         pytest.skip(f"no device for `{case}`: {output.strip()}")
     failed = [line for line in proc.stdout.splitlines() if line.startswith("FAIL ")]
@@ -63,9 +65,30 @@ def test_vulkan_kernel_sweep(evaluator_tests: Path, tmp_path: Path) -> None:
     assert any(p.startswith("every Vulkan result equals the DX12 result") for p in passed), passed
 
 
-def test_unverified_kernels_are_refused_on_vulkan(evaluator_tests: Path, tmp_path: Path) -> None:
-    """The Levels, virtual normal, UV projection and raw blend kernels are refused on Vulkan by
-    name (`unsupported_node`, NotYetSupported) before anything is queued; a blend is accepted."""
-    passed = _run(evaluator_tests, "vulkan-refusals", tmp_path, needs_gpu=True)
-    assert "a blend is accepted on Vulkan" in passed, passed
-    assert sum(p.endswith("is refused on Vulkan by name") for p in passed) == 4, passed
+def test_vulkan_projection_equals_cpu_and_dx12(evaluator_tests: Path, tmp_path: Path) -> None:
+    """The UV projection kernel on Vulkan: `projection-gpu-vs-cpu`'s random stacks (filters, wrap
+    modes, transforms, minification through the texture unit, sRGB decodes) equal the CPU reference
+    and the DX12 result bit for bit."""
+    passed = _run(evaluator_tests, "vulkan-projection-gpu-vs-cpu", tmp_path, needs_gpu=True)
+    assert any(p.startswith("every random projection stack") for p in passed), passed
+    assert any(p.startswith("every random minifying projection stack") for p in passed), passed
+    assert any(p.startswith("every Vulkan result equals the DX12 result") for p in passed), passed
+
+
+def test_vulkan_levels_equal_cpu_and_dx12(evaluator_tests: Path, tmp_path: Path) -> None:
+    """The Levels kernel on Vulkan: `masks-gpu-vs-cpu`'s masked stacks (mask and content fill
+    effects, levels with gamma, group masks) equal the CPU reference and the DX12 result."""
+    passed = _run(evaluator_tests, "vulkan-masks-gpu-vs-cpu", tmp_path, needs_gpu=True)
+    assert any(p.startswith("every masked stack evaluates to the same") for p in passed), passed
+    assert any(p.startswith("every Vulkan result equals the DX12 result") for p in passed), passed
+
+
+def test_vulkan_height_normal_equals_cpu_and_dx12(evaluator_tests: Path, tmp_path: Path) -> None:
+    """The virtual normal and raw blend kernels on Vulkan: `height-normal-gpu-vs-cpu`'s sweeps (both
+    methods and conventions across tile edges, the float32 read-out on every channel format, the
+    whole virtual normal evaluation) equal the CPU reference and the DX12 result."""
+    passed = _run(evaluator_tests, "vulkan-height-normal-gpu-vs-cpu", tmp_path, needs_gpu=True)
+    assert any(p.startswith("the virtual normal kernel equals the CPU reference") for p in passed)
+    assert any(p.startswith("the float32 read-out (raw blend) equals the CPU") for p in passed)
+    assert any(p.startswith("Evaluator (GPU) and CpuEvaluator give the same") for p in passed)
+    assert any(p.startswith("every Vulkan result equals the DX12 result") for p in passed), passed

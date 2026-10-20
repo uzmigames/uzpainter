@@ -4,7 +4,7 @@
 ## 2. Implementation
 - [ ] 2.1 Implement the Vulkan device/queue wrapper behind `src/render/backend.h` on the vendored Vulkan backend (Vulkan 1.2 instance), selected only by `--gpu-backend vulkan`
 - [ ] 2.2 Qualify the deadline wait on Vulkan (UZP-MOD-003): `signaled`, `timeout`, `device_lost`; map `VK_ERROR_DEVICE_LOST` to `device_removed {backend, reason}`
-- [ ] 2.3 Run generated compositor kernels as SPIR-V through the shared kernel cache (cache key includes the target), within the fixed-slot descriptor subset
+- [x] 2.3 Run generated compositor kernels as SPIR-V through the shared kernel cache (cache key includes the target), within the fixed-slot descriptor subset
 - [ ] 2.4 Implement `TextureReadback` on Vulkan: per-request ownership, aligned row pitch, fence-linked map, drain on shutdown and on failure
 - [ ] 2.5 Port the UV raster pass, dilation (jump-flood), resampling and mip generation to Vulkan with the same HLSL sources
 - [ ] 2.6 Implement the Vulkan capability query: format/usage support, descriptor capacities, VRAM budget from `VK_EXT_memory_budget` or conservatively from heap sizes; derive the tile admission budget from it
@@ -53,3 +53,11 @@
   - In part: 2.4. Readback maps through `IDevice::MapReadback`, and Vulkan refuses `RGB32Float` by name.
   - In part: 2.6. The criteria now cover the kernels' features, limits and tile formats.
   - `render::CreateDevice(Vulkan)` still refuses every product path. `EngineOptions::createDevice` is a native-test seam only.
+- Vulkan refusals lifted (2026-10-20; decision 313's condition, "until their sweeps run"): item 2.3 checked.
+  - In part: 2.6. `QueryCapabilities` on a Vulkan device returns `VulkanCapabilityReport` over the qualified device's record (`src/render/vulkan_qualification.h`): identity, the recorded formats' usages from their optimal-tiling features, the descriptors one dispatch binds, the VRAM of `DeriveVulkanVram` and the admission of `DeriveVulkanAdmissionBudget`. The engine thread's startup query and the evaluator's admission now run on Vulkan (`vulkan-qualify` checks the report on a fabricated record). The worker scenario stays open while `CreateDevice(Vulkan)` refuses.
+  - `uzp-evaluator-tests vulkan-projection-gpu-vs-cpu`, `vulkan-masks-gpu-vs-cpu` and `vulkan-height-normal-gpu-vs-cpu` run the DX12 cases on the qualified Vulkan device and compare every result with the CPU reference and with a DX12 engine's (`Dx12Twin`). Evidence on the RTX 4090 (2026-10-20), each GPU = CPU and Vulkan = DX12 bit for bit:
+    - UV projection: every section of `projection-gpu-vs-cpu` (43 581 440 samples over 36 stacks and 9 formats, minification through the texture unit, sRGB decodes, the refusals, the cache keys); 82 results equal DX12.
+    - Levels: `masks-gpu-vs-cpu` (2 490 368 samples over 9 formats: mask and content fill effects, levels with gamma, group masks, masked PassThrough groups); 18 results equal DX12. With the current profile's coverage weights and fused read-out, this covers the mask tiles and the effect, coverage-weight and fused-read-out flags the blend sweep left open.
+    - Virtual normal and raw blend: `height-normal-gpu-vs-cpu` (2 239 488 virtual normal values, 77 824 read-out values on every channel format, the whole virtual normal evaluation with its tags); 29 results equal DX12.
+  - `GpuTileStore` no longer refuses any kernel on Vulkan; `vulkan-refusals` is removed. Decision 313's subnormal finding (decision 317) is unchanged: the GPU flushes subnormal float32 operands on DX12 and Vulkan alike, the CPU reference keeps them; reported, not waived, recording pending.
+  - Still open: 3.3 (every node kind on both backends: the random-stack `gpu-vs-cpu` and `diagnostics-gpu-vs-cpu` cases have no Vulkan run yet). Product paths still refuse Vulkan.

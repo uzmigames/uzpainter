@@ -2325,6 +2325,108 @@ bool NoAdapter(const render::Engine& engine) {
     return true;
 }
 
+template <class T>
+std::future<T> Ready(T value) {
+    std::promise<T> promise;
+    promise.set_value(std::move(value));
+    return promise.get_future();
+}
+
+/// On Vulkan (`g_vulkan`) a DX12 engine beside the Vulkan one: a `vulkan-<case>` evaluates every
+/// input on both and compares the two results bit for bit, besides comparing the Vulkan result with
+/// the CPU reference as the DX12 case does (decision 313). Off Vulkan it holds nothing.
+struct Dx12Twin {
+    std::optional<render::Engine> engine;
+    size_t compared = 0;
+    std::vector<std::string> failures;
+
+    /// Starts the DX12 engine on Vulkan; false, after a failed check, when it does not start.
+    bool Start(const fs::path& dir) {
+        if (!g_vulkan) return true;
+        render::EngineOptions options;
+        options.kernelCacheRoot = dir / "kernel-cache-dx12";
+        engine.emplace(options);
+        if (engine->DeviceError()) {
+            Check(false, "the DX12 engine beside the Vulkan one starts", engine->DeviceError()->Describe());
+            return false;
+        }
+        return true;
+    }
+
+    /// The Vulkan result `actual` equals the DX12 result `reference`: the same samples, or the same
+    /// failure reason.
+    template <class T>
+    void Compare(const std::string& label, const render::Result<T>& reference, const render::Result<T>& actual,
+                 const std::function<std::vector<uint32_t>(const T&)>& samples, render::TexelEncoding encoding) {
+        ++compared;
+        if (!reference || !actual) {
+            if (!reference && !actual && reference.error().reason == actual.error().reason) return;
+            failures.push_back(label + ": DX12 " + Describe(reference) + " / Vulkan " + Describe(actual));
+            return;
+        }
+        std::string first;
+        const size_t differing = Mismatches(samples(*reference), samples(*actual), first, encoding);
+        if (differing != 0) failures.push_back(label + ": " + std::to_string(differing) + " differ from DX12; " + first);
+    }
+
+    /// The case's verdict on Vulkan (nothing off Vulkan).
+    void Report() const {
+        if (!engine) return;
+        for (const std::string& failure : failures) Check(false, "Vulkan vs DX12", failure);
+        Check(failures.empty(), "every Vulkan result equals the DX12 result bit for bit (" + std::to_string(compared) +
+                                    " results)");
+    }
+};
+
+/// The GPU evaluator of a case; on Vulkan each evaluation also runs on the DX12 twin, and the two
+/// results are compared there before the Vulkan one is returned.
+class TwinEvaluator {
+public:
+    TwinEvaluator(render::Engine& engine, Dx12Twin& twin, const std::shared_ptr<const TemplateLibrary>& templates)
+        : m_primary(engine, templates), m_twin(twin) {
+        if (twin.engine) m_dx12.emplace(*twin.engine, templates);
+    }
+
+    std::future<render::Result<ChannelResult>> Evaluate(core::Snapshot snapshot, EvaluateRequest request) {
+        std::future<render::Result<ChannelResult>> primary = m_primary.Evaluate(snapshot, request);
+        if (!m_dx12) return primary;
+        std::future<render::Result<ChannelResult>> reference = m_dx12->Evaluate(snapshot, request);
+        render::Result<ChannelResult> actual = Get(primary);
+        render::Result<ChannelResult> expected = Get(reference);
+        const render::TexelEncoding encoding = actual ? actual->tileFormat.encoding : render::TexelEncoding::Unorm16;
+        m_twin.Compare<ChannelResult>("evaluation " + std::to_string(m_twin.compared + 1) + " (" +
+                                          std::string(core::ToString(request.channel)) + ")",
+                                      expected, actual, [](const ChannelResult& r) { return Samples(r); }, encoding);
+        return Ready(std::move(actual));
+    }
+
+    std::future<render::Result<VirtualNormalResult>> EvaluateNormal(core::Snapshot snapshot, VirtualNormalRequest request) {
+        std::future<render::Result<VirtualNormalResult>> primary = m_primary.EvaluateNormal(snapshot, request);
+        if (!m_dx12) return primary;
+        std::future<render::Result<VirtualNormalResult>> reference = m_dx12->EvaluateNormal(snapshot, request);
+        render::Result<VirtualNormalResult> actual = Get(primary);
+        render::Result<VirtualNormalResult> expected = Get(reference);
+        const std::string label = "virtual normal evaluation " + std::to_string(m_twin.compared + 1);
+        if (expected && actual && !(expected->tag == actual->tag)) m_twin.failures.push_back(label + ": tags differ from DX12");
+        m_twin.Compare<VirtualNormalResult>(label, expected, actual, [](const VirtualNormalResult& r) {
+            std::vector<uint32_t> words(r.texels.size());
+            std::memcpy(words.data(), r.texels.data(), words.size() * 4);
+            return words;
+        }, render::TexelEncoding::Float32);
+        return Ready(std::move(actual));
+    }
+
+    void Shutdown() {
+        m_primary.Shutdown();
+        if (m_dx12) m_dx12->Shutdown();
+    }
+
+private:
+    Evaluator m_primary;
+    Dx12Twin& m_twin;
+    std::optional<Evaluator> m_dx12;
+};
+
 int RunEvaluate(const fs::path& assets, const fs::path& specPath, const fs::path& out, std::string_view backend) {
     std::shared_ptr<const TemplateLibrary> templates = LoadTemplates(assets);
     Spec spec = ParseSpec(specPath);
@@ -2711,71 +2813,6 @@ std::shared_ptr<DecodedImage> SubnormalImage(const TileFormat& format, bool rows
 /// Every blend mode x channel format, with and without coverage, against the CPU reference, then
 /// on Vulkan (`vulkan-kernel-sweep`) the 32-bit float formats again with subnormal operands, and
 /// every result compared with a DX12 engine's result for the same inputs.
-/// The kernels not yet compared bit for bit on Vulkan are refused there by name before anything
-/// is queued (decision 313): Levels, virtual normal, UV projection and raw blend.
-int RunVulkanRefusals(const fs::path& dir) {
-    g_vulkan = true;
-    render::Engine engine(TestOptions(dir));
-    if (NoAdapter(engine)) return kExitSkip;
-    auto token = std::make_shared<const int>(0);
-    std::future<render::Result<std::vector<std::string>>> future = engine.Submit(
-        token, [&](render::EngineContext& context, const int&) -> render::Result<std::vector<std::string>> {
-            GpuTileStore gpu(context.Device());
-            gpu.BeginRequest(context);
-            std::vector<std::string> reasons;
-            const auto reason = [&](const render::Result<void>& result) {
-                reasons.push_back(result ? std::string("accepted") : result.error().Describe());
-            };
-            const TileFormat grey = TileFormatOf(ChannelFormat::L16);
-            const TileFormat float3 = TileFormatOf(ChannelFormat::RGB32F);
-            render::Result<TileHandle> a = gpu.Allocate(grey, 8, 8);
-            render::Result<TileHandle> b = gpu.Allocate(grey, 8, 8);
-            render::Result<TileHandle> f = gpu.Allocate(float3, 8, 8);
-            render::Result<TileHandle> g = gpu.Allocate(float3, 8, 8);
-            if (!a || !b || !f || !g) return render::Unexpected((!a ? a : !b ? b : !f ? f : g).error());
-            LevelsOp levels;
-            levels.dst = *a;
-            levels.src = *b;
-            reason(gpu.Levels(levels));
-            VirtualNormalOp normal;
-            normal.dst = *f;
-            reason(gpu.VirtualNormal(normal));
-            ProjectOp project;
-            project.dst = *a;
-            project.image = PatternImage(8, 8, 1, render::TexelEncoding::Unorm16, 1);
-            reason(gpu.Project(project));
-            BlendOp raw;
-            raw.dst = *f;
-            raw.acc = Operand::Constant({0.0f, 0.0f, 0.0f}, 1.0f);
-            raw.source = Operand::Of(*g);
-            raw.rawOutput = true;
-            reason(gpu.Blend(raw));
-            BlendOp blend;
-            blend.dst = *a;
-            blend.acc = Operand::Constant({0.0f, 0.0f, 0.0f}, 1.0f);
-            blend.source = Operand::Of(*b);
-            reason(gpu.Blend(blend));
-            render::Result<void> flushed = gpu.Flush();
-            gpu.EndRequest();
-            if (!flushed) return render::Unexpected(flushed.error());
-            return reasons;
-        });
-    render::Result<std::vector<std::string>> reasons = Get(future);
-    Check(reasons.has_value(), "the Vulkan request runs", reasons ? "" : reasons.error().Describe());
-    if (!reasons) return Finish();
-    const char* kernels[4] = {"the Levels kernel", "the virtual normal kernel", "the UV projection kernel",
-                              "the raw blend kernel"};
-    for (size_t i = 0; i < 4; ++i) {
-        const std::string& got = (*reasons)[i];
-        Check(got.find(kernels[i]) != std::string::npos &&
-                  got.find("not yet verified bit for bit on Vulkan") != std::string::npos &&
-                  got.find("unsupported_node") != std::string::npos,
-              std::string(kernels[i]) + " is refused on Vulkan by name", got);
-    }
-    Check((*reasons)[4] == "accepted", "a blend is accepted on Vulkan", (*reasons)[4]);
-    return Finish();
-}
-
 int RunKernelSweep(const fs::path& assets, const fs::path& dir) {
     (void)assets;
     render::Engine engine(TestOptions(dir));
@@ -3875,7 +3912,9 @@ int RunProjectionGpuVsCpu(const fs::path& assets, const fs::path& dir) {
     std::mt19937 rng(1808);
     auto unit = [&] { return std::uniform_real_distribution<double>(0.0, 1.0)(rng); };
     const std::vector<BlendingMode> modes = KernelModes();
-    Evaluator gpu(engine, templates);
+    Dx12Twin twin;
+    if (!twin.Start(dir)) return Finish();
+    TwinEvaluator gpu(engine, twin, templates);
     size_t compared = 0;
     size_t stacks = 0;
     bool allEqual = true;
@@ -4470,6 +4509,7 @@ int RunProjectionGpuVsCpu(const fs::path& assets, const fs::path& dir) {
               Describe(legacyRaw) + " / " + Describe(warmRaw) + " / " + Describe(freshRaw));
     }
     gpu.Shutdown();
+    twin.Report();
     return Finish();
 }
 
@@ -5718,7 +5758,9 @@ int RunMasksGpuVsCpu(const fs::path& assets, const fs::path& dir) {
     provider->Add(colour, PatternImage(256, 256, 3, render::TexelEncoding::Unorm16, 32));
     size_t compared = 0;
     bool allEqual = true;
-    Evaluator gpu(engine, templates);
+    Dx12Twin twin;
+    if (!twin.Start(dir)) return Finish();
+    TwinEvaluator gpu(engine, twin, templates);
     for (const ChannelFormat format : kAllFormats) {
         const std::vector<ChannelType> channels{ChannelType::User0};
         for (int variant = 0; variant < 2; ++variant) {
@@ -5792,6 +5834,7 @@ int RunMasksGpuVsCpu(const fs::path& assets, const fs::path& dir) {
     gpu.Shutdown();
     Check(allEqual, "every masked stack evaluates to the same bytes on the GPU and on the CPU (" + std::to_string(compared) +
                         " samples over 9 formats: mask and content fill effects, levels with gamma, group masks, masked PassThrough groups)");
+    twin.Report();
     return Finish();
 }
 
@@ -6794,9 +6837,11 @@ int RunHeightNormalGpuVsCpu(const fs::path& assets, const fs::path& dir) {
     render::Engine engine(TestOptions(dir));
     if (NoAdapter(engine)) return kExitSkip;
     Info("adapter " + engine.Capabilities().value_or(render::CapabilityReport{}).adapter);
+    Dx12Twin twin;
+    if (!twin.Start(dir)) return Finish();
     auto token = std::make_shared<const int>(0);
-    auto onGpu = [&](auto&& body) -> render::Result<std::vector<uint32_t>> {
-        std::future<render::Result<std::vector<uint32_t>>> future = engine.Submit(
+    auto onEngine = [&](render::Engine& on, auto&& body) -> render::Result<std::vector<uint32_t>> {
+        std::future<render::Result<std::vector<uint32_t>>> future = on.Submit(
             token, [&](render::EngineContext& context, const int&) -> render::Result<std::vector<uint32_t>> {
                 GpuTileStore gpu(context.Device());
                 gpu.BeginRequest(context);
@@ -6807,6 +6852,16 @@ int RunHeightNormalGpuVsCpu(const fs::path& assets, const fs::path& dir) {
                 return result;
             });
         return Get(future);
+    };
+    // On Vulkan each sweep runs on the DX12 twin too; the Vulkan result is compared with it.
+    auto onGpu = [&](const std::string& label, auto&& body) -> render::Result<std::vector<uint32_t>> {
+        render::Result<std::vector<uint32_t>> actual = onEngine(engine, body);
+        if (twin.engine) {
+            twin.Compare<std::vector<uint32_t>>(label, onEngine(*twin.engine, body), actual,
+                                                [](const std::vector<uint32_t>& words) { return words; },
+                                                render::TexelEncoding::Float32);
+        }
+        return actual;
     };
 
     // The kernel over a 3 x 3 grid of 72-texel tiles (wrap-around across tile edges and the set
@@ -6842,7 +6897,7 @@ int RunHeightNormalGpuVsCpu(const fs::path& assets, const fs::path& dir) {
                 CpuTileStore cpu;
                 render::Result<std::vector<uint32_t>> expected =
                     VirtualNormalSweep(cpu, *heights, sweep, kTiles, kSize, method, convention);
-                render::Result<std::vector<uint32_t>> actual = onGpu([&](GpuTileStore& gpu) {
+                render::Result<std::vector<uint32_t>> actual = onGpu(label, [&](GpuTileStore& gpu) {
                     return VirtualNormalSweep(gpu, *heights, sweep, kTiles, kSize, method, convention);
                 });
                 if (!expected || !actual) {
@@ -6866,8 +6921,9 @@ int RunHeightNormalGpuVsCpu(const fs::path& assets, const fs::path& dir) {
     for (const ChannelFormat channelFormat : kAllFormats) {
         CpuTileStore cpu;
         render::Result<std::vector<uint32_t>> expected = RawReadoutSweep(cpu, channelFormat, 64);
-        render::Result<std::vector<uint32_t>> actual = onGpu([&](GpuTileStore& gpu) { return RawReadoutSweep(gpu, channelFormat, 64); });
         const std::string label(core::ToString(channelFormat));
+        render::Result<std::vector<uint32_t>> actual =
+            onGpu(label + " read-out", [&](GpuTileStore& gpu) { return RawReadoutSweep(gpu, channelFormat, 64); });
         if (!expected || !actual) {
             failures.push_back(label + ": " + (expected ? Describe(actual) : Describe(expected)));
             continue;
@@ -6915,7 +6971,7 @@ int RunHeightNormalGpuVsCpu(const fs::path& assets, const fs::path& dir) {
             request.resources = resources;
             CpuEvaluator cpu(templates, kWideLimits);
             render::Result<VirtualNormalResult> expected = cpu.EvaluateNormal(b.project, 2, request);
-            Evaluator gpu(engine, templates);
+            TwinEvaluator gpu(engine, twin, templates);
             std::future<render::Result<VirtualNormalResult>> future =
                 gpu.EvaluateNormal(core::Snapshot{2, std::make_shared<const core::Project>(b.project)}, request);
             render::Result<VirtualNormalResult> actual = Get(future);
@@ -6930,6 +6986,7 @@ int RunHeightNormalGpuVsCpu(const fs::path& assets, const fs::path& dir) {
     Check(same, "Evaluator (GPU) and CpuEvaluator give the same virtual normal maps and tags (both methods and "
                 "conventions, a mesh map, a Normal layer at opacity 0.6)",
           detail);
+    twin.Report();
     return Finish();
 }
 
@@ -8739,16 +8796,22 @@ int RunPersistent(const fs::path& assets, const fs::path& dir) {
 
 int main(int argc, char** argv) {
     std::string_view mode = argc > 1 ? argv[1] : "";
-    // `vulkan-<case>`: a GPU case on the qualified Vulkan device (decision 313).
-    if (mode == "vulkan-kernel-sweep") {
-        g_vulkan = true;
-        mode = "kernel-sweep";
+    // `vulkan-<case>`: a GPU case on the qualified Vulkan device, every result also compared with
+    // a DX12 engine's (decision 313).
+    for (const std::string_view gpuCase : {std::string_view("kernel-sweep"), std::string_view("projection-gpu-vs-cpu"),
+                                           std::string_view("masks-gpu-vs-cpu"),
+                                           std::string_view("height-normal-gpu-vs-cpu")}) {
+        if (mode.starts_with("vulkan-") && mode.substr(7) == gpuCase) {
+            g_vulkan = true;
+            mode = gpuCase;
+        }
     }
     if (argc < 3) {
         std::fprintf(stderr,
                      "usage: uzp-evaluator-tests arith|templates|order|cache|admission|sources|masks|height-normal|"
                      "not-yet-supported <assets-dir> | "
-                     "evaluate <assets-dir> <spec.json> <out-dir> cpu|gpu | gpu-vs-cpu|kernel-sweep|vulkan-kernel-spirv|vulkan-kernel-sweep|vulkan-refusals|"
+                     "evaluate <assets-dir> <spec.json> <out-dir> cpu|gpu | gpu-vs-cpu|kernel-sweep|vulkan-kernel-spirv|vulkan-kernel-sweep|"
+                     "vulkan-projection-gpu-vs-cpu|vulkan-masks-gpu-vs-cpu|vulkan-height-normal-gpu-vs-cpu|"
                      "projection-gpu-vs-cpu|srgb8-hardware|fp-hardware|pow-hardware|trig-hardware|bilinear-hardware|texture-unit|masks-gpu-vs-cpu|"
                      "height-normal-gpu-vs-cpu|diagnostics|diagnostics-gpu-vs-cpu|persistent|tables <assets-dir> <work-dir> | "
                      "uv-coverage <assets-dir> <work-dir> <mesh> <size>\n");
@@ -8794,7 +8857,6 @@ int main(int argc, char** argv) {
         if (mode == "gpu-vs-cpu") code = RunGpuVsCpu(assets, dir);
         else if (mode == "kernel-sweep") code = RunKernelSweep(assets, dir);
         else if (mode == "vulkan-kernel-spirv") code = RunVulkanKernelSpirv(dir);
-        else if (mode == "vulkan-refusals") code = RunVulkanRefusals(dir);
         else if (mode == "projection-gpu-vs-cpu") code = RunProjectionGpuVsCpu(assets, dir);
         else if (mode == "srgb8-hardware") code = RunSrgb8Hardware(dir);
         else if (mode == "tables") code = RunTables(dir);

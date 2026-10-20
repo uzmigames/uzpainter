@@ -490,4 +490,64 @@ AdmissionBudget DeriveVulkanAdmissionBudget(const VulkanVram& vram, const Admiss
     return budget;
 }
 
+CapabilityReport VulkanCapabilityReport(const VulkanDeviceRecord& device, const AdmissionPolicy& policy) {
+    CapabilityReport report;
+    report.backend = Backend::Vulkan;
+    report.adapter = device.name;
+    report.vendorId = device.vendorId;
+    report.deviceId = device.deviceId;
+    report.softwareAdapter = device.type == "cpu";
+    report.featureLevel = "vulkan " + VulkanVersionText(device.apiVersion);
+    report.shaderModel = "spirv";
+
+    // The recorded formats in the vendored RHI's terms.
+    const std::pair<uint32_t, uz::RHIFormat> rhi[] = {
+        {VK_FORMAT_R16_SFLOAT, uz::RHIFormat::R16Float},
+        {VK_FORMAT_R32_UINT, uz::RHIFormat::R32Uint},
+        {VK_FORMAT_R32_SFLOAT, uz::RHIFormat::R32Float},
+        {VK_FORMAT_R8_UNORM, uz::RHIFormat::R8Unorm},
+        {VK_FORMAT_R16_UNORM, uz::RHIFormat::R16Unorm},
+        {VK_FORMAT_R8G8B8A8_UNORM, uz::RHIFormat::RGBA8Unorm},
+        {VK_FORMAT_R16G16B16A16_UNORM, uz::RHIFormat::RGBA16Unorm},
+        {VK_FORMAT_R16G16B16A16_SFLOAT, uz::RHIFormat::RGBA16Float},
+        {VK_FORMAT_R32G32B32_SFLOAT, uz::RHIFormat::RGB32Float},
+        {VK_FORMAT_R32G32B32A32_SFLOAT, uz::RHIFormat::RGBA32Float},
+    };
+    for (const auto& [vkFormat, format] : rhi) {
+        const VulkanFormatRecord* record = device.Format(vkFormat);
+        if (record == nullptr) continue;
+        const uint32_t features = record->optimalTilingFeatures;
+        const auto has = [features](uint32_t bit) { return (features & bit) != 0; };
+        FormatCapability capability;
+        capability.format = format;
+        capability.name = std::string(FormatName(format));
+        capability.texture2D = features != 0;
+        capability.shaderResource = has(VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT);
+        capability.sample = has(VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT);
+        capability.renderTarget = has(VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT);
+        capability.depthStencil = has(VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+        // A storage image declaring its format both loads and stores (decision 313).
+        capability.unorderedAccess = has(VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT);
+        capability.unorderedAccessLoad = capability.unorderedAccess;
+        report.formats.push_back(std::move(capability));
+    }
+
+    const VulkanDescriptorModel descriptors = DeriveVulkanDescriptorModel(device);
+    report.descriptors.shaderResources = descriptors.sampledImagesPerDispatch +
+                                         descriptors.uniformBuffersPerDispatch +
+                                         descriptors.storageImagesPerDispatch;
+    report.descriptors.samplers = descriptors.samplersPerDispatch;
+
+    const VulkanVram vram = DeriveVulkanVram(device);
+    report.vram.budgetBytes = vram.budgetBytes;
+    report.vram.usageBytes = vram.usageBytes;
+    report.vram.dedicatedVideoMemoryBytes = vram.deviceLocalHeapBytes;
+    for (const VulkanMemoryHeapRecord& heap : device.heaps) {
+        if ((heap.flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) == 0) report.vram.sharedSystemMemoryBytes += heap.sizeBytes;
+    }
+    report.policy = policy;
+    report.admission = DeriveVulkanAdmissionBudget(vram, policy);
+    return report;
+}
+
 }  // namespace uzp::render

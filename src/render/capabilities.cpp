@@ -3,6 +3,7 @@
 #include "render/capabilities.h"
 
 #include "render/device.h"
+#include "render/vulkan_backend.h"
 
 #include "dx12_device.h"
 #include "dx12_guids.h"
@@ -269,10 +270,9 @@ std::string CapabilityReport::ToJson() const {
 }
 
 Result<CapabilityReport> QueryCapabilities(IDevice& device, const AdmissionPolicy& policy) {
-    if (device.GetBackend() != Backend::Dx12) {
-        return Fail(ErrorCode::GpuBackendUnavailable, device.GetBackend(),
-                    "this build queries capabilities on DX12 devices only; a Vulkan device's are "
-                    "its VulkanDeviceRecord (render/vulkan_qualification.h, decision 310)");
+    if (device.GetBackend() == Backend::Vulkan) {
+        // The record the qualified device was created on (render/vulkan_qualification.h).
+        return VulkanCapabilityReport(static_cast<VulkanDevice&>(device).Record(), policy);
     }
     return QueryDx12(static_cast<Dx12Device&>(device), policy);
 }

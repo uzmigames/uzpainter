@@ -26,16 +26,6 @@ uz::RHITextureUsage TileUsage() {
 
 bool Valid(uz::RHITextureHandle handle) { return handle.IsValid(); }
 
-/// Kernels whose SPIR-V is checked but whose results are not yet compared bit for bit on Vulkan
-/// are refused there by name (decision 313); only the blend kernels are.
-render::Result<void> RefuseUnverifiedOnVulkan(const render::IDevice& device, const char* kernel) {
-    if (device.GetBackend() != render::Backend::Vulkan) return {};
-    return EvalFail(EvalErrorKind::UnsupportedNode,
-                    std::string("the ") + kernel +
-                        " kernel is not yet verified bit for bit on Vulkan (phase3.1_vulkan-compute-parity item 2.3, "
-                        "decision 313)");
-}
-
 /// The stored bits of a plane value (plane 3 is the coverage, linear).
 uint32_t StoreValueBits(float value, const TileFormat& format, uint32_t plane) {
     if (format.halfCoverage && format.alpha && plane == 3 && (!format.halfCoverageFromHalf || value >= 0.5f)) {
@@ -358,8 +348,6 @@ render::Result<void> GpuTileStore::Blend(const BlendOp& op) {
     // A raw blend reads its operands in the source's format and writes a 32-bit float tile.
     TileFormat operands = dst->format;
     if (op.rawOutput) {
-        render::Result<void> verified = RefuseUnverifiedOnVulkan(m_device, "raw blend");
-        if (!verified) return verified;
         if (src != nullptr) operands = src->format;
         operands.alpha = false;
         if (dst->format.encoding != render::TexelEncoding::Float32 || dst->format.alpha ||
@@ -438,8 +426,6 @@ render::Result<void> GpuTileStore::Levels(const LevelsOp& op) {
     if (src->width != dst->width || src->height != dst->height || !(src->format == dst->format)) {
         return EvalFail(EvalErrorKind::Internal, "levels operands differ in size or format");
     }
-    render::Result<void> verified = RefuseUnverifiedOnVulkan(m_device, "Levels");
-    if (!verified) return verified;
     render::Result<void> table = EnsureTable16();
     if (!table) return table;
     render::Result<void> pow = EnsurePowTables();
@@ -472,8 +458,6 @@ render::Result<void> GpuTileStore::VirtualNormal(const VirtualNormalOp& op) {
     if (!context) return context;
     const Tile* dst = Find(op.dst);
     if (dst == nullptr) return EvalFail(EvalErrorKind::Internal, "virtual normal into an unknown tile");
-    render::Result<void> verified = RefuseUnverifiedOnVulkan(m_device, "virtual normal");
-    if (!verified) return verified;
     if (dst->format.encoding != render::TexelEncoding::Float32 || dst->format.channels != 3 || dst->format.alpha) {
         return EvalFail(EvalErrorKind::Internal, "a virtual normal tile is a three-channel 32-bit float tile");
     }
@@ -547,8 +531,6 @@ render::Result<void> GpuTileStore::Project(const ProjectOp& op) {
     if (dst == nullptr || !op.image) {
         return EvalFail(EvalErrorKind::Internal, "projection into an unknown tile or of no bitmap");
     }
-    render::Result<void> verified = RefuseUnverifiedOnVulkan(m_device, "UV projection");
-    if (!verified) return verified;
     if (op.projection.MayUncover() && !dst->format.alpha) {
         return EvalFail(EvalErrorKind::Internal,
                         "a projection that may uncover texels needs a coverage plane");

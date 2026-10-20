@@ -69,7 +69,7 @@ def test_entry_points_and_refusal_before_any_work(render_tests: Path) -> None:
 def test_descriptor_and_admission_model(render_tests: Path) -> None:
     """2.6: descriptors in Vulkan's own terms (per-dispatch bindings, set snapshots in the vendored
     pool, no descriptor bound on live tiles) and the VRAM budget from VK_EXT_memory_budget or the
-    heap sizes."""
+    heap sizes; the capability report the engine thread's startup query returns on Vulkan."""
     passed = _run(render_tests, "vulkan-qualify")
     assert {
         "one dispatch binds 16 of each descriptor type",
@@ -78,6 +78,10 @@ def test_descriptor_and_admission_model(render_tests: Path) -> None:
         "without VK_EXT_memory_budget the budget is the device-local heap size, usage unknown",
         "with VK_EXT_memory_budget the device-local heaps' budget and usage",
         "admission = (budget - usage - reserve) x 50 %, no descriptor bound on live tiles",
+        "the Vulkan capability report carries the record's identity, VRAM and admission budget",
+        "the report's format usages come from the optimal-tiling features "
+        "(none for RGB32F without any)",
+        "the report's descriptors are what one dispatch binds",
     } <= passed
 
 
