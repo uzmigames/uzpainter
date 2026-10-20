@@ -24,15 +24,15 @@
 - [ ] 4.1 Child acceptance met and reported to `phase3.4_uzengine-preset`: deterministic encoder and mips, layout-correct `.uztexture`, guarded normals, lossy-derivative numbers published
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
-- [ ] 5.1 Update or create documentation covering the implementation
-- [ ] 5.2 Write tests covering the new behavior
-- [ ] 5.3 Run tests and confirm they pass
+- [x] 5.1 Update or create documentation covering the implementation
+- [x] 5.2 Write tests covering the new behavior
+- [x] 5.3 Run tests and confirm they pass
 
 ## 6. Item 2.8 validation (2026-10-20)
 - Authored decoder, reader and size-validation regressions: all 11 `tests/export/test_uze_texture.py` tests passed on Debug; all 10 native cases passed separately on ReleaseSafe, ReleaseFast and ReleaseSmall. The source audit passed 57 tests. Run evidence: `tmp/scratch/bc-decoder/`.
 - The all-mode corpus exposed an uninitialised alpha read in the bcdec oracle. The recorded, archive-reproducible initialisation fix retains sanitizers. Vendoring checks: two passed initially; the remaining check's obsolete single-patched-library expectation was updated and its rerun passed. No skipped tests counted as evidence.
 - Reader and writer reject overflowing dimensions/offsets and malformed image buffers before access or publication. BC7 format constants retain their upstream MIT notice; bcdec is called only by the differential test, never by `DecodeBc` or the lossy report.
-- Items 2.7 and 3.5 still require the real export plan, receipt and publication integration. Their library guard tests do not close those obligations. Prerequisite and final acceptance remain open.
+- At the item 2.8 validation checkpoint, items 2.7 and 3.5 still required the real export plan, receipt and publication integration; section 7 records their subsequent closure. Prerequisite and final acceptance remain open.
 
 ## 7. Items 2.7 and 3.5 through the real export (2026-10-20, decision 316)
 - **2.7.** The plan field `PlannedFile::uztexture` (`RequestUzTextureNormal`) requests a `.uztexture` normal derivative of an RGB PNG 16 normal file, its canonical 16-bit companion. The negative-Z policy is `fail` (the default) or `rgb`.
@@ -50,3 +50,9 @@
   - 3 of 3 new cases passed, after one fixture fix (64x64 is below the project's 128 minimum).
   - The affected publication, encoder and plan-hash tests passed: 30 passed, 1 skipped.
   - Evidence: `tmp/scratch/uze-normal-export/`.
+
+## 8. Tail evidence audit (2026-10-20)
+- **5.1 Documentation.** `src/export/EXPORT.md` documents the encoder/mip/writer path and the real normal derivative's plan, canonical source, policy, receipt and publication contract (decisions 315 and 316). `docs/BC-DECODER.md` records the authored decoder's approved inputs, attribution and numerical contract; `NOTICE` retains the reused constants' licence. Preset exposure and consumer binding acceptance remain explicitly owned by their downstream tasks.
+- **5.2 Coverage.** `tests/export/test_uze_texture.py` and its native cases cover determinism, mip classes, negative-Z detection, file layout, authored decoding and derivative metrics. The three `uztexture` cases in `tests/export/test_export_publication.py` exercise the real plan and publication. `tests/export/test_uze_publication.py` independently checks the canonical negative-Z fixture, default/explicit refusal with the selected generation unchanged, and RGB routing with canonical bytes, decoded sign, header/mips, receipt and pinned consumer verification.
+- **5.3 Results.** Decoder validation is recorded in section 6 and `tmp/scratch/bc-decoder/evidence.json`: 11 texture tests passed on Debug, 10 native cases passed in each optimized mode; the obsolete vendoring assertion passed its focused rerun. Real-export validation in section 7 has 3 new cases passed plus 30 affected cases passed, with 1 skipped case not counted as evidence. Independent publication run2 had 3 passed and 1 failed test assertion; after correcting the assertion for the receipt's integer mip count, run3's RGB node passed. These are four covered cases across two runs, not a single four-pass suite. Evidence: `tmp/scratch/uze-publication-audit/run2/{run.json,junit.xml}` and `run3/{run.json,junit.xml}`; binary SHA-256 `d093294113917a6bafde3050969701f85305f8e96ec4559406daed9934e4d46d`, with source and binary identity checked before and after.
+- **Integration and limits.** Decoder, normal integration and independent tests landed as `eeb7e90`, `f97baa40` and `afab8102`, respectively. This audit closes documentation/test tails only; it does not close prerequisite 1.1, acceptance 4.1, preset exposure, consumer acceptance or any parity gate. No native or GPU tests were rerun for this documentation-only closure.
