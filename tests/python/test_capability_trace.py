@@ -1,8 +1,11 @@
-"""CPU checks of receiver attribution in the compared-replay capability trace."""
+"""CPU checks of receiver and thread attribution in the compared-replay capability trace."""
 
 from __future__ import annotations
 
+import _thread
 import importlib.util
+import sys
+import threading
 import types
 from collections.abc import Iterator
 from pathlib import Path
@@ -171,3 +174,150 @@ def test_public_base_method_keeps_credit_and_ambiguous_factories_do_not(trace: A
     found = trace.stop()
     assert set(found["base"]) == {"api.Derived", "api.Base.value"}
     assert not found.get("factories")
+
+
+class _Dispatcher:
+    """A dispatcher thread the trace did not start, as UzPainter's native one: `post` queues a
+    task, `deliver` runs the queued tasks on a raw thread and waits for them."""
+
+    def __init__(self) -> None:
+        self.tasks: list[Any] = []
+
+    def post(self, task: Any) -> None:
+        self.tasks.append(task)
+
+    def deliver(self) -> None:
+        done = threading.Event()
+
+        def loop() -> None:
+            for task in self.tasks:
+                task()
+            self.tasks.clear()
+            done.set()
+
+        _thread.start_new_thread(loop, ())
+        assert done.wait(10.0)
+
+
+@pytest.fixture
+def api(trace: Any, monkeypatch: pytest.MonkeyPatch) -> tuple[Any, _Dispatcher]:
+    """A synthetic public module `api`, and a `uzpainter.event.post` over `_Dispatcher`."""
+
+    def work() -> str:
+        return "work"
+
+    def nested() -> str:
+        return "nested"
+
+    def delivered() -> str:
+        return "delivered"
+
+    def other() -> str:
+        return "other"
+
+    module = types.ModuleType("api")
+    for function in (work, nested, delivered, other):
+        setattr(module, function.__name__, function)
+    trace._index_module("api", module)
+    trace._drop_shared_code()
+    dispatcher = _Dispatcher()
+    uzpainter = types.ModuleType("uzpainter")
+    uzpainter.event = types.SimpleNamespace(post=dispatcher.post)  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "uzpainter", uzpainter)
+    return module, dispatcher
+
+
+def test_worker_calls_belong_to_the_output_that_started_it(
+    trace: Any, api: tuple[Any, _Dispatcher]
+) -> None:
+    module, dispatcher = api
+    event = sys.modules["uzpainter"].event
+    go = threading.Event()
+
+    def worker() -> None:
+        go.wait()
+        module.work()
+        inner = threading.Thread(target=module.nested)
+        inner.start()
+        inner.join()
+        event.post(module.delivered)
+
+    trace.start()
+    trace.mark("A")
+    thread = threading.Thread(target=worker)
+    thread.start()
+    trace.mark("B")
+    go.set()
+    thread.join()
+    trace.mark("C")
+    dispatcher.deliver()
+    trace.mark("D")
+    module.other()
+    found = trace.stop()
+    # The worker ran after B began and its posted task after C: both belong to A, as does the
+    # thread it started.
+    assert found == {"A": ["api.delivered", "api.nested", "api.work"], "D": ["api.other"]}
+
+
+def test_an_excluded_starting_output_gives_its_worker_no_credit(
+    trace: Any, api: tuple[Any, _Dispatcher]
+) -> None:
+    module, dispatcher = api
+    event = sys.modules["uzpainter"].event
+    go = threading.Event()
+
+    def worker() -> None:
+        go.wait()
+        module.work()
+        event.post(module.delivered)
+
+    trace.start()
+    trace.mark("s23/reload")
+    thread = threading.Thread(target=worker)
+    thread.start()
+    trace.mark("s23/states")
+    go.set()
+    thread.join()
+    dispatcher.deliver()
+    module.other()
+    found = trace.stop()
+    assert found == {"s23/reload": ["api.delivered", "api.work"], "s23/states": ["api.other"]}
+    assert trace.exercised(found, ["s23/reload"]) == ["api.other"]
+
+
+def test_main_dispatcher_and_service_threads_keep_the_marked_output(
+    trace: Any, api: tuple[Any, _Dispatcher]
+) -> None:
+    module, dispatcher = api
+    event = sys.modules["uzpainter"].event
+    original_start, original_post = threading.Thread.start, event.post
+    request, done, finish = threading.Event(), threading.Event(), threading.Event()
+
+    def service() -> None:
+        while True:
+            request.wait()
+            request.clear()
+            if finish.is_set():
+                return
+            module.work()
+            done.set()
+
+    trace.start()
+    assert threading.Thread.start is not original_start
+    trace.mark("A")
+    module.other()
+    event.post(module.delivered)  # posted on the main thread, delivered during B
+    trace.mark("B")
+    dispatcher.deliver()
+    thread = threading.Thread(target=service, daemon=True)
+    thread.start()  # started during B, still running at stop()
+    trace.mark("C")
+    request.set()
+    assert done.wait(10.0)
+    found = trace.stop()
+    finish.set()
+    request.set()
+    thread.join()
+    assert found == {"A": ["api.other"], "B": ["api.delivered"], "C": ["api.work"]}
+    assert threading.Thread.start is original_start
+    assert event.post == original_post

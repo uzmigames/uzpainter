@@ -2205,7 +2205,6 @@
    "substance_painter.resource.Shelves.exists",
    "substance_painter.resource.Shelves.refresh_all",
    "substance_painter.resource.Shelves.remove",
-   "substance_painter.resource.ShelvesListFilter",
    "substance_painter.resource.Usage",
    "substance_painter.resource.Usage.GENERATOR",
    "substance_painter.resource.Usage.SMART_MATERIAL",

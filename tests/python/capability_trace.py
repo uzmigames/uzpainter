@@ -15,6 +15,15 @@ exercised when
 - an enum member of it was passed to, or returned by, such a call; an instance of a public class
   was returned by one, or an exception of a public class left one.
 
+A call is attributed to the output marked (`mark`) when it is made, except on a thread started
+under the trace (`threading.Thread.start`) that ended before `stop()`: an asynchronous operation's
+worker, whose calls belong to the output current when the thread was started, whenever they run.
+A thread it starts inherits that output, and so do the tasks it posts to the dispatcher thread
+(`uzpainter.event.post`): the deliveries a worker queues belong to the output that started it.
+A thread still running at `stop()` is a service thread (the texture-state notifier), which works
+for whichever call waits on it: its calls keep the output marked when they are made, as calls on
+the main and dispatcher threads do.
+
 A capability manifest entry `supported` in context `any` cites the api-probe goldens whose
 compared outputs exercised it (`tier_evidence`); the Tier 0 tests check that claim against this
 trace, in both directions, on the owner's machine (decision 028).
@@ -26,6 +35,7 @@ embedded interpreter, where `tests` is not importable.
 from __future__ import annotations
 
 import enum
+import functools
 import importlib
 import inspect
 import sys
@@ -59,8 +69,13 @@ _keep: list[Any] = []
 _names: set[str] = set()  # every public name indexed
 _trace: dict[str, set[str]] = {}
 _current = ["setup"]
-_stack = threading.local()
+_stack = threading.local()  # per thread: the open frames, and the worker tokens it runs under
 _lock = threading.Lock()
+# Threads started under the trace, by token: the output they were started for, and the thread.
+_workers: list[tuple[str, threading.Thread]] = []
+# Calls made for a worker: (token, output marked when made) -> names, resolved by `stop()`.
+_deferred: dict[tuple[int, str], set[str]] = {}
+_patched: list[tuple[Any, str, Any]] = []  # (owner, attribute, original) restored by `stop()`
 
 
 def _add(index: dict[Any, set[str]], key: Any, name: str) -> None:
@@ -174,9 +189,61 @@ def _index_module(qualified: str, module: types.ModuleType) -> None:
                     _index_value(f"{qualified}.{name}.{member}", attribute, 1)
 
 
+def _token() -> int | None:
+    """The token of the worker this thread is working for (its own, or a posted task's)."""
+    tokens: list[int] | None = getattr(_stack, "tokens", None)
+    return tokens[-1] if tokens else None
+
+
 def _note(names: set[str]) -> None:
+    token = _token()
     with _lock:
-        _trace.setdefault(_current[0], set()).update(names)
+        if token is None:
+            _trace.setdefault(_current[0], set()).update(names)
+        else:
+            _deferred.setdefault((token, _current[0]), set()).update(names)
+
+
+def _working_for(token: int, function: Any, *args: Any) -> Any:
+    """Runs `function` on this thread for the worker `token`."""
+    tokens: list[int] | None = getattr(_stack, "tokens", None)
+    if tokens is None:
+        tokens = _stack.tokens = []
+    tokens.append(token)
+    try:
+        return function(*args)
+    finally:
+        tokens.pop()
+
+
+def _start_thread(original: Any, thread: threading.Thread) -> None:
+    """`threading.Thread.start`: the thread works for its starter's worker, or for the output
+    marked now."""
+    token = _token()
+    with _lock:
+        output = _workers[token][0] if token is not None else _current[0]
+        _workers.append((output, thread))
+        started = len(_workers) - 1
+    thread.run = functools.partial(_working_for, started, thread.run)  # type: ignore[method-assign]
+    original(thread)
+
+
+def _post(original: Any, task: Any) -> Any:
+    """`uzpainter.event.post`: a task a worker posts runs for that worker."""
+    token = _token()
+    return original(task if token is None else functools.partial(_working_for, token, task))
+
+
+def _patch(owner: Any, attribute: str, wrapper: Any) -> None:
+    """Replaces `owner.attribute` with `wrapper(original, ...)` (a function, so that a method
+    stays one) until `stop()`."""
+    original = getattr(owner, attribute)
+    _patched.append((owner, attribute, original))
+
+    def patched(*args: Any) -> Any:
+        return wrapper(original, *args)
+
+    setattr(owner, attribute, patched)
 
 
 def _given_fields(value: Any) -> set[str]:
@@ -316,6 +383,10 @@ def public_symbols() -> list[str]:
 def start() -> None:
     """Indexes the public symbols of the three packages and starts recording."""
     public_symbols()
+    _patch(threading.Thread, "start", _start_thread)
+    event = getattr(sys.modules.get("uzpainter"), "event", None)
+    if callable(getattr(event, "post", None)):
+        _patch(event, "post", _post)
     monitoring = sys.monitoring
     monitoring.use_tool_id(TOOL, "uzpainter-capability-trace")
     monitoring.register_callback(TOOL, EVENTS.PY_START, _on_start)
@@ -345,7 +416,14 @@ def stop() -> dict[str, list[str]]:
     """Stops recording; the exercised symbols by output id."""
     sys.monitoring.set_events(TOOL, 0)
     sys.monitoring.free_tool_id(TOOL)
+    while _patched:
+        owner, attribute, original = _patched.pop()
+        setattr(owner, attribute, original)
     with _lock:
+        for (token, marked), names in _deferred.items():
+            started, thread = _workers[token]
+            _trace.setdefault(marked if thread.is_alive() else started, set()).update(names)
+        _deferred.clear()
         return {output: sorted(names) for output, names in sorted(_trace.items())}
 
 

@@ -650,3 +650,75 @@ Clause by clause:
 - **Capability evidence equal to the trace.** One symbol is short of it, the held `ShelvesListFilter` (§13.5), so the conformance check is red.
 
 4.1 can be ticked once §13.5 is settled and Codex's patch is committed with these 8 file hashes. The full gate is still needed before archive.
+
+## 14. Worker-thread attribution in the trace, 2026-10-20
+
+The trace now credits a worker's calls to the output that started the worker. With that rule, `p22b-host-resources` gives the same trace in two separate runs. `ShelvesListFilter` gets no credit, because the s23 output it comes from is excluded. The conformance check passes, so **item 4.1 is fully evidenced** (§14.4).
+
+### 14.1 The rule (`tests/python/capability_trace.py`)
+
+§13.5's nondeterminism had two paths:
+- the s23 reload worker built `ReloadResourcesEnded` on its own thread, and the constructor's arguments credit the filter;
+- the worker posted the event's delivery to the native dispatcher thread, where the recorder's handler reads `event.filter`.
+
+Both ran after the call returned, under whichever output was current at the time. The trace now handles them as follows:
+- **Threads started under the trace.** A thread started under the trace (`threading.Thread.start`, which the trace wraps from `start()` to `stop()`) gets the output that was current when it started. A thread it starts inherits that output.
+- **Posted tasks.** A task such a thread posts with `uzpainter.event.post` runs on the dispatcher under the poster's output. The facade starts its reload, mesh-reload and shelf-crawl workers with `threading.Thread`, and they deliver their events through `uzpainter.event.post`.
+- **Service threads.** A started thread that is still running at `stop()` keeps the marked-output attribution for its calls. This covers the texture-state notifier, which lives for the whole process and works for whichever call waits on it (`texture_state.synchronize`). Without this exception, every texture-state delivery would move to `setup`, and an excluded step's texture work could then earn credit.
+- **Unchanged.** Calls on the main thread, and tasks the main thread posts, keep the output that is current when they run.
+
+CPU unit tests are in `tests/python/test_capability_trace.py`, next to the receiver tests, and use real `sys.monitoring`:
+- a worker started during A whose calls, nested thread and posted task run after B and C have begun is credited to A;
+- an excluded starting output gives no credit;
+- main-thread calls, main-thread posts and a service thread keep the marked output, and both wrappers are removed at `stop()`.
+
+All 7 tests pass (exit 0, `tmp/scratch/trace-thread/unit.log`).
+
+### 14.2 Runs
+
+The method is §13's: no rebuild, and `run_existing.py` on runner `uzp-pyapi-tests.exe` SHA-256 `a15306f2b6b31cacd36bca2b8e244760878d25e08b9eec1550988bfb7d2917c2`. Its prefix was copied from `trace-final2/prefix` and overlaid with the worktree's `python/`. The installed Python files equal §13's (`run1-build-identity.json`). Both runs set `UZP_UPDATE_TIER0_TRACE=1`. No `tests/evaluator`, `tests/preview` or `union_run` process was running.
+
+| Run | Tests | Result |
+|---|---|---|
+| run1, 18:31:15Z to 18:31:58Z | `p22b-host-resources`, P21-D `phase1-shelves`, `facade-events/phase1-reload-mesh`, `facade-events/phase1-reload-resources` and `phase1-create-open-timing` (the recorder's readiness poller is a started thread) | 5 passed, exit 0 (`run1.log`) |
+| run2, a separate process, 18:31:58Z to 18:32:09Z | `p22b-host-resources` | 1 passed, exit 0 (`run2.log`) |
+
+**Stability.** The per-output trace of `p22b-host-resources` (`by_output`) is identical in run1 and run2, and so is its symbol set.
+
+**What moved.** Each worker's work moved from `sN/states` to the call that started it:
+- s16 `add` and s17 `refresh_all`: `ShelfCrawlingEnded` and `uzpainter.event.release`;
+- s20 to s24 `reload_modified_resources_async`: `ReloadResourcesEnded`, the reload imports and `release`.
+
+**Compared symbols.** The only change is that `substance_painter.resource.ShelvesListFilter` is gone. It now appears only under the excluded `s23/reload_modified_resources_async`. The verdict is unchanged: the comparison passes under decision 338.
+
+**The other four replays.** Their committed trace entries are unchanged. `phase1-shelves` moves its crawl ends from s3 and s9 `states` to `add` and `refresh`, both of which are compared.
+
+The four reload-order replays write no trace entry, so they were not re-run.
+
+### 14.3 Manifest
+
+`consolidate.py` (§13's `consolidate2.py` with an empty hold list) replaced one trace entry, `facade-observed/p22b-host-resources`. It promoted, demoted or re-evidenced nothing. The status counts are those of §13.4.
+
+Two inventory notes were edited in `painter-api-inventory.json`, the source of the inventory notes:
+- `ShelvesListFilter` (pending-evidence, owner phase3.3_procedural-families) now gives the rule as the reason for its pending status;
+- `BakingParameters.set` @ `baker-other-than-ao` says that AO, Position, ID, Thickness and Height values are stored (decisions 337 and 341).
+
+Both checks ran once, after the trace and both notes were final:
+
+| Check | Result |
+|---|---|
+| `tests/python/test_capability_conformance.py`, on the same prefix | 5 passed, exit 0 (`conformance.log`) |
+| `tests/capabilities` | 44 passed, exit 0 (`capabilities-tests.log`) |
+
+The logs are in `tmp/scratch/trace-thread/`.
+
+### 14.4 Item 4.1
+
+§13.6's last open clause holds now: the capability evidence equals the trace, and the conformance check is green.
+
+The other clauses stand on §13.6:
+- the three pipeline scripts run through the adapter;
+- the API-probe goldens are exact apart from named exclusions with owners outside this task;
+- the results are recorded here.
+
+Item 4.1 is fully evidenced on this branch. The full gate is still needed before archive.
