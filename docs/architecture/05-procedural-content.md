@@ -47,6 +47,13 @@ The library ships beside the executable as `assets/procedural/`: one provenance 
 - Curvature, Position, World Space Normals and Ambient Occlusion shape one mesh-map signal with a boxstep and smoothstep. Dirt and Metal Edge Wear detect cavities or convex edges from curvature and AO, spread them by a disk dilation and break them up with fBm noise over the position map. Mask Builder (Legacy) shapes one source with a noise mask and growth; Mask Editor boxsteps a weighted sum of six mesh-map terms. Each kernel equals its CPU reference bit for bit on DX12.
 - The eight domains are declared in `assets/procedural/` before calibration. None is certified, and no alias names them.
 
+**As built, grunges and noises (`phase3.2_proc-grunge-families`, decision 331, `src/procedural/grunges.h`).**
+- Seventeen assets `uzasset://grunge/<id>@1`, inventoried from the recipes with their recorded parameter sets (`docs/analysis/proc-grunge-families/01-asset-inventory.md`).
+- Each asset is a fixed configuration of six periodic pattern kinds over the primitive library: fBm, ridged fBm, spots, scratches, cracks (Worley F2 - F1) and a plain weave. Each takes a seed and UzPainter's own parameters. Every texture wraps seamlessly, and `tiling` repeats it a whole number of times.
+- One kernel pass per asset, from a parameter block computed on the host. DX12 equals the CPU reference bit for bit.
+- A recipe's projection scale belongs to the fill, not to the asset.
+- The domains are declared before calibration. None is certified, and no alias names them.
+
 Parity status per asset is `exact` (zero residual on every calibration and held-out case of §6) or `calibrated{max |Δ|, mean |Δ|, p99 |Δ|, corpus id}`, published by `uzpainter assets list --parity`. Under Q1 there is no preset tolerance: a calibrated asset passes only through an owner-approved, versioned exception in the register (`14-parity-testing.md` §5); without one it is a failure.
 
 ## 4. Frozen snapshots (`SnapshotBackend`)

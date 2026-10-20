@@ -11,7 +11,24 @@
     "records/generator.mask-editor@1.json",
     "records/generator.occlusion@1.json",
     "records/generator.position@1.json",
-    "records/generator.world-normal@1.json"
+    "records/generator.world-normal@1.json",
+    "records/grunge.cracks-leather@1.json",
+    "records/grunge.dirt-a@1.json",
+    "records/grunge.dirt-large@1.json",
+    "records/grunge.dirt-spots-small@1.json",
+    "records/grunge.humidity@1.json",
+    "records/grunge.linen@1.json",
+    "records/grunge.map-a@1.json",
+    "records/grunge.map-b@1.json",
+    "records/grunge.rock@1.json",
+    "records/grunge.rust-fine@1.json",
+    "records/grunge.scratches-dirty@1.json",
+    "records/grunge.scratches-fine@1.json",
+    "records/grunge.scratches@1.json",
+    "records/grunge.spots-bw-a@1.json",
+    "records/grunge.spots-bw-b@1.json",
+    "records/grunge.spots-soft@1.json",
+    "records/grunge.stone-details@1.json"
   ],
   "aliases": "aliases.json"
 }

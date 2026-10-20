@@ -10,6 +10,7 @@ its UzPainter name and its provenance. Importing a `.sbsar` file raises `Unsuppo
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,20 @@ import pytest
 from tests.python.conftest import Run
 
 FIXTURE = Path(__file__).resolve().parents[1] / "procedural/fixtures/library"
+SHIPPED_LIBRARY = Path(__file__).resolve().parents[2] / "assets/procedural"
+
+
+def shipped_resource_ids() -> list[str]:
+    """The ResourceID of every record of the shipped library, sorted."""
+    library = json.loads((SHIPPED_LIBRARY / "library.json").read_text(encoding="utf-8"))
+    ids = []
+    for path in library["records"]:
+        record = json.loads((SHIPPED_LIBRARY / path).read_text(encoding="utf-8"))
+        family, rest = record["asset"].removeprefix("uzasset://").split("/", 1)
+        asset_id, version = rest.split("@", 1)
+        ids.append(f"resource://uzasset/{family}/{asset_id}?version={version}")
+    return sorted(ids)
+
 
 SHIPPED = """
 def refusal(query):
@@ -97,20 +112,11 @@ def test_search_with_the_shipped_library_answers_no_painter_name(facade: Run) ->
     assert report["status"] == "ok", report
     result = report["result"]
     # The shipped records declare their domains before calibration and are not certified
-    # (phase3.2 filter 2.6, generator 2.7): listed on UzPainter's shelf, never aliased.
-    assert sorted(result["own"]) == [
-        "resource://uzasset/filter/grayscale?version=1",
-        "resource://uzasset/filter/levels?version=1",
-        "resource://uzasset/filter/sharpen?version=1",
-        "resource://uzasset/generator/curvature?version=1",
-        "resource://uzasset/generator/dirt?version=1",
-        "resource://uzasset/generator/edge-wear?version=1",
-        "resource://uzasset/generator/mask-builder?version=1",
-        "resource://uzasset/generator/mask-editor?version=1",
-        "resource://uzasset/generator/occlusion?version=1",
-        "resource://uzasset/generator/position?version=1",
-        "resource://uzasset/generator/world-normal?version=1",
-    ]
+    # (phase3.2_proc-filter-families and proc-grunge-families 2.6): listed on UzPainter's shelf,
+    # never aliased.
+    assert sorted(result["own"]) == shipped_resource_ids()
+    assert "resource://uzasset/filter/sharpen?version=1" in result["own"]
+    assert "resource://uzasset/grunge/rock?version=1" in result["own"]
     name, asset, reason, message = result["painter"]
     assert (name, asset, reason) == (
         "UnsupportedProcedural",

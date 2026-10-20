@@ -12,6 +12,7 @@ Clean-room note (decision 002, `docs/licensing-and-clean-room.md`): some of thes
 | `assets3d-pipeline/` | `01-pipeline-overview.md` … `07-lessons-and-pitfalls.md`, `08-requirements-for-uzpainter.md` (the requirement source of `docs/prd.md`), `09-review-response.md` | How Painter is used today in Assets3D and the derived requirements |
 | `uzengine-renderer/` | `01-module-map.md` … `09-gaps-and-risks.md`, `10-review-response.md` | What UzEngine provides and lacks for a texturing tool |
 | `technology-options/` | `01-python-embedding-and-packaging.md`, `02-texture-compression-and-containers.md`, `03-project-container-format.md`, `04-mcp-server-options.md`, `05-review-response.md` | Python embedding, compression, containers, MCP |
+| `proc-grunge-families/` | `01-asset-inventory.md` | The grunge and noise assets the UzmiGames recipes reference, their UzPainter assets and the recorded parameter sets (phase3.2_proc-grunge-families item 2.1, 2026-10-20) |
 
 ## Clean-room record
 

@@ -1,0 +1,30 @@
+{
+  "schema": "uzpainter/asset-provenance/1",
+  "asset": "uzasset://grunge/spots-bw-a@1",
+  "name": "UzPainter Black and White Spots A",
+  "usage": "PROCEDURAL",
+  "author": "UzmiGames (UzPainter procedural families, phase3.2_proc-grunge-families)",
+  "license": "Apache-2.0",
+  "sources": [
+    {"kind": "paper", "citation": "S. Worley, A Cellular Texture Basis Function, SIGGRAPH 1996 (one feature point per cell, F1 and F2, F2 - F1 for cell borders)"},
+    {"kind": "paper", "citation": "K. Perlin, Improving Noise, SIGGRAPH 2002, ACM TOG 21(3) (the interpolant 6t^5 - 15t^4 + 10t^3 and the cube-edge gradients, here on the z = 0 plane)"},
+    {"kind": "book", "citation": "D. S. Ebert, F. K. Musgrave et al., Texturing and Modeling: A Procedural Approach, 3rd ed., 2003, F. K. Musgrave's chapters on fractal models (fBm with lacunarity 2 and a gain per octave; the ridged multifractal 1 - |noise|, squared)"},
+    {"kind": "paper", "citation": "A. Lagae et al., A Survey of Procedural Noise Functions, Computer Graphics Forum 29(8), 2010 (periodic lattice noise: the lattice index taken modulo the period, so the texture tiles)"},
+    {"kind": "paper", "citation": "M. Jarzynski, M. Olano, Hash Functions for GPU Rendering, Journal of Computer Graphics Techniques 9(3), 2020 (pcg3d: the lattice hash of every cell)"}
+  ],
+  "defaults": {"balance": 0.5, "contrast": 0, "invert": 0, "tiling": 1, "disorder": 0},
+  "domain": {
+    "parameters": {
+      "balance": {"range": [0, 1]},
+      "contrast": {"range": [0, 1]},
+      "invert": {"set": [0, 1]},
+      "tiling": {"set": [1, 2, 3, 4, 5, 6, 7, 8]},
+      "disorder": {"range": [0, 1]}
+    },
+    "seeds": {"policy": "any_u32"},
+    "geometry": {"mesh_classes": ["sphere", "bevelled-cube", "garment"], "uv_tiles": 1},
+    "output": {"resolutions": [1024, 2048, 4096], "formats": ["f32"], "colour_spaces": ["linear"], "channels": [1]}
+  },
+  "corpus": {},
+  "parity": {"status": "unavailable", "reason": "not certified: the parameter discovery (2.2), the calibration against private Painter oracles (2.4), the held-out reservation (2.6) and Tier 2a (3.1) of phase3.2_proc-grunge-families wait on Painter recordings"}
+}

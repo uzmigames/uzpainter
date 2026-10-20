@@ -477,6 +477,10 @@ const procedural_filter_sources = [_][]const u8{
 const procedural_generator_sources = [_][]const u8{
     "procedural/generators.cpp",
 };
+
+/// The grunge and noise family (`src/procedural/grunges.h`, decision 331), relative to `src/`:
+/// compiled into `uzp-proc-grunge-tests.exe` with `procedural_sources`.
+const procedural_grunge_sources = [_][]const u8{"procedural/grunges.cpp"};
 /// The asset library and the seam vocabulary it uses (`src/procedural/asset_library.h`, decision
 /// 324), relative to `src/`: compiled into `UzPainter.exe` and into `uzp-pyapi-tests.exe`
 /// (`resource.search`), without the HlslBackend host.
@@ -1662,6 +1666,43 @@ pub fn build(b: *std.Build) void {
     proc_generator_tests_step.dependOn(&b.addInstallArtifact(proc_generator_tests_exe, .{}).step);
     for (dx_runtime) |step| proc_generator_tests_step.dependOn(step);
     b.getInstallStep().dependOn(proc_generator_tests_step);
+
+    // ── The grunge and noise family (phase3.2_proc-grunge-families, decision 331) ────────────
+    // `src/procedural/grunges.cpp` over the seam and the HLSL host, in its own test executable.
+    const proc_grunge_tests_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    addCoreIncludePaths(b, proc_grunge_tests_mod);
+    proc_grunge_tests_mod.addIncludePath(b.path("src"));
+    proc_grunge_tests_mod.addCSourceFiles(.{
+        .root = b.path("tests/procedural"),
+        .files = &.{"grunges_test.cpp"},
+        .flags = &evaluator_flags,
+    });
+    embed_inputs.add(proc_grunge_tests_mod, "src", &(procedural_sources ++ procedural_grunge_sources), &evaluator_flags);
+    embed_inputs.add(proc_grunge_tests_mod, "src", &render_sources, &(cxx_flags ++ own_warning_flags));
+    proc_grunge_tests_mod.addCSourceFiles(.{
+        .root = b.path(core_root),
+        .files = &.{agility_export_source},
+        .flags = &cxx_flags,
+    });
+    proc_grunge_tests_mod.linkLibrary(core_lib);
+    // `procedural_sources` holds the snapshot backend, which reads and records project planes.
+    proc_grunge_tests_mod.linkLibrary(store_lib);
+    proc_grunge_tests_mod.linkLibrary(uzp_core_lib);
+    for (system_libraries) |name| proc_grunge_tests_mod.linkSystemLibrary(name, .{});
+    proc_grunge_tests_mod.linkSystemLibrary("version", .{});
+    const proc_grunge_tests_exe = b.addExecutable(.{
+        .name = "uzp-proc-grunge-tests",
+        .root_module = proc_grunge_tests_mod,
+    });
+    const proc_grunge_tests_step = b.step("proc-grunge-tests", "Build the native tests of the procedural grunge family");
+    proc_grunge_tests_step.dependOn(&b.addInstallArtifact(proc_grunge_tests_exe, .{}).step);
+    for (dx_runtime) |step| proc_grunge_tests_step.dependOn(step);
+    b.getInstallStep().dependOn(proc_grunge_tests_step);
 
     // ── The export plan compiler (phase1.15_export-plan-compiler) ─────────────────────────────
     // `src/export/` over the evaluator; its tests evaluate on the CPU store only, so they run on

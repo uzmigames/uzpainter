@@ -120,8 +120,7 @@ def test_no_alias_names_a_filter_family() -> None:
 
 
 def test_shipped_library_loads_natively(procedural_tests: Path, tmp_path: Path) -> None:
-    """The native loader (`AssetLibrary::Load`) admits the shipped records (three filters, eight
-    generators) and no alias."""
+    """The native loader (`AssetLibrary::Load`) admits every shipped record and no alias."""
     proc = subprocess.run(
         [str(procedural_tests), "library-load", str(tmp_path), str(SHIPPED)],
         capture_output=True,
@@ -132,7 +131,8 @@ def test_shipped_library_loads_natively(procedural_tests: Path, tmp_path: Path) 
         check=False,
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    assert proc.stdout.strip() == "LOADED 11 0", proc.stdout
+    library = json.loads((SHIPPED / "library.json").read_text(encoding="utf-8"))
+    assert proc.stdout.strip() == f"LOADED {len(library['records'])} 0", proc.stdout
 
 
 def test_sharpen_and_grayscale_follow_their_published_formulas(
