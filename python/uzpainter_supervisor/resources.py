@@ -206,13 +206,16 @@ PROMPTS = (
     ),
     Prompt(
         "baking_preset_template",
-        "A baking preset for bake_configure and bake_apply_preset (a release gap of this build).",
+        "Baking parameters for bake_configure (and the preset bake_apply_preset takes).",
         _prompt(
-            "Write a baking preset for `bake_configure` / `bake_apply_preset`.",
+            "Write the baking parameters of `bake_configure`.",
             BAKING_TEMPLATE,
-            "Bakers are mesh map usages; `common` and `per_baker` hold the baking parameters by "
-            "their documented names. Native baking is a release gap of this build "
-            "(phase3.5_embree-bakers): the baking tools answer capability_gap until it lands.",
+            "Bakers are mesh map usages; `common` takes keys of common() and `per_baker` a "
+            "baker's keys, by Painter's short names (`bake_inspect` with `properties` lists them "
+            "with their types and enum labels). The texture set's state (`enabled`, `bakers`, "
+            "`uv_tiles`, `curvature_method`) and native baking are release gaps of this build "
+            "(phase3.5_embree-bakers) and answer capability_gap. `bake_apply_preset` takes the "
+            "uzpainter/bake-preset/1 file `bake_capture_preset` writes.",
         ),
     ),
     Prompt(

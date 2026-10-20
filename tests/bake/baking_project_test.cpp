@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <stdexcept>
 #include <string>
 
@@ -234,6 +235,71 @@ void Invalid() {
     CheckConfigured(session);
     CHECK(project == valid);
 }
+
+// The model's metadata and defaults as the authored table lays them out
+// (`tools.bake.bake_defaults.check_model` compares the two; decision 323).
+json::Value Plain(const PropertySpec& spec, const PropertyValue& value) {
+    if (const auto* b = std::get_if<bool>(&value)) return *b;
+    if (const auto* i = std::get_if<std::int64_t>(&value)) return *i;
+    if (const auto* d = std::get_if<double>(&value)) return *d;
+    if (const auto* s = std::get_if<std::string>(&value)) return *s;
+    if (const auto* p = std::get_if<std::pair<std::int64_t, std::int64_t>>(&value)) return json::Array{p->first, p->second};
+    if (const auto* f = std::get_if<std::pair<double, double>>(&value)) return json::Array{f->first, f->second};
+    const std::string& label = std::get<EnumLabel>(value).label;
+    for (const auto& [known, integer] : spec.enum_values) {
+        if (known == label) return std::int64_t{integer};
+    }
+    throw std::runtime_error("no enum value " + label);
+}
+
+json::Array Dump(const std::map<std::string, Property>& properties) {
+    json::Array out;
+    for (const auto& [key, property] : properties) {
+        const PropertySpec& spec = property.spec();
+        json::Object entry{{"short_name", property.short_name()},  {"name", property.name()},
+                           {"label", property.label()},            {"widget_type", property.widget_type()},
+                           {"type", PropertyTypeName(property.type())}};
+        if (property.type() == PropertyType::Enum) {
+            json::Object values;
+            for (const auto& [label, integer] : property.enum_values()) {
+                CHECK(property.enum_value(label) == integer);
+                values[label] = std::int64_t{integer};
+            }
+            entry["enum_values"] = std::move(values);
+        }
+        json::Object range;
+        if (spec.minimum) range["min"] = Plain(spec, *spec.minimum);
+        if (spec.maximum) range["max"] = Plain(spec, *spec.maximum);
+        if (!range.empty()) entry["range"] = std::move(range);
+        try {
+            entry["default"] = Plain(spec, property.value());
+        } catch (const NotYetSupported&) {
+            entry["default"] = nullptr;
+        }
+        out.push_back(std::move(entry));
+    }
+    return out;
+}
+
+void Catalog(const std::filesystem::path& out) {
+    const BakingParameters parameters("catalog");
+    json::Object bakers;
+    for (int u = 0; u <= static_cast<int>(MeshMapUsage::Opacity); ++u) {
+        const auto usage = static_cast<MeshMapUsage>(u);
+        bakers[UsageName(usage)] = Dump(parameters.baker(usage));
+    }
+    const TextureSetBakeState& state = DefaultTextureSetState();
+    json::Array enabled;
+    for (const std::string& baker : state.enabled_bakers) enabled.push_back(baker);
+    const json::Object dump{{"common", Dump(parameters.common())},
+                            {"bakers", std::move(bakers)},
+                            {"texture_set_state", json::Object{{"curvature_method", state.curvature_method},
+                                                               {"enabled_bakers", std::move(enabled)},
+                                                               {"textureset_enabled", state.textureset_enabled}}}};
+    std::ofstream file(out, std::ios::binary);
+    file << json::WriteCanonical(dump);
+    CHECK(file.good());
+}
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -243,6 +309,7 @@ int main(int argc, char** argv) {
         if (name == "roundtrip") Roundtrip(argv[2]);
         else if (name == "transactions") Transactions();
         else if (name == "invalid") Invalid();
+        else if (name == "catalog") Catalog(argv[2]);
         else return 2;
         std::printf("PASS %s\n", name.c_str());
         return 0;

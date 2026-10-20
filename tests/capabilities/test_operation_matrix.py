@@ -70,12 +70,7 @@ GAP_TOOLS = {
     "smart_mask_insert",
     "smart_export",
     "apply_smart",
-    "bake_inspect",
-    "bake_configure",
-    "bake_set_mesh_inputs",
     "bake_start",
-    "bake_capture_preset",
-    "bake_apply_preset",
 }
 
 

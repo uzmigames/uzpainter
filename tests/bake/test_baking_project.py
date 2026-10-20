@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
+
+from tools.bake import bake_defaults
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -39,3 +42,20 @@ def test_baking_project(baking_project_tests: Path, tmp_path: Path, case: str) -
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert f"PASS {case}" in result.stdout
+
+
+def test_model_equals_the_authored_table(baking_project_tests: Path, tmp_path: Path) -> None:
+    """2.8 (decision 323): the native model's keys, names, labels, widget types, value types, enum
+    values, ranges and defaults equal `assets/defaults/baking.json`, which the private capture
+    check compares with Painter (`tests/bake/test_bake_defaults.py`)."""
+    dump = tmp_path / "catalog.json"
+    result = subprocess.run(
+        [str(baking_project_tests), "catalog", str(dump)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    model = json.loads(dump.read_text(encoding="utf-8"))
+    assert bake_defaults.check_model(bake_defaults.load_table(), model) == []

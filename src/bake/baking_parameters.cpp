@@ -1,179 +1,220 @@
 #include "bake/baking_parameters.h"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <set>
 #include <stdexcept>
 
+#include "bake/baking_catalog.h"
 #include "uzp_core/types/errors.h"
 
 namespace uzp::bake {
 
 using core::NotYetSupported;
 using core::ValueError;
+namespace json = core::json;
 
 const char* PropertyTypeName(PropertyType type) {
     switch (type) {
         case PropertyType::Bool: return "Bool";
         case PropertyType::Int: return "Int";
+        case PropertyType::Float: return "Float";
         case PropertyType::IntPair: return "IntPair";
+        case PropertyType::FloatPair: return "FloatPair";
         case PropertyType::Enum: return "Enum";
         case PropertyType::String: return "String";
-        case PropertyType::Pending: return "Pending";
     }
     return "unknown";
 }
 
 namespace {
 
-// Sources (`docs/approved-sources.md`).
-constexpr const char* kTask = "docs/architecture/06-baking.md section 2 (key)";
-constexpr const char* kPage =
-    "A-HELP-BAKING, https://experienceleague.adobe.com/en/docs/substance-3d-painter/using/baking/"
-    "mesh-map-settings (label, widget)";
-constexpr const char* kPyDoc =
-    "python-doc substance_painter/baking.html, module example (option label)";
+// ── The authored table (assets/defaults/baking.json) ─────────────────────────────────────────
 
-std::string Join(std::initializer_list<const char*> parts) {
-    std::string out;
-    for (const char* part : parts) out += (out.empty() ? "" : "; ") + std::string(part);
-    return out;
+constexpr MeshMapUsage kUsages[] = {
+    MeshMapUsage::Normal,    MeshMapUsage::WorldSpaceNormal, MeshMapUsage::ID,     MeshMapUsage::AO,
+    MeshMapUsage::Curvature, MeshMapUsage::Position,         MeshMapUsage::Thickness, MeshMapUsage::Height,
+    MeshMapUsage::BentNormals, MeshMapUsage::Opacity,
+};
+
+[[noreturn]] void Malformed(const std::string& what) {
+    throw std::logic_error("assets/defaults/baking.json: " + what);
 }
 
-PropertySpec Spec(std::string key, PropertyGroup group, PropertyType type, std::string label,
-                  std::string source, std::string description) {
+const json::Value& Member(const json::Object& object, const char* key, const std::string& where) {
+    const auto it = object.find(key);
+    if (it == object.end()) Malformed(where + " has no '" + key + "'");
+    return it->second;
+}
+
+const json::Object& AsObject(const json::Value& value, const std::string& where) {
+    if (!value.IsObject()) Malformed(where + " is not an object");
+    return std::get<json::Object>(value.data);
+}
+
+const json::Array& AsArray(const json::Value& value, const std::string& where) {
+    if (!value.IsArray()) Malformed(where + " is not an array");
+    return std::get<json::Array>(value.data);
+}
+
+const std::string& AsString(const json::Value& value, const std::string& where) {
+    if (!value.IsString()) Malformed(where + " is not a string");
+    return std::get<std::string>(value.data);
+}
+
+double AsNumber(const json::Value& value, const std::string& where) {
+    if (value.IsInt()) return static_cast<double>(std::get<std::int64_t>(value.data));
+    if (value.IsDouble()) return std::get<double>(value.data);
+    Malformed(where + " is not a number");
+}
+
+std::int64_t AsInt(const json::Value& value, const std::string& where) {
+    if (!value.IsInt()) Malformed(where + " is not an integer");
+    return std::get<std::int64_t>(value.data);
+}
+
+PropertyType TypeNamed(const std::string& name, const std::string& where) {
+    for (PropertyType type : {PropertyType::Bool, PropertyType::Int, PropertyType::Float, PropertyType::IntPair,
+                              PropertyType::FloatPair, PropertyType::Enum, PropertyType::String}) {
+        if (name == PropertyTypeName(type)) return type;
+    }
+    Malformed(where + " has an unknown type '" + name + "'");
+}
+
+/// A value of `spec`'s type from the table (an `Enum` as its integer, stored as its label).
+PropertyValue TableValue(const PropertySpec& spec, const json::Value& value, const std::string& where) {
+    const auto pair = [&](auto convert) {
+        const json::Array& array = AsArray(value, where);
+        if (array.size() != 2) Malformed(where + " is not a pair");
+        return std::pair{convert(array[0], where), convert(array[1], where)};
+    };
+    switch (spec.type) {
+        case PropertyType::Bool:
+            if (!value.IsBool()) Malformed(where + " is not a bool");
+            return std::get<bool>(value.data);
+        case PropertyType::Int: return AsInt(value, where);
+        case PropertyType::Float: return AsNumber(value, where);
+        case PropertyType::IntPair: return pair(AsInt);
+        case PropertyType::FloatPair: return pair(AsNumber);
+        case PropertyType::Enum: {
+            const std::int64_t number = AsInt(value, where);
+            for (const auto& [label, integer] : spec.enum_values) {
+                if (integer == number) return EnumLabel{label};
+            }
+            Malformed(where + " names no enum value");
+        }
+        case PropertyType::String: return AsString(value, where);
+    }
+    Malformed(where + " has no type");
+}
+
+PropertySpec ParseEntry(const json::Value& value, PropertyGroup group, MeshMapUsage usage, const std::string& where) {
+    const json::Object& entry = AsObject(value, where);
     PropertySpec spec;
-    spec.short_name = std::move(key);
-    spec.group = group;
-    spec.type = type;
-    spec.label = std::move(label);
-    spec.source = std::move(source);
-    spec.description = std::move(description);
+    spec.short_name = AsString(Member(entry, "short_name", where), where + ".short_name");
+    const std::string at = where + " (" + spec.short_name + ")";
+    spec.name = AsString(Member(entry, "name", at), at + ".name");
+    spec.label = AsString(Member(entry, "label", at), at + ".label");
+    spec.widget_type = AsString(Member(entry, "widget_type", at), at + ".widget_type");
+    spec.type = TypeNamed(AsString(Member(entry, "type", at), at + ".type"), at);
+    spec.usage = usage;
+    if (group == PropertyGroup::Baker) {
+        spec.group = group;
+    } else if (spec.name.starts_with("Common.")) {
+        spec.group = PropertyGroup::Common;
+    } else if (spec.name.starts_with("Detail.")) {
+        spec.group = PropertyGroup::Detail;
+    } else {
+        Malformed(at + ": a common() key's name starts with Common. or Detail.");
+    }
+    if (const auto it = entry.find("enum_values"); it != entry.end()) {
+        for (const auto& [label, integer] : AsObject(it->second, at + ".enum_values")) {
+            spec.enum_values.emplace_back(label, static_cast<int>(AsInt(integer, at + ".enum_values")));
+        }
+        std::sort(spec.enum_values.begin(), spec.enum_values.end(),
+                  [](const auto& a, const auto& b) { return a.second < b.second; });
+    }
+    if ((spec.type == PropertyType::Enum) == spec.enum_values.empty()) {
+        Malformed(at + ": enum_values belong to Enum keys only, and every Enum key has them");
+    }
+    if (const auto it = entry.find("range"); it != entry.end()) {
+        const json::Object& range = AsObject(it->second, at + ".range");
+        if (const auto min = range.find("min"); min != range.end()) spec.minimum = TableValue(spec, min->second, at + ".min");
+        if (const auto max = range.find("max"); max != range.end()) spec.maximum = TableValue(spec, max->second, at + ".max");
+    }
+    const json::Value& default_value = Member(entry, "default", at);
+    if (default_value.IsNull()) {
+        spec.default_note = AsString(Member(entry, "default_note", at), at + ".default_note");
+    } else {
+        spec.default_value = TableValue(spec, default_value, at + ".default");
+    }
+    const json::Object& provenance = AsObject(Member(entry, "provenance", at), at + ".provenance");
+    spec.record_sha256 = AsString(Member(provenance, "record_sha256", at), at + ".record_sha256");
+    spec.output_id = AsString(Member(provenance, "output_id", at), at + ".output_id");
     return spec;
 }
 
-PropertySpec WithOptions(PropertySpec spec, std::vector<std::string> options, bool complete) {
-    spec.option_labels = std::move(options);
-    spec.options_complete = complete;
-    return spec;
-}
-
-PropertySpec WithDefault(PropertySpec spec, PropertyValue value, std::string source) {
-    spec.default_value = std::move(value);
-    spec.default_source = std::move(source);
-    return spec;
-}
-
-std::vector<PropertySpec> BuildSpecs() {
-    using G = PropertyGroup;
-    using T = PropertyType;
-    const std::string task_page = Join({kTask, kPage});
-    const char* listed = "docs/architecture/06-baking.md section 2 (listed default)";
+struct Catalog {
     std::vector<PropertySpec> specs;
-    // Common.
-    specs.push_back(Spec("OutputSize", G::Common, T::IntPair, "Output size",
-                         Join({kTask, "the log2 pair", kPage}),
-                         "Width and height of the baked maps, each written as a power-of-two exponent."));
-    specs.push_back(Spec("DilationWidth", G::Common, T::Int, "Dilation width",
-                         Join({kTask, "a count of texels", kPage}),
-                         "How many texels the baked values are carried outward from the UV islands into "
-                         "unused texture space."));
-    specs.push_back(Spec("ApplyDiffusion", G::Common, T::Bool, "Apply diffusion", task_page,
-                         "Whether the texels reached by dilation are also smoothed as they spread."));
-    // Detail (high-poly).
-    specs.push_back(Spec("HipolyMesh", G::Detail, T::String, "High definition meshes",
-                         Join({kTask, "file:/// URLs joined by '|'", kPage}),
-                         "The high-resolution meshes the maps are baked from, as a '|'-separated list of "
-                         "file URLs."));
-    specs.push_back(Spec("LowAsHigh", G::Detail, T::Bool, "Use Low poly mesh as high poly mesh", task_page,
-                         "Take the texture set's own mesh as the bake source instead of separate "
-                         "high-resolution meshes."));
-    specs.push_back(WithOptions(
-        Spec("CageMode", G::Detail, T::Enum, "Cage", task_page,
-             "Where the primary rays start: at fixed distances along the low normal, on an "
-             "automatically built shell, or on a cage mesh the user supplies."),
-        {"Distance based", "Automatic (experimental)", "Custom file"}, true));
-    specs.push_back(Spec("CageMesh", G::Detail, T::Pending, "", kTask,
-                         "The user-supplied cage mesh used by the custom cage mode."));
-    specs.push_back(Spec("MaxHeight", G::Detail, T::Pending, "", kTask,
-                         "Distance above the low surface at which a distance-based primary ray begins."));
-    specs.push_back(Spec("MaxDepth", G::Detail, T::Pending, "", kTask,
-                         "Distance below the low surface down to which a distance-based primary ray "
-                         "keeps looking for the high mesh."));
-    specs.push_back(Spec("RelativeScale", G::Detail, T::Pending, "", kTask,
-                         "Selects whether the cage distances are absolute or measured against the "
-                         "bounding box."));
-    specs.push_back(Spec("SmoothNormals", G::Detail, T::Pending, "", kTask,
-                         "Normal smoothing of the ray directions (listed by the task; its type waits "
-                         "for the discovery capture)."));
-    specs.push_back(Spec("IgnoreBackface", G::Detail, T::Bool, "Ignore backface", task_page,
-                         "Primary rays go through high-mesh faces they meet from behind instead of "
-                         "stopping there."));
-    specs.push_back(WithOptions(Spec("FilterMethod", G::Detail, T::Enum, "Match", task_page,
-                                     "Whether any high mesh may serve any low mesh, or only the high "
-                                     "meshes whose names pair with it."),
-                                {"Always", "By mesh name"}, true));
-    specs.push_back(WithDefault(Spec("LowpolySuffix", G::Detail, T::String, "Low poly mesh suffix", task_page,
-                                     "Name ending that identifies a low mesh when meshes are paired by "
-                                     "name."),
-                                std::string("_low"), listed));
-    specs.push_back(WithDefault(Spec("HipolySuffix", G::Detail, T::String, "High poly mesh suffix", task_page,
-                                     "Name ending that identifies a high mesh when meshes are paired by "
-                                     "name."),
-                                std::string("_high"), listed));
-    specs.push_back(WithDefault(Spec("BackfaceCullingSuffix", G::Detail, T::String, "", kTask,
-                                     "Name ending that makes primary rays go through the back faces of "
-                                     "that one high mesh."),
-                                std::string("_ignorebf"), listed));
-    specs.push_back(WithOptions(Spec("SubSampling", G::Detail, T::Enum, "Antialiasing",
-                                     Join({kTask, "options as listed there", kPage}),
-                                     "How many primary samples are taken inside each texel and averaged."),
-                                {"None", "2×2", "4×4", "8×8"}, true));
-    specs.push_back(Spec("SkewFaceBehavior", G::Detail, T::Pending, "", kTask,
-                         "Skew-correction behaviour (listed by the task; type and meaning wait for the "
-                         "discovery capture)."));
-    specs.push_back(Spec("OffsetMap", G::Detail, T::Pending, "", kTask,
-                         "Offset map input (listed by the task; type and meaning wait for the discovery "
-                         "capture)."));
-    // AO.
-    specs.push_back(Spec("NbSecondary", G::Ao, T::Pending, "Secondary rays", task_page,
-                         "Rays sent out from each surface point to estimate how open it is."));
-    specs.push_back(Spec("MinDistance", G::Ao, T::Pending, "Min Occluder distance", task_page,
-                         "Geometry nearer than this along a ray does not block it."));
-    specs.push_back(Spec("MaxDistance", G::Ao, T::Pending, "Max occluder distance", task_page,
-                         "A ray that gets this far without meeting geometry counts as unblocked."));
-    specs.push_back(Spec("MaxDistanceRelativeScale", G::Ao, T::Bool, "Relative to bounding box", task_page,
-                         "Read the occluder distances as fractions of the mesh's bounding-box size rather "
-                         "than in scene units."));
-    specs.push_back(Spec("Spread", G::Ao, T::Pending, "Spread angle", task_page,
-                         "Opening angle of the cone the rays are drawn from."));
-    specs.push_back(WithOptions(Spec("Distribution", G::Ao, T::Enum, "Distribution", Join({kTask, kPage, kPyDoc}),
-                                     "How the ray directions are laid out over the hemisphere."),
-                                {"Cosine"}, false));
-    specs.push_back(Spec("IgnoreBackfaceSecondary", G::Ao, T::Pending, "Ignore backface", task_page,
-                         "Whether faces met from behind block the secondary rays."));
-    specs.push_back(Spec("FilterMethodSecondary", G::Ao, T::Pending, "", kTask,
-                         "Which meshes the secondary rays of a given mesh may hit."));
-    specs.push_back(Spec("Attenuation", G::Ao, T::Pending, "Attenuation", task_page,
-                         "How much less an occluder counts the farther away it is."));
-    specs.push_back(Spec("GroundPlane", G::Ao, T::Bool, "Ground plane", task_page,
-                         "Adds a floor plane beneath the mesh as an extra occluder."));
-    specs.push_back(Spec("GroundOffset", G::Ao, T::Pending, "Ground plane offset", task_page,
-                         "Moves that floor plane up or down."));
-    return specs;
+    TextureSetBakeState state;
+};
+
+Catalog ParseCatalog(std::string_view text) {
+    json::Value root;
+    try {
+        root = json::Parse(text);
+    } catch (const json::ParseError& error) {
+        Malformed(error.what());
+    }
+    const json::Object& table = AsObject(root, "the table");
+    if (AsString(Member(table, "schema", "the table"), "schema") != "uzpainter/baking-defaults/1") {
+        Malformed("unknown schema");
+    }
+    Catalog catalog;
+    for (const json::Value& entry : AsArray(Member(table, "common", "the table"), "common")) {
+        catalog.specs.push_back(ParseEntry(entry, PropertyGroup::Common, MeshMapUsage::AO, "common"));
+    }
+    const json::Object& bakers = AsObject(Member(table, "bakers", "the table"), "bakers");
+    if (bakers.size() != std::size(kUsages)) Malformed("bakers names every MeshMapUsage once");
+    for (MeshMapUsage usage : kUsages) {
+        const std::string where = std::string("bakers.") + UsageName(usage);
+        for (const json::Value& entry : AsArray(Member(bakers, UsageName(usage), "bakers"), where)) {
+            catalog.specs.push_back(ParseEntry(entry, PropertyGroup::Baker, usage, where));
+        }
+    }
+    const json::Object& state = AsObject(Member(table, "texture_set_state", "the table"), "texture_set_state");
+    const auto state_default = [&](const char* key) -> const json::Value& {
+        return Member(AsObject(Member(state, key, "texture_set_state"), key), "default", key);
+    };
+    catalog.state.curvature_method = AsString(state_default("curvature_method"), "curvature_method");
+    for (const json::Value& baker : AsArray(state_default("enabled_bakers"), "enabled_bakers")) {
+        catalog.state.enabled_bakers.push_back(AsString(baker, "enabled_bakers"));
+    }
+    const json::Value& enabled = state_default("textureset_enabled");
+    if (!enabled.IsBool()) Malformed("textureset_enabled is not a bool");
+    catalog.state.textureset_enabled = std::get<bool>(enabled.data);
+    return catalog;
 }
 
-std::string TierZero(const std::string& what) {
-    return what + " is not established: it comes from the Tier 0 discovery capture "
-                  "(phase3.1_baker-request-model items 2.8 and 3.1)";
+const Catalog& TheCatalog() {
+    static const Catalog catalog = ParseCatalog(BakingDefaultsText());
+    return catalog;
+}
+
+std::string Owner(MeshMapUsage usage) { return UsageOwnerTask(usage); }
+
+void RefuseOtherUsage(MeshMapUsage usage, const std::string& what) {
+    if (usage != MeshMapUsage::AO) {
+        throw NotYetSupported(what + " of " + UsageName(usage) + " (owned by " + Owner(usage) + ")");
+    }
 }
 
 }  // namespace
 
-const std::vector<PropertySpec>& PropertySpecs() {
-    static const std::vector<PropertySpec> specs = BuildSpecs();
-    return specs;
-}
+const std::vector<PropertySpec>& PropertySpecs() { return TheCatalog().specs; }
+
+const TextureSetBakeState& DefaultTextureSetState() { return TheCatalog().state; }
 
 /// One copy of a group of parameters: a texture set's own, or a link group's shared one.
 struct ParameterSlot {
@@ -187,7 +228,11 @@ struct ParameterStore {
     /// Shared by the texture sets of one session; null for a set outside a session.
     std::shared_ptr<std::uint64_t> revision;
 
-    ParameterSlot& SlotOf(PropertyGroup group) const { return group == PropertyGroup::Ao ? *ao : *common; }
+    /// The slot holding `spec`'s values; null for a baker other than AO (its values are not stored).
+    ParameterSlot* SlotOf(const PropertySpec& spec) const {
+        if (spec.group != PropertyGroup::Baker) return common.get();
+        return spec.usage == MeshMapUsage::AO ? ao.get() : nullptr;
+    }
 };
 
 // ── Property ─────────────────────────────────────────────────────────────────────────────────
@@ -195,40 +240,35 @@ struct ParameterStore {
 const std::string& Property::short_name() const { return spec_->short_name; }
 PropertyType Property::type() const { return spec_->type; }
 PropertyGroup Property::group() const { return spec_->group; }
-const std::string& Property::description() const { return spec_->description; }
-const std::vector<std::string>& Property::documented_option_labels() const { return spec_->option_labels; }
+const std::string& Property::name() const { return spec_->name; }
+const std::string& Property::label() const { return spec_->label; }
+const std::string& Property::widget_type() const { return spec_->widget_type; }
 
 PropertyValue Property::value() const {
-    const auto& values = store_->SlotOf(spec_->group).values;
-    const auto it = values.find(spec_->short_name);
-    if (it != values.end()) return it->second;
+    if (const ParameterSlot* slot = store_->SlotOf(*spec_)) {
+        const auto it = slot->values.find(spec_->short_name);
+        if (it != slot->values.end()) return it->second;
+    }
     if (spec_->default_value) return *spec_->default_value;
-    throw NotYetSupported("the default of " + spec_->short_name +
-                          " is not established: it comes from the private defaults capture "
-                          "(phase3.1_baker-request-model item 2.9)");
-}
-
-std::string Property::label() const {
-    if (spec_->label.empty()) throw NotYetSupported(TierZero("the label of " + spec_->short_name));
-    return spec_->label;
-}
-
-std::string Property::name() const { throw NotYetSupported(TierZero("the full name of " + spec_->short_name)); }
-
-std::string Property::widget_type() const {
-    throw NotYetSupported(TierZero("the widget type of " + spec_->short_name));
+    throw NotYetSupported("the default of " + spec_->short_name + " is not established: " + spec_->default_note +
+                          " (decision 323)");
 }
 
 std::map<std::string, int> Property::enum_values() const {
-    throw NotYetSupported(TierZero("the enum integers of " + spec_->short_name));
+    return {spec_->enum_values.begin(), spec_->enum_values.end()};
 }
 
 int Property::enum_value(const std::string& enum_label) const {
-    throw NotYetSupported(TierZero("the enum integer of " + spec_->short_name + " '" + enum_label + "'"));
+    for (const auto& [label, integer] : spec_->enum_values) {
+        if (label == enum_label) return integer;
+    }
+    throw ValueError(spec_->short_name + " has no enum value '" + enum_label + "'");
 }
 
 std::string Property::properties() const {
-    throw NotYetSupported(TierZero("the meta properties of " + spec_->short_name));
+    throw NotYetSupported("the meta properties of " + spec_->short_name +
+                          " carry Painter's descriptive text, which UzPainter does not reproduce (clean room; "
+                          "decision 323)");
 }
 
 // ── BakingParameters ─────────────────────────────────────────────────────────────────────────
@@ -242,58 +282,91 @@ const std::string& BakingParameters::texture_set() const { return store_->textur
 std::map<std::string, Property> BakingParameters::common() const {
     std::map<std::string, Property> out;
     for (const PropertySpec& spec : PropertySpecs()) {
-        if (spec.group == PropertyGroup::Common || spec.group == PropertyGroup::Detail) {
-            out.emplace(spec.short_name, Property(store_, &spec));
-        }
+        if (spec.group != PropertyGroup::Baker) out.emplace(spec.short_name, Property(store_, &spec));
     }
     return out;
 }
-
-namespace {
-
-void RefuseOtherUsage(MeshMapUsage usage, const std::string& what) {
-    if (usage != MeshMapUsage::AO) {
-        throw NotYetSupported(what + " of " + UsageName(usage) + " (owned by " + UsageOwnerTask(usage) + ")");
-    }
-}
-
-}  // namespace
 
 std::map<std::string, Property> BakingParameters::baker(MeshMapUsage usage) const {
-    RefuseOtherUsage(usage, "the bake parameters");
     std::map<std::string, Property> out;
     for (const PropertySpec& spec : PropertySpecs()) {
-        if (spec.group == PropertyGroup::Ao) out.emplace(spec.short_name, Property(store_, &spec));
+        if (spec.group == PropertyGroup::Baker && spec.usage == usage) out.emplace(spec.short_name, Property(store_, &spec));
     }
     return out;
 }
 
 namespace {
+
+std::string Text(const PropertyValue& value) {
+    if (const auto* i = std::get_if<std::int64_t>(&value)) return std::to_string(*i);
+    if (const auto* d = std::get_if<double>(&value)) return json::FormatDouble(*d);
+    if (const auto* p = std::get_if<std::pair<std::int64_t, std::int64_t>>(&value)) {
+        return "[" + std::to_string(p->first) + ", " + std::to_string(p->second) + "]";
+    }
+    return "the value";
+}
+
+/// `value` inside `spec`'s range, component by component for a pair.
+void CheckRange(const PropertySpec& spec, const PropertyValue& value) {
+    const auto below = [](const PropertyValue& v, const PropertyValue& bound) {
+        if (const auto* i = std::get_if<std::int64_t>(&v)) return *i < std::get<std::int64_t>(bound);
+        if (const auto* d = std::get_if<double>(&v)) return *d < std::get<double>(bound);
+        const auto& p = std::get<std::pair<std::int64_t, std::int64_t>>(v);
+        const auto& b = std::get<std::pair<std::int64_t, std::int64_t>>(bound);
+        return p.first < b.first || p.second < b.second;
+    };
+    const bool low = spec.minimum && below(value, *spec.minimum);
+    const bool high = spec.maximum && below(*spec.maximum, value);
+    if (low || high) {
+        throw NotYetSupported(spec.short_name + " = " + Text(value) + " lies outside Painter's range [" +
+                              (spec.minimum ? Text(*spec.minimum) : std::string("-inf")) + ", " +
+                              (spec.maximum ? Text(*spec.maximum) : std::string("inf")) +
+                              "]; how Painter treats such a value is not recorded (decision 323)");
+    }
+}
 
 /// The value `value` takes in the store for `spec`, or the refusal.
 PropertyValue Checked(const PropertySpec& spec, const PropertyValue& value) {
     const std::string& key = spec.short_name;
-    const auto wrong = [&] {
-        return ValueError(key + " takes a " + PropertyTypeName(spec.type) + " value");
-    };
+    const auto wrong = [&] { return ValueError(key + " takes a " + PropertyTypeName(spec.type) + " value"); };
     switch (spec.type) {
-        case PropertyType::Pending: throw NotYetSupported(TierZero("the value type of " + key));
         case PropertyType::Bool:
             if (!std::holds_alternative<bool>(value)) throw wrong();
             return value;
         case PropertyType::Int:
             if (!std::holds_alternative<std::int64_t>(value)) throw wrong();
+            CheckRange(spec, value);
             return value;
+        case PropertyType::Float: {
+            double number = 0.0;
+            if (const auto* d = std::get_if<double>(&value)) {
+                number = *d;
+            } else if (const auto* i = std::get_if<std::int64_t>(&value)) {
+                number = static_cast<double>(*i);
+            } else {
+                throw wrong();
+            }
+            if (!std::isfinite(number)) throw ValueError(key + " takes a finite number");
+            CheckRange(spec, number);
+            return number;
+        }
         case PropertyType::IntPair:
             if (!std::holds_alternative<std::pair<std::int64_t, std::int64_t>>(value)) throw wrong();
+            CheckRange(spec, value);
             return value;
+        case PropertyType::FloatPair: {
+            const auto* pair = std::get_if<std::pair<double, double>>(&value);
+            if (!pair) throw wrong();
+            if (!std::isfinite(pair->first) || !std::isfinite(pair->second)) throw ValueError(key + " takes finite numbers");
+            return value;
+        }
         case PropertyType::Enum: {
             const auto* label = std::get_if<EnumLabel>(&value);
             if (!label) throw wrong();
-            const auto& options = spec.option_labels;
-            if (std::find(options.begin(), options.end(), label->label) != options.end()) return value;
-            if (spec.options_complete) throw ValueError(key + " has no option '" + label->label + "'");
-            throw NotYetSupported(TierZero("the option '" + label->label + "' of " + key));
+            for (const auto& [known, integer] : spec.enum_values) {
+                if (known == label->label) return value;
+            }
+            throw ValueError(key + " has no enum value '" + label->label + "'");
         }
         case PropertyType::String:
             if (!std::holds_alternative<std::string>(value)) throw wrong();
@@ -318,17 +391,19 @@ void BakingParameters::set(const std::vector<std::pair<Property, PropertyValue>>
     // A linked group's sets share one slot: a key named twice in one slot is one parameter set twice.
     std::set<std::pair<const ParameterSlot*, std::string>> seen;
     for (const auto& [property, value] : values) {
-        const ParameterSlot* slot = &property.store_->SlotOf(property.spec_->group);
-        if (!seen.emplace(slot, property.spec_->short_name).second) {
-            throw ValueError(property.spec_->short_name + " of texture set '" + property.store_->texture_set +
+        const PropertySpec& spec = *property.spec_;
+        if (spec.group == PropertyGroup::Baker) RefuseOtherUsage(spec.usage, "storing the bake parameters");
+        const ParameterSlot* slot = property.store_->SlotOf(spec);
+        if (!seen.emplace(slot, spec.short_name).second) {
+            throw ValueError(spec.short_name + " of texture set '" + property.store_->texture_set +
                              "' appears twice in one set() (directly or through a link group)");
         }
-        checked.push_back(Checked(*property.spec_, value));
+        checked.push_back(Checked(spec, value));
     }
     std::vector<const ParameterStore*> stores;
     for (std::size_t i = 0; i < values.size(); ++i) {
         const Property& property = values[i].first;
-        property.store_->SlotOf(property.spec_->group).values[property.spec_->short_name] = std::move(checked[i]);
+        property.store_->SlotOf(*property.spec_)->values[property.spec_->short_name] = std::move(checked[i]);
         stores.push_back(property.store_.get());
     }
     Advance(stores);
@@ -452,53 +527,71 @@ std::vector<std::string> BakingSession::get_linked_texture_sets_common_parameter
 
 namespace {
 
-core::json::Value ToJson(const PropertySpec& spec, const PropertyValue& value) {
+json::Value ToJson(const PropertySpec& spec, const PropertyValue& value) {
     switch (spec.type) {
         case PropertyType::Bool: return std::get<bool>(value);
         case PropertyType::Int: return std::get<std::int64_t>(value);
+        case PropertyType::Float: return std::get<double>(value);
         case PropertyType::IntPair: {
             const auto& pair = std::get<std::pair<std::int64_t, std::int64_t>>(value);
-            return core::json::Array{pair.first, pair.second};
+            return json::Array{pair.first, pair.second};
+        }
+        case PropertyType::FloatPair: {
+            const auto& pair = std::get<std::pair<double, double>>(value);
+            return json::Array{pair.first, pair.second};
         }
         case PropertyType::Enum: return std::get<EnumLabel>(value).label;
         case PropertyType::String: return std::get<std::string>(value);
-        case PropertyType::Pending: break;
     }
-    throw std::logic_error("a pending property holds no value");
+    throw std::logic_error("a property of no type");
 }
 
-PropertyValue FromJson(const PropertySpec& spec, const core::json::Value& json, const std::string& where) {
+PropertyValue FromJson(const PropertySpec& spec, const json::Value& value, const std::string& where) {
     const auto wrong = [&] {
         return ValueError(where + "." + spec.short_name + " is not a " + PropertyTypeName(spec.type) + " value");
     };
+    const auto number = [&](const json::Value& v) {
+        if (v.IsInt()) return static_cast<double>(std::get<std::int64_t>(v.data));
+        if (v.IsDouble()) return std::get<double>(v.data);
+        throw wrong();
+    };
     switch (spec.type) {
         case PropertyType::Bool:
-            if (!json.IsBool()) throw wrong();
-            return std::get<bool>(json.data);
+            if (!value.IsBool()) throw wrong();
+            return std::get<bool>(value.data);
         case PropertyType::Int:
-            if (!json.IsInt()) throw wrong();
-            return std::get<std::int64_t>(json.data);
+            if (!value.IsInt()) throw wrong();
+            return std::get<std::int64_t>(value.data);
+        case PropertyType::Float: return number(value);
         case PropertyType::IntPair: {
-            if (!json.IsArray()) throw wrong();
-            const auto& array = std::get<core::json::Array>(json.data);
+            if (!value.IsArray()) throw wrong();
+            const auto& array = std::get<json::Array>(value.data);
             if (array.size() != 2 || !array[0].IsInt() || !array[1].IsInt()) throw wrong();
             return std::pair<std::int64_t, std::int64_t>{std::get<std::int64_t>(array[0].data),
                                                          std::get<std::int64_t>(array[1].data)};
         }
+        case PropertyType::FloatPair: {
+            if (!value.IsArray()) throw wrong();
+            const auto& array = std::get<json::Array>(value.data);
+            if (array.size() != 2) throw wrong();
+            return std::pair<double, double>{number(array[0]), number(array[1])};
+        }
         case PropertyType::Enum:
-            if (!json.IsString()) throw wrong();
-            return EnumLabel{std::get<std::string>(json.data)};
+            if (!value.IsString()) throw wrong();
+            return EnumLabel{std::get<std::string>(value.data)};
         case PropertyType::String:
-            if (!json.IsString()) throw wrong();
-            return std::get<std::string>(json.data);
-        case PropertyType::Pending: break;
+            if (!value.IsString()) throw wrong();
+            return std::get<std::string>(value.data);
     }
-    return PropertyValue{};  // a pending type: Checked() refuses it
+    throw wrong();
 }
 
-const PropertySpec* SpecOf(const std::string& key) {
+const PropertySpec* SpecOf(const std::string& key, PropertyGroup group, MeshMapUsage usage) {
     for (const PropertySpec& spec : PropertySpecs()) {
-        if (spec.short_name == key) return &spec;
+        if (spec.short_name != key) continue;
+        if (group == PropertyGroup::Baker ? spec.group == group && spec.usage == usage : spec.group == group) {
+            return &spec;
+        }
     }
     return nullptr;
 }
@@ -509,14 +602,15 @@ core::BakeSettings ToBakeSettings(const BakingParameters& parameters) {
     core::BakeSettings out;
     const ParameterStore& store = *parameters.store_;
     for (const PropertySpec& spec : PropertySpecs()) {
-        const auto& values = store.SlotOf(spec.group).values;
-        const auto it = values.find(spec.short_name);
-        if (it == values.end()) continue;
-        core::json::Value json = ToJson(spec, it->second);
+        const ParameterSlot* slot = store.SlotOf(spec);
+        if (!slot) continue;
+        const auto it = slot->values.find(spec.short_name);
+        if (it == slot->values.end()) continue;
+        json::Value value = ToJson(spec, it->second);
         switch (spec.group) {
-            case PropertyGroup::Common: out.common[spec.short_name] = std::move(json); break;
-            case PropertyGroup::Detail: out.detail[spec.short_name] = std::move(json); break;
-            case PropertyGroup::Ao: out.per_baker[UsageName(MeshMapUsage::AO)][spec.short_name] = std::move(json); break;
+            case PropertyGroup::Common: out.common[spec.short_name] = std::move(value); break;
+            case PropertyGroup::Detail: out.detail[spec.short_name] = std::move(value); break;
+            case PropertyGroup::Baker: out.per_baker[UsageName(spec.usage)][spec.short_name] = std::move(value); break;
         }
     }
     return out;
@@ -524,24 +618,23 @@ core::BakeSettings ToBakeSettings(const BakingParameters& parameters) {
 
 void LoadBakeSettings(const BakingParameters& parameters, const core::BakeSettings& settings) {
     ParameterSlot common, ao;
-    const auto load = [](const core::json::Object& object, PropertyGroup group, const std::string& where,
+    const auto load = [](const json::Object& object, PropertyGroup group, const std::string& where,
                          ParameterSlot& into) {
-        for (const auto& [key, json] : object) {
-            const PropertySpec* spec = SpecOf(key);
-            if (!spec || spec->group != group) throw ValueError(where + " has no key '" + key + "'");
-            into.values[key] = Checked(*spec, FromJson(*spec, json, where));
+        for (const auto& [key, value] : object) {
+            const PropertySpec* spec = SpecOf(key, group, MeshMapUsage::AO);
+            if (!spec) throw ValueError(where + " has no key '" + key + "'");
+            into.values[key] = Checked(*spec, FromJson(*spec, value, where));
         }
     };
     load(settings.common, PropertyGroup::Common, "bake_settings.common", common);
     load(settings.detail, PropertyGroup::Detail, "bake_settings.detail", common);
     for (const auto& [baker, object] : settings.per_baker) {
         if (baker == UsageName(MeshMapUsage::AO)) {
-            load(object, PropertyGroup::Ao, "bake_settings.per_baker.AO", ao);
+            load(object, PropertyGroup::Baker, "bake_settings.per_baker.AO", ao);
             continue;
         }
         bool known = false;
-        for (int u = 0; u <= static_cast<int>(MeshMapUsage::Opacity); ++u) {
-            const auto usage = static_cast<MeshMapUsage>(u);
+        for (MeshMapUsage usage : kUsages) {
             if (baker != UsageName(usage)) continue;
             known = true;
             if (!object.empty()) RefuseOtherUsage(usage, "the bake parameters");
@@ -570,44 +663,64 @@ MappedRequest RequestFromParameters(const BakingParameters& parameters, BakeRequ
     const auto text = [&](const std::map<std::string, Property>& group, const char* key) {
         return std::get<std::string>(value(group, key));
     };
+    const auto real = [&](const std::map<std::string, Property>& group, const char* key) {
+        return static_cast<float>(std::get<double>(value(group, key)));
+    };
+    const auto only = [&](const std::map<std::string, Property>& group, const char* key, const char* implemented,
+                          const std::string& owner) {
+        const std::string given = label(group, key);
+        if (given != implemented) {
+            throw NotYetSupported(std::string(key) + " '" + given + "': the CPU baker implements only '" + implemented +
+                                  "' (" + owner + ")");
+        }
+    };
     MappedRequest out;
     BakeRequest& r = base;
     r.texture_set = parameters.texture_set();
     const auto size = std::get<std::pair<std::int64_t, std::int64_t>>(value(common, "OutputSize"));
-    for (const std::int64_t log2 : {size.first, size.second}) {
-        if (log2 < 0 || log2 > 31) throw ValueError("OutputSize needs log2 sizes in [0, 31]");
-    }
     r.output_size_log2[0] = static_cast<std::uint32_t>(size.first);
     r.output_size_log2[1] = static_cast<std::uint32_t>(size.second);
-    const std::int64_t dilation = std::get<std::int64_t>(value(common, "DilationWidth"));
-    if (dilation < 0 || dilation > std::numeric_limits<std::uint32_t>::max()) {
-        throw ValueError("DilationWidth needs a texel count >= 0");
-    }
-    r.common.dilation_width = static_cast<std::uint32_t>(dilation);
+    r.common.dilation_width = static_cast<std::uint32_t>(std::get<std::int64_t>(value(common, "DilationWidth")));
     r.common.apply_diffusion = boolean(common, "ApplyDiffusion");
     r.detail.low_as_high = boolean(common, "LowAsHigh");
     const std::string cage = label(common, "CageMode");
-    r.detail.cage_mode = cage == "Distance based"             ? CageMode::DistanceBased
+    r.detail.cage_mode = cage == "Distance-based"             ? CageMode::DistanceBased
                          : cage == "Automatic (experimental)" ? CageMode::Automatic
                                                               : CageMode::CustomFile;
+    r.detail.max_height = real(common, "MaxHeight");
+    r.detail.max_depth = real(common, "MaxDepth");
+    r.detail.relative_to_bounding_box = boolean(common, "RelativeScale");
     r.detail.ignore_backface = boolean(common, "IgnoreBackface");
     r.detail.filter_method = label(common, "FilterMethod") == "Always" ? FilterMethod::Always : FilterMethod::ByMeshName;
     r.detail.low_suffix = text(common, "LowpolySuffix");
     r.detail.high_suffix = text(common, "HipolySuffix");
     r.detail.ignore_backface_suffix = text(common, "BackfaceCullingSuffix");
     const std::string sub = label(common, "SubSampling");
-    r.detail.subsampling = sub == "None" ? 1u : sub == "2×2" ? 2u : sub == "4×4" ? 4u : 8u;
-    out.keys_from_request = {"MaxHeight", "MaxDepth", "RelativeScale"};
+    r.detail.subsampling = sub == "None"              ? 1u
+                           : sub == "Subsampling 2x2" ? 2u
+                           : sub == "Subsampling 4x4" ? 4u
+                                                      : 8u;
+    if (!text(common, "OffsetMap").empty()) {
+        throw NotYetSupported("OffsetMap: the per-texel cage offset is not implemented (phase3.5_embree-bakers)");
+    }
+    out.keys_not_read = {"SmoothNormals", "SkewFaceBehavior"};
     if (std::find(r.usages.begin(), r.usages.end(), MeshMapUsage::AO) != r.usages.end()) {
         const std::map<std::string, Property> ao = parameters.baker(MeshMapUsage::AO);
-        r.ao.relative_to_bounding_box = boolean(ao, "MaxDistanceRelativeScale");
-        // `Cosine` is the only documented option, so the only one set() accepts.
-        (void)label(ao, "Distribution");
-        r.ao.distribution = Distribution::Cosine;
+        const std::string owner = UsageOwnerTask(MeshMapUsage::AO);
         if (boolean(ao, "GroundPlane")) {
-            throw NotYetSupported("GroundPlane: the AO ground plane is not implemented (phase3.4_baker-ao)");
+            throw NotYetSupported("GroundPlane: the AO ground plane is not implemented (" + owner + ")");
         }
-        for (const char* key : {"NbSecondary", "MinDistance", "MaxDistance"}) out.keys_from_request.push_back(key);
+        only(ao, "Attenuation", "None", owner);
+        only(ao, "IgnoreBackfaceSecondary", "Never", owner);
+        only(ao, "FilterMethodSecondary", "Always", owner);
+        if (std::get<double>(value(ao, "Spread")) != 180.0) {
+            throw NotYetSupported("Spread: the CPU baker casts over the whole hemisphere only, 180 degrees (" + owner + ")");
+        }
+        r.ao.secondary_rays = static_cast<std::uint32_t>(std::get<std::int64_t>(value(ao, "NbSecondary")));
+        r.ao.min_distance = real(ao, "MinDistance");
+        r.ao.max_distance = real(ao, "MaxDistance");
+        r.ao.relative_to_bounding_box = boolean(ao, "MaxDistanceRelativeScale");
+        r.ao.distribution = label(ao, "Distribution") == "Cosine" ? Distribution::Cosine : Distribution::Uniform;
     }
     out.request = std::move(r);
     return out;

@@ -69,8 +69,8 @@ DistanceRecord EffectiveDistances(const BakeRequest& request) {
         if (!request.box_size_metric) {
             throw NotYetSupported(
                 "the size of the bounding box a relative distance is measured against (its diagonal or its "
-                "largest extent) is not established: a Painter recording settles it (decision 311; "
-                "phase3.1_baker-request-model item 2.5)");
+                "largest extent) is not established: a Painter recording settles it (decision 311; owner "
+                "phase3.5_embree-bakers, decision 323)");
         }
         d.box_size_metric = *request.box_size_metric;
         d.box_size = d.box_size_metric == BoxSizeMetric::Diagonal ? std::sqrt(ex * ex + ey * ey + ez * ez)

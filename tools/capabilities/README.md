@@ -68,9 +68,9 @@ notes, or a compositor release gap naming no owner task. Each error names the en
 The release gaps of §3 are seeded as their own entries with a note (paint layers and effects
 receiving bitmaps or projections, warp and UV-set-to-UV-set projections, the UV-tile workflows,
 auto-unwrap, vector and font sources, material layering, USD export, TIFF/PSD/WebP/JPEG 2000
-export, arbitrary `.sbsar` evaluation). The desktop-only members are the Qt-facing members of
-`ui` named in §3, `Resource.show_in_ui`, `show_resources_in_ui` and
-`GraphicalUserInterfaceStarted`. A gap leaves `RELEASE_GAPS` only together with §3.
+export, arbitrary `.sbsar` evaluation, a bake with the `Automatic` cage). The desktop-only
+members are the Qt-facing members of `ui` named in §3, `Resource.show_in_ui`,
+`show_resources_in_ui` and `GraphicalUserInterfaceStarted`. A gap leaves `RELEASE_GAPS` only together with §3.
 
 Phase 1 statuses (decision 112): a symbol a compared Tier 0 replay exercises is `supported` and
 cites exactly the goldens of those replays (for a module or a class, a member counts); one the API

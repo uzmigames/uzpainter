@@ -60,6 +60,7 @@ RELEASE_GAPS = {
     ("substance_painter.export.export_project_textures", "file-format:webp"),
     ("substance_painter.export.export_project_textures", "file-format:j2k"),
     ("substance_painter.source.SourceSubstance", "arbitrary-sbsar"),
+    ("substance_painter.baking.bake_async", "cage-mode:automatic"),
 }
 
 # The desktop-only members named in docs/architecture/10-python-api.md §3.

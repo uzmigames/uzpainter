@@ -6,17 +6,17 @@
 - [x] 2.2 Define `IBaker`, `Capabilities`, `BakeRequest` and `JobHandle`; implement `EmbreeBaker` with the explicit capability error for unqualified CPU/ISA configurations
 - [x] 2.3 Implement deterministic sampling (Hammersley by texel index and sample id), fixed reduction order and thread-count-independent tile partitioning
 - [x] 2.4 Implement low/high matching (`FilterMethod`, `_low`/`_high`/`_ignorebf` suffixes, `LowAsHigh`) and `IgnoreBackface`
-- [ ] 2.5 Implement cages: custom cage mesh and distance-based frontal/rear (absolute or relative to the bounding box); report `Automatic` as a release gap in the capability manifest
+- [x] 2.5 Implement cages: custom cage mesh and distance-based frontal/rear (absolute or relative to the bounding box); report `Automatic` as a release gap in the capability manifest
 - [x] 2.6 Implement per-texel hit classification (straight hit, cage hit, centre miss, hidden) and `SubSampling` coverage accumulation
-- [ ] 2.7 Implement `DilationWidth` with optional `ApplyDiffusion` on the baked map only, keeping RAW; record distances in project units
-- [ ] 2.8 Implement the `BakingParameters`/`Property` model (`common()`, `baker(usage)`, `set`, `Property.*`) from the Phase 0 discovery capture; enum integers from `enum_values()` labels
-- [ ] 2.9 Author `assets/defaults/baking.json` with per-entry provenance and a local check on the owner's machine (decision 028) against the private defaults capture
+- [x] 2.7 Implement `DilationWidth` with optional `ApplyDiffusion` on the baked map only, keeping RAW; record distances in project units
+- [x] 2.8 Implement the `BakingParameters`/`Property` model (`common()`, `baker(usage)`, `set`, `Property.*`) from the Phase 0 discovery capture; enum integers from `enum_values()` labels
+- [x] 2.9 Author `assets/defaults/baking.json` with per-entry provenance and a local check on the owner's machine (decision 028) against the private defaults capture
 - [x] 2.10 Implement linked groups (`set_linked_group`, `set_linked_group_common_parameters`, `unlink_all*`, `get_link_group*`, `get_linked_texture_sets*`) as one transaction across linked sets; persist `bake_settings {common, detail, per_baker}` — supported Common/Detail and AO surface, with decision 311's explicit refusals retained; project persistence and evidence in section 9
-- [ ] 2.11 Register the MCP Baking parameter tools `bake_inspect`, `bake_configure`, `bake_set_mesh_inputs`, `bake_capture_preset`, `bake_apply_preset`
+- [x] 2.11 Register the MCP Baking parameter tools `bake_inspect`, `bake_configure`, `bake_set_mesh_inputs`, `bake_capture_preset`, `bake_apply_preset`
 
 ## 3. Tests
 - [ ] 3.1 Tier 0 API-probe goldens for current baking defaults and property metadata (`common().keys()`, `baker(usage).keys()`, labels, widget types, enum values) compared exactly on the owner's machine
-- [ ] 3.2 Defaults check: every `assets/defaults/baking.json` entry equals the private capture hash it cites
+- [x] 3.2 Defaults check: every `assets/defaults/baking.json` entry equals the private capture hash it cites
 - [x] 3.3 Local CPU lane (decision 200): repeatability of the ray-cast core on the analytic fixtures (plane, sphere, bevelled cube with highs) at 1, 4 and max threads — identical bytes
 - [x] 3.4 Matching and cage tests on the bevelled cube with highs (suffix filtering, `LowAsHigh`, distance-based and custom cage), dilation keeps RAW, subsampling coverage counts
 - [x] 3.5 Linked-set transaction test: a failing `set` on one linked set leaves every set unchanged; capability error test on an unqualified ISA configuration
@@ -77,3 +77,49 @@
 - `tests/bake/test_baking_project.py`: 3 passed, 0 skipped on Debug (29.53 s). The three native cases (`roundtrip`, `transactions`, `invalid`) also passed on each of ReleaseSafe, ReleaseFast and ReleaseSmall. Real `.uzp` save/reopen covers values, groups, rename/reorder and unlink; transaction checks cover no-op, replay, stale revision, idempotency conflict, invalid values and commit-sink failure. Malformed metadata and unsupported original settings are rejected before replacement. Evidence: `tmp/scratch/baking-project/evidence.json`.
 - Documentation: `docs/architecture/06-baking.md` section 3.1 and this task's baker spec. Source citation/revision audit, Python lint/type checks, Zig formatting and Rulebook validation passed. No GPU or Painter session was used.
 - Other baker usages, unrecorded property metadata/defaults and unsupported regrouping retain decision 311's refusals and their existing owners. Items 2.8, 2.9, 3.1, 3.2 and acceptance 4.1 remain open; this persistence result does not accept the parent task or any parity gate.
+
+## 10. Closing items (decision 323; 2026-10-20, branch `wt/bake-model`)
+- 2.5 ticked. What is implemented:
+  - the custom cage, in memory or read from a mesh file (decisions 306 and 311);
+  - the distance-based frontal and rear distances, absolute in centimetres or relative to the project mesh's bounding box.
+
+  What stays refused, each refusal now naming `phase3.5_embree-bakers`:
+  - the relative box-size metric: `NotYetSupported` unless the request names it;
+  - `CageMode` Automatic: `CapabilityError`. It is the capability manifest's release gap `substance_painter.baking.bake_async` @ `cage-mode:automatic`, seeded in `RELEASE_GAPS` and listed in `10-python-api.md` §3.
+
+  Evidence:
+  - `uzp-bake-feasibility-tests run capability_errors` and `run relative_distances` (built with `zig build bake-feasibility-tests -j2`): exit 0, PASS each;
+  - `python -m pytest tests/capabilities/test_capabilities.py -k "release_gap or schema or evidence"`: exit 0, 9 passed.
+- 2.7 ticked. What is implemented:
+  - `DilationWidth`, into uncovered texels only, writing the baked map with RAW kept (decisions 306 and 311);
+  - distances in centimetres over `scale_to_internal`, recorded with the map (`DistanceRecord`, `UZPBAKE3`).
+
+  What stays refused: `ApplyDiffusion` on, with `NotYetSupported` before any work, owned by `phase3.5_embree-bakers`. The manifest adds the release gaps `bake_async` @ `apply-diffusion` and @ `relative-to-bounding-box`.
+
+  Evidence: `uzp-bake-feasibility-tests run dilation`, `run units` and `run capability_errors` (exit 0, PASS each), plus the capabilities tests named under 2.5.
+- 2.9 and 3.2 ticked.
+  - The table: `assets/defaults/baking.json`, authored by UzmiGames, 60 keys plus the texture set's baking state. Each entry cites the Tier 0 record `tier0/defaults-templates/baking-defaults` on Painter 12.1.5 (`53d9cfc9...`, recordings r1 to r3 equal).
+  - The local check: `tools/bake/bake_defaults.py`, decision 323 §4.
+  - Evidence: `python -m tools.bake.bake_defaults check --model <catalog dump>` run on the owner's machine against the private store, read only. Exit 0, status `pass`, 0 problems; table SHA-256 `cb5c925d...` in the working tree, after the check moved to `tools/bake/` (the paths of `tools/parity/` were held for Codex). `python -m pytest tests/bake/test_bake_defaults.py`: exit 0, 11 passed, with `test_the_private_capture_equals_the_table` run, not skipped.
+- 2.8 ticked (decision 323 §3).
+  - The model: `BakingParameters`/`Property` are built from the authored table, embedded through `EmbedInputs`. `common()` gives 19 keys and `baker(usage)` gives every usage's observed keys. `name()`, `label()`, `widget_type()`, `enum_values()` and `enum_value()` answer from the table; enum integers come only from `enum_values()`. `set()` is typed and range-checked, in one transaction.
+  - What stays refused with `NotYetSupported`:
+    - `properties()`, since Painter's meta properties carry its descriptive text and the clean room does not copy it;
+    - a value outside a key's range;
+    - storing a value for a baker other than AO (its owner task);
+    - the unestablished defaults of `OutputSize` and `TonemappingBounds`.
+  - Evidence: `zig build bake-feasibility-tests baking-project-tests -j2` exit 0, then the native cases `run parameters`, `linked_groups`, `bake_settings`, `parameters_to_request` and `capability_errors` (exit 0, PASS each).
+    - `python -m pytest tests/bake/test_baking_project.py`: exit 0, 4 passed, including `test_model_equals_the_authored_table` (the `catalog` dump equals the table).
+    - `python -m pytest tests/bake/test_bake_feasibility.py -k "parameters or linked_groups or bake_settings or capability_errors or dilation or units or relative_distances"`: exit 0, 8 passed.
+    - `tools.bake.bake_defaults check --model`: model equals table equals capture, exit 0.
+  - Item 3.1 stays open. Its Tier 0 API probe compares the Python `substance_painter.baking` surface, and `uzpainter.baking` is still gapped: binding the parameter API to Python (this task's Impact) is not done yet. The native model's metadata is already compared exactly through the `catalog` dump.
+- 2.11 ticked (decision 323 §5).
+  - The tools: `bake_inspect`, `bake_configure`, `bake_set_mesh_inputs`, `bake_capture_preset` and `bake_apply_preset` are served by the worker over the parameter model, each change one transaction.
+  - The gates: the texture set's baking state arguments are gated release gaps, and `bake_start` stays a gap.
+  - The manifest: `mcp-tools.json` was regenerated (`UZP_UPDATE_MCP_TOOLS=1`), and the five matrix rows are `available` with the Python-disabled fixture.
+  - Evidence: `zig build painter -j2`: exit 0.
+    - `python -m pytest tests/supervisor/test_typed_tools.py -k "bake_parameter_tools or every_family_is_listed or unavailable_families or direct_pipe_client or resources_and_prompts"`: exit 0, 5 passed.
+    - `tests/supervisor/test_operation_matrix.py -k "registered_tools or matrix_is_published"`: exit 0, 2 passed.
+    - `tests/capabilities/test_operation_matrix.py`: exit 0, 16 passed.
+    - `tests/supervisor/test_registry.py -k "prompt or capabilities"`: exit 0, 4 passed.
+

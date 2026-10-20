@@ -1,0 +1,12 @@
+{
+  "id": 323,
+  "slug": "323-bake-model-close",
+  "title": "Closing the baker request model: the Automatic cage, ApplyDiffusion and the relative box size as manifest release gaps owned by phase3.5_embree-bakers; the BakingParameters/Property model from the authored, capture-checked table assets/defaults/baking.json (meta properties and out-of-range values refused); the MCP Baking parameter tools; parity pending-evidence",
+  "status": "accepted",
+  "date": "2026-10-20",
+  "relatedTasks": [
+    "phase3.1_baker-request-model",
+    "phase3.5_embree-bakers"
+  ],
+  "supersededBy": null
+}

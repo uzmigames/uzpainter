@@ -11,7 +11,9 @@
 // src/supervisor/SUPERVISOR.md (Typed tools).
 
 #include <exception>
+#include <filesystem>
 #include <functional>
+#include <string>
 #include <vector>
 
 #include "supervisor/tools.h"
@@ -30,6 +32,9 @@ struct ToolContext {
     /// The transaction result of an outcome of the admitted request, decided elsewhere (a create or
     /// a revert); throws like `submit`.
     std::function<json::Object(const core::RequestOutcome& outcome, const std::exception_ptr& error)> settle;
+    /// A file path inside the worker's output root (a relative path is taken under it);
+    /// `invalid_arguments` otherwise.
+    std::function<std::filesystem::path(const std::string& path)> output_path;
 };
 
 /// Every typed tool of the families above, in listing order.

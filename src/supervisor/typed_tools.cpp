@@ -3,11 +3,15 @@
 #include "supervisor/typed_tools.h"
 
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <map>
 #include <set>
+#include <type_traits>
+#include <variant>
 
+#include "bake/baking_project.h"
 #include "python/edits.h"
 #include "python/errors.h"
 #include "python/recipe.h"
@@ -21,6 +25,7 @@ namespace uzp::supervisor {
 
 namespace {
 
+namespace bake = uzp::bake;
 using python::ChannelArg;
 
 [[noreturn]] void Invalid(std::string message) { throw CallError{"invalid_arguments", std::move(message), {}}; }
@@ -1395,51 +1400,391 @@ void RecipeFamily(const ToolContext& context, std::vector<ToolDefinition>& tools
         "smart materials are a release gap (phase3.6_smart-presets-projections)"));
 }
 
-void BakingFamily(std::vector<ToolDefinition>& tools) {
-    const std::string reason = "native baking is a release gap (phase3.5_embree-bakers)";
-    tools.push_back(GapTool({"bake_inspect", "A texture set's baking parameters: bakers, UV tiles, common and per-baker values.",
-                             Schema({{"texture_set", TextureSetProperty()}}, {}), false, false, true,
-                             Operation("substance_painter.baking.BakingParameters.from_texture_set")},
-                            reason));
-    tools.push_back(GapTool(
-        {"bake_configure", "Sets a texture set's baking parameters: enabled, bakers, UV tiles, curvature method, common and "
-                           "per-baker values.",
+// ── Baking parameters (phase3.1_baker-request-model item 2.11, decision 323) ────────────────────
+
+constexpr const char* kBakeParity = "pending-evidence";
+constexpr const char* kBakePresetSchema = "uzpainter/bake-preset/1";
+
+/// A `ValueError` of the parameter model is `invalid_arguments {type: ValueError}`; a release gap
+/// (`NotYetSupported`) reaches the worker's boundary as `capability_gap`.
+json::Object BakeCall(const std::function<json::Object()>& run) {
+    try {
+        return run();
+    } catch (const core::ValueError& error) {
+        throw CallError{"invalid_arguments", error.what(), json::Object{{"type", "ValueError"}}};
+    }
+}
+
+bake::MeshMapUsage UsageNamed(const std::string& name, const std::string& what) {
+    for (int u = 0; u <= static_cast<int>(bake::MeshMapUsage::Opacity); ++u) {
+        const auto usage = static_cast<bake::MeshMapUsage>(u);
+        if (name == bake::UsageName(usage)) return usage;
+    }
+    Invalid(what + ": no baker " + name);
+}
+
+std::vector<bake::MeshMapUsage> AllUsages() {
+    std::vector<bake::MeshMapUsage> usages;
+    for (int u = 0; u <= static_cast<int>(bake::MeshMapUsage::Opacity); ++u) usages.push_back(static_cast<bake::MeshMapUsage>(u));
+    return usages;
+}
+
+/// A parameter value as JSON: an `Enum` as its label, a pair as `[a, b]`.
+json::Value BakeJson(const bake::PropertyValue& value) {
+    return std::visit(
+        [](const auto& v) -> json::Value {
+            using T = std::decay_t<decltype(v)>;
+            if constexpr (std::is_same_v<T, bake::EnumLabel>) {
+                return v.label;
+            } else if constexpr (std::is_same_v<T, std::pair<std::int64_t, std::int64_t>> ||
+                                 std::is_same_v<T, std::pair<double, double>>) {
+                return json::Array{v.first, v.second};
+            } else {
+                return v;
+            }
+        },
+        value);
+}
+
+/// The value a texture set bakes with (set, else the default); null when neither is established.
+json::Value Effective(const bake::Property& property) {
+    try {
+        return BakeJson(property.value());
+    } catch (const core::NotYetSupported&) {
+        return nullptr;
+    }
+}
+
+json::Object Values(const std::map<std::string, bake::Property>& properties) {
+    json::Object out;
+    for (const auto& [key, property] : properties) out[key] = Effective(property);
+    return out;
+}
+
+json::Object PropertyMetadata(const bake::Property& property) {
+    const bake::PropertySpec& spec = property.spec();
+    json::Object entry{{"name", spec.name},
+                       {"label", spec.label},
+                       {"widget_type", spec.widget_type},
+                       {"type", bake::PropertyTypeName(spec.type)}};
+    if (!spec.enum_values.empty()) {
+        json::Object values;
+        for (const auto& [label, integer] : spec.enum_values) values[label] = std::int64_t{integer};
+        entry["enum_values"] = std::move(values);
+    }
+    json::Object range;
+    if (spec.minimum) range["min"] = BakeJson(*spec.minimum);
+    if (spec.maximum) range["max"] = BakeJson(*spec.maximum);
+    if (!range.empty()) entry["range"] = std::move(range);
+    entry["default"] = spec.default_value ? BakeJson(*spec.default_value) : json::Value(nullptr);
+    return entry;
+}
+
+/// `value` for `property`, from a JSON argument: an `Enum` by its label or its integer.
+bake::PropertyValue BakeArgument(const bake::Property& property, const json::Value& value, const std::string& where) {
+    const auto pair_of = [&](auto read) {
+        const json::Array& array = ArrayOf(value, where);
+        if (array.size() != 2) Invalid(where + " takes a pair [a, b]");
+        return std::pair{read(array[0]), read(array[1])};
+    };
+    const auto integer = [&](const json::Value& v) { return Integer(v, where); };
+    const auto number = [&](const json::Value& v) { return Number(v, where); };
+    switch (property.type()) {
+        case bake::PropertyType::Bool: return Flag(value, where);
+        case bake::PropertyType::Int: return Integer(value, where);
+        case bake::PropertyType::Float: return Number(value, where);
+        case bake::PropertyType::IntPair: return pair_of(integer);
+        case bake::PropertyType::FloatPair: return pair_of(number);
+        case bake::PropertyType::String: return Text(value, where);
+        case bake::PropertyType::Enum:
+            if (value.IsString()) return bake::EnumLabel{std::get<std::string>(value.data)};
+            for (const auto& [label, number_of] : property.spec().enum_values) {
+                if (value.IsInt() && std::get<std::int64_t>(value.data) == number_of) return bake::EnumLabel{label};
+            }
+            Invalid(where + " takes one of its enum labels or their integers");
+    }
+    Invalid(where + " has no value type");
+}
+
+/// The `common` and `per_baker` arguments as one `set()` batch for `parameters`.
+std::vector<std::pair<bake::Property, bake::PropertyValue>> BakeValues(const bake::BakingParameters& parameters,
+                                                                       const json::Object& arguments) {
+    std::vector<std::pair<bake::Property, bake::PropertyValue>> values;
+    const auto add = [&](const std::map<std::string, bake::Property>& properties, const json::Object& given,
+                         const std::string& where) {
+        for (const auto& [key, value] : given) {
+            const auto it = properties.find(key);
+            if (it == properties.end()) Invalid(where + " has no key " + key);
+            values.emplace_back(it->second, BakeArgument(it->second, value, where + "." + key));
+        }
+    };
+    if (const json::Value* common = Given(arguments, "common")) add(parameters.common(), ObjectOf(*common, "common"), "common");
+    if (const json::Value* per_baker = Given(arguments, "per_baker")) {
+        for (const auto& [name, given] : ObjectOf(*per_baker, "per_baker")) {
+            add(parameters.baker(UsageNamed(name, "per_baker")), ObjectOf(given, "per_baker." + name), "per_baker." + name);
+        }
+    }
+    return values;
+}
+
+/// `file:///` URL of an existing mesh file (Painter's `HipolyMesh`/`CageMesh` form, 06-baking.md §2).
+std::string MeshUrl(const json::Value& value, const std::string& what) {
+    const std::filesystem::path path = std::filesystem::absolute(python::PathFromUtf8(Text(value, what)));
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(path, error)) Invalid(what + ": no mesh file " + python::Utf8(path));
+    std::string text = python::Utf8(path);
+    std::replace(text.begin(), text.end(), '\\', '/');
+    return "file:///" + text;
+}
+
+json::Object PresetOf(const std::string& texture_set, const core::BakeSettings& settings) {
+    json::Object per_baker;
+    for (const auto& [baker, values] : settings.per_baker) per_baker[baker] = values;
+    return {{"schema", kBakePresetSchema},
+            {"source_texture_set", texture_set},
+            {"common", settings.common},
+            {"detail", settings.detail},
+            {"per_baker", std::move(per_baker)}};
+}
+
+core::BakeSettings SettingsOfPreset(const json::Value& preset) {
+    const json::Object& object = ObjectOf(preset, "preset");
+    for (const auto& [key, unused] : object) {
+        if (key != "schema" && key != "source_texture_set" && key != "common" && key != "detail" && key != "per_baker") {
+            Invalid("preset: unknown field " + key);
+        }
+    }
+    const json::Value* schema = Given(object, "schema");
+    if (!schema || !schema->IsString() || std::get<std::string>(schema->data) != kBakePresetSchema) {
+        Invalid(std::string("preset: schema must be ") + kBakePresetSchema);
+    }
+    core::BakeSettings settings;
+    if (const json::Value* v = Given(object, "common")) settings.common = ObjectOf(*v, "preset.common");
+    if (const json::Value* v = Given(object, "detail")) settings.detail = ObjectOf(*v, "preset.detail");
+    if (const json::Value* v = Given(object, "per_baker")) {
+        for (const auto& [baker, values] : ObjectOf(*v, "preset.per_baker")) {
+            settings.per_baker[baker] = ObjectOf(values, "preset.per_baker." + baker);
+        }
+    }
+    return settings;
+}
+
+void BakingFamily(const ToolContext& context, std::vector<ToolDefinition>& tools) {
+    tools.push_back(Define(
+        {"bake_inspect",
+         "A texture set's baking parameters, read from the committed revision: the value it bakes with for each key "
+         "of common() and of every baker (null when Painter states no default and none is set), the explicitly set "
+         "values (`explicit`, the project's bake_settings), its link groups and the fresh texture set's baking "
+         "state. `properties: true` adds each key's name, label, widget type, value type, enum values, range and "
+         "default. Parity: pending-evidence.",
          Schema({{"texture_set", TextureSetProperty()},
-                 {"enabled", BoolProperty("Whether the texture set is baked.")},
-                 {"bakers", ArrayProperty(json::Object{{"type", "string"}}, "The enabled bakers.")},
-                 {"uv_tiles", ArrayProperty(json::Object{{"type", "integer"}}, "The enabled UV tiles (UDIM numbers).")},
-                 {"curvature_method", StringProperty("The curvature method.")},
-                 {"common", json::Object{{"type", "object"}}},
-                 {"per_baker", json::Object{{"type", "object"}}}},
-                {"texture_set"}),
-         true, false, true, Operation("substance_painter.baking.BakingParameters.set")},
-        reason));
-    tools.push_back(GapTool({"bake_set_mesh_inputs", "Sets the high-poly meshes (and cage) a texture set bakes from.",
-                             Schema({{"texture_set", TextureSetProperty()},
-                                     {"high_poly", ArrayProperty(PathProperty("A mesh file.", "bake_mesh"), "The high-poly meshes.")},
-                                     {"cage", PathProperty("The cage mesh.", "bake_mesh")}},
-                                    {"texture_set"}),
-                             true, false, true, Operation("substance_painter.baking.BakingParameters.set")},
-                            reason));
+                 {"properties", BoolProperty("Whether to add each key's metadata.")}},
+                {}),
+         false, false},
+        [](const json::Object& arguments) {
+            return BakeCall([&] {
+                const std::shared_ptr<python::OpenProject> open = Open();
+                const core::Snapshot snapshot = open->document->snapshot();
+                const core::Project& project = *snapshot.project;
+                const std::string name = NamedStack(project, *open, arguments).first->name;
+                const bake::BakingSession session = bake::LoadBakingSession(project);
+                const bake::BakingParameters parameters = session.parameters(name);
+                json::Object bakers;
+                for (bake::MeshMapUsage usage : AllUsages()) {
+                    const auto properties = parameters.baker(usage);
+                    if (!properties.empty()) bakers[bake::UsageName(usage)] = Values(properties);
+                }
+                const bake::TextureSetBakeState& state = bake::DefaultTextureSetState();
+                json::Array enabled;
+                for (const std::string& baker : state.enabled_bakers) enabled.push_back(baker);
+                json::Array common_group, ao_group;
+                for (const std::string& set : session.get_linked_texture_sets_common_parameters(name)) common_group.push_back(set);
+                for (const std::string& set : session.get_linked_texture_sets(name, bake::MeshMapUsage::AO)) ao_group.push_back(set);
+                const core::BakeSettings settings = bake::ToBakeSettings(parameters);
+                json::Object explicit_values = PresetOf(name, settings);
+                explicit_values.erase("schema");
+                explicit_values.erase("source_texture_set");
+                json::Object result{
+                    {"revision", snapshot.revision},
+                    {"texture_set", name},
+                    {"parity_status", kBakeParity},
+                    {"values", json::Object{{"common", Values(parameters.common())}, {"bakers", std::move(bakers)}}},
+                    {"explicit", std::move(explicit_values)},
+                    {"linked", json::Object{{"common", std::move(common_group)}, {"AO", std::move(ao_group)}}},
+                    {"state", json::Object{{"curvature_method", state.curvature_method},
+                                           {"enabled_bakers", std::move(enabled)},
+                                           {"textureset_enabled", state.textureset_enabled},
+                                           {"source", "the fresh texture set's (not stored per texture set yet)"}}}};
+                const json::Value* with = Given(arguments, "properties");
+                if (with && Flag(*with, "properties")) {
+                    json::Object common, per_baker;
+                    for (const auto& [key, property] : parameters.common()) common[key] = PropertyMetadata(property);
+                    for (bake::MeshMapUsage usage : AllUsages()) {
+                        json::Object keys;
+                        for (const auto& [key, property] : parameters.baker(usage)) keys[key] = PropertyMetadata(property);
+                        if (!keys.empty()) per_baker[bake::UsageName(usage)] = std::move(keys);
+                    }
+                    result["properties"] = json::Object{{"common", std::move(common)}, {"bakers", std::move(per_baker)}};
+                }
+                return result;
+            });
+        }));
+
+    // The texture set's baking state is not stored yet: each of these arguments is its release gap.
+    const std::vector<std::pair<const char*, const char*>> state_arguments = {
+        {"enabled", "substance_painter.baking.BakingParameters.set_textureset_enabled"},
+        {"bakers", "substance_painter.baking.BakingParameters.set_enabled_bakers"},
+        {"uv_tiles", "substance_painter.baking.BakingParameters.set_enabled_uv_tiles"},
+        {"curvature_method", "substance_painter.baking.BakingParameters.set_curvature_method"}};
+    tools.push_back(Define(
+        {"bake_configure",
+         "Sets a texture set's baking parameters in one transaction: `common` takes keys of common() (common and "
+         "detail), `per_baker` keys of a baker (only AO's are stored). Values are typed as bake_inspect's "
+         "properties say; an enum takes its label or its integer. A wrong type or an unknown key or label is "
+         "invalid_arguments; a value outside a key's range, another baker's value and the texture set's baking "
+         "state (enabled, bakers, uv_tiles, curvature_method) are capability gaps. Linked texture sets share the "
+         "change. Parity: pending-evidence.",
+         Schema({{"texture_set", TextureSetProperty()},
+                 {"enabled", CapabilityByValue(BoolProperty("Whether the texture set is baked."), {{"*", state_arguments[0].second}})},
+                 {"bakers", CapabilityByValue(ArrayProperty(json::Object{{"type", "string"}}, "The enabled bakers."),
+                                              {{"*", state_arguments[1].second}})},
+                 {"uv_tiles", CapabilityByValue(ArrayProperty(json::Object{{"type", "integer"}}, "The enabled UV tiles (UDIM numbers)."),
+                                                {{"*", state_arguments[2].second}})},
+                 {"curvature_method", CapabilityByValue(StringProperty("The curvature method."), {{"*", state_arguments[3].second}})},
+                 {"common", json::Object{{"type", "object"}, {"description", "Key -> value, keys of common()."}}},
+                 {"per_baker", json::Object{{"type", "object"}, {"description", "Baker -> {key -> value}."}}}},
+                {}),
+         true, false},
+        [context, state_arguments](const json::Object& arguments) {
+            for (const auto& [argument, symbol] : state_arguments) {
+                if (Given(arguments, argument)) {
+                    throw GapError("bake_configure",
+                                   std::string("the texture set's baking state (") + argument +
+                                       ") is not stored yet (phase3.5_embree-bakers; decision 323)",
+                                   "NotYetSupported", Operation(symbol));
+                }
+            }
+            return BakeCall([&] {
+                const std::shared_ptr<python::OpenProject> open = Open();
+                const core::Snapshot snapshot = open->document->snapshot();
+                const std::string name = NamedStack(*snapshot.project, *open, arguments).first->name;
+                return context.submit([&](core::Edit& edit) {
+                    bake::EditBakingSession(edit, [&](bake::BakingSession& session) {
+                        bake::BakingParameters::set(BakeValues(session.parameters(name), arguments));
+                    });
+                });
+            });
+        }));
+
+    tools.push_back(Define(
+        {"bake_set_mesh_inputs",
+         "Sets the high-poly meshes (HipolyMesh, file:/// URLs joined by '|'; an empty list clears them) and the "
+         "cage (CageMesh) a texture set bakes from, in one transaction. Each file must exist. Linked texture sets "
+         "share them. Parity: pending-evidence.",
+         Schema({{"texture_set", TextureSetProperty()},
+                 {"high_poly", ArrayProperty(PathProperty("A mesh file.", "bake_mesh"), "The high-poly meshes.")},
+                 {"cage", PathProperty("The cage mesh.", "bake_mesh")}},
+                {}),
+         true, false},
+        [context](const json::Object& arguments) {
+            const json::Value* high = Given(arguments, "high_poly");
+            const json::Value* cage = Given(arguments, "cage");
+            if (!high && !cage) Invalid("bake_set_mesh_inputs needs high_poly or cage");
+            std::optional<std::string> high_urls, cage_url;
+            if (high) {
+                std::string joined;
+                for (const json::Value& path : ArrayOf(*high, "high_poly")) {
+                    joined += (joined.empty() ? "" : "|") + MeshUrl(path, "high_poly");
+                }
+                high_urls = std::move(joined);
+            }
+            if (cage) cage_url = MeshUrl(*cage, "cage");
+            return BakeCall([&] {
+                const std::shared_ptr<python::OpenProject> open = Open();
+                const core::Snapshot snapshot = open->document->snapshot();
+                const std::string name = NamedStack(*snapshot.project, *open, arguments).first->name;
+                return context.submit([&](core::Edit& edit) {
+                    bake::EditBakingSession(edit, [&](bake::BakingSession& session) {
+                        const auto common = session.parameters(name).common();
+                        std::vector<std::pair<bake::Property, bake::PropertyValue>> values;
+                        if (high_urls) values.emplace_back(common.at("HipolyMesh"), *high_urls);
+                        if (cage_url) values.emplace_back(common.at("CageMesh"), *cage_url);
+                        bake::BakingParameters::set(values);
+                    });
+                });
+            });
+        }));
+
+    const std::string reason = "native baking is a release gap (phase3.5_embree-bakers)";
     tools.push_back(GapTool({"bake_start", "Bakes the mesh maps of texture sets (a long job).",
                              Schema({{"sets", ArrayProperty(json::Object{{"type", "string"}}, "The texture sets; every enabled one when omitted.")},
                                      {"wait", BoolProperty("Wait for the job's end.")}},
                                     {}),
                              true, false, true, Operation("substance_painter.baking.bake_async")},
                             reason));
-    tools.push_back(GapTool({"bake_capture_preset", "Captures a texture set's baking parameters as a baking preset.",
-                             Schema({{"texture_set", TextureSetProperty()}, {"path", PathProperty("The preset file.", "export")}},
-                                    {"path"}),
-                             false, false, true, Operation("uzpainter.baking.BakingParameters")},
-                            reason));
-    tools.push_back(GapTool({"bake_apply_preset", "Applies a baking preset to texture sets.",
-                             Schema({{"preset", json::Object{{"type", json::Array{"object", "string"}},
-                                                             {"description", "The preset, as an object or the path of its file."},
-                                                             {"x-uzpainter-root", "resource"}}},
-                                     {"texture_sets", ArrayProperty(json::Object{{"type", "string"}}, "The texture sets.")}},
-                                    {"preset"}),
-                             true, false, true, Operation("uzpainter.baking.BakingParameters")},
-                            reason));
+
+    tools.push_back(Define(
+        {"bake_capture_preset",
+         "Writes a texture set's explicitly set baking parameters (its bake_settings: common, detail, per_baker) "
+         "as a UzPainter baking preset (schema uzpainter/bake-preset/1) to `path`, inside the output root, and "
+         "returns it.",
+         Schema({{"texture_set", TextureSetProperty()}, {"path", PathProperty("The preset file.", "export")}}, {"path"}),
+         false, false},
+        [context](const json::Object& arguments) {
+            return BakeCall([&] {
+                const std::shared_ptr<python::OpenProject> open = Open();
+                const core::Snapshot snapshot = open->document->snapshot();
+                const core::Project& project = *snapshot.project;
+                const std::string name = NamedStack(project, *open, arguments).first->name;
+                const bake::BakingSession session = bake::LoadBakingSession(project);
+                json::Object preset = PresetOf(name, bake::ToBakeSettings(session.parameters(name)));
+                const std::filesystem::path path = context.output_path(Text(*Given(arguments, "path"), "path"));
+                std::filesystem::create_directories(path.parent_path());
+                std::ofstream file(path, std::ios::binary);
+                file << json::WriteCanonical(preset) << "\n";
+                if (!file) throw CallError{"call_failed", "cannot write " + python::Utf8(path), {}};
+                return json::Object{{"revision", snapshot.revision}, {"path", python::Utf8(path)}, {"preset", std::move(preset)}};
+            });
+        }));
+
+    tools.push_back(Define(
+        {"bake_apply_preset",
+         "Replaces the explicitly set baking parameters of texture sets (every one when `texture_sets` is "
+         "omitted) with a UzPainter baking preset's, in one transaction, checked like bake_configure. Linked "
+         "texture sets share the change. Parity: pending-evidence.",
+         Schema({{"preset", json::Object{{"type", json::Array{"object", "string"}},
+                                         {"description", "The preset, as an object or the path of its file."},
+                                         {"x-uzpainter-root", "resource"}}},
+                 {"texture_sets", ArrayProperty(json::Object{{"type", "string"}}, "The texture sets.")}},
+                {"preset"}),
+         true, false},
+        [context](const json::Object& arguments) {
+            json::Value document = *Given(arguments, "preset");
+            if (document.IsString()) {
+                const std::string source = std::get<std::string>(document.data);
+                std::ifstream file(python::PathFromUtf8(source), std::ios::binary);
+                if (!file) Invalid("preset: cannot read " + source);
+                try {
+                    document = json::Parse(std::string{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()});
+                } catch (const json::ParseError& error) {
+                    Invalid("preset: " + source + " is not JSON: " + error.what());
+                }
+            }
+            const core::BakeSettings settings = SettingsOfPreset(document);
+            std::vector<std::string> names;
+            if (const json::Value* given = Given(arguments, "texture_sets")) {
+                for (const json::Value& name : ArrayOf(*given, "texture_sets")) names.push_back(Text(name, "texture_sets"));
+            } else {
+                for (const core::TextureSet& set : Open()->document->snapshot().project->texture_sets) names.push_back(set.name);
+            }
+            return BakeCall([&] {
+                return context.submit([&](core::Edit& edit) {
+                    bake::EditBakingSession(edit, [&](bake::BakingSession& session) {
+                        for (const std::string& name : names) bake::LoadBakeSettings(session.parameters(name), settings);
+                    });
+                });
+            });
+        }));
 }
 
 void MeshFamily(const ToolContext& context, std::vector<ToolDefinition>& tools) {
@@ -1510,7 +1855,7 @@ std::vector<ToolDefinition> TypedTools(const ToolContext& context) {
     ResourceFamily(context, tools);
     StackFamily(context, tools);
     RecipeFamily(context, tools);
-    BakingFamily(tools);
+    BakingFamily(context, tools);
     MeshFamily(context, tools);
     return tools;
 }

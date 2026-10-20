@@ -368,6 +368,12 @@ const bake_flags = uzp_core_flags ++ [_][]const u8{
     "-DUZP_EMBREE_PINNED_ISA=\"avx2\"",
     "-DUZP_EMBREE_PINNED_TASKING=1",
 };
+/// The embedder of the authored baking table `assets/defaults/baking.json` (decision 323): every
+/// module that compiles `bake/baking_parameters.cpp` adds it through `EmbedInputs` (decision 147).
+const bake_catalog_sources = [_][]const u8{"bake/baking_catalog.cpp"};
+/// The bake parameter model behind the MCP Baking tools (`src/supervisor/typed_tools.cpp`, item 2.11,
+/// decision 323), relative to `src/`: compiled into `UzPainter.exe` without Embree or the CPU baker.
+const bake_parameter_sources = [_][]const u8{ "bake/bake_request.cpp", "bake/baking_parameters.cpp", "bake/baking_project.cpp" };
 /// The compositor (`src/evaluator/`, P1-COMPOSITOR, `04-layer-stack-and-compositing.md` §7),
 /// relative to `src/`: compiled into `UzPainter.exe` and into `uzp-evaluator-tests.exe` over the
 /// render layer and the document model. Contraction is off so that every float operation of its
@@ -1043,6 +1049,7 @@ pub fn build(b: *std.Build) void {
         .files = &.{"bake_feasibility_test.cpp"},
         .flags = &bake_flags,
     });
+    embed_inputs.add(bake_tests_mod, "src", &bake_catalog_sources, &bake_flags);
     const bake_tests_exe = b.addExecutable(.{
         .name = "uzp-bake-feasibility-tests",
         .root_module = bake_tests_mod,
@@ -1286,6 +1293,7 @@ pub fn build(b: *std.Build) void {
         .files = &.{"baking_project_test.cpp"},
         .flags = &uzp_core_flags,
     });
+    embed_inputs.add(baking_project_tests_mod, "src", &bake_catalog_sources, &uzp_core_flags);
     const baking_project_tests_exe = b.addExecutable(.{
         .name = "uzp-baking-project-tests",
         .root_module = baking_project_tests_mod,
@@ -1444,6 +1452,9 @@ pub fn build(b: *std.Build) void {
     const worker_hook_flags: []const []const u8 = if (optimize == .Debug) &.{ "-DUZP_WORKER_FAULT_HOOKS=1", "-DUZP_STORE_FAULT_HOOKS=1" } else &.{};
     const supervisor_flags = std.mem.concat(b.allocator, []const u8, &.{ &pyapi_flags, worker_hook_flags }) catch @panic("OOM");
     app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &supervisor_sources, .flags = supervisor_flags });
+    // The bake parameter model the MCP Baking tools serve (decision 323).
+    app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &bake_parameter_sources, .flags = &uzp_core_flags });
+    embed_inputs.add(app_mod, "src", &bake_catalog_sources, &uzp_core_flags);
     // The preview viewport and window (phase2.1_preview-viewport-window).
     embed_inputs.add(app_mod, "src", &(preview_sources ++ preview_host_sources), &pyapi_flags);
     app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &preview_scene_sources, .flags = &pyapi_flags });

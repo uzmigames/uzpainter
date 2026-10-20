@@ -108,12 +108,7 @@ GAP_CALLS: dict[str, dict[str, Any]] = {
     "smart_mask_insert": {"uid": 1, "asset": "uzasset://smart/edges@1"},
     "smart_export": {"uid": 1, "kind": "material", "path": "smart.spsm"},
     "apply_smart": {"config_json": {"layers": []}},
-    "bake_inspect": {},
-    "bake_configure": {"texture_set": "uzp_plane"},
-    "bake_set_mesh_inputs": {"texture_set": "uzp_plane"},
     "bake_start": {},
-    "bake_capture_preset": {"path": "bake.json"},
-    "bake_apply_preset": {"preset": {}},
 }
 
 
@@ -1230,6 +1225,119 @@ def test_a_direct_pipe_client_gets_the_same_gaps(
     [operation] = bake["error"]["details"]["operations"]
     assert operation["symbol"] == "substance_painter.baking.bake_async"
     assert pipe.call("project_inspect")["result"]["revision"] == revision
+
+
+def test_bake_parameter_tools_with_python_disabled(
+    painter: Path, tmp_path: Path, sessions: list[Mcp]
+) -> None:
+    """phase3.1_baker-request-model item 2.11 (decision 323): bake_inspect, bake_configure,
+    bake_set_mesh_inputs, bake_capture_preset and bake_apply_preset over MCP with Python disabled.
+    Values and metadata come from the authored table; each change is one transaction; a refusal
+    commits nothing. Parity is pending-evidence."""
+    session, revision = opened(painter, tmp_path, sessions)
+    inspect = session.call("bake_inspect", {"properties": True})["result"]
+    assert inspect["texture_set"] == "uzp_plane" and inspect["parity_status"] == "pending-evidence"
+    common = inspect["values"]["common"]
+    assert common["DilationWidth"] == 32 and common["CageMode"] == "Distance-based"
+    assert common["OutputSize"] is None  # Painter states no default
+    assert inspect["values"]["bakers"]["AO"]["Attenuation"] == "Linear"
+    assert set(inspect["values"]["bakers"]) == {
+        "ID",
+        "AO",
+        "Curvature",
+        "Position",
+        "Thickness",
+        "Height",
+        "BentNormals",
+    }
+    assert inspect["explicit"] == {"common": {}, "detail": {}, "per_baker": {}}
+    assert inspect["linked"] == {"common": ["uzp_plane"], "AO": ["uzp_plane"]}
+    cage_mode = inspect["properties"]["common"]["CageMode"]
+    assert cage_mode["label"] == "Cage type" and cage_mode["enum_values"]["Custom file"] == 2
+    assert inspect["properties"]["bakers"]["AO"]["NbSecondary"]["range"] == {"min": 1, "max": 256}
+
+    configured = session.call(
+        "bake_configure",
+        {
+            "common": {"DilationWidth": 8, "SubSampling": "Subsampling 4x4", "OutputSize": [9, 9]},
+            "per_baker": {"AO": {"NbSecondary": 16, "Attenuation": 0, "MaxDistance": 1}},
+        },
+    )
+    assert configured["result"]["status"] == "committed", configured
+    after = session.call("bake_inspect")["result"]
+    assert after["values"]["common"]["SubSampling"] == "Subsampling 4x4"
+    assert after["values"]["bakers"]["AO"]["Attenuation"] == "None"
+    assert after["explicit"] == {
+        "common": {"DilationWidth": 8, "OutputSize": [9, 9]},
+        "detail": {"SubSampling": "Subsampling 4x4"},
+        "per_baker": {"AO": {"Attenuation": "None", "MaxDistance": 1.0, "NbSecondary": 16}},
+    }
+    assert "properties" not in after
+    revision = revision_of(session)
+
+    # Refusals commit nothing.
+    for arguments, code in (
+        ({"common": {"Sparkle": 1}}, "invalid_arguments"),
+        ({"common": {"DilationWidth": "8"}}, "invalid_arguments"),
+        ({"common": {"DilationWidth": 4, "FilterMethod": "Sometimes"}}, "invalid_arguments"),
+        (
+            {"common": {"DilationWidth": 4}, "per_baker": {"AO": {"NbSecondary": 512}}},
+            "capability_gap",
+        ),
+        ({"per_baker": {"Curvature": {"NbSecondary": 8}}}, "capability_gap"),
+        ({"per_baker": {"Sparkle": {}}}, "invalid_arguments"),
+        ({"bakers": ["AO"]}, "capability_gap"),
+        ({"curvature_method": "FromNormalMap"}, "capability_gap"),
+    ):
+        refused = session.call("bake_configure", arguments)
+        assert refused["error"]["code"] == code, (arguments, refused)
+    gated = session.call("bake_configure", {"enabled": False})["error"]["details"]["operations"]
+    assert gated[0]["symbol"] == "substance_painter.baking.BakingParameters.set_textureset_enabled"
+    assert revision_of(session) == revision
+
+    high = tmp_path / "plane_high.obj"
+    shutil.copy(PLANE, high)
+    meshes = session.call("bake_set_mesh_inputs", {"high_poly": [str(high)], "cage": str(PLANE)})
+    assert meshes["result"]["status"] == "committed", meshes
+    detail = session.call("bake_inspect")["result"]["explicit"]["detail"]
+    assert detail["HipolyMesh"] == "file:///" + str(high).replace("\\", "/")
+    assert detail["CageMesh"].startswith("file:///") and detail["CageMesh"].endswith("plane.obj")
+    missing = session.call("bake_set_mesh_inputs", {"high_poly": [str(tmp_path / "none.obj")]})
+    assert missing["error"]["code"] == "invalid_arguments"
+    assert session.call("bake_set_mesh_inputs", {})["error"]["code"] == "invalid_arguments"
+
+    captured = session.call("bake_capture_preset", {"path": "bake-preset.json"})["result"]
+    preset = captured["preset"]
+    assert (
+        preset["schema"] == "uzpainter/bake-preset/1"
+        and preset["source_texture_set"] == "uzp_plane"
+    )
+    assert preset["per_baker"] == {
+        "AO": {"Attenuation": "None", "MaxDistance": 1.0, "NbSecondary": 16}
+    }
+    written = Path(captured["path"])
+    assert json.loads(written.read_text(encoding="utf-8")) == preset
+
+    session.call(
+        "bake_configure", {"common": {"DilationWidth": 2}, "per_baker": {"AO": {"NbSecondary": 4}}}
+    )
+    applied = session.call("bake_apply_preset", {"preset": preset})
+    assert applied["result"]["status"] == "committed", applied
+    restored = session.call("bake_inspect")["result"]
+    assert restored["values"]["common"]["DilationWidth"] == 8
+    assert restored["values"]["bakers"]["AO"]["NbSecondary"] == 16
+    session.call("bake_configure", {"common": {"DilationWidth": 2}})
+    from_file = session.call(
+        "bake_apply_preset", {"preset": str(written), "texture_sets": ["uzp_plane"]}
+    )
+    assert from_file["result"]["status"] == "committed", from_file
+    assert session.call("bake_inspect")["result"]["values"]["common"]["DilationWidth"] == 8
+    bad = dict(preset, schema="other")
+    assert (
+        session.call("bake_apply_preset", {"preset": bad})["error"]["code"] == "invalid_arguments"
+    )
+    unknown = session.call("bake_apply_preset", {"preset": preset, "texture_sets": ["none"]})
+    assert unknown["error"]["code"] == "invalid_arguments"
 
 
 # ── 3.6 resources and prompts ───────────────────────────────────────────────────────────────────

@@ -248,14 +248,15 @@ DistanceRecord ValidateRequest(const Capabilities& caps, const BakeRequest& requ
     }
     if (request.common.apply_diffusion) {
         throw NotYetSupported(
-            "ApplyDiffusion: the diffusion of the dilated texels is not established "
-            "(phase3.1_baker-request-model item 2.7)");
+            "ApplyDiffusion: the diffusion of the dilated texels is not established; one fixture baked "
+            "with diffusion on and off settles it (owner phase3.5_embree-bakers, decisions 311 and 323)");
     }
     const DetailSettings& detail = request.detail;
     if (detail.cage_mode == CageMode::Automatic) {
         throw CapabilityError(
             "release gap: CageMode Automatic is not established against Painter "
-            "(docs/architecture/06-baking.md section 3; phase3.1_baker-request-model item 2.5)");
+            "(docs/architecture/06-baking.md section 3; capability manifest substance_painter.baking.bake_async "
+            "cage-mode:automatic; owner phase3.5_embree-bakers, decision 323)");
     }
     if (!NonNegative(detail.max_height) || !NonNegative(detail.max_depth)) {
         throw ValueError("max_height and max_depth must be finite and >= 0");

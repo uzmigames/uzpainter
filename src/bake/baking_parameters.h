@@ -1,23 +1,22 @@
 #pragma once
 
 // The bake parameter model (phase3.1_baker-request-model item 2.8; `docs/architecture/06-baking.md`
-// §2; decision 306), shaped like Painter's documented `BakingParameters` and `Property`
+// §2; decisions 306 and 323), shaped like Painter's documented `BakingParameters` and `Property`
 // (`substance_painter.baking`, `substance_painter.properties`): `common()` (common and detail
 // keys), `baker(usage)`, `set({Property: value})` and the `Property` accessors.
 //
-// Only what an admitted source states is answered:
-// - the keys are the Painter short names `06-baking.md` §2 lists;
-// - labels and option labels come from Adobe's public mesh-map settings page (approved source
-//   A-HELP-BAKING) and Painter's public Python API page (the `Distribution` example);
-// - the value type comes only from the page's widget (a checkbox is a `Bool`, a dropdown an
-//   `Enum`) or from the task's own listing (the `OutputSize` log2 pair, `DilationWidth` in texels,
-//   the file-URL list, the suffix strings); a type that only the meaning of a key suggests (a ray
-//   count, a distance, an angle) stays `Pending` (decision 306);
-// - the only defaults are the three suffixes `06-baking.md` §2 lists.
-// Everything else (Painter's `name()`, `widget_type()`, enum integers, ranges, `properties()`,
-// the remaining defaults and value types) comes from the Tier 0 discovery capture on the owner's
-// machine (items 2.8, 2.9 and 3.1) and raises `uzp::core::NotYetSupported` naming that item,
-// never a guess. Descriptions are UzmiGames' own words.
+// Every key, name, label, widget type, value type, enum value, range and default comes from
+// `assets/defaults/baking.json` (`baking_catalog.h`). UzmiGames authored that table from Painter's
+// documented API, and each entry names the private observation it must equal, the Tier 0
+// baking-defaults record. `python -m tools.bake.bake_defaults check` compares the two on the
+// owner's machine (item 2.9, decision 028).
+//
+// What still raises `uzp::core::NotYetSupported`, never a guess (decision 323):
+// - `Property::properties()`: Painter's meta properties carry its descriptive text, which is not
+//   reproduced;
+// - a default the observation does not establish (`OutputSize`, `TonemappingBounds`);
+// - a value outside a key's range: how Painter treats it is not recorded;
+// - storing a value for a baker other than AO, which its owner baker task brings.
 //
 // Decision 311 adds the mapping to a `BakeRequest`, linked groups (`BakingSession`, the documented
 // `substance_painter.baking` link functions) and the project manifest's `bake_settings`.
@@ -36,44 +35,59 @@
 
 namespace uzp::bake {
 
-enum class PropertyGroup { Common, Detail, Ao };
+/// `Common.*` and `Detail.*` keys form `common()`; a baker's keys form `baker(usage)`.
+enum class PropertyGroup { Common, Detail, Baker };
 
-/// `Pending`: no admitted source states the value type yet; the property cannot be set.
-/// Painter's float values have no established key yet, so no `Float` type is modelled.
-enum class PropertyType { Bool, Int, IntPair, Enum, String, Pending };
+/// The value type of a key, from the type of Painter's `value()` (an `Enum` is an int with
+/// `enum_values`).
+enum class PropertyType { Bool, Int, Float, IntPair, FloatPair, Enum, String };
 
 const char* PropertyTypeName(PropertyType type);
 
-/// An `Enum` value, given by its documented option label.
+/// An `Enum` value, given by its label (a key of `enum_values()`).
 struct EnumLabel {
     std::string label;
     bool operator==(const EnumLabel&) const = default;
 };
 
-using PropertyValue =
-    std::variant<bool, std::int64_t, std::pair<std::int64_t, std::int64_t>, double, EnumLabel, std::string>;
+using PropertyValue = std::variant<bool, std::int64_t, std::pair<std::int64_t, std::int64_t>, double, EnumLabel,
+                                   std::string, std::pair<double, double>>;
 
 struct PropertySpec {
     std::string short_name;
-    PropertyGroup group;
-    PropertyType type;
-    /// The label on Adobe's public mesh-map settings page; empty when the page does not state it.
+    /// Painter's full name (`Common.DilationWidth`, `Detail.SecondaryCommon.NbSecondary`).
+    std::string name;
     std::string label;
-    /// `Enum`: the option labels an admitted source documents.
-    std::vector<std::string> option_labels;
-    /// True when the source lists every option; false when only some are documented.
-    bool options_complete = false;
-    /// A default an admitted source states; empty when only the private capture knows it.
+    std::string widget_type;
+    PropertyGroup group = PropertyGroup::Common;
+    /// The baker of a `Baker` key.
+    MeshMapUsage usage = MeshMapUsage::AO;
+    PropertyType type = PropertyType::Bool;
+    /// `Enum`: every label with its integer, in integer order.
+    std::vector<std::pair<std::string, int>> enum_values;
+    /// The inclusive range Painter states, of the key's type (`Int`, `Float`, `IntPair` per
+    /// component); absent when unbounded on that side.
+    std::optional<PropertyValue> minimum;
+    std::optional<PropertyValue> maximum;
+    /// The value on a fresh project (an `Enum` as its label); absent when not established.
     std::optional<PropertyValue> default_value;
-    std::string default_source;
-    /// Where the key, label, type and options come from.
-    std::string source;
-    /// UzmiGames' own words.
-    std::string description;
+    std::string default_note;
+    /// The private observation the entry must equal: the record's SHA-256 and its output.
+    std::string record_sha256;
+    std::string output_id;
 };
 
-/// Every modelled key: common, detail and AO, in that order.
+/// Every key: `common()`'s in Painter's order, then each baker's, in `MeshMapUsage` order.
 const std::vector<PropertySpec>& PropertySpecs();
+
+/// A fresh texture set's baking state (`get_curvature_method`, `get_enabled_bakers`,
+/// `is_textureset_enabled`), from the same table.
+struct TextureSetBakeState {
+    std::string curvature_method;
+    std::vector<std::string> enabled_bakers;
+    bool textureset_enabled = true;
+};
+const TextureSetBakeState& DefaultTextureSetState();
 
 struct ParameterStore;
 class BakingParameters;
@@ -87,22 +101,18 @@ public:
     const std::string& short_name() const;
     PropertyType type() const;
     PropertyGroup group() const;
-    const std::string& description() const;
-    /// The documented option labels of an `Enum` (possibly a partial list, see `spec()`).
-    const std::vector<std::string>& documented_option_labels() const;
     const PropertySpec& spec() const { return *spec_; }
 
-    /// The value set through `BakingParameters::set`, else the documented default, else
-    /// `NotYetSupported` (item 2.9).
+    /// The value set through `BakingParameters::set`, else the default, else `NotYetSupported`.
     PropertyValue value() const;
-    /// `NotYetSupported` when the public page does not state the label.
-    std::string label() const;
-    /// Painter's full name, widget type, enum integers and meta properties: `NotYetSupported`
-    /// until the Tier 0 discovery goldens (items 2.8 and 3.1).
-    std::string name() const;
-    std::string widget_type() const;
+    const std::string& name() const;
+    const std::string& label() const;
+    const std::string& widget_type() const;
+    /// Empty for a key that is not an `Enum`.
     std::map<std::string, int> enum_values() const;
+    /// `ValueError` for a label the key does not have.
     int enum_value(const std::string& enum_label) const;
+    /// `NotYetSupported`: the meta properties carry Painter's descriptive text (decision 323).
     std::string properties() const;
 
 private:
@@ -120,13 +130,14 @@ public:
     const std::string& texture_set() const;
     /// The common and detail parameters.
     std::map<std::string, Property> common() const;
-    /// The parameters of `usage`: AO's; every other usage raises `NotYetSupported` naming its
-    /// owner baker task.
+    /// The parameters of `usage` (none for `Normal`, `WorldSpaceNormal` and `Opacity`). Every
+    /// baker's are readable; only AO's take values (`set`).
     std::map<std::string, Property> baker(MeshMapUsage usage) const;
-    /// Sets the values in one transaction: every value is checked first, and one failure
-    /// (`ValueError`, or `NotYetSupported` for a pending type or an undocumented option) leaves
-    /// every parameter, of every texture set in the batch, unchanged. A value set on a member of
-    /// a link group is the whole group's (one parameter, so naming it twice is a `ValueError`).
+    /// Sets the values in one transaction: every value is checked first, and one failure leaves
+    /// every parameter, of every texture set in the batch, unchanged. Refusals: `ValueError` (a
+    /// wrong type or an unknown enum label), `NotYetSupported` (a value outside the key's range, or
+    /// a baker other than AO, naming its owner task). A value set on a member of a link group is
+    /// the whole group's (one parameter, so naming it twice is a `ValueError`).
     static void set(const std::vector<std::pair<Property, PropertyValue>>& values);
 
 private:
@@ -193,25 +204,28 @@ private:
 
 /// The values set on `parameters` (never a default) as the manifest's `bake_settings`: common
 /// keys in `common`, detail keys in `detail`, AO keys in `per_baker["AO"]`, by Painter short
-/// name; a `Bool` as a JSON bool, an `Int` as an integer, an `IntPair` as `[a, b]`, an `Enum` as
-/// its option label and a `String` as a string.
+/// name; a `Bool` as a JSON bool, an `Int` as an integer, a `Float` as a number, an `IntPair` as
+/// `[a, b]`, an `Enum` as its label and a `String` as a string.
 core::BakeSettings ToBakeSettings(const BakingParameters& parameters);
 
 /// Replaces `parameters`' values with `settings` (its `extra` is not read), as one transaction
-/// checked like `set()`: an unknown key, a key in the wrong group, a wrong JSON type, a pending
-/// type or a baker other than AO with values refuses the whole load. Loading a linked set loads
-/// its group.
+/// checked like `set()`: an unknown key, a key in the wrong group, a wrong JSON type, a value
+/// `set()` refuses or a baker other than AO with values refuses the whole load. Loading a linked
+/// set loads its group.
 void LoadBakeSettings(const BakingParameters& parameters, const core::BakeSettings& settings);
 
-/// A `BakeRequest` from `parameters` over `base` (decision 311). Every key with a known type that
-/// maps to a request field must have a value (set, or documented): otherwise `NotYetSupported`
-/// (item 2.9). Keys whose type is still pending keep the request's own field and are listed in
-/// `keys_from_request`. The mesh inputs (`HipolyMesh`, `CageMesh`) are the mesh-input step's:
-/// `base` carries the meshes. A set feature the baker does not implement (`GroundPlane` on) is
-/// refused with `NotYetSupported`.
+/// A `BakeRequest` from `parameters` over `base` (decisions 311 and 323). Every key that maps to a
+/// request field is read (its set value or its default; a key without either raises
+/// `NotYetSupported`). A value selecting behaviour the baker does not implement is refused with
+/// `NotYetSupported` naming its owner: `OffsetMap` given, AO `Attenuation` other than None,
+/// `Spread` other than 180, `IgnoreBackfaceSecondary` other than Never, `FilterMethodSecondary`
+/// other than Always, `GroundPlane` on. `SmoothNormals` and `SkewFaceBehavior` are not read: the
+/// baker's own ray-direction reading applies (decision 302), and they are listed in
+/// `keys_not_read`. The mesh inputs (`HipolyMesh`, `CageMesh`) are the mesh-input step's: `base`
+/// carries the meshes.
 struct MappedRequest {
     BakeRequest request;
-    std::vector<std::string> keys_from_request;
+    std::vector<std::string> keys_not_read;
 };
 MappedRequest RequestFromParameters(const BakingParameters& parameters, BakeRequest base);
 

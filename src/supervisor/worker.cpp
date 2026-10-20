@@ -597,7 +597,8 @@ void Worker::DefineTools() {
         },
         [this](const core::RequestOutcome& outcome, const std::exception_ptr& error) {
             return SettleAdmitted(outcome, error);
-        }};
+        },
+        [this](const std::string& path) { return InsideOutputRoot(path); }};
     for (ToolDefinition& definition : TypedTools(context)) {
         if (definition.job) {
             add_job(std::move(definition.tool), std::move(definition.commit_point), std::move(definition.job));

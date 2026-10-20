@@ -27,6 +27,7 @@
 #include <string>
 #include <system_error>
 #include <thread>
+#include <tuple>
 #include <utility>
 #include <vector>
 #include <xmmintrin.h>
@@ -364,6 +365,7 @@ void CaseCapabilityErrors() {
     request.detail.cage_mode = CageMode::Automatic;
     message = ExpectThrow<CapabilityError>([&] { baker.bake(request); });
     CHECK(Contains(message, "release gap"));
+    CHECK(Contains(message, "cage-mode:automatic") && Contains(message, "phase3.5_embree-bakers"));
 
     request = PlaneRequest(low);
     request.detail.cage_mode = CageMode::CustomFile;  // no cage meshes
@@ -383,7 +385,7 @@ void CaseCapabilityErrors() {
     CHECK(Contains(message, "bounds"));
     request.project_bounds = BoundingBox{{-1, -1, 0}, {1, 1, 0}};
     message = ExpectThrow<NotYetSupported>([&] { baker.bake(request); });
-    CHECK(Contains(message, "decision 311"));
+    CHECK(Contains(message, "decision 311") && Contains(message, "phase3.5_embree-bakers"));
     request.project_bounds = BoundingBox{{1, -1, 0}, {-1, 1, 0}};
     request.box_size_metric = BoxSizeMetric::Diagonal;
     ExpectThrow<ValueError>([&] { baker.bake(request); });
@@ -391,7 +393,7 @@ void CaseCapabilityErrors() {
     request = PlaneRequest(low);
     request.common.apply_diffusion = true;
     message = ExpectThrow<NotYetSupported>([&] { baker.bake(request); });
-    CHECK(Contains(message, "phase3.1_baker-request-model item 2.7"));
+    CHECK(Contains(message, "ApplyDiffusion") && Contains(message, "phase3.5_embree-bakers"));
 
     request = PlaneRequest(low);
     request.output_size_log2[0] = 13;
@@ -1109,48 +1111,59 @@ void CaseParameters() {
         CHECK(ao.count(key) == 1);
     }
     CHECK_EQ(ao.size(), 11u);
-    for (const PropertySpec& spec : PropertySpecs()) CHECK(!spec.description.empty() && !spec.source.empty());
-    // Every usage but AO names its owner baker task.
-    std::string message = ExpectThrow<NotYetSupported>([&] { params.baker(MeshMapUsage::Curvature); });
-    CHECK(Contains(message, "phase3.4_baker-curvature"));
-    message = ExpectThrow<NotYetSupported>([&] { params.baker(MeshMapUsage::Normal); });
-    CHECK(Contains(message, "phase3.2_baker-normal"));
+    // Every baker's keys are readable, from the authored table (decision 323).
+    CHECK(params.baker(MeshMapUsage::Normal).empty() && params.baker(MeshMapUsage::Opacity).empty());
+    CHECK_EQ(params.baker(MeshMapUsage::Curvature).size(), 6u);
+    CHECK_EQ(params.baker(MeshMapUsage::ID).size(), 2u);
+    for (const PropertySpec& spec : PropertySpecs()) {
+        CHECK(!spec.name.empty() && !spec.label.empty() && !spec.widget_type.empty());
+        CHECK(spec.record_sha256.size() == 64 && !spec.output_id.empty());
+        CHECK(spec.default_value.has_value() == spec.default_note.empty());
+    }
+    CHECK(DefaultTextureSetState().curvature_method == "FromMesh" && DefaultTextureSetState().textureset_enabled);
 
-    // Documented facts answer; the rest is pending, never guessed.
+    // Painter's metadata answers; the meta properties and an unestablished default refuse.
     const Property& suffix = common.at("LowpolySuffix");
     CHECK(std::get<std::string>(suffix.value()) == "_low");
-    CHECK(std::get<std::string>(common.at("HipolySuffix").value()) == "_high");
-    CHECK(std::get<std::string>(common.at("BackfaceCullingSuffix").value()) == "_ignorebf");
+    CHECK(suffix.name() == "Detail.LowpolySuffix" && suffix.widget_type() == "LineEdit");
     CHECK(suffix.label() == "Low poly mesh suffix");
-    CHECK(common.at("SubSampling").label() == "Antialiasing");
-    CHECK(common.at("FilterMethod").documented_option_labels() == std::vector<std::string>({"Always", "By mesh name"}));
-    message = ExpectThrow<NotYetSupported>([&] { (void)common.at("OutputSize").value(); });
-    CHECK(Contains(message, "item 2.9"));
-    message = ExpectThrow<NotYetSupported>([&] { (void)common.at("MaxHeight").label(); });
-    CHECK(Contains(message, "items 2.8 and 3.1"));
-    ExpectThrow<NotYetSupported>([&] { (void)suffix.name(); });
-    ExpectThrow<NotYetSupported>([&] { (void)suffix.widget_type(); });
-    ExpectThrow<NotYetSupported>([&] { (void)suffix.properties(); });
-    ExpectThrow<NotYetSupported>([&] { (void)common.at("FilterMethod").enum_values(); });
-    ExpectThrow<NotYetSupported>([&] { (void)common.at("FilterMethod").enum_value("Always"); });
+    CHECK(common.at("DilationWidth").name() == "Common.DilationWidth");
+    CHECK(std::get<std::int64_t>(common.at("DilationWidth").value()) == 32);
+    CHECK(common.at("CageMode").label() == "Cage type");
+    CHECK((common.at("FilterMethod").enum_values() == std::map<std::string, int>{{"Always", 0}, {"By mesh name", 1}}));
+    CHECK(common.at("SubSampling").enum_value("Subsampling 4x4") == 2);
+    CHECK(std::get<EnumLabel>(common.at("CageMode").value()).label == "Distance-based");
+    CHECK(std::get<double>(ao.at("Spread").value()) == 180.0);
+    ExpectThrow<ValueError>([&] { (void)common.at("FilterMethod").enum_value("Sometimes"); });
+    std::string message = ExpectThrow<NotYetSupported>([&] { (void)common.at("OutputSize").value(); });
+    CHECK(Contains(message, "decision 323"));
+    message = ExpectThrow<NotYetSupported>([&] { (void)suffix.properties(); });
+    CHECK(Contains(message, "descriptive text"));
+    // Another baker's values are readable, never stored here (their owner task).
+    const auto curvature = params.baker(MeshMapUsage::Curvature);
+    CHECK(std::get<std::int64_t>(curvature.at("NbSecondary").value()) == 32);
+    message = ExpectThrow<NotYetSupported>([&] { BakingParameters::set({{curvature.at("NbSecondary"), std::int64_t{8}}}); });
+    CHECK(Contains(message, "phase3.4_baker-curvature"));
 
     // set(): typed, one transaction.
     BakingParameters::set({{common.at("OutputSize"), std::pair<std::int64_t, std::int64_t>{11, 10}},
                            {common.at("FilterMethod"), EnumLabel{"By mesh name"}},
                            {common.at("HipolySuffix"), std::string("_hi")},
                            {ao.at("GroundPlane"), true},
-                           {ao.at("Distribution"), EnumLabel{"Cosine"}}});
+                           {ao.at("MaxDistance"), std::int64_t{1}},
+                           {ao.at("Distribution"), EnumLabel{"Uniform"}}});
     CHECK((std::get<std::pair<std::int64_t, std::int64_t>>(common.at("OutputSize").value()) ==
            std::pair<std::int64_t, std::int64_t>{11, 10}));
     CHECK(std::get<std::string>(common.at("HipolySuffix").value()) == "_hi");
     CHECK(std::get<bool>(ao.at("GroundPlane").value()));
+    CHECK(std::get<double>(ao.at("MaxDistance").value()) == 1.0);  // an integer given to a Float key
     CHECK(std::get<EnumLabel>(params.common().at("FilterMethod").value()).label == "By mesh name");
     const auto unchanged = [&] {
         CHECK(std::get<EnumLabel>(common.at("FilterMethod").value()).label == "By mesh name");
-        ExpectThrow<NotYetSupported>([&] { (void)common.at("DilationWidth").value(); });
+        CHECK(std::get<std::int64_t>(common.at("DilationWidth").value()) == 32);
     };
-    // A wrong type, an unknown option of a complete list, a pending type and an undocumented
-    // option each refuse the whole batch.
+    // A wrong type, an unknown enum label, a repeated key and a value outside the range each
+    // refuse the whole batch.
     ExpectThrow<ValueError>([&] {
         BakingParameters::set({{common.at("DilationWidth"), std::int64_t{8}}, {common.at("FilterMethod"), true}});
     });
@@ -1160,25 +1173,19 @@ void CaseParameters() {
                                {common.at("FilterMethod"), EnumLabel{"Sometimes"}}});
     });
     unchanged();
-    message = ExpectThrow<NotYetSupported>([&] {
-        BakingParameters::set({{common.at("DilationWidth"), std::int64_t{8}}, {common.at("SmoothNormals"), true}});
-    });
-    CHECK(Contains(message, "value type of SmoothNormals"));
-    unchanged();
-    ExpectThrow<NotYetSupported>([&] {
-        BakingParameters::set({{common.at("DilationWidth"), std::int64_t{8}},
-                               {ao.at("Distribution"), EnumLabel{"Uniform"}}});
-    });
-    unchanged();
     ExpectThrow<ValueError>([&] {
         BakingParameters::set({{common.at("DilationWidth"), std::int64_t{8}}, {common.at("DilationWidth"), std::int64_t{9}}});
     });
     unchanged();
-    // A type only the key's meaning suggests (a distance) stays pending.
     message = ExpectThrow<NotYetSupported>([&] {
         BakingParameters::set({{common.at("DilationWidth"), std::int64_t{8}}, {ao.at("MaxDistance"), 2.0}});
     });
-    CHECK(Contains(message, "value type of MaxDistance"));
+    CHECK(Contains(message, "outside Painter's range"));
+    unchanged();
+    ExpectThrow<NotYetSupported>([&] { BakingParameters::set({{common.at("DilationWidth"), std::int64_t{129}}}); });
+    ExpectThrow<NotYetSupported>([&] {
+        BakingParameters::set({{common.at("OutputSize"), std::pair<std::int64_t, std::int64_t>{14, 10}}});
+    });
     unchanged();
     ExpectThrow<ValueError>([&] {
         BakingParameters::set({{common.at("DilationWidth"), std::int64_t{8}}, {common.at("LowAsHigh"), 1.0}});
@@ -1188,12 +1195,12 @@ void CaseParameters() {
     BakingParameters second("second");
     const auto second_common = second.common();
     ExpectThrow<ValueError>([&] {
-        BakingParameters::set({{second_common.at("IgnoreBackface"), true}, {common.at("IgnoreBackface"), std::int64_t{1}}});
+        BakingParameters::set({{second_common.at("IgnoreBackface"), false}, {common.at("IgnoreBackface"), std::int64_t{1}}});
     });
-    ExpectThrow<NotYetSupported>([&] { (void)second_common.at("IgnoreBackface").value(); });
-    BakingParameters::set({{second_common.at("IgnoreBackface"), true}});
-    CHECK(std::get<bool>(second.common().at("IgnoreBackface").value()));
-    ExpectThrow<NotYetSupported>([&] { (void)common.at("IgnoreBackface").value(); });
+    CHECK(std::get<bool>(second_common.at("IgnoreBackface").value()));  // the default
+    BakingParameters::set({{second_common.at("IgnoreBackface"), false}});
+    CHECK(!std::get<bool>(second.common().at("IgnoreBackface").value()));
+    CHECK(std::get<bool>(common.at("IgnoreBackface").value()));
 }
 
 // ── Units, relative distances and mesh files (decision 311) ──────────────────────────────────
@@ -1415,7 +1422,7 @@ void CaseLinkedGroups() {
     CHECK(std::get<bool>(c.baker(MeshMapUsage::AO).at("GroundPlane").value()));
     BakingParameters::set({{c.baker(MeshMapUsage::AO).at("GroundPlane"), false}});
     CHECK(!std::get<bool>(a.baker(MeshMapUsage::AO).at("GroundPlane").value()));
-    ExpectThrow<NotYetSupported>([&] { (void)b.baker(MeshMapUsage::AO).at("GroundPlane").value(); });
+    CHECK(!std::get<bool>(b.baker(MeshMapUsage::AO).at("GroundPlane").value()));  // the default
     // The common parameters of a and c stay independent.
     CHECK_EQ(std::get<std::int64_t>(c.common().at("DilationWidth").value()), 8);
 
@@ -1472,7 +1479,7 @@ void CaseBakeSettings() {
     CHECK((saved.common.at("OutputSize") == Value(Array{Value(std::int64_t{11}), Value(std::int64_t{10})})));
     CHECK(saved.common.at("ApplyDiffusion") == Value(false));
     CHECK(saved.detail.at("FilterMethod") == Value("By mesh name"));
-    CHECK(saved.detail.at("HipolySuffix") == Value("_hi"));  // the documented default is never written
+    CHECK(saved.detail.at("HipolySuffix") == Value("_hi"));  // a default is never written
     CHECK(saved.detail.count("LowpolySuffix") == 0);
     CHECK(saved.per_baker.at("AO").at("Distribution") == Value("Cosine"));
 
@@ -1502,8 +1509,8 @@ void CaseBakeSettings() {
     bad.common["DilationWidth"] = Value("8");
     refused(bad, "DilationWidth", false);
     bad = saved;
-    bad.detail["MaxHeight"] = Value(0.5);
-    refused(bad, "value type of MaxHeight", true);
+    bad.detail["MaxHeight"] = Value(5.0);
+    refused(bad, "outside Painter's range", true);
     bad = saved;
     bad.per_baker["Normal"]["Foo"] = Value(1);
     refused(bad, "phase3.2_baker-normal", true);
@@ -1512,7 +1519,7 @@ void CaseBakeSettings() {
     refused(bad, "no baker 'Sparkle'", false);
     bad = saved;
     bad.detail["SubSampling"] = Value("3x3");
-    refused(bad, "no option '3x3'", false);
+    refused(bad, "no enum value '3x3'", false);
     // An empty object of another baker is no value.
     uzp::core::BakeSettings empty_normal = saved;
     empty_normal.per_baker["Normal"] = {};
@@ -1520,8 +1527,9 @@ void CaseBakeSettings() {
     CHECK(ToBakeSettings(other.parameters("a")) == saved);
 }
 
-/// The parameters of a texture set as a request: every typed key needs a value; pending keys keep
-/// the request's own fields; the mapped request bakes exactly as the request it describes.
+/// The parameters of a texture set as a request: every key the baker reads takes its set value or
+/// its default; values the baker does not implement are refused; the mapped request bakes exactly as
+/// the request it describes.
 void CaseParametersToRequest() {
     EmbreeBaker baker;
     Bevel fixture;
@@ -1529,41 +1537,66 @@ void CaseParametersToRequest() {
     BakingParameters params("bevelled_cube");
     const auto common = params.common();
     const auto ao = params.baker(MeshMapUsage::AO);
+    using Pair = std::pair<std::int64_t, std::int64_t>;
+    // OutputSize has no established default.
     std::string message = ExpectThrow<NotYetSupported>([&] { (void)RequestFromParameters(params, base); });
-    CHECK(Contains(message, "item 2.9"));
-    BakingParameters::set({{common.at("OutputSize"), std::pair<std::int64_t, std::int64_t>{7, 6}},
-                           {common.at("DilationWidth"), std::int64_t{0}},
-                           {common.at("ApplyDiffusion"), false},
-                           {common.at("LowAsHigh"), false},
-                           {common.at("CageMode"), EnumLabel{"Distance based"}},
+    CHECK(Contains(message, "OutputSize"));
+    BakingParameters::set({{common.at("OutputSize"), Pair{base.output_size_log2[0], base.output_size_log2[1]}}});
+    // Painter's default AO attenuation is not the baker's.
+    message = ExpectThrow<NotYetSupported>([&] { (void)RequestFromParameters(params, base); });
+    CHECK(Contains(message, "Attenuation") && Contains(message, "phase3.4_baker-ao"));
+    BakingParameters::set({{common.at("DilationWidth"), std::int64_t{0}},
                            {common.at("IgnoreBackface"), false},
                            {common.at("FilterMethod"), EnumLabel{"By mesh name"}},
-                           {common.at("SubSampling"), EnumLabel{"None"}},
-                           {ao.at("MaxDistanceRelativeScale"), false},
-                           {ao.at("Distribution"), EnumLabel{"Cosine"}},
-                           {ao.at("GroundPlane"), false}});
+                           {common.at("MaxHeight"), static_cast<double>(base.detail.max_height)},
+                           {common.at("MaxDepth"), static_cast<double>(base.detail.max_depth)},
+                           {common.at("RelativeScale"), false},
+                           {ao.at("Attenuation"), EnumLabel{"None"}},
+                           {ao.at("NbSecondary"), std::int64_t{base.ao.secondary_rays}},
+                           {ao.at("MinDistance"), static_cast<double>(base.ao.min_distance)},
+                           {ao.at("MaxDistance"), static_cast<double>(base.ao.max_distance)},
+                           {ao.at("MaxDistanceRelativeScale"), false}});
     const MappedRequest mapped = RequestFromParameters(params, base);
-    CHECK((mapped.keys_from_request ==
-           std::vector<std::string>{"MaxHeight", "MaxDepth", "RelativeScale", "NbSecondary", "MinDistance", "MaxDistance"}));
+    CHECK((mapped.keys_not_read == std::vector<std::string>{"SmoothNormals", "SkewFaceBehavior"}));
+    CHECK(mapped.request.ao.distribution == Distribution::Cosine);  // the default
     CHECK(SerializeResult(Bake(baker, mapped.request)) == SerializeResult(Bake(baker, base)));
     // Sub-samples and dilation through their keys.
-    BakingParameters::set({{common.at("SubSampling"), EnumLabel{"2×2"}}, {common.at("DilationWidth"), std::int64_t{4}}});
+    BakingParameters::set({{common.at("SubSampling"), EnumLabel{"Subsampling 2x2"}}, {common.at("DilationWidth"), std::int64_t{4}}});
     BakeRequest expected = base;
     expected.detail.subsampling = 2;
     expected.common.dilation_width = 4;
     const MappedRequest sub = RequestFromParameters(params, base);
     CHECK_EQ(sub.request.detail.subsampling, 2u);
     CHECK(SerializeResult(Bake(baker, sub.request)) == SerializeResult(Bake(baker, expected)));
+    // Painter's default relative distances map, and the box-size refusal travels with them.
+    BakingParameters::set({{common.at("RelativeScale"), true}});
+    BakeRequest bounded = base;
+    bounded.project_bounds = BoundingBox{{-2, -2, -2}, {2, 2, 2}};
+    const MappedRequest relative = RequestFromParameters(params, bounded);
+    CHECK(relative.request.detail.relative_to_bounding_box);
+    message = ExpectThrow<NotYetSupported>([&] { baker.bake(relative.request); });
+    CHECK(Contains(message, "phase3.5_embree-bakers"));
+    BakingParameters::set({{common.at("RelativeScale"), false}});
     // The release gap and the refusals travel with the mapping.
     BakingParameters::set({{common.at("CageMode"), EnumLabel{"Automatic (experimental)"}}});
     const MappedRequest automatic = RequestFromParameters(params, base);
     message = ExpectThrow<CapabilityError>([&] { baker.bake(automatic.request); });
     CHECK(Contains(message, "release gap"));
-    BakingParameters::set({{common.at("CageMode"), EnumLabel{"Distance based"}}, {ao.at("GroundPlane"), true}});
-    message = ExpectThrow<NotYetSupported>([&] { (void)RequestFromParameters(params, base); });
-    CHECK(Contains(message, "phase3.4_baker-ao"));
-    BakingParameters::set({{ao.at("GroundPlane"), false}, {common.at("OutputSize"), std::pair<std::int64_t, std::int64_t>{40, 6}}});
-    ExpectThrow<ValueError>([&] { (void)RequestFromParameters(params, base); });
+    BakingParameters::set({{common.at("CageMode"), EnumLabel{"Distance-based"}}});
+    for (const auto& [property, value, owner] :
+         std::vector<std::tuple<Property, PropertyValue, const char*>>{
+             {ao.at("GroundPlane"), true, "phase3.4_baker-ao"},
+             {ao.at("Spread"), 90.0, "phase3.4_baker-ao"},
+             {ao.at("IgnoreBackfaceSecondary"), EnumLabel{"Always"}, "phase3.4_baker-ao"},
+             {ao.at("FilterMethodSecondary"), EnumLabel{"Only same mesh name"}, "phase3.4_baker-ao"},
+             {common.at("OffsetMap"), std::string("offset.png"), "phase3.5_embree-bakers"}}) {
+        const PropertyValue before = property.value();
+        BakingParameters::set({{property, value}});
+        message = ExpectThrow<NotYetSupported>([&] { (void)RequestFromParameters(params, base); });
+        CHECK(Contains(message, property.short_name()) && Contains(message, owner));
+        BakingParameters::set({{property, before}});
+    }
+    (void)RequestFromParameters(params, base);
 }
 
 /// The `cage_file` fixture of the `bake` command: the cube, its high and its cage from OBJ files,

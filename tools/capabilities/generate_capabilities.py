@@ -119,6 +119,8 @@ RELEASE_GAPS: tuple[tuple[str, str], ...] = (
     ("substance_painter.export.export_project_textures", "file-format:j2k"),
     # Arbitrary .sbsar evaluation
     ("substance_painter.source.SourceSubstance", "arbitrary-sbsar"),
+    # The Automatic bake cage
+    ("substance_painter.baking.bake_async", "cage-mode:automatic"),
 )
 
 
