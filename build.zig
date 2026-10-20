@@ -1091,11 +1091,12 @@ pub fn build(b: *std.Build) void {
         .files = &fastgltf_sources,
         .flags = &cxx_flags,
     });
-    mesh_mod.linkLibrary(b.addLibrary(.{
+    const gltf_lib = b.addLibrary(.{
         .linkage = .static,
         .name = "uzp_gltf",
         .root_module = gltf_mod,
-    }));
+    });
+    mesh_mod.linkLibrary(gltf_lib);
     mesh_mod.addCSourceFiles(.{
         .root = b.path("thirdparty/zlib"),
         .files = &zlib_sources,
@@ -1112,6 +1113,29 @@ pub fn build(b: *std.Build) void {
         .name = "uzp_mesh",
         .root_module = mesh_mod,
     });
+    const gltf_consumer_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    gltf_consumer_mod.addIncludePath(b.path("src"));
+    gltf_consumer_mod.addIncludePath(b.path("thirdparty/fastgltf/include"));
+    gltf_consumer_mod.addIncludePath(b.path("thirdparty/spng/spng"));
+    gltf_consumer_mod.linkLibrary(mesh_lib);
+    gltf_consumer_mod.linkLibrary(gltf_lib);
+    gltf_consumer_mod.linkLibrary(uzp_core_lib);
+    gltf_consumer_mod.addCSourceFiles(.{
+        .root = b.path("tests/export"),
+        .files = &.{"gltf_consumer.cpp"},
+        .flags = &(uzp_core_flags ++ [_][]const u8{"-DSPNG_STATIC"}),
+    });
+    const gltf_consumer_exe = b.addExecutable(.{
+        .name = "uzp-gltf-consumer",
+        .root_module = gltf_consumer_mod,
+    });
+    const gltf_consumer_step = b.step("gltf-consumer", "Build the CPU glTF consumer fixture");
+    gltf_consumer_step.dependOn(&b.addInstallArtifact(gltf_consumer_exe, .{}).step);
     // The CPU baker reads high and cage mesh files with the mesh loaders (decision 311).
     bake_tests_mod.linkLibrary(mesh_lib);
 

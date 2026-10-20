@@ -105,6 +105,44 @@ Task `phase1.17_export-presets`. Local run report: `parity/reports/phase1/export
   - The five-map preset writes BaseColor sRGB-encoded (decision 126); on a template whose BaseColor base is inferred the export is refused before writing.
 - **Parity.** The five-map preset's Normal map, written on the recorded plane goldens, is byte-identical to Painter's `Normal_OpenGL` PNG 16 files. Every preset's full output parity waits on a comparison with recording R-095, which decisions 180 and 198 admitted (`export-presets-legacy`, `export-presets-ocio`, `phase1-export-preset-search`) and no test compares yet: a scope split to `phase3.3_unreal-gltf-presets` (decision 103).
 
+### glTF consumer fixture
+
+`tools/consumers/gltf.py` assembles an external glTF 2.0 asset from one published
+generation. Build its CPU consumer with `zig build gltf-consumer`, then run
+`python -m tools.consumers.gltf --request <request.json>`. The consumer uses vendored
+fastgltf 0.9.1 and `fastgltf::validate`; its recorded identity and archive hash are in
+`parity/manifests/consumers/gltf/wand-v1.json`. This is structural validation and actual
+geometry/PNG loading, not the Khronos validator or a renderer.
+
+The request is a JSON object with these fields; paths resolve from the caller's working
+directory:
+
+| Field | Contract |
+| --- | --- |
+| `export_root` | Publication directory containing `current.json`. |
+| `mesh_obj` | Authored, triangulated OBJ with position, normal and UV at every corner. |
+| `mesh_material` | Optional OBJ material selection; otherwise exactly one material must contain faces. |
+| `bindings` | Exactly `baseColor`, `metallicRoughness`, `normal`, `occlusion`, `emissive`, each naming a PNG relative to the generation's `files/`. |
+| `references` | `roughness` and `metallic`, each `{path, sha256}` naming an independent single-channel PNG with the packed texture's dimensions and native bit depth. |
+| `output_dir` | New fixture directory; an existing directory is refused. |
+| `consumer_exe` | Built `uzp-gltf-consumer.exe`. |
+| `manifest_path` | Recorded consumer manifest above. |
+
+The runner reads `current.json` once, verifies its receipt and every published file's
+path, size and SHA-256, then retains those bytes. It copies selected PNGs unchanged,
+converts the OBJ to indexed glTF geometry (normalizing normals and inverting V), and
+sets material multipliers to one. The loader checks geometry, all five texture slots,
+decoded PNG metadata and material factors. PNG input is limited to non-interlaced
+8/16-bit grey, grey-alpha, RGB or RGBA; decompression is bounded by its declared size.
+Metallic-roughness G/B must equal the independent references at every texel. Swapping
+channels fails even when the altered texture and receipt have consistent hashes.
+
+Success writes `asset.gltf`, `mesh.bin`, five PNGs and `report.json`; the report pins
+the generation, receipt, source mesh, asset, manifest and consumer executable. Errors
+return nonzero with a JSON error. `tests/export/test_gltf_consumer.py` exercises an
+authored publication and corrupt inputs. The manifest stays `pending-real-fixture`:
+this tooling does not satisfy Wand acceptance, R-314, or Painter export parity.
+
 ## 6. Publication and receipts (decision 097)
 
 Task `phase1.17_export-publication-receipts`. Tests: `tests/export/test_export_publication.py` (CPU, every lane).

@@ -32,6 +32,7 @@ class Schema(StrEnum):
     ENVELOPE_REGISTRY = "envelope-registry.json"
     ORACLE_ENVELOPE = "oracle-envelope.json"
     RECIPE_REBUILD_REPORT = "recipe-rebuild-report.json"
+    GLTF_CONSUMER_FIXTURE = "gltf-consumer-fixture.json"
 
 
 def load_json(path: Path) -> Any:

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:uzpainter:parity:schema:gltf-consumer-fixture:1",
+  "title": "Public glTF consumer selection",
+  "description": "Pinned authored consumer configuration only. No observed output, private image, free-form readback or real-fixture pass is admitted by this schema.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "fixture", "consumer", "loader_archive_sha256", "loader_origin",
+    "fixture_runner", "consumer_target", "status", "validation_scope", "required_slots",
+    "packing_reference_policy", "blocked_by", "wand_report"
+  ],
+  "properties": {
+    "schema": {"const": "uzpainter/gltf-consumer-fixture/1"},
+    "fixture": {"const": "wand-v1"},
+    "consumer": {
+      "const": {
+        "loader": "fastgltf",
+        "version": "0.9.1",
+        "validator": "fastgltf::validate"
+      }
+    },
+    "loader_archive_sha256": {"const": "d8705a496deb2831775baeef5009be36d24bf3d10f8d29ab016e977d0119c872"},
+    "loader_origin": {"const": "thirdparty/fastgltf/ORIGIN.md"},
+    "fixture_runner": {"const": "tools/consumers/gltf.py"},
+    "consumer_target": {"const": "gltf-consumer"},
+    "status": {"const": "pending-real-fixture"},
+    "validation_scope": {
+      "const": "fastgltf structural validation, loaded triangle geometry, decoded PNG resources and material bindings; no Khronos validator or rendered-image claim"
+    },
+    "required_slots": {
+      "const": {
+        "baseColor": {"channels": "RGB and optional alpha", "transfer": "sRGB for RGB; linear alpha"},
+        "metallicRoughness": {"channels": "G roughness, B metallic", "transfer": "linear"},
+        "normal": {"channels": "RGB tangent-space OpenGL normal", "transfer": "linear"},
+        "occlusion": {"channels": "R", "transfer": "linear"},
+        "emissive": {"channels": "RGB", "transfer": "sRGB"}
+      }
+    },
+    "packing_reference_policy": {
+      "const": "Independent native-depth single-channel roughness and metallic PNG files, each pinned by SHA-256; every G/B texel must equal its reference"
+    },
+    "blocked_by": {
+      "const": ["R-314 preset layout observation", "phase1.25_pilot-wand exact export"]
+    },
+    "wand_report": {"type": "null"}
+  }
+}

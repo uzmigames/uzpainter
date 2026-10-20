@@ -785,6 +785,35 @@ def test_mcp_round_report_holds_numbers_identifiers_and_hashes_only(
 
 REBUILD_PATH = "parity/reports/phase2/recipe-rebuild-wand.json"
 
+GLTF_CONSUMER_PATH = "parity/manifests/consumers/gltf/wand-v1.json"
+
+
+@pytest.mark.parametrize(
+    ("change", "allowed"),
+    [
+        (lambda m: m, True),
+        (lambda m: {**m, "status": "pass"}, False),
+        (lambda m: {**m, "wand_report": {"pixels": [0.25, 0.5]}}, False),
+        (lambda m: {**m, "readback": "private observation"}, False),
+        (lambda m: {**m, "consumer": {**m["consumer"], "version": "unverified"}}, False),
+        (lambda m: {**m, "loader_archive_sha256": "0" * 64}, False),
+        (lambda m: {**m, "required_slots": {**m["required_slots"], "pixels": [1, 2]}}, False),
+        (lambda m: {**m, "blocked_by": []}, False),
+    ],
+)
+def test_gltf_consumer_selection_admits_no_private_output(
+    repo: Path, change: Any, allowed: bool
+) -> None:
+    manifest = load_json(REPO_ROOT / GLTF_CONSUMER_PATH)
+    put(repo, GLTF_CONSUMER_PATH, json.dumps(change(manifest)).encode())
+    assert blocked(repo, None) == ({} if allowed else {GLTF_CONSUMER_PATH: {"public-schema"}})
+
+
+def test_gltf_consumer_rule_is_limited_to_selected_manifest(repo: Path) -> None:
+    path = "parity/manifests/consumers/gltf/unreviewed.json"
+    put(repo, path, (REPO_ROOT / GLTF_CONSUMER_PATH).read_bytes())
+    assert blocked(repo, None) == {path: {"public-schema"}}
+
 
 def _rebuild_report() -> dict[str, Any]:
     side = {

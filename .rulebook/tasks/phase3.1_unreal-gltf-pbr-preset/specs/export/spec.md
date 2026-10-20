@@ -23,3 +23,22 @@ The glTF consumer fixture MUST record the consumer it uses (validator and loader
 Given the fixture manifest `parity/manifests/consumers/gltf/wand-v1.json`
 When the fixture runs
 Then the report names the consumer identities and versions taken from the manifest
+
+### Requirement: Pinned Consumer Input and Independent Packing Check
+The fixture runner SHALL read one publication pointer and verify the receipt and all
+published file hashes and sizes before consuming that generation. It SHALL copy the
+five selected PNGs without changing their bytes and use the recorded fastgltf loader
+and structural validator. The runner MUST compare metallic-roughness G/B at native
+depth against independently pinned roughness and metallic PNG references.
+
+#### Scenario: Swapped channels with consistent publication hashes
+Given a published metallic-roughness PNG whose G/B channels have been swapped and whose
+receipt and pointer have been updated to match those bytes
+When the consumer fixture compares the PNG with the independent references
+Then it fails the packing check and produces no passing report
+
+#### Scenario: Authored fixture is not pilot acceptance
+Given an authored CPU fixture that validates and loads through fastgltf
+When its successful report is written
+Then the report describes structural validation and bindings only, and the Wand
+manifest remains pending until the real pilot and R-314 comparisons pass

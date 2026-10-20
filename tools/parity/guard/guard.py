@@ -246,6 +246,10 @@ def _public_manifest(path: str, document: Any, data: bytes, ctx: _Context) -> li
     return validation_errors(document, Schema.GOLDEN_PUBLIC)
 
 
+def _gltf_consumer_fixture(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
+    return validation_errors(document, Schema.GLTF_CONSUMER_FIXTURE)
+
+
 def _requested_manifest(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
     """A requested golden: a valid public manifest that names no private record yet."""
     problems = validation_errors(document, Schema.GOLDEN_PUBLIC)
@@ -407,6 +411,11 @@ PATH_RULES: tuple[tuple[re.Pattern[str], str, _Rule], ...] = (
         _report_sample,
     ),
     (re.compile(r"^parity/exceptions\.json$"), "exceptions.json", _register),
+    (
+        re.compile(r"^parity/manifests/consumers/gltf/wand-v1\.json$"),
+        "gltf-consumer-fixture.json (public consumer selection, no private outputs)",
+        _gltf_consumer_fixture,
+    ),
     (re.compile(r"^parity/manifests/.+$"), "golden-public.json", _public_manifest),
     (
         re.compile(r"^parity/envelopes/registry\.json$"),
