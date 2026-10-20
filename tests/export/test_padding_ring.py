@@ -490,9 +490,13 @@ def test_ring_point_neighbours_and_reach_follow_decision_279(
       decision 285's recorded basis, bevelled-cube-256 (4, 234), whose 1.772004 endpoint edge is
       found through its collinear seam neighbour to the same far island. (8, 15) takes B's texel
       (16, 15) through that edge's window (decision 285's cap, 1.78 texels), and is flagged
-      "reach-bracket", since a cap at the bracket's low end, 1.772004 texels, would drop it. A lone
-      endpoint edge (no seam of its run owning a sample) is not discovered: Painter drops that
-      edge class on the recorded window-side texel (28, 82) and 77 more window texels."""
+      "reach-bracket", since a cap at the bracket's low end, 1.772004 texels, would drop it;
+    - the same mesh without A's lower right quad, so the 1.7768 edge is a lone endpoint edge (no
+      seam of its run owns a sample of (8, 15)'s 3x3): it is not discovered, (8, 15) takes no far
+      candidate and no texel is flagged "reach-bracket", as Painter drops that edge class on the
+      recorded window-side texel (28, 82) and 77 more window texels. The rule before decision 339
+      (decisions 279 and 285, no strip) discovers it: `padding_reference` at d9d04233's parent
+      gives (8, 15) B's far candidates (17, 15) and (16, 15) and flags it "reach-bracket"."""
     from tests.export.padding_reference import Ring
 
     vgap = Mesh(
@@ -539,6 +543,13 @@ def test_ring_point_neighbours_and_reach_follow_decision_279(
     flagged = {(r["x"], r["y"]): r for r in ring if "reach-bracket" in r["undecided"]}
     assert list(flagged) == [(8, 15)]
     assert (16, 15) in [(c[0], c[1]) for c in flagged[(8, 15)]["candidates"] if c[3]]
+
+    lone = Mesh(reach.quads[:3] + reach.quads[4:], 32)
+    values, out, ring = run(export_tests, tmp_path, lone, "lone", 279)
+    _matches_reference(tmp_path, "lone", values, out, ring)
+    assert not [r for r in ring if "reach-bracket" in r["undecided"]]
+    texel = next(r for r in ring if (r["x"], r["y"]) == (8, 15))
+    assert not [c for c in texel["candidates"] if c[3]]
 
 
 class Triangles:
