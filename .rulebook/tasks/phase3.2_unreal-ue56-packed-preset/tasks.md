@@ -29,3 +29,26 @@
 - [ ] 5.1 Update or create documentation covering the implementation
 - [ ] 5.2 Write tests covering the new behavior
 - [ ] 5.3 Run tests and confirm they pass
+
+## 6. DDS leaf evidence (2026-10-20)
+
+Item 2.6's CPU writer/cook is implemented in `src/export/dds.{h,cpp}` and
+`src/export/cook_dds.{h,cpp}`; contract and public-source provenance:
+`docs/DDS.md`, approved source `S-DDS-MS`. It writes DX10 BC5/BC7/BC7-sRGB,
+validates headers/mips/limits, reuses the existing mip/BC policies, and refuses
+negative-Z BC5 normals before compression. Canonical inputs retain their supplied
+green convention. No Painter/default/backend claim follows from these tests.
+
+`tests/export/test_dds_writer.py`: 56 CPU cases pass in Debug, ReleaseSafe,
+ReleaseFast and ReleaseSmall. Pillow 12.2.0 independently opens all generated
+formats and every mip. Coverage includes channel/block orientation, alpha,
+exact encoder-boundary samples, malformed inputs, colour transfer, normal
+filtering, negative Z, and byte-identical 1/4/max-thread output. Debug also passes
+all 11 existing `test_uze_texture.py` regressions. The fixed BC7 encoder's mode-6
+endpoint quantization is kept distinct from exact canonical samples.
+
+Local evidence: `tmp/scratch/dds/evidence.json` indexes four run records/JUnits,
+source hashes and executable hashes; each run verifies unchanged identities.
+Ruff, mypy, source audit and Rulebook validation pass. Item 2.6 remains open:
+the optional preset variant and its observation/provenance prerequisites are
+not delivered by a library alone. UE import/cook acceptance remains in 3.3.

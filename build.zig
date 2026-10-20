@@ -426,6 +426,8 @@ const texture_sources = [_][]const u8{
     "export/bc_encoder.cpp",
     "export/mips.cpp",
     "export/uztexture_writer.cpp",
+    "export/dds.cpp",
+    "export/cook_dds.cpp",
 };
 /// etcpak's BC encoders (`thirdparty/etcpak/`, `tools/vendoring/thirdparty.py`), relative to the
 /// folder; `Dither.cpp` only because `ProcessDxtc.cpp` references it. `bcdec.c` (the independent
@@ -1641,6 +1643,28 @@ pub fn build(b: *std.Build) void {
     const texture_tests_step = b.step("uzp-texture-tests", "Build the native tests of the .uztexture texture path (BC encoder, mips, writer)");
     texture_tests_step.dependOn(&b.addInstallArtifact(texture_tests_exe, .{}).step);
     b.getInstallStep().dependOn(texture_tests_step);
+
+    const dds_tests_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    dds_tests_mod.addIncludePath(b.path("src"));
+    dds_tests_mod.addCSourceFiles(.{
+        .root = b.path("tests/export"),
+        .files = &.{"dds_test.cpp"},
+        .flags = &uzp_core_flags,
+    });
+    dds_tests_mod.linkLibrary(texture_lib);
+    dds_tests_mod.linkLibrary(uzp_core_lib);
+    const dds_tests_exe = b.addExecutable(.{
+        .name = "uzp-dds-tests",
+        .root_module = dds_tests_mod,
+    });
+    const dds_tests_step = b.step("uzp-dds-tests", "Build the CPU DDS writer and cook tests");
+    dds_tests_step.dependOn(&b.addInstallArtifact(dds_tests_exe, .{}).step);
+    b.getInstallStep().dependOn(dds_tests_step);
 
     // ── The native Python API (phase1.19_pyapi-native-module) ─────────────────────────────────
     // `uzp-pyapi-tests.exe <script.py>` runs one script in the embedded interpreter with the

@@ -17,6 +17,10 @@ Audit of 2026-10-10 (task `phase0.1_approved-source-index`). Reviewer of every e
 
 ### A. Public specifications and papers
 
+| ID | Source | Category | Revision / hash | Licence | Cleared scope | Cited as | Reviewer |
+|---|---|---|---|---|---|---|---|
+| S-DDS-MS | Microsoft, DDS_HEADER; DDS_HEADER_DXT10; DDS_PIXELFORMAT; Programming Guide for DDS; DXGI_FORMAT: https://learn.microsoft.com/en-us/windows/win32/direct3ddds/dds-header ; https://learn.microsoft.com/en-us/windows/win32/direct3ddds/dds-header-dxt10 ; https://learn.microsoft.com/en-us/windows/win32/direct3ddds/dds-pixelformat ; https://learn.microsoft.com/en-us/windows/win32/direct3ddds/dx-graphics-dds-pguide ; https://learn.microsoft.com/en-us/windows/win32/api/dxgiformat/ne-dxgiformat-dxgi_format | Public documentation | Retrieved 2026-10-20 | Consulted; no implementation copied | Authored DDS DX10 writer: header fields, flags, dimensions, mip layout and BC5/BC7 format identifiers | `S-DDS-MS` | Codex source audit 2026-10-20 |
+
 BC decoder audit, Codex, 2026-10-20: the following public sources are approved
 implementation inputs for the project's own test-only BC decoder. They do not
 authorize copying proprietary implementations or claim hardware equivalence.
