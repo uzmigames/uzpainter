@@ -1,0 +1,12 @@
+{
+  "id": 318,
+  "slug": "318-uzengine-preset-layout",
+  "title": "The UzEngine preset ships as a `consumer` layout with a `uzengine` block, PNG 16 canonical companions in `canonical/`, and receipts that report the colour space of the bytes written",
+  "status": "accepted",
+  "date": "2026-10-20",
+  "relatedTasks": [
+    "phase3.2_uze-uzmat-preset",
+    "phase3.2_unreal-ue56-packed-preset"
+  ],
+  "supersededBy": null
+}
