@@ -1,0 +1,54 @@
+{
+  "schema": "uzpainter/asset-provenance/1",
+  "asset": "uzasset://generator/world-normal@1",
+  "name": "UzPainter World Normal Direction",
+  "usage": "GENERATOR",
+  "author": "UzmiGames (UzPainter procedural families, phase3.2_proc-generator-families)",
+  "license": "Apache-2.0",
+  "sources": [
+    {
+      "kind": "approved-source",
+      "id": "A-HELP-BAKING",
+      "citation": "the documented mesh-map encodings, consulted, never copied: the curvature map is mid grey on flat surfaces, brighter on convex and darker on concave ones; the ambient occlusion map is white where unoccluded; the position map holds the bounding-box-normalised position per axis; the world space normal map holds n x 0.5 + 0.5; the thickness map is brighter where the mesh is thicker"
+    },
+    {
+      "kind": "book",
+      "citation": "D. S. Ebert, F. K. Musgrave, D. Peachey, K. Perlin, S. Worley, Texturing and Modeling: A Procedural Approach, 3rd ed., Morgan Kaufmann, 2003, chapter 2 (Peachey: the clamp, boxstep linear ramp and smoothstep 3t^2 - 2t^3 building blocks) and chapter 16 (Musgrave: fractional Brownian motion)"
+    },
+    {
+      "kind": "approved-source",
+      "id": "A-PYDOC",
+      "citation": "SourceSubstance parameter semantics (booleans passed as int) and generators binding mesh maps by usage"
+    }
+  ],
+  "defaults": {"axis": 2, "low": 0, "high": 1, "invert": 0, "smooth": 0},
+  "domain": {
+    "parameters": {
+      "axis": {"set": [0, 1, 2, 3, 4, 5]},
+      "low": {"range": [-1, 1]},
+      "high": {"range": [-1, 1]},
+      "invert": {"set": [0, 1]},
+      "smooth": {"set": [0, 1]}
+    },
+    "constraints": [{"coefficients": {"low": 1, "high": -1}, "max": -0.00390625}],
+    "seeds": {"policy": "any_u32"},
+    "geometry": {
+      "mesh_classes": ["sphere", "bevelled-cube", "garment"],
+      "uv_tiles": 1,
+      "inputs": {
+        "WorldSpaceNormal": {
+          "resolutions": [1024, 2048, 4096],
+          "formats": ["u8", "u16"],
+          "colour_spaces": ["Raw"],
+          "channels": [3]
+        }
+      }
+    },
+    "output": {"resolutions": [1024, 2048, 4096], "formats": ["f32"], "colour_spaces": ["linear"], "channels": [1]}
+  },
+  "corpus": {},
+  "parity": {
+    "status": "unavailable",
+    "reason": "not certified: the parameter discovery (2.1), the held-out reservation (2.7), the calibration against private Painter oracles (2.5) and Tier 2a (3.1) of phase3.2_proc-generator-families wait on Painter recordings"
+  }
+}

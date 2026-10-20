@@ -472,6 +472,11 @@ const procedural_filter_sources = [_][]const u8{
     "evaluator/arith.cpp",
     "evaluator/hwmath.cpp",
 };
+/// The mesh-map generator families (`src/procedural/generators.h`, decision 329), relative to
+/// `src/`: compiled into `uzp-proc-generator-tests.exe` with `procedural_sources`.
+const procedural_generator_sources = [_][]const u8{
+    "procedural/generators.cpp",
+};
 /// The asset library and the seam vocabulary it uses (`src/procedural/asset_library.h`, decision
 /// 324), relative to `src/`: compiled into `UzPainter.exe` and into `uzp-pyapi-tests.exe`
 /// (`resource.search`), without the HlslBackend host.
@@ -1620,6 +1625,43 @@ pub fn build(b: *std.Build) void {
     proc_filter_tests_step.dependOn(&b.addInstallArtifact(proc_filter_tests_exe, .{}).step);
     for (dx_runtime) |step| proc_filter_tests_step.dependOn(step);
     b.getInstallStep().dependOn(proc_filter_tests_step);
+
+    // ── The mesh-map generator families (phase3.2_proc-generator-families, decision 329) ──────
+    // `src/procedural/generators.cpp` over the seam and the HLSL host, in its own test executable.
+    const proc_generator_tests_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    addCoreIncludePaths(b, proc_generator_tests_mod);
+    proc_generator_tests_mod.addIncludePath(b.path("src"));
+    proc_generator_tests_mod.addCSourceFiles(.{
+        .root = b.path("tests/procedural"),
+        .files = &.{"generators_test.cpp"},
+        .flags = &evaluator_flags,
+    });
+    embed_inputs.add(proc_generator_tests_mod, "src", &(procedural_sources ++ procedural_generator_sources), &evaluator_flags);
+    embed_inputs.add(proc_generator_tests_mod, "src", &render_sources, &(cxx_flags ++ own_warning_flags));
+    proc_generator_tests_mod.addCSourceFiles(.{
+        .root = b.path(core_root),
+        .files = &.{agility_export_source},
+        .flags = &cxx_flags,
+    });
+    proc_generator_tests_mod.linkLibrary(core_lib);
+    // `procedural_sources` holds the snapshot backend, which reads and records project planes.
+    proc_generator_tests_mod.linkLibrary(store_lib);
+    proc_generator_tests_mod.linkLibrary(uzp_core_lib);
+    for (system_libraries) |name| proc_generator_tests_mod.linkSystemLibrary(name, .{});
+    proc_generator_tests_mod.linkSystemLibrary("version", .{});
+    const proc_generator_tests_exe = b.addExecutable(.{
+        .name = "uzp-proc-generator-tests",
+        .root_module = proc_generator_tests_mod,
+    });
+    const proc_generator_tests_step = b.step("proc-generator-tests", "Build the native tests of the procedural mesh-map generator families");
+    proc_generator_tests_step.dependOn(&b.addInstallArtifact(proc_generator_tests_exe, .{}).step);
+    for (dx_runtime) |step| proc_generator_tests_step.dependOn(step);
+    b.getInstallStep().dependOn(proc_generator_tests_step);
 
     // ── The export plan compiler (phase1.15_export-plan-compiler) ─────────────────────────────
     // `src/export/` over the evaluator; its tests evaluate on the CPU store only, so they run on

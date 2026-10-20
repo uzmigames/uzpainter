@@ -42,6 +42,11 @@ The library ships beside the executable as `assets/procedural/`: one provenance 
 - A filter effect's source carries no resolution override (§7).
 - The three domains are declared in `assets/procedural/` before calibration. None is certified, and no alias names them.
 
+**As built, mesh-map generators (`phase3.2_proc-generator-families`, decision 329, `src/procedural/generators.h`).**
+- A generator reads the texture set's mesh maps by usage (`AO`, `Curvature`, `Position`, `WorldSpaceNormal`, `Thickness`), never from its reference. A missing binding, a binding marked invalid, or an image that is absent or not the binding's size, channels or sample type fails evaluation loudly and names the map (§7). Every map has the output's resolution: nothing is resampled.
+- Curvature, Position, World Space Normals and Ambient Occlusion shape one mesh-map signal with a boxstep and smoothstep. Dirt and Metal Edge Wear detect cavities or convex edges from curvature and AO, spread them by a disk dilation and break them up with fBm noise over the position map. Mask Builder (Legacy) shapes one source with a noise mask and growth; Mask Editor boxsteps a weighted sum of six mesh-map terms. Each kernel equals its CPU reference bit for bit on DX12.
+- The eight domains are declared in `assets/procedural/` before calibration. None is certified, and no alias names them.
+
 Parity status per asset is `exact` (zero residual on every calibration and held-out case of §6) or `calibrated{max |Δ|, mean |Δ|, p99 |Δ|, corpus id}`, published by `uzpainter assets list --parity`. Under Q1 there is no preset tolerance: a calibrated asset passes only through an owner-approved, versioned exception in the register (`14-parity-testing.md` §5); without one it is a failure.
 
 ## 4. Frozen snapshots (`SnapshotBackend`)

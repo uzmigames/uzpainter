@@ -97,11 +97,19 @@ def test_search_with_the_shipped_library_answers_no_painter_name(facade: Run) ->
     assert report["status"] == "ok", report
     result = report["result"]
     # The shipped records declare their domains before calibration and are not certified
-    # (phase3.2_proc-filter-families 2.6): listed on UzPainter's shelf, never aliased.
+    # (phase3.2 filter 2.6, generator 2.7): listed on UzPainter's shelf, never aliased.
     assert sorted(result["own"]) == [
         "resource://uzasset/filter/grayscale?version=1",
         "resource://uzasset/filter/levels?version=1",
         "resource://uzasset/filter/sharpen?version=1",
+        "resource://uzasset/generator/curvature?version=1",
+        "resource://uzasset/generator/dirt?version=1",
+        "resource://uzasset/generator/edge-wear?version=1",
+        "resource://uzasset/generator/mask-builder?version=1",
+        "resource://uzasset/generator/mask-editor?version=1",
+        "resource://uzasset/generator/occlusion?version=1",
+        "resource://uzasset/generator/position?version=1",
+        "resource://uzasset/generator/world-normal?version=1",
     ]
     name, asset, reason, message = result["painter"]
     assert (name, asset, reason) == (

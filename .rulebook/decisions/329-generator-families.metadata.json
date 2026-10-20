@@ -1,0 +1,11 @@
+{
+  "id": 329,
+  "slug": "329-generator-families",
+  "title": "The mesh-map generator families: eight HLSL families over mesh maps bound by usage, a loud failure for a missing or invalid map, no resampling, and domains declared uncertified",
+  "status": "accepted",
+  "date": "2026-10-20",
+  "relatedTasks": [
+    "phase3.2_proc-generator-families"
+  ],
+  "supersededBy": null
+}

@@ -1,0 +1,92 @@
+{
+  "schema": "uzpainter/asset-provenance/1",
+  "asset": "uzasset://generator/dirt@1",
+  "name": "UzPainter Cavity Dirt",
+  "usage": "GENERATOR",
+  "author": "UzmiGames (UzPainter procedural families, phase3.2_proc-generator-families)",
+  "license": "Apache-2.0",
+  "sources": [
+    {
+      "kind": "paper",
+      "citation": "G. Miller, Efficient algorithms for local and global accessibility shading, SIGGRAPH 1994: dirt accumulates where a surface is least accessible (cavities, occluded regions)"
+    },
+    {
+      "kind": "paper",
+      "citation": "S.-C. Hsu, T.-T. Wong, Simulating dust accumulation, IEEE Computer Graphics and Applications 15(1), 1995"
+    },
+    {
+      "kind": "approved-source",
+      "id": "A-HELP-BAKING",
+      "citation": "the documented mesh-map encodings, consulted, never copied: the curvature map is mid grey on flat surfaces, brighter on convex and darker on concave ones; the ambient occlusion map is white where unoccluded; the position map holds the bounding-box-normalised position per axis; the world space normal map holds n x 0.5 + 0.5; the thickness map is brighter where the mesh is thicker"
+    },
+    {
+      "kind": "paper",
+      "citation": "K. Perlin, Improving noise, ACM Transactions on Graphics 21(3), SIGGRAPH 2002"
+    },
+    {
+      "kind": "book",
+      "citation": "D. S. Ebert, F. K. Musgrave, D. Peachey, K. Perlin, S. Worley, Texturing and Modeling: A Procedural Approach, 3rd ed., Morgan Kaufmann, 2003, chapter 2 (Peachey: the clamp, boxstep linear ramp and smoothstep 3t^2 - 2t^3 building blocks) and chapter 16 (Musgrave: fractional Brownian motion)"
+    },
+    {
+      "kind": "book",
+      "citation": "R. C. Gonzalez, R. E. Woods, Digital Image Processing, 4th ed., Pearson, 2018, chapter 9 (grey-scale dilation and erosion by a flat structuring element)"
+    },
+    {
+      "kind": "approved-source",
+      "id": "A-PYDOC",
+      "citation": "SourceSubstance parameter semantics (booleans passed as int) and generators binding mesh maps by usage"
+    }
+  ],
+  "defaults": {
+    "cavity_weight": 1,
+    "occlusion_weight": 1,
+    "spread": 1,
+    "noise_scale": 8,
+    "noise_amount": 0.25,
+    "low": 0.25,
+    "high": 0.75
+  },
+  "domain": {
+    "parameters": {
+      "cavity_weight": {"range": [0, 1]},
+      "occlusion_weight": {"range": [0, 1]},
+      "spread": {"set": [0, 1, 2, 3, 4, 5, 6, 7, 8]},
+      "noise_scale": {"range": [1, 64]},
+      "noise_amount": {"range": [0, 1]},
+      "low": {"range": [0, 1]},
+      "high": {"range": [0, 1]}
+    },
+    "constraints": [{"coefficients": {"low": 1, "high": -1}, "max": -0.00390625}],
+    "seeds": {"policy": "any_u32"},
+    "geometry": {
+      "mesh_classes": ["sphere", "bevelled-cube", "garment"],
+      "uv_tiles": 1,
+      "inputs": {
+        "AO": {
+          "resolutions": [1024, 2048, 4096],
+          "formats": ["u8", "u16"],
+          "colour_spaces": ["Raw"],
+          "channels": [1]
+        },
+        "Curvature": {
+          "resolutions": [1024, 2048, 4096],
+          "formats": ["u8", "u16"],
+          "colour_spaces": ["Raw"],
+          "channels": [1]
+        },
+        "Position": {
+          "resolutions": [1024, 2048, 4096],
+          "formats": ["u8", "u16"],
+          "colour_spaces": ["Raw"],
+          "channels": [3]
+        }
+      }
+    },
+    "output": {"resolutions": [1024, 2048, 4096], "formats": ["f32"], "colour_spaces": ["linear"], "channels": [1]}
+  },
+  "corpus": {},
+  "parity": {
+    "status": "unavailable",
+    "reason": "not certified: the parameter discovery (2.1), the held-out reservation (2.7), the calibration against private Painter oracles (2.5) and Tier 2a (3.1) of phase3.2_proc-generator-families wait on Painter recordings"
+  }
+}
