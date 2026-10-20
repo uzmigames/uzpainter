@@ -1693,7 +1693,7 @@ int main(int argc, char** argv) {
                      "usage: uzp-render-tests xxhash | admission | readback-layout | kernel-cache | "
                      "dispatch | deadline | device-removed | unavailable | capabilities | "
                      "readback-pitch | readback-exact | readback-drain | readback-failure | "
-                     "readback-kernel | uv-raster-* | vulkan-qualify | vulkan-device | vulkan-faults | "
+                     "readback-kernel | uv-raster-* | vulkan-qualify | vulkan-device | vulkan-faults | vulkan-readback | "
                      "image-* "
                      "<work-dir>\n");
         return 2;

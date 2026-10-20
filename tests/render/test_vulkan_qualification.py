@@ -4,9 +4,10 @@
 
 `vulkan-qualify` needs no GPU: the criteria judged on fabricated capability records, and the
 refusal of an unqualified device before the Vulkan loader is even loaded (the deterministic
-unavailable-device fixture of the render layer). `vulkan-device` and `vulkan-faults` create Vulkan
-devices; they skip under `UZP_NO_GPU=1` (decision 028) or when the machine has no Vulkan device
-(exit code 77). None of them is parity evidence for a Painter-visible output.
+unavailable-device fixture of the render layer). `vulkan-device`, `vulkan-faults` and
+`vulkan-readback` create Vulkan devices; they skip under `UZP_NO_GPU=1` (decision 028) or when
+the machine has no Vulkan device (exit code 77). None of them is parity evidence for a
+Painter-visible output.
 """
 
 from __future__ import annotations
@@ -138,3 +139,39 @@ def test_bounded_waits_and_failure_teardown(render_tests: Path, tmp_path: Path) 
         "a new device is created after abandoned ones",
         "the new device runs the kernel bit for bit",
     } <= passed
+
+
+def test_readback_on_vulkan(render_tests: Path, tmp_path: Path) -> None:
+    """2.4, 3.1: `TextureReadback` on an engine over the qualified Vulkan device. Every format the
+    device creates reads back bit-identical at widths 1, 3, 1023 and 4097 (pitch a multiple of 256
+    bytes and of the texel) and at a lower mip; RGB32F, which it cannot create, is refused by name.
+    64 requests in flight drain in submission order, each with its own staging buffer, and no
+    staging allocation is left, also after a destructor drain. Under an injected device loss the
+    pending readbacks fail with `device_removed {backend: vulkan, reason}` and hold no staging
+    buffer; behind a stalled queue a readback times out, keeps its staging buffer while the GPU
+    may write it, and the drain releases it once the copy completed (the DX12 drain and failure
+    cases of `readback-drain` and `readback-failure`)."""
+    passed = _run(render_tests, "vulkan-readback", tmp_path)
+    assert {
+        "the engine runs on the qualified Vulkan device",
+        "RGB32F, which this device cannot create, is refused by name on Vulkan",
+        "the pitch is a multiple of 256 bytes and of the texel size for every format and width",
+        "mip level 2 (16x10) reads back bit-identical",
+        "64 readback requests are outstanding, each with its own staging buffer",
+        "the device holds one staging allocation per outstanding request",
+        "the drain reports every request in submission order",
+        "every drained request returns its texture's texels",
+        "after the drain no staging buffer remains allocated on the device",
+        "destroying a TextureReadback with 17 requests in flight drains it and releases their "
+        "staging buffers",
+        "the pending readback fails with device_removed {backend: vulkan, reason}",
+        "the drain fails the other pending readback with device_removed",
+        "a readback requested after the loss fails with device_removed",
+        "the failed readbacks hold no staging buffer (the lost device keeps their memory, "
+        "abandoned)",
+        "later requests fail with device_removed without running",
+        "a readback behind a stalled queue fails with timeout and no texels",
+        "its staging buffer is held while the GPU may still write it",
+        "once the copy has completed the drain releases the held staging buffer",
+    } <= passed
+    assert any(p.startswith("every supported format reads back bit-identical") for p in passed)

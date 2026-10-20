@@ -6,7 +6,9 @@ qualified Vulkan device (adapter index 0, through `EngineOptions::createDevice`;
 still refuse Vulkan, decision 310) and compare every result with the CPU reference and with a DX12
 engine's: `vulkan-kernel-sweep` the blend kernels, subnormal float32 operands included;
 `vulkan-projection-gpu-vs-cpu` the UV projection kernel; `vulkan-masks-gpu-vs-cpu` the Levels
-kernel; `vulkan-height-normal-gpu-vs-cpu` the virtual normal and raw blend kernels. They skip under
+kernel; `vulkan-height-normal-gpu-vs-cpu` the virtual normal and raw blend kernels;
+`vulkan-gpu-vs-cpu` the random stacks of every node kind and channel format;
+`vulkan-diagnostics-gpu-vs-cpu` every diagnostic source (item 3.3). They skip under
 `UZP_NO_GPU=1` and when no qualified Vulkan device exists (exit code 77). None of this is parity
 evidence for a Painter-visible output.
 """
@@ -91,4 +93,24 @@ def test_vulkan_height_normal_equals_cpu_and_dx12(evaluator_tests: Path, tmp_pat
     assert any(p.startswith("the virtual normal kernel equals the CPU reference") for p in passed)
     assert any(p.startswith("the float32 read-out (raw blend) equals the CPU") for p in passed)
     assert any(p.startswith("Evaluator (GPU) and CpuEvaluator give the same") for p in passed)
+    assert any(p.startswith("every Vulkan result equals the DX12 result") for p in passed), passed
+
+
+def test_vulkan_random_stacks_equal_cpu_and_dx12(evaluator_tests: Path, tmp_path: Path) -> None:
+    """3.3: `gpu-vs-cpu`'s random stacks on Vulkan (fills, bitmap fills, groups and PassThrough
+    groups under random blend modes and opacities, on every channel format) equal the CPU
+    reference and the DX12 result bit for bit."""
+    passed = _run(evaluator_tests, "vulkan-gpu-vs-cpu", tmp_path, needs_gpu=True)
+    assert any(p.startswith("every random stack evaluates to the same bytes") for p in passed)
+    assert any(p.startswith("every Vulkan result equals the DX12 result") for p in passed), passed
+
+
+def test_vulkan_diagnostics_equal_cpu_and_dx12(evaluator_tests: Path, tmp_path: Path) -> None:
+    """3.3: `diagnostics-gpu-vs-cpu` on Vulkan: every diagnostic source (isolate and contribution
+    on six channel formats, material masks, views, leaks and region statistics) equals the CPU
+    reference and the DX12 result bit for bit, repeats byte-identical, and an isolation failing
+    midway leaves the document as it was."""
+    passed = _run(evaluator_tests, "vulkan-diagnostics-gpu-vs-cpu", tmp_path, needs_gpu=True)
+    assert any(p.startswith("every diagnostic source on the GPU equals the CPU") for p in passed)
+    assert any(p.startswith("a GPU isolation that fails midway") for p in passed)
     assert any(p.startswith("every Vulkan result equals the DX12 result") for p in passed), passed

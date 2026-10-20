@@ -2332,6 +2332,9 @@ std::future<T> Ready(T value) {
     return promise.get_future();
 }
 
+std::string OutputBytes(const DiagnosticOutput& output);
+std::string ViewsBytes(const MaterialViews& views);
+
 /// On Vulkan (`g_vulkan`) a DX12 engine beside the Vulkan one: a `vulkan-<case>` evaluates every
 /// input on both and compares the two results bit for bit, besides comparing the Vulkan result with
 /// the CPU reference as the DX12 case does (decision 313). Off Vulkan it holds nothing.
@@ -2367,6 +2370,19 @@ struct Dx12Twin {
         std::string first;
         const size_t differing = Mismatches(samples(*reference), samples(*actual), first, encoding);
         if (differing != 0) failures.push_back(label + ": " + std::to_string(differing) + " differ from DX12; " + first);
+    }
+
+    /// As `Compare`, for results compared through the bytes they stand for (diagnostics).
+    template <class T>
+    void CompareBytes(const std::string& label, const render::Result<T>& reference, const render::Result<T>& actual,
+                      const std::function<std::string(const T&)>& bytes) {
+        ++compared;
+        if (!reference || !actual) {
+            if (!reference && !actual && reference.error().reason == actual.error().reason) return;
+            failures.push_back(label + ": DX12 " + Describe(reference) + " / Vulkan " + Describe(actual));
+            return;
+        }
+        if (bytes(*reference) != bytes(*actual)) failures.push_back(label + ": bytes differ from DX12");
     }
 
     /// The case's verdict on Vulkan (nothing off Vulkan).
@@ -2413,6 +2429,31 @@ public:
             std::memcpy(words.data(), r.texels.data(), words.size() * 4);
             return words;
         }, render::TexelEncoding::Float32);
+        return Ready(std::move(actual));
+    }
+
+    std::future<render::Result<DiagnosticOutput>> Diagnose(core::Snapshot snapshot, DiagnosticSource source,
+                                                           DiagnosticRequest request) {
+        std::future<render::Result<DiagnosticOutput>> primary = m_primary.Diagnose(snapshot, source, request);
+        if (!m_dx12) return primary;
+        std::future<render::Result<DiagnosticOutput>> reference = m_dx12->Diagnose(snapshot, source, request);
+        render::Result<DiagnosticOutput> actual = Get(primary);
+        render::Result<DiagnosticOutput> expected = Get(reference);
+        m_twin.CompareBytes<DiagnosticOutput>("diagnostic " + std::to_string(m_twin.compared + 1) + " (" +
+                                                  SourceName(source) + ")",
+                                              expected, actual, OutputBytes);
+        return Ready(std::move(actual));
+    }
+
+    std::future<render::Result<MaterialViews>> EvaluateMaterialViews(core::Snapshot snapshot, core::Id material,
+                                                                     DiagnosticRequest request) {
+        std::future<render::Result<MaterialViews>> primary = m_primary.EvaluateMaterialViews(snapshot, material, request);
+        if (!m_dx12) return primary;
+        std::future<render::Result<MaterialViews>> reference = m_dx12->EvaluateMaterialViews(snapshot, material, request);
+        render::Result<MaterialViews> actual = Get(primary);
+        render::Result<MaterialViews> expected = Get(reference);
+        m_twin.CompareBytes<MaterialViews>("material views " + std::to_string(m_twin.compared + 1), expected, actual,
+                                           ViewsBytes);
         return Ready(std::move(actual));
     }
 
@@ -2532,7 +2573,9 @@ int RunGpuVsCpu(const fs::path& assets, const fs::path& dir) {
     auto unit = [&] { return std::uniform_real_distribution<double>(0.0, 1.0)(rng); };
     size_t compared = 0;
     bool allEqual = true;
-    Evaluator gpu(engine, templates);
+    Dx12Twin twin;
+    if (!twin.Start(dir)) return Finish();
+    TwinEvaluator gpu(engine, twin, templates);
     for (const ChannelFormat format : kAllFormats) {
         const std::vector<ChannelType> channels{ChannelType::User0};
         for (int variant = 0; variant < 2; ++variant) {
@@ -2595,6 +2638,7 @@ int RunGpuVsCpu(const fs::path& assets, const fs::path& dir) {
     gpu.Shutdown();
     Check(allEqual, "every random stack evaluates to the same bytes on the GPU and on the CPU (" +
                         std::to_string(compared) + " samples over 9 formats)");
+    twin.Report();
     return Finish();
 }
 
@@ -7908,7 +7952,9 @@ int RunDiagnosticsGpuVsCpu(const fs::path& assets, const fs::path& dir) {
             cases[1].sources.push_back(s);
         }
     }
-    Evaluator gpu(engine, templates);
+    Dx12Twin twin;
+    if (!twin.Start(dir)) return Finish();
+    TwinEvaluator gpu(engine, twin, templates);
     size_t outputs = 0;
     bool same = true;
     std::string detail;
@@ -7970,6 +8016,7 @@ int RunDiagnosticsGpuVsCpu(const fs::path& assets, const fs::path& dir) {
               DocumentUnchanged(document, before, copy, wide.top, true),
           "a GPU isolation that fails midway leaves the document, its revision, records and save state as they were",
           Describe(failed));
+    twin.Report();
     return Finish();
 }
 
@@ -8808,7 +8855,8 @@ int main(int argc, char** argv) {
     // a DX12 engine's (decision 313).
     for (const std::string_view gpuCase : {std::string_view("kernel-sweep"), std::string_view("projection-gpu-vs-cpu"),
                                            std::string_view("masks-gpu-vs-cpu"),
-                                           std::string_view("height-normal-gpu-vs-cpu")}) {
+                                           std::string_view("height-normal-gpu-vs-cpu"), std::string_view("gpu-vs-cpu"),
+                                           std::string_view("diagnostics-gpu-vs-cpu")}) {
         if (mode.starts_with("vulkan-") && mode.substr(7) == gpuCase) {
             g_vulkan = true;
             mode = gpuCase;
@@ -8819,7 +8867,8 @@ int main(int argc, char** argv) {
                      "usage: uzp-evaluator-tests arith|templates|order|cache|admission|sources|masks|height-normal|"
                      "not-yet-supported <assets-dir> | "
                      "evaluate <assets-dir> <spec.json> <out-dir> cpu|gpu | gpu-vs-cpu|kernel-sweep|vulkan-kernel-spirv|vulkan-kernel-sweep|"
-                     "vulkan-projection-gpu-vs-cpu|vulkan-masks-gpu-vs-cpu|vulkan-height-normal-gpu-vs-cpu|"
+                     "vulkan-projection-gpu-vs-cpu|vulkan-masks-gpu-vs-cpu|vulkan-height-normal-gpu-vs-cpu|vulkan-gpu-vs-cpu|"
+                     "vulkan-diagnostics-gpu-vs-cpu|"
                      "projection-gpu-vs-cpu|srgb8-hardware|fp-hardware|pow-hardware|trig-hardware|bilinear-hardware|texture-unit|masks-gpu-vs-cpu|"
                      "height-normal-gpu-vs-cpu|diagnostics|diagnostics-gpu-vs-cpu|persistent|tables <assets-dir> <work-dir> | "
                      "uv-coverage <assets-dir> <work-dir> <mesh> <size>\n");

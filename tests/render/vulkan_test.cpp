@@ -13,6 +13,10 @@
 //                   barrier refused after the command list) that keeps its staging buffer; a
 //                   refused fence signal; an injected device loss; a stalled queue abandoned at a
 //                   bounded teardown; a new device after the abandoned one
+//   vulkan-readback TextureReadback on an engine over the qualified device (items 2.4, 3.1): every
+//                   supported format read back bit-identical at odd widths and a lower mip; 64
+//                   requests in flight drained in order with no staging allocation left, also by
+//                   the destructor; device loss and a stalled queue under pending readbacks
 //
 // Faults are injected through volk's function table (as tests/native/vendor_modifications_test.cpp
 // does), after the device is created and restored right after. Exit code 77 when the machine has
@@ -24,6 +28,7 @@
 #define VK_USE_PLATFORM_WIN32_KHR
 #include <volk.h>
 
+#include "render/engine_thread.h"
 #include "render/texture_readback.h"
 #include "render/vulkan_backend.h"
 #include "render/vulkan_kernels.h"
@@ -33,14 +38,27 @@
 #include "vulkan_device.h"
 #include "vulkan_resources.h"
 
+#define VMA_STATIC_VULKAN_FUNCTIONS 0
+#define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
+// VMA's header leaves some pointers without a nullability specifier (a warning, an error here).
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wnullability-completeness"
+#include <vk_mem_alloc.h>
+#pragma clang diagnostic pop
+
 #include <windows.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
+#include <future>
 #include <limits>
+#include <memory>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -707,11 +725,376 @@ int RunFaults() {
     return Finish();
 }
 
+// ── Readback (items 2.4, 3.1) ────────────────────────────────────────────────
+
+/// An engine on the qualified Vulkan device of adapter index 0, through the native-test seam
+/// (`EngineOptions::createDevice`, decision 313; product paths still refuse Vulkan).
+EngineOptions VulkanEngineOptions(const fs::path& dir) {
+    EngineOptions options;
+    options.kernelCacheRoot = dir / "kernel-cache";
+    options.device.backend = Backend::Vulkan;
+    options.createDevice = []() -> Result<std::unique_ptr<IDevice>> {
+        Result<std::unique_ptr<VulkanDevice>> device = NewDevice();
+        if (!device) return Unexpected(device.error());
+        return std::unique_ptr<IDevice>(std::move(*device));
+    };
+    return options;
+}
+
+template <class T>
+Result<T> Get(std::future<Result<T>>& future) {
+    return future.get();
+}
+
+/// Live VMA allocations of the device (textures and buffers).
+uint64_t LiveAllocations(IDevice& device) {
+    VmaTotalStatistics stats{};
+    vmaCalculateStatistics(static_cast<uz::VulkanDevice&>(device.Rhi()).GetAllocator(), &stats);
+    return stats.total.statistics.allocationCount;
+}
+
+/// Deterministic bytes (xorshift64*), as `render_core_test.cpp`'s readback cases use.
+std::vector<std::byte> PatternBytes(size_t count, uint64_t seed) {
+    std::vector<std::byte> bytes(count);
+    uint64_t state = seed * 0x9E3779B97F4A7C15ull + 1;
+    for (std::byte& b : bytes) {
+        state ^= state >> 12;
+        state ^= state << 25;
+        state ^= state >> 27;
+        b = static_cast<std::byte>((state * 0x2545F4914F6CDD1Dull) >> 56);
+    }
+    return bytes;
+}
+
+std::string Compare(const Result<ReadbackImage>& image, const std::vector<std::byte>& expected, uint32_t width,
+                    uint32_t height) {
+    if (!image) return image.error().Describe();
+    if (image->width != width || image->height != height) {
+        return "size " + std::to_string(image->width) + "x" + std::to_string(image->height);
+    }
+    if (image->texels.size() != expected.size()) {
+        return std::to_string(image->texels.size()) + " bytes, expected " + std::to_string(expected.size());
+    }
+    const size_t row = image->RowBytes();
+    for (size_t i = 0; i < expected.size(); ++i) {
+        if (image->texels[i] != expected[i]) {
+            return "first difference in row " + std::to_string(i / row) + " at byte " + std::to_string(i % row);
+        }
+    }
+    return {};
+}
+
+/// A texture filled with pattern bytes through a tightly packed upload (`bufferRowLength` = the
+/// width, independent of `TextureReadback`'s pitch); destroyed by its owner.
+struct Filled {
+    uz::RHITextureHandle texture = uz::RHITextureHandle::Invalid();
+    TexelLayout layout;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    std::vector<std::byte> texels;
+};
+
+Result<Filled> MakeFilled(EngineContext& context, uz::RHIFormat format, uint32_t width, uint32_t height,
+                          uint64_t seed, uint16_t mips = 1, uint32_t mip = 0) {
+    IDevice& device = context.Device();
+    Filled filled;
+    filled.layout = ReadbackLayout(format).value_or(TexelLayout{});
+    filled.width = std::max(1u, width >> mip);
+    filled.height = std::max(1u, height >> mip);
+    const size_t rowBytes = size_t{filled.width} * filled.layout.BytesPerTexel();
+    filled.texels = PatternBytes(rowBytes * filled.height, seed);
+    uz::RHITextureDesc desc;
+    desc.width = width;
+    desc.height = height;
+    desc.mipLevels = mips;
+    desc.format = format;
+    desc.usage = uz::RHITextureUsage::ShaderResource | uz::RHITextureUsage::CopySrc | uz::RHITextureUsage::CopyDst;
+    desc.debugName = "vulkan_readback_test";
+    Result<uz::RHITextureHandle> texture = device.CreateTexture(desc);
+    if (!texture) return Unexpected(texture.error());
+    filled.texture = *texture;
+    uz::RHIBufferDesc bufferDesc;
+    bufferDesc.sizeBytes = filled.texels.size();
+    bufferDesc.usage = uz::RHIBufferUsage::CopySrc;
+    bufferDesc.memory = uz::RHIMemoryType::Upload;
+    bufferDesc.debugName = "vulkan_readback_test_upload";
+    Result<uz::RHIBufferHandle> buffer = device.CreateBuffer(bufferDesc);
+    if (!buffer) {
+        device.DestroyTexture(filled.texture);
+        return Unexpected(buffer.error());
+    }
+    auto* mapped = static_cast<std::byte*>(device.Rhi().MapBuffer(*buffer));
+    if (mapped) {
+        std::memcpy(mapped, filled.texels.data(), filled.texels.size());
+        device.Rhi().UnmapBuffer(*buffer);
+    }
+    const uz::RHIBufferHandle source = *buffer;
+    Result<void> done = mapped ? context.SubmitAndWait([&](uz::IRHICommandList& cmd) {
+        const uz::RHIBarrierDesc toCopy{filled.texture, uz::RHIBufferHandle::Invalid(), uz::RHIResourceState::Common,
+                                        uz::RHIResourceState::CopyDst};
+        cmd.ResourceBarrier(&toCopy, 1);
+        cmd.CopyBufferToTexture(source, 0, static_cast<uint32_t>(rowBytes), filled.texture, mip, 0);
+        const uz::RHIBarrierDesc back{filled.texture, uz::RHIBufferHandle::Invalid(), uz::RHIResourceState::CopyDst,
+                                      uz::RHIResourceState::Common};
+        cmd.ResourceBarrier(&back, 1);
+    })
+                               : Result<void>(Fail(ErrorCode::RequestFailed, Backend::Vulkan, "upload buffer not mapped"));
+    device.DestroyBuffer(source);
+    if (!done) {
+        device.DestroyTexture(filled.texture);
+        return Unexpected(done.error());
+    }
+    return filled;
+}
+
+/// The formats `TextureReadback` reads (`ReadbackLayout`), as in `render_core_test.cpp`.
+constexpr uz::RHIFormat kReadableFormats[] = {
+    uz::RHIFormat::R8Unorm,     uz::RHIFormat::RG8Unorm,    uz::RHIFormat::RGBA8Unorm,
+    uz::RHIFormat::RGBA8Srgb,   uz::RHIFormat::BGRA8Unorm,  uz::RHIFormat::BGRA8Srgb,
+    uz::RHIFormat::R16Unorm,    uz::RHIFormat::RG16Unorm,   uz::RHIFormat::RGBA16Unorm,
+    uz::RHIFormat::R16Float,    uz::RHIFormat::RG16Float,   uz::RHIFormat::RGBA16Float,
+    uz::RHIFormat::R32Float,    uz::RHIFormat::RG32Float,   uz::RHIFormat::RGB32Float,
+    uz::RHIFormat::RGBA32Float, uz::RHIFormat::R32Uint,     uz::RHIFormat::RG32Uint,
+    uz::RHIFormat::RGBA32Uint,
+};
+
+std::string Name(uz::RHIFormat format) { return std::string(FormatName(format)); }
+
+int RunReadback(const fs::path& dir) {
+    if (NoVulkanDevice()) return kExitSkip;
+    auto snapshot = std::make_shared<const int>(0);
+
+    // Pitch and exactness: every readable format the device supports as a 2D texture, at widths
+    // whose rows are not multiples of 256 bytes, and a lower mip level.
+    {
+        Engine engine(VulkanEngineOptions(dir));
+        Check(!engine.DeviceError(), "the engine runs on the qualified Vulkan device",
+              engine.DeviceError() ? engine.DeviceError()->Describe() : "");
+        if (engine.DeviceError()) return Finish();
+        const Result<CapabilityReport> report = engine.Capabilities();
+        std::vector<uz::RHIFormat> formats;
+        for (const uz::RHIFormat format : kReadableFormats) {
+            const FormatCapability* capability = report ? report->Find(format) : nullptr;
+            if (capability && capability->texture2D) {
+                formats.push_back(format);
+            } else {
+                Info(Name(format) + " is not a 2D texture format on this device; not tested");
+            }
+        }
+        const bool rgb32 = std::find(formats.begin(), formats.end(), uz::RHIFormat::RGB32Float) != formats.end();
+        Check(rgb32 || ReadbackRefusal(Backend::Vulkan, uz::RHIFormat::RGB32Float).has_value(),
+              "RGB32F, which this device cannot create, is refused by name on Vulkan");
+        auto future = engine.Submit(snapshot, [&](EngineContext& context, const int&) -> Result<void> {
+            IDevice& device = context.Device();
+            constexpr uint32_t kWidths[] = {1, 3, 1023, 4097};
+            bool rows = true;
+            bool pitches = true;
+            uint64_t seed = 1;
+            for (const uz::RHIFormat format : formats) {
+                for (const uint32_t width : kWidths) {
+                    const std::string what = Name(format) + ", width " + std::to_string(width);
+                    Result<Filled> filled = MakeFilled(context, format, width, 5, seed++);
+                    if (!filled) {
+                        rows = false;
+                        Check(false, what + ": uploaded", filled.error().Describe());
+                        continue;
+                    }
+                    const uint32_t texel = filled->layout.BytesPerTexel();
+                    const uint64_t pitch = ReadbackRowPitch(uint64_t{width} * texel, texel);
+                    pitches = pitches && pitch % kReadbackPitchAlignment == 0 && pitch % texel == 0 &&
+                              pitch >= uint64_t{width} * texel;
+                    TextureReadback readback(context);
+                    Result<ReadbackId> id = readback.Request({filled->texture});
+                    Result<ReadbackImage> image =
+                        id ? readback.Complete(*id) : Result<ReadbackImage>(Unexpected(id.error()));
+                    const std::string diff = Compare(image, filled->texels, width, 5);
+                    if (!diff.empty()) Check(false, what + ": every row reads back unshifted", diff);
+                    rows = rows && diff.empty();
+                    device.DestroyTexture(filled->texture);
+                }
+            }
+            Check(pitches, "the pitch is a multiple of 256 bytes and of the texel size for every format and width");
+            Check(rows, "every supported format reads back bit-identical at widths 1, 3, 1023 and 4097 (" +
+                            std::to_string(formats.size()) + " formats)");
+            Result<Filled> mipped = MakeFilled(context, uz::RHIFormat::RGBA16Unorm, 64, 40, 7, 3, 2);
+            if (!mipped) return Unexpected(mipped.error());
+            TextureReadback readback(context);
+            ReadbackDesc desc{mipped->texture};
+            desc.mipLevel = 2;
+            Result<ReadbackId> id = readback.Request(desc);
+            Result<ReadbackImage> image = id ? readback.Complete(*id) : Result<ReadbackImage>(Unexpected(id.error()));
+            const std::string diff = Compare(image, mipped->texels, 16, 10);
+            Check(diff.empty(), "mip level 2 (16x10) reads back bit-identical", diff);
+            device.DestroyTexture(mipped->texture);
+            return {};
+        });
+        Result<void> result = Get(future);
+        Check(result.has_value(), "the pitch request ran", Describe(result));
+    }
+
+    // Drain: 64 requests in flight, each with its own staging buffer, drained in submission
+    // order; the destructor drains; nothing stays allocated.
+    {
+        Engine engine(VulkanEngineOptions(dir));
+        if (engine.DeviceError()) return Finish();
+        constexpr size_t kRequests = 64;
+        auto future = engine.Submit(snapshot, [&](EngineContext& context, const int&) -> Result<void> {
+            IDevice& device = context.Device();
+            const uz::RHIFormat formats[] = {uz::RHIFormat::R16Unorm, uz::RHIFormat::RGBA16Unorm,
+                                             uz::RHIFormat::R8Unorm,  uz::RHIFormat::RGBA8Unorm,
+                                             uz::RHIFormat::R16Float, uz::RHIFormat::RGBA16Float,
+                                             uz::RHIFormat::R32Float, uz::RHIFormat::RGBA32Float};
+            const uint32_t widths[] = {1, 3, 255, 1023, 64, 513, 4097, 17};
+            std::vector<Filled> textures;
+            for (size_t i = 0; i < std::size(formats); ++i) {
+                Result<Filled> filled = MakeFilled(context, formats[i], widths[i], 9, 1000 + i);
+                if (!filled) return Unexpected(filled.error());
+                textures.push_back(std::move(*filled));
+            }
+            const uint64_t baseline = LiveAllocations(device);
+            {
+                TextureReadback readback(context);
+                std::vector<ReadbackId> ids;
+                std::vector<size_t> sources;
+                for (size_t i = 0; i < kRequests; ++i) {
+                    const size_t source = (i * 5) % textures.size();
+                    Result<ReadbackId> id = readback.Request({textures[source].texture});
+                    if (!id) return Unexpected(id.error());
+                    ids.push_back(*id);
+                    sources.push_back(source);
+                }
+                Check(readback.Outstanding() == kRequests && readback.StagingBuffers() == kRequests,
+                      "64 readback requests are outstanding, each with its own staging buffer",
+                      std::to_string(readback.StagingBuffers()) + " staging buffers");
+                Check(LiveAllocations(device) == baseline + kRequests,
+                      "the device holds one staging allocation per outstanding request",
+                      std::to_string(LiveAllocations(device) - baseline) + " allocations");
+                const std::vector<ReadbackOutcome> outcomes = readback.Drain();
+                bool order = outcomes.size() == kRequests;
+                bool exact = order;
+                std::string first;
+                for (size_t i = 0; order && i < outcomes.size(); ++i) {
+                    order = outcomes[i].id == ids[i];
+                    const Filled& source = textures[sources[i]];
+                    const std::string diff = Compare(outcomes[i].image, source.texels, source.width, source.height);
+                    if (!diff.empty() && first.empty()) first = "request " + std::to_string(i) + ": " + diff;
+                    exact = exact && diff.empty();
+                }
+                Check(order, "the drain reports every request in submission order",
+                      std::to_string(outcomes.size()) + " outcomes");
+                Check(exact, "every drained request returns its texture's texels", first);
+                Check(readback.Outstanding() == 0 && readback.StagingBuffers() == 0 &&
+                          LiveAllocations(device) == baseline,
+                      "after the drain no staging buffer remains allocated on the device",
+                      std::to_string(LiveAllocations(device)) + " allocations, baseline " + std::to_string(baseline));
+                for (size_t i = 0; i < 17; ++i) {
+                    if (!readback.Request({textures[i % textures.size()].texture})) {
+                        return Fail(ErrorCode::RequestFailed, Backend::Vulkan, "request before destruction");
+                    }
+                }
+            }
+            Check(LiveAllocations(device) == baseline,
+                  "destroying a TextureReadback with 17 requests in flight drains it and releases their staging buffers",
+                  std::to_string(LiveAllocations(device)) + " allocations, baseline " + std::to_string(baseline));
+            for (const Filled& filled : textures) device.DestroyTexture(filled.texture);
+            return {};
+        });
+        Result<void> result = Get(future);
+        Check(result.has_value(), "the drain request ran", Describe(result));
+    }
+
+    // Device loss under pending readbacks: device_removed, no texels, the drain fails the other
+    // request, a later request fails, and the readback holds no staging buffer.
+    {
+        Engine engine(VulkanEngineOptions(dir));
+        if (engine.DeviceError()) return Finish();
+        auto future = engine.Submit(snapshot, [&](EngineContext& context, const int&) -> Result<void> {
+            Result<Filled> filled = MakeFilled(context, uz::RHIFormat::R16Unorm, 1023, 5, 77);
+            if (!filled) return Unexpected(filled.error());
+            TextureReadback readback(context);
+            Result<ReadbackId> first = readback.Request({filled->texture});
+            Result<ReadbackImage> before =
+                first ? readback.Complete(*first) : Result<ReadbackImage>(Unexpected(first.error()));
+            Check(Compare(before, filled->texels, 1023, 5).empty(), "a readback succeeds before the loss",
+                  Describe(before));
+            Result<ReadbackId> pending = readback.Request({filled->texture});
+            Result<ReadbackId> pending2 = readback.Request({filled->texture});
+            Check(pending && pending2 && readback.Outstanding() == 2, "two readbacks are pending when the device is lost");
+            const PFN_vkWaitSemaphores real = vkWaitSemaphores;
+            vkWaitSemaphores = &LostWaitSemaphores;
+            Result<ReadbackImage> after =
+                pending ? readback.Complete(*pending) : Result<ReadbackImage>(Unexpected(pending.error()));
+            const std::vector<ReadbackOutcome> drained = readback.Drain();
+            vkWaitSemaphores = real;
+            Check(!after && after.error().Describe() == "device_removed {backend: vulkan, reason: VK_ERROR_DEVICE_LOST (-4)}",
+                  "the pending readback fails with device_removed {backend: vulkan, reason}", Describe(after));
+            Check(drained.size() == 1 && pending2 && drained[0].id == *pending2 && !drained[0].image &&
+                      drained[0].image.error().code == ErrorCode::DeviceRemoved,
+                  "the drain fails the other pending readback with device_removed");
+            Result<ReadbackId> later = readback.Request({filled->texture});
+            Check(!later && later.error().code == ErrorCode::DeviceRemoved,
+                  "a readback requested after the loss fails with device_removed", Describe(later));
+            Check(readback.Outstanding() == 0 && readback.StagingBuffers() == 0,
+                  "the failed readbacks hold no staging buffer (the lost device keeps their memory, abandoned)");
+            context.Device().DestroyTexture(filled->texture);
+            return {};
+        });
+        Result<void> result = Get(future);
+        Check(result.has_value(), "the loss request ran", Describe(result));
+        bool ran = false;
+        auto next = engine.Submit(snapshot, [&](EngineContext&, const int&) -> Result<void> {
+            ran = true;
+            return {};
+        });
+        Result<void> later = Get(next);
+        Check(!later && later.error().code == ErrorCode::DeviceRemoved && !ran,
+              "later requests fail with device_removed without running", Describe(later));
+        engine.Stop();
+    }
+
+    // A readback behind a stalled queue: timeout and no texels; its staging buffer is held while
+    // the GPU may still write it and released by the drain once the copy completed.
+    {
+        EngineOptions options = VulkanEngineOptions(dir);
+        options.requestDeadline = Ms{300};
+        Engine engine(options);
+        if (engine.DeviceError()) return Finish();
+        auto future = engine.Submit(snapshot, [&](EngineContext& context, const int&) -> Result<void> {
+            auto& device = static_cast<VulkanDevice&>(context.Device());
+            Result<Filled> filled = MakeFilled(context, uz::RHIFormat::RGBA16Unorm, 300, 4, 91);
+            if (!filled) return Unexpected(filled.error());
+            Result<std::function<void()>> release = device.InjectQueueStall();
+            if (!release) return Unexpected(release.error());
+            TextureReadback readback(context);
+            Result<ReadbackId> id = readback.Request({filled->texture});
+            Result<ReadbackImage> image = id ? readback.Complete(*id) : Result<ReadbackImage>(Unexpected(id.error()));
+            Check(!image && image.error().code == ErrorCode::Timeout,
+                  "a readback behind a stalled queue fails with timeout and no texels", Describe(image));
+            Check(readback.Outstanding() == 0 && readback.StagingBuffers() == 1,
+                  "its staging buffer is held while the GPU may still write it");
+            (*release)();
+            const auto until = Clock::now() + std::chrono::seconds(10);
+            while (device.Queue().Completed() < device.Queue().LastSubmitted() && Clock::now() < until) {
+                std::this_thread::sleep_for(Ms{5});
+            }
+            static_cast<void>(readback.Drain());
+            Check(readback.StagingBuffers() == 0, "once the copy has completed the drain releases the held staging buffer");
+            device.DestroyTexture(filled->texture);
+            return {};
+        });
+        Result<void> result = Get(future);
+        Check(result.has_value(), "the timeout request ran", Describe(result));
+        engine.Stop();
+    }
+    return Finish();
+}
+
 }  // namespace
 
-int RunVulkanCase(std::string_view mode, const fs::path& /*dir*/) {
+int RunVulkanCase(std::string_view mode, const fs::path& dir) {
     if (mode == "vulkan-qualify") return RunQualify();
     if (mode == "vulkan-device") return RunDevice();
     if (mode == "vulkan-faults") return RunFaults();
+    if (mode == "vulkan-readback") return RunReadback(dir);
     return -1;
 }
