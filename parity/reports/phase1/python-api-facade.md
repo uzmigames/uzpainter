@@ -458,3 +458,85 @@ The task is not archived, because 4.1 is open. Besides §11.6, the manifest stil
 - 32 entries name item 4.1 itself: the 4 held entries, the 6 demoted BlendingMode entries and the 22 notes of §10.2.
 
 Each needs a reason and an owner that outlives the task.
+
+## 12. Integration trace pass on one build, 2026-10-20
+
+The replays that the changes since `6518f49e` touch were regenerated on one build: `88f5ffe7` (texture observer) and `b427cf00` (P22-A and P22-C, decision 336). The pass used the method of §11. All 28 replays pass. 4.1 stays **open** on one exclusion (§12.4).
+
+### 12.1 Run identities
+
+| Run | Identity | Result |
+|---|---|---|
+| Build | `zig build pyapi-tests -j2` from commit `f689f08a138d5dd5c75ab25a46cd7a698c5be5b7` (worktree `wt/api-integrate`), with a fresh `ZIG_GLOBAL_CACHE_DIR` under `tmp/scratch/api-integrate/`; CPU only | exit 0, 1 min 52 s (`build.log`) |
+| Runner | `uzp-pyapi-tests.exe` SHA-256 `afabf268f0eaac9e11532a57fe5a94a705d480dd028f085b3e88792199c0611b`. All 51 installed Python files equal the commit's `python/` sources (`replay-build-identity.json`) | — |
+| Replays, set 1 | `run_existing.py` on that binary, `UZP_UPDATE_TIER0_TRACE=1`, `UZP_OBSERVED_TRACE_DIR=traces/`, 16:45:59Z to 16:49:04Z | 19 passed, exit 0 (`replays.log`, `replays-junit.xml`) |
+| Replays, set 2 | the same, `traces2/`; the replays whose `set_name` revision credit moved (§12.2) | 9 passed, exit 0 (`replays2.log`, `replays2-junit.xml`) |
+| Conformance | `tests/python/test_capability_conformance.py` on the same binary | exit 0, 5 passed (`conformance.log`) |
+| Manifest | `tests/capabilities` | exit 0, 44 passed (`capabilities-tests.log`) |
+| Recorder | `tests/parity/recorder/test_api_probes_p22b_d297.py`, then its 2 failed node ids after the fix (§12.3) | exit 1, 34 passed and 2 failed; then exit 0, 2 passed (`recorder-d297.log`, `recorder-d297-rerun.log`) |
+
+**Set 1** covered:
+- `p22b-textureset-channels`;
+- P22-A `phase1-mesh-map-update` and P22-C `phase1-restored-values`;
+- the facade replays `phase1-resource-update`, `textureset-project-readback`, `fill-layer-readback`, `mask-stack`, `export-ocio-encode` and `export-ocio-encode-legacy`;
+- the lifecycle replays `phase1-save-modes` and `phase1-resource-update`;
+- the observed replays `phase1-create-mesh-maps` and `phase1-layer-stack-events`;
+- the 5 layer replays and the colour replay.
+
+**Set 2** covered:
+- the facade replays `phase1-create-settings` and `phase1-delete-node`;
+- the lifecycle replays `phase1-create-settings`, `phase1-delete-node`, `phase1-reload-mesh` and `phase1-execute-when-not-busy`;
+- `phase1-close-without-saving`, `phase1-engine-computations` and `phase1-save-as-existing`.
+
+The logs are in `tmp/scratch/api-integrate/`.
+
+### 12.2 Trace
+
+`tools/capabilities/tier0-trace.json` now holds 67 replays.
+- **Added (2).** `facade-observed/phase1-mesh-map-update` and `facade-observed/phase1-restored-values`.
+  - P22-A is exact apart from `s12/uid`, Painter's uid allocation (decision 336).
+  - P22-C is exact with no exclusion.
+- **`p22b-textureset-channels`.** It passes now that `88f5ffe7` skips unmaterialized channels. Its trace adds `TextureStateEvent.cache_key_invalidation_throttling_period` and `uzpainter.application.engine_computations_status`.
+- **Moved revision credit (15 traces).** `b427cf00` moves the revision read of a value edit from `nodes.py` into `state.value_edit`, which the trace does not credit. So 15 traces lose `uzpainter.project.revision`:
+  - 5 `facade-events/`: `phase1-create-settings`, `-delete-node`, `-execute-when-not-busy`, `-reload-mesh` and `-resource-update`;
+  - 5 `facade-observed/`: colour, `engine-computations`, `layer-navigation`, `layer-node-kinds` and `levels-params`;
+  - 5 `facade/`: `fill-layer-readback`, `mask-stack`, `phase1-create-settings`, `-delete-node` and `-resource-update`.
+
+  The symbol keeps its evidence from other replays.
+- **Mesh-map rebind.** It adds `uzpainter.textureset.TextureSet.get_mesh_map_resource` to both `phase1-resource-update` traces. The lifecycle trace also gains `substance_painter.textureset.TextureSet` and `all_texture_sets`.
+- **Blending-mode replays.** Both gain `uzpainter.project.needs_saving`.
+- **Unchanged.** The other 9 regenerated replays keep identical symbol sets.
+
+### 12.3 Manifest
+
+- **Promoted 0, demoted 0.** No exercised symbol was pending. `tier_evidence` follows the trace on 302 supported entries.
+- **Status counts, unchanged.**
+  - Painter inventory: 529 supported, 268 release-gap, 70 pending-evidence and 15 desktop-only.
+  - UzPainter additions: 336 supported, 238 pending-evidence and 56 release-gap.
+- **`update_layer_stack_resource @ mesh-map` stays a release gap,** facade and native.
+  - Single-map replacement is implemented and exact on P22-A (decision 336).
+  - It is not general. Import the same bytes under two names, bind AO to one and Thickness to the other: the facade replaces by name, but the native guard matches by content. So the update raises `NotYetSupported` before any change.
+  - An alias control recording is pending. Until it replays exactly, both entries keep the gap. Owner: `phase5.3_parity-report-capability-gaps`.
+  - The conformance recipe now builds that alias case. A run on this runner checked that it raises `NotYetSupported` with the revision unchanged (6 to 6) and both bindings as they were (`alias-check/report.json`).
+- **`BlendingMode.PassThrough`.** The inventory entry and the compositor entry move from item 4.1 to `phase5.3_parity-report-capability-gaps` (gap register), re-checked should a later Painter build expose the member. Their recorded evidence is kept.
+- **No manifest entry names phase1.24 any more.**
+- **Recorder test fix.** Two tests in `test_api_probes_p22b_d297.py` failed:
+  - `test_every_pending_symbol_of_the_group_is_requested_or_routed`;
+  - `test_every_routed_symbol_names_its_route_in_the_manifest`.
+
+  Both expected `substance_painter.display` to be pending under a decision 297 route. `abd94980` made it supported, through `display.set_environment_resource`, which `p22b-host-resources` exercises exactly. The expectation was stale, so the test's `ROUTED` table drops `display`. The inventory is unchanged and the recorder code untouched.
+
+### 12.4 Item 4.1: not ticked
+
+Clause by clause:
+- **Three pipeline scripts through the adapter.** Holds, on item 3.2's evidence (§2, §4.1).
+- **API-probe goldens exact apart from named exclusions with owners.** Does **not** hold yet, for one reason.
+  - §11.6's behaviour failure is settled: `p22b-textureset-channels` passes.
+  - §11.6's missing replays are settled: P22-A and P22-C replay exactly.
+  - Still open: the `p22b-host-resources` `after_save_reopen s20/events` exclusion, the reload order of the one recording that reloads two resources at once (`tests/python/test_pyapi_observed_host_tier0.py`). It still names phase1.24 item 4.1 as its owner. A dedicated recording is being prepared for it (SUP-213/214), and item 4.1 stays open until it is replayed.
+- **Results recorded in `parity/reports/phase1/`.** Holds: this section.
+
+### 12.5 Before archive
+
+- **Not archived.** Item 4.1 is open, and archiving also needs the coordinated full suite.
+- **Native refusal message.** `src/python/edits.cpp` still reads "release gap until recording P22-A (phase1.24_python-api-facade)" for the mesh-map case. That case is now the alias case, owned by phase5.3. This is product code, left for its owner.

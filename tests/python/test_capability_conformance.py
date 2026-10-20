@@ -51,10 +51,14 @@ UV = "fill.set_projection_mode(ls.ProjectionMode.UV)"
 NATIVE_UV = "nfill.set_projection_mode(nls.ProjectionMode.UV)"
 SHELF = "shelf = resource.Shelves.add('p22-' + str(len(resource.Shelves.all())), WORK)"
 TEXTURE = "resource.Usage.TEXTURE"
+# The facade replaces a mesh map bound by name (P22-A, decision 336); the one it refuses is the
+# alias: the same bytes imported under two names, AO bound to one and Thickness to the other.
 MESH_MAP = (
     f"r = resource.import_project_resource(IMAGES + '/checker-16.png', {TEXTURE}, 'a')\n"
+    f"alias = resource.import_project_resource(IMAGES + '/checker-16.png', {TEXTURE}, 'alias')\n"
     f"r2 = resource.import_project_resource(IMAGES + '/ao-white.png', {TEXTURE}, 'b')\n"
-    "ts.all_texture_sets()[0].set_mesh_map_resource(ts.MeshMapUsage.AO, r.identifier())"
+    "ts.all_texture_sets()[0].set_mesh_map_resource(ts.MeshMapUsage.AO, r.identifier())\n"
+    "ts.all_texture_sets()[0].set_mesh_map_resource(ts.MeshMapUsage.Thickness, alias.identifier())"
 )
 NATIVE_MESH_MAP = (
     "nres = uzpainter.resource\n"

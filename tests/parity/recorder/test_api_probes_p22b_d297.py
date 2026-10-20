@@ -79,7 +79,8 @@ ROUTED = {
     },
     f"{SP}exception.ServiceNotFoundError": G5,
     f"{SP}resource.AllResourcesFilter": G5,
-    f"{SP}display": "decision 188's display requests (R-132-D, phase2.1_preview-display-presets)",
+    # `display` left this route in abd94980: the module is supported through its member
+    # `display.set_environment_resource`, exercised exactly by p22b-host-resources.
 }
 # Decision 188's requests exercise these (decision 189 §2).
 REQUESTED_BY_188 = {
