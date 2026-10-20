@@ -1544,7 +1544,7 @@ pub fn build(b: *std.Build) void {
     });
     texture_mod.addIncludePath(b.path("src"));
     texture_mod.addIncludePath(b.path(core_root));
-    texture_mod.addIncludePath(b.path(core_root ++ "/engine/rhi"));
+    texture_mod.addIncludePath(b.path(core_root ++ "/" ++ "engine/rhi"));
     texture_mod.addIncludePath(b.path("thirdparty/etcpak"));
     texture_mod.addCSourceFiles(.{
         .root = b.path("src"),
@@ -1571,7 +1571,7 @@ pub fn build(b: *std.Build) void {
     });
     texture_tests_mod.addIncludePath(b.path("src"));
     texture_tests_mod.addIncludePath(b.path(core_root));
-    texture_tests_mod.addIncludePath(b.path(core_root ++ "/engine/rhi"));
+    texture_tests_mod.addIncludePath(b.path(core_root ++ "/" ++ "engine/rhi"));
     texture_tests_mod.addIncludePath(b.path("thirdparty/etcpak"));
     texture_tests_mod.addCSourceFiles(.{
         .root = b.path("tests/export"),
@@ -1589,7 +1589,7 @@ pub fn build(b: *std.Build) void {
         .name = "uzp-texture-tests",
         .root_module = texture_tests_mod,
     });
-    const texture_tests_step = b.step("uzp-texture-tests", "Build the native tests of the UzEngine texture path (BC encoder, mips, .uztexture)");
+    const texture_tests_step = b.step("uzp-texture-tests", "Build the native tests of the .uztexture texture path (BC encoder, mips, writer)");
     texture_tests_step.dependOn(&b.addInstallArtifact(texture_tests_exe, .{}).step);
     b.getInstallStep().dependOn(texture_tests_step);
 

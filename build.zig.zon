@@ -10,6 +10,7 @@
         "thirdparty",
         "src",
         "tests/native",
+        "tests/no_error_dialogs.h",
     },
     .dependencies = .{},
 }
