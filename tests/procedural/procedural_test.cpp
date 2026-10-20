@@ -1,0 +1,1121 @@
+// Native tests of the procedural backend seam, the HlslBackend host and the shared primitive
+// library (src/procedural/, rulebook task phase3.1_proc-backend-seam items 2.1-2.3, 3.3 and
+// 3.6 at the seam). Built by `zig build procedural-tests` and driven by
+// tests/procedural/test_proc_backend_seam.py.
+//
+// Usage: uzp-procedural-tests <case> <work-dir>
+//   seam            backend order, refusals before evaluation, no substitution (CPU)
+//   domain          the certified-domain check, field by field (CPU)
+//   primitives      the primitive library against public expectations (CPU)
+//   kernels         every probe kernel compiled to DXIL and SPIR-V through the kernel cache;
+//                   the cache key ignores parameter values (CPU, needs dxcompiler.dll)
+//   gpu             every probe family on DX12 equal to the CPU reference bit for bit, twice,
+//                   whole and by tile, and the seam's certified path end to end (GPU)
+//
+// The families here are test probes with authored formulas: none is a Painter asset, and the
+// one whose status is `exact` is a synthetic test double of the seam's certified path.
+//
+// Output: `PASS <check>` / `FAIL <check>: <detail>` / `INFO` lines.
+// Exit code 0 when every check passed, 1 when one failed, 2 on a usage error, 77 when the case
+// needs a DX12 hardware adapter and there is none.
+
+#include "procedural/hlsl_backend.h"
+#include "procedural/primitives.h"
+#include "procedural/seam.h"
+
+#include "render/engine_thread.h"
+#include "render/kernel_cache.h"
+
+#include <bit>
+#include <chrono>
+#include <cmath>
+#include <cstdio>
+#include <cstring>
+#include <filesystem>
+#include <memory>
+#include <random>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace {
+
+using namespace uzp::procedural;
+namespace fs = std::filesystem;
+namespace render = uzp::render;
+
+constexpr int kExitSkip = 77;
+int g_failures = 0;
+
+void Check(bool ok, std::string_view name, const std::string& detail = {}) {
+    if (ok) {
+        std::printf("PASS %.*s\n", static_cast<int>(name.size()), name.data());
+    } else {
+        std::printf("FAIL %.*s: %s\n", static_cast<int>(name.size()), name.data(), detail.c_str());
+        ++g_failures;
+    }
+    std::fflush(stdout);
+}
+
+void Info(const std::string& text) {
+    std::printf("INFO %s\n", text.c_str());
+    std::fflush(stdout);
+}
+
+int Finish() { return g_failures == 0 ? 0 : 1; }
+
+uint32_t Bits(float value) { return std::bit_cast<uint32_t>(value); }
+
+std::string Hex(uint32_t value) {
+    char buf[16];
+    std::snprintf(buf, sizeof(buf), "%08X", value);
+    return buf;
+}
+
+/// The first texel where two rasters differ bit for bit, or empty.
+std::string FirstDifference(const Raster& a, const Raster& b) {
+    if (a.width != b.width || a.height != b.height || a.channels != b.channels ||
+        a.texels.size() != b.texels.size()) {
+        return "shapes differ: " + std::to_string(a.width) + "x" + std::to_string(a.height) + "x" +
+               std::to_string(a.channels) + " against " + std::to_string(b.width) + "x" +
+               std::to_string(b.height) + "x" + std::to_string(b.channels);
+    }
+    size_t count = 0;
+    std::string first;
+    for (size_t i = 0; i < a.texels.size(); ++i) {
+        if (Bits(a.texels[i]) == Bits(b.texels[i])) continue;
+        if (count++ == 0) {
+            const size_t texel = i / a.channels;
+            first = "texel (" + std::to_string(texel % a.width) + ", " +
+                    std::to_string(texel / a.width) + ") channel " +
+                    std::to_string(i % a.channels) + ": " + Hex(Bits(a.texels[i])) + " against " +
+                    Hex(Bits(b.texels[i]));
+        }
+    }
+    return count == 0 ? std::string() : std::to_string(count) + " values differ, first at " + first;
+}
+
+// ── Probe families (authored test formulas, never Painter assets) ────────────
+
+uzp::core::AssetUrl Url(std::string family, std::string id, std::string version) {
+    return uzp::core::AssetUrl{std::move(family), std::move(id), std::move(version)};
+}
+
+float F(const Params& params, const std::string& name) {
+    const ParamValue& v = params.at(name);
+    if (const auto* d = std::get_if<double>(&v)) return static_cast<float>(*d);
+    return static_cast<float>(std::get<int64_t>(v));
+}
+
+uint32_t U(const Params& params, const std::string& name) {
+    const ParamValue& v = params.at(name);
+    if (const auto* i = std::get_if<int64_t>(&v)) return static_cast<uint32_t>(*i);
+    return static_cast<uint32_t>(std::get<double>(v));
+}
+
+/// Primitive codes of the noise probe.
+enum NoiseCode : uint32_t {
+    kPerlin1985 = 0,
+    kPerlin2002 = 1,
+    kSimplex = 2,
+    kWorleyEuclidean = 3,
+    kWorleyManhattan = 4,
+    kWorleyChebyshev = 5,
+    kFbm = 6,
+    kSqrt = 7,
+};
+
+/// The probe's point of texel (x, y): ((x + 1/2) scale + ox, (y + 1/2) scale + oy, oz).
+prim::Vec3 ProbePoint(int32_t x, int32_t y, float scale, float ox, float oy, float oz) {
+    using namespace prim;
+    const float px = Add(Mul(Add(static_cast<float>(x), 0.5f), scale), ox);
+    const float py = Add(Mul(Add(static_cast<float>(y), 0.5f), scale), oy);
+    return Vec3{px, py, oz};
+}
+
+/// The noise probe's texel: (value, second value, cell, 1) of the selected primitive.
+std::array<float, 4> NoiseTexel(uint32_t code, prim::Vec3 p, uint32_t seed, uint32_t basis,
+                                uint32_t octaves, float lacunarity, float gain) {
+    using namespace prim;
+    switch (code) {
+        case kPerlin1985: return {Perlin1985(p, seed), 0.0f, 0.0f, 1.0f};
+        case kPerlin2002: return {Perlin2002(p, seed), 0.0f, 0.0f, 1.0f};
+        case kSimplex: return {Simplex3(p, seed), 0.0f, 0.0f, 1.0f};
+        case kWorleyEuclidean:
+        case kWorleyManhattan:
+        case kWorleyChebyshev: {
+            const WorleyResult r =
+                Worley3(p, seed, static_cast<WorleyMetric>(code - kWorleyEuclidean));
+            return {r.f1, r.f2, static_cast<float>(r.cell >> 8), 1.0f};
+        }
+        case kFbm:
+            return {Fbm(static_cast<FbmBasis>(basis), p, seed, octaves, lacunarity, gain), 0.0f,
+                    0.0f, 1.0f};
+        default: {
+            const float d = Add(Add(Mul(p.x, p.x), Mul(p.y, p.y)), Mul(p.z, p.z));
+            return {SqrtRn(d), SqrtRn(p.x), SqrtRn(Sub(0.0f, p.x)), 1.0f};
+        }
+    }
+}
+
+constexpr std::string_view kNoiseBody = R"(
+float4 ProcTexel(int2 texel) {
+    const uint code = ProcParam(0);
+    const float scale = asfloat(ProcParam(1));
+    const float ox = asfloat(ProcParam(2));
+    const float oy = asfloat(ProcParam(3));
+    const float oz = asfloat(ProcParam(4));
+    const uint basis = ProcParam(5);
+    const uint octaves = ProcParam(6);
+    const float lacunarity = asfloat(ProcParam(7));
+    const float gain = asfloat(ProcParam(8));
+    const float3 p = float3(Add(Mul(Add(float(texel.x), 0.5f), scale), ox),
+                            Add(Mul(Add(float(texel.y), 0.5f), scale), oy), oz);
+    if (code == 0u) return float4(Perlin1985(p, g_seed), 0.0f, 0.0f, 1.0f);
+    if (code == 1u) return float4(Perlin2002(p, g_seed), 0.0f, 0.0f, 1.0f);
+    if (code == 2u) return float4(Simplex3(p, g_seed), 0.0f, 0.0f, 1.0f);
+    if (code >= 3u && code <= 5u) {
+        const WorleyResult r = Worley3(p, g_seed, code - 3u);
+        return float4(r.f1, r.f2, float(r.cell >> 8), 1.0f);
+    }
+    if (code == 6u) return float4(Fbm(basis, p, g_seed, octaves, lacunarity, gain), 0.0f, 0.0f, 1.0f);
+    const float d = Add(Add(Mul(p.x, p.x), Mul(p.y, p.y)), Mul(p.z, p.z));
+    return float4(SqrtRn(d), SqrtRn(p.x), SqrtRn(Sub(0.0f, p.x)), 1.0f);
+}
+)";
+
+RasterRule F32Output(std::vector<uint32_t> resolutions, std::vector<uint32_t> channels) {
+    return RasterRule{std::move(resolutions), {ChannelFormat::F32}, {"linear"}, std::move(channels)};
+}
+
+ParamRule Range(double low, double high) { return ParamRule{std::pair{low, high}, {}}; }
+
+ParamRule Set(std::vector<int64_t> values) {
+    ParamRule rule;
+    for (const int64_t v : values) rule.set.push_back(v);
+    return rule;
+}
+
+class NoiseProbe final : public IHlslFamily {
+public:
+    explicit NoiseProbe(ParityStatus status) {
+        m_record.asset = Url("test-probe", "noise", "1");
+        m_record.status = std::move(status);
+        m_record.provenance = "tests/procedural/procedural_test.cpp (authored probe)";
+        CertifiedDomain& d = m_record.domain;
+        d.parameters["primitive"] = Set({0, 1, 2, 3, 4, 5, 6, 7});
+        d.parameters["scale"] = Range(1.0 / 1024, 64.0);
+        d.parameters["offset_x"] = Range(-4096.0, 4096.0);
+        d.parameters["offset_y"] = Range(-4096.0, 4096.0);
+        d.parameters["offset_z"] = Range(-4096.0, 4096.0);
+        d.parameters["basis"] = Set({0, 1, 2, 3});
+        d.parameters["octaves"] = Set({1, 2, 3, 4, 5, 6, 7, 8});
+        d.parameters["lacunarity"] = Range(1.0, 4.0);
+        d.parameters["gain"] = Range(0.0, 1.0);
+        d.meshClasses = {"synthetic"};
+        d.output = F32Output({8, 16, 33, 64, 128}, {4});
+    }
+
+    const FamilyRecord& Record() const override { return m_record; }
+
+    std::vector<KernelPass> Plan(const ProceduralRequest& r) const override {
+        KernelPass pass;
+        pass.name = "noise_probe";
+        pass.body = std::string(kNoiseBody);
+        pass.params = {U(r.params, "primitive"), Bits(F(r.params, "scale")),
+                       Bits(F(r.params, "offset_x")), Bits(F(r.params, "offset_y")),
+                       Bits(F(r.params, "offset_z")), U(r.params, "basis"),
+                       U(r.params, "octaves"), Bits(F(r.params, "lacunarity")),
+                       Bits(F(r.params, "gain"))};
+        return {pass};
+    }
+
+    Raster Reference(const ProceduralRequest& r, const InputImages&) const override {
+        const TileRect tile = r.tile.width ? r.tile
+                                           : TileRect{0, 0, r.output.resolution, r.output.resolution};
+        Raster out{tile.width, tile.height, 4, {}};
+        for (uint32_t y = 0; y < tile.height; ++y) {
+            for (uint32_t x = 0; x < tile.width; ++x) {
+                const prim::Vec3 p = ProbePoint(static_cast<int32_t>(tile.x + x),
+                                                static_cast<int32_t>(tile.y + y),
+                                                F(r.params, "scale"), F(r.params, "offset_x"),
+                                                F(r.params, "offset_y"), F(r.params, "offset_z"));
+                const auto t = NoiseTexel(U(r.params, "primitive"), p,
+                                          static_cast<uint32_t>(r.seed), U(r.params, "basis"),
+                                          U(r.params, "octaves"), F(r.params, "lacunarity"),
+                                          F(r.params, "gain"));
+                out.texels.insert(out.texels.end(), t.begin(), t.end());
+            }
+        }
+        return out;
+    }
+
+private:
+    FamilyRecord m_record;
+};
+
+constexpr std::string_view kMorphBody = R"(
+float4 ProcTexel(int2 texel) {
+    const uint op = ProcParam(0);
+    const int radius = int(ProcParam(1));
+    const uint footprint = ProcParam(2);
+    const uint border = ProcParam(3);
+    if (op == 0u) return Dilate(0u, texel, radius, footprint, border);
+    return Erode(0u, texel, radius, footprint, border);
+}
+)";
+
+constexpr std::string_view kBlurBody = R"(
+float4 ProcTexel(int2 texel) {
+    return BlurPass(0u, texel, 3u, ProcParam(0), ProcParam(1) != 0u, ProcParam(2));
+}
+)";
+
+/// The image-operator probe: dilate, erode, box blur or Gaussian blur of input "image".
+class ImageProbe final : public IHlslFamily {
+public:
+    ImageProbe() {
+        m_record.asset = Url("test-probe", "image", "1");
+        m_record.status = ParityStatus::Unavailable("authored test probe");
+        m_record.provenance = "tests/procedural/procedural_test.cpp (authored probe)";
+        CertifiedDomain& d = m_record.domain;
+        d.parameters["op"] = Set({0, 1, 2, 3});
+        d.parameters["radius"] = Set({0, 1, 2, 3, 5, 8});
+        d.parameters["footprint"] = Set({0, 1});
+        d.parameters["border"] = Set({0, 1});
+        d.parameters["sigma"] = Range(0.25, 16.0);
+        d.meshClasses = {"synthetic"};
+        d.inputs["image"] = F32Output({16, 32, 37}, {1, 2, 4});
+        d.inputs["image"].colourSpaces = {"linear"};
+        d.output = F32Output({16, 32, 37}, {1, 2, 4});
+    }
+
+    const FamilyRecord& Record() const override { return m_record; }
+
+    std::vector<float> Weights(const ProceduralRequest& r) const {
+        const uint32_t radius = U(r.params, "radius");
+        return U(r.params, "op") == 2 ? prim::BoxWeights(radius)
+                                      : prim::GaussianWeights(F(r.params, "sigma"), radius);
+    }
+
+    std::vector<KernelPass> Plan(const ProceduralRequest& r) const override {
+        const uint32_t op = U(r.params, "op");
+        const uint32_t border = U(r.params, "border");
+        if (op <= 1) {
+            KernelPass pass{"morph_probe", std::string(kMorphBody),
+                            {op, U(r.params, "radius"), U(r.params, "footprint"), border},
+                            {PassInput{"image", -1}}};
+            return {pass};
+        }
+        const std::vector<float> weights = Weights(r);
+        const auto block = [&](bool horizontal) {
+            std::vector<uint32_t> words = {static_cast<uint32_t>(weights.size()),
+                                           horizontal ? 1u : 0u, border};
+            for (const float w : weights) words.push_back(Bits(w));
+            return words;
+        };
+        KernelPass horizontal{"blur_h_probe", std::string(kBlurBody), block(true),
+                              {PassInput{"image", -1}}};
+        KernelPass vertical{"blur_v_probe", std::string(kBlurBody), block(false),
+                            {PassInput{"", 0}}};
+        return {horizontal, vertical};
+    }
+
+    Raster Reference(const ProceduralRequest& r, const InputImages& inputs) const override {
+        const Raster& image = inputs.at("image");
+        const uint32_t op = U(r.params, "op");
+        const auto border = static_cast<prim::Border>(U(r.params, "border"));
+        const auto footprint = static_cast<prim::Footprint>(U(r.params, "footprint"));
+        Raster whole;
+        if (op == 0) whole = prim::Dilate(image, U(r.params, "radius"), footprint, border);
+        else if (op == 1) whole = prim::Erode(image, U(r.params, "radius"), footprint, border);
+        else whole = prim::SeparableBlur(image, Weights(r), border);
+        // The output keeps the request's channels (the GPU reads its first channels back).
+        const TileRect tile = r.tile.width ? r.tile
+                                           : TileRect{0, 0, r.output.resolution, r.output.resolution};
+        Raster out{tile.width, tile.height, r.output.channels, {}};
+        for (uint32_t y = 0; y < tile.height; ++y) {
+            for (uint32_t x = 0; x < tile.width; ++x) {
+                for (uint32_t c = 0; c < r.output.channels; ++c) {
+                    out.texels.push_back(
+                        c < whole.channels
+                            ? whole.texels[(size_t{tile.y + y} * whole.width + tile.x + x) *
+                                               whole.channels + c]
+                            : 0.0f);
+                }
+            }
+        }
+        return out;
+    }
+
+private:
+    FamilyRecord m_record;
+};
+
+ProceduralRequest NoiseRequest(uint32_t primitive, uint32_t resolution, uint64_t seed) {
+    ProceduralRequest r;
+    r.asset = Url("test-probe", "noise", "1");
+    r.params = {{"primitive", int64_t{primitive}}, {"scale", 0.37},       {"offset_x", -3.25},
+                {"offset_y", 1.75},                {"offset_z", 0.5},     {"basis", int64_t{1}},
+                {"octaves", int64_t{5}},           {"lacunarity", 2.0},   {"gain", 0.5}};
+    r.meshClass = "synthetic";
+    r.output = RasterSpec{resolution, ChannelFormat::F32, "linear", 4};
+    r.seed = seed;
+    return r;
+}
+
+Raster TestImage(uint32_t size, uint32_t channels, uint32_t seed) {
+    std::mt19937 rng(seed);
+    std::uniform_real_distribution<float> unit(-2.0f, 2.0f);
+    Raster image{size, size, channels, {}};
+    for (size_t i = 0; i < size_t{size} * size * channels; ++i) image.texels.push_back(unit(rng));
+    // A subnormal, a negative zero and an exact tie, so the flush and the strict comparisons
+    // are exercised.
+    image.texels[0] = std::bit_cast<float>(0x00000F00u);
+    image.texels[1] = -0.0f;
+    image.texels[2] = image.texels[3];
+    return image;
+}
+
+ProceduralRequest ImageRequest(uint32_t op, uint32_t radius, uint32_t footprint, uint32_t border,
+                               uint32_t size, uint32_t channels) {
+    ProceduralRequest r;
+    r.asset = Url("test-probe", "image", "1");
+    r.params = {{"op", int64_t{op}},           {"radius", int64_t{radius}},
+                {"footprint", int64_t{footprint}}, {"border", int64_t{border}},
+                {"sigma", 1.5}};
+    r.meshClass = "synthetic";
+    r.inputs["image"] = ImageInput{RasterSpec{size, ChannelFormat::F32, "linear", channels},
+                                   std::string(64, 'a')};
+    r.output = RasterSpec{size, ChannelFormat::F32, "linear", channels};
+    return r;
+}
+
+// ── seam ─────────────────────────────────────────────────────────────────────
+
+/// A snapshot backend test double: serves exactly the signatures it holds, and counts what it
+/// evaluates.
+class FakeSnapshots final : public IProceduralBackend {
+public:
+    std::map<std::string, Raster> rasters;  ///< By signature hash.
+    int evaluations = 0;
+
+    std::string_view Name() const override { return "snapshot"; }
+    ParityStatus Status(const uzp::core::AssetUrl&) const override {
+        return ParityStatus::Unavailable("snapshots are migration data");
+    }
+    bool CanEvaluate(const ProceduralRequest& request) const override {
+        return rasters.contains(SignatureHash(request));
+    }
+    std::optional<UnsupportedProcedural> Refusal(const ProceduralRequest& request) const override {
+        if (CanEvaluate(request)) return std::nullopt;
+        return Refuse(AssetName(request), "no snapshot with this signature");
+    }
+    RasterFuture Evaluate(const ProceduralRequest& request, const InputImages&) override {
+        ++evaluations;
+        std::promise<render::Result<Raster>> promise;
+        promise.set_value(rasters.at(SignatureHash(request)));
+        return promise.get_future();
+    }
+};
+
+/// A synthetic family the test declares `exact`, so the seam's certified path can be exercised.
+class SyntheticExact final : public IHlslFamily {
+public:
+    mutable int plans = 0;
+    mutable int references = 0;
+
+    SyntheticExact() {
+        m_record.asset = Url("test-synthetic", "ridge", "2");
+        m_record.status.kind = ParityStatus::Kind::Exact;
+        m_record.status.corpusIds = {"synthetic-calibration", "synthetic-held-out"};
+        m_record.provenance = "tests/procedural/procedural_test.cpp (synthetic test double)";
+        CertifiedDomain& d = m_record.domain;
+        d.parameters["amount"] = Range(0.0, 1.0);
+        d.parameters["bias"] = Range(-1.0, 1.0);
+        d.parameters["mode"] = Set({0, 1});
+        d.constraints = {LinearConstraint{{{"amount", 1.0}, {"bias", 1.0}}, 1.25}};
+        d.anySeed = false;
+        d.seeds = {7, 11};
+        d.meshClasses = {"sphere", "bevelled-cube"};
+        d.inputs["Curvature"] = RasterRule{{64}, {ChannelFormat::U16}, {"linear"}, {1}};
+        d.output = F32Output({64}, {1});
+    }
+
+    const FamilyRecord& Record() const override { return m_record; }
+
+    std::vector<KernelPass> Plan(const ProceduralRequest& r) const override {
+        ++plans;
+        KernelPass pass;
+        pass.name = "synthetic_ridge";
+        pass.body = R"(
+float4 ProcTexel(int2 texel) {
+    const float amount = asfloat(ProcParam(0));
+    const float c = Ftz(ProcInput(0u, texel).x);
+    return float4(Add(Mul(Perlin2002(float3(Mul(float(texel.x), 0.125f), Mul(float(texel.y), 0.125f), 0.0f), g_seed), amount), c), 0.0f, 0.0f, 0.0f);
+}
+)";
+        pass.params = {Bits(F(r.params, "amount"))};
+        pass.inputs = {PassInput{"Curvature", -1}};
+        return {pass};
+    }
+
+    Raster Reference(const ProceduralRequest& r, const InputImages& inputs) const override {
+        using namespace prim;
+        ++references;
+        const Raster& curvature = inputs.at("Curvature");
+        Raster out{64, 64, 1, {}};
+        for (uint32_t y = 0; y < 64; ++y) {
+            for (uint32_t x = 0; x < 64; ++x) {
+                const float n = Perlin2002(Vec3{Mul(static_cast<float>(x), 0.125f),
+                                                Mul(static_cast<float>(y), 0.125f), 0.0f},
+                                           static_cast<uint32_t>(r.seed));
+                const float c = Ftz(curvature.texels[size_t{y} * 64 + x]);
+                out.texels.push_back(Add(Mul(n, F(r.params, "amount")), c));
+            }
+        }
+        return out;
+    }
+
+private:
+    FamilyRecord m_record;
+};
+
+ProceduralRequest SyntheticRequest() {
+    ProceduralRequest r;
+    r.asset = Url("test-synthetic", "ridge", "2");
+    r.params = {{"amount", 0.5}, {"bias", -0.25}, {"mode", int64_t{1}}};
+    r.meshClass = "sphere";
+    r.inputs["Curvature"] =
+        ImageInput{RasterSpec{64, ChannelFormat::U16, "linear", 1}, std::string(64, 'c')};
+    r.output = RasterSpec{64, ChannelFormat::F32, "linear", 1};
+    r.seed = 7;
+    return r;
+}
+
+Raster Curvature() {
+    Raster image{64, 64, 1, {}};
+    for (uint32_t i = 0; i < 64 * 64; ++i) image.texels.push_back(static_cast<float>(i % 97) / 96.0f);
+    return image;
+}
+
+std::string Describe(const std::expected<IProceduralBackend*, UnsupportedProcedural>& selected) {
+    return selected ? "served by " + std::string((*selected)->Name()) : selected.error().Describe();
+}
+
+int RunSeam() {
+    auto synthetic = std::make_shared<SyntheticExact>();
+    HlslBackend hlsl(nullptr);
+    Check(hlsl.Register(synthetic).has_value(), "a certified synthetic family registers");
+    Check(hlsl.Register(std::make_shared<NoiseProbe>(ParityStatus::Unavailable("probe")))
+              .has_value(),
+          "an uncertified probe family registers");
+    Check(!hlsl.Register(std::make_shared<NoiseProbe>(ParityStatus::Unavailable("probe")))
+               .has_value(),
+          "a second family for the same pinned asset is refused");
+    FakeSnapshots snapshots;
+    ProceduralSeam seam(&snapshots, &hlsl);
+
+    // An uncertified asset: no snapshot, no family. Refused, nothing evaluated, nothing else
+    // served in its place (the probe and the synthetic family stay unplanned).
+    ProceduralRequest unknown = SyntheticRequest();
+    unknown.asset = Url("painter-generator", "metal-edge-wear", "1");
+    const auto refused = seam.Select(unknown);
+    Check(!refused && refused.error().reason == kNoBackend &&
+              refused.error().asset == "uzasset://painter-generator/metal-edge-wear@1",
+          "an asset with no snapshot and no family raises UnsupportedProcedural", Describe(refused));
+    const auto evaluated = seam.Evaluate(unknown, {{"Curvature", Curvature()}});
+    Check(!evaluated && snapshots.evaluations == 0 && synthetic->plans == 0 &&
+              synthetic->references == 0,
+          "the refusal evaluates nothing and substitutes no other asset");
+
+    // A registered family whose status is not exact is never served by the seam.
+    ProceduralRequest probe = NoiseRequest(kPerlin2002, 16, 3);
+    const auto uncertified = seam.Select(probe);
+    Check(!uncertified && uncertified.error().reason == kNotCertified &&
+              uncertified.error().value == "unavailable",
+          "a family whose status is unavailable is refused (family not certified)",
+          Describe(uncertified));
+    ProceduralRequest probeOther = probe;
+    probeOther.asset.version = "2";
+    const auto otherVersion = seam.Select(probeOther);
+    Check(!otherVersion && otherVersion.error().reason == kNoBackend,
+          "another version of a registered asset is not served by it", Describe(otherVersion));
+
+    // The certified path: inside the domain the HLSL backend serves it.
+    const ProceduralRequest inside = SyntheticRequest();
+    const auto served = seam.Select(inside);
+    Check(served && *served == &hlsl, "inside the domain the certified family is selected",
+          Describe(served));
+    Check(hlsl.Status(inside.asset).kind == ParityStatus::Kind::Exact &&
+              hlsl.Status(unknown.asset).kind == ParityStatus::Kind::Unavailable,
+          "status: exact for the certified family, unavailable for an unknown asset");
+
+    // Snapshot first: a snapshot holding the exact signature wins over the family.
+    Raster stored{64, 64, 1, std::vector<float>(64 * 64, 0.25f)};
+    snapshots.rasters[SignatureHash(inside)] = stored;
+    const auto first = seam.Select(inside);
+    Check(first && *first == &snapshots, "a snapshot with the exact signature is tried first",
+          Describe(first));
+    snapshots.rasters.clear();
+
+    // A GPU-less HLSL backend fails loudly, a missing image input fails loudly, and the CPU
+    // reference lane serves the certified family.
+    auto noGpu = seam.Evaluate(inside, {{"Curvature", Curvature()}});
+    const render::Result<Raster> noGpuResult = noGpu ? noGpu->get() : render::Result<Raster>{};
+    Check(noGpu && !noGpuResult &&
+              noGpuResult.error().code == render::ErrorCode::GpuBackendUnavailable,
+          "without a GPU engine the evaluation fails with gpu_backend_unavailable");
+    RasterFuture missingFuture = hlsl.EvaluateCandidate(inside, {});
+    const render::Result<Raster> missingResult = missingFuture.get();
+    Check(!missingResult && missingResult.error().reason.find("Curvature is missing") != std::string::npos,
+          "a missing mesh map fails the evaluation loudly",
+          missingResult ? "evaluated" : missingResult.error().Describe());
+    Raster wrong = Curvature();
+    wrong.width = 32;
+    const render::Result<Raster> invalid = hlsl.EvaluateReference(inside, {{"Curvature", wrong}});
+    Check(!invalid && invalid.error().reason.find("Curvature is invalid") != std::string::npos,
+          "an invalid mesh map (wrong size) fails the evaluation loudly",
+          invalid ? "evaluated" : invalid.error().Describe());
+    const render::Result<Raster> reference = hlsl.EvaluateReference(inside, {{"Curvature", Curvature()}});
+    Check(reference && reference->width == 64 && reference->channels == 1,
+          "the CPU reference lane evaluates the certified family",
+          reference ? "" : reference.error().Describe());
+
+    // Signatures: numbers by value, the tile excluded, every other field included.
+    ProceduralRequest same = inside;
+    same.params["mode"] = 1.0;
+    same.tile = TileRect{0, 0, 32, 32};
+    Check(SignatureHash(same) == SignatureHash(inside),
+          "the signature compares numbers by value (1 == 1.0) and leaves the tile out");
+    ProceduralRequest moved = inside;
+    moved.inputs["Curvature"].sha256 = std::string(64, 'd');
+    ProceduralRequest reseeded = inside;
+    reseeded.seed = 11;
+    Check(SignatureHash(moved) != SignatureHash(inside) &&
+              SignatureHash(reseeded) != SignatureHash(inside),
+          "the signature covers the input hashes and the seed");
+    Info("signature " + Signature(inside));
+    return Finish();
+}
+
+// ── domain (3.6 at the seam) ─────────────────────────────────────────────────
+
+int RunDomain() {
+    auto synthetic = std::make_shared<SyntheticExact>();
+    HlslBackend hlsl(nullptr);
+    (void)hlsl.Register(synthetic);
+    FakeSnapshots snapshots;
+    ProceduralSeam seam(&snapshots, &hlsl);
+    const ProceduralRequest inside = SyntheticRequest();
+    Check(!CheckDomain(inside, synthetic->Record().domain), "the reference request is inside");
+
+    struct Outside {
+        std::string what;
+        ProceduralRequest request;
+        std::string field;
+        std::string value;
+        std::string certified;
+    };
+    std::vector<Outside> cases;
+    const auto add = [&](std::string what, auto edit, std::string field, std::string value,
+                         std::string certified) {
+        ProceduralRequest r = inside;
+        edit(r);
+        cases.push_back({std::move(what), std::move(r), std::move(field), std::move(value),
+                         std::move(certified)});
+    };
+    add("a parameter one ulp above its range",
+        [](ProceduralRequest& r) { r.params["amount"] = std::nextafter(1.0, 2.0); }, "params.amount",
+        "1.0000000000000002", "[0, 1]");
+    add("a parameter one ulp below its range",
+        [](ProceduralRequest& r) { r.params["bias"] = std::nextafter(-1.0, -2.0); }, "params.bias",
+        "-1.0000000000000002", "[-1, 1]");
+    add("a set parameter outside its set", [](ProceduralRequest& r) { r.params["mode"] = int64_t{2}; },
+        "params.mode", "2", "[0, 1]");
+    add("a missing parameter", [](ProceduralRequest& r) { r.params.erase("bias"); }, "params.bias",
+        "missing", "every declared parameter");
+    add("an undeclared parameter", [](ProceduralRequest& r) { r.params["extra"] = 0.0; },
+        "params.extra", "0", "not a parameter");
+    add("a joint constraint exceeded by one ulp",
+        [](ProceduralRequest& r) {
+            r.params["amount"] = 1.0;
+            r.params["bias"] = std::nextafter(0.25, 1.0);
+        },
+        "params", "{amount: 1, bias: 0.25000000000000006}", "1 amount + 1 bias <= 1.25");
+    add("a seed next to the listed ones", [](ProceduralRequest& r) { r.seed = 8; }, "seed", "8",
+        "[7, 11]");
+    add("a seed above 32 bits", [](ProceduralRequest& r) { r.seed = 0x100000000ull; }, "seed",
+        "4294967296", "[0, 4294967295]");
+    add("an uncertified mesh class", [](ProceduralRequest& r) { r.meshClass = "hat-v6-low"; },
+        "mesh.class", "\"hat-v6-low\"", "[\"sphere\", \"bevelled-cube\"]");
+    add("two UV tiles", [](ProceduralRequest& r) { r.uvTiles = 2; }, "mesh.uv_tiles", "2", "1");
+    add("a missing mesh map", [](ProceduralRequest& r) { r.inputs.erase("Curvature"); },
+        "inputs.Curvature", "missing", "a declared input");
+    add("an undeclared mesh map",
+        [](ProceduralRequest& r) {
+            r.inputs["AO"] = ImageInput{RasterSpec{64, ChannelFormat::U16, "linear", 1}, "x"};
+        },
+        "inputs.AO", "present", "not an input of the domain");
+    add("a mesh map one resolution step above",
+        [](ProceduralRequest& r) { r.inputs["Curvature"].spec.resolution = 128; },
+        "inputs.Curvature.resolution", "128", "[64]");
+    add("a mesh map in another format",
+        [](ProceduralRequest& r) { r.inputs["Curvature"].spec.format = ChannelFormat::U8; },
+        "inputs.Curvature.format", "\"u8\"", "[\"u16\"]");
+    add("a mesh map in another colour space",
+        [](ProceduralRequest& r) { r.inputs["Curvature"].spec.colourSpace = "srgb"; },
+        "inputs.Curvature.colour_space", "\"srgb\"", "[\"linear\"]");
+    add("an output resolution one step above",
+        [](ProceduralRequest& r) { r.output.resolution = 128; }, "output.resolution", "128",
+        "[64]");
+    add("an output resolution one texel below",
+        [](ProceduralRequest& r) { r.output.resolution = 63; }, "output.resolution", "63",
+        "[64]");
+    add("an output channel count outside",
+        [](ProceduralRequest& r) { r.output.channels = 2; }, "output.channels", "2", "[1]");
+    add("a preset the domain does not certify", [](ProceduralRequest& r) { r.preset = "Rusty"; },
+        "preset", "\"Rusty\"", "[]");
+    add("a tile outside the texture", [](ProceduralRequest& r) { r.tile = TileRect{48, 0, 32, 16}; },
+        "tile", "[48, 0, 32, 16]", "a non-empty rectangle inside the 64 texel output");
+
+    for (const Outside& c : cases) {
+        const auto selected = seam.Select(c.request);
+        const bool ok = !selected && selected.error().reason == kOutsideDomain &&
+                        selected.error().field == c.field && selected.error().value == c.value &&
+                        selected.error().certified == c.certified;
+        Check(ok, "outside the domain: " + c.what, Describe(selected));
+    }
+    for (const Outside& c : cases) (void)seam.Evaluate(c.request, {{"Curvature", Curvature()}});
+    Check(synthetic->plans == 0 && synthetic->references == 0 && snapshots.evaluations == 0,
+          "no refused request is planned or evaluated by any backend (nothing clamped, nothing "
+          "substituted)",
+          std::to_string(synthetic->plans) + " plans, " + std::to_string(synthetic->references) +
+              " references, " + std::to_string(snapshots.evaluations) + " snapshot evaluations");
+
+    // The constraint is judged exactly: at the bound it holds, one ulp above it does not.
+    ProceduralRequest bound = inside;
+    bound.params["amount"] = 1.0;
+    bound.params["bias"] = 0.25;
+    Check(!CheckDomain(bound, synthetic->Record().domain),
+          "a joint constraint met with equality is inside");
+    ProceduralRequest tenths = inside;
+    LinearConstraint tight{{{"amount", 1.0}, {"bias", 1.0}}, 0.3};
+    CertifiedDomain exactDomain = synthetic->Record().domain;
+    exactDomain.constraints = {tight};
+    tenths.params["amount"] = 0.1;
+    tenths.params["bias"] = 0.2;
+    // Exactly, double(0.1) + double(0.2) = 0.3000000000000000166533453693773481063544750213623046875
+    // and double(0.3) = 0.299999999999999988897769753748434595763683319091796875.
+    Check(CheckDomain(tenths, exactDomain).has_value(),
+          "the exact sum of 0.1 and 0.2 exceeds 0.3 (no rounding decides the constraint)");
+
+    // A project snapshot with an out-of-domain request's exact signature is still served.
+    const Outside& kept = cases.front();
+    Raster stored{64, 64, 1, std::vector<float>(64 * 64, 0.75f)};
+    snapshots.rasters[SignatureHash(kept.request)] = stored;
+    auto snapshot = seam.Evaluate(kept.request, {});
+    const render::Result<Raster> snapshotRaster = snapshot ? snapshot->get() : render::Result<Raster>{};
+    Check(snapshot && snapshotRaster && *snapshotRaster == stored && snapshots.evaluations == 1 &&
+              synthetic->plans == 0,
+          "an out-of-domain request whose exact signature has a project snapshot is served by "
+          "the snapshot, and only by it");
+    ProceduralRequest near = kept.request;
+    near.params["amount"] = std::nextafter(std::nextafter(1.0, 2.0), 2.0);
+    Check(!seam.Select(near).has_value(), "a snapshot does not widen the domain to a nearby value");
+    return Finish();
+}
+
+// ── primitives (3.3, CPU lane) ───────────────────────────────────────────────
+
+int RunPrimitives() {
+    using namespace prim;
+    // SqrtRn is IEEE 754 squareRoot: compared with the host's correctly rounded sqrt.
+    std::mt19937 rng(20261019);
+    size_t sqrtMismatch = 0;
+    std::string firstSqrt;
+    const auto checkSqrt = [&](float x) {
+        const float want = Ftz(std::sqrt(x));
+        const float got = SqrtRn(x);
+        const bool same = Bits(got) == Bits(want) || (std::isnan(got) && std::isnan(want));
+        if (!same && sqrtMismatch++ == 0) firstSqrt = Hex(Bits(x)) + ": " + Hex(Bits(got)) + " against " + Hex(Bits(want));
+    };
+    for (uint32_t e = 1; e < 255; ++e) {
+        for (int i = 0; i < 4096; ++i) checkSqrt(std::bit_cast<float>(e << 23 | (rng() & 0x7FFFFFu)));
+        checkSqrt(std::bit_cast<float>(e << 23));
+        checkSqrt(std::bit_cast<float>(e << 23 | 0x7FFFFFu));
+    }
+    for (const float x : {0.0f, -0.0f, INFINITY, 2.0f, 4.0f, 0.25f, 1e-30f, 3.4e38f}) checkSqrt(x);
+    Check(sqrtMismatch == 0, "SqrtRn equals the correctly rounded IEEE square root (1.04 M values)",
+          firstSqrt);
+    Check(Bits(SqrtRn(-1.0f)) == 0x7FC00000u && Bits(SqrtRn(-0.0f)) == 0x80000000u,
+          "SqrtRn: a negative input gives the quiet NaN, -0 gives -0");
+
+    // Ftz flushes subnormal results to a zero of their sign and keeps everything else.
+    Check(Bits(Ftz(std::bit_cast<float>(0x00000001u))) == 0u &&
+              Bits(Ftz(std::bit_cast<float>(0x807FFFFFu))) == 0x80000000u &&
+              Bits(Ftz(std::bit_cast<float>(0x00800000u))) == 0x00800000u &&
+              Bits(Mul(1e-30f, 1e-15f)) == 0u,
+          "Ftz flushes subnormals to signed zeros only");
+
+    // The interpolants (Perlin 1985 and 2002): ends, centre and symmetry.
+    bool fades = Fade1985(0.0f) == 0.0f && Fade1985(1.0f) == 1.0f && Fade1985(0.5f) == 0.5f &&
+                 Fade2002(0.0f) == 0.0f && Fade2002(1.0f) == 1.0f && Fade2002(0.5f) == 0.5f;
+    Check(fades, "the 1985 and 2002 interpolants are 0, 1/2 and 1 at 0, 1/2 and 1");
+    // 2002's quintic has zero first and second derivatives at the ends: f(t) = O(t^3).
+    const float small = 1.0f / 1024.0f;
+    Check(Fade2002(small) < 11.0f * small * small * small && Fade1985(small) < 3.1f * small * small,
+          "the 2002 interpolant is cubic at 0 (zero first and second derivatives), 1985's quadratic");
+
+    // Gradient noise vanishes on the lattice (both papers), for every seed.
+    bool lattice = true;
+    for (int32_t i = -5; i <= 5; ++i) {
+        for (uint32_t seed : {0u, 1u, 0xFFFFFFFFu}) {
+            const Vec3 p{static_cast<float>(i), static_cast<float>(2 * i + 1),
+                         static_cast<float>(-3 * i)};
+            lattice = lattice && Perlin1985(p, seed) == 0.0f && Perlin2002(p, seed) == 0.0f;
+        }
+    }
+    Check(lattice, "Perlin 1985 and 2002 noise are 0 at every lattice point");
+    // Simplex noise vanishes at the origin: its own corner has offset 0 and the other three
+    // are at squared distance 3/4, outside Gustavson's radius 0.6.
+    Check(Simplex3(Vec3{}, 0) == 0.0f && Simplex3(Vec3{}, 12345) == 0.0f,
+          "simplex noise is 0 at a simplex-lattice vertex");
+
+    // Bounds over a sample: 2002 noise in [-1, 1] (|grad| <= 2 per axis pair, Perlin), 1985 in
+    // [-sqrt(3), sqrt(3)] for cube gradients, simplex near [-1, 1] (Gustavson's scale).
+    float max1985 = 0.0f, max2002 = 0.0f, maxSimplex = 0.0f;
+    bool varies = false;
+    std::uniform_real_distribution<float> coord(-64.0f, 64.0f);
+    float previous = 0.0f;
+    for (int i = 0; i < 20000; ++i) {
+        const Vec3 p{coord(rng), coord(rng), coord(rng)};
+        max1985 = std::max(max1985, std::fabs(Perlin1985(p, 9)));
+        const float n = Perlin2002(p, 9);
+        max2002 = std::max(max2002, std::fabs(n));
+        maxSimplex = std::max(maxSimplex, std::fabs(Simplex3(p, 9)));
+        varies = varies || (i > 0 && n != previous);
+        previous = n;
+    }
+    Info("max |noise| over 20000 points: perlin1985 " + std::to_string(max1985) + ", perlin2002 " +
+         std::to_string(max2002) + ", simplex3 " + std::to_string(maxSimplex));
+    Check(max2002 <= 1.0f && max1985 <= 1.7320509f && maxSimplex <= 1.1f && max2002 > 0.3f &&
+              maxSimplex > 0.3f && varies,
+          "noise magnitudes stay inside the papers' bounds and the fields vary");
+    Check(Perlin2002(Vec3{0.5f, 0.25f, 0.75f}, 1) != Perlin2002(Vec3{0.5f, 0.25f, 0.75f}, 2),
+          "the seed changes the field");
+
+    // Worley: F1 is 0 on a feature point, F2 >= F1, and the metric order M >= E >= C.
+    const U3 offset = SeedOffset(42);
+    bool worley = true;
+    for (int32_t i = -3; i <= 3; ++i) {
+        const U3 h = CellHash(i, 2 * i, -i, offset);
+        const Vec3 feature{Add(static_cast<float>(i), Mul(static_cast<float>(h[0] >> 8), 0x1.0p-24f)),
+                           Add(static_cast<float>(2 * i), Mul(static_cast<float>(h[1] >> 8), 0x1.0p-24f)),
+                           Add(static_cast<float>(-i), Mul(static_cast<float>(h[2] >> 8), 0x1.0p-24f))};
+        const WorleyResult r = Worley3(feature, 42, WorleyMetric::Euclidean);
+        worley = worley && r.f1 == 0.0f && r.cell == h[0] && r.f2 > 0.0f;
+    }
+    Check(worley, "Worley F1 is 0 at a feature point, which names its cell");
+    bool order = true;
+    for (int i = 0; i < 5000; ++i) {
+        const Vec3 p{coord(rng), coord(rng), coord(rng)};
+        const WorleyResult e = Worley3(p, 5, WorleyMetric::Euclidean);
+        const WorleyResult m = Worley3(p, 5, WorleyMetric::Manhattan);
+        const WorleyResult c = Worley3(p, 5, WorleyMetric::Chebyshev);
+        order = order && e.f2 >= e.f1 && m.f2 >= m.f1 && c.f2 >= c.f1 &&
+                m.f1 >= e.f1 * (1.0f - 1e-6f) && e.f1 >= c.f1 * (1.0f - 1e-6f) && e.f1 <= 1.7320509f;
+    }
+    Check(order, "Worley: F2 >= F1, Manhattan >= Euclidean >= Chebyshev, F1 <= sqrt(3)");
+
+    // fBm: one octave is the basis; zero gain keeps the first octave only.
+    const Vec3 q{1.3f, -2.7f, 0.4f};
+    Check(Fbm(FbmBasis::Perlin2002, q, 3, 1, 2.0f, 0.5f) == Perlin2002(q, 3) &&
+              Fbm(FbmBasis::Simplex3, q, 3, 6, 2.0f, 0.0f) == Simplex3(q, 3) &&
+              Fbm(FbmBasis::Perlin1985, q, 3, 2, 2.0f, 0.5f) ==
+                  Add(Perlin1985(q, 3), Mul(0.5f, Perlin1985(Vec3{Mul(q.x, 2.0f), Mul(q.y, 2.0f), Mul(q.z, 2.0f)}, 4))),
+          "fBm sums the octaves as defined (one octave, zero gain, two octaves)");
+
+    // Morphology: radius 0 is the identity; an impulse dilates to the structuring element;
+    // erosion is the dual of dilation (erode(f) = -dilate(-f)).
+    Raster impulse{9, 9, 1, std::vector<float>(81, 0.0f)};
+    impulse.texels[4 * 9 + 4] = 1.0f;
+    const Raster square = Dilate(impulse, 2, Footprint::Square, Border::Clamp);
+    const Raster disk = Dilate(impulse, 2, Footprint::Disk, Border::Clamp);
+    bool shapes = true;
+    for (int y = 0; y < 9; ++y) {
+        for (int x = 0; x < 9; ++x) {
+            const int dx = x - 4, dy = y - 4;
+            const bool inSquare = std::abs(dx) <= 2 && std::abs(dy) <= 2;
+            const bool inDisk = dx * dx + dy * dy <= 4;
+            shapes = shapes && square.texels[size_t(y * 9 + x)] == (inSquare ? 1.0f : 0.0f) &&
+                     disk.texels[size_t(y * 9 + x)] == (inDisk ? 1.0f : 0.0f);
+        }
+    }
+    Check(shapes, "an impulse dilates to the 5x5 square and to the radius-2 disk");
+    const Raster image = TestImage(16, 2, 77);
+    Raster negated = image;
+    for (float& v : negated.texels) v = -v;
+    const Raster eroded = Erode(image, 3, Footprint::Disk, Border::Wrap);
+    Raster dual = Dilate(negated, 3, Footprint::Disk, Border::Wrap);
+    for (float& v : dual.texels) v = -v;
+    Raster flushed = image;
+    for (float& v : flushed.texels) v = Ftz(v);
+    Check(FirstDifference(Dilate(image, 0, Footprint::Square, Border::Wrap), flushed).empty(),
+          "dilation by radius 0 is the identity (subnormals flushed)");
+    Check(FirstDifference(eroded, dual).empty(), "erosion is the dual of dilation",
+          FirstDifference(eroded, dual));
+
+    // Blur: an impulse's response is the outer product of the weights, rounded once; the
+    // weights are symmetric and sum to 1 in double; the deterministic exponential matches.
+    const std::vector<float> gauss = GaussianWeights(1.5, 4);
+    bool symmetric = gauss.size() == 9;
+    double total = 0.0;
+    for (size_t k = 0; k < gauss.size(); ++k) {
+        symmetric = symmetric && gauss[k] == gauss[gauss.size() - 1 - k];
+        total += gauss[k];
+    }
+    const double e1 = std::exp(-1.0 / (2.0 * 1.5 * 1.5));
+    Check(symmetric && std::fabs(total - 1.0) < 1e-6 &&
+              std::fabs(double(gauss[3]) / double(gauss[4]) - e1) < 1e-6,
+          "Gaussian weights are symmetric, sum to 1 and follow exp(-k^2 / 2 sigma^2)");
+    Raster spike{9, 9, 1, std::vector<float>(81, 0.0f)};
+    spike.texels[4 * 9 + 4] = 1.0f;
+    const Raster response = SeparableBlur(spike, gauss, Border::Wrap);
+    bool outer = true;
+    for (int y = 0; y < 9; ++y) {
+        for (int x = 0; x < 9; ++x) {
+            outer = outer && response.texels[size_t(y * 9 + x)] == Mul(gauss[size_t(y)], gauss[size_t(x)]);
+        }
+    }
+    Check(outer, "a blurred impulse is the outer product of the weights");
+    Check(BoxWeights(0) == std::vector<float>{1.0f} &&
+              BoxWeights(2) == std::vector<float>(5, static_cast<float>(1.0 / 5.0)),
+          "box weights are float32(1 / (2r + 1))");
+
+    // Pcg3d: changes every output word with one input bit (avalanche over a sample).
+    size_t flips = 0, trials = 0;
+    for (uint32_t i = 0; i < 256; ++i) {
+        const U3 a = Pcg3d({i, 7u * i, 13u * i});
+        const U3 b = Pcg3d({i ^ 1u, 7u * i, 13u * i});
+        for (int c = 0; c < 3; ++c) flips += static_cast<size_t>(std::popcount(a[c] ^ b[c]));
+        trials += 96;
+    }
+    const double rate = double(flips) / double(trials);
+    Info("pcg3d single-bit avalanche rate " + std::to_string(rate));
+    Check(rate > 0.40 && rate < 0.60, "pcg3d flips about half the output bits for one input bit");
+    return Finish();
+}
+
+// ── kernels (2.2: generated HLSL through the render core's cache) ────────────
+
+/// Number of `OpDecorate <id> NoContraction` instructions in a SPIR-V module (`precise`).
+int NoContractionCount(const std::vector<uint8_t>& spirv) {
+    std::vector<uint32_t> words(spirv.size() / 4);
+    std::memcpy(words.data(), spirv.data(), words.size() * 4);
+    int count = 0;
+    for (size_t i = 5; i < words.size();) {
+        const uint32_t length = words[i] >> 16;
+        if (length == 0) break;
+        if ((words[i] & 0xFFFF) == 71 && i + 2 < words.size() && words[i + 2] == 42) ++count;
+        i += length;
+    }
+    return count;
+}
+
+int RunKernels(const fs::path& dir) {
+    render::Result<std::unique_ptr<render::DxcKernelCompiler>> compiler =
+        render::DxcKernelCompiler::Load(render::DefaultDxcompilerPath());
+    Check(compiler.has_value(), "DXC loads", compiler ? "" : compiler.error().Describe());
+    if (!compiler) return Finish();
+    render::KernelCache cache(**compiler, dir / "kernel-cache");
+    HlslBackend hlsl(nullptr);
+    (void)hlsl.Register(std::make_shared<NoiseProbe>(ParityStatus::Unavailable("probe")));
+    (void)hlsl.Register(std::make_shared<ImageProbe>());
+    (void)hlsl.Register(std::make_shared<SyntheticExact>());
+
+    std::vector<ProceduralRequest> requests = {NoiseRequest(kPerlin2002, 16, 1),
+                                               ImageRequest(0, 2, 1, 0, 16, 2),
+                                               ImageRequest(3, 3, 0, 1, 16, 2), SyntheticRequest()};
+    size_t compiled = 0;
+    for (const ProceduralRequest& request : requests) {
+        auto kernels = hlsl.Kernels(request);
+        Check(kernels.has_value(), "kernels planned for " + AssetName(request),
+              kernels ? "" : kernels.error().Describe());
+        if (!kernels) continue;
+        for (const render::KernelSource& source : *kernels) {
+            for (const render::KernelTarget target :
+                 {render::KernelTarget::Dxil, render::KernelTarget::Spirv}) {
+                render::Result<render::CompiledKernel> kernel = cache.Get(source, target);
+                const std::string what = source.name + " (" +
+                                         std::string(render::KernelTargetName(target)) + ")";
+                Check(kernel.has_value() && !kernel->bytecode.empty(), "compiles: " + what,
+                      kernel ? "" : kernel.error().Describe());
+                if (!kernel) continue;
+                ++compiled;
+                if (target == render::KernelTarget::Spirv) {
+                    const int precise = NoContractionCount(kernel->bytecode);
+                    Check(precise > 0, "precise arithmetic reaches SPIR-V as NoContraction: " + what,
+                          std::to_string(precise) + " decorations");
+                }
+                render::Result<render::CompiledKernel> again = cache.Get(source, target);
+                Check(again && again->cacheHit && again->key == kernel->key &&
+                          again->bytecode == kernel->bytecode,
+                      "the second request is a cache hit by content hash: " + what);
+            }
+        }
+    }
+    Info("compiled " + std::to_string(compiled) + " kernels");
+
+    // The cache key is the kernel's content: parameter values and seeds travel in buffers and
+    // root constants, so editing them reuses the kernel; another body is another kernel.
+    ProceduralRequest edited = NoiseRequest(kSimplex, 64, 99);
+    edited.params["scale"] = 2.5;
+    const std::string version = cache.CompilerVersion();
+    const uint64_t a = render::KernelKey((*hlsl.Kernels(NoiseRequest(kPerlin2002, 16, 1)))[0],
+                                         render::KernelTarget::Dxil, version);
+    const uint64_t b = render::KernelKey((*hlsl.Kernels(edited))[0], render::KernelTarget::Dxil, version);
+    const uint64_t c = render::KernelKey((*hlsl.Kernels(ImageRequest(0, 1, 0, 0, 16, 1)))[0],
+                                         render::KernelTarget::Dxil, version);
+    Check(a == b && a != c, "parameter and seed edits reuse the kernel; another family's body does not");
+    return Finish();
+}
+
+// ── gpu (3.3 DX12 repeatability; 2.2 end to end) ─────────────────────────────
+
+template <class T>
+render::Result<T> Get(std::future<render::Result<T>>& future) {
+    if (future.wait_for(std::chrono::seconds(300)) != std::future_status::ready) {
+        return render::Fail(render::ErrorCode::RequestFailed, std::nullopt, "no result within 300 s");
+    }
+    return future.get();
+}
+
+int RunGpu(const fs::path& dir) {
+    render::EngineOptions options;
+    options.kernelCacheRoot = dir / "kernel-cache";
+    render::Engine engine(options);
+    if (engine.DeviceError()) {
+        std::printf("SKIP no DX12 device: %s\n", engine.DeviceError()->Describe().c_str());
+        return kExitSkip;
+    }
+    HlslBackend hlsl(&engine);
+    (void)hlsl.Register(std::make_shared<NoiseProbe>(ParityStatus::Unavailable("probe")));
+    (void)hlsl.Register(std::make_shared<ImageProbe>());
+    (void)hlsl.Register(std::make_shared<SyntheticExact>());
+
+    struct Case {
+        std::string what;
+        ProceduralRequest request;
+        InputImages inputs;
+    };
+    std::vector<Case> cases;
+    const char* noiseNames[] = {"perlin1985", "perlin2002", "simplex3", "worley euclidean",
+                                "worley manhattan", "worley chebyshev", "fbm", "sqrt"};
+    for (uint32_t code = 0; code <= kSqrt; ++code) {
+        for (const uint64_t seed : {uint64_t{0}, uint64_t{0xFFFFFFFFu}}) {
+            cases.push_back({std::string(noiseNames[code]) + " seed " + std::to_string(seed),
+                             NoiseRequest(code, code == kSqrt ? 128 : 64, seed), {}});
+        }
+    }
+    for (const uint32_t basis : {0u, 2u, 3u}) {
+        ProceduralRequest r = NoiseRequest(kFbm, 33, 5);
+        r.params["basis"] = int64_t{basis};
+        r.params["octaves"] = int64_t{basis == 3 ? 3 : 8};
+        r.params["lacunarity"] = 1.875;
+        r.params["gain"] = 0.625;
+        r.params["scale"] = 3.0;
+        cases.push_back({"fbm basis " + std::to_string(basis), r, {}});
+    }
+    {
+        ProceduralRequest r = NoiseRequest(kPerlin2002, 64, 1);
+        r.params["scale"] = 1.0 / 1024;
+        r.params["offset_x"] = -4000.0;
+        r.params["offset_y"] = 4000.0;
+        cases.push_back({"perlin2002 far from the origin at a fine scale", r, {}});
+    }
+    const char* opNames[] = {"dilate", "erode", "box blur", "gaussian blur"};
+    for (uint32_t op = 0; op < 4; ++op) {
+        for (const uint32_t border : {0u, 1u}) {
+            const uint32_t channels = op % 2 == 0 ? 4 : 2;
+            ProceduralRequest r = ImageRequest(op, op < 2 ? 3 : 5, border, border, 37, channels);
+            cases.push_back({std::string(opNames[op]) + (border ? " clamp" : " wrap"), r,
+                             {{"image", TestImage(37, channels, 100 + op)}}});
+        }
+    }
+    {
+        ProceduralRequest r = ImageRequest(1, 8, 1, 0, 32, 1);
+        cases.push_back({"erode radius 8 disk, one channel", r, {{"image", TestImage(32, 1, 9)}}});
+    }
+
+    for (const Case& c : cases) {
+        render::Result<Raster> reference = hlsl.EvaluateReference(c.request, c.inputs);
+        RasterFuture first = hlsl.EvaluateCandidate(c.request, c.inputs);
+        render::Result<Raster> gpu = Get(first);
+        if (!reference || !gpu) {
+            Check(false, "GPU equals CPU: " + c.what,
+                  !reference ? reference.error().Describe() : gpu.error().Describe());
+            continue;
+        }
+        Check(FirstDifference(*gpu, *reference).empty(), "GPU equals CPU bit for bit: " + c.what,
+              FirstDifference(*gpu, *reference));
+        RasterFuture second = hlsl.EvaluateCandidate(c.request, c.inputs);
+        render::Result<Raster> again = Get(second);
+        Check(again && FirstDifference(*again, *gpu).empty(),
+              "DX12 repeats byte for byte: " + c.what,
+              again ? FirstDifference(*again, *gpu) : again.error().Describe());
+    }
+
+    // A tile is the same texels as the whole texture.
+    for (const Case& c : {cases[2], cases[cases.size() - 2]}) {
+        ProceduralRequest tiled = c.request;
+        tiled.tile = TileRect{5, 9, 19, 11};
+        RasterFuture whole = hlsl.EvaluateCandidate(c.request, c.inputs);
+        RasterFuture part = hlsl.EvaluateCandidate(tiled, c.inputs);
+        render::Result<Raster> w = Get(whole);
+        render::Result<Raster> t = Get(part);
+        bool same = w && t && t->width == 19 && t->height == 11;
+        for (uint32_t y = 0; same && y < 11; ++y) {
+            for (uint32_t x = 0; same && x < 19; ++x) {
+                for (uint32_t ch = 0; ch < t->channels; ++ch) {
+                    same = same && Bits(t->texels[(size_t{y} * 19 + x) * t->channels + ch]) ==
+                                       Bits(w->texels[(size_t{y + 9} * w->width + x + 5) * w->channels + ch]);
+                }
+            }
+        }
+        render::Result<Raster> reference = hlsl.EvaluateReference(tiled, c.inputs);
+        Check(same && reference && FirstDifference(*t, *reference).empty(),
+              "a tile equals the same texels of the whole texture and the CPU tile: " + c.what);
+    }
+
+    // The seam's certified path end to end on the GPU: the synthetic exact family, with its
+    // mesh map, equals its CPU reference.
+    ProceduralSeam seam(nullptr, &hlsl);
+    const InputImages curvature = {{"Curvature", Curvature()}};
+    auto served = seam.Evaluate(SyntheticRequest(), curvature);
+    render::Result<Raster> seamRaster = served ? Get(*served) : render::Result<Raster>{};
+    render::Result<Raster> seamReference = hlsl.EvaluateReference(SyntheticRequest(), curvature);
+    Check(served && seamRaster && seamReference && FirstDifference(*seamRaster, *seamReference).empty(),
+          "the seam serves a certified family on DX12 equal to its CPU reference",
+          !served ? served.error().Describe()
+                  : (!seamRaster ? seamRaster.error().Describe() : FirstDifference(*seamRaster, *seamReference)));
+    return Finish();
+}
+
+}  // namespace
+
+int main(int argc, char** argv) {
+    if (argc < 3) {
+        std::fprintf(stderr, "usage: uzp-procedural-tests seam | domain | primitives | kernels | gpu <work-dir>\n");
+        return 2;
+    }
+    const std::string_view mode = argv[1];
+    const fs::path dir = argv[2];
+    if (mode == "seam") return RunSeam();
+    if (mode == "domain") return RunDomain();
+    if (mode == "primitives") return RunPrimitives();
+    if (mode == "kernels") return RunKernels(dir);
+    if (mode == "gpu") return RunGpu(dir);
+    std::fprintf(stderr, "unknown case %.*s\n", static_cast<int>(mode.size()), mode.data());
+    return 2;
+}

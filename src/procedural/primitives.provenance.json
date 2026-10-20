@@ -1,0 +1,97 @@
+{
+  "schema": "uzpainter/procedural-primitives-provenance/1",
+  "author": "UzmiGames",
+  "licence": "Apache-2.0",
+  "date": "2026-10-19",
+  "clean_room": "Written from the public papers, books and standards below only. No Adobe code, asset, output or documentation of Substance internals was used; no primitive is fitted to Painter.",
+  "primitives": [
+    {
+      "primitive": "SqrtRn",
+      "sources": [
+        {"kind": "standard", "title": "IEEE 754-2019, Standard for Floating-Point Arithmetic", "section": "5.4.1 squareRoot", "facts": "Correct rounding of the square root to nearest, ties to even."},
+        {"kind": "book", "title": "H. S. Warren, Hacker's Delight, 2nd ed., 2012", "section": "11-1 Integer square root", "facts": "The bit-by-bit integer square root and its remainder."}
+      ],
+      "notes": "Computed on integers so that GPU and CPU agree; equals the host's IEEE sqrt on 1.04 M tested values."
+    },
+    {
+      "primitive": "Pcg3d",
+      "sources": [
+        {"kind": "paper", "title": "M. Jarzynski, M. Olano, Hash Functions for GPU Rendering, JCGT 9(3), 2020", "section": "pcg3d", "facts": "The LCG step, the two cross-multiplication rounds and the 16-bit xorshift."}
+      ],
+      "notes": "Used in place of Perlin's permutation table for lattice hashing; the seed enters as a per-seed offset of the lattice key (a UzmiGames choice)."
+    },
+    {
+      "primitive": "Perlin1985",
+      "sources": [
+        {"kind": "paper", "title": "K. Perlin, An Image Synthesizer, SIGGRAPH 1985", "section": "Noise", "facts": "Pseudo-random gradients on the integer lattice, dot products with the corner offsets, interpolation by 3t^2 - 2t^3."}
+      ],
+      "notes": "Gradient components are uniform in [-1, 1) from the hash (not normalised: a normalisation needs a square root and a division)."
+    },
+    {
+      "primitive": "Perlin2002",
+      "sources": [
+        {"kind": "paper", "title": "K. Perlin, Improving Noise, SIGGRAPH 2002 (ACM TOG 21(3))", "section": "The interpolant and the gradient set", "facts": "The interpolant 6t^5 - 15t^4 + 10t^3 and the twelve cube-edge gradients selected by four hash bits."}
+      ],
+      "notes": "The paper's permutation table is replaced by Pcg3d."
+    },
+    {
+      "primitive": "Simplex3",
+      "sources": [
+        {"kind": "paper", "title": "K. Perlin, Noise Hardware, Real-Time Shading SIGGRAPH Course Notes, 2001", "section": "Simplex noise", "facts": "Noise over the simplicial lattice with radially symmetric corner kernels."},
+        {"kind": "paper", "title": "S. Gustavson, Simplex Noise Demystified, 2005", "section": "3D simplex noise", "facts": "Skew and unskew factors 1/3 and 1/6, ranking of the offsets, kernel (0.6 - d^2)^4, gradients from the twelve cube edges, scale 32."}
+      ],
+      "notes": "Lattice hashing by Pcg3d (h mod 12)."
+    },
+    {
+      "primitive": "Worley3",
+      "sources": [
+        {"kind": "paper", "title": "S. Worley, A Cellular Texture Basis Function, SIGGRAPH 1996", "section": "The cellular basis function", "facts": "Feature points scattered per cell, F1 and F2 as the nearest and second-nearest distances, alternative distance metrics."}
+      ],
+      "notes": "One feature point per cell and the 27 neighbouring cells, as is usual in GPU implementations; Euclidean, Manhattan and Chebyshev metrics."
+    },
+    {
+      "primitive": "Fbm",
+      "sources": [
+        {"kind": "paper", "title": "B. B. Mandelbrot, J. W. Van Ness, Fractional Brownian Motions, Fractional Noises and Applications, SIAM Review 10(4), 1968", "section": "Definition", "facts": "Fractional Brownian motion."},
+        {"kind": "book", "title": "D. S. Ebert, F. K. Musgrave et al., Texturing and Modeling: A Procedural Approach, 3rd ed., 2003", "section": "F. K. Musgrave's chapters on fractal models (fBm)", "facts": "The spectral sum of octaves with lacunarity and gain."}
+      ],
+      "notes": "Octave i uses seed + i; the sum is not normalised."
+    },
+    {
+      "primitive": "Dilate",
+      "sources": [
+        {"kind": "book", "title": "J. Serra, Image Analysis and Mathematical Morphology, 1982", "section": "Dilation", "facts": "Grey-scale dilation by a flat structuring element (maximum over the element)."},
+        {"kind": "book", "title": "R. C. Gonzalez, R. E. Woods, Digital Image Processing, 4th ed., 2018", "section": "Chapter 9, grayscale morphology", "facts": "Flat square and disk structuring elements."}
+      ],
+      "notes": "Wrap or clamp borders; strict comparison so NaN never wins."
+    },
+    {
+      "primitive": "Erode",
+      "sources": [
+        {"kind": "book", "title": "J. Serra, Image Analysis and Mathematical Morphology, 1982", "section": "Erosion", "facts": "Grey-scale erosion by a flat structuring element (minimum), the dual of dilation."}
+      ],
+      "notes": "Tested as the exact dual of Dilate."
+    },
+    {
+      "primitive": "SeparableBlur",
+      "sources": [
+        {"kind": "book", "title": "R. C. Gonzalez, R. E. Woods, Digital Image Processing, 4th ed., 2018", "section": "3.5 Smoothing spatial filters", "facts": "Separable linear filters applied as a horizontal then a vertical pass."}
+      ],
+      "notes": "Taps summed in a fixed order from offset -r to r."
+    },
+    {
+      "primitive": "BoxWeights",
+      "sources": [
+        {"kind": "book", "title": "R. C. Gonzalez, R. E. Woods, Digital Image Processing, 4th ed., 2018", "section": "3.5 Box filter kernels", "facts": "Equal weights 1 / (2r + 1)."}
+      ],
+      "notes": "float32(1 / (2r + 1))."
+    },
+    {
+      "primitive": "GaussianWeights",
+      "sources": [
+        {"kind": "book", "title": "R. C. Gonzalez, R. E. Woods, Digital Image Processing, 4th ed., 2018", "section": "3.5 Lowpass Gaussian filter kernels", "facts": "Weights exp(-k^2 / (2 sigma^2)), normalised to sum 1."}
+      ],
+      "notes": "The exponential is evaluated with IEEE double additions, multiplications and divisions only (halving, a Taylor series, squaring), so every machine computes the same weights."
+    }
+  ]
+}

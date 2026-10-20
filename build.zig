@@ -441,6 +441,13 @@ const etcpak_flags = cxx_flags ++ [_][]const u8{"-ffp-contract=off"};
 const tinyexr_unit = "export/tinyexr_unit.cpp";
 /// spng is linked statically wherever the evaluator is (its bitmap decoder, `sources.h`).
 const evaluator_flags = cxx_flags ++ own_warning_flags ++ [_][]const u8{ "-ffp-contract=off", "-DSPNG_STATIC" };
+/// The procedural backend seam (`src/procedural/`, `05-procedural-content.md` §2, §3), relative to
+/// `src/`; compiled with `evaluator_flags` (no contraction: its CPU reference mirrors the kernels).
+const procedural_sources = [_][]const u8{
+    "procedural/seam.cpp",
+    "procedural/primitives.cpp",
+    "procedural/hlsl_backend.cpp",
+};
 /// The project templates the evaluator reads (`src/evaluator/templates.h`), installed beside the
 /// executables as `bin/assets/templates/`.
 const templates_dir = "assets/templates";
@@ -1405,6 +1412,43 @@ pub fn build(b: *std.Build) void {
     for (dx_runtime) |step| evaluator_tests_step.dependOn(step);
     evaluator_tests_step.dependOn(&install_templates.step);
     b.getInstallStep().dependOn(evaluator_tests_step);
+
+    // ── The procedural backend seam (phase3.1_proc-backend-seam) ─────────────────────────────
+    // `src/procedural/` over the render layer: the seam, the HlslBackend host and the primitive
+    // library, compiled without contraction like the evaluator (its CPU reference mirrors the
+    // kernels bit for bit).
+    const procedural_tests_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    addCoreIncludePaths(b, procedural_tests_mod);
+    procedural_tests_mod.addIncludePath(b.path("src"));
+    procedural_tests_mod.addCSourceFiles(.{
+        .root = b.path("tests/procedural"),
+        .files = &.{"procedural_test.cpp"},
+        .flags = &evaluator_flags,
+    });
+    embed_inputs.add(procedural_tests_mod, "src", &procedural_sources, &evaluator_flags);
+    embed_inputs.add(procedural_tests_mod, "src", &render_sources, &(cxx_flags ++ own_warning_flags));
+    procedural_tests_mod.addCSourceFiles(.{
+        .root = b.path(core_root),
+        .files = &.{agility_export_source},
+        .flags = &cxx_flags,
+    });
+    procedural_tests_mod.linkLibrary(core_lib);
+    procedural_tests_mod.linkLibrary(uzp_core_lib);
+    for (system_libraries) |name| procedural_tests_mod.linkSystemLibrary(name, .{});
+    procedural_tests_mod.linkSystemLibrary("version", .{});
+    const procedural_tests_exe = b.addExecutable(.{
+        .name = "uzp-procedural-tests",
+        .root_module = procedural_tests_mod,
+    });
+    const procedural_tests_step = b.step("procedural-tests", "Build the native tests of the procedural backend seam");
+    procedural_tests_step.dependOn(&b.addInstallArtifact(procedural_tests_exe, .{}).step);
+    for (dx_runtime) |step| procedural_tests_step.dependOn(step);
+    b.getInstallStep().dependOn(procedural_tests_step);
 
     // ── The export plan compiler (phase1.15_export-plan-compiler) ─────────────────────────────
     // `src/export/` over the evaluator; its tests evaluate on the CPU store only, so they run on
