@@ -129,6 +129,9 @@ EmbreeBaker::EmbreeBaker(BakerConfig config) : config_(std::move(config)), core_
     if (version != kPinnedEmbreeVersion) {
         caps_.unqualified_reason = "Embree " + caps_.embree_version + " is not the pinned " +
                                    VersionText(kPinnedEmbreeVersion);
+    } else if (tasking != kPinnedEmbreeTasking) {
+        caps_.unqualified_reason = "Embree's tasking system " + caps_.tasking_system +
+                                   " is not the pinned package's (TBB)";
     } else if (api.getDeviceProperty(device, RTC_DEVICE_PROPERTY_BACKFACE_CULLING_ENABLED) != 0) {
         // Culling would hide the back-face hits this baker must count.
         caps_.unqualified_reason = "the Embree build culls back faces";
@@ -203,7 +206,8 @@ bool StripSuffix(std::string& name, const std::string& suffix) {
 
 bool NonNegative(float v) { return std::isfinite(v) && v >= 0.0f; }
 
-void ValidateRequest(const Capabilities& caps, const BakeRequest& request) {
+/// Checks `request` before any work and returns its effective distances (decision 311).
+DistanceRecord ValidateRequest(const Capabilities& caps, const BakeRequest& request) {
     if (request.usages.empty()) throw ValueError("the request enables no usage");
     for (MeshMapUsage usage : request.usages) {
         if (std::find(caps.usages.begin(), caps.usages.end(), usage) == caps.usages.end()) {
@@ -231,18 +235,23 @@ void ValidateRequest(const Capabilities& caps, const BakeRequest& request) {
     if (!NonNegative(detail.max_height) || !NonNegative(detail.max_depth)) {
         throw ValueError("max_height and max_depth must be finite and >= 0");
     }
-    if (detail.cage_mode == CageMode::DistanceBased && !(detail.max_height + detail.max_depth > 0.0f)) {
-        throw ValueError("the distance-based cage needs max_height + max_depth > 0");
-    }
-    const std::uint32_t k = detail.subsampling;
-    if (k != 1 && k != 2 && k != 4 && k != 8) throw ValueError("subsampling must be 1, 2, 4 or 8");
     const AoSettings& ao = request.ao;
-    if (ao.secondary_rays == 0 || static_cast<std::uint64_t>(ao.secondary_rays) * k * k > 65535) {
-        throw ValueError("secondary_rays must be >= 1 and secondary_rays x subsampling^2 <= 65535");
-    }
     if (!NonNegative(ao.min_distance) || !std::isfinite(ao.max_distance) ||
         !(ao.min_distance < ao.max_distance)) {
         throw ValueError("AO distances need 0 <= min_distance < max_distance, finite");
+    }
+    // In mesh units: absolute distances over the unit scale, relative ones times the box size.
+    const DistanceRecord distances = EffectiveDistances(request);
+    if (detail.cage_mode == CageMode::DistanceBased && !(distances.max_height + distances.max_depth > 0.0f)) {
+        throw ValueError("the distance-based cage needs max_height + max_depth > 0 (in mesh units)");
+    }
+    if (!(distances.ao_min_distance < distances.ao_max_distance)) {
+        throw ValueError("AO distances need min_distance < max_distance in mesh units");
+    }
+    const std::uint32_t k = detail.subsampling;
+    if (k != 1 && k != 2 && k != 4 && k != 8) throw ValueError("subsampling must be 1, 2, 4 or 8");
+    if (ao.secondary_rays == 0 || static_cast<std::uint64_t>(ao.secondary_rays) * k * k > 65535) {
+        throw ValueError("secondary_rays must be >= 1 and secondary_rays x subsampling^2 <= 65535");
     }
     if (request.low.empty()) throw ValueError("the request has no low mesh part");
     for (const BakeMesh* low : request.low) {
@@ -279,12 +288,9 @@ void ValidateRequest(const Capabilities& caps, const BakeRequest& request) {
         }
     }
     if (detail.cage_mode == CageMode::CustomFile) {
-        if (request.cage.empty()) {
-            throw NotYetSupported(
-                "CageMode CustomFile without cage meshes: loading the cage file "
-                "(phase3.1_baker-request-model item 2.5)");
+        if (request.cage.size() != request.low.size()) {
+            throw ValueError("CageMode CustomFile needs one cage per low part (CageParts builds them from the cage file)");
         }
-        if (request.cage.size() != request.low.size()) throw ValueError("the request needs one cage per low part");
         for (std::size_t i = 0; i < request.cage.size(); ++i) {
             if (!request.cage[i]) throw ValueError("the request has a null cage");
             ValidateCage(*request.cage[i], *request.low[i]);
@@ -296,12 +302,16 @@ void ValidateRequest(const Capabilities& caps, const BakeRequest& request) {
     if (!request.hidden_mask.empty() && request.hidden_mask.size() != texels) {
         throw ValueError("the hidden mask needs one byte per texel");
     }
+    return distances;
 }
 
 // ── The job's own copy of the request ────────────────────────────────────────────────────────
 
 struct JobInputs {
-    BakeRequest request;  // its mesh pointers point into the vectors below
+    /// Its distances are the effective mesh-unit distances; its mesh pointers point into the
+    /// vectors below.
+    BakeRequest request;
+    DistanceRecord distances;
     std::vector<BakeMesh> low;
     std::vector<BakeMesh> high;
     std::vector<BakeMesh> cage;
@@ -321,9 +331,14 @@ std::vector<const BakeMesh*> Pointers(const std::vector<BakeMesh>& meshes) {
     return pointers;
 }
 
-std::shared_ptr<const JobInputs> CopyInputs(const BakeRequest& request) {
+std::shared_ptr<const JobInputs> CopyInputs(const BakeRequest& request, const DistanceRecord& distances) {
     auto inputs = std::make_shared<JobInputs>();
     inputs->request = request;
+    inputs->distances = distances;
+    inputs->request.detail.max_height = distances.max_height;
+    inputs->request.detail.max_depth = distances.max_depth;
+    inputs->request.ao.min_distance = distances.ao_min_distance;
+    inputs->request.ao.max_distance = distances.ao_max_distance;
     inputs->low = CopyMeshes(request.low);
     inputs->high = CopyMeshes(request.high);
     inputs->cage = CopyMeshes(request.cage);
@@ -925,6 +940,7 @@ BakeResult RunBake(EmbreeBaker::Core& core, const BakerConfig& config, const Job
     result.rays_per_texel = request.ao.secondary_rays;
     result.subsampling = request.detail.subsampling;
     result.dilation_width = request.common.dilation_width;
+    result.distances = inputs.distances;
     const std::size_t texels = static_cast<std::size_t>(result.width) * result.height;
     result.ao_raw.assign(texels, 0);
     result.texel_class.assign(texels, 0);
@@ -1033,8 +1049,8 @@ JobHandle EmbreeBaker::bake(const BakeRequest& request) {
         }
         diagnostic = true;
     }
-    ValidateRequest(caps_, request);
-    std::shared_ptr<const JobInputs> inputs = CopyInputs(request);
+    const DistanceRecord distances = ValidateRequest(caps_, request);
+    std::shared_ptr<const JobInputs> inputs = CopyInputs(request, distances);
     return JobHandle::Start([core = core_, config = config_, inputs, diagnostic](JobControl& control) {
         BakeResult result = RunBake(*core, config, *inputs, control);
         result.diagnostic_unqualified = diagnostic;

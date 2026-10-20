@@ -15,7 +15,9 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <cmath>
 #include <deque>
+#include <filesystem>
 #include <fstream>
 #include <functional>
 #include <future>
@@ -32,6 +34,7 @@
 #include "bake/baker.h"
 #include "bake/baking_parameters.h"
 #include "bake/embree_baker.h"
+#include "bake/mesh_inputs.h"
 #include "bake/sampling.h"
 #include "bake_fixtures.h"
 #include "uzp_core/manifest/sha256.h"
@@ -92,6 +95,7 @@ BakeRequest PlaneRequest(const BakeMesh& low) {
     BakeRequest request;
     request.texture_set = "fixture";
     request.input_revision = "fixture-r1";
+    request.scale_to_internal = 1.0;
     request.usages = {MeshMapUsage::AO};
     request.output_size_log2[0] = 6;
     request.output_size_log2[1] = 6;
@@ -291,6 +295,7 @@ void CaseSelfHit() {
     BakeRequest request;
     request.texture_set = "fixture";
     request.input_revision = "fixture-r1";
+    request.scale_to_internal = 1.0;
     request.usages = {MeshMapUsage::AO};
     request.output_size_log2[0] = 7;
     request.output_size_log2[1] = 7;
@@ -346,9 +351,27 @@ void CaseCapabilityErrors() {
     CHECK(Contains(message, "release gap"));
 
     request = PlaneRequest(low);
-    request.detail.cage_mode = CageMode::CustomFile;  // no cage meshes: loading the file is open
+    request.detail.cage_mode = CageMode::CustomFile;  // no cage meshes
+    message = ExpectThrow<ValueError>([&] { baker.bake(request); });
+    CHECK(Contains(message, "one cage per low part"));
+
+    // Units and relative distances (decision 311).
+    request = PlaneRequest(low);
+    request.scale_to_internal = 0.0;
+    message = ExpectThrow<ValueError>([&] { baker.bake(request); });
+    CHECK(Contains(message, "scale_to_internal"));
+    request.scale_to_internal = std::numeric_limits<double>::quiet_NaN();
+    ExpectThrow<ValueError>([&] { baker.bake(request); });
+    request = PlaneRequest(low);
+    request.ao.relative_to_bounding_box = true;
+    message = ExpectThrow<ValueError>([&] { baker.bake(request); });
+    CHECK(Contains(message, "bounds"));
+    request.project_bounds = BoundingBox{{-1, -1, 0}, {1, 1, 0}};
     message = ExpectThrow<NotYetSupported>([&] { baker.bake(request); });
-    CHECK(Contains(message, "phase3.1_baker-request-model item 2.5"));
+    CHECK(Contains(message, "decision 311"));
+    request.project_bounds = BoundingBox{{1, -1, 0}, {-1, 1, 0}};
+    request.box_size_metric = BoxSizeMetric::Diagonal;
+    ExpectThrow<ValueError>([&] { baker.bake(request); });
 
     request = PlaneRequest(low);
     request.common.apply_diffusion = true;
@@ -421,6 +444,7 @@ BakeRequest SphereRequest(const BakeMesh& low, std::uint32_t log2) {
     BakeRequest request;
     request.texture_set = "fixture";
     request.input_revision = "fixture-r1";
+    request.scale_to_internal = 1.0;
     request.usages = {MeshMapUsage::AO};
     request.output_size_log2[0] = log2;
     request.output_size_log2[1] = log2;
@@ -659,6 +683,7 @@ struct Bevel {
         BakeRequest request;
         request.texture_set = "bevelled_cube";
         request.input_revision = "fixture-r1";
+        request.scale_to_internal = 1.0;
         request.usages = {MeshMapUsage::AO};
         request.output_size_log2[0] = fixtures::kAtlasWidthLog2;
         request.output_size_log2[1] = fixtures::kAtlasHeightLog2;
@@ -1156,6 +1181,427 @@ void CaseParameters() {
     ExpectThrow<NotYetSupported>([&] { (void)common.at("IgnoreBackface").value(); });
 }
 
+// ── Units, relative distances and mesh files (decision 311) ──────────────────────────────────
+
+/// `meshes` as one OBJ file, an object each; every float printed exactly.
+std::string ToObj(const std::vector<const BakeMesh*>& meshes) {
+    std::string out;
+    char line[160];
+    std::uint32_t base = 1;
+    for (const BakeMesh* mesh : meshes) {
+        out += "o " + mesh->name + "\n";
+        for (const Float3& p : mesh->positions) {
+            std::snprintf(line, sizeof line, "v %.17g %.17g %.17g\n", static_cast<double>(p.x),
+                          static_cast<double>(p.y), static_cast<double>(p.z));
+            out += line;
+        }
+        for (const Float2& uv : mesh->uvs) {
+            std::snprintf(line, sizeof line, "vt %.17g %.17g\n", static_cast<double>(uv.x), static_cast<double>(uv.y));
+            out += line;
+        }
+        for (const Float3& n : mesh->normals) {
+            std::snprintf(line, sizeof line, "vn %.17g %.17g %.17g\n", static_cast<double>(n.x),
+                          static_cast<double>(n.y), static_cast<double>(n.z));
+            out += line;
+        }
+        for (std::size_t t = 0; t < mesh->indices.size(); t += 3) {
+            out += "f";
+            for (std::size_t k = 0; k < 3; ++k) {
+                const std::string i = std::to_string(base + mesh->indices[t + k]);
+                out += " " + i + (mesh->uvs.empty() ? "//" : "/" + i + "/") + i;
+            }
+            out += "\n";
+        }
+        base += static_cast<std::uint32_t>(mesh->positions.size());
+    }
+    return out;
+}
+
+uzp::mesh::TexturingMesh ReadObj(const std::vector<const BakeMesh*>& meshes, const std::string& name) {
+    const uzp::mesh::ExternalFileReader none = [](const std::string& uri, const std::filesystem::path&) -> std::string {
+        throw ValueError("no external file " + uri);
+    };
+    return ReadBakeMeshFile(ToObj(meshes), name, none);
+}
+
+/// The maps of two results, without their distance records.
+bool SameMaps(const BakeResult& a, const BakeResult& b) {
+    return a.ao == b.ao && a.ao_raw == b.ao_raw && a.texel_class == b.texel_class && a.coverage == b.coverage &&
+           a.subsample_hits == b.subsample_hits && a.back_face_rays == b.back_face_rays &&
+           a.self_hit_rays == b.self_hit_rays;
+}
+
+/// Absolute distances are centimetres, divided by `scale_to_internal` into mesh units: the
+/// bevelled cube at scale 2 with doubled distances bakes the same maps, and the record keeps the
+/// scale and the effective distances.
+void CaseUnits() {
+    EmbreeBaker baker;
+    Bevel fixture;
+    const BakeRequest base = fixture.Request(0.04f);
+    BakeRequest scaled = base;
+    scaled.scale_to_internal = 2.0;
+    scaled.detail.max_height = 2.0f * base.detail.max_height;
+    scaled.detail.max_depth = 2.0f * base.detail.max_depth;
+    scaled.ao.min_distance = 2.0f * base.ao.min_distance;
+    scaled.ao.max_distance = 2.0f * base.ao.max_distance;
+    const BakeResult r1 = Bake(baker, base);
+    const BakeResult r2 = Bake(baker, scaled);
+    CheckConservation(r2);
+    CHECK(SameMaps(r1, r2));
+    CHECK(r1.distances.scale_to_internal == 1.0 && r2.distances.scale_to_internal == 2.0);
+    CHECK(r2.distances.max_height == base.detail.max_height && r2.distances.max_depth == base.detail.max_depth);
+    CHECK(r2.distances.ao_min_distance == base.ao.min_distance && r2.distances.ao_max_distance == base.ao.max_distance);
+    CHECK(!r2.distances.detail_relative && !r2.distances.ao_relative && r2.distances.box_size == 0.0);
+    CHECK(SerializeResult(r1) != SerializeResult(r2));  // the record is part of the bytes
+    // An inch-based mesh: 2.54 cm per mesh unit.
+    BakeRequest inches = base;
+    inches.scale_to_internal = 2.54;
+    const BakeResult r3 = Bake(baker, inches);
+    CHECK(r3.distances.max_height == static_cast<float>(static_cast<double>(base.detail.max_height) / 2.54));
+    CHECK(r3.distances.ao_max_distance == static_cast<float>(static_cast<double>(base.ao.max_distance) / 2.54));
+}
+
+/// Relative distances are fractions of the project mesh's bounding-box size, under the metric
+/// the request names: the same maps as the absolute distances they come to.
+void CaseRelativeDistances() {
+    EmbreeBaker baker;
+    Bevel fixture;
+    // The project mesh: the cube [-1, 1]^3 and the knob plane at z = 3.
+    const BoundingBox box{{-1, -1, -1}, {1, 1, 3}};
+    BakeRequest relative = fixture.Request(0.04f);
+    relative.scale_to_internal = 2.54;  // not read by relative distances
+    relative.detail.relative_to_bounding_box = true;
+    relative.detail.max_height = 0.01f;
+    relative.detail.max_depth = 0.008f;
+    relative.ao.relative_to_bounding_box = true;
+    relative.ao.min_distance = 2e-5f;
+    relative.ao.max_distance = 0.2f;
+    relative.project_bounds = box;
+    relative.box_size_metric = BoxSizeMetric::Diagonal;
+    const BakeResult r = Bake(baker, relative);
+    CheckConservation(r);
+    const double diagonal = std::sqrt(24.0);
+    CHECK(r.distances.detail_relative && r.distances.ao_relative);
+    CHECK(r.distances.box_size == diagonal);
+    CHECK(r.distances.max_height == static_cast<float>(static_cast<double>(0.01f) * diagonal));
+    CHECK(r.distances.max_depth == static_cast<float>(static_cast<double>(0.008f) * diagonal));
+    CHECK(r.distances.ao_max_distance == static_cast<float>(static_cast<double>(0.2f) * diagonal));
+    BakeRequest absolute = fixture.Request(0.04f);
+    absolute.detail.max_height = r.distances.max_height;
+    absolute.detail.max_depth = r.distances.max_depth;
+    absolute.ao.min_distance = r.distances.ao_min_distance;
+    absolute.ao.max_distance = r.distances.ao_max_distance;
+    CHECK(SameMaps(r, Bake(baker, absolute)));
+    // The largest extent instead: 4 on z.
+    relative.box_size_metric = BoxSizeMetric::LargestExtent;
+    const BakeResult extent = Bake(baker, relative);
+    CHECK(extent.distances.box_size == 4.0);
+    CHECK(extent.distances.max_height == static_cast<float>(static_cast<double>(0.01f) * 4.0));
+    // Only AO relative: the cage distances stay absolute, in centimetres over the scale.
+    relative.detail.relative_to_bounding_box = false;
+    relative.detail.max_height = 0.05f;
+    relative.detail.max_depth = 0.04f;
+    const BakeResult mixed = Bake(baker, relative);
+    CHECK(!mixed.distances.detail_relative && mixed.distances.ao_relative);
+    CHECK(mixed.distances.max_height == static_cast<float>(static_cast<double>(0.05f) / 2.54));
+}
+
+/// Mesh files: the low cube, its chamfered high and a cage read from OBJ files bake exactly as
+/// the same meshes in memory; the cage's vertices pair with the low file's by index.
+void CaseCageFile() {
+    EmbreeBaker baker;
+    Bevel fixture;
+    const BakeMesh cage_mesh = fixtures::LowCube("cube_cage", 1.1f);
+    const uzp::mesh::TexturingMesh low_file = ReadObj({&fixture.cube_low}, "cube_low.obj");
+    const uzp::mesh::TexturingMesh high_file = ReadObj({&fixture.cube_high}, "cube_high.obj");
+    const uzp::mesh::TexturingMesh cage_file = ReadObj({&cage_mesh}, "cube_cage.obj");
+    const std::vector<BakeMesh> low = LowParts(low_file, 0);
+    CHECK_EQ(low.size(), 1u);
+    CHECK(low[0].name == "cube_low");
+    CHECK_EQ(low[0].positions.size(), 36u);  // one vertex per corner
+    const std::vector<BakeMesh> high = HighMeshes(high_file);
+    CHECK_EQ(high.size(), 1u);
+    const std::vector<BakeMesh> cage = CageParts(cage_file, low_file, 0);
+    CHECK_EQ(cage.size(), 1u);
+    CHECK_EQ(cage[0].positions.size(), 36u);
+    const BoundingBox bounds = SceneBounds(low_file);
+    CHECK(bounds.lower.x == -1.0f && bounds.lower.z == -1.0f && bounds.upper.y == 1.0f && bounds.upper.z == 1.0f);
+
+    BakeRequest in_memory = fixture.Request(1.0f);
+    in_memory.low = {&fixture.cube_low};
+    in_memory.high = {&fixture.cube_high};
+    in_memory.detail.cage_mode = CageMode::CustomFile;
+    in_memory.cage = {&cage_mesh};
+    BakeRequest from_files = in_memory;
+    from_files.low = {&low[0]};
+    from_files.high = {&high[0]};
+    from_files.cage = {&cage[0]};
+    const BakeResult r = Bake(baker, from_files);
+    CheckConservation(r);
+    CHECK_EQ(r.texels.cage_hit, 6 * kIslandTexels);
+    CHECK(SerializeResult(r) == SerializeResult(Bake(baker, in_memory)));
+
+    // Refusals before any work: another vertex count, a transform, a material without triangles.
+    const BakeMesh plane = fixtures::Plane("plane", -1, 1, -1, 1, 0);
+    std::string message = ExpectThrow<ValueError>([&] { (void)CageParts(ReadObj({&plane}, "p.obj"), low_file, 0); });
+    CHECK(Contains(message, "same number of vertices"));
+    uzp::mesh::TexturingMesh moved = cage_file;
+    moved.objects[0].transform[12] = 0.5;
+    message = ExpectThrow<NotYetSupported>([&] { (void)CageParts(moved, low_file, 0); });
+    CHECK(Contains(message, "decision 311"));
+    ExpectThrow<ValueError>([&] { (void)LowParts(low_file, 3); });
+    // A low object's transform moves its points and keeps its normals under a translation; a
+    // mirror is refused.
+    uzp::mesh::TexturingMesh shifted = low_file;
+    shifted.objects[0].transform[14] = 2.0;
+    const std::vector<BakeMesh> up = LowParts(shifted, 0);
+    CHECK(up[0].positions[0].z == low[0].positions[0].z + 2.0f);
+    CHECK(up[0].normals[0].z == low[0].normals[0].z && up[0].normals[0].x == low[0].normals[0].x);
+    shifted.objects[0].transform[0] = -1.0;
+    ExpectThrow<NotYetSupported>([&] { (void)LowParts(shifted, 0); });
+}
+
+// ── Linked groups and the manifest's bake_settings (decision 311) ────────────────────────────
+
+void CaseLinkedGroups() {
+    BakingSession session({"a", "b", "c"});
+    // Common parameters are shared at project creation.
+    CHECK((session.get_link_group_common_parameters() == std::vector<std::string>{"a", "b", "c"}));
+    CHECK(session.get_link_group(MeshMapUsage::AO).empty());
+    CHECK((session.get_linked_texture_sets(std::string("b"), MeshMapUsage::AO) == std::vector<std::string>{"b"}));
+    const BakingParameters a = session.parameters("a");
+    const BakingParameters b = session.parameters("b");
+    const BakingParameters c = session.parameters("c");
+    CHECK_EQ(session.revision(), 0u);
+    BakingParameters::set({{a.common().at("DilationWidth"), std::int64_t{8}}});
+    CHECK_EQ(std::get<std::int64_t>(c.common().at("DilationWidth").value()), 8);
+    CHECK_EQ(session.revision(), 1u);
+    // One parameter of the group, named twice through two members: refused.
+    ExpectThrow<ValueError>([&] {
+        BakingParameters::set({{a.common().at("IgnoreBackface"), true}, {b.common().at("IgnoreBackface"), true}});
+    });
+    CHECK_EQ(session.revision(), 1u);
+    // Unlinking keeps each set's current values, and then they are independent.
+    session.unlink_all_common_parameters();
+    CHECK(session.get_link_group_common_parameters().empty());
+    CHECK_EQ(session.revision(), 2u);
+    BakingParameters::set({{b.common().at("DilationWidth"), std::int64_t{2}}});
+    CHECK_EQ(std::get<std::int64_t>(a.common().at("DilationWidth").value()), 8);
+    CHECK_EQ(std::get<std::int64_t>(b.common().at("DilationWidth").value()), 2);
+
+    // An AO group takes the reference's AO parameters.
+    BakingParameters::set({{a.baker(MeshMapUsage::AO).at("GroundPlane"), true}});
+    BakingParameters::set({{c.baker(MeshMapUsage::AO).at("GroundPlane"), false}});
+    const std::uint64_t before = session.revision();
+    session.set_linked_group({"c", "a"}, "a", MeshMapUsage::AO);
+    CHECK_EQ(session.revision(), before + 1);
+    CHECK((session.get_link_group(MeshMapUsage::AO) == std::vector<std::string>{"a", "c"}));
+    CHECK((session.get_linked_texture_sets(std::string("c"), MeshMapUsage::AO) == std::vector<std::string>{"a", "c"}));
+    CHECK(std::get<bool>(c.baker(MeshMapUsage::AO).at("GroundPlane").value()));
+    BakingParameters::set({{c.baker(MeshMapUsage::AO).at("GroundPlane"), false}});
+    CHECK(!std::get<bool>(a.baker(MeshMapUsage::AO).at("GroundPlane").value()));
+    ExpectThrow<NotYetSupported>([&] { (void)b.baker(MeshMapUsage::AO).at("GroundPlane").value(); });
+    // The common parameters of a and c stay independent.
+    CHECK_EQ(std::get<std::int64_t>(c.common().at("DilationWidth").value()), 8);
+
+    // A failing set on one linked set leaves every set unchanged and the revision where it was.
+    const std::uint64_t at = session.revision();
+    ExpectThrow<ValueError>([&] {
+        BakingParameters::set({{a.baker(MeshMapUsage::AO).at("GroundPlane"), true},
+                               {b.common().at("DilationWidth"), std::int64_t{5}},
+                               {c.common().at("IgnoreBackface"), std::int64_t{1}}});
+    });
+    CHECK(!std::get<bool>(c.baker(MeshMapUsage::AO).at("GroundPlane").value()));
+    CHECK_EQ(std::get<std::int64_t>(b.common().at("DilationWidth").value()), 2);
+    CHECK_EQ(session.revision(), at);
+
+    // Refused link changes change nothing.
+    std::string message = ExpectThrow<ValueError>([&] { session.set_linked_group_common_parameters({"a", "z"}, "a"); });
+    CHECK(Contains(message, "'z'"));
+    CHECK(session.get_link_group_common_parameters().empty());
+    ExpectThrow<ValueError>([&] { session.set_linked_group_common_parameters({"a", "a"}, "a"); });
+    ExpectThrow<NotYetSupported>([&] { session.set_linked_group_common_parameters({"a", "b"}, "c"); });
+    ExpectThrow<NotYetSupported>([&] { session.set_linked_group_common_parameters({"a"}, "a"); });
+    message = ExpectThrow<NotYetSupported>([&] { session.set_linked_group({"a", "b"}, "a", MeshMapUsage::AO); });
+    CHECK(Contains(message, "regrouping"));
+    message = ExpectThrow<NotYetSupported>([&] { session.set_linked_group({"a", "b"}, "a", MeshMapUsage::Normal); });
+    CHECK(Contains(message, "phase3.2_baker-normal"));
+    CHECK_EQ(session.revision(), at);
+    // Linking the same group again re-applies the reference.
+    session.set_linked_group({"a", "c"}, "c", MeshMapUsage::AO);
+    CHECK_EQ(session.revision(), at + 1);
+    session.unlink_all(MeshMapUsage::AO);
+    CHECK(session.get_link_group(MeshMapUsage::AO).empty());
+    CHECK(!std::get<bool>(a.baker(MeshMapUsage::AO).at("GroundPlane").value()));
+    ExpectThrow<ValueError>([&] { (void)session.parameters("z"); });
+    ExpectThrow<ValueError>([&] { BakingSession duplicate({"a", "a"}); });
+    // One texture set: no group.
+    BakingSession single({"only"});
+    CHECK(single.get_link_group_common_parameters().empty());
+}
+
+void CaseBakeSettings() {
+    BakingSession session({"a", "b"});
+    const BakingParameters a = session.parameters("a");
+    const auto common = a.common();
+    const auto ao = a.baker(MeshMapUsage::AO);
+    BakingParameters::set({{common.at("OutputSize"), std::pair<std::int64_t, std::int64_t>{11, 10}},
+                           {common.at("ApplyDiffusion"), false},
+                           {common.at("FilterMethod"), EnumLabel{"By mesh name"}},
+                           {common.at("HipolySuffix"), std::string("_hi")},
+                           {ao.at("Distribution"), EnumLabel{"Cosine"}}});
+    const uzp::core::BakeSettings saved = ToBakeSettings(a);
+    using uzp::core::json::Array;
+    using uzp::core::json::Value;
+    CHECK(saved.common.size() == 2 && saved.detail.size() == 2 && saved.per_baker.size() == 1);
+    CHECK((saved.common.at("OutputSize") == Value(Array{Value(std::int64_t{11}), Value(std::int64_t{10})})));
+    CHECK(saved.common.at("ApplyDiffusion") == Value(false));
+    CHECK(saved.detail.at("FilterMethod") == Value("By mesh name"));
+    CHECK(saved.detail.at("HipolySuffix") == Value("_hi"));  // the documented default is never written
+    CHECK(saved.detail.count("LowpolySuffix") == 0);
+    CHECK(saved.per_baker.at("AO").at("Distribution") == Value("Cosine"));
+
+    // A fresh set loads it back; the common group shares it.
+    BakingSession other({"a", "b"});
+    LoadBakeSettings(other.parameters("a"), saved);
+    CHECK_EQ(other.revision(), 1u);
+    const uzp::core::BakeSettings shared = ToBakeSettings(other.parameters("b"));
+    CHECK(shared.common == saved.common && shared.detail == saved.detail && shared.per_baker.empty());
+    CHECK(std::get<EnumLabel>(other.parameters("b").common().at("FilterMethod").value()).label == "By mesh name");
+
+    // Refusals leave the loaded values and the revision unchanged.
+    const auto refused = [&](uzp::core::BakeSettings settings, const char* expected, bool not_yet) {
+        const std::function<void()> load = [&] { LoadBakeSettings(other.parameters("a"), settings); };
+        const std::string message = not_yet ? ExpectThrow<NotYetSupported>(load) : ExpectThrow<ValueError>(load);
+        CHECK(Contains(message, expected));
+        CHECK(ToBakeSettings(other.parameters("a")) == saved);
+        CHECK_EQ(other.revision(), 1u);
+    };
+    uzp::core::BakeSettings bad = saved;
+    bad.common["Unknown"] = Value(true);
+    refused(bad, "no key 'Unknown'", false);
+    bad = saved;
+    bad.common["LowAsHigh"] = Value(true);  // a detail key in the common group
+    refused(bad, "no key 'LowAsHigh'", false);
+    bad = saved;
+    bad.common["DilationWidth"] = Value("8");
+    refused(bad, "DilationWidth", false);
+    bad = saved;
+    bad.detail["MaxHeight"] = Value(0.5);
+    refused(bad, "value type of MaxHeight", true);
+    bad = saved;
+    bad.per_baker["Normal"]["Foo"] = Value(1);
+    refused(bad, "phase3.2_baker-normal", true);
+    bad = saved;
+    bad.per_baker["Sparkle"] = {};
+    refused(bad, "no baker 'Sparkle'", false);
+    bad = saved;
+    bad.detail["SubSampling"] = Value("3x3");
+    refused(bad, "no option '3x3'", false);
+    // An empty object of another baker is no value.
+    uzp::core::BakeSettings empty_normal = saved;
+    empty_normal.per_baker["Normal"] = {};
+    LoadBakeSettings(other.parameters("a"), empty_normal);
+    CHECK(ToBakeSettings(other.parameters("a")) == saved);
+}
+
+/// The parameters of a texture set as a request: every typed key needs a value; pending keys keep
+/// the request's own fields; the mapped request bakes exactly as the request it describes.
+void CaseParametersToRequest() {
+    EmbreeBaker baker;
+    Bevel fixture;
+    const BakeRequest base = fixture.Request(0.04f);
+    BakingParameters params("bevelled_cube");
+    const auto common = params.common();
+    const auto ao = params.baker(MeshMapUsage::AO);
+    std::string message = ExpectThrow<NotYetSupported>([&] { (void)RequestFromParameters(params, base); });
+    CHECK(Contains(message, "item 2.9"));
+    BakingParameters::set({{common.at("OutputSize"), std::pair<std::int64_t, std::int64_t>{7, 6}},
+                           {common.at("DilationWidth"), std::int64_t{0}},
+                           {common.at("ApplyDiffusion"), false},
+                           {common.at("LowAsHigh"), false},
+                           {common.at("CageMode"), EnumLabel{"Distance based"}},
+                           {common.at("IgnoreBackface"), false},
+                           {common.at("FilterMethod"), EnumLabel{"By mesh name"}},
+                           {common.at("SubSampling"), EnumLabel{"None"}},
+                           {ao.at("MaxDistanceRelativeScale"), false},
+                           {ao.at("Distribution"), EnumLabel{"Cosine"}},
+                           {ao.at("GroundPlane"), false}});
+    const MappedRequest mapped = RequestFromParameters(params, base);
+    CHECK((mapped.keys_from_request ==
+           std::vector<std::string>{"MaxHeight", "MaxDepth", "RelativeScale", "NbSecondary", "MinDistance", "MaxDistance"}));
+    CHECK(SerializeResult(Bake(baker, mapped.request)) == SerializeResult(Bake(baker, base)));
+    // Sub-samples and dilation through their keys.
+    BakingParameters::set({{common.at("SubSampling"), EnumLabel{"2×2"}}, {common.at("DilationWidth"), std::int64_t{4}}});
+    BakeRequest expected = base;
+    expected.detail.subsampling = 2;
+    expected.common.dilation_width = 4;
+    const MappedRequest sub = RequestFromParameters(params, base);
+    CHECK_EQ(sub.request.detail.subsampling, 2u);
+    CHECK(SerializeResult(Bake(baker, sub.request)) == SerializeResult(Bake(baker, expected)));
+    // The release gap and the refusals travel with the mapping.
+    BakingParameters::set({{common.at("CageMode"), EnumLabel{"Automatic (experimental)"}}});
+    const MappedRequest automatic = RequestFromParameters(params, base);
+    message = ExpectThrow<CapabilityError>([&] { baker.bake(automatic.request); });
+    CHECK(Contains(message, "release gap"));
+    BakingParameters::set({{common.at("CageMode"), EnumLabel{"Distance based"}}, {ao.at("GroundPlane"), true}});
+    message = ExpectThrow<NotYetSupported>([&] { (void)RequestFromParameters(params, base); });
+    CHECK(Contains(message, "phase3.4_baker-ao"));
+    BakingParameters::set({{ao.at("GroundPlane"), false}, {common.at("OutputSize"), std::pair<std::int64_t, std::int64_t>{40, 6}}});
+    ExpectThrow<ValueError>([&] { (void)RequestFromParameters(params, base); });
+}
+
+/// The `cage_file` fixture of the `bake` command: the cube, its high and its cage from OBJ files,
+/// AO distances relative to the bounding box (diagonal), a 2 cm mesh unit, 2 x 2 sub-samples and
+/// dilation 4.
+struct CageFileFixture {
+    Bevel bevel;
+    BakeMesh cage_mesh = fixtures::LowCube("cube_cage", 1.1f);
+    uzp::mesh::TexturingMesh low_file = ReadObj({&bevel.cube_low}, "cube_low.obj");
+    uzp::mesh::TexturingMesh high_file = ReadObj({&bevel.cube_high}, "cube_high.obj");
+    uzp::mesh::TexturingMesh cage_file = ReadObj({&cage_mesh}, "cube_cage.obj");
+    std::vector<BakeMesh> low = LowParts(low_file, 0);
+    std::vector<BakeMesh> high = HighMeshes(high_file);
+    std::vector<BakeMesh> cage = CageParts(cage_file, low_file, 0);
+
+    BakeRequest Request() const {
+        BakeRequest request = bevel.Request(2.0f);
+        request.low = {&low[0]};
+        request.high = {&high[0]};
+        request.detail.cage_mode = CageMode::CustomFile;
+        request.cage = {&cage[0]};
+        request.scale_to_internal = 2.0;
+        request.ao.relative_to_bounding_box = true;
+        request.ao.min_distance = 1e-5f;
+        request.ao.max_distance = 0.3f;
+        request.ao.secondary_rays = 8;
+        request.project_bounds = SceneBounds(low_file);
+        request.box_size_metric = BoxSizeMetric::Diagonal;
+        request.detail.subsampling = 2;
+        request.common.dilation_width = 4;
+        return request;
+    }
+};
+
+void CaseCageFileThreadsInProcess() {
+    EmbreeBaker baker;
+    const CageFileFixture fixture;
+    BakeRequest request = fixture.Request();
+    std::string reference;
+    for (std::uint32_t threads : {1u, 4u, std::max(1u, std::thread::hardware_concurrency())}) {
+        request.threads = threads;
+        const BakeResult r = Bake(baker, request);
+        CheckConservation(r);
+        CHECK(r.texels.cage_hit > 0 && r.dilated_texels > 0 && r.distances.ao_relative);
+        const std::string bytes = SerializeResult(r);
+        if (reference.empty()) {
+            reference = bytes;
+        } else {
+            CHECK(bytes == reference);
+        }
+    }
+}
+
 const std::vector<std::pair<std::string, std::function<void()>>>& Cases() {
     static const std::vector<std::pair<std::string, std::function<void()>>> cases = {
         {"sampling", CaseSampling},
@@ -1184,6 +1630,13 @@ const std::vector<std::pair<std::string, std::function<void()>>>& Cases() {
         {"dilation", CaseDilation},
         {"bevel_threads_in_process", CaseBevelThreadsInProcess},
         {"parameters", CaseParameters},
+        {"units", CaseUnits},
+        {"relative_distances", CaseRelativeDistances},
+        {"cage_file", CaseCageFile},
+        {"cage_file_threads_in_process", CaseCageFileThreadsInProcess},
+        {"linked_groups", CaseLinkedGroups},
+        {"bake_settings", CaseBakeSettings},
+        {"parameters_to_request", CaseParametersToRequest},
     };
     return cases;
 }
@@ -1229,8 +1682,9 @@ std::string Json(const BakeResult& r, const Capabilities& caps, const std::strin
 }
 
 /// The `bake` command's fixtures: `scene` (the sphere on the ground at 256², 64 rays, low as
-/// high), `scene_self` (the same with min_distance 0, where self hits occur) and `bevel` (the
-/// bevelled cube with highs and every path of decision 306 on).
+/// high), `scene_self` (the same with min_distance 0, where self hits occur), `bevel` (the
+/// bevelled cube with highs and every path of decision 306 on) and `cage_file` (the cube, its
+/// high and its cage from OBJ files with relative AO distances and a unit scale, decision 311).
 int BakeCommand(int argc, char** argv) {
     if (argc < 4) throw ValueError("bake needs <fixture> <threads>");
     const std::string fixture = argv[2];
@@ -1256,6 +1710,7 @@ int BakeCommand(int argc, char** argv) {
     EmbreeBaker baker(config);
     const BakeMesh sphere = fixtures::SphereOnGround();
     const Bevel bevel;
+    std::optional<CageFileFixture> cage_file;
     std::vector<std::uint8_t> mask;
     BakeRequest request;
     if (fixture == "scene" || fixture == "scene_self") {
@@ -1265,6 +1720,8 @@ int BakeCommand(int argc, char** argv) {
         request.ao.min_distance = fixture == "scene" ? 1e-4f : 0.0f;
     } else if (fixture == "bevel") {
         request = BevelDeterminismRequest(bevel, mask);
+    } else if (fixture == "cage_file") {
+        request = cage_file.emplace().Request();
     } else {
         throw ValueError("unknown fixture " + fixture);
     }

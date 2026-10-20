@@ -69,9 +69,15 @@ struct BakerConfig {
 
 inline constexpr std::uint32_t kTileSize = 16;
 inline constexpr std::uint32_t kMaxOutputSizeLog2 = 12;
-inline constexpr const char* kQualifiedIsa = "avx2";
+// The Embree pin lives in build.zig (`bake_flags`, item 2.1, decision 311).
+#if !defined(UZP_EMBREE_PINNED_VERSION) || !defined(UZP_EMBREE_PINNED_ISA) || !defined(UZP_EMBREE_PINNED_TASKING)
+#error "src/bake is built with build.zig's bake_flags, which pin the Embree package"
+#endif
+inline constexpr const char* kQualifiedIsa = UZP_EMBREE_PINNED_ISA;
 /// Embree's RTC_DEVICE_PROPERTY_VERSION of the pinned release.
-inline constexpr long kPinnedEmbreeVersion = 40401;
+inline constexpr long kPinnedEmbreeVersion = UZP_EMBREE_PINNED_VERSION;
+/// Embree's RTC_DEVICE_PROPERTY_TASKING_SYSTEM of the pinned package (1 = TBB).
+inline constexpr long kPinnedEmbreeTasking = UZP_EMBREE_PINNED_TASKING;
 
 class EmbreeBaker final : public IBaker {
 public:
@@ -85,8 +91,9 @@ public:
     Capabilities caps() const override { return caps_; }
 
     /// Raises `CapabilityError` (unqualified machine, Embree build, usage, size or the
-    /// `Automatic` cage release gap), `uzp::core::NotYetSupported` (`ApplyDiffusion`, a custom
-    /// cage without its meshes) or `uzp::core::ValueError` (invalid request or mesh) before any
+    /// `Automatic` cage release gap), `uzp::core::NotYetSupported` (`ApplyDiffusion`, a relative
+    /// distance without a box size metric) or `uzp::core::ValueError` (invalid request, mesh, unit
+    /// scale or bounds; a custom cage without one cage per low part) before any
     /// work; otherwise copies the request's meshes and starts the job. A job fails on vertex
     /// normals or a cage that cancel under a texel, an Embree failure or a worker that cannot
     /// be started: `Fail`, and no result.

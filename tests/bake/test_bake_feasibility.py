@@ -1,5 +1,5 @@
-"""CPU baker (phase3.1_baker-request-model, a permitted slice, not its acceptance; decisions 302
-and 306; `docs/architecture/06-baking.md` §1-§4 and §6).
+"""CPU baker (phase3.1_baker-request-model, permitted slices, not its acceptance; decisions 302,
+306 and 311; `docs/architecture/06-baking.md` §1-§4 and §6).
 
 `uzp-bake-feasibility-tests.exe` (`tests/bake/bake_feasibility_test.cpp`,
 `zig build bake-feasibility-tests`) holds the native cases with their analytic class counts and
@@ -49,6 +49,13 @@ NATIVE_CASES = (
     "dilation",  # 2.7, 3.4: DilationWidth outside the used surface, RAW kept
     "bevel_threads_in_process",  # 3.3: the bevelled cube with highs at 1, 4 and N threads
     "parameters",  # 2.8: the BakingParameters/Property model, one-transaction set()
+    "units",  # 2.7: distances in centimetres over the mesh's scale_to_internal, recorded
+    "relative_distances",  # 2.5: distances relative to the project mesh's bounding box
+    "cage_file",  # 2.5, 3.4: low, high and cage read from mesh files, cage vertices by index
+    "cage_file_threads_in_process",  # 3.3: the file-loaded cage scene at 1, 4 and N threads
+    "linked_groups",  # 2.10, 3.5: link groups, one transaction across linked sets
+    "bake_settings",  # 2.10: bake_settings {common, detail, per_baker} saved and loaded
+    "parameters_to_request",  # 2.8: BakingParameters to a BakeRequest
 )
 
 
@@ -96,12 +103,13 @@ def test_native_case(bake_tests: Path, case: str) -> None:
     assert f"PASS {case}".encode() in proc.stdout
 
 
-@pytest.mark.parametrize(("fixture", "tiles"), [("scene", 256), ("bevel", 32)])
+@pytest.mark.parametrize(("fixture", "tiles"), [("scene", 256), ("bevel", 32), ("cage_file", 32)])
 def test_bytes_equal_across_thread_counts(
     bake_tests: Path, tmp_path: Path, fixture: str, tiles: int
 ) -> None:
     """A fixture baked in three processes at 1, 4 and N workers: identical bytes. `bevel` is the
-    bevelled cube with highs and every path of decision 306 on."""
+    bevelled cube with highs and every path of decision 306 on; `cage_file` reads its meshes and
+    cage from OBJ files with relative AO distances and a unit scale (decision 311)."""
     hardware = os.cpu_count() or 1
     outputs = {}
     for threads in (1, 4, hardware):

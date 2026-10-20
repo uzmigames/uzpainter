@@ -351,6 +351,19 @@ const uzp_core_sources = [_][]const u8{
 };
 /// Warnings are errors in UzPainter's document model and its tests (never in vendored code).
 const uzp_core_flags = cxx_flags ++ [_][]const u8{ "-Wall", "-Wextra", "-Werror" };
+/// The CPU baker (`src/bake/`, phase3.1_baker-request-model item 2.1, decisions 302 and 311): the
+/// Embree package it is qualified on (`thirdparty/embree/ORIGIN.md`: release 4.4.1, the prebuilt
+/// x64 Windows DLL with TBB tasking), pinned here and checked against the loaded device before any
+/// bake: `RTC_DEVICE_PROPERTY_VERSION`, the device's `isa=` and `RTC_DEVICE_PROPERTY_TASKING_SYSTEM`
+/// (1 = TBB). No fast-math and no contraction, so every float operation of the baker is one IEEE
+/// operation whatever the target CPU.
+const bake_flags = uzp_core_flags ++ [_][]const u8{
+    "-fno-fast-math",
+    "-ffp-contract=off",
+    "-DUZP_EMBREE_PINNED_VERSION=40401",
+    "-DUZP_EMBREE_PINNED_ISA=\"avx2\"",
+    "-DUZP_EMBREE_PINNED_TASKING=1",
+};
 /// The compositor (`src/evaluator/`, P1-COMPOSITOR, `04-layer-stack-and-compositing.md` §7),
 /// relative to `src/`: compiled into `UzPainter.exe` and into `uzp-evaluator-tests.exe` over the
 /// render layer and the document model. Contraction is off so that every float operation of its
@@ -976,13 +989,13 @@ pub fn build(b: *std.Build) void {
     bake_tests_mod.linkLibrary(uzp_core_lib);
     bake_tests_mod.addCSourceFiles(.{
         .root = b.path("src"),
-        .files = &.{ "bake/bake_request.cpp", "bake/baker.cpp", "bake/baking_parameters.cpp", "bake/embree_api.cpp", "bake/embree_baker.cpp", "bake/sampling.cpp" },
-        .flags = &uzp_core_flags,
+        .files = &.{ "bake/bake_request.cpp", "bake/baker.cpp", "bake/baking_parameters.cpp", "bake/embree_api.cpp", "bake/embree_baker.cpp", "bake/mesh_inputs.cpp", "bake/sampling.cpp" },
+        .flags = &bake_flags,
     });
     bake_tests_mod.addCSourceFiles(.{
         .root = b.path("tests/bake"),
         .files = &.{"bake_feasibility_test.cpp"},
-        .flags = &uzp_core_flags,
+        .flags = &bake_flags,
     });
     const bake_tests_exe = b.addExecutable(.{
         .name = "uzp-bake-feasibility-tests",
@@ -1069,6 +1082,8 @@ pub fn build(b: *std.Build) void {
         .name = "uzp_mesh",
         .root_module = mesh_mod,
     });
+    // The CPU baker reads high and cage mesh files with the mesh loaders (decision 311).
+    bake_tests_mod.linkLibrary(mesh_lib);
 
     const mesh_tests_mod = b.createModule(.{
         .target = target,

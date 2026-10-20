@@ -1,0 +1,13 @@
+{
+  "id": 311,
+  "slug": "311-bake-units-links",
+  "title": "CPU baker slice 3: the Embree pin in build.zig, distances in centimetres over the mesh's unit scale, distances relative to a named bounding-box size, mesh-file inputs with the cage paired by vertex index, link groups and bake_settings as one transaction, and the parameter-to-request mapping; ApplyDiffusion stays refused; parity pending-evidence",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase3.1_baker-request-model",
+    "phase3.4_baker-ao",
+    "phase3.5_embree-bakers"
+  ],
+  "supersededBy": null
+}

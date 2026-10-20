@@ -8,6 +8,7 @@
 // claimed: every usage here is `pending-evidence`.
 
 #include <cstdint>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -55,8 +56,8 @@ const char* UsageName(MeshMapUsage usage);
 /// The task that owns the baker of `usage` (`phase3.2_baker-normal`, `phase3.4_baker-*`).
 std::string UsageOwnerTask(MeshMapUsage usage);
 
-/// `CageMode`. `CustomFile` takes the cage meshes in memory (`BakeRequest::cage`); loading them
-/// from a file is the caller's work.
+/// `CageMode`. `CustomFile` takes one cage mesh per low part (`BakeRequest::cage`), which
+/// `CageParts` (`mesh_inputs.h`) builds from a cage file.
 enum class CageMode { DistanceBased, Automatic, CustomFile };
 
 /// `FilterMethod` (Painter's "Match"): which high meshes a low part's primary rays may hit.
@@ -71,15 +72,17 @@ struct CommonSettings {
     bool apply_diffusion = false;
 };
 
-/// Detail (high-poly) settings, distances in mesh units (absolute, not relative to the bounding
-/// box). The distance-based primary ray starts `max_height` above the low surface along its
-/// normal and searches down to `max_depth` below it; a custom cage ray starts on the cage and
-/// searches to `max_depth` beyond the low surface (decision 306).
+/// Detail (high-poly) settings. The distance-based primary ray starts `max_height` above the low
+/// surface along its normal and searches down to `max_depth` below it; a custom cage ray starts on
+/// the cage and searches to `max_depth` beyond the low surface (decision 306). The distances are
+/// in the project's unit (centimetres) or, with `relative_to_bounding_box` (`RelativeScale`),
+/// fractions of the project mesh's bounding-box size (decision 311).
 struct DetailSettings {
     bool low_as_high = true;
     CageMode cage_mode = CageMode::DistanceBased;
     float max_height = 0.01f;
     float max_depth = 0.01f;
+    bool relative_to_bounding_box = false;
     /// `IgnoreBackface`: primary rays pass through the back faces of every high mesh.
     bool ignore_backface = false;
     FilterMethod filter_method = FilterMethod::Always;
@@ -92,19 +95,39 @@ struct DetailSettings {
 };
 
 /// AO settings: `secondary_rays` per primary hit (`NbSecondary`), occluders searched from
-/// `min_distance` to `max_distance` along each ray (mesh units).
+/// `min_distance` to `max_distance` along each ray: centimetres or, with
+/// `relative_to_bounding_box` (`MaxDistanceRelativeScale`), fractions of the bounding-box size.
 struct AoSettings {
     std::uint32_t secondary_rays = 64;
     float min_distance = 0.0f;
     float max_distance = 1.0f;
+    bool relative_to_bounding_box = false;
     Distribution distribution = Distribution::Cosine;
 };
+
+/// An axis-aligned box in mesh units (`lower` <= `upper` on every axis).
+struct BoundingBox {
+    Float3 lower;
+    Float3 upper;
+};
+
+/// What "the size of the bounding box" a relative distance is a fraction of means. Adobe's page
+/// says only that a distance of 1 equals the size of the project mesh's bounding box; which size
+/// is not established (decision 311), so a request names it and the parameter model never does.
+enum class BoxSizeMetric { Diagonal, LargestExtent };
 
 /// One bake: one texture set, its meshes, the enabled usages and their settings.
 struct BakeRequest {
     std::string texture_set;
     std::string input_revision;
     std::vector<MeshMapUsage> usages;
+    /// The mesh's `units.scale_to_internal` (centimetres per mesh unit, `12-mesh-import.md` §3):
+    /// an absolute distance d is d / scale_to_internal mesh units. Required (0 = not given).
+    double scale_to_internal = 0.0;
+    /// The project mesh's bounding box (every texture set's parts, mesh units) and its size
+    /// metric: required when a distance is relative to the bounding box.
+    std::optional<BoundingBox> project_bounds;
+    std::optional<BoxSizeMetric> box_size_metric;
     /// `OutputSize`: log2 of the width and height.
     std::uint32_t output_size_log2[2] = {8, 8};
     CommonSettings common;
@@ -188,6 +211,27 @@ struct SubsampleCounts {
     std::uint64_t hidden = 0;
 };
 
+/// The distances a bake used, recorded with its maps (`06-baking.md` §3, decision 311): the
+/// request's unit scale, whether each group was relative, the bounding-box size (mesh units; 0
+/// when no distance was relative) and the effective distances in mesh units.
+struct DistanceRecord {
+    double scale_to_internal = 0.0;
+    bool detail_relative = false;
+    bool ao_relative = false;
+    BoxSizeMetric box_size_metric = BoxSizeMetric::Diagonal;  // meaningful when box_size > 0
+    double box_size = 0.0;
+    float max_height = 0.0f;
+    float max_depth = 0.0f;
+    float ao_min_distance = 0.0f;
+    float ao_max_distance = 0.0f;
+};
+
+/// The effective mesh-unit distances of `request`: absolute distances divided by
+/// `scale_to_internal`, relative ones multiplied by the bounding-box size. Raises
+/// `uzp::core::ValueError` (no or invalid scale, no or invalid box) or `NotYetSupported` (a
+/// relative distance without a size metric).
+DistanceRecord EffectiveDistances(const BakeRequest& request);
+
 /// The baked AO map, its RAW map and its evidence maps (`06-baking.md` §4), row 0 at the top
 /// (v = 1). `ao_raw` is the escaped fraction of the rays of a texel's hit sub-samples,
 /// round(65535 * escaped / (hits * rays)) in integers; every other texel holds 0 and is told
@@ -213,13 +257,15 @@ struct BakeResult {
     SubsampleCounts subsamples;
     RayClassCounts rays;
     std::uint64_t dilated_texels = 0;
+    DistanceRecord distances;
     /// Baked on the explicit diagnostic path of an unqualified BVH build thread count: never
     /// evidence (decision 306). Not part of the canonical bytes.
     bool diagnostic_unqualified = false;
 };
 
-/// The canonical bytes of a result (little-endian; magic, sizes, the maps, then the counts): what
-/// the determinism proof compares across thread counts. `threads_used` is not part of it.
+/// The canonical bytes of a result (little-endian; magic `UZPBAKE3`, sizes, the maps, the counts,
+/// then the distance record): what the determinism proof compares across thread counts.
+/// `threads_used` is not part of it.
 std::string SerializeResult(const BakeResult& result);
 
 }  // namespace uzp::bake
