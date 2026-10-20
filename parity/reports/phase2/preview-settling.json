@@ -24,11 +24,11 @@
     },
     {
       "backend": "cpu",
-      "date": "2026-10-12",
-      "exe_sha256": "c4831f56dbaddd3b8269c7eaf53034413b51d0f229fb72c321b0927e9f618a73",
+      "date": "2026-10-19",
+      "exe_sha256": "ee810a0e0390fc85bf6d0643c4461b61a5991f899df20541b72aef82be2c82e9",
       "id": "painter_iray_unavailable",
       "result": "pass",
-      "seconds": 1.578
+      "seconds": 0.138
     },
     {
       "backend": "dx12",
@@ -60,8 +60,15 @@
     },
     {
       "backend": "dx12",
+      "date": "2026-10-19",
+      "exe_sha256": "ee810a0e0390fc85bf6d0643c4461b61a5991f899df20541b72aef82be2c82e9",
       "id": "wand_integration",
-      "result": "not_run"
+      "metrics": {
+        "baseline_export_s": 111.452,
+        "open_export_s": 123.921
+      },
+      "result": "pass",
+      "seconds": 279.377
     },
     {
       "backend": "vulkan",
@@ -71,8 +78,15 @@
     },
     {
       "backend": "dx12",
+      "date": "2026-10-19",
+      "exe_sha256": "ee810a0e0390fc85bf6d0643c4461b61a5991f899df20541b72aef82be2c82e9",
       "id": "wand_export_preview",
-      "result": "not_run"
+      "metrics": {
+        "baseline_export_s": 111.452,
+        "stalled_export_s": 92.503
+      },
+      "result": "pass",
+      "seconds": 118.247
     },
     {
       "backend": "vulkan",
