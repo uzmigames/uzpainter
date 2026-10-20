@@ -1,0 +1,11 @@
+{
+  "id": 332,
+  "slug": "332-texture-state-update-window",
+  "title": "TextureStateEvent UPDATE dispatches are compared as distinct (action, channel type) pairs within their causative window s7-s8; ADD and REMOVE stay exact per step",
+  "status": "accepted",
+  "date": "2026-10-20",
+  "relatedTasks": [
+    "phase1.24_python-api-facade"
+  ],
+  "supersededBy": null
+}
