@@ -7,11 +7,15 @@
 // modelled; everything else is refused before any work. Parity with Painter's bakers is NOT
 // claimed: every usage here is `pending-evidence`.
 
+#include <array>
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+#include "uzp_core/types/enums.h"
 
 namespace uzp::bake {
 
@@ -35,9 +39,12 @@ struct BakeMesh {
     std::vector<Float3> normals;
     std::vector<Float2> uvs;
     std::vector<std::uint32_t> indices;
+    /// MikkTSpace tangent xyz and sign, one per index/corner (not per vertex).
+    std::vector<std::array<float, 4>> corner_tangents;
+    bool normal_frame_supported = true;
 };
 
-/// Painter's ten `MeshMapUsage` bakers (`06-baking.md` §2). The CPU baker bakes `AO` only.
+/// Painter's ten `MeshMapUsage` bakers (`06-baking.md` §2). CPU: AO and Normal.
 enum class MeshMapUsage {
     Normal,
     WorldSpaceNormal,
@@ -105,6 +112,11 @@ struct AoSettings {
     Distribution distribution = Distribution::Cosine;
 };
 
+struct NormalSettings {
+    core::TangentSpace tangent_space = core::TangentSpace::PerVertex;
+    core::NormalMapFormat format = core::NormalMapFormat::OpenGL;
+};
+
 /// An axis-aligned box in mesh units (`lower` <= `upper` on every axis).
 struct BoundingBox {
     Float3 lower;
@@ -133,6 +145,7 @@ struct BakeRequest {
     CommonSettings common;
     DetailSettings detail;
     AoSettings ao;
+    NormalSettings normal;
     /// The texture set's low mesh parts. Where UV islands overlap, the lowest part index, then
     /// the lowest triangle index, wins.
     std::vector<const BakeMesh*> low;
@@ -164,6 +177,8 @@ struct Capabilities {
     /// Parity status of every usage: never `supported` until Tier 2b evidence exists.
     std::string parity_status;
     std::string parity_owner_task;
+    /// Per-usage owners; parity_owner_task retains the legacy AO owner.
+    std::map<MeshMapUsage, std::string> parity_owner_tasks;
 };
 
 /// The machine, the Embree build or the request is outside what the baker is qualified for.
@@ -248,6 +263,11 @@ struct BakeResult {
     std::uint32_t dilation_width = 0;
     std::vector<std::uint16_t> ao;
     std::vector<std::uint16_t> ao_raw;
+    /// RGB16 interleaved, zero on non-hit texels; no negative-Z repair.
+    std::vector<std::uint16_t> normal_raw;
+    std::vector<std::uint16_t> normal;
+    core::TangentSpace tangent_space = core::TangentSpace::PerVertex;
+    core::NormalMapFormat normal_format = core::NormalMapFormat::OpenGL;
     std::vector<std::uint8_t> texel_class;
     std::vector<std::uint8_t> coverage;
     std::vector<std::uint8_t> subsample_hits;
@@ -263,7 +283,8 @@ struct BakeResult {
     bool diagnostic_unqualified = false;
 };
 
-/// The canonical bytes of a result (little-endian; magic `UZPBAKE3`, sizes, the maps, the counts,
+/// The canonical bytes of a result (little-endian; AO-only keeps `UZPBAKE3`; Normal uses
+/// `UZPBAKE4` with usage flags, mode, format and RGB maps before the existing sizes/maps/counts,
 /// then the distance record): what the determinism proof compares across thread counts.
 /// `threads_used` is not part of it.
 std::string SerializeResult(const BakeResult& result);

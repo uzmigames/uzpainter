@@ -23,6 +23,7 @@
 
 #include "bake/bake_request.h"
 #include "mesh/gltf_import.h"
+#include "mesh/tangents.h"
 #include "mesh/texturing_mesh.h"
 
 namespace uzp::bake {
@@ -34,8 +35,17 @@ mesh::TexturingMesh ReadBakeMeshFile(std::string_view bytes, std::string_view fi
 
 /// The low parts of the texture set of material index `material`. Throws `core::ValueError` when
 /// no triangle uses it and `core::NotYetSupported` for an object transform that mirrors or is
-/// singular.
+/// singular. MikkTSpace runs on each complete object before the material split; each retained
+/// triangle corner keeps that tangent. Normal baking currently requires identity transforms.
 std::vector<BakeMesh> LowParts(const mesh::TexturingMesh& low, std::uint32_t material);
+
+/// For a validated, complete native low object, compute missing per-corner MikkTSpace tangents.
+/// Existing tangents from LowParts are retained, never recomputed after the material split.
+void EnsureNormalTangents(BakeMesh& low);
+
+/// Interpolate the retained low corners using the texturing mesh's frame operation.
+mesh::Frame InterpolateBakeFrame(const BakeMesh& low, std::uint32_t triangle,
+                                const std::array<float, 3>& weights, core::TangentSpace mode);
 
 /// One high mesh per object of `high` with at least one triangle.
 std::vector<BakeMesh> HighMeshes(const mesh::TexturingMesh& high);

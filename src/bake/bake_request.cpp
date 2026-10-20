@@ -53,7 +53,8 @@ DistanceRecord EffectiveDistances(const BakeRequest& request) {
     }
     d.scale_to_internal = scale;
     d.detail_relative = request.detail.relative_to_bounding_box;
-    d.ao_relative = request.ao.relative_to_bounding_box;
+    const bool has_ao = std::find(request.usages.begin(), request.usages.end(), MeshMapUsage::AO) != request.usages.end();
+    d.ao_relative = has_ao && request.ao.relative_to_bounding_box;
     if (d.detail_relative || d.ao_relative) {
         if (!request.project_bounds) {
             throw ValueError("a distance relative to the bounding box needs the project mesh's bounds");
@@ -84,8 +85,10 @@ DistanceRecord EffectiveDistances(const BakeRequest& request) {
     };
     d.max_height = effective(request.detail.max_height, d.detail_relative, "max_height");
     d.max_depth = effective(request.detail.max_depth, d.detail_relative, "max_depth");
-    d.ao_min_distance = effective(request.ao.min_distance, d.ao_relative, "min_distance");
-    d.ao_max_distance = effective(request.ao.max_distance, d.ao_relative, "max_distance");
+    if (has_ao) {
+        d.ao_min_distance = effective(request.ao.min_distance, d.ao_relative, "min_distance");
+        d.ao_max_distance = effective(request.ao.max_distance, d.ao_relative, "max_distance");
+    }
     return d;
 }
 
@@ -98,7 +101,17 @@ void PutLe(std::string& out, std::uint64_t value, int bytes) {
 }  // namespace
 
 std::string SerializeResult(const BakeResult& result) {
-    std::string out = "UZPBAKE3";
+    const bool has_normal = !result.normal_raw.empty();
+    std::string out = has_normal ? "UZPBAKE4" : "UZPBAKE3";
+    if (has_normal) {
+        PutLe(out, (!result.ao_raw.empty() ? 1u : 0u) | 2u, 1);
+        PutLe(out, result.tangent_space == core::TangentSpace::PerVertex ? 0u : 1u, 1);
+        PutLe(out, result.normal_format == core::NormalMapFormat::OpenGL ? 0u : 1u, 1);
+        PutLe(out, result.normal_raw.size(), 8);
+        for (std::uint16_t v : result.normal_raw) PutLe(out, v, 2);
+        PutLe(out, result.normal.size(), 8);
+        for (std::uint16_t v : result.normal) PutLe(out, v, 2);
+    }
     PutLe(out, result.width, 4);
     PutLe(out, result.height, 4);
     PutLe(out, result.tile_size, 4);

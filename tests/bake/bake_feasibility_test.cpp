@@ -29,6 +29,7 @@
 #include <thread>
 #include <utility>
 #include <vector>
+#include <xmmintrin.h>
 
 #include "bake/bake_request.h"
 #include "bake/baker.h"
@@ -143,17 +144,24 @@ void CheckConservation(const BakeResult& r) {
         CHECK(r.subsample_hits[i] <= r.coverage[i]);
         if (!IsHit(r.texel_class[i])) {
             // Nothing is filled: a texel without a hit carries no value, hit or ray count.
-            CHECK_EQ(r.ao_raw[i], 0);
+            if (!r.ao_raw.empty()) CHECK_EQ(r.ao_raw[i], 0);
             CHECK_EQ(r.subsample_hits[i], 0);
-            CHECK_EQ(r.back_face_rays[i], 0);
-            CHECK_EQ(r.self_hit_rays[i], 0);
+            if (!r.back_face_rays.empty()) CHECK_EQ(r.back_face_rays[i], 0);
+            if (!r.self_hit_rays.empty()) CHECK_EQ(r.self_hit_rays[i], 0);
         } else {
             CHECK(r.subsample_hits[i] > 0);
         }
         // Dilation writes only outside the used surface.
-        if (cls != TexelClass::Uncovered) CHECK_EQ(r.ao[i], r.ao_raw[i]);
-        back += r.back_face_rays[i];
-        self += r.self_hit_rays[i];
+        if (!r.ao.empty() && cls != TexelClass::Uncovered) CHECK_EQ(r.ao[i], r.ao_raw[i]);
+        if (!r.normal_raw.empty()) {
+            CHECK_EQ(r.normal_raw.size(), texels * 3);
+            CHECK(r.normal == r.normal_raw);
+            if (!IsHit(r.texel_class[i])) {
+                for (std::size_t c = 0; c < 3; ++c) CHECK_EQ(r.normal_raw[3 * i + c], 0);
+            }
+        }
+        if (!r.back_face_rays.empty()) back += r.back_face_rays[i];
+        if (!r.self_hit_rays.empty()) self += r.self_hit_rays[i];
         covered += r.coverage[i];
         hits += r.subsample_hits[i];
     }
@@ -334,7 +342,13 @@ void CaseCapabilityErrors() {
     CHECK(baker.caps().parity_status == "pending-evidence");
     CHECK(baker.caps().parity_owner_task == "phase3.4_baker-ao");
     CHECK(baker.caps().embree_version == "4.4.1");
-    CHECK(baker.caps().usages.size() == 1 && baker.caps().usages[0] == MeshMapUsage::AO);
+    const Capabilities capabilities = baker.caps();
+    CHECK(capabilities.usages.size() == 2);
+    for (MeshMapUsage usage : {MeshMapUsage::AO, MeshMapUsage::Normal}) {
+        CHECK(std::find(capabilities.usages.begin(), capabilities.usages.end(), usage) != capabilities.usages.end());
+    }
+    CHECK(capabilities.parity_owner_tasks.at(MeshMapUsage::AO) == "phase3.4_baker-ao");
+    CHECK(capabilities.parity_owner_tasks.at(MeshMapUsage::Normal) == "phase3.2_baker-normal");
 
     BakeRequest request = PlaneRequest(low);
     request.usages = {MeshMapUsage::AO, MeshMapUsage::Thickness};
@@ -342,9 +356,9 @@ void CaseCapabilityErrors() {
     CHECK(Contains(message, "phase3.4_baker-thickness"));
 
     request = PlaneRequest(low);
-    request.usages = {MeshMapUsage::Normal};
+    request.usages = {MeshMapUsage::WorldSpaceNormal};
     message = ExpectThrow<CapabilityError>([&] { baker.bake(request); });
-    CHECK(Contains(message, "phase3.2_baker-normal"));
+    CHECK(Contains(message, "WorldSpaceNormal"));
 
     request = PlaneRequest(low);
     request.detail.cage_mode = CageMode::Automatic;
@@ -1603,6 +1617,8 @@ void CaseCageFileThreadsInProcess() {
     }
 }
 
+#include "normal_bake_cases.h"
+
 const std::vector<std::pair<std::string, std::function<void()>>>& Cases() {
     static const std::vector<std::pair<std::string, std::function<void()>>> cases = {
         {"sampling", CaseSampling},
@@ -1638,6 +1654,18 @@ const std::vector<std::pair<std::string, std::function<void()>>>& Cases() {
         {"linked_groups", CaseLinkedGroups},
         {"bake_settings", CaseBakeSettings},
         {"parameters_to_request", CaseParametersToRequest},
+        {"normal_plane", CaseNormalPlane},
+        {"normal_curved_modes", CaseNormalCurvedModes},
+        {"normal_mirrored", CaseNormalMirrored},
+        {"normal_directx", CaseNormalDirectX},
+        {"normal_negative_z", CaseNormalNegativeZ},
+        {"normal_high_interpolation", CaseNormalHighInterpolation},
+        {"normal_hit_classes", CaseNormalHitClasses},
+        {"normal_singular_failure", CaseNormalSingularFailure},
+        {"normal_usage_isolation", CaseNormalUsageIsolation},
+        {"normal_refusals", CaseNormalRefusals},
+        {"normal_material_split", CaseNormalMaterialSplit},
+        {"normal_retained_corners", CaseNormalRetainedCorners},
     };
     return cases;
 }
@@ -1710,6 +1738,8 @@ int BakeCommand(int argc, char** argv) {
     config.allow_unqualified_build_threads_diagnostic = diagnostic;
     EmbreeBaker baker(config);
     const BakeMesh sphere = fixtures::SphereOnGround();
+    const BakeMesh normal_low = NormalTriangle();
+    const BakeMesh normal_high = NormalHigh({0.3f, -0.2f, 0.9f});
     const Bevel bevel;
     std::optional<CageFileFixture> cage_file;
     std::vector<std::uint8_t> mask;
@@ -1719,6 +1749,10 @@ int BakeCommand(int argc, char** argv) {
         request.texture_set = fixture;
         request.ao.secondary_rays = 64;
         request.ao.min_distance = fixture == "scene" ? 1e-4f : 0.0f;
+    } else if (fixture == "normal") {
+        request = NormalRequest(normal_low, normal_high);
+        request.output_size_log2[0] = request.output_size_log2[1] = 6;
+        request.normal.tangent_space = uzp::core::TangentSpace::PerFragment;
     } else if (fixture == "bevel") {
         request = BevelDeterminismRequest(bevel, mask);
     } else if (fixture == "cage_file") {

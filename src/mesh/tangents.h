@@ -70,6 +70,10 @@ struct Frame {
 Frame InterpolateFrame(const TexturingMesh& mesh, const Triangle& triangle, const std::array<float, 3>& weights,
                        core::TangentSpace mode = kDefaultTangentSpace);
 
+/// The same interpolation for three retained corners, without a temporary mesh allocation.
+Frame InterpolateFrame(const std::array<Corner, 3>& corners, const std::array<float, 3>& weights,
+                       core::TangentSpace mode = kDefaultTangentSpace);
+
 /// `normal` (world space) in `frame`: the exact inverse of `FromTangentSpace`, normalized.
 Float3 ToTangentSpace(const Frame& frame, const Float3& normal);
 

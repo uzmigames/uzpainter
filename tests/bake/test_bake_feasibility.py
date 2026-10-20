@@ -56,6 +56,18 @@ NATIVE_CASES = (
     "linked_groups",  # 2.10, 3.5: link groups, one transaction across linked sets
     "bake_settings",  # 2.10: bake_settings {common, detail, per_baker} saved and loaded
     "parameters_to_request",  # 2.8: BakingParameters to a BakeRequest
+    "normal_plane",
+    "normal_curved_modes",
+    "normal_mirrored",
+    "normal_directx",
+    "normal_negative_z",
+    "normal_high_interpolation",
+    "normal_hit_classes",
+    "normal_singular_failure",
+    "normal_usage_isolation",
+    "normal_refusals",
+    "normal_material_split",
+    "normal_retained_corners",
 )
 
 
@@ -103,7 +115,9 @@ def test_native_case(bake_tests: Path, case: str) -> None:
     assert f"PASS {case}".encode() in proc.stdout
 
 
-@pytest.mark.parametrize(("fixture", "tiles"), [("scene", 256), ("bevel", 32), ("cage_file", 32)])
+@pytest.mark.parametrize(
+    ("fixture", "tiles"), [("scene", 256), ("bevel", 32), ("cage_file", 32), ("normal", 16)]
+)
 def test_bytes_equal_across_thread_counts(
     bake_tests: Path, tmp_path: Path, fixture: str, tiles: int
 ) -> None:

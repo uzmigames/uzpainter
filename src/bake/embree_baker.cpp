@@ -14,6 +14,8 @@
 #include <vector>
 
 #include "bake/sampling.h"
+#include "bake/mesh_inputs.h"
+#include "mesh/tangents.h"
 #include "uzp_core/types/errors.h"
 
 namespace uzp::bake {
@@ -87,12 +89,14 @@ std::string VersionText(long version) {
 }  // namespace
 
 EmbreeBaker::EmbreeBaker(BakerConfig config) : config_(std::move(config)), core_(std::make_shared<Core>()) {
-    caps_.usages = {MeshMapUsage::AO};
+    caps_.usages = {MeshMapUsage::AO, MeshMapUsage::Normal};
     caps_.max_output_size_log2 = kMaxOutputSizeLog2;
     caps_.determinism_class = "repeatable-on-one-build-and-cpu-isa";
     caps_.isa = kQualifiedIsa;
     caps_.parity_status = "pending-evidence";
     caps_.parity_owner_task = "phase3.4_baker-ao";
+    caps_.parity_owner_tasks = {{MeshMapUsage::AO, "phase3.4_baker-ao"},
+                                {MeshMapUsage::Normal, "phase3.2_baker-normal"}};
 
     const CpuFeatures features = config_.cpu_features ? *config_.cpu_features : DetectCpuFeatures();
     std::string reason = UnqualifiedIsaReason(features);
@@ -159,6 +163,25 @@ std::int64_t EmbreeBaker::live_embree_objects() const { return core_->live_objec
 namespace {
 
 bool Finite(Float3 v) { return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z); }
+bool Finite(mesh::Float3 v) { return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z); }
+
+bool HasUsage(const BakeRequest& request, MeshMapUsage usage) {
+    return std::find(request.usages.begin(), request.usages.end(), usage) != request.usages.end();
+}
+
+void ValidateTangents(const BakeMesh& mesh) {
+    if (mesh.corner_tangents.empty()) return;
+    if (mesh.corner_tangents.size() != mesh.indices.size()) {
+        throw ValueError("Normal needs one tangent per triangle corner");
+    }
+    for (const auto& t : mesh.corner_tangents) {
+        if (!std::isfinite(t[0]) || !std::isfinite(t[1]) || !std::isfinite(t[2]) ||
+            (t[0] == 0.0f && t[1] == 0.0f && t[2] == 0.0f) ||
+            (t[3] != 1.0f && t[3] != -1.0f)) {
+            throw ValueError("Normal tangents need finite nonzero xyz and sign +1 or -1");
+        }
+    }
+}
 
 void ValidateMesh(const BakeMesh& mesh, bool needs_uvs) {
     const std::string what = "mesh '" + mesh.name + "'";
@@ -208,6 +231,8 @@ bool NonNegative(float v) { return std::isfinite(v) && v >= 0.0f; }
 
 /// Checks `request` before any work and returns its effective distances (decision 311).
 DistanceRecord ValidateRequest(const Capabilities& caps, const BakeRequest& request) {
+    const bool has_ao = HasUsage(request, MeshMapUsage::AO);
+    const bool has_normal = HasUsage(request, MeshMapUsage::Normal);
     if (request.usages.empty()) throw ValueError("the request enables no usage");
     for (MeshMapUsage usage : request.usages) {
         if (std::find(caps.usages.begin(), caps.usages.end(), usage) == caps.usages.end()) {
@@ -236,8 +261,8 @@ DistanceRecord ValidateRequest(const Capabilities& caps, const BakeRequest& requ
         throw ValueError("max_height and max_depth must be finite and >= 0");
     }
     const AoSettings& ao = request.ao;
-    if (!NonNegative(ao.min_distance) || !std::isfinite(ao.max_distance) ||
-        !(ao.min_distance < ao.max_distance)) {
+    if (has_ao && (!NonNegative(ao.min_distance) || !std::isfinite(ao.max_distance) ||
+        !(ao.min_distance < ao.max_distance))) {
         throw ValueError("AO distances need 0 <= min_distance < max_distance, finite");
     }
     // In mesh units: absolute distances over the unit scale, relative ones times the box size.
@@ -245,18 +270,38 @@ DistanceRecord ValidateRequest(const Capabilities& caps, const BakeRequest& requ
     if (detail.cage_mode == CageMode::DistanceBased && !(distances.max_height + distances.max_depth > 0.0f)) {
         throw ValueError("the distance-based cage needs max_height + max_depth > 0 (in mesh units)");
     }
-    if (!(distances.ao_min_distance < distances.ao_max_distance)) {
+    if (has_ao && !(distances.ao_min_distance < distances.ao_max_distance)) {
         throw ValueError("AO distances need min_distance < max_distance in mesh units");
     }
     const std::uint32_t k = detail.subsampling;
     if (k != 1 && k != 2 && k != 4 && k != 8) throw ValueError("subsampling must be 1, 2, 4 or 8");
-    if (ao.secondary_rays == 0 || static_cast<std::uint64_t>(ao.secondary_rays) * k * k > 65535) {
+    if (has_ao && (ao.secondary_rays == 0 || static_cast<std::uint64_t>(ao.secondary_rays) * k * k > 65535)) {
         throw ValueError("secondary_rays must be >= 1 and secondary_rays x subsampling^2 <= 65535");
+    }
+    if (has_normal) {
+        if (k != 1) throw NotYetSupported("Normal SubSampling > 1 has no established resolve rule (phase3.2_baker-normal)");
+        if (request.common.dilation_width != 0) {
+            throw NotYetSupported("Normal DilationWidth > 0 has no established padding rule (phase3.2_baker-normal)");
+        }
+        if (request.normal.tangent_space != core::TangentSpace::PerVertex &&
+            request.normal.tangent_space != core::TangentSpace::PerFragment) {
+            throw ValueError("invalid Normal tangent space");
+        }
+        if (request.normal.format != core::NormalMapFormat::OpenGL &&
+            request.normal.format != core::NormalMapFormat::DirectX) {
+            throw ValueError("invalid Normal map format");
+        }
     }
     if (request.low.empty()) throw ValueError("the request has no low mesh part");
     for (const BakeMesh* low : request.low) {
         if (!low) throw ValueError("the request has a null low mesh part");
         ValidateMesh(*low, true);
+        if (has_normal) {
+            if (!low->normal_frame_supported) {
+                throw NotYetSupported("Normal with a nonidentity object transform is not established (phase3.2_baker-normal)");
+            }
+            ValidateTangents(*low);
+        }
     }
     if (detail.low_as_high) {
         if (!request.high.empty()) throw ValueError("LowAsHigh bakes the low parts onto themselves: no high mesh");
@@ -340,6 +385,12 @@ std::shared_ptr<const JobInputs> CopyInputs(const BakeRequest& request, const Di
     inputs->request.ao.min_distance = distances.ao_min_distance;
     inputs->request.ao.max_distance = distances.ao_max_distance;
     inputs->low = CopyMeshes(request.low);
+    if (HasUsage(request, MeshMapUsage::Normal)) {
+        for (BakeMesh& low : inputs->low) {
+            EnsureNormalTangents(low);
+            ValidateTangents(low);
+        }
+    }
     inputs->high = CopyMeshes(request.high);
     inputs->cage = CopyMeshes(request.cage);
     inputs->request.low = Pointers(inputs->low);
@@ -681,12 +732,37 @@ std::string TexelText(std::uint32_t x, std::uint32_t y) {
     return "texel (" + std::to_string(x) + ", " + std::to_string(y) + ")";
 }
 
+std::uint16_t EncodeNormal(float x) {
+    const float encoded = std::clamp(x * 0.5f + 0.5f, 0.0f, 1.0f);
+    return static_cast<std::uint16_t>(std::floor(encoded * 65535.0f + 0.5f));
+}
+
+Float3 TangentNormal(const BakeMesh& low, std::uint32_t tri, const UvWeights& w,
+                     core::TangentSpace mode, Vec3d high_normal) {
+    const mesh::Frame frame = InterpolateBakeFrame(
+        low, tri, {static_cast<float>(w.w0), static_cast<float>(w.w1), static_cast<float>(w.w2)}, mode);
+    const float determinant = mesh::v3::Dot(frame.t, mesh::v3::Cross(frame.b, frame.n));
+    if (!Finite(frame.t) || !Finite(frame.b) || !Finite(frame.n) ||
+        !std::isfinite(determinant) || determinant == 0.0f) {
+        throw ValueError("Normal has a singular or non-finite interpolated tangent frame");
+    }
+    const mesh::Float3 normal = mesh::ToTangentSpace(
+        frame, {static_cast<float>(high_normal.x), static_cast<float>(high_normal.y),
+                static_cast<float>(high_normal.z)});
+    if (!Finite(normal) || !(mesh::v3::Dot(normal, normal) > 0.0f)) {
+        throw ValueError("Normal tangent transform produced a zero or non-finite normal");
+    }
+    return {normal.x, normal.y, normal.z};
+}
+
 void BakeTexel(const Context& ctx, std::uint32_t x, std::uint32_t y, TileCounts& counts) {
     BakeResult& out = ctx.result;
     const BakeRequest& request = ctx.request;
     const DetailSettings& detail = request.detail;
     const AoSettings& ao = request.ao;
     const std::size_t index = static_cast<std::size_t>(y) * out.width + x;
+    const bool has_ao = !out.ao_raw.empty();
+    const bool has_normal = !out.normal_raw.empty();
     const std::uint32_t k = detail.subsampling;
     const bool hidden = !request.hidden_mask.empty() && request.hidden_mask[index] != 0;
     const bool cage = detail.cage_mode == CageMode::CustomFile;
@@ -784,6 +860,15 @@ void BakeTexel(const Context& ctx, std::uint32_t x, std::uint32_t y, TileCounts&
                                  hit_mesh.name + "' cancel at " + TexelText(x, y));
             }
 
+            if (has_normal) {
+                const Float3 normal = TangentNormal(low, tri, w, request.normal.tangent_space, nh);
+                out.normal_raw[3 * index] = EncodeNormal(normal.x);
+                const std::uint16_t green = EncodeNormal(normal.y);
+                out.normal_raw[3 * index + 1] = request.normal.format == core::NormalMapFormat::DirectX
+                    ? static_cast<std::uint16_t>(65535u - green) : green;
+                out.normal_raw[3 * index + 2] = EncodeNormal(normal.z);
+            }
+            if (!has_ao) continue;
             // AO secondary rays, in sample order; one Hammersley set over the texel's sub-samples.
             const std::uint32_t texel_rays = ao.secondary_rays * k * k;
             for (std::uint32_t s = 0; s < ao.secondary_rays; ++s) {
@@ -819,11 +904,13 @@ void BakeTexel(const Context& ctx, std::uint32_t x, std::uint32_t y, TileCounts&
     } else if (hits > 0) {
         cls = cage ? TexelClass::CageHit : TexelClass::StraightHit;
         ++(cage ? counts.texels.cage_hit : counts.texels.straight_hit);
-        const std::uint64_t rays = static_cast<std::uint64_t>(hits) * ao.secondary_rays;
-        out.ao_raw[index] = static_cast<std::uint16_t>((escaped * 65535u + rays / 2) / rays);
         out.subsample_hits[index] = static_cast<std::uint8_t>(hits);
-        out.back_face_rays[index] = static_cast<std::uint16_t>(back_rays);
-        out.self_hit_rays[index] = static_cast<std::uint16_t>(self_rays);
+        if (has_ao) {
+            const std::uint64_t rays = static_cast<std::uint64_t>(hits) * ao.secondary_rays;
+            out.ao_raw[index] = static_cast<std::uint16_t>((escaped * 65535u + rays / 2) / rays);
+            out.back_face_rays[index] = static_cast<std::uint16_t>(back_rays);
+            out.self_hit_rays[index] = static_cast<std::uint16_t>(self_rays);
+        }
     } else if (back_hits > 0) {
         cls = TexelClass::BackFaceHit;
         ++counts.texels.back_face_hit;
@@ -932,22 +1019,31 @@ BakeResult RunBake(EmbreeBaker::Core& core, const BakerConfig& config, const Job
     const FixedFpState fp_state;
     const BakeRequest& request = inputs.request;
     const EmbreeApi& api = *core.api;
+    const bool has_ao = HasUsage(request, MeshMapUsage::AO);
+    const bool has_normal = HasUsage(request, MeshMapUsage::Normal);
 
     BakeResult result;
     result.width = 1u << request.output_size_log2[0];
     result.height = 1u << request.output_size_log2[1];
     result.tile_size = kTileSize;
-    result.rays_per_texel = request.ao.secondary_rays;
+    result.rays_per_texel = has_ao ? request.ao.secondary_rays : 0;
     result.subsampling = request.detail.subsampling;
     result.dilation_width = request.common.dilation_width;
     result.distances = inputs.distances;
     const std::size_t texels = static_cast<std::size_t>(result.width) * result.height;
-    result.ao_raw.assign(texels, 0);
+    if (has_ao) {
+        result.ao_raw.assign(texels, 0);
+        result.back_face_rays.assign(texels, 0);
+        result.self_hit_rays.assign(texels, 0);
+    }
+    if (has_normal) {
+        result.normal_raw.assign(3 * texels, 0);
+        result.tangent_space = request.normal.tangent_space;
+        result.normal_format = request.normal.format;
+    }
     result.texel_class.assign(texels, 0);
     result.coverage.assign(texels, 0);
     result.subsample_hits.assign(texels, 0);
-    result.back_face_rays.assign(texels, 0);
-    result.self_hit_rays.assign(texels, 0);
 
     const std::vector<const BakeMesh*> high = request.detail.low_as_high ? request.low : request.high;
     const Matching matching = MatchMeshes(request, high);
@@ -1034,7 +1130,8 @@ BakeResult RunBake(EmbreeBaker::Core& core, const BakerConfig& config, const Job
         Add(result.subsamples, counts.subsamples);
         Add(result.rays, counts.rays);
     }
-    result.dilated_texels = Dilate(result, request.common.dilation_width, control);
+    if (has_ao) result.dilated_texels = Dilate(result, request.common.dilation_width, control);
+    if (has_normal) result.normal = result.normal_raw;
     return result;
 }
 
@@ -1049,6 +1146,9 @@ JobHandle EmbreeBaker::bake(const BakeRequest& request) {
         }
         diagnostic = true;
     }
+    // Tangent generation inherits the same floating-point state as the texel workers.
+    std::optional<FixedFpState> fp_state;
+    if (HasUsage(request, MeshMapUsage::Normal)) fp_state.emplace();
     const DistanceRecord distances = ValidateRequest(caps_, request);
     std::shared_ptr<const JobInputs> inputs = CopyInputs(request, distances);
     return JobHandle::Start([core = core_, config = config_, inputs, diagnostic](JobControl& control) {

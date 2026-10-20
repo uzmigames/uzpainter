@@ -18,6 +18,33 @@ Given the bevelled cube low/high pair and its private golden
 When the Tier 2b comparison runs on the owner's machine
 Then the hit and coverage evidence MUST match first, and the normal map MUST be equal or cite an approved exception
 
+### Requirement: Native Normal Request Boundary
+The native CPU Normal calculation SHALL retain MikkTSpace tangents per corner before material partitioning, use the existing inverse-frame transform, and encode RGB16 with the Phase 0 float32 operation order. DirectX SHALL complement the encoded OpenGL green code. Native requests with Normal SHALL currently refuse subsampling other than 1, nonzero dilation and imported low objects with nonidentity transforms before starting a job; these are explicit unresolved domains, not parity acceptance.
+
+#### Scenario: Material partition preserves the frame
+Given a source object whose shared corners receive contributions from faces with different materials
+When `LowParts` selects one material
+Then its retained corner tangents MUST equal the complete object's MikkTSpace results
+And the Normal baker MUST NOT recalculate those tangents on the material subset
+
+#### Scenario: Independent usages and failure publication
+Given a native request containing Normal without AO
+When AO settings contain values outside the AO domain
+Then they MUST NOT affect Normal validation or computation, no secondary rays SHALL be cast, and AO maps SHALL remain empty
+And a singular or non-finite interpolated tangent frame MUST fail the job without publishing any result
+
+#### Scenario: DirectX code conversion
+Given an OpenGL Normal hit whose encoded green code is 32768
+When the same request selects DirectX
+Then its green code MUST be 32767 and its red and blue codes MUST remain unchanged
+And non-hit texels MUST retain zero codes and their separate classifications
+
+#### Scenario: Canonical bytes and qualification
+Given an AO-only request and a request that also contains Normal
+When their results are serialized
+Then the AO-only representation MUST remain `UZPBAKE3`, and the Normal result MUST use `UZPBAKE4` with usage and configuration metadata
+And both usages MUST remain `pending-evidence` with their individual owner tasks until Tier 2b acceptance
+
 ### Requirement: Low Z Is An Inspection Signal
 The normal baker MUST NOT replace any texel because of a low or negative normal Z; such texels SHALL be counted and reported.
 

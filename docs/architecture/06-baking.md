@@ -72,6 +72,42 @@ This persistence contract does not establish Painter's unrecorded property types
 defaults, enum integers or regrouping rules. Those refusals and each remaining
 baker's ownership continue to apply.
 
+### 3.2 Native Normal calculation
+
+The CPU request accepts `Normal`, `AO`, or both. For `Normal`, it interpolates the
+high mesh's authored corner normals at the primary hit, normalizes that vector,
+and expresses it through the inverse of the low mesh's interpolated MikkTSpace
+frame. The frame is not orthonormalized. `normal.tangent_space` selects
+`PerVertex` (the default from decision 031) or `PerFragment`. `LowParts` computes
+MikkTSpace over the complete source object before selecting its material; the
+result keeps one tangent and sign per triangle corner. A direct native `BakeMesh`
+without tangents is treated as one complete object and computes them before the
+job starts. Singular or non-finite frames fail the job without a result.
+
+`normal_raw` and `normal` contain interleaved RGB16 codes. Each OpenGL component
+uses the Phase 0 prototype's float32 operation order:
+`e = clamp(n * 0.5f + 0.5f, 0, 1); code = floor(e * 65535.0f + 0.5f)`.
+`normal.format = DirectX` complements the encoded green code, `65535 - G`,
+including the neutral value `32768 -> 32767`. Negative Z remains negative;
+misses, hidden texels and back-face hits keep zero codes and their separate
+classification. No neutral fill or repair is implicit.
+
+This native domain requires `SubSampling = 1`, `DilationWidth = 0` and identity
+transforms on imported low objects. Normal supersample reduction, padding and
+transformed frames require further evidence; requests outside this domain are
+refused before a job starts. Existing cage, diffusion and relative-distance
+refusals remain. A Normal-only request ignores AO settings, casts no secondary
+rays and leaves AO maps empty. A combined request shares primary hits and retains
+the AO calculation.
+
+AO-only canonical results retain `UZPBAKE3`; results containing Normal use
+`UZPBAKE4` with usage and normal configuration metadata. Thread counts remain
+outside the canonical bytes. Both usages remain `pending-evidence`, owned by
+`phase3.4_baker-ao` and `phase3.2_baker-normal` respectively. This native calculation
+does not expose baking through Python/MCP, establish unrecorded defaults or
+certify Painter equality. Phase 0's calibrated residual of up to one RGB16 code
+does not satisfy the Tier 2b equality gate.
+
 ## 4. Outputs and evidence
 
 Per bake and usage: the **compatible map** (what Painter would produce) plus evidence maps that never alter it: `raw` (before dilation), `hit` (straight / cage hit), `coverage` (texel centre, conservative used surface), `miss` (used-surface texels without a hit), `extension` (dilated texels), per-class counts and the per-part Z<0 statistics the pipeline asks for (`docs/analysis/assets3d-pipeline/07-lessons-and-pitfalls.md` §3). AO reports misses from hit evidence, distinct from real holes, hidden surfaces and low AO (BAK-04); a second pass with wider distances applied only to missed texels is a documented option.

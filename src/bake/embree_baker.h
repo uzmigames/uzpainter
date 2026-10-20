@@ -2,7 +2,7 @@
 
 // `EmbreeBaker`, the CPU baker of phase3.1_baker-request-model (`docs/architecture/06-baking.md`
 // §1-§4, decisions 302 and 306): a deterministic ray-cast core on the vendored Embree 4.4.1 and
-// the AO usage on it, behind `IBaker`.
+// AO and tangent-space Normal usages on it, behind `IBaker`.
 //
 // Determinism: the BVH is built by one Embree thread; texels are cast in fixed 16 x 16 tiles that
 // any number of workers take in any order, each texel's sub-samples and rays are addressed by
@@ -96,7 +96,8 @@ public:
     /// scale or bounds; a custom cage without one cage per low part) before any
     /// work; otherwise copies the request's meshes and starts the job. A job fails on vertex
     /// normals or a cage that cancel under a texel, an Embree failure or a worker that cannot
-    /// be started: `Fail`, and no result.
+    /// be started: `Fail`, and no result. Normal additionally refuses supersampling, dilation
+    /// and unsupported transformed frames; a singular interpolated frame fails the job.
     JobHandle bake(const BakeRequest& request) override;
 
     /// Embree scenes and geometries this baker holds right now (every bake releases its own).

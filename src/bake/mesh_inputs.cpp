@@ -3,7 +3,9 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
 #include <string>
+#include <xmmintrin.h>
 
 #include "mesh/fbx_import.h"
 #include "mesh/mesh_import.h"
@@ -31,6 +33,20 @@ mesh::TexturingMesh ReadBakeMeshFile(std::string_view bytes, std::string_view fi
 namespace {
 
 bool IsIdentity(const mesh::Matrix4& m) { return m == mesh::kIdentity; }
+
+void ComputeBakeTangents(mesh::TexturingMesh& source) {
+    for (const auto& object : source.objects) {
+        if (object.triangles.size() > static_cast<std::size_t>(std::numeric_limits<int>::max() / 3)) {
+            throw ValueError("Normal object exceeds MikkTSpace's signed corner-count limit");
+        }
+    }
+    struct FixedFpState {
+        unsigned int saved = _mm_getcsr();
+        FixedFpState() { _mm_setcsr(0x1F80u); }
+        ~FixedFpState() { _mm_setcsr(saved); }
+    } fp_state;
+    mesh::ComputeTangents(source);
+}
 
 /// An object's transform to scene space and its normal matrix (the inverse transpose of its 3 x 3
 /// part, as the cofactor matrix over the determinant).
@@ -85,9 +101,11 @@ std::uint32_t MaterialOf(const mesh::TexturingMesh& source, const mesh::Triangle
 /// The bake mesh of `object`'s triangles that `keep` accepts, one vertex per corner; empty when
 /// none is kept.
 template <typename Keep>
-BakeMesh PartOf(const mesh::TexturingMesh& source, const mesh::Object& object, Keep keep) {
+BakeMesh PartOf(const mesh::TexturingMesh& source, const mesh::Object& object, Keep keep,
+                bool keep_tangents = false) {
     BakeMesh part;
     part.name = object.name;
+    part.normal_frame_supported = IsIdentity(object.transform);
     const ObjectFrame frame(object);
     for (const mesh::Triangle& triangle : object.triangles) {
         if (!keep(triangle)) continue;
@@ -97,6 +115,7 @@ BakeMesh PartOf(const mesh::TexturingMesh& source, const mesh::Object& object, K
             part.positions.push_back(frame.Point(source.positions[corner.position]));
             part.normals.push_back(frame.Normal(corner.normal));
             part.uvs.push_back({corner.uv0.u, corner.uv0.v});
+            if (keep_tangents) part.corner_tangents.push_back(corner.tangent);
         }
     }
     return part;
@@ -105,13 +124,61 @@ BakeMesh PartOf(const mesh::TexturingMesh& source, const mesh::Object& object, K
 }  // namespace
 
 std::vector<BakeMesh> LowParts(const mesh::TexturingMesh& low, std::uint32_t material) {
+    mesh::TexturingMesh framed = low;
+    ComputeBakeTangents(framed);
     std::vector<BakeMesh> parts;
-    for (const mesh::Object& object : low.objects) {
-        BakeMesh part = PartOf(low, object, [&](const mesh::Triangle& t) { return MaterialOf(low, t) == material; });
+    for (const mesh::Object& object : framed.objects) {
+        BakeMesh part = PartOf(framed, object,
+                              [&](const mesh::Triangle& t) { return MaterialOf(framed, t) == material; }, true);
         if (!part.indices.empty()) parts.push_back(std::move(part));
     }
     if (parts.empty()) throw ValueError("no triangle of the mesh uses material " + std::to_string(material));
     return parts;
+}
+
+void EnsureNormalTangents(BakeMesh& low) {
+    if (!low.corner_tangents.empty()) return;
+    if (low.indices.size() > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+        throw ValueError("Normal object exceeds MikkTSpace's signed corner-count limit");
+    }
+    mesh::TexturingMesh source;
+    source.positions.reserve(low.positions.size());
+    for (const Float3& p : low.positions) source.positions.push_back({p.x, p.y, p.z});
+    source.corners.reserve(low.indices.size());
+    mesh::Object object;
+    object.name = low.name;
+    object.triangles.reserve(low.indices.size() / 3);
+    for (std::size_t i = 0; i < low.indices.size(); i += 3) {
+        mesh::Triangle triangle;
+        for (std::size_t j = 0; j < 3; ++j) {
+            const std::uint32_t vertex = low.indices[i + j];
+            const Float3& n = low.normals[vertex];
+            const Float2& uv = low.uvs[vertex];
+            mesh::Corner corner;
+            corner.position = vertex;
+            corner.normal = {n.x, n.y, n.z};
+            corner.uv0 = {uv.x, uv.y};
+            triangle.corners[j] = static_cast<std::uint32_t>(source.corners.size());
+            source.corners.push_back(corner);
+        }
+        object.triangles.push_back(triangle);
+    }
+    source.objects.push_back(std::move(object));
+    ComputeBakeTangents(source);
+    low.corner_tangents.reserve(source.corners.size());
+    for (const mesh::Corner& corner : source.corners) low.corner_tangents.push_back(corner.tangent);
+}
+
+mesh::Frame InterpolateBakeFrame(const BakeMesh& low, std::uint32_t triangle,
+                                const std::array<float, 3>& weights, core::TangentSpace mode) {
+    std::array<mesh::Corner, 3> corners;
+    const std::size_t first = static_cast<std::size_t>(triangle) * 3;
+    for (std::size_t i = 0; i < 3; ++i) {
+        const Float3& n = low.normals[low.indices[first + i]];
+        corners[i].normal = {n.x, n.y, n.z};
+        corners[i].tangent = low.corner_tangents[first + i];
+    }
+    return mesh::InterpolateFrame(corners, weights, mode);
 }
 
 std::vector<BakeMesh> HighMeshes(const mesh::TexturingMesh& high) {

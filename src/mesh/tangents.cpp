@@ -75,11 +75,18 @@ void ComputeTangents(TexturingMesh& mesh) {
 
 Frame InterpolateFrame(const TexturingMesh& mesh, const Triangle& triangle, const std::array<float, 3>& weights,
                        core::TangentSpace mode) {
+    const std::array<Corner, 3> corners = {mesh.corners[triangle.corners[0]], mesh.corners[triangle.corners[1]],
+                                         mesh.corners[triangle.corners[2]]};
+    return InterpolateFrame(corners, weights, mode);
+}
+
+Frame InterpolateFrame(const std::array<Corner, 3>& corners, const std::array<float, 3>& weights,
+                       core::TangentSpace mode) {
     using namespace v3;
     Frame frame{};
     float sign = 0.0f;
     for (std::size_t i = 0; i < 3; ++i) {
-        const Corner& c = mesh.corners[triangle.corners[i]];
+        const Corner& c = corners[i];
         const Float3 t = CornerTangent(c);
         frame.t = Add(frame.t, Scale(t, weights[i]));
         frame.n = Add(frame.n, Scale(c.normal, weights[i]));

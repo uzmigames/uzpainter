@@ -12,6 +12,7 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
 
 ### Added
 
+- Native CPU Normal calculation (`phase3.2_baker-normal`): retained MikkTSpace corner frames, inverse-frame projection, RGB16 OpenGL/DirectX encoding and shared primary hits with AO. The explicit native domain is one sample, zero dilation and identity imported low transforms; Painter parity and Python/MCP baking remain pending.
 - Normal comparison inspection (`phase3.2_baker-normal` item 2.3): reports count finite candidate vectors with negative decoded Z without repairing samples or changing verdicts. Historical reports remain valid; normal-baker implementation and parity acceptance remain open.
 - MCP server contract suite (task `phase2.8_mcp-server`, decision 186; still open on items 1.1–1.4): the Phase 2 contract cases run on stdio and HTTP, the children's tests are tagged with their cases, and the results go into `parity/reports/phase2/mcp-contract.json` with its own guard rule.
 - Painter batch D (decision 180): Session O (OCIO), the wand R9 (`phase1/tier1/wand-v1`, maps identical across r1, r1-repeat and r2), `export-presets-legacy` and four API probes are recorded and admitted. `phase1-srgb-uniform-decode` was stopped at the time cap and its request stays. The stability report counts 192 goldens, 133 stable.
