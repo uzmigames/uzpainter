@@ -172,6 +172,10 @@ ROUTED = {
             "widget_type",
         )
     ),
+    # Demoted by 92f9ca13 when the trace began crediting the receiver's class: no P22-B request
+    # sets a fill effect's projection; its evidence owner is the gap register
+    # (phase5.3_parity-report-capability-gaps, inventory note).
+    LS + "FillEffectNode.set_projection_parameters",
 }
 # Decision 189: exercised by decision 188's requests.
 DECISION_188 = {
