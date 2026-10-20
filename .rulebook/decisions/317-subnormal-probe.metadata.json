@@ -1,0 +1,12 @@
+{
+  "id": 317,
+  "slug": "317-subnormal-probe",
+  "title": "Painter's handling of subnormal float32 values is measured as a black box by one Tier 0 request, `blend-subnormal-f32`, before the CPU reference or the GPU paths change; designed, recording pending",
+  "status": "accepted",
+  "date": "2026-10-20",
+  "relatedTasks": [
+    "phase3.1_vulkan-compute-parity",
+    "phase1.14_compositor-core"
+  ],
+  "supersededBy": null
+}

@@ -10,14 +10,16 @@ import struct
 import zlib
 from fractions import Fraction
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
 
 from tools.parity.envelope.registry import current_envelope
 from tools.parity.guard.guard import load_index, run_guard, worktree_snapshot
+from tools.parity.recorder import vocabulary as ps
 from tools.parity.recorder.capture import decode_png
-from tools.parity.recorder.job import load_job
+from tools.parity.recorder.job import EXPORT, load_job
 from tools.parity.schemas import REPO_ROOT, Schema, load_json, validation_errors
 from tools.parity.store.store import locate
 from tools.parity.tier0_semantics import request_fixtures as rf
@@ -25,6 +27,8 @@ from tools.parity.tier0_semantics.corpus import FIXTURE_DIR
 from tools.parity.tier0_semantics.recording_requests import (
     OCIO_SETTING,
     REQUEST_FIXTURES,
+    SUBNORMAL_MODES,
+    blend_subnormal,
     ocio_goldens,
     padding_normal_combine_probe,
     probe_groups,
@@ -32,6 +36,7 @@ from tools.parity.tier0_semantics.recording_requests import (
     request_root,
     requested_goldens,
     srgb_bitmap_variants,
+    subnormal_slots,
 )
 
 
@@ -716,3 +721,66 @@ def test_normal_combine_probe_separates_the_mesh_map_height_and_channel() -> Non
         for c in (0, 128)
     ]
     assert all(not (a & b) for i, a in enumerate(quadrants) for b in quadrants[i + 1 :])
+
+
+def f32_bits(value: float) -> int:
+    return int(struct.unpack("<I", struct.pack("<f", value))[0])
+
+
+def test_subnormal_bitmaps_hold_the_exact_operands() -> None:
+    """Decision 317: R holds every ordered pair of the 16 values, one per 16 x 16 block (acc
+    the row's value, src the column's); G follows decision 313's three classes per texel (acc
+    by column, src by row); B locates the block with normal values; every pattern survives
+    the file bit for bit, subnormals and -0 included."""
+    bitmaps = REPO_ROOT / FIXTURE_DIR / "bitmaps"
+    for layer in rf.SUBNORMAL_LAYERS:
+        width, height, pixels = exr_rgb(bitmaps / f"subnormal-{layer}.exr")
+        assert (width, height) == (256, 256)
+        bits = np.array([[f32_bits(c) for c in p] for p in pixels], np.uint32).reshape(256, 256, 3)
+        assert np.array_equal(bits, rf.subnormal_bits(layer))
+        for by in range(16):
+            for bx in range(16):
+                block = bits[by * 16 : by * 16 + 16, bx * 16 : bx * 16 + 16]
+                own = rf.SUBNORMAL_VALUES[by if layer == "acc" else bx]
+                assert (block[:, :, 0] == own).all()
+                i = 16 * by + bx
+                locator = f32_bits((i if layer == "acc" else 256 - i) / 256)
+                assert (block[:, :, 2] == locator).all()
+        for y in (0, 1, 2, 77, 255):
+            for x in (0, 1, 2, 130, 255):
+                g = int(bits[y, x, 1])
+                exponent = g >> 23  # the sign bit is clear: decision 313's operands are >= 0
+                kind = (x if layer == "acc" else y) % 3
+                if kind == 0:
+                    assert exponent == 0 and g != 0
+                elif kind == 1:
+                    assert exponent == 1
+                else:
+                    assert g == 0 or 127 - 24 <= exponent < 127
+
+
+def test_subnormal_probe_covers_every_mode_at_both_opacities_beside_its_controls() -> None:
+    """Decision 317: 64 slots, s0 User0/User1 and s7 User6/User7 the controls, the 30 modes at
+    opacity 1 and 0.7 between them; the lower fill holds every slot but the upper-only control,
+    the upper fill every slot but the lower-only one; both read with Nearest filtering; the
+    upper bitmap is the Normal mesh map; one passthrough OpenEXR 32f export of nine maps."""
+    slots = subnormal_slots()
+    assert len(slots) == 64 and len(SUBNORMAL_MODES) == 30 and "Disable" not in SUBNORMAL_MODES
+    roles = [role for _, _, role in slots]
+    assert roles[:2] == ["src", "acc"] == roles[62:]
+    assert roles[2:62] == [(m, o) for m in SUBNORMAL_MODES for o in (1.0, 0.7)]
+    steps = blend_subnormal().sequence.steps
+
+    def calls(call: str) -> list[dict[str, Any]]:
+        return [s["args"] for s in steps if s["call"] == call]
+
+    assert {a["blending_mode"] for a in calls(ps.SET_BLENDING_MODE)} == {"Normal", *SUBNORMAL_MODES}
+    assert [a["filtering_mode"] for a in calls(ps.SET_PROJECTION)] == ["Nearest"] * 16
+    assert calls(ps.SET_MESH_MAP) == [{"usage": "Normal", "resource_step": 11}]
+    exports = calls(EXPORT)
+    assert [(e["file_format"], e["bit_depth"], e["padding"]) for e in exports] == [
+        ("exr", "32f", "passthrough")
+    ]
+    assert exports[0]["maps"] == [f"documentMap/user{i}:RGB" for i in range(8)] + [
+        "meshMap/normal_base:RGB"
+    ]

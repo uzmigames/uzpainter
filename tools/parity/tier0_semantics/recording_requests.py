@@ -16,7 +16,8 @@ and P-tie (decision 157), the other 21 inferred template bases (decision 168), d
 sRGB bitmap minification and decision 169's L8 material channels, decision 210's ring-sign probes
 and a position-encoded seam probe (decision 216), decision 225's sRGB minification on random
 content, decision 266's kernel-code padding probes, decision 272's tie-order sweeps and decision
-293's Normal mesh-map combination probe, and decision 314's glTF preset recording R-314.
+293's Normal mesh-map combination probe, decision 314's glTF preset recording R-314, and
+decision 317's subnormal float32 probe.
 
 Colour management: every golden runs under Legacy (Painter started without `OCIO`) except the
 three that name `OCIO` in `applied_settings` (`export-ocio-encode`, `export-presets-ocio`,
@@ -35,6 +36,7 @@ from tools.parity.recorder import vocabulary as ps
 from tools.parity.recorder.job import EXPORT
 from tools.parity.tier0_semantics import request_fixtures as rf
 from tools.parity.tier0_semantics.corpus import (
+    BLEND_FAMILIES,
     FIXTURE_DIR,
     FIXTURES,
     GOLDEN_PREFIX,
@@ -329,6 +331,19 @@ for _name, _kind, _generate in (
         _kind,
         f"{FIXTURE_DIR}/bitmaps/normal-combine-{_name}.png",
         _generate,
+    )
+
+
+# Decision 317's subnormal probe: the lower and upper layers' float32 bitmaps.
+def subnormal_generator(layer: str) -> Generate:
+    return lambda: rf.subnormal_bitmap(layer)
+
+
+for _layer in rf.SUBNORMAL_LAYERS:
+    REQUEST_FIXTURES[f"subnormal-{_layer}"] = (
+        "image",
+        f"{FIXTURE_DIR}/bitmaps/subnormal-{_layer}.exr",
+        subnormal_generator(_layer),
     )
 for _group, _probes in probe_groups().items():
     for _probe in _probes:
@@ -1724,6 +1739,76 @@ def padding_normal_combine_probe() -> Golden:
     )
 
 
+# --- Decision 317: Painter's handling of subnormal float32 operands --------------------------
+
+SUBNORMAL_MODES = tuple(m for family in BLEND_FAMILIES.values() for m in family if m != "Disable")
+SUBNORMAL_OPACITIES = (1.0, 0.7)
+SUBNORMAL_MAPS = [*KERNEL_MAPS, "meshMap/normal_base:RGB"]
+# A slot's role: a blend (mode, opacity) of the upper layer over the lower one, or a control
+# holding one layer alone ("src" the upper, "acc" the lower).
+SubnormalRole = tuple[str, float] | str
+
+
+def subnormal_slots() -> list[tuple[str, str, SubnormalRole]]:
+    """Decision 317's 64 (texture set, channel, role) slots of the 4x2 grid, in the order s0
+    User0..User7, s1 User0..: s0 User0 the upper layer alone, s0 User1 the lower layer alone,
+    then each of the 30 modes at opacity 1 and 0.7, then on s7 User6 and User7 the two
+    controls again."""
+    roles: list[SubnormalRole] = ["src", "acc"]
+    roles += [(mode, opacity) for mode in SUBNORMAL_MODES for opacity in SUBNORMAL_OPACITIES]
+    roles += ["src", "acc"]
+    sets = MESH_SETS["grid4x2"]
+    return [(sets[i // 8], KERNEL_CHANNELS[i % 8], role) for i, role in enumerate(roles)]
+
+
+def blend_subnormal() -> Golden:
+    """Decision 317: what Painter does with subnormal float32 operands, read through the blend
+    stack, a single-layer control and a bound mesh map."""
+    s = start("grid4x2")
+    s.channels(tuple((channel, "RGB32F") for channel in KERNEL_CHANNELS))
+    res = s.imports("subnormal-acc", "subnormal-src")
+    s.add(ps.SET_MESH_MAP, usage="Normal", resource_step=res["subnormal-src"])
+    slots = subnormal_slots()
+    for texture_set in MESH_SETS["grid4x2"]:
+        own = [(channel, role) for name, channel, role in slots if name == texture_set]
+        lower = s.fill([c for c, r in own if r != "src"], position="top", texture_set=texture_set)
+        projection(s, lower, "Nearest")
+        for channel, role in own:
+            if role != "src":
+                s.bitmap(lower, channel, res["subnormal-acc"])
+                s.blend(lower, channel, "Normal", 1.0)
+        upper = s.fill([c for c, r in own if r != "acc"], above_step=lower)
+        projection(s, upper, "Nearest")
+        for channel, role in own:
+            if role != "acc":
+                mode, opacity = role if isinstance(role, tuple) else ("Normal", 1.0)
+                s.bitmap(upper, channel, res["subnormal-src"])
+                s.blend(upper, channel, mode, opacity)
+    export(s, SUBNORMAL_MAPS, EXR32F, "passthrough", repeat=False)
+    return Golden(
+        "blend-subnormal-f32",
+        "tier0/blend/subnormal",
+        "Decision 317's subnormal probe (decision 313's finding: the GPU flushes subnormal "
+        "float32 operands, the CPU reference keeps them), exploratory, under Legacy at 256 px on "
+        "the 4x2 plane grid, User0-User7 RGB32F on every set. Two authored float32 OpenEXR "
+        "bitmaps, the lower layer's and the upper layer's: R holds every ordered pair of 16 "
+        "values (+0, -0, subnormals 2^-149, 3 2^-149, 2^-127, the largest and their negatives, "
+        "FLT_MIN, FLT_MIN + 1 ulp, 1.5 FLT_MIN, -FLT_MIN, 0.25, 0.5, 1, -0.25), one pair per "
+        "16 x 16 texel block; G per texel decision 313's operand classes (a subnormal, a normal "
+        "in [FLT_MIN, 2 FLT_MIN), a value k/2^24); B normal values locating the block. Per set "
+        "a lower fill (the lower bitmap, Normal at opacity 1) and an upper fill above it (the "
+        "upper bitmap), both with Nearest filtering at scale 1. Per channel, the upper fill's "
+        "mode and opacity: every blend mode but Disable at opacity 1 and 0.7, in order; s0 "
+        "User0 and s7 User6 the upper fill alone (Normal at 1 on the empty stack), s0 User1 and "
+        "s7 User7 the lower fill alone. The upper bitmap is also bound as the Normal mesh map of "
+        "every set (no layer stack between import and export). User0-User7 and normal_base at "
+        "OpenEXR 32f, passthrough padding, one export step.",
+        "grid4x2",
+        ["grid4x2", "subnormal-acc", "subnormal-src"],
+        s,
+    )
+
+
 # --- Decision 174 item 6: bilinear minification of an sRGB bitmap ------------------------------
 
 SRGB_MINIFY_SOURCES = ("srgb8-ramp", "field-a")
@@ -1900,7 +1985,8 @@ def later_goldens() -> list[Golden]:
     then decision 266's kernel-code padding probes, then decision 272's tie-order sweeps, then
     decision 278's concave seam-gate probes and decision 289's far-side hinge and
     window-side probes, then decision 293's Normal mesh-map combination probe, then decision
-    298's corner-reach probe, then decision 314's glTF preset recording (Legacy, then OCIO)."""
+    298's corner-reach probe, then decision 314's glTF preset recording (Legacy, then OCIO),
+    then decision 317's subnormal probe."""
     return [
         srgb_bitmap_variants(),
         *(template_base(t) for t in INFERRED_BASE_TEMPLATES),
@@ -1923,6 +2009,7 @@ def later_goldens() -> list[Golden]:
         padding_corner_reach_probe(),
         export_presets_gltf(ocio=False),
         export_presets_gltf(ocio=True),
+        blend_subnormal(),
     ]
 
 

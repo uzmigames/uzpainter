@@ -2346,3 +2346,68 @@ def gltf_preset_probes(root: str) -> dict[str, Config]:
 def recipe(data: Config) -> bytes:
     """One configuration as an authored recipe (JSON, LF, sorted keys)."""
     return (json.dumps(data, indent=2, sort_keys=True) + "\n").encode()
+
+
+# --- Decision 317: subnormal float32 operands --------------------------------------------------
+
+# Two 256 px float32 bitmaps, the lower (acc) and the upper (src) layer of decision 317's blend
+# probe. Each component has its own role:
+#   R: per 16 x 16 texel block (bx, by), acc = SUBNORMAL_VALUES[by] and src = SUBNORMAL_VALUES[bx]:
+#      every ordered pair of the table, uniform inside its block.
+#   G: per texel, decision 313's operand classes, non-negative as in its sweep: class 0 a
+#      subnormal, class 1 a normal in [FLT_MIN, 2 FLT_MIN), class 2 a value k/2^24 in [0, 1);
+#      acc takes class x mod 3, src class y mod 3 (x the column, y the row from the top), so
+#      every pair of classes occurs.
+#   B: per block i = 16 by + bx, acc = i/256 and src = (256 - i)/256: normal values that locate
+#      the block and check that the path is exact on normal float32 values.
+SUBNORMAL_SIZE = 256
+SUBNORMAL_BLOCK = 16
+SUBNORMAL_VALUES = (
+    0x00000000,  # +0
+    0x80000000,  # -0
+    0x00000001,  # the smallest subnormal, 2^-149
+    0x00000003,  # 3 2^-149 (0.7 of it rounds)
+    0x00400000,  # 2^-127
+    0x007FFFFF,  # the largest subnormal
+    0x80000001,  # -2^-149
+    0x807FFFFF,  # minus the largest subnormal
+    0x00800000,  # FLT_MIN, the smallest normal, 2^-126
+    0x00800001,  # FLT_MIN + 1 ulp (minus FLT_MIN: 2^-149)
+    0x00C00000,  # 1.5 FLT_MIN (times 0.5 or 0.7: subnormal)
+    0x80800000,  # -FLT_MIN
+    0x3E800000,  # 0.25
+    0x3F000000,  # 0.5
+    0x3F800000,  # 1
+    0xBE800000,  # -0.25
+)
+SUBNORMAL_LAYERS = ("acc", "src")
+SUBNORMAL_SEEDS = {"acc": 20261019, "src": 20261317}
+
+
+def subnormal_bits(layer: str) -> npt.NDArray[np.uint32]:
+    """The float32 bit patterns of decision 317's `layer` bitmap, (row, column, R G B)."""
+    n, block = SUBNORMAL_SIZE, SUBNORMAL_BLOCK
+    rows, columns = np.indices((n, n), dtype=np.uint32)
+    by, bx = rows // block, columns // block
+    values = np.array(SUBNORMAL_VALUES, dtype=np.uint32)
+    acc = layer == "acc"
+    bits = np.empty((n, n, 3), dtype=np.uint32)
+    bits[:, :, 0] = values[by if acc else bx]
+    texel = rows * np.uint32(n) + columns
+    k = texel * np.uint32(2654435761) + np.uint32(SUBNORMAL_SEEDS[layer])  # modulo 2^32
+    mantissa = k & np.uint32(0x007FFFFF)
+    unit = ((k >> np.uint32(8)).astype(np.float64) / 2.0**24).astype(np.float32)
+    kind = (columns if acc else rows) % np.uint32(3)
+    bits[:, :, 1] = np.where(
+        kind == 0,
+        mantissa | np.uint32(1),
+        np.where(kind == 1, np.uint32(0x00800000) + mantissa, unit.view(np.uint32)),
+    )
+    index = (by * np.uint32(n // block) + bx).astype(np.float64)
+    locator = (index if acc else n - index) / n
+    bits[:, :, 2] = locator.astype(np.float32).view(np.uint32)
+    return bits
+
+
+def subnormal_bitmap(layer: str) -> bytes:
+    return exr_float_rgb(subnormal_bits(layer).view(np.float32))
