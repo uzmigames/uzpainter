@@ -2,9 +2,12 @@
 computations (`python/FACADE.md` §9; 10 §4; task phase1.21_pyapi-dispatcher-lifecycle; decision
 109).
 
-A transition changes the state first, then delivers its event (`event.emit_sync`), so a handler
-reads the state Painter's handlers read (Tier 0 `lifecycle-events`): `BusyStatusChanged(True)`
-sees `is_busy()` true, `ProjectEditionEntered` sees `is_in_edition_state()` true.
+A transition changes the state first, then delivers its event, so a handler reads the state
+Painter's handlers read (Tier 0 `lifecycle-events`): `BusyStatusChanged(True)` sees `is_busy()`
+true, `ProjectEditionEntered` sees `is_in_edition_state()` true. Busy events are delivered during
+the call (`event.emit_sync`). `ProjectEditionEntered` after a create or open is queued and
+delivered once the call returns, and any queued entry is flushed before the edition state changes
+again (P21-F, P21-G; decision 319).
 
 - **Busy.** Nested busy sections (a create, open or close, a mesh reload, an export) count; the
   first entry delivers `BusyStatusChanged(True)` and the last exit `BusyStatusChanged(False)`,

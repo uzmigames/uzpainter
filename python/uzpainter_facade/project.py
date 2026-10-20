@@ -276,7 +276,8 @@ def discard_unsaved() -> None:
 
 def is_busy() -> bool:
     """Whether UzPainter is busy: a project is loading or closing, a mesh is reloading or an
-    export runs (an export deferred while engine computations are disabled included)."""
+    export runs. An explicit export finishes while engine computations are disabled (R10,
+    decision 319), so none waits deferred."""
     return host.is_busy()
 
 
