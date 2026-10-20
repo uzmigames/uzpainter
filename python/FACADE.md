@@ -11,7 +11,7 @@ Task `phase1.20_pyapi-facade` (child of `phase1.24_python-api-facade`, P1-PYAPI)
 |---|---|
 | `substance_painter/` | Painter's documented modules. Each one only re-exports names, so a module holds documented symbols and nothing else. `__version__ = "0.3.7"` and `_version.py` give the API level (10 §4 Versions row). `_version` is the one private name. |
 | `substance_painter_plugins/` | `path`, `plugins`, `start_plugin`, `close_plugin`, `is_plugin_started`, `reload_plugin`, `startup_module_names`, `plugin_module_names`, `load_startup_modules`, `close_all_plugins`, `update_sys_path`. They load non-UI `startup/`, `plugins/` and `modules/` folders (`uzpainter_facade/plugins.py`). |
-| `uzpainter_facade/` | The implementation, pure Python over the native `uzpainter` (`src/python/PYAPI.md`): `state` (per-interpreter state, one transaction per call), `host` (busy, edition and engine-computation state, §9), `event` (the event classes and the dispatcher), `colour`, `ocio_srgb` (Painter's measured OCIO sRGB decode, §4), `nodes` (layerstack and source), `textureset`, `resource`, `project`, `export`, `levels`, `display` (§10), `js`, `ui`, `async_utils`, `plugins`. |
+| `uzpainter_facade/` | The implementation, pure Python over the native `uzpainter` (`src/python/PYAPI.md`): `state` (per-interpreter state, one transaction per call), `host` (busy, edition and engine-computation state, §9), `event` (the event classes and the dispatcher), `colour`, `ocio_srgb` (Painter's measured OCIO sRGB decode, §4), `nodes` (layerstack and source), `textureset`, `baking` (the bake parameters), `resource`, `project`, `export`, `levels`, `display` (§10), `js`, `ui`, `async_utils`, `plugins`. |
 
 `zig build pyapi-tests` and `zig build painter` install the `.py` files into `bin/python/`. That folder is on the embedded interpreter's search path (`src/python/python313._pth`).
 
@@ -25,9 +25,10 @@ The repository's mypy run cannot include `python/`. On its path, `substance_pain
 
 ## 2. Surface
 
-- The facade provides the documented symbols of the Phase 1 subset. It also provides the documented symbols whose native counterpart raises `NotYetSupported` or `UnsupportedProcedural`: `baking`, `display`, the smart and procedural inserts, `SourceSubstance` and the material sources.
+- The facade provides the documented symbols of the Phase 1 subset. It also provides the documented symbols whose native counterpart raises `NotYetSupported` or `UnsupportedProcedural`: the bake and the link groups of `baking`, `display`, the smart and procedural inserts, `SourceSubstance` and the material sources.
 - A documented symbol with neither is absent and raises `AttributeError`, so `hasattr` keeps working. The capability manifest (phase1.22) lists it as a release gap (decision 107 §1).
 - `TextureSet`, `Stack` and `Channel` hold their native handle and resolve it on every call.
+- `baking.BakingParameters` holds its native handle too (`src/python/PYAPI.md`, `baking`). `common()` and `baker(usage)` return the native `properties.Property` handles, so a `Property` is one class in both packages. `BakingParameters.set` is an edit call: the project then needs saving. Its refusals are decision 323's, each a `NotYetSupported` before any change. `tests/python/test_pyapi_baking.py` compares the defaults with the Tier 0 golden `tier0/defaults-templates/baking-defaults` on the owner's machine (phase3.1_baker-request-model item 3.1).
 - A node holds its uid (`Node(uid)`, as Painter's constructor takes it).
 - Projection and levels parameters are dataclasses, as Painter documents them.
 

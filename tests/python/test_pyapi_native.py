@@ -482,7 +482,7 @@ def test_unknown_attribute_and_stale_handle(run: Run) -> None:
 LATER_PHASE = [
     ("uzpainter.baking", "bake_async", "phase3.5_embree-bakers"),
     ("uzpainter.baking", "bake_selected_textures_async", "phase3.5_embree-bakers"),
-    ("uzpainter.baking", "BakingParameters", "phase3.5_embree-bakers"),
+    ("uzpainter.baking", "set_linked_group", "phase3.5_embree-bakers"),
 ]
 
 

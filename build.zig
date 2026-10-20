@@ -210,6 +210,7 @@ const app_sources = [_][]const u8{
 /// `interpreter.cpp` are in `app_sources`), relative to `src/`: compiled with `-Werror` into
 /// `UzPainter.exe` and into `uzp-pyapi-tests.exe`.
 const pyapi_sources = [_][]const u8{
+    "python/bind_baking.cpp",
     "python/bind_color.cpp",
     "python/bind_core.cpp",
     "python/bind_diagnostics.cpp",
@@ -372,7 +373,8 @@ const bake_flags = uzp_core_flags ++ [_][]const u8{
 /// module that compiles `bake/baking_parameters.cpp` adds it through `EmbedInputs` (decision 147).
 const bake_catalog_sources = [_][]const u8{"bake/baking_catalog.cpp"};
 /// The bake parameter model behind the MCP Baking tools (`src/supervisor/typed_tools.cpp`, item 2.11,
-/// decision 323), relative to `src/`: compiled into `UzPainter.exe` without Embree or the CPU baker.
+/// decision 323) and `uzpainter.baking` (`src/python/bind_baking.cpp`), relative to `src/`: compiled
+/// into `UzPainter.exe` and `uzp-pyapi-tests.exe` without Embree or the CPU baker.
 const bake_parameter_sources = [_][]const u8{ "bake/bake_request.cpp", "bake/baking_parameters.cpp", "bake/baking_project.cpp" };
 /// The compositor (`src/evaluator/`, P1-COMPOSITOR, `04-layer-stack-and-compositing.md` §7),
 /// relative to `src/`: compiled into `UzPainter.exe` and into `uzp-evaluator-tests.exe` over the
@@ -1725,6 +1727,9 @@ pub fn build(b: *std.Build) void {
     });
     pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &pyapi_sources, .flags = &pyapi_flags });
     pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &asset_library_sources, .flags = &pyapi_flags });
+    // `uzpainter.baking` binds the bake parameter model (`python/bind_baking.cpp`).
+    pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &bake_parameter_sources, .flags = &uzp_core_flags });
+    embed_inputs.add(pyapi_tests_mod, "src", &bake_catalog_sources, &uzp_core_flags);
     // The capture (`python/capture.cpp`) builds the preview's scene and pass.
     embed_inputs.add(pyapi_tests_mod, "src", &preview_sources, &evaluator_flags);
     pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &preview_scene_sources, .flags = &pyapi_flags });

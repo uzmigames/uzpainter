@@ -35,6 +35,7 @@ The table is `assets/defaults/baking.json` (decision 323).
 - **How the model reads it.** `src/bake/baking_parameters.*` embeds the table and builds `Property` from it.
 - **What the model refuses.** `Property.properties()` raises `NotYetSupported`: Painter's meta properties carry its descriptive text, which is not reproduced. A default Painter does not state (`OutputSize`, `TonemappingBounds`) and a value outside a key's range raise `NotYetSupported` too.
 - **The local check.** `python -m tools.bake.bake_defaults check [--model <dump>]` compares the table with the record in the private store, read only. With `--model`, it also compares the native model's dump (`uzp-baking-project-tests catalog`) with the table. `tests/bake/test_bake_defaults.py` and `tests/bake/test_baking_project.py` run both.
+- **The Python surface.** `substance_painter.baking.BakingParameters` and `properties.Property` bind the model (`src/python/bind_baking.cpp`, `python/uzpainter_facade/baking.py`): `from_texture_set`, `common()`, `baker(usage)`, `set()`, the `Property` getters and the fresh texture set's baking state. The refusals above hold there too, and the bake and the link groups stay release gaps (phase3.5_embree-bakers). `tests/python/test_pyapi_baking.py` replays the Tier 0 golden through the recorder's own Painter-side code and compares every captured field exactly, the refused ones named (item 3.1).
 
 ## 3. Semantics
 

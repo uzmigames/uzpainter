@@ -268,6 +268,40 @@ def recipes() -> dict[Any, tuple[str, str]]:
         NATIVE_MESH_MAP,
         "nres.update_layer_stack_resource(r.identifier(), r2.identifier())",
     )
+    # The bake parameters' refusals (decision 323): the texture set's baking state setters, the
+    # UV-tile members and the meta properties, through either package; a value refused by context.
+    for root, sets in (("substance_painter", "ts"), ("uzpainter", "uzpainter.textureset")):
+        first = f"{sets}.all_texture_sets()[0]"
+        params = f"b = {root}.baking.BakingParameters.from_texture_set({first})"
+        usage = f"{sets}.MeshMapUsage.AO"
+        method = f"b.set_curvature_method({root}.baking.CurvatureMethod.FromMesh)"
+        for name, call in (
+            ("set_textureset_enabled", "b.set_textureset_enabled(False)"),
+            ("set_enabled_bakers", f"b.set_enabled_bakers([{usage}])"),
+            ("is_baker_enabled", f"b.is_baker_enabled({usage})"),
+            ("set_baker_enabled", f"b.set_baker_enabled({usage}, False)"),
+            ("set_curvature_method", method),
+            ("get_enabled_uv_tiles", "b.get_enabled_uv_tiles()"),
+            ("set_enabled_uv_tiles", "b.set_enabled_uv_tiles([])"),
+            ("is_uv_tile_enabled", "b.is_uv_tile_enabled(None)"),
+            ("set_uv_tile_enabled", "b.set_uv_tile_enabled(None, True)"),
+        ):
+            r[f"{root}.baking.BakingParameters.{name}"] = (params, call)
+        meta = "b.common()['CageMode'].properties()"
+        r[f"{root}.properties.Property.properties"] = (params, meta)
+    facade_params = "b = sp.baking.BakingParameters.from_texture_set(ts.all_texture_sets()[0])"
+    r[("substance_painter.properties.Property.value", "default-unestablished")] = (
+        facade_params,
+        "b.common()['OutputSize'].value()",
+    )
+    r[("substance_painter.baking.BakingParameters.set", "out-of-range")] = (
+        facade_params,
+        "sp.baking.BakingParameters.set({b.common()['DilationWidth']: 100000})",
+    )
+    r[("substance_painter.baking.BakingParameters.set", "baker-other-than-ao")] = (
+        facade_params,
+        "sp.baking.BakingParameters.set({b.baker(ts.MeshMapUsage.ID)['ColorSource']: 0})",
+    )
     r["substance_painter.resource.Resource.show_in_ui"] = (
         f"r = resource.import_project_resource(IMAGES + '/checker-16.png', {TEXTURE}, 'a')",
         "r.show_in_ui()",

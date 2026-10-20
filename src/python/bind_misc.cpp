@@ -1,7 +1,7 @@
 // `uzpainter.logging`, `.application` (with the engine-computation state, phase1.21), `.event` (the
-// Python dispatcher thread, dispatcher.h), `.properties` and the modules whose behaviour arrives
-// in later phases (`.baking`, `render.capture`): importable, every call raising
-// `NotYetSupported` naming its owner task before anything changes (decision 082); `.diagnostics`
+// Python dispatcher thread, dispatcher.h), `.properties` and `.baking` (the bake parameters,
+// bind_baking.cpp; the bake itself and the link groups are release gaps: every such call raises
+// `NotYetSupported` naming its owner task before anything changes, decision 082); `.diagnostics`
 // (bind_diagnostics.cpp); `.display`, `render.display` and `render.shader` (bind_display.cpp); and
 // `.capabilities` (capabilities.h, phase1.22).
 
@@ -59,26 +59,6 @@ def disable_engine_computations():
         yield
     finally:
         enable_engine_computations(True)
-)PY";
-
-constexpr const char* kProperties = R"PY(
-class Property:
-    """A parameter of procedural content (`source.SourceSubstance.get_properties`). The Phase 1 subset
-    holds no procedural content, so no call returns one yet (phase3.3_procedural-families)."""
-
-    __slots__ = ("name", "label", "short_name", "value", "widget_type", "enum_values", "properties")
-
-    def __init__(self, name, label="", short_name="", value=None, widget_type="", enum_values=None, properties=None):
-        self.name = name
-        self.label = label
-        self.short_name = short_name
-        self.value = value
-        self.widget_type = widget_type
-        self.enum_values = dict(enum_values or {})
-        self.properties = dict(properties or {})
-
-    def enum_value(self, name):
-        return self.enum_values[name]
 )PY";
 
 /// Defines functions `names` in `module` that raise `NotYetSupported` naming `owner`.
@@ -160,12 +140,11 @@ void BindMisc(py::module_& m) {
     event.def("dispatcher_thread_id", [] { return Dispatcher::Get().ThreadIdent(); },
               "`threading.get_ident()` of the dispatcher thread (0 before its first task).");
 
-    py::module_ properties = submodule(m, "properties", "uzpainter.properties", "Parameters of procedural content.");
-    py::exec(kProperties, properties.attr("__dict__"));
-
-    py::module_ baking = submodule(m, "baking", "uzpainter.baking", "Mesh-map baking (phase3.5_embree-bakers).");
+    py::module_ properties = submodule(m, "properties", "uzpainter.properties", "Parameters (the bake parameters' keys).");
+    py::module_ baking = submodule(m, "baking", "uzpainter.baking", "Mesh-map baking: the bake parameters.");
+    BindBaking(baking, properties);
     Gaps(baking, "uzpainter.baking",
-         {"bake_async", "bake_selected_textures_async", "BakingParameters", "set_linked_group",
+         {"bake_async", "bake_selected_textures_async", "set_linked_group",
           "set_linked_group_common_parameters", "unlink_all", "unlink_all_common_parameters", "get_link_group",
           "get_link_group_common_parameters", "get_linked_texture_sets", "get_linked_texture_sets_common_parameters"},
          "phase3.5_embree-bakers");

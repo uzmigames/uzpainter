@@ -25,9 +25,9 @@
 - [ ] 4.1 Acceptance: defaults and property metadata exact against Tier 0 goldens; repeatable across thread counts; linked-set changes atomic
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
-- [ ] 5.1 Update or create documentation covering the implementation
-- [ ] 5.2 Write tests covering the new behavior
-- [ ] 5.3 Run tests and confirm they pass
+- [x] 5.1 Update or create documentation covering the implementation
+- [x] 5.2 Write tests covering the new behavior
+- [x] 5.3 Run tests and confirm they pass
 
 ## 6. Notes (feasibility slice, decision 302; 2026-10-19, branch `wt/bake-feas`)
 - A permitted early-feasibility slice (SUP-014, `docs/roadmap.md` rule 1), not acceptance of any item above: no box is ticked, and prerequisite 1.1 still gates the task.
@@ -123,3 +123,23 @@
     - `tests/capabilities/test_operation_matrix.py`: exit 0, 16 passed.
     - `tests/supervisor/test_registry.py -k "prompt or capabilities"`: exit 0, 4 passed.
 
+## 11. The Python surface and item 3.1 (2026-10-20, branch `wt/bake-py`, commit 628513d7)
+- Bound: `substance_painter.baking.BakingParameters` (`BakingParameters(material_id)`, `from_texture_set`, `from_texture_set_name`, `texture_set`, `common()`, `baker(usage)`, `set()`, `get_curvature_method`, `get_enabled_bakers`, `is_textureset_enabled`), `baking.CurvatureMethod` and `properties.Property` (`value`, `name`, `short_name`, `label`, `widget_type`, `enum_values`, `enum_value`), over the native model (`src/python/bind_baking.cpp`, `python/uzpainter_facade/baking.py`).
+  - Each handle resolves through `bake::LoadBakingSession` on every call. `set()` is one transaction over `bake::EditBakingSession`. An `Enum` value is its integer; a pair is a tuple, as Painter documents `value()`.
+  - Decision 323's refusals are kept, each `NotYetSupported` before any change: `Property.properties()`, the unestablished defaults of `OutputSize` and `TonemappingBounds`, out-of-range values, and values for a baker other than AO. The baking-state setters, `is_baker_enabled` and the UV-tile members name `phase3.5_embree-bakers`. `bake_async`, `bake_selected_textures_async` and the link-group functions stay gaps.
+  - The manifest keeps the three `bake_async` release gaps. It adds `Property.value` @ `default-unestablished` and `BakingParameters.set` @ `out-of-range` and @ `baker-other-than-ao`. The replay's trace (`facade/baking-defaults` in `tools/capabilities/tier0-trace.json`) makes the exercised symbols `supported` with `tier0/defaults-templates/baking-defaults` (decision 112). `set`, `from_texture_set_name`, `texture_set` and `CurvatureMethod.FromNormalMap` are `pending-evidence`.
+- Item 3.1 stays open. `tests/python/test_pyapi_baking.py::test_baking_defaults_equal_painter` runs the recorder's own `painter_side.baking_capture` inside the embedded interpreter against the facade. It replays the golden as `record-defaults` recorded it: r1 fresh, r2 after save and reopen, r3 on a second fresh project. It compares every captured field with the private record (`53d9cfc9...`, read from the store, read only) by type-strict equality, on all 60 keys and the three state outputs.
+  - Exact on all three recordings: `common().keys()` and every `baker(usage).keys()`, `name`, `short_name`, `label`, `widget_type`, `enum_values`, `enum_value` of every label, the `value()` of 58 of the 60 keys, `get_curvature_method`, `get_enabled_bakers` and `is_textureset_enabled`.
+  - Not exact (refused with `NotYetSupported`, named in the test's `REFUSED`; the test asserts this exact set):
+    - the `value()` of `OutputSize` and of Curvature's `TonemappingBounds`: Painter returns a value on a fresh project, and UzPainter refuses it as an unestablished default (decision 323);
+    - `properties()` of every key: the clean-room refusal (decision 323).
+  - So the metadata the item names is exact, but two current defaults are refused, not equal. 3.1 closes when those two values are established by a recording (for example `OutputSize` at a second texture-set resolution) or the owner accepts the refusal.
+- Tail 5.1 to 5.3 ticked (this section with sections 6 to 10):
+  - Docs: `src/python/PYAPI.md` (`baking` and `properties`), `python/FACADE.md` §1 and §2, `docs/architecture/06-baking.md` §2.
+  - Tests: `tests/python/test_pyapi_baking.py` (table readback, set, save and reopen; refusals before any change; the Tier 0 replay), and the baking recipes added to `tests/python/test_capability_conformance.py`.
+- Evidence (no GPU, no Painter). Logs are in `tmp/scratch/bake-py/`:
+  - `zig build pyapi-tests -j2` and `zig build painter -j2`: exit 0.
+  - `python -m pytest tests/python/test_pyapi_baking.py tests/python/test_capability_conformance.py tests/python/test_pyapi_native.py::test_later_phase_calls_raise_not_yet_supported_before_mutation tests/python/test_pyapi_facade.py::test_every_facade_symbol_is_documented_and_no_private_symbol_exists`: 9 passed, 1 failed (`pytest-python.log`). The failure was `test_supported_entries_equal_the_tier0_trace`: `uzpainter.exception` still cited the golden after `NotYetSupported` was dropped from the evidence. After the fix, that node id alone passed: exit 0, 1 passed (`pytest-rerun.log`). `test_baking_defaults_equal_painter` ran against the store, not skipped.
+  - `python -m pytest tests/capabilities/test_capabilities.py`: exit 0, 28 passed (`pytest-capabilities.log`).
+  - ruff and mypy are clean on the touched Python, and `mypy --strict` on `python/`.
+- Not ticked: 1.1 (`phase2.10_pilot-tunic-recovery` is not accepted), 3.1 (above) and 4.1.
