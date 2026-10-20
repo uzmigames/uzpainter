@@ -1,0 +1,11 @@
+{
+  "id": 330,
+  "slug": "330-host-version-identity",
+  "title": "The application version UzPainter reports is its own, not Painter's; P22-B host replays record it as an explicit host difference",
+  "status": "accepted",
+  "date": "2026-10-20",
+  "relatedTasks": [
+    "phase1.24_python-api-facade"
+  ],
+  "supersededBy": null
+}
