@@ -11,6 +11,19 @@
 //                   the cache key ignores parameter values (CPU, needs dxcompiler.dll)
 //   gpu             every probe family on DX12 equal to the CPU reference bit for bit, twice,
 //                   whole and by tile, and the seam's certified path end to end (GPU)
+//   library <work-dir> <fixture-library> <shipped-library>
+//                   the asset library: exact pins, the alias table, resource.search's query
+//                   terms and the project's pins (CPU; item 2.4)
+//   library-load <work-dir> <library>
+//                   loads one library and prints `LOADED <records> <aliases>` (exit 0) or
+//                   `REFUSED <reason>` (exit 1): the load checks (CPU)
+//   assets-cli <work-dir> <fixture-library> <shipped-library>
+//                   `UzPainter.exe assets list [--parity]` (RunAssetsCommand) on both libraries,
+//                   a broken one and the usage errors (CPU; item 2.5)
+//   admission <work-dir> <fixture-library>
+//                   procedural edits through the seam on a stored project: refusals before
+//                   mutation, a snapshot-served request, the certified path, and the same
+//                   evaluation after save and reopen (CPU; items 3.1, 3.4, 3.6)
 //
 // The families here are test probes with authored formulas: none is a Painter asset, and the
 // one whose status is `exact` is a synthetic test double of the seam's certified path.
@@ -19,12 +32,19 @@
 // Exit code 0 when every check passed, 1 when one failed, 2 on a usage error, 77 when the case
 // needs a DX12 hardware adapter and there is none.
 
+#include "procedural/admission.h"
+#include "procedural/asset_library.h"
+#include "procedural/cli.h"
 #include "procedural/hlsl_backend.h"
 #include "procedural/primitives.h"
 #include "procedural/seam.h"
 
 #include "render/engine_thread.h"
 #include "render/kernel_cache.h"
+
+#include "store/project_store.h"
+#include "uzp_core/document/document.h"
+#include "uzp_core/types/project.h"
 
 #include <bit>
 #include <chrono>
@@ -426,8 +446,8 @@ public:
     mutable int plans = 0;
     mutable int references = 0;
 
-    SyntheticExact() {
-        m_record.asset = Url("test-synthetic", "ridge", "2");
+    explicit SyntheticExact(uzp::core::AssetUrl asset = Url("test-synthetic", "ridge", "2")) {
+        m_record.asset = std::move(asset);
         m_record.status.kind = ParityStatus::Kind::Exact;
         m_record.status.corpusIds = {"synthetic-calibration", "synthetic-held-out"};
         m_record.provenance = "tests/procedural/procedural_test.cpp (synthetic test double)";
@@ -1103,11 +1123,506 @@ int RunGpu(const fs::path& dir) {
     return Finish();
 }
 
+// ── library (item 2.4) ───────────────────────────────────────────────────────
+
+std::string Urls(const std::vector<const AssetRecord*>& records) {
+    std::string out;
+    for (const AssetRecord* record : records) {
+        out += (out.empty() ? "" : " ") + uzp::core::FormatAssetUrl(record->asset);
+    }
+    return out;
+}
+
+std::string Describe(const std::expected<std::vector<const AssetRecord*>, SearchRefusal>& found) {
+    if (found) return "found [" + Urls(*found) + "]";
+    return (found.error().kind == SearchRefusal::Kind::NotYetSupported ? "NotYetSupported: "
+                                                                       : "UnsupportedProcedural: ") +
+           found.error().message;
+}
+
+bool Gap(const std::expected<std::vector<const AssetRecord*>, SearchRefusal>& found, std::string_view text) {
+    return !found && found.error().kind == SearchRefusal::Kind::NotYetSupported &&
+           found.error().message.find(text) != std::string::npos &&
+           found.error().message.find("phase3.3_procedural-families") != std::string::npos;
+}
+
+/// A project with one fill whose BaseColor is a procedural source pinning `source`, and one
+/// filter effect pinning `filter`.
+uzp::core::Project PinningProject(const std::string& source, const std::string& filter) {
+    uzp::core::Project project;
+    uzp::core::TextureSet set;
+    set.id = project.AllocateId();
+    set.name = "set";
+    uzp::core::Stack stack;
+    stack.id = project.AllocateId();
+    uzp::core::Layer layer;
+    layer.uid = project.AllocateId();
+    layer.kind = uzp::core::LayerKind::fill;
+    uzp::core::FillContent fill;
+    uzp::core::ProceduralSource procedural;
+    procedural.ref.asset = source;
+    fill.sources[uzp::core::ChannelType::BaseColor] = uzp::core::Source{procedural};
+    layer.fill = fill;
+    uzp::core::Effect effect;
+    effect.uid = project.AllocateId();
+    effect.kind = uzp::core::EffectKind::filter;
+    effect.procedural = uzp::core::ProceduralRef{};
+    effect.procedural->asset = filter;
+    layer.content_effects.push_back(effect);
+    stack.root_layers.push_back(layer);
+    set.stacks.push_back(stack);
+    project.texture_sets.push_back(set);
+    return project;
+}
+
+int RunLibrary(const fs::path& fixture, const fs::path& shipped) {
+    const auto shippedLibrary = AssetLibrary::Load(shipped);
+    Check(shippedLibrary && shippedLibrary->records().empty() && shippedLibrary->aliases().empty(),
+          "the shipped library loads and holds no asset and no alias (no family is certified yet)",
+          shippedLibrary ? std::to_string(shippedLibrary->records().size()) : shippedLibrary.error());
+    const auto loaded = AssetLibrary::Load(fixture);
+    Check(loaded.has_value(), "the fixture library loads", loaded ? "" : loaded.error());
+    if (!loaded || !shippedLibrary) return Finish();
+    const AssetLibrary& library = *loaded;
+    Check(library.records().size() == 3 && library.aliases().size() == 1,
+          "the fixture library holds three records and one alias");
+
+    // Pins: the exact version or a refusal; no other version is substituted.
+    const AssetRecord* ridge2 = library.Find(Url("test-generator", "ridge", "2"));
+    Check(ridge2 != nullptr && ridge2->name == "Ridge (synthetic test probe)" &&
+              ridge2->status.kind == ParityStatus::Kind::Exact &&
+              ridge2->status.corpusIds == std::vector<std::string>{"synthetic-calibration", "synthetic-held-out"},
+          "a pin resolves to its exact version with its UzPainter name, status and corpus ids");
+    Check(ridge2 != nullptr && std::get<int64_t>(ridge2->defaults.at("mode")) == 1 &&
+              ridge2->domain.parameters.size() == 3 && ridge2->domain.constraints.size() == 1 &&
+              !ridge2->domain.anySeed && ridge2->domain.seeds == std::vector<uint64_t>{7, 11} &&
+              ridge2->domain.inputs.at("Curvature").formats == std::vector<ChannelFormat>{ChannelFormat::U16},
+          "the record's defaults (a boolean as an integer) and its certified domain are read");
+    const auto missing = library.Resolve(Url("test-generator", "ridge", "3"));
+    Check(!missing && missing.error().reason == kNotInLibrary && missing.error().field == "version" &&
+              missing.error().value == "3" && missing.error().certified == "[1, 2]" &&
+              missing.error().asset == "uzasset://test-generator/ridge@3",
+          "a pin of a version the library does not hold is refused, naming the versions it holds",
+          missing ? "resolved" : missing.error().Describe());
+    const AssetRecord* soften = library.Find(Url("test-filter", "soften", "1"));
+    Check(soften != nullptr && soften->status.kind == ParityStatus::Kind::Calibrated &&
+              soften->status.residuals.size() == 1 && soften->status.residuals[0].unit == "ulp_f32",
+          "a calibrated record keeps its residuals, one per unit");
+
+    // resource.search: the library's own shelf, by UzPainter names.
+    const auto all = library.Search("s:uzpainter");
+    Check(all && Urls(*all) == "uzasset://test-filter/soften@1 uzasset://test-generator/ridge@1 "
+                               "uzasset://test-generator/ridge@2",
+          "s:uzpainter lists every asset of the library, sorted by URL", Describe(all));
+    const auto generators = library.Search("s:uzpainter u:generator");
+    Check(generators && generators->size() == 2, "s:uzpainter u:generator keeps the generators", Describe(generators));
+    const auto byName = library.Search(R"(s:uzpainter n:Ridge\ (synthetic\ test\ probe)=)");
+    Check(byName && Urls(*byName) == "uzasset://test-generator/ridge@2",
+          "an exact UzPainter name with escaped blanks finds its asset", Describe(byName));
+    const auto none = library.Search("s:uzpainter n:Nothing=");
+    Check(none && none->empty(), "an exact name the library does not hold finds nothing on its own shelf",
+          Describe(none));
+
+    // Painter names: only through the alias table, only to a certified asset.
+    const auto alias = library.Search(R"(s:starterassets u:generator n:Synthetic\ Edge\ Probe=)");
+    Check(alias && Urls(*alias) == "uzasset://test-generator/ridge@2" && (*alias)[0]->name != "Synthetic Edge Probe",
+          "a Painter name resolves through the alias table to the UzPainter asset, with its UzPainter name",
+          Describe(alias));
+    const auto anyShelf = library.Search(R"(n:Synthetic\ Edge\ Probe=)");
+    Check(anyShelf && Urls(*anyShelf) == "uzasset://test-generator/ridge@2",
+          "a Painter name without a shelf resolves through the alias table", Describe(anyShelf));
+    const auto wrongUsage = library.Search(R"(s:starterassets u:filter n:Synthetic\ Edge\ Probe=)");
+    Check(!wrongUsage && wrongUsage.error().kind == SearchRefusal::Kind::UnsupportedProcedural &&
+              wrongUsage.error().procedural.reason == kNoCertifiedFamily &&
+              wrongUsage.error().procedural.asset == "starterassets/filter/Synthetic Edge Probe",
+          "the same Painter name under another usage is refused, not answered with the generator",
+          Describe(wrongUsage));
+    const auto unknown = library.Search("s:starterassets u:filter n:Blur=");
+    Check(!unknown && unknown.error().kind == SearchRefusal::Kind::UnsupportedProcedural &&
+              unknown.error().procedural.reason == kNoCertifiedFamily,
+          "a Painter name with no alias raises UnsupportedProcedural (no certified family), no similar asset",
+          Describe(unknown));
+    const auto uzName = library.Search(R"(s:starterassets n:Ridge\ (synthetic\ test\ probe)=)");
+    Check(!uzName && uzName.error().kind == SearchRefusal::Kind::UnsupportedProcedural,
+          "a UzPainter name is not a Painter name: Painter's shelf does not answer it", Describe(uzName));
+
+    // The terms outside the implemented grammar are release gaps.
+    Check(Gap(library.Search("s:starterassets u:generator"), "without an exact name"),
+          "listing a Painter shelf without an exact name is a release gap");
+    Check(Gap(library.Search("u:generator"), "every shelf"), "listing every shelf is a release gap");
+    Check(Gap(library.Search("n:Blur"), "not exact"), "a partial name is a release gap");
+    Check(Gap(library.Search("Blur"), "is not s:, u: or n:"), "free text is a release gap");
+    Check(Gap(library.Search("s:uzpainter s:starterassets"), "repeats"), "a repeated term is a release gap");
+    Check(Gap(library.Search(R"(u:substance n:Paper\ Grainy=)"), "u:substance"),
+          "a usage that is not a procedural usage of the library is a release gap");
+    Check(Gap(library.Search("s:"), "has no value"), "a term without a value is a release gap");
+    const auto empty = library.Search("");
+    Check(Gap(empty, "every shelf"), "an empty query (every shelf) is a release gap", Describe(empty));
+
+    // The project's pins.
+    uzp::core::Project project =
+        PinningProject("uzasset://test-generator/ridge@2", "uzasset://test-filter/soften@1");
+    Check(PinnedAssets(project) ==
+              std::vector<std::string>{"uzasset://test-filter/soften@1", "uzasset://test-generator/ridge@2"},
+          "the project's pins are its procedural sources and effects, by full URL");
+    Check(!CheckPins(project, library).has_value(), "every pin of the project resolves at its exact version");
+    const uzp::core::Project other =
+        PinningProject("uzasset://test-generator/ridge@9", "uzasset://test-filter/soften@1");
+    const std::optional<UnsupportedProcedural> pin = CheckPins(other, library);
+    Check(pin && pin->reason == kNotInLibrary && pin->asset == "uzasset://test-generator/ridge@9",
+          "a pin of a version the library does not hold is refused", pin ? pin->Describe() : "resolved");
+    Check(CheckPins(project, *shippedLibrary).has_value(), "the shipped library holds none of the fixture pins");
+    return Finish();
+}
+
+int RunLibraryLoad(const fs::path& root) {
+    const auto loaded = AssetLibrary::Load(root);
+    if (!loaded) {
+        std::printf("REFUSED %s\n", loaded.error().c_str());
+        return 1;
+    }
+    std::printf("LOADED %zu %zu\n", loaded->records().size(), loaded->aliases().size());
+    return 0;
+}
+
+// ── assets-cli (item 2.5) ────────────────────────────────────────────────────
+
+struct CliRun {
+    int status = 0;
+    std::string out;
+    std::string err;
+    uzp::core::json::Value document;
+};
+
+std::string ReadAll(std::FILE* file) {
+    std::fflush(file);
+    std::rewind(file);
+    std::string text;
+    char buffer[4096];
+    for (size_t n; (n = std::fread(buffer, 1, sizeof(buffer), file)) > 0;) text.append(buffer, n);
+    return text;
+}
+
+CliRun Cli(std::vector<std::string> args) {
+    CliRun run;
+    std::FILE* out = std::tmpfile();
+    std::FILE* err = std::tmpfile();
+    run.status = RunAssetsCommand(args, out, err);
+    run.out = ReadAll(out);
+    run.err = ReadAll(err);
+    std::fclose(out);
+    std::fclose(err);
+    if (run.out.starts_with("UZP_JSON:")) {
+        try {
+            run.document = uzp::core::json::Parse(std::string_view(run.out).substr(9));
+        } catch (const uzp::core::json::ParseError&) {
+        }
+    }
+    return run;
+}
+
+const uzp::core::json::Value* Field(const uzp::core::json::Value& value, std::string_view key) {
+    if (!value.IsObject()) return nullptr;
+    const auto& object = std::get<uzp::core::json::Object>(value.data);
+    const auto it = object.find(key);
+    return it == object.end() ? nullptr : &it->second;
+}
+
+const uzp::core::json::Array* Assets(const CliRun& run) {
+    const uzp::core::json::Value* assets = Field(run.document, "assets");
+    return assets != nullptr && assets->IsArray() ? &std::get<uzp::core::json::Array>(assets->data) : nullptr;
+}
+
+int RunAssetsCli(const fs::path& work, const fs::path& fixture, const fs::path& shipped) {
+    namespace json = uzp::core::json;
+    const std::string fixtureDir = fixture.generic_string();
+    const CliRun plain = Cli({"assets", "list", "--library", fixtureDir});
+    const json::Array* listed = Assets(plain);
+    Check(plain.status == 0 && listed != nullptr && listed->size() == 3 &&
+              *Field((*listed)[0], "asset") == json::Value("uzasset://test-filter/soften@1") &&
+              *Field((*listed)[2], "name") == json::Value("Ridge (synthetic test probe)") &&
+              Field((*listed)[0], "parity") == nullptr && Field((*listed)[0], "domain") == nullptr,
+          "assets list prints every asset with its URL, UzPainter name and usage, sorted by URL", plain.out);
+    Check(plain.out.find("Synthetic Edge Probe") == std::string::npos,
+          "assets list shows no Painter name of the internal alias table");
+
+    const CliRun parity = Cli({"assets", "list", "--parity", "--library", fixtureDir});
+    const json::Array* rows = Assets(parity);
+    const auto status = [&](size_t i) -> std::string {
+        const json::Value* p = rows == nullptr ? nullptr : Field((*rows)[i], "parity");
+        const json::Value* s = p == nullptr ? nullptr : Field(*p, "status");
+        return s != nullptr && s->IsString() ? std::get<std::string>(s->data) : "";
+    };
+    Check(parity.status == 0 && rows != nullptr && rows->size() == 3 && status(0) == "calibrated" &&
+              status(1) == "unavailable" && status(2) == "exact",
+          "assets list --parity gives each asset's parity status (calibrated, unavailable, exact)", parity.out);
+    const json::Value* calibrated = rows == nullptr ? nullptr : Field((*rows)[0], "parity");
+    const json::Value* residuals = calibrated == nullptr ? nullptr : Field(*calibrated, "residuals");
+    Check(residuals != nullptr && residuals->IsArray() && std::get<json::Array>(residuals->data).size() == 1 &&
+              *Field(std::get<json::Array>(residuals->data)[0], "unit") == json::Value("ulp_f32") &&
+              *Field(std::get<json::Array>(residuals->data)[0], "max") == json::Value(1) &&
+              Field(*calibrated, "corpus_ids") != nullptr,
+          "a calibrated asset lists its residuals per unit and its corpus ids", parity.out);
+    const json::Value* unavailable = rows == nullptr ? nullptr : Field((*rows)[1], "parity");
+    Check(unavailable != nullptr && Field(*unavailable, "reason") != nullptr,
+          "an unavailable asset gives the reason", parity.out);
+    const json::Value* domain = rows == nullptr ? nullptr : Field((*rows)[2], "domain");
+    Check(domain != nullptr && Field(*domain, "parameters") != nullptr && Field(*domain, "output") != nullptr,
+          "assets list --parity gives each asset's certified editable domain", parity.out);
+
+    const CliRun empty = Cli({"assets", "list", "--parity", "--library", shipped.generic_string()});
+    Check(empty.status == 0 && Assets(empty) != nullptr && Assets(empty)->empty(),
+          "the shipped library lists no asset", empty.out);
+
+    const fs::path broken = work / "broken-library";
+    fs::create_directories(broken);
+    {
+        std::FILE* file = std::fopen((broken / "library.json").string().c_str(), "wb");
+        std::fputs("{\"schema\": \"uzpainter/asset-library/1\", \"records\": [\"absent.json\"], \"aliases\": \"a.json\"}", file);
+        std::fclose(file);
+    }
+    const CliRun refused = Cli({"assets", "list", "--library", broken.generic_string()});
+    const json::Value* error = Field(refused.document, "error");
+    Check(refused.status == 3 && *Field(refused.document, "status") == json::Value("host_error") &&
+              error != nullptr && *Field(*error, "type") == json::Value("AssetLibraryError"),
+          "a library that does not load is a host error (exit 3), nothing listed", refused.out);
+    bool usage = true;
+    for (const std::vector<std::string>& args :
+         {std::vector<std::string>{"assets"}, {"assets", "show"}, {"assets", "list", "--parity", "--parity"},
+          {"assets", "list", "--library"}, {"assets", "list", "--bogus"}}) {
+        const CliRun bad = Cli(args);
+        usage = usage && bad.status == 2 && bad.out.empty() && bad.err.starts_with("usage: UzPainter.exe assets list");
+    }
+    Check(usage, "a usage error prints the usage on stderr (exit 2)");
+    return Finish();
+}
+
+// ── admission (items 3.1, 3.4 and 3.6 through a document edit) ───────────────
+
+/// A project with one fill layer whose content stack holds one generator effect without a
+/// procedural yet; `generator` receives its uid.
+uzp::core::Project GeneratorProject(uzp::core::Id& generator) {
+    uzp::core::Project project;
+    project.versions.app_version = "0.0.0";
+    project.versions.evaluator_profile = "painter-12.1-isolated-linear";
+    uzp::core::TextureSet set;
+    set.id = project.AllocateId();
+    set.name = set.original_name = set.material_id = "set";
+    set.uv_tiles = {uzp::core::UVTile{project.AllocateId(), 1001, {}}};
+    uzp::core::Stack stack;
+    stack.id = project.AllocateId();
+    stack.channels[uzp::core::ChannelType::BaseColor] =
+        uzp::core::Channel{uzp::core::ChannelFormat::sRGB8, "", {}};
+    uzp::core::Layer layer;
+    layer.uid = project.AllocateId();
+    layer.kind = uzp::core::LayerKind::fill;
+    layer.name = "fill";
+    layer.fill = uzp::core::FillContent{};
+    uzp::core::Effect effect;
+    effect.uid = project.AllocateId();
+    effect.kind = uzp::core::EffectKind::generator;
+    effect.name = "ridge";
+    generator = effect.uid;
+    layer.content_effects.push_back(effect);
+    stack.root_layers.push_back(layer);
+    set.stacks.push_back(stack);
+    project.texture_sets.push_back(set);
+    return project;
+}
+
+const uzp::core::Effect* GeneratorOf(const uzp::core::Project& project) {
+    return &project.texture_sets.at(0).stacks.at(0).root_layers.at(0).content_effects.at(0);
+}
+
+UseContext RidgeContext() {
+    UseContext context;
+    context.meshClass = "sphere";
+    context.output = RasterSpec{64, ChannelFormat::F32, "linear", 1};
+    context.inputs["Curvature"] = RasterSpec{64, ChannelFormat::U16, "linear", 1};
+    context.seed = 7;
+    return context;
+}
+
+/// The SHA-256 of the curvature map the admission case imports (set before the refusals).
+std::string g_curvature;
+
+uzp::core::ProceduralRef RidgeRef(std::string asset, uzp::core::json::Object params) {
+    uzp::core::ProceduralRef ref;
+    ref.asset = std::move(asset);
+    ref.params = std::move(params);
+    ref.image_inputs["Curvature"] = uzp::core::ResourceBinding{g_curvature, std::nullopt, {}};
+    return ref;
+}
+
+int RunAdmission(const fs::path& work, const fs::path& fixture) {
+    namespace core = uzp::core;
+    namespace json = uzp::core::json;
+    const auto loaded = AssetLibrary::Load(fixture);
+    Check(loaded.has_value(), "the fixture library loads", loaded ? "" : loaded.error());
+    if (!loaded) return Finish();
+    const AssetLibrary& library = *loaded;
+    auto ridge = std::make_shared<SyntheticExact>(Url("test-generator", "ridge", "2"));
+    HlslBackend hlsl(nullptr);
+    Check(hlsl.Register(ridge).has_value(), "the library's certified asset registers with the HLSL host");
+    FakeSnapshots snapshots;
+    ProceduralSeam seam(&snapshots, &hlsl);
+
+    core::Id generator = core::kNoId;
+    core::DocumentState initial;
+    initial.project_uuid = "6f1c2a3e-0000-4000-8000-00000000a324";
+    initial.project = GeneratorProject(generator);
+    const fs::path file = work / "admission.uzp";
+    fs::remove(file);
+    auto store = uzp::store::ProjectStore::Create(file, initial);
+    core::Document document(initial);
+    store->Attach(document);
+    int submits = 0;
+    int keys = 0;
+    const SubmitEdit submit = [&](const std::function<void(core::Edit&)>& call) {
+        ++submits;
+        const std::string key = "procedural-" + std::to_string(++keys);
+        return store->Submit(document,
+                             core::MutationRequest{"procedural_set", json::Object{{"key", key}}, key, document.revision()},
+                             call);
+    };
+    const UseContext context = RidgeContext();
+
+    // The curvature map the references bind: a project resource (its bytes are the raster's
+    // float32 samples; the evaluation reads the decoded raster).
+    const Raster curvature = Curvature();
+    std::string bytes(reinterpret_cast<const char*>(curvature.texels.data()), curvature.texels.size() * sizeof(float));
+    const auto imported = store->Submit(
+        document, core::MutationRequest{"resource_import", json::Object{{"name", "curvature"}}, "import", 0},
+        [&](core::Edit& edit) {
+            const auto size = static_cast<std::int64_t>(bytes.size());
+            g_curvature = store->StageResource(bytes, "application/octet-stream");
+            core::ResourceMeta meta;
+            meta.id = edit.AllocateId();
+            meta.name = "curvature";
+            meta.mime = "application/octet-stream";
+            meta.size = size;
+            meta.usage = "TEXTURE";
+            meta.imported_at = "2026-10-20T00:00:00Z";
+            edit.project().resources[g_curvature].push_back(meta);
+        });
+    Check(imported.result && imported.result->status == core::ResultStatus::committed && document.revision() == 1,
+          "the curvature map is imported as a project resource (revision 1)");
+
+    // 3.1 and 3.6: every refusal returns before a transaction opens, with nothing evaluated.
+    const core::Project before = *document.snapshot().project;
+    struct Refusal {
+        std::string name;
+        core::ProceduralRef ref;
+        UseContext context;
+        std::string_view reason;
+        std::string field;
+    };
+    UseContext narrowInput = context;
+    narrowInput.inputs["Curvature"].resolution = 32;
+    UseContext largeOutput = context;
+    largeOutput.output.resolution = 128;
+    UseContext otherSeed = context;
+    otherSeed.seed = 8;
+    const double justAbove = std::nextafter(1.0, 2.0);
+    const std::vector<Refusal> refusals{
+        {"an asset the library holds with no snapshot and no certified family (3.1)",
+         RidgeRef("uzasset://test-generator/ridge@1", {}), context, kNoBackend, ""},
+        {"a pinned version the library does not hold", RidgeRef("uzasset://test-generator/ridge@3", {}), context,
+         kNotInLibrary, "version"},
+        {"a Painter asset with no snapshot and no family", RidgeRef("uzasset://painter-generator/metal-edge-wear@1", {}),
+         context, kNotInLibrary, "version"},
+        {"a parameter one ulp above its range (3.6)", RidgeRef("uzasset://test-generator/ridge@2", {{"amount", justAbove}}),
+         context, kOutsideDomain, "params.amount"},
+        {"a seed outside the listed seeds (3.6)", RidgeRef("uzasset://test-generator/ridge@2", {}), otherSeed,
+         kOutsideDomain, "seed"},
+        {"a mesh-map input of another resolution (3.6)", RidgeRef("uzasset://test-generator/ridge@2", {}), narrowInput,
+         kOutsideDomain, "inputs.Curvature.resolution"},
+        {"an output resolution outside the domain (3.6)", RidgeRef("uzasset://test-generator/ridge@2", {}), largeOutput,
+         kOutsideDomain, "output.resolution"},
+        {"a parameter the asset does not declare", RidgeRef("uzasset://test-generator/ridge@2", {{"gain", 1}}), context,
+         kOutsideDomain, "params.gain"},
+        {"a parameter that is not a number, a boolean or a string",
+         RidgeRef("uzasset://test-generator/ridge@2", {{"amount", json::Array{}}}), context,
+         "a parameter value is a number, a boolean or a string", "params.amount"},
+    };
+    for (const Refusal& r : refusals) {
+        const auto outcome = SetEffectProcedural(generator, r.ref, r.context, library, seam, submit);
+        Check(!outcome && outcome.error().reason == r.reason && outcome.error().field == r.field && submits == 0 &&
+                  document.revision() == 1 && *document.snapshot().project == before,
+              "refused before mutation, the revision unchanged: " + r.name,
+              outcome ? "admitted" : outcome.error().Describe());
+    }
+    Check(ridge->plans == 0 && ridge->references == 0 && snapshots.evaluations == 0 &&
+              GeneratorOf(*document.snapshot().project)->procedural == std::nullopt,
+          "no refused edit evaluates, plans or stores any asset in its place (no substitution, no clamping)");
+
+    // 3.6: a snapshot of the project with the exact signature of an out-of-domain request is
+    // still served, and the edit commits that request as given.
+    const core::ProceduralRef outside = RidgeRef("uzasset://test-generator/ridge@2", {{"amount", justAbove}});
+    const auto outsideRequest = RequestFor(outside, context, library);
+    snapshots.rasters[SignatureHash(*outsideRequest)] = Raster{64, 64, 1, std::vector<float>(64 * 64, 0.5f)};
+    const auto served = SetEffectProcedural(generator, outside, context, library, seam, submit);
+    Check(served && served->result && served->result->status == core::ResultStatus::committed && submits == 1 &&
+              document.revision() == 2 && GeneratorOf(*document.snapshot().project)->procedural == outside,
+          "an out-of-domain request whose exact signature a snapshot holds is served and committed unclamped",
+          served ? "" : served.error().Describe());
+    snapshots.rasters.clear();
+
+    // The certified path: the edit commits the pinned reference exactly.
+    const core::ProceduralRef chosen = RidgeRef("uzasset://test-generator/ridge@2", {{"amount", 0.75}, {"mode", false}});
+    const auto committed = SetEffectProcedural(generator, chosen, context, library, seam, submit);
+    Check(committed && committed->result && committed->result->status == core::ResultStatus::committed &&
+              document.revision() == 3 && GeneratorOf(*document.snapshot().project)->procedural == chosen,
+          "inside the domain the edit commits the pinned reference as given",
+          committed ? "" : committed.error().Describe());
+    const auto request = RequestFor(chosen, context, library);
+    Check(request && std::get<int64_t>(request->params.at("mode")) == 0 &&
+              std::get<double>(request->params.at("bias")) == -0.25 &&
+              std::get<double>(request->params.at("amount")) == 0.75,
+          "the request holds the stored parameters over the record's defaults (a boolean as an integer)");
+    if (!request) return Finish();
+    const render::Result<Raster> before_save = hlsl.EvaluateReference(*request, {{"Curvature", Curvature()}});
+    Check(before_save.has_value(), "the certified family evaluates the committed request on the CPU lane",
+          before_save ? "" : before_save.error().Describe());
+
+    // 3.4: save, close, reopen; the pin and its evaluation are identical.
+    store->Save(document);
+    store->Close();
+    store.reset();
+    auto reopened = uzp::store::ProjectStore::Open(file);
+    core::Document again(std::move(reopened.state));
+    reopened.store->Attach(again);
+    const core::Project& project = *again.snapshot().project;
+    const core::ProceduralRef* pinned = GeneratorOf(project)->procedural ? &*GeneratorOf(project)->procedural : nullptr;
+    Check(pinned != nullptr && *pinned == chosen && PinnedAssets(project) ==
+                                                         std::vector<std::string>{"uzasset://test-generator/ridge@2"},
+          "the reopened project pins uzasset://test-generator/ridge@2 with the same parameters and inputs");
+    Check(!CheckPins(project, library).has_value(), "every pin of the reopened project resolves at its exact version");
+    if (pinned == nullptr || !request) return Finish();
+    const auto reopenedRequest = RequestFor(*pinned, context, library);
+    Check(reopenedRequest && Signature(*reopenedRequest) == Signature(*request),
+          "the reopened request has the same signature");
+    if (!reopenedRequest) return Finish();
+    const auto readmitted = Admit(*reopenedRequest, library, seam);
+    Check(readmitted && *readmitted == &hlsl, "the reopened request is admitted by the same certified family");
+    const render::Result<Raster> after_save = hlsl.EvaluateReference(*reopenedRequest, {{"Curvature", Curvature()}});
+    Check(before_save && after_save && FirstDifference(*before_save, *after_save).empty() &&
+              before_save->texels.size() == 64 * 64,
+          "evaluation after save and reopen is identical, bit for bit (RES-04)",
+          before_save && after_save ? FirstDifference(*before_save, *after_save) : "no raster");
+    const AssetLibrary empty;
+    const std::optional<UnsupportedProcedural> unpinned = CheckPins(project, empty);
+    Check(unpinned && unpinned->reason == kNotInLibrary,
+          "a library without that version refuses the pin on reopen; no other version is used");
+    reopened.store->Close();
+    return Finish();
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
     if (argc < 3) {
-        std::fprintf(stderr, "usage: uzp-procedural-tests seam | domain | primitives | kernels | gpu <work-dir>\n");
+        std::fprintf(stderr, "usage: uzp-procedural-tests seam | domain | primitives | kernels | gpu | library | library-load <work-dir> [...]\n");
         return 2;
     }
     const std::string_view mode = argv[1];
@@ -1117,6 +1632,10 @@ int main(int argc, char** argv) {
     if (mode == "primitives") return RunPrimitives();
     if (mode == "kernels") return RunKernels(dir);
     if (mode == "gpu") return RunGpu(dir);
+    if (mode == "library" && argc == 5) return RunLibrary(argv[3], argv[4]);
+    if (mode == "library-load" && argc == 4) return RunLibraryLoad(argv[3]);
+    if (mode == "assets-cli" && argc == 5) return RunAssetsCli(dir, argv[3], argv[4]);
+    if (mode == "admission" && argc == 4) return RunAdmission(dir, argv[3]);
     std::fprintf(stderr, "unknown case %.*s\n", static_cast<int>(mode.size()), mode.data());
     return 2;
 }

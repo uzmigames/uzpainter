@@ -1,0 +1,9 @@
+{
+  "schema": "uzpainter/asset-library/1",
+  "records": [
+    "records/test-generator.ridge@2.json",
+    "records/test-generator.ridge@1.json",
+    "records/test-filter.soften@1.json"
+  ],
+  "aliases": "aliases.json"
+}

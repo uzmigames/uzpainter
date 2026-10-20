@@ -157,7 +157,9 @@ struct ResourceFile {
     std::string file_name;
 };
 
-/// Reads `file_path` for `resource.import_project_resource`: a COLOR_LUT is `UnsupportedInUzPainter`
+/// Reads `file_path` for `resource.import_project_resource`: a `.sbsar` file of any usage is
+/// `UnsupportedProcedural{asset: <file name>, reason: "no runtime"}`, before the file is read
+/// (05-procedural-content.md §5); a COLOR_LUT is `UnsupportedInUzPainter`
 /// (decision 038), GENERATOR and SMART_MATERIAL and a texture that is not a PNG are
 /// `NotYetSupported`, an unreadable file `ResourceNotFoundError`, an environment that is not an
 /// equirectangular OpenEXR `ValueError`. The entry is `name`, or the file's stem.

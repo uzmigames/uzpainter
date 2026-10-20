@@ -93,3 +93,38 @@ def test_every_primitive_has_a_public_provenance_note() -> None:
     for entry in record["primitives"]:
         assert entry["sources"], entry["primitive"]
         assert all(s["kind"] in {"paper", "standard", "book"} for s in entry["sources"])
+
+
+def test_edits_refuse_before_mutation_and_reopen_identically(
+    procedural_tests: Path, tmp_path: Path
+) -> None:
+    """3.1, 3.6 and 3.4 through a document edit (`src/procedural/admission.h`, decision 324
+    §10): every refusal leaves the stored project's revision where it was and evaluates
+    nothing; a snapshot with the exact signature still serves an out-of-domain request; the
+    pinned reference evaluates identically after save and reopen. CPU only."""
+    fixture = Path(__file__).resolve().parent / "fixtures/library"
+    proc = subprocess.run(
+        [str(procedural_tests), "admission", str(tmp_path), str(fixture)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=300,
+        check=False,
+    )
+    failed = [line for line in proc.stdout.splitlines() if line.startswith("FAIL ")]
+    assert proc.returncode == 0 and not failed, proc.stdout + proc.stderr
+    passed = {line[5:] for line in proc.stdout.splitlines() if line.startswith("PASS ")}
+    assert len(passed) == 23, sorted(passed)
+    refused = [check for check in passed if check.startswith("refused before mutation, ")]
+    assert len(refused) == 9
+    assert sum("(3.6)" in check for check in refused) == 4
+    for check in (
+        "no refused edit evaluates, plans or stores any asset in its place (no substitution, "
+        "no clamping)",
+        "an out-of-domain request whose exact signature a snapshot holds is served and committed "
+        "unclamped",
+        "evaluation after save and reopen is identical, bit for bit (RES-04)",
+        "a library without that version refuses the pin on reopen; no other version is used",
+    ):
+        assert check in passed

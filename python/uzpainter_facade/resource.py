@@ -13,6 +13,16 @@ save and reopen. A binding keeps, for this session, the context of the identifie
 (Painter's `textureset-project-readback` s11 after reopen); a reopened project's resources read
 back in the new context.
 
+Search (phase3.1_proc-backend-seam item 2.4, decision 324): `search(query)` answers from
+UzPainter's own asset library only (`src/procedural/asset_library.h`), never with an invented
+Painter result. `s:uzpainter` lists the library by UzPainter names; a Painter shelf (or none) is
+answered only for an exact name `n:<name>=` that the library's internal alias table maps to a
+certified (exact) asset, and raises `UnsupportedProcedural` for any other Painter name. A result
+is an `AssetResource`: its identifier is `resource://uzasset/<family>/<id>?version=<version>`
+(the pinned `uzasset://<family>/<id>@<version>`), its GUI name the UzPainter name, and
+`provenance()` its provenance record. Any other query form, and a shelf the script added, is a
+release gap.
+
 Resource reload and shelves (phase1.21, decision 110):
 - `reload_modified_resources_async(filter)` delivers `ReloadResourcesStarted(filter)` before it
   returns True, then reloads on a worker thread and delivers `ReloadResourcesEnded(filter,
@@ -174,6 +184,9 @@ def import_project_resource(
     file_path: str, resource_usage: Any, name: str | None = None, group: str | None = None
 ) -> Resource:
     """Import a resource into the current project."""
+    if Path(file_path).suffix.lower() == ".sbsar":
+        # Refused natively before the file is read: UnsupportedProcedural, reason "no runtime".
+        uzpainter.resource.import_project_resource(file_path, resource_usage, name, group)
     try:
         data = Path(file_path).read_bytes()
     except OSError as error:
@@ -213,6 +226,66 @@ def show_resources_in_ui(resources: Any) -> None:
         "script-visible state, and UzPainter has no desktop UI",
         "resource.list_project_resources() to enumerate them",
     )
+
+
+# ── Search over the asset library (decision 324) ────────────────────────────────────────────────
+
+ASSET_CONTEXT = "uzasset"
+# The terms of a query: runs of characters or backslash escapes, separated by unescaped blanks.
+_QUERY_TERM = re.compile(r"(?:\\.|[^\s\\])+|\\$")
+_ESCAPE = re.compile(r"\\(.)")
+
+
+class AssetResource(Resource):
+    """A resource of UzPainter's asset library, pinned at one version, with its provenance."""
+
+    __slots__ = ("_record",)
+
+    def __init__(self, record: dict[str, Any]) -> None:
+        identifier = ResourceID(
+            ASSET_CONTEXT, f"{record['family']}/{record['id']}", str(record["version"])
+        )
+        super().__init__(identifier, record["usage"])
+        self._record = record
+
+    def gui_name(self) -> str:
+        return str(self._record["name"])
+
+    def usages(self) -> list[Any]:
+        member = getattr(Usage, str(self._usage), None)
+        if member is None:
+            raise uzpainter.NotYetSupported(
+                f"resource.Usage.{self._usage} is a release gap (phase3.3_procedural-families)"
+            )
+        return [member]
+
+    def asset_url(self) -> str:
+        """The pinned `uzasset://<family>/<id>@<version>` URL a project stores."""
+        return str(self._record["url"])
+
+    def parity_status(self) -> str:
+        """`exact`, `calibrated` or `unavailable` (05-procedural-content.md §3)."""
+        return str(self._record["status"])
+
+    def provenance(self) -> dict[str, Any]:
+        """The asset's provenance record (public sources, author, domain, corpus, parity)."""
+        return dict(self._record["provenance"])
+
+    def __repr__(self) -> str:
+        return f"AssetResource({self._record['url']!r})"
+
+
+def search(query: str) -> list[Resource]:
+    """List the resources that match `query`: only what UzPainter's asset library holds."""
+    if not isinstance(query, str):
+        raise TypeError("the query must be a str")
+    for term in _QUERY_TERM.findall(query):
+        shelf = _ESCAPE.sub(r"\1", term[2:]) if term.startswith("s:") else None
+        if shelf is not None and shelf in _SHELVES:
+            raise uzpainter.NotYetSupported(
+                f"resource.search of the shelf {shelf!r} is a release gap ({SHELF_GAP})"
+            )
+    return [AssetResource(record) for record in uzpainter.resource._search_assets(query)]
 
 
 # ── Resource reload ─────────────────────────────────────────────────────────────────────────────

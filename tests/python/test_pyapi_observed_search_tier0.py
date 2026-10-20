@@ -18,8 +18,9 @@ from tests.python.observed_replay import (
 
 PROBE = "phase1-export-preset-search"
 SEARCH_GAP = (
-    "known divergence: resource.search is absent from the facade; owner "
-    "phase3.1_proc-backend-seam item 2.4, decisions 113 and 164"
+    "known divergence: resource.search answers from UzPainter's asset library only, which "
+    "holds no export preset and no Adobe shelf content; owner phase3.3_procedural-families, "
+    "decisions 113, 164 and 324"
 )
 EXCLUDED: dict[str, dict[str, str]] = {
     PROBE: {"s3/search": SEARCH_GAP, "s4/search": SEARCH_GAP},

@@ -4,7 +4,8 @@
 // (src/store/cli.h), the export of a project and
 // its publication's recovery `export` (src/export/cli.h), the Python API the script host `run`
 // (src/python/run.h) and `capabilities` (src/python/capabilities.h), the supervisor and worker
-// roles `--mcp` and `--worker` (src/supervisor/), the preview window `--preview` (src/preview/cli.h);
+// roles `--mcp` and `--worker` (src/supervisor/), the preview window `--preview` (src/preview/cli.h),
+// the asset library's `assets list` (src/procedural/cli.h);
 // the other commands are added by their phases. Every verb reads its arguments in UTF-8, decoded
 // from the wide command line. `--help` prints the usage on stdout (exit status 0); a usage error
 // prints it on stderr (exit status 2). The persistent caches (src/render/disk_cache.h, decision 253)
@@ -14,6 +15,7 @@
 
 #include "export/cli.h"
 #include "preview/cli.h"
+#include "procedural/cli.h"
 #include "python/capabilities.h"
 #include "python/recipe.h"
 #include "python/run.h"
@@ -63,6 +65,7 @@ constexpr const char* kUsage =
     "       UzPainter.exe run <script.py> [args...] [--gpu-backend dx12|vulkan] [-- args...]\n"
     "                         [--diagnostic-measure-export]   (non-conformant, decision 286)\n"
     "       UzPainter.exe capabilities\n"
+    "       UzPainter.exe assets list [--parity] [--library <dir>]\n"
     "       UzPainter.exe cache info | clear\n"
     "       UzPainter.exe --preview <file.uzp> [--gpu-backend dx12|vulkan] [--headless]\n"
     "       UzPainter.exe --mcp [--mcp-http <host>:<port> [--token <token>] [--allow-remote]]\n"
@@ -173,6 +176,9 @@ int main() {
     }
     if (!args.empty() && uzp::python::IsCapabilitiesCommand(args.front())) {
         return uzp::python::RunCapabilitiesCommand(args, stdout, stderr);
+    }
+    if (!args.empty() && uzp::procedural::IsAssetsCommand(args.front())) {
+        return uzp::procedural::RunAssetsCommand(args, stdout, stderr);
     }
     if (!args.empty() && uzp::render::IsCacheCommand(args.front())) {
         return uzp::render::RunCacheCommand(args, stdout, stderr);

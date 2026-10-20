@@ -393,6 +393,16 @@ void SetMeshMapResource(core::Edit& edit, core::Id set_id, core::MeshMapUsage us
 // ── Resources ───────────────────────────────────────────────────────────────────────────────────
 
 ResourceFile ReadResourceFile(const std::string& file_path, ResourceUsage usage, const std::optional<std::string>& name) {
+    // A Substance archive, whatever its usage: UzPainter has no runtime that executes one and
+    // reserves none (05-procedural-content.md §5, decisions 002 and 006). Refused before the file
+    // is read.
+    if (const std::filesystem::path archive = PathFromUtf8(file_path); Lower(Utf8(archive.extension())) == ".sbsar") {
+        const std::string file = Utf8(archive.filename());
+        ThrowUnsupportedProcedural("importing " + file + ": UnsupportedProcedural{asset: " + file +
+                                       ", reason: no runtime}: UzPainter executes no .sbsar file "
+                                       "(05-procedural-content.md §5, decision 006)",
+                                   file, "no runtime");
+    }
     if (usage == ResourceUsage::COLOR_LUT) {
         ApiError error("UnsupportedInUzPainter",
                        "uzpainter.resource.import_project_resource is not supported in UzPainter: a COLOR_LUT "

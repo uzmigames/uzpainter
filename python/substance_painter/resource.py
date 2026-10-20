@@ -18,6 +18,7 @@ from uzpainter_facade.resource import (
     is_reload_modified_resources_running,
     list_project_resources,
     reload_modified_resources_async,
+    search,
     show_resources_in_ui,
     update_layer_stack_resource,
 )
@@ -38,6 +39,7 @@ __all__ = [
     "is_reload_modified_resources_running",
     "list_project_resources",
     "reload_modified_resources_async",
+    "search",
     "show_resources_in_ui",
     "update_layer_stack_resource",
 ]

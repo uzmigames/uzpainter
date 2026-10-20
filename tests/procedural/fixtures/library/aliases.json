@@ -1,0 +1,6 @@
+{
+  "schema": "uzpainter/asset-aliases/1",
+  "aliases": [
+    {"shelf": "starterassets", "usage": "GENERATOR", "painter_name": "Synthetic Edge Probe", "asset": "uzasset://test-generator/ridge@2"}
+  ]
+}

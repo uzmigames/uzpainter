@@ -1,0 +1,12 @@
+{
+  "id": 324,
+  "slug": "324-asset-library",
+  "title": "The asset library: data files beside the executable, exact pins, provenance records that enforce the clean room, and an alias table that answers a Painter name only with a certified asset",
+  "status": "accepted",
+  "date": "2026-10-20",
+  "relatedTasks": [
+    "phase3.1_proc-backend-seam",
+    "phase3.3_procedural-families"
+  ],
+  "supersededBy": null
+}

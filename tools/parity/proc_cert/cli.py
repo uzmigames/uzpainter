@@ -1,17 +1,18 @@
 """`python -m tools.parity.proc_cert`: validate, fit, certify and report (decision 303).
 
     validate BATCH                         load and check the batch; nothing is fitted
-    fit      BATCH --fitter M:F --reports D   fit behind the fence and print the candidate's
+    fit      BATCH --fitter M:F [--reports D]  fit behind the fence and print the candidate's
                                            fingerprint; the held-out set is not spent
-    certify  BATCH --fitter M:F --reports D   fit, then certify on both sets: spends the held-out
+    certify  BATCH --fitter M:F [--reports D]  fit, then certify on both sets: spends the held-out
                                            set on the candidate and writes the report
-    report   BATCH --reports D             print the report and the ledger entry of the batch;
+    report   BATCH [--reports D]           print the report and the ledger entry of the batch;
                                            a report whose batch, domain, matrix, case lists or
                                            candidate is not the current batch's and the ledger's
                                            spend is refused (exit 2), never shown as certified
 
 `--store` names the private store (default: this machine's, `UZP_PARITY_STORE`); `--no-store`
-runs without one, so every case is `oracle_unavailable`. `--ledger` defaults to the committed
+runs without one, so every case is `oracle_unavailable`. `--reports` defaults to the committed
+`parity/reports/phase3/proc-cert/` (`report.py`) and `--ledger` to the committed
 `parity/reports/phase3/held-out-ledger.json`. Output is JSON on stdout.
 
 Exit codes: 0 done (certify: the asset is exact); 1 certify or report found no exact asset or no
@@ -36,6 +37,7 @@ from tools.parity.proc_cert.harness import (
     StaleReport,
 )
 from tools.parity.proc_cert.ledger import DEFAULT_LEDGER, Ledger, LedgerError
+from tools.parity.proc_cert.report import DEFAULT_REPORTS
 from tools.parity.store.store import OracleStore, StoreError, locate
 
 # Refusals, and a batch, store or ledger path that does not open or parse (JSON errors are
@@ -70,7 +72,9 @@ def _parser() -> argparse.ArgumentParser:
         command.add_argument("batch", type=Path)
         if name != "report":
             command.add_argument("--fitter", required=True, help="module:callable")
-        command.add_argument("--reports", type=Path, required=True, help="reports directory")
+        command.add_argument(
+            "--reports", type=Path, default=DEFAULT_REPORTS, help="reports directory"
+        )
         command.add_argument("--ledger", type=Path, default=DEFAULT_LEDGER)
         if name != "report":
             store = command.add_mutually_exclusive_group()

@@ -7,7 +7,8 @@
 // bytes. `replace_node_resource` rebinds one source of one node and keeps the node's uid; nothing
 // else changes. `list_used_resources` lists the entries the layer stacks and mesh maps bind, and
 // `resource_origin` the file an entry was imported from (the resource reload of the facade,
-// phase1.21).
+// phase1.21). `_search_assets` is the facade's `resource.search` over UzPainter's asset library
+// (procedural/asset_library.h, decision 324): it returns only what the library holds.
 
 #include <algorithm>
 #include <fstream>
@@ -17,6 +18,7 @@
 #include "python/bindings.h"
 #include "python/edits.h"
 #include "python/errors.h"
+#include "procedural/asset_library.h"
 #include "uzp_core/types/errors.h"
 #include "uzp_core/types/resource_url.h"
 
@@ -172,6 +174,35 @@ void BindResource(py::module_& m) {
         py::arg("node"), py::arg("new_resource"), py::arg("channel") = py::none(),
         "LAY-08: rebinds the bitmap (or mask) source of one node to another project resource; the node keeps "
         "its uid and every other binding is unchanged.");
+
+    m.def(
+        "_search_assets",
+        [](const std::string& query) {
+            const auto& library = procedural::ShippedLibrary();
+            if (!library) throw ApiError("RuntimeError", "the asset library does not load: " + library.error());
+            const auto found = library->Search(query);
+            if (!found) {
+                const procedural::SearchRefusal& refusal = found.error();
+                if (refusal.kind == procedural::SearchRefusal::Kind::NotYetSupported) ThrowNotYetSupported(refusal.message);
+                ThrowUnsupportedProcedural(refusal.message, refusal.procedural.asset, refusal.procedural.reason);
+            }
+            py::list records;
+            for (const procedural::AssetRecord* record : *found) {
+                py::dict entry;
+                entry["url"] = core::FormatAssetUrl(record->asset);
+                entry["family"] = record->asset.family;
+                entry["id"] = record->asset.id;
+                entry["version"] = record->asset.version;
+                entry["name"] = record->name;
+                entry["usage"] = record->usage;
+                entry["status"] = std::string(procedural::KindName(record->status.kind));
+                entry["provenance"] = FromJson(record->json);
+                records.append(entry);
+            }
+            return records;
+        },
+        py::arg("query"),
+        "The asset library's answer to a resource.search query (decision 324): its records, as dicts.");
 
     m.def(
         "update_layer_stack_resource",

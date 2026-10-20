@@ -49,8 +49,10 @@ public:
     /// `StaleRevisionError`: the revision the call was based on and the current one.
     std::int64_t expected = 0;
     std::int64_t current = 0;
-    /// `UnsupportedInUzPainter`.
+    /// `UnsupportedInUzPainter` (`reason` also for `UnsupportedProcedural`).
     std::string symbol, reason, alternative;
+    /// `UnsupportedProcedural`: the asset (or file) refused.
+    std::string asset;
     /// `ProjectError` subclasses of mesh import: the refusal's structured facts.
     core::json::Object details;
 
@@ -64,6 +66,9 @@ private:
 [[noreturn]] void ThrowBusy(const std::string& job_id, const std::string& message);
 [[noreturn]] void ThrowStale(std::int64_t expected, std::int64_t current);
 [[noreturn]] void ThrowResourceNotFound(const std::string& message);
+/// `UnsupportedProcedural(message, asset, reason)` (05 §2): the asset or file and the reason.
+[[noreturn]] void ThrowUnsupportedProcedural(const std::string& message, const std::string& asset,
+                                             const std::string& reason);
 
 /// Raises the error of a failed transaction result: `error`, when the call stored the typed
 /// exception that failed it, otherwise the class `result.error_type` names.

@@ -51,7 +51,13 @@ class NotYetSupported(Exception):
 
 
 class UnsupportedProcedural(NotYetSupported):
-    """Procedural content this build does not evaluate."""
+    """Procedural content this build does not evaluate: `asset` names the asset (or the file) and
+    `reason` why, when the refusal states them (05-procedural-content.md §2)."""
+
+    def __init__(self, message, asset=None, reason=None):
+        super().__init__(message)
+        self.asset = asset
+        self.reason = reason
 
 
 class PathTracerUnavailable(NotYetSupported):
@@ -143,6 +149,9 @@ void RaiseApiError(const ApiError& error) {
         Raise(type(error.expected, error.current));
     } else if (cls == "UnsupportedInUzPainter") {
         Raise(type(error.symbol, error.reason, error.alternative));
+    } else if (cls == "UnsupportedProcedural") {
+        const auto text = [](const std::string& value) { return value.empty() ? py::object(py::none()) : py::object(py::str(value)); };
+        Raise(type(error.what(), text(error.asset), text(error.reason)));
     } else if (cls == "MeshParseError" || cls == "UnsupportedFormat" || cls == "DuplicateMaterialNames" ||
                cls == "UVOutsideTile" || cls == "ReleaseGap" || cls == mesh::kMaterialMappingErrorClass) {
         Raise(type(error.what(), FromJson(error.details)));
@@ -170,6 +179,13 @@ void ThrowProjectError(const std::string& message) { throw ApiError("ProjectErro
 void ThrowNotYetSupported(const std::string& message) { throw ApiError("NotYetSupported", message); }
 void ThrowEditionContext(const std::string& message) { throw ApiError("EditionContextException", message); }
 void ThrowResourceNotFound(const std::string& message) { throw ApiError("ResourceNotFoundError", message); }
+
+void ThrowUnsupportedProcedural(const std::string& message, const std::string& asset, const std::string& reason) {
+    ApiError error("UnsupportedProcedural", message);
+    error.asset = asset;
+    error.reason = reason;
+    throw error;
+}
 
 void ThrowBusy(const std::string& job_id, const std::string& message) {
     ApiError error("BusyError", message);

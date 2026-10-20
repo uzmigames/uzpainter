@@ -25,7 +25,10 @@ Checks the content of files, never only their names or signatures:
   `tools/parity/settling/mcp_contract.py`), and a pilot's MCP-only round report
   (`parity/reports/<phase>/<pilot>-mcp-round.json`, `tools/parity/tier1/mcp_round.py`). The
   procedural held-out ledger (`parity/reports/<phase>/held-out-ledger.json`,
-  `tools/parity/proc_cert/ledger.py`) holds held-out pins and candidate SHA-256 digests only.
+  `tools/parity/proc_cert/ledger.py`) holds held-out pins and candidate SHA-256 digests only. The
+  procedural certification reports (`parity/reports/<phase>/proc-cert/<asset>@<version>/<pin>.json`)
+  and batches (`parity/manifests/phase3/proc-cert/**`) have rules of their own
+  (`tools/parity/proc_cert/report.py`): hashes, integer statistics and case outcomes, no path.
 """
 
 from __future__ import annotations
@@ -389,6 +392,18 @@ def _held_out_ledger(path: str, document: Any, data: bytes, ctx: _Context) -> li
     return ledger_problems(document)
 
 
+def _proc_cert_report(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
+    from tools.parity.proc_cert.report import report_problems
+
+    return report_problems(document)
+
+
+def _proc_cert_batch(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
+    from tools.parity.proc_cert.report import batch_problems
+
+    return batch_problems(document)
+
+
 _Rule = Callable[[str, Any, bytes, _Context], list[str]]
 
 # First match wins: (path pattern, schema it assigns, check).
@@ -415,6 +430,11 @@ PATH_RULES: tuple[tuple[re.Pattern[str], str, _Rule], ...] = (
         re.compile(r"^parity/manifests/consumers/gltf/wand-v1\.json$"),
         "gltf-consumer-fixture.json (public consumer selection, no private outputs)",
         _gltf_consumer_fixture,
+    ),
+    (
+        re.compile(r"^parity/manifests/phase3/proc-cert/.+\.json$"),
+        "procedural certification batch (hashes only, decision 303)",
+        _proc_cert_batch,
     ),
     (re.compile(r"^parity/manifests/.+$"), "golden-public.json", _public_manifest),
     (
@@ -473,6 +493,14 @@ PATH_RULES: tuple[tuple[re.Pattern[str], str, _Rule], ...] = (
         re.compile(r"^parity/reports/[^/]+/[a-z0-9][a-z0-9.-]*-mcp-round\.json$"),
         "pilot MCP-only round report (numbers, identifiers and hashes only)",
         _mcp_round,
+    ),
+    (
+        re.compile(
+            r"^parity/reports/[^/]+/proc-cert/[a-z0-9][a-z0-9._-]*__[a-z0-9][a-z0-9._-]*@[0-9]+"
+            r"/[0-9a-f]{16}\.json$"
+        ),
+        "procedural certification report (hashes, statistics and outcomes only)",
+        _proc_cert_report,
     ),
     (
         re.compile(r"^parity/reports/[^/]+/held-out-ledger\.json$"),

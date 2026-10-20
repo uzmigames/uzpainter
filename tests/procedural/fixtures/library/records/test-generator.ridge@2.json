@@ -1,0 +1,23 @@
+{
+  "schema": "uzpainter/asset-provenance/1",
+  "asset": "uzasset://test-generator/ridge@2",
+  "name": "Ridge (synthetic test probe)",
+  "usage": "GENERATOR",
+  "author": "UzmiGames (synthetic test fixture, not a shipped asset)",
+  "license": "Apache-2.0",
+  "sources": [
+    {"kind": "paper", "citation": "K. Perlin, Improving noise, ACM Transactions on Graphics 21(3), SIGGRAPH 2002"},
+    {"kind": "approved-source", "id": "A-PYDOC", "citation": "SourceSubstance parameter semantics (booleans passed as int)"}
+  ],
+  "defaults": {"amount": 0.5, "bias": -0.25, "mode": true},
+  "domain": {
+    "parameters": {"amount": {"range": [0, 1]}, "bias": {"range": [-1, 1]}, "mode": {"set": [0, 1]}},
+    "constraints": [{"coefficients": {"amount": 1, "bias": 1}, "max": 1.25}],
+    "seeds": {"policy": "listed", "seeds": [7, 11]},
+    "geometry": {"mesh_classes": ["sphere", "bevelled-cube"], "uv_tiles": 1,
+                 "inputs": {"Curvature": {"resolutions": [64], "formats": ["u16"], "colour_spaces": ["linear"], "channels": [1]}}},
+    "output": {"resolutions": [64], "formats": ["f32"], "colour_spaces": ["linear"], "channels": [1]}
+  },
+  "corpus": {"calibration": "synthetic-calibration", "held_out": "synthetic-held-out"},
+  "parity": {"status": "exact", "report": "tests/procedural/procedural_test.cpp (synthetic: no harness report)"}
+}

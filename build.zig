@@ -451,7 +451,20 @@ const procedural_sources = [_][]const u8{
     "procedural/seam.cpp",
     "procedural/primitives.cpp",
     "procedural/hlsl_backend.cpp",
+    "procedural/asset_library.cpp",
+    "procedural/cli.cpp",
+    "procedural/admission.cpp",
 };
+/// The asset library and the seam vocabulary it uses (`src/procedural/asset_library.h`, decision
+/// 324), relative to `src/`: compiled into `UzPainter.exe` and into `uzp-pyapi-tests.exe`
+/// (`resource.search`), without the HlslBackend host.
+const asset_library_sources = [_][]const u8{
+    "procedural/seam.cpp",
+    "procedural/asset_library.cpp",
+};
+/// UzPainter's own procedural asset library (`src/procedural/asset_library.h`), installed beside
+/// the executables as `bin/assets/procedural/`.
+const procedural_assets_dir = "assets/procedural";
 /// The project templates the evaluator reads (`src/evaluator/templates.h`), installed beside the
 /// executables as `bin/assets/templates/`.
 const templates_dir = "assets/templates";
@@ -1421,6 +1434,9 @@ pub fn build(b: *std.Build) void {
     // mesh of an export: the mesh importers join `UzPainter.exe`.
     const pyapi_flags = evaluator_flags ++ app_defines;
     app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &pyapi_sources, .flags = &pyapi_flags });
+    app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &asset_library_sources, .flags = &pyapi_flags });
+    // `UzPainter.exe assets list [--parity]` (src/procedural/cli.h).
+    app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &.{"procedural/cli.cpp"}, .flags = &pyapi_flags });
     // The supervisor and worker roles (phase2.1). The worker's test-only fault hooks exist in a
     // Debug build only: ReleaseFast, ReleaseSafe and ReleaseSmall contain none of their code and
     // refuse `--test-faults` (decision 120). They reach the store's hooks to end the worker inside
@@ -1444,6 +1460,12 @@ pub fn build(b: *std.Build) void {
         .install_subdir = "assets/export-presets",
     });
     painter_step.dependOn(&install_export_presets.step);
+    const install_procedural_assets = b.addInstallDirectory(.{
+        .source_dir = b.path(procedural_assets_dir),
+        .install_dir = .bin,
+        .install_subdir = "assets/procedural",
+    });
+    painter_step.dependOn(&install_procedural_assets.step);
     const install_environments = b.addInstallDirectory(.{
         .source_dir = b.path(environments_dir),
         .install_dir = .bin,
@@ -1518,6 +1540,8 @@ pub fn build(b: *std.Build) void {
         .flags = &cxx_flags,
     });
     procedural_tests_mod.linkLibrary(core_lib);
+    // The admission case saves and reopens a project (items 3.1, 3.4, 3.6).
+    procedural_tests_mod.linkLibrary(store_lib);
     procedural_tests_mod.linkLibrary(uzp_core_lib);
     for (system_libraries) |name| procedural_tests_mod.linkSystemLibrary(name, .{});
     procedural_tests_mod.linkSystemLibrary("version", .{});
@@ -1687,6 +1711,7 @@ pub fn build(b: *std.Build) void {
         .flags = &pyapi_flags,
     });
     pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &pyapi_sources, .flags = &pyapi_flags });
+    pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &asset_library_sources, .flags = &pyapi_flags });
     // The capture (`python/capture.cpp`) builds the preview's scene and pass.
     embed_inputs.add(pyapi_tests_mod, "src", &preview_sources, &evaluator_flags);
     pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &preview_scene_sources, .flags = &pyapi_flags });
@@ -1733,6 +1758,7 @@ pub fn build(b: *std.Build) void {
     }).step);
     pyapi_tests_step.dependOn(&install_templates.step);
     pyapi_tests_step.dependOn(&install_export_presets.step);
+    pyapi_tests_step.dependOn(&install_procedural_assets.step);
     pyapi_tests_step.dependOn(&install_environments.step);
     // `uzpainter.capabilities` reads the manifest beside the executable, as in `zig build painter`.
     pyapi_tests_step.dependOn(capabilities_step);

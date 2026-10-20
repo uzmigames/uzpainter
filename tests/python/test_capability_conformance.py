@@ -229,6 +229,11 @@ def recipes() -> dict[Any, tuple[str, str]]:
     )
     r["substance_painter.resource.Shelf.import_resource"] = (SHELF, "shelf.import_resource(PLANE)")
     r["substance_painter.resource.Shelf.resources"] = (SHELF, "shelf.resources()")
+    # A Painter name: the shipped asset library certifies no family yet (decision 324).
+    r["substance_painter.resource.search"] = (
+        "",
+        "resource.search('s:starterassets u:filter n:Blur=')",
+    )
     for file_format in ("tiff", "psd", "webp", "j2k"):
         r[("substance_painter.export.export_project_textures", f"file-format:{file_format}")] = (
             "",
