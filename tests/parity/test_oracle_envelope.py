@@ -879,8 +879,16 @@ def corpus_golden_manifests() -> list[Path]:
     """The golden manifests under `parity/manifests`. The tree also holds public manifests of
     other schemas (the glTF consumer fixture `consumers/gltf/wand-v1.json`), which the guard
     validates against their own schema (`tools/parity/guard/guard.py` PATH_RULES)."""
-    paths = sorted((REPO_ROOT / "parity" / "manifests").rglob("*.json"))
-    return [p for p in paths if load_json(p).get("schema") == GOLDEN_PUBLIC]
+    root = REPO_ROOT / "parity" / "manifests"
+    paths = sorted(root.rglob("*.json"))
+    goldens = [p for p in paths if load_json(p).get("schema") == GOLDEN_PUBLIC]
+    # Only the files the guard gives a schema of their own may be skipped (the glTF consumer
+    # fixture, procedural certification batches): a golden with a wrong schema is not dropped.
+    others = {p.relative_to(root).as_posix() for p in paths if p not in goldens}
+    assert all(
+        o == "consumers/gltf/wand-v1.json" or o.startswith("phase3/proc-cert/") for o in others
+    ), others
+    return goldens
 
 
 def test_canary_subset_is_fixed_and_covers_the_required_areas() -> None:

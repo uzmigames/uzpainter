@@ -165,7 +165,11 @@ def test_every_pending_symbol_of_the_group_is_requested_or_routed() -> None:
     # p22b-textureset-channels passes were pending until abd94980 promoted them on its replay.
     channel_types = {s for s in covered if ".ChannelType." in s}
     assert len(channel_types) == 52
-    assert channel_types <= {e["symbol"] for e in load_json(INVENTORY)["entries"]}
+    entries = {e["symbol"]: e for e in load_json(INVENTORY)["entries"]}
+    assert channel_types <= set(entries)
+    assert all(
+        entries[s]["status"] == "supported" and entries[s]["tier_evidence"] for s in channel_types
+    )
 
 
 def test_the_requests_name_the_symbols_they_exercise() -> None:
