@@ -143,6 +143,40 @@ return nonzero with a JSON error. `tests/export/test_gltf_consumer.py` exercises
 authored publication and corrupt inputs. The manifest stays `pending-real-fixture`:
 this tooling does not satisfy Wand acceptance, R-314, or Painter export parity.
 
+### UzEngine material writer
+
+`WriteUzMaterial` (`uzmat_writer.{h,cpp}`) emits a version-1 `.uzmat` graph and the
+matching JSON value for a scene's `components.material`. It writes bytes in memory;
+the preset and publication integration remain `phase3.2_uze-uzmat-preset` work.
+Its format source is approved `U-UZE-RUNTIME`, commit
+`a703c95ada45002a774db9d9cf82b3b7964d09d6`: `material_expression.cpp`,
+`material_graph.cpp`, `hlsl_material_translator.cpp` and `ecs/loaders/scene_loader.cpp`.
+No UzEngine implementation is linked or executed.
+
+The request explicitly supplies the material name/path and albedo, normal, ORM and
+emissive `.uztexture` paths, with optional height, blend mode and two-sidedness.
+Pins 0..6 bind albedo RGB, ORM B, ORM G, normal RGB, emissive RGB, albedo A and ORM R.
+Samples are named `Albedo`, `Normal`, `ORM`, `Emissive` because the pinned graph
+translator uses those names for texture colour space. Normal stays encoded; the
+shader decodes it downstream. Multipliers are one. The inline block includes `orm`
+and all four emissive colour/intensity values because the pinned scene loader
+otherwise overwrites graph ORM and multiplies emission by zero.
+
+The `.uzmat` must sit at the delivery root, mounted as the consumer's VFS root.
+All texture references use that same root in both documents; nested texture paths
+are allowed. The writer rejects traversal, invalid UTF-8, reserved Windows device
+names and case-insensitive path matches between sRGB and linear texture slots. It never infers a binding
+or format from a filename. File existence, format metadata, generation ownership
+and actual engine loading belong to the publication and external consumer fixture.
+
+Height has no pin among 0..6 and no verified inline binding in this source revision.
+An optional height path is reported in `gaps`, without inventing an engine key.
+Non-opaque modes also report the SM5 opacity gap. The pinned shader reconstructs
+positive normal Z from XY: RGB file preservation alone does not establish that this
+consumer renders negative-Z normals correctly. These consumer limits do not accept
+the complete UzEngine preset or its fixture. CPU tests: `zig build uzp-material-tests`
+and `tests/export/test_uzmat_writer.py`.
+
 ## 6. Publication and receipts (decision 097)
 
 Task `phase1.17_export-publication-receipts`. Tests: `tests/export/test_export_publication.py` (CPU, every lane).

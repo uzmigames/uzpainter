@@ -6,7 +6,14 @@ UzPainter SHALL write `<set>.uzmat` with its own code, binding `TextureSample โ
 #### Scenario: Pins reference the exported textures
 Given wand v1 exported with the UzEngine preset
 When `<set>.uzmat` is parsed
-Then pins 0..6 reference the albedo, normal, ORM, emissive and height textures of the same generation as stated in the preset table
+Then pins 0..6 reference the albedo, normal, ORM and emissive textures of the same generation: BaseColor, Metallic, Roughness, Normal, Emissive, Opacity and AO respectively
+And height MUST NOT be assigned an invented graph pin or inline key; the pinned engine has no verified route for it, so the consumer gap remains explicit until the external fixture establishes that route
+
+#### Scenario: Consistent graph and inline paths
+Given a `.uzmat` at the exported generation's file root, mounted as the consumer's VFS root
+When the material writer emits the graph and inline scene-material block
+Then both MUST reference the same relative texture paths, with ORM explicitly present inline and emissive multipliers set to one
+And unsafe paths, malformed UTF-8 and one texture path assigned to both sRGB and linear slots MUST be rejected
 
 ### Requirement: UzEngine Preset Outputs With Explicit Metadata
 The UzEngine preset MUST compile into a typed plan whose outputs, formats, colour spaces and bindings equal the UzEngine preset table of `08-export.md` ยง4, and MUST NOT infer any of them from file names.

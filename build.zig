@@ -411,6 +411,7 @@ const export_sources = [_][]const u8{
     "export/project_export.cpp",
     "export/publish.cpp",
     "export/receipt.cpp",
+    "export/uzmat_writer.cpp",
     "export/virtual_maps.cpp",
     "export/write.cpp",
 };
@@ -1136,6 +1137,30 @@ pub fn build(b: *std.Build) void {
     });
     const gltf_consumer_step = b.step("gltf-consumer", "Build the CPU glTF consumer fixture");
     gltf_consumer_step.dependOn(&b.addInstallArtifact(gltf_consumer_exe, .{}).step);
+    const material_tests_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    material_tests_mod.addIncludePath(b.path("src"));
+    material_tests_mod.linkLibrary(uzp_core_lib);
+    material_tests_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &.{"export/uzmat_writer.cpp"},
+        .flags = &uzp_core_flags,
+    });
+    material_tests_mod.addCSourceFiles(.{
+        .root = b.path("tests/export"),
+        .files = &.{"uzmat_test.cpp"},
+        .flags = &uzp_core_flags,
+    });
+    const material_tests_exe = b.addExecutable(.{
+        .name = "uzp-material-tests",
+        .root_module = material_tests_mod,
+    });
+    const material_tests_step = b.step("uzp-material-tests", "Build the CPU UzEngine material writer tests");
+    material_tests_step.dependOn(&b.addInstallArtifact(material_tests_exe, .{}).step);
     // The CPU baker reads high and cage mesh files with the mesh loaders (decision 311).
     bake_tests_mod.linkLibrary(mesh_lib);
 
