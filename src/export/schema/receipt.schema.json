@@ -232,7 +232,8 @@
             "bmp",
             "jpeg",
             "dds",
-            "json"
+            "json",
+            "uztexture"
           ]
         },
         "bit_depth": {
@@ -291,6 +292,9 @@
           "items": {
             "$ref": "#/$defs/consumer_gap"
           }
+        },
+        "uztexture": {
+          "$ref": "#/$defs/uztexture_derivative"
         }
       },
       "allOf": [
@@ -322,6 +326,178 @@
               },
               "colour_space": {
                 "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "format": {
+                "const": "uztexture"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "uztexture"
+            ],
+            "properties": {
+              "bit_depth": {
+                "const": "8"
+              },
+              "colour_space": {
+                "const": "linear"
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "uztexture"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "uztexture_derivative": {
+      "description": "A .uztexture normal derivative (src/export/write.h EncodedUzTexture, decision 316): cooked from its canonical PNG 16 file `source`; stored as BC5, or as RGBA8 when the negative-Z policy rgb routed a map holding negative-Z texels (B <= 32767). Policy fail with such texels publishes nothing, so a published derivative under fail has none.",
+      "type": "object",
+      "required": [
+        "source",
+        "binding",
+        "format",
+        "srgb",
+        "mips",
+        "encoder",
+        "negative_z"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/delivery_path"
+        },
+        "binding": {
+          "const": "normal"
+        },
+        "format": {
+          "enum": [
+            "BC5",
+            "RGBA8"
+          ]
+        },
+        "srgb": {
+          "const": false
+        },
+        "mips": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "encoder": {
+          "type": "string",
+          "minLength": 1
+        },
+        "negative_z": {
+          "type": "object",
+          "required": [
+            "policy",
+            "texels",
+            "first",
+            "routed"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "policy": {
+              "enum": [
+                "fail",
+                "rgb"
+              ]
+            },
+            "texels": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "first": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "routed": {
+              "type": "boolean"
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "routed": {
+                    "const": true
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "policy": {
+                    "const": "rgb"
+                  },
+                  "texels": {
+                    "minimum": 1
+                  },
+                  "first": {
+                    "type": "array"
+                  }
+                }
+              },
+              "else": {
+                "properties": {
+                  "texels": {
+                    "const": 0
+                  },
+                  "first": {
+                    "type": "null"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "negative_z": {
+                "properties": {
+                  "routed": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "format": {
+                "const": "RGBA8"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "format": {
+                "const": "BC5"
               }
             }
           }

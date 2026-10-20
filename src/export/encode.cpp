@@ -100,7 +100,8 @@ std::optional<uint16_t> OcioSrgbPng16Code(float v) {
 }
 
 EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster, const Coverage* coverage,
-                        InexactPadding inexact) {
+                        InexactPadding inexact, std::vector<uint16_t>* samples) {
+    if (samples != nullptr) samples->clear();
     if (file.layout == FileLayout::Statistics) {
         if (!raster.statistics) throw std::invalid_argument("export: a statistics file without statistics");
         return {*raster.statistics, FileLayout::Statistics};
@@ -209,7 +210,9 @@ EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster, const
             }
         }
     }
-    return {EncodePng(image), layout};
+    EncodedImage encoded{EncodePng(image), layout};
+    if (samples != nullptr) *samples = std::move(image.samples);
+    return encoded;
 }
 
 }  // namespace uzp::exporter

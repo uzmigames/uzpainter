@@ -65,11 +65,14 @@
 //       ("stored") or not stored ("missing": the re-derive fails); "mesh_reads" counts their reads.
 //       Without it the coverage is the spec's mesh, or a known-absent mesh.
 //   uzp-export-tests [--fault <point>[:<n>]] publish <templates dir> <spec.json> <config.json>
+//                    [--uztexture <relativePath>[:fail|:rgb]]
 //       (phase1.17) As `export`, through `PublishExport`: the files and the receipt published as a
 //       new generation under exportPath; the spec's mesh is also the project's imported mesh (a
 //       resource). Prints {"generation", "receipt_sha256", "files": [{rootPath, relativePath,
 //       path, size, sha256}]} or {"error": class, "message": text}. `--fault` arms a test-only
-//       fault hook (src/export/fault.h).
+//       fault hook (src/export/fault.h). `--uztexture` requests the `.uztexture` normal derivative
+//       of the planned file `relativePath` with that negative-Z policy, `fail` when none is given
+//       (`RequestUzTextureNormal`, decision 316).
 //   uzp-export-tests [--fault <point>[:<n>]] fixed-copy <exportPath> <dir>
 //       (phase1.17) `CopyFixedNames`; prints {"generation", "files": [path...]} or {"error"}.
 //   uzp-export-tests project <spec.json> <out.uzp>
@@ -1092,7 +1095,8 @@ json::Object FailureJson(const render::Error& error) {
     return json::Object{{"error", "Failure"}, {"message", error.reason}};
 }
 
-int RunPublish(const fs::path& templatesDir, const fs::path& specPath, const fs::path& configPath) {
+int RunPublish(const fs::path& templatesDir, const fs::path& specPath, const fs::path& configPath,
+               const std::optional<std::string>& uztexture) {
     Spec spec = ParseSpec(specPath);
     const json::Value document = json::Parse(ReadText(specPath));
     const json::Object& o = Obj(document, "spec");
@@ -1115,7 +1119,14 @@ int RunPublish(const fs::path& templatesDir, const fs::path& specPath, const fs:
     }
     json::Object result;
     try {
-        const exporter::ExportPlan plan = exporter::CompilePlan(spec.project, ReadText(configPath));
+        exporter::ExportPlan plan = exporter::CompilePlan(spec.project, ReadText(configPath));
+        if (uztexture) {
+            const size_t colon = uztexture->rfind(':');
+            const exporter::NegativeZPolicy policy = colon == std::string::npos
+                                                         ? exporter::NegativeZPolicy::fail
+                                                         : exporter::ParseNegativeZPolicy(uztexture->substr(colon + 1));
+            exporter::RequestUzTextureNormal(plan, uztexture->substr(0, colon), policy);
+        }
         auto templates = std::make_shared<const evaluator::TemplateLibrary>(evaluator::TemplateLibrary::Load(templatesDir));
         evaluator::CpuEvaluator cpu(templates, evaluator::AdmissionLimits{64ull << 30, 1 << 20});
         exporter::SourceInputs inputs;
@@ -1399,7 +1410,10 @@ int main(int argc, char** argv) {
             exporter::fault::Arm(args[1]);
             args.erase(args.begin(), args.begin() + 2);
         }
-        if (args.size() == 4 && args[0] == "publish") return RunPublish(args[1], args[2], args[3]);
+        if (args.size() == 4 && args[0] == "publish") return RunPublish(args[1], args[2], args[3], std::nullopt);
+        if (args.size() == 6 && args[0] == "publish" && args[4] == "--uztexture") {
+            return RunPublish(args[1], args[2], args[3], args[5]);
+        }
         if (args.size() == 3 && args[0] == "fixed-copy") return RunFixedCopy(args[1], args[2]);
         if (args.size() == 3 && args[0] == "project") return RunProject(args[1], args[2]);
         if (!args.empty() && args[0] == "cli") {
@@ -1434,7 +1448,8 @@ int main(int argc, char** argv) {
     std::cerr << "usage: uzp-export-tests plan <cases.json> | files <templates> <spec.json> <config.json> <out> | "
                  "export <templates> <spec.json> <config.json> | "
                  "export-diagnostic <templates> <spec.json> <config.json> | reencode <list.txt> | roundtrip <out> | "
-                 "[--fault <point>[:<n>]] publish <templates> <spec.json> <config.json> | "
+                 "[--fault <point>[:<n>]] publish <templates> <spec.json> <config.json> "
+                 "[--uztexture <relativePath>[:fail|:rgb]] | "
                  "[--fault <point>[:<n>]] fixed-copy <exportPath> <dir> | consume-pinned <exportPath> | "
                  "consume-locked <exportPath> <dir> | receipt <project.json> <config.json> | hold-lock <exportPath> <ms> | recover --recover <exportPath> [--fixed-names <dir>]... | "
                  "presets <preset dir> <references.json> | aliases\n";

@@ -2,6 +2,7 @@
 
 #include "export/encode.h"
 #include "export/padding.h"
+#include "export/uztexture_writer.h"
 #include "uzp_core/manifest/sha256.h"
 #include "uzp_core/types/errors.h"
 
@@ -30,6 +31,43 @@ const core::TextureSet* SetOf(const core::Project& project, core::Id id) {
         if (set.id == id) return &set;
     }
     return nullptr;
+}
+
+/// The `.uztexture` derivative of `file` from its PNG 16 samples (`EncodedUzTexture`), or the
+/// negative-Z refusal of policy `fail`.
+render::Result<EncodedUzTexture> CookNormalDerivative(const PlannedFile& file, const std::vector<uint16_t>& samples) {
+    const UzTextureOutput& output = *file.uztexture;
+    const size_t texels = size_t{file.width} * file.height;
+    if (samples.size() != texels * 3) {
+        return ExportFail("the samples of " + file.relativePath + " are not the RGB PNG 16 its derivative reads");
+    }
+    Rgba16Image canonical{file.width, file.height, {}};
+    canonical.rgba.reserve(texels * 4);
+    for (size_t t = 0; t < texels; ++t) {
+        canonical.rgba.insert(canonical.rgba.end(), {samples[t * 3], samples[t * 3 + 1], samples[t * 3 + 2], 65535});
+    }
+    const NegativeZ negative = FindNegativeZ(canonical);
+    if (negative.count != 0 && output.negativeZ == NegativeZPolicy::fail) {
+        return ExportFail(std::string(NegativeZNormal(file.relativePath, negative).what()) +
+                          "; the negative-Z policy is fail (decision 316): nothing is published");
+    }
+    EncodedUzTexture cooked;
+    cooked.policy = output.negativeZ;
+    cooked.negativeTexels = negative.count;
+    if (negative.count != 0) cooked.firstNegative = std::array<uint32_t, 2>{negative.firstX, negative.firstY};
+    cooked.routed = negative.count != 0;
+    UzTextureSpec spec;
+    spec.binding = "normal";
+    spec.format = cooked.routed ? uz::TextureFormat::Uncompressed_RGBA8 : uz::TextureFormat::BC5;
+    spec.srgb = false;
+    spec.mips.mapClass = MipClass::Normal;
+    const BcEncoder& encoder = EtcpakEncoder();
+    UzTexture texture = CookUzTexture(encoder, canonical, spec, 0);
+    cooked.bytes.assign(texture.bytes.begin(), texture.bytes.end());
+    cooked.format = cooked.routed ? "RGBA8" : "BC5";
+    cooked.mips = static_cast<uint32_t>(texture.metadata.mips.size());
+    cooked.encoder = std::string(encoder.Name());
+    return cooked;
 }
 
 }  // namespace
@@ -125,10 +163,18 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
 #endif
             const Coverage* coverage =
                 file.layout != FileLayout::Statistics ? &coverages.at(file.textureSetId) : nullptr;
+            std::vector<uint16_t> samples;
             EncodedImage image = EncodeFile(file, *raster, coverage,
-                                            diagnostic != nullptr ? InexactPadding::measure : InexactPadding::refuse);
+                                            diagnostic != nullptr ? InexactPadding::measure : InexactPadding::refuse,
+                                            file.uztexture ? &samples : nullptr);
+            std::optional<EncodedUzTexture> derivative;
+            if (file.uztexture) {
+                render::Result<EncodedUzTexture> cooked = CookNormalDerivative(file, samples);
+                if (!cooked) return render::Unexpected(cooked.error());
+                derivative = std::move(*cooked);
+            }
             encoded.push_back({std::move(image.bytes), raster->normalTag, image.layout, diagnostic != nullptr,
-                               std::move(bypassed[i]), raster->undecided});
+                               std::move(bypassed[i]), raster->undecided, std::move(derivative)});
         } catch (const std::exception& e) {
             return ExportFail("encoding " + file.relativePath + " failed: " + e.what());
         }
@@ -145,19 +191,26 @@ render::Result<std::vector<WrittenFile>> WriteExport(const core::Project& projec
     if (!encoded) return render::Unexpected(encoded.error());
     // 3. The files written.
     std::vector<WrittenFile> written;
-    for (size_t i = 0; i < plan.files.size(); ++i) {
-        const PlannedFile& file = plan.files[i];
-        const fs::path path = fs::path(plan.exportPath) / fs::path(file.relativePath);
+    const auto write = [&](const std::string& rootPath, const std::string& relativePath,
+                           const std::string& bytes) -> render::Result<void> {
+        const fs::path path = fs::path(plan.exportPath) / fs::path(relativePath);
         std::error_code error;
         fs::create_directories(path.parent_path(), error);
         if (error) return ExportFail("cannot create the folder of " + path.string() + ": " + error.message());
         std::ofstream stream(path, std::ios::binary | std::ios::trunc);
-        const std::string& bytes = (*encoded)[i].bytes;
         stream.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
         stream.close();
         if (!stream) return ExportFail("cannot write " + path.string());
-        written.push_back(
-            {file.rootPath, file.relativePath, path.generic_string(), bytes.size(), core::Sha256Hex(bytes)});
+        written.push_back({rootPath, relativePath, path.generic_string(), bytes.size(), core::Sha256Hex(bytes)});
+        return {};
+    };
+    for (size_t i = 0; i < plan.files.size(); ++i) {
+        const PlannedFile& file = plan.files[i];
+        render::Result<void> done = write(file.rootPath, file.relativePath, (*encoded)[i].bytes);
+        if (done && (*encoded)[i].uztexture) {
+            done = write(file.rootPath, file.uztexture->relativePath, (*encoded)[i].uztexture->bytes);
+        }
+        if (!done) return render::Unexpected(done.error());
     }
     return written;
 }

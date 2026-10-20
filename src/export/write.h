@@ -10,8 +10,10 @@
 //    then a combined virtual normal on a UV-islanded set (CheckIslandNormal, statistics files
 //    included) and the padding (CheckPadding);
 // 2. every file is evaluated (EvaluateFileOn), padded over its texture set's coverage
-//    (ApplyPadding) and encoded (EncodeFile) in memory;
-// 3. only then are the files written, in plan order, sub-folders created as needed.
+//    (ApplyPadding) and encoded (EncodeFile) in memory, and its `.uztexture` derivative, when the
+//    plan requests one, cooked from the encoded samples (`EncodedUzTexture`, decision 316);
+// 3. only then are the files written, in plan order, each derivative right after its file,
+//    sub-folders created as needed.
 //
 // The coverage comes from `inputs.geometry` (the texture set's material, every object); a
 // configuration with an image file and no texturing mesh fails before anything is written. Same
@@ -32,6 +34,7 @@
 // the whole-tile evaluation, padded as its stored values. The receipt marks such a generation
 // `non_conformant` (receipt.h).
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -59,6 +62,26 @@ struct DiagnosticMeasure {
 /// refusal of its in-memory views (padding.h, decision 245).
 [[nodiscard]] std::optional<Coverage> CoverageOf(const core::TextureSet& set, const SourceInputs& inputs);
 
+/// A planned file's `.uztexture` normal derivative, cooked in memory (plan.h `UzTextureOutput`,
+/// decision 316): the file's PNG 16 samples, A = 65535, as the `Normal` class of
+/// uztexture_writer.h `CookUzTexture`, binding `normal`, linear. Its negative-Z texels (B <= 32767)
+/// are found first: with any of them, policy `fail` stops the export with an `export:` failure
+/// naming their count and the first, before anything is published, and policy `rgb` stores the map
+/// as RGBA8 (`routed`); otherwise it is stored as BC5.
+struct EncodedUzTexture {
+    std::string bytes;
+    /// "BC5" or "RGBA8".
+    std::string format;
+    uint32_t mips = 0;
+    NegativeZPolicy policy = NegativeZPolicy::fail;
+    uint64_t negativeTexels = 0;
+    /// The first negative-Z texel in row-major order, when there is one.
+    std::optional<std::array<uint32_t, 2>> firstNegative;
+    bool routed = false;
+    /// The block encoder, for the receipt ("etcpak 2.1").
+    std::string encoder;
+};
+
 /// A planned file's bytes, encoded in memory.
 struct EncodedFile {
     std::string bytes;
@@ -73,6 +96,8 @@ struct EncodedFile {
     /// The diagnostic measure export: the file's texels whose form is not recorded, written by the
     /// best-known rule (`FileRaster::undecided`, decision 308).
     uint64_t undecided = 0;
+    /// The file's `.uztexture` derivative, when the plan requests one.
+    std::optional<EncodedUzTexture> uztexture{};
 };
 
 /// Steps 1 and 2 above: every file of `plan` (compiled from revision `revision` of `project`)
@@ -98,7 +123,8 @@ struct WrittenFile {
     std::string sha256;
 };
 
-/// Writes every file of `plan` (compiled from revision `revision` of `project`). Throws
+/// Writes every file of `plan` (compiled from revision `revision` of `project`), each `.uztexture`
+/// derivative after its file. Throws
 /// `core::NotYetSupported` before anything is evaluated for an unrecorded processing or padding;
 /// returns the evaluator's failure, or an `export:` failure (no texturing mesh, a write that
 /// fails), with nothing written except, for a write failure, the files before it.

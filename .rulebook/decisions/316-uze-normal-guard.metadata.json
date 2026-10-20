@@ -1,0 +1,13 @@
+{
+  "id": 316,
+  "slug": "316-uze-normal-guard",
+  "title": "The `.uztexture` normal derivative is a plan field with a negative-Z policy, `fail` by default, cooked in the export engine from the canonical PNG 16",
+  "status": "accepted",
+  "date": "2026-10-20",
+  "relatedTasks": [
+    "phase3.1_uze-uztexture-writer",
+    "phase3.4_uzengine-preset",
+    "phase3.3_uze-consumer-fixture"
+  ],
+  "supersededBy": null
+}

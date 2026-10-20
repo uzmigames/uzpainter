@@ -9,6 +9,11 @@
 // - per written file: its path (the plan's relativePath, relative to the generation's `files/`),
 //   bytes, SHA-256, format, bit depth, colour space, size, preset, layout, channel mapping, the
 //   EXP-09 normal tag (`combined` with its relief round, or `geometry_only`) and its consumer gaps;
+// - per `.uztexture` normal derivative (write.h `EncodedUzTexture`, decision 316), right after its
+//   canonical file: a file of format `uztexture`, bit depth 8, linear, with `uztexture` {source (the
+//   canonical file's path), binding `normal`, format (`BC5`, or `RGBA8` when routed), srgb, mips,
+//   encoder, negative_z {policy, texels, first, routed}}; a routed one carries a Normal consumer gap
+//   (a consumer that reconstructs Z still loses its sign);
 // - the maps the plan does not write (`skipped`, with their kind and reason: QG-03);
 // - the Assets3D manifest export block (`manifest_export`) in the form of Assets3D's
 //   `manifest-schema-v2.json` `$defs/export` (sources, outputs, moment, preset, maps, comparison,

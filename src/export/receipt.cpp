@@ -29,6 +29,14 @@ constexpr std::string_view kSpecularWeightGap =
     "SpecularWeight has no slot in the consumer's material: its mapping (Specular = 0.5 x "
     "SpecularWeight in the hat v8 report) belongs to the consumer and is not applied by the export";
 
+/// The gap of a normal derivative routed to RGBA8 (decision 316): the file keeps Z's sign in B, but
+/// UzEngine's fixed G-buffer path reconstructs a non-negative Z from X and Y
+/// (`docs/analysis/reviews/assets3d-pipeline-astra-review.md` C09).
+constexpr std::string_view kRoutedNormalGap =
+    "the normal map holds negative-Z texels and is stored as RGBA8, which keeps Z's sign in B (decision 316); a "
+    "consumer that reconstructs Z from X and Y (UzEngine's fixed G-buffer path) still loses it: its binding is "
+    "accepted by phase3.3_uze-consumer-fixture";
+
 std::string BitDepthOf(const PlannedFile& file) {
     return file.parameters ? std::string(BitDepthName(file.parameters->bitDepth)) : std::string();
 }
@@ -339,6 +347,63 @@ json::Object BuildReceipt(const ReceiptInputs& in) {
                                      {"color_space", kWrittenColourSpace}};
         }
         presets.insert(file.preset);
+        // The `.uztexture` derivative (write.h `EncodedUzTexture`, decision 316): its own file, with
+        // the format it is stored as and what its negative-Z guard found.
+        if (const std::optional<EncodedUzTexture>& derivative = encoded.uztexture) {
+            const std::string derivedSha = core::Sha256Hex(derivative->bytes);
+            const std::string derivedKey = ManifestKey(file.uztexture->relativePath, used);
+            json::Array derivedChannels;
+            for (const PlannedChannel& c : file.channels) {
+                derivedChannels.push_back(json::Object{{"dest_channel", std::string(ChannelLetterName(c.dest))},
+                                                       {"src_channel", std::string(ChannelLetterName(c.src))},
+                                                       {"src_map_type", std::string(SourceTypeName(c.source.type))},
+                                                       {"src_map_name", c.source.name}});
+            }
+            json::Array derivedGaps;
+            if (derivative->routed) {
+                derivedGaps.push_back(json::Object{{"channel", "Normal"}, {"gap", std::string(kRoutedNormalGap)}});
+                openItems.emplace_back(file.uztexture->relativePath + ": " + std::string(kRoutedNormalGap));
+            }
+            json::Value first = nullptr;
+            if (derivative->firstNegative) {
+                first = json::Array{static_cast<std::int64_t>((*derivative->firstNegative)[0]),
+                                    static_cast<std::int64_t>((*derivative->firstNegative)[1])};
+            }
+            files.push_back(json::Object{
+                {"path", file.uztexture->relativePath},
+                {"key", derivedKey},
+                {"root_path", file.rootPath},
+                {"preset", file.preset},
+                {"bytes", static_cast<std::int64_t>(derivative->bytes.size())},
+                {"sha256", derivedSha},
+                {"format", "uztexture"},
+                {"bit_depth", "8"},
+                {"colour_space", std::string(kWrittenColourSpace)},
+                {"size", size},
+                {"layout", std::string(FileLayoutName(encoded.layout))},
+                {"channels", std::move(derivedChannels)},
+                {"normal", NormalJson(encoded.normalTag)},
+                {"consumer_gaps", std::move(derivedGaps)},
+                {"uztexture",
+                 json::Object{{"source", file.relativePath},
+                              {"binding", "normal"},
+                              {"format", derivative->format},
+                              {"srgb", false},
+                              {"mips", static_cast<std::int64_t>(derivative->mips)},
+                              {"encoder", derivative->encoder},
+                              {"negative_z",
+                               json::Object{{"policy", std::string(NegativeZPolicyName(derivative->policy))},
+                                            {"texels", static_cast<std::int64_t>(derivative->negativeTexels)},
+                                            {"first", std::move(first)},
+                                            {"routed", derivative->routed}}}}},
+            });
+            manifestFiles[derivedKey] = json::Object{{"path", "files/" + file.uztexture->relativePath},
+                                                     {"role", "map"},
+                                                     {"sha256", Sha256Field(derivedSha, true)},
+                                                     {"bytes", static_cast<std::int64_t>(derivative->bytes.size())}};
+            outputs.emplace_back(derivedKey);
+            maps[derivedKey] = json::Object{{"resolution", size}, {"bit_depth", 8}, {"color_space", kWrittenColourSpace}};
+        }
     }
     // The diagnostic measure export (write.h, decision 286): the generation is not conformant.
     json::Value nonConformant = nullptr;

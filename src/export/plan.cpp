@@ -3,6 +3,8 @@
 #include "export/encode.h"
 
 #include <algorithm>
+#include <array>
+#include <bit>
 #include <cctype>
 #include <cmath>
 #include <map>
@@ -716,19 +718,33 @@ json::Value FileJson(const PlannedFile& f) {
         if (p.dilationDistance) o["dilationDistance"] = *p.dilationDistance;
         parameters = std::move(o);
     }
-    return json::Object{{"textureSet", f.textureSet},
-                        {"stack", f.stack},
-                        {"rootPath", f.rootPath},
-                        {"preset", f.preset},
-                        {"map", static_cast<std::int64_t>(f.mapIndex)},
-                        {"fileName", f.fileName},
-                        {"relativePath", f.relativePath},
-                        {"path", f.path},
-                        {"layout", std::string(FileLayoutName(f.layout))},
-                        {"width", static_cast<std::int64_t>(f.width)},
-                        {"height", static_cast<std::int64_t>(f.height)},
-                        {"parameters", std::move(parameters)},
-                        {"channels", std::move(channels)}};
+    json::Object file{{"textureSet", f.textureSet},
+                      {"stack", f.stack},
+                      {"rootPath", f.rootPath},
+                      {"preset", f.preset},
+                      {"map", static_cast<std::int64_t>(f.mapIndex)},
+                      {"fileName", f.fileName},
+                      {"relativePath", f.relativePath},
+                      {"path", f.path},
+                      {"layout", std::string(FileLayoutName(f.layout))},
+                      {"width", static_cast<std::int64_t>(f.width)},
+                      {"height", static_cast<std::int64_t>(f.height)},
+                      {"parameters", std::move(parameters)},
+                      {"channels", std::move(channels)}};
+    // Only a file with a derivative has the member, so every other plan keeps its hash.
+    if (f.uztexture) {
+        file["uztexture"] = json::Object{{"relativePath", f.uztexture->relativePath},
+                                         {"path", f.uztexture->path},
+                                         {"binding", "normal"},
+                                         {"negativeZ", std::string(NegativeZPolicyName(f.uztexture->negativeZ))}};
+    }
+    return file;
+}
+
+/// True when `source` holds normal vectors: the Normal channel, a virtual normal or `normal_base`.
+bool IsNormalSource(const PlannedSource& source) {
+    return source.normalRole.has_value() ||
+           (source.type == SourceType::documentMap && source.channel == ChannelType::Normal);
 }
 
 json::Value PlanBody(const ExportPlan& plan) {
@@ -761,6 +777,58 @@ std::string_view FileLayoutName(FileLayout layout) {
 std::string_view SkipKindName(SkipKind kind) {
     static constexpr std::array<std::string_view, 3> names{"absent", "not_written", "export_error"};
     return names[static_cast<size_t>(kind)];
+}
+
+std::string_view NegativeZPolicyName(NegativeZPolicy policy) {
+    return policy == NegativeZPolicy::fail ? "fail" : "rgb";
+}
+
+NegativeZPolicy ParseNegativeZPolicy(std::string_view text) {
+    if (text == "fail") return NegativeZPolicy::fail;
+    if (text == "rgb") return NegativeZPolicy::rgb;
+    throw core::ValueError("export: the negative-Z policy \"" + std::string(text) + "\": expected fail or rgb");
+}
+
+void RequestUzTextureNormal(ExportPlan& plan, std::string_view relativePath, NegativeZPolicy policy) {
+    const auto found = std::find_if(plan.files.begin(), plan.files.end(),
+                                    [&](const PlannedFile& f) { return f.relativePath == relativePath; });
+    if (found == plan.files.end()) {
+        Invalid("the .uztexture normal derivative of \"" + std::string(relativePath) + "\"", "the plan has no such file");
+    }
+    PlannedFile& file = *found;
+    const std::string what = "the .uztexture normal derivative of \"" + file.relativePath + "\"";
+    const auto bound = [&](const std::string& problem) {
+        Gap(what, problem + "; the derivative is bounded to an RGB PNG 16 normal map, its canonical 16-bit companion, "
+                            "at power-of-two sides (decision 316); other maps and formats",
+            "phase3.4_uzengine-preset");
+    };
+    if (file.layout != FileLayout::RGB || !file.parameters || file.parameters->fileFormat != FileFormat::png ||
+        file.parameters->bitDepth != BitDepth::u16) {
+        bound("the file is not an RGB PNG 16");
+    }
+    if (file.channels.size() != 3) bound("it does not have three channels");
+    const PlannedSource& first = file.channels.front().source;
+    if (!IsNormalSource(first)) bound("its source \"" + first.name + "\" is not a normal map");
+    constexpr std::array<ChannelLetter, 3> rgb{ChannelLetter::R, ChannelLetter::G, ChannelLetter::B};
+    for (uint32_t c = 0; c < 3; ++c) {
+        const PlannedChannel& channel = file.channels[c];
+        if (channel.dest != rgb[c] || channel.component != c || channel.luma || channel.source.components != 3 ||
+            channel.source.type != first.type || channel.source.name != first.name) {
+            bound("its R, G and B do not read components 0, 1 and 2 of one normal source");
+        }
+    }
+    if (!std::has_single_bit(file.width) || !std::has_single_bit(file.height)) {
+        bound("its size " + std::to_string(file.width) + "x" + std::to_string(file.height) +
+              " is not a power of two on both sides (decision 315: a 2x2 box does not tile it)");
+    }
+    const std::string derived = file.relativePath.substr(0, file.relativePath.rfind('.')) + ".uztexture";
+    for (const PlannedFile& other : plan.files) {
+        const bool clash = Lower(other.relativePath) == Lower(derived) ||
+                           (&other != &file && other.uztexture && Lower(other.uztexture->relativePath) == Lower(derived));
+        if (clash) Invalid(what, "its path \"" + derived + "\" is another output's");
+    }
+    file.uztexture = UzTextureOutput{derived, JoinPath(plan.exportPath, derived), policy};
+    plan.hash = core::Sha256Hex(json::WriteCanonical(PlanBody(plan)));
 }
 
 ExportPlan CompilePlan(const core::Project& project, const ExportConfig& config, const PlanContext& context) {
@@ -864,6 +932,7 @@ std::vector<StackFiles> FilesByStack(const ExportPlan& plan) {
             it = std::prev(out.end());
         }
         it->files.push_back(f.path);
+        if (f.uztexture) it->files.push_back(f.uztexture->path);
     }
     return out;
 }

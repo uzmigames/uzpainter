@@ -1288,11 +1288,11 @@ LIBRARIES: tuple[Library, ...] = (
             "MIT or the Unlicense, stated at the end of `bcdec.h`"
         ),
         role=(
-            "build-only today: `ProcessDxtc.cpp`, `bc7enc.cpp` and `Dither.cpp` compiled into "
-            "`uzp_texture.lib` (UzPainter's BC encoder adapter, `src/export/bc_encoder.cpp`) and "
-            "its native tests `uzp-texture-tests.exe`; `bcdec.c` compiled into "
-            "`uzp-texture-tests.exe` only, the independent decoder oracle; shipped once the "
-            "UzEngine preset (`phase3.4_uzengine-preset`) links the library into `UzPainter.exe`"
+            "shipped: `ProcessDxtc.cpp`, `bc7enc.cpp` and `Dither.cpp` compiled into "
+            "`uzp_texture.lib` (UzPainter's BC encoder adapter, `src/export/bc_encoder.cpp`), "
+            "which `UzPainter.exe` links for the export's `.uztexture` normal derivative "
+            "(decision 316), and into its native tests; `bcdec.c` compiled into "
+            "`uzp-texture-tests.exe` only, the independent decoder oracle"
         ),
         features=(
             "The BC1, BC3, BC4, BC5 and BC7 block encoders of `ProcessDxtc.cpp` (`CompressBc1`, "

@@ -22,7 +22,7 @@ Task `phase1.15_export-plan-compiler` (child of `phase1.18_export-engine`, P1-EX
 | `project_export.{h,cpp}` | (phase1.18, decision 104) `ExportProject`: a `.uzp` project's current revision exported end to end with a `json_config` and published (§7). |
 | `cli.{h,cpp}` | (phase1.17, phase1.18) `UzPainter.exe export <file.uzp> --config <config.json> --app-version <v> --build <id>` and `export --recover <exportPath> [--fixed-names <dir>]...`. |
 | `fault.{h,cpp}` | (phase1.17) Test-only fault hooks between every publication step, compiled into `uzp-export-tests.exe` only (`UZP_EXPORT_FAULT_HOOKS`). |
-| `bc_encoder.{h,cpp}`, `mips.{h,cpp}`, `uztexture_writer.{h,cpp}` | (phase3.1_uze-uztexture-writer, decision 315) The UzEngine texture path, compiled into `uzp_texture.lib`, not into the two executables below: `EncodeBc`, the BC1/BC3/BC4/BC5/BC7 (and sRGB) encoder adapter over etcpak 2.1, whose bytes do not depend on the thread count; `GenerateMipChain`, full 16-bit power-of-two chains per map class (linear, sRGB-aware colour, renormalised normals, alpha-coverage-preserving masked colour); `WriteUzTextureFile` / `CookUzTexture`, the `.uztexture` writer over the vendored format definition, with the negative-Z guard for BC5 normals. Tests: `tests/export/texture_test.cpp` (`zig build uzp-texture-tests`, `tests/export/test_uze_texture.py`), with the test-only bcdec decoder and `.uztexture` reader of `tests/export/uze_texture_check.h`. |
+| `bc_encoder.{h,cpp}`, `mips.{h,cpp}`, `uztexture_writer.{h,cpp}` | (phase3.1_uze-uztexture-writer, decisions 315 and 316) The UzEngine texture path, compiled into `uzp_texture.lib`, which every binary compiling these export sources links (decision 316): `EncodeBc`, the BC1/BC3/BC4/BC5/BC7 (and sRGB) encoder adapter over etcpak 2.1, whose bytes do not depend on the thread count; `GenerateMipChain`, full 16-bit power-of-two chains per map class (linear, sRGB-aware colour, renormalised normals, alpha-coverage-preserving masked colour); `WriteUzTextureFile` / `CookUzTexture`, the `.uztexture` writer over the vendored format definition, with the negative-Z guard for BC5 normals. Tests: `tests/export/texture_test.cpp` (`zig build uzp-texture-tests`, `tests/export/test_uze_texture.py`), with the test-only bcdec decoder and `.uztexture` reader of `tests/export/uze_texture_check.h`. |
 
 Both `uzp-export-tests.exe` and `UzPainter.exe` compile these sources (`build.zig`, `export_sources`). The Python bindings (`uzpainter.export.plan`, `substance_painter.export.list_project_textures`) are `phase1.19_pyapi-native-module` item 2.7.
 
@@ -137,6 +137,16 @@ Task `phase1.17_export-publication-receipts`. Tests: `tests/export/test_export_p
   - **Identity.** `app_version` and `build` come from the caller (`PublishRequest::identity`).
   - **Colour space.** Every image file written today is `linear`.
   - **Consumer gaps.** A SpecularWeight map carries the consumer gap of `08-export.md` §4.
+- **`.uztexture` normal derivative** (phase3.1_uze-uztexture-writer items 2.7 and 3.5, decision 316).
+  - **Request.** `RequestUzTextureNormal(plan, relativePath, policy)` sets the plan field `PlannedFile::uztexture`. The policy is `fail` (the default) or `rgb`. The plan hash covers the field.
+  - **Bound.** The file must be an RGB PNG 16 of one normal source, with power-of-two sides. That file is the canonical 16-bit companion. The derivative is `<stem>.uztexture` beside it.
+  - **Preset exposure.** No configuration or preset key sets the field yet. Exposing it, and choosing a policy per preset, belong to `phase3.4_uzengine-preset`.
+  - **Cook.** `EncodeExport` cooks the derivative from the PNG's samples as written, after padding.
+  - **Guard.** It finds the texels with B <= 32767 (Z < 0).
+    - `fail`: an `export:` failure naming the count and the first texel, returned before any generation is claimed.
+    - `rgb`: the map is stored as RGBA8, which keeps Z's sign.
+    - No negative texel: the map is stored as BC5.
+  - **Publication.** The derivative is published right after its file. The receipt lists it as a `uztexture` file with `uztexture.format` and `uztexture.negative_z` {policy, texels, first, routed}. A routed map carries a Normal consumer gap.
 
 ## 7. The end-to-end export (decision 104)
 

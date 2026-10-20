@@ -15,8 +15,9 @@
 // 1. every file checked, evaluated, padded and encoded in memory (EncodeExport): a refusal or a
 //    failure here writes nothing;
 // 2. a new generation claimed: the next number after every existing one, created only if absent;
-// 3. each file written and flushed to disk, then read back and verified against its encoding
-//    (size and SHA-256); then plan.json and receipt.json, flushed and verified the same way;
+// 3. each file written and flushed to disk (a file's `.uztexture` derivative right after it,
+//    write.h `EncodedUzTexture`), then read back and verified against its encoding (size and
+//    SHA-256); then plan.json and receipt.json, flushed and verified the same way;
 // 4. the pointer written to `current.json.uzp-staging`, flushed, and renamed over `current.json`
 //    (MoveFileEx, replace existing, write through).
 // A failure at any step before the rename removes the new generation and returns the failure: the
@@ -129,7 +130,8 @@ struct Publication {
     std::filesystem::path directory;
     std::filesystem::path receipt;
     std::string receiptSha256;
-    /// In plan order; `path` is the file in the generation's `files/`.
+    /// In plan order, each `.uztexture` derivative after its file; `path` is the file in the
+    /// generation's `files/`.
     std::vector<WrittenFile> files;
 };
 

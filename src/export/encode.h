@@ -45,6 +45,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "export/padding.h"
 #include "export/plan.h"
@@ -82,8 +83,12 @@ struct EncodedImage {
 /// in its document format when it has one (`FileRaster::documentFormat`, decision 274), except a
 /// channel whose source padded itself (`FileRaster::padded`), written as it is. Throws
 /// std::invalid_argument when the raster or the coverage does not match the file's size and layout.
+/// With `samples`, a PNG's samples as written (padded and transferred, rows top first, one per
+/// written channel) are also stored there: the canonical 16-bit codes a `.uztexture` derivative is
+/// cooked from (decision 316). They are left empty for any other file.
 [[nodiscard]] EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster,
                                       const Coverage* coverage = nullptr,
-                                      InexactPadding inexact = InexactPadding::refuse);
+                                      InexactPadding inexact = InexactPadding::refuse,
+                                      std::vector<uint16_t>* samples = nullptr);
 
 }  // namespace uzp::exporter

@@ -422,6 +422,14 @@ render::Result<Publication> PublishExport(const core::Project& project, std::int
 #endif
         publication.files.push_back(
             {file.rootPath, file.relativePath, Utf8String(path), bytes.size(), core::Sha256Hex(bytes)});
+        // The file's `.uztexture` derivative, right after it (decision 316).
+        if (const std::optional<EncodedUzTexture>& derivative = (*encoded)[i].uztexture) {
+            const fs::path cooked = directory / "files" / Utf8Path(file.uztexture->relativePath);
+            render::Result<void> cookedWritten = WriteDurable(cooked, derivative->bytes);
+            if (!cookedWritten) return failed(cookedWritten.error());
+            publication.files.push_back({file.rootPath, file.uztexture->relativePath, Utf8String(cooked),
+                                         derivative->bytes.size(), core::Sha256Hex(derivative->bytes)});
+        }
     }
     for (const WrittenFile& file : publication.files) {
         std::string problem;

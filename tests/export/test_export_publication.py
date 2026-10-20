@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import struct
 import subprocess
 import time
 from pathlib import Path
@@ -24,6 +25,8 @@ import pytest
 
 from tests.export.conftest import REPO_ROOT
 from tests.export.test_export_encoders import (
+    GRID,
+    PNG16,
     TEMPLATES,
     chan,
     config,
@@ -723,3 +726,197 @@ def test_receipt_schema_copies_the_pinned_assets3d_export_block() -> None:
     pinned = json.loads(shown.stdout)
     original = {name: pinned["$defs"][name] for name in A3D_DEFS}
     assert hashlib.sha256(canonical_json(original)).hexdigest() == A3D_DEFS_SHA256
+
+
+# ── The .uztexture normal derivative (phase3.1_uze-uztexture-writer 2.7, 3.5; decision 316) ──
+
+NORMAL_SIZE = 128
+NORMAL_MIPS = 8
+NEGATIVE_TEXEL = (5, 3)  # (x, y)
+UZ_BC5, UZ_RGBA8 = 3, 0  # uz::TextureFormat
+
+
+def normal_spec(tmp: Path, negative: bool) -> Path:
+    """A texture set s0 of the grid mesh whose Normal (RGB16F) is filled from an authored RGB 16-bit
+    bitmap holding (0, 0, 1), with Z = -0.5 at `NEGATIVE_TEXEL` when `negative`."""
+    from tools.parity.feasibility import png
+
+    tmp.mkdir(parents=True, exist_ok=True)
+    codes = np.empty((NORMAL_SIZE, NORMAL_SIZE, 3), np.int64)
+    codes[..., 0:2] = 32768
+    codes[..., 2] = 65535
+    if negative:
+        x, y = NEGATIVE_TEXEL
+        codes[y, x, 2] = 16384
+    data = png.encode(codes, 16)
+    (tmp / "normal.png").write_bytes(data)
+    sha = hashlib.sha256(data).hexdigest()
+    document = {
+        "name": "s0",
+        "resolution": [NORMAL_SIZE, NORMAL_SIZE],
+        "channels": [{"type": "Normal", "format": "RGB16F"}],
+        "resources": [{"sha256": sha, "png": "normal.png"}],
+        "layers": [{"kind": "fill", "sources": {"Normal": {"bitmap": sha, "color_space": "Raw"}}}],
+        "mesh": str(GRID),
+    }
+    (tmp / "spec.json").write_text(json.dumps(document), encoding="utf-8")
+    return tmp / "spec.json"
+
+
+def normal_config(out: Path, tmp: Path, luma_map: bool = False) -> Path:
+    """`s0_n`: the Normal channel as an RGB PNG 16 (the canonical companion); with `luma_map`, also
+    `s0_l`, its luma as an L file."""
+    maps: list[dict[str, Any]] = [
+        {"fileName": "$textureSet_n", "channels": [chan(c, "documentMap", "normal") for c in "RGB"]}
+    ]
+    if luma_map:
+        maps.append({"fileName": "$textureSet_l", "channels": [chan("L", "documentMap", "normal")]})
+    cfg = {
+        "exportShaderParams": False,
+        "exportPath": out.as_posix(),
+        "defaultExportPreset": "p",
+        "exportPresets": [{"name": "p", "maps": maps}],
+        "exportList": [{"rootPath": "s0"}],
+        "exportParameters": [{"parameters": PNG16}],
+    }
+    path = tmp / f"normal-config-{int(luma_map)}.json"
+    path.write_text(json.dumps(cfg), encoding="utf-8")
+    return path
+
+
+def publish_normal(
+    exe: Path, spec_path: Path, cfg: Path, request: str = "s0_n.png"
+) -> dict[str, Any]:
+    return one(exe, "publish", str(TEMPLATES), str(spec_path), str(cfg), "--uztexture", request)
+
+
+def read_uztexture(data: bytes) -> tuple[tuple[int, ...], list[tuple[int, ...]]]:
+    """The header (magic, version, width, height, mipCount, format, flags) and the mip
+    descriptors (offset, size, width, height) of a `.uztexture`."""
+    header = struct.unpack_from("<7I", data, 0)
+    mips = [struct.unpack_from("<QQII", data, 64 + 24 * n) for n in range(header[4])]
+    return header, mips
+
+
+def derivative_entry(receipt: dict[str, Any]) -> dict[str, Any]:
+    entries: list[dict[str, Any]] = [f for f in receipt["files"] if f["format"] == "uztexture"]
+    assert len(entries) == 1, entries
+    return entries[0]
+
+
+def test_uztexture_negative_z_fail_publishes_nothing(export_tests: Path, tmp_path: Path) -> None:
+    """2.7, 3.5: under the default policy `fail`, a normal map without negative-Z texels is
+    published as BC5 beside its canonical PNG 16, the receipt recording the policy; the authored
+    map with one negative-Z texel then fails the export, naming the count and the first texel,
+    before anything is published: no generation, and the pointer, the selected receipt and what a
+    pinned consumer reads are unchanged."""
+    out = tmp_path / "out"
+    cfg = normal_config(out, tmp_path)
+    clean = publish_normal(export_tests, normal_spec(tmp_path / "clean", False), cfg)
+    assert "error" not in clean, clean
+    assert [f["relativePath"] for f in clean["files"]] == ["s0_n.png", "s0_n.uztexture"]
+    receipt = receipt_of(out)
+    validate(receipt)
+    entry = derivative_entry(receipt)
+    assert entry["path"] == "s0_n.uztexture" and entry["bit_depth"] == "8"
+    assert entry["uztexture"] == {
+        "source": "s0_n.png",
+        "binding": "normal",
+        "format": "BC5",
+        "srgb": False,
+        "mips": NORMAL_MIPS,
+        "encoder": "etcpak 2.1",
+        "negative_z": {"policy": "fail", "texels": 0, "first": None, "routed": False},
+    }
+    data = (out / "generations" / "000001" / "files" / "s0_n.uztexture").read_bytes()
+    assert hashlib.sha256(data).hexdigest() == entry["sha256"]
+    header, _ = read_uztexture(data)
+    assert header == (0x5A585455, 1, NORMAL_SIZE, NORMAL_SIZE, NORMAL_MIPS, UZ_BC5, 0)
+    plan = json.loads((out / "generations" / "000001" / "plan.json").read_text(encoding="utf-8"))
+    assert plan["files"][0]["uztexture"] == {
+        "relativePath": "s0_n.uztexture",
+        "path": (out / "s0_n.uztexture").as_posix(),
+        "binding": "normal",
+        "negativeZ": "fail",
+    }
+
+    pointer = (out / "current.json").read_bytes()
+    selected_receipt = (out / "generations" / "000001" / "receipt.json").read_bytes()
+    pinned = consumed(export_tests, out)
+    refused = publish_normal(
+        export_tests, normal_spec(tmp_path / "negative", True), cfg, "s0_n.png:fail"
+    )
+    assert refused["error"] == "Failure", refused
+    x, y = NEGATIVE_TEXEL
+    message = refused["message"]
+    assert f"normal map 's0_n.png': 1 texel(s) with negative Z (first at {x}, {y})" in message
+    assert "the negative-Z policy is fail (decision 316): nothing is published" in message
+    assert (out / "current.json").read_bytes() == pointer
+    assert sorted(p.name for p in (out / "generations").iterdir()) == ["000001"]
+    assert (out / "generations" / "000001" / "receipt.json").read_bytes() == selected_receipt
+    assert consumed(export_tests, out) == pinned
+
+
+def test_uztexture_negative_z_rgb_routes_and_records(export_tests: Path, tmp_path: Path) -> None:
+    """2.7, 3.5: under the policy `rgb` the authored map with one negative-Z texel is published
+    with its canonical PNG 16 and a derivative stored as RGBA8 whose decoded Z keeps its negative
+    sign; the receipt (valid against the schema) records the policy, the count, the first texel,
+    the routed format and the consumer gap."""
+    from tools.parity.feasibility import png
+
+    out = tmp_path / "out"
+    result = publish_normal(
+        export_tests,
+        normal_spec(tmp_path / "negative", True),
+        normal_config(out, tmp_path),
+        "s0_n.png:rgb",
+    )
+    assert "error" not in result, result
+    assert [f["relativePath"] for f in result["files"]] == ["s0_n.png", "s0_n.uztexture"]
+    receipt = receipt_of(out)
+    validate(receipt)
+    x, y = NEGATIVE_TEXEL
+    entry = derivative_entry(receipt)
+    assert entry["uztexture"]["format"] == "RGBA8"
+    assert entry["uztexture"]["negative_z"] == {
+        "policy": "rgb",
+        "texels": 1,
+        "first": [x, y],
+        "routed": True,
+    }
+    assert [gap["channel"] for gap in entry["consumer_gaps"]] == ["Normal"]
+    assert entry["key"] in receipt["manifest_export"]["outputs"]
+    files = out / "generations" / "000001" / "files"
+    canonical = png.decode((files / "s0_n.png").read_bytes()).reshape(NORMAL_SIZE, NORMAL_SIZE, 3)
+    assert canonical[y, x, 2] < 32768
+    assert int((canonical[..., 2] < 32768).sum()) == 1
+    data = (files / "s0_n.uztexture").read_bytes()
+    assert hashlib.sha256(data).hexdigest() == entry["sha256"]
+    header, mips = read_uztexture(data)
+    assert header == (0x5A585455, 1, NORMAL_SIZE, NORMAL_SIZE, NORMAL_MIPS, UZ_RGBA8, 0)
+    offset, size, width, height = mips[0]
+    assert (size, width, height) == (NORMAL_SIZE * NORMAL_SIZE * 4, NORMAL_SIZE, NORMAL_SIZE)
+    level0 = np.frombuffer(data, np.uint8, size, offset).reshape(NORMAL_SIZE, NORMAL_SIZE, 4)
+    z = level0[..., 2].astype(np.float64) / 255 * 2 - 1
+    assert z[y, x] < 0
+    assert int((z < 0).sum()) == 1
+
+
+def test_uztexture_request_refusals(export_tests: Path, tmp_path: Path) -> None:
+    """Decision 316: an unknown policy and an unknown file are ValueErrors, and a file outside the
+    bound is NotYetSupported naming phase3.4_uzengine-preset; all before anything is written."""
+    out = tmp_path / "out"
+    spec_path = normal_spec(tmp_path / "spec", True)
+    cfg = normal_config(out, tmp_path, luma_map=True)
+    bogus = publish_normal(export_tests, spec_path, cfg, "s0_n.png:bogus")
+    assert bogus == {
+        "error": "ValueError",
+        "message": 'export: the negative-Z policy "bogus": expected fail or rgb',
+    }
+    missing = publish_normal(export_tests, spec_path, cfg, "s0_x.png")
+    assert missing["error"] == "ValueError", missing
+    assert 'the .uztexture normal derivative of "s0_x.png"' in missing["message"]
+    luma = publish_normal(export_tests, spec_path, cfg, "s0_l.png:rgb")
+    assert luma["error"] == "NotYetSupported", luma
+    assert "decision 316" in luma["message"] and "phase3.4_uzengine-preset" in luma["message"]
+    assert not out.exists()

@@ -1530,9 +1530,11 @@ pub fn build(b: *std.Build) void {
 
     // ── UzEngine textures (phase3.1_uze-uztexture-writer, decision 315) ──────────────────────
     // The BC encoder adapter over etcpak, the mip chains and the `.uztexture` writer as the
-    // static library `uzp_texture`, CPU only; the UzEngine preset (phase3.4) links it into
-    // `UzPainter.exe`. The tests add our decoder and `.uztexture` reader; bcdec is only
-    // the differential oracle for the decoder tests.
+    // static library `uzp_texture`, CPU only. The export engine cooks the `.uztexture` normal
+    // derivative of a plan file through it (decision 316), so every binary that compiles
+    // `export_sources` links it: `UzPainter.exe`, `uzp-export-tests.exe` and `uzp-pyapi-tests.exe`.
+    // The tests add our decoder and `.uztexture` reader; bcdec is only the differential oracle for
+    // the decoder tests.
     const texture_mod = b.createModule(.{
         .target = target,
         .optimize = optimize,
@@ -1558,6 +1560,8 @@ pub fn build(b: *std.Build) void {
         .name = "uzp_texture",
         .root_module = texture_mod,
     });
+    app_mod.linkLibrary(texture_lib);
+    export_tests_mod.linkLibrary(texture_lib);
     const texture_tests_mod = b.createModule(.{
         .target = target,
         .optimize = optimize,
@@ -1630,6 +1634,7 @@ pub fn build(b: *std.Build) void {
     pyapi_tests_mod.linkLibrary(store_lib);
     pyapi_tests_mod.linkLibrary(mesh_lib);
     pyapi_tests_mod.linkLibrary(uzp_core_lib);
+    pyapi_tests_mod.linkLibrary(texture_lib);
     for (system_libraries) |name| pyapi_tests_mod.linkSystemLibrary(name, .{});
     pyapi_tests_mod.linkSystemLibrary("version", .{});
     pyapi_tests_mod.addObjectFile(b.path(python_import_library));

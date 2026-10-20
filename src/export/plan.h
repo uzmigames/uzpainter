@@ -121,6 +121,28 @@ struct ResolvedParameters {
     std::optional<int> dilationDistance;
 };
 
+/// What the `.uztexture` normal derivative does when its canonical map holds negative-Z texels
+/// (decision 316): `fail` refuses the export before anything is published; `rgb` stores the map as
+/// `Uncompressed_RGBA8` (8 bits per channel, B kept, so Z keeps its sign) instead of BC5.
+enum class NegativeZPolicy : uint8_t { fail, rgb };
+[[nodiscard]] std::string_view NegativeZPolicyName(NegativeZPolicy policy);
+/// The policy named `text` ("fail" or "rgb"); throws `core::ValueError` for any other text.
+[[nodiscard]] NegativeZPolicy ParseNegativeZPolicy(std::string_view text);
+
+/// A planned file's `.uztexture` derivative (task phase3.1_uze-uztexture-writer items 2.7 and 3.5,
+/// decision 316): the UzEngine normal texture cooked from the file's own 16-bit samples, the file
+/// being its canonical 16-bit companion (EXP-10). Bound: the file is an RGB PNG 16 whose R, G and B
+/// read components 0, 1 and 2 of one normal source, at power-of-two sides (`RequestUzTextureNormal`).
+/// The engine binding is `normal`; the stored format is BC5, or RGBA8 under `NegativeZPolicy::rgb`
+/// when the map holds negative-Z texels.
+struct UzTextureOutput {
+    /// The file's relativePath with its extension replaced by `.uztexture`.
+    std::string relativePath;
+    /// exportPath / relativePath.
+    std::string path;
+    NegativeZPolicy negativeZ = NegativeZPolicy::fail;
+};
+
 struct PlannedFile {
     std::string textureSet;
     /// "" for the unnamed stack.
@@ -145,6 +167,8 @@ struct PlannedFile {
     /// The written size (sizeLog2 applied); for a statistics file the set's resolution.
     uint32_t width = 0;
     uint32_t height = 0;
+    /// Written beside the file when requested (`RequestUzTextureNormal`); never set by CompilePlan.
+    std::optional<UzTextureOutput> uztexture;
 };
 
 /// Why the export writes no file for a preset map of a stack (decision 091).
@@ -196,6 +220,15 @@ struct PlanContext {
 [[nodiscard]] ExportPlan CompilePlan(const core::Project& project, std::string_view configJson,
                                      const PlanContext& context = {});
 
+/// Adds the `.uztexture` normal derivative (`UzTextureOutput`, decision 316) with negative-Z policy
+/// `policy` to the file of `plan` whose relativePath is `relativePath`, and updates the plan's hash.
+/// This plan field is the whole surface here: which preset maps get a derivative and the choice of
+/// policy in a preset belong to phase3.4_uzengine-preset. Throws `core::ValueError` when no file has
+/// that path or the derivative's path is another output's (compared ignoring case), and
+/// `core::NotYetSupported` naming phase3.4_uzengine-preset for a file outside the bound above.
+void RequestUzTextureNormal(ExportPlan& plan, std::string_view relativePath,
+                            NegativeZPolicy policy = NegativeZPolicy::fail);
+
 /// Throws `core::ValueError` naming the first `export_error` map of `plan` when the plan writes no
 /// file: Painter's export of that configuration raises ValueError, and so do the dry run and the
 /// export, before anything is written (probes P12, P13, decision 091). With files to write it
@@ -216,7 +249,7 @@ struct StackFiles {
 };
 
 /// The plan's files grouped by (texture set, stack) in first-appearance order: Painter's
-/// `list_project_textures` result.
+/// `list_project_textures` result. A file's `.uztexture` derivative follows it.
 [[nodiscard]] std::vector<StackFiles> FilesByStack(const ExportPlan& plan);
 
 /// The dry run: the files `export_project_textures(json_config)` writes on `project`, grouped as
