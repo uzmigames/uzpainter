@@ -47,7 +47,8 @@ struct PresetAlias {
 /// The shipped preset a preset reference names: its id, an alias's Painter name, or
 /// `resource://starter_assets/<Painter name>` with no query or `?version=<recorded version>`;
 /// nullopt for any other text. Throws `core::NotYetSupported` naming the alias's recording (R-095,
-/// or R-314 for the glTF preset) for an alias's URL with an unrecorded query (decision 095).
+/// R-314 for the glTF preset, R-322 for the Unreal preset) for an alias's URL with an unrecorded query
+/// (decision 095).
 [[nodiscard]] std::optional<std::string> ShippedPresetId(std::string_view reference);
 
 /// Whether a shipped preset's layout is confirmed (provenance `parity.layout`).

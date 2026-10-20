@@ -22,15 +22,18 @@ constexpr std::string_view kRecording = "recording R-095, decision 095";
 /// (`SM/10-Chapeu/report.json → painter_recipe.export.preset_details.preset.url`).
 constexpr std::array<std::string_view, 1> kBlenderVersions{"13120355637414252359"};
 
-constexpr std::array<std::string_view, 5> kShippedIds{"pbr-metallic-roughness", "blender-principled-bsdf",
+constexpr std::array<std::string_view, 7> kShippedIds{"pbr-metallic-roughness",   "blender-principled-bsdf",
                                                        "assets3d-inline-five-map", "gltf-pbr-metal-roughness",
-                                                       "uzengine"};
+                                                       "uzengine",                 "unreal-engine-packed",
+                                                       "unreal-engine-packed-dds"};
 
-const std::array<PresetAlias, 3> kAliases{{
+const std::array<PresetAlias, 4> kAliases{{
     {"PBR Metallic Roughness", "pbr-metallic-roughness", {}, kRecording},
     {"Blender (Principled BSDF)", "blender-principled-bsdf", kBlenderVersions, kRecording},
     // phase3.1_unreal-gltf-pbr-preset item 2.4 (CLR-06); its URL's versions: recording R-314.
     {"glTF PBR Metal Roughness", "gltf-pbr-metal-roughness", {}, "recording R-314, decision 314"},
+    // phase3.2_unreal-ue56-packed-preset item 2.4 (CLR-06); its URL's versions: recording R-322.
+    {"Unreal Engine (Packed)", "unreal-engine-packed", {}, "recording R-322, decision 322"},
 }};
 
 [[noreturn]] void Fail(std::string_view id, const std::string& problem) {
@@ -161,6 +164,49 @@ UzEngineTargets ParseUzEngine(const json::Value& block, const PresetSpec& spec, 
     return targets;
 }
 
+/// The `dds` block of a shipped preset (config.h `DdsTarget`, decision 322), checked against its
+/// maps: BC5 with normal mips, BC7 with linear mips, BC7_SRGB with colour mips. Throws
+/// `core::ManifestError` naming the preset.
+std::vector<DdsTarget> ParseDds(const json::Value& block, const PresetSpec& spec, std::string_view id,
+                                const std::string& file) {
+    const auto fail = [&](const std::string& problem) { Fail(id, file + ": dds: " + problem); };
+    if (!block.IsArray()) fail("expected an array");
+    std::vector<DdsTarget> targets;
+    for (const json::Value& item : std::get<json::Array>(block.data)) {
+        if (!item.IsObject()) fail("a target must be an object");
+        for (const auto& [key, _] : std::get<json::Object>(item.data)) {
+            if (key != "map" && key != "format" && key != "mips") fail("unknown key \"" + key + "\"");
+        }
+        const std::string* map = StringMember(item, "map");
+        const std::string* format = StringMember(item, "format");
+        const std::string* mips = StringMember(item, "mips");
+        if (map == nullptr || format == nullptr || mips == nullptr) fail("map, format and mips must be strings");
+        DdsTarget t;
+        t.map = *map;
+        if (*format == "BC5") t.format = BcFormat::Bc5;
+        else if (*format == "BC7") t.format = BcFormat::Bc7;
+        else if (*format == "BC7_SRGB") t.format = BcFormat::Bc7Srgb;
+        else fail(t.map + ": format \"" + *format + "\" is not BC5, BC7 or BC7_SRGB");
+        if (*mips == "linear") t.mips = DerivativeMips::linear;
+        else if (*mips == "colour") t.mips = DerivativeMips::colour;
+        else if (*mips == "normal") t.mips = DerivativeMips::normal;
+        else if (*mips == "masked_colour") t.mips = DerivativeMips::masked_colour;
+        else fail(t.map + ": mips \"" + *mips + "\" is not linear, colour, normal or masked_colour");
+        const bool colour = t.mips == DerivativeMips::colour || t.mips == DerivativeMips::masked_colour;
+        if ((t.format == BcFormat::Bc5) != (t.mips == DerivativeMips::normal)) {
+            fail(t.map + ": BC5 goes with normal mips, and only with them");
+        }
+        if (colour != (t.format == BcFormat::Bc7Srgb)) fail(t.map + ": BC7_SRGB goes with colour mips, and only with them");
+        if (MapNamed(spec, t.map) == nullptr) fail("no map \"" + t.map + "\"");
+        for (const DdsTarget& other : targets) {
+            if (other.map == t.map) fail("two targets of the map \"" + t.map + "\"");
+        }
+        targets.push_back(std::move(t));
+    }
+    if (targets.empty()) fail("no target");
+    return targets;
+}
+
 }  // namespace
 
 std::span<const PresetAlias> PresetAliases() { return kAliases; }
@@ -208,18 +254,24 @@ ShippedPreset LoadShippedPreset(const std::filesystem::path& directory, std::str
     ShippedPreset shipped;
     shipped.id = std::string(id);
     json::Value presetJson = ReadJson(presetFile, id);
-    // The UzEngine targets: a key only a shipped preset may carry (an inline one is refused).
+    // The UzEngine and DDS targets: keys only a shipped preset may carry (an inline one is refused).
     std::optional<json::Value> uzengine;
+    std::optional<json::Value> dds;
     if (presetJson.IsObject()) {
         json::Object& object = std::get<json::Object>(presetJson.data);
         if (const auto it = object.find("uzengine"); it != object.end()) {
             uzengine = std::move(it->second);
             object.erase(it);
         }
+        if (const auto it = object.find("dds"); it != object.end()) {
+            dds = std::move(it->second);
+            object.erase(it);
+        }
     }
     shipped.spec = ParsePreset(presetJson, presetFile.filename().string());
     if (shipped.spec.name != id) Fail(id, presetFile.string() + ": the preset's name is not its id");
     if (uzengine) shipped.spec.uzengine = ParseUzEngine(*uzengine, shipped.spec, id, presetFile.string());
+    if (dds) shipped.spec.dds = ParseDds(*dds, shipped.spec, id, presetFile.string());
 
     const json::Value record = ReadJson(recordFile, id);
     const std::string* schema = StringMember(record, "schema");

@@ -99,9 +99,10 @@ Task `phase1.17_export-presets`. Local run report: `parity/reports/phase1/export
   - `assets3d-inline-five-map`: the Assets3D pipeline's inline preset (`painter_export.py`), named `$textureSet_<map>`; layout `pipeline`. It plans, file for file, what the pipeline's inline configuration plans.
   - `pbr-metallic-roughness` and `blender-principled-bsdf`: written from public sources and UzmiGames' own observations; layout `unconfirmed`.
   - `gltf-pbr-metal-roughness` (phase3.1_unreal-gltf-pbr-preset, decision 314): written from the glTF 2.0 specification; layout `unconfirmed` until recording R-314. Maps: BaseColor (RGB, A from opacity), MetallicRoughness (R white, G roughness, B metallic), Normal (`Normal_OpenGL`), Occlusion (`AO_Mixed`, refused until it is fitted, decision 131), Emissive and SpecularWeight (a consumer gap in the receipt, decision 023), each `fileFormat: png`.
-- **Resolution.** A reference that names an inline preset is that preset. The id `uzengine` names the UzEngine preset (below), which no Painter name aliases. Otherwise `ShippedPresetId` reads it as a shipped id, a Painter name of the alias table (`PBR Metallic Roughness`, `Blender (Principled BSDF)`, `glTF PBR Metal Roughness`), or `resource://starter_assets/<Painter name>` with no query or a recorded `?version=` (an unrecorded query: `NotYetSupported`, naming the alias's recording: R-095, or R-314 for the glTF preset). The shipped preset joins `exportPresets` under its id, and the reference becomes that id. Painter names are aliases only (CLR-06). An inline preset named like the shipped id a reference resolves to is a `ValueError`. Any other `resource://` or `export-preset-generator://` reference is `NotYetSupported` (the Unreal presets are Phase 3).
+  - `unreal-engine-packed` and its DDS variant `unreal-engine-packed-dds` (phase3.2_unreal-ue56-packed-preset, decision 322): layout `unconfirmed` until recording R-322 (below).
+- **Resolution.** A reference that names an inline preset is that preset. The id `uzengine` names the UzEngine preset (below), which no Painter name aliases. Otherwise `ShippedPresetId` reads it as a shipped id, a Painter name of the alias table (`PBR Metallic Roughness`, `Blender (Principled BSDF)`, `glTF PBR Metal Roughness`, `Unreal Engine (Packed)`), or `resource://starter_assets/<Painter name>` with no query or a recorded `?version=` (an unrecorded query: `NotYetSupported`, naming the alias's recording: R-095, R-314 for the glTF preset, R-322 for the Unreal preset). The shipped preset joins `exportPresets` under its id, and the reference becomes that id. Painter names are aliases only (CLR-06). An inline preset named like the shipped id a reference resolves to is a `ValueError`. Any other `resource://` or `export-preset-generator://` reference is `NotYetSupported`.
 - **Refusals.**
-  - A preset whose layout is `unconfirmed` is refused (`NotYetSupported`) before anything is planned, naming its pending recordings (R-095; R-314 for the glTF preset).
+  - A preset whose layout is `unconfirmed` is refused (`NotYetSupported`) before anything is planned, naming its pending recordings (R-095; R-314 for the glTF preset; R-322 for the two Unreal presets).
   - The five-map preset writes BaseColor sRGB-encoded (decision 126); on a template whose BaseColor base is inferred the export is refused before writing.
 - **Parity.** The five-map preset's Normal map, written on the recorded plane goldens, is byte-identical to Painter's `Normal_OpenGL` PNG 16 files. Every preset's full output parity waits on a comparison with recording R-095, which decisions 180 and 198 admitted (`export-presets-legacy`, `export-presets-ocio`, `phase1-export-preset-search`) and no test compares yet: a scope split to `phase3.3_unreal-gltf-presets` (decision 103).
 
@@ -147,6 +148,26 @@ Task `phase1.17_export-presets`. Local run report: `parity/reports/phase1/export
 - **Status.** Every plan that writes `$textureSet_orm` is refused until `AO_Mixed` is fitted (decision 131, `phase3.2_unreal-ue56-packed-preset` item 2.10, provenance pending R-131). So the full shipped preset is not yet exportable. On wand v1 its normal is also refused by the island rule (decision 245).
 - **Tests.** `tests/export/test_uze_preset.py`, CPU only. It covers the shipped preset with its ORM maps filtered out and a test-only variant whose ORM R reads `ambientOcclusion`. Neither is shipped-preset or wand v1 acceptance.
 - **Height sidecar.** The table's "sidecar" is read as the BC4 `.uztexture` companion: the engine probes a cooked companion before its file-name rule, and the companion's header states the format. The receipt also records that format. No engine sidecar format exists in the approved source.
+
+### Unreal Engine (Packed) preset (phase3.2_unreal-ue56-packed-preset, decision 322)
+
+`assets/export-presets/unreal-engine-packed.json` is `08-export.md` §4's layout in the configuration form, written by hand from that section, decision 023 and the UE 5.6 texture documentation (X-CONSUMERS). It answers to `Unreal Engine (Packed)` through the alias table. Its provenance record has layout `unconfirmed`, pending recording R-322 (item 2.1), so every reference to it is refused before anything is planned.
+
+- **Maps**, named `$mesh_$textureSet_<map>`, each PNG 8:
+  - `BaseColor`: RGB from basecolor, A from opacity;
+  - `OcclusionRoughnessMetallic`: R `AO_Mixed`, G roughness, B metallic. Refused until AO_Mixed is fitted (decision 131, item 2.10);
+  - `Normal`: `Normal_DirectX`;
+  - `Emissive`;
+  - `SpecularWeight`: absent when the stack has no SpecularWeight channel. The receipt reports it as a consumer gap, and the mapping `Specular = 0.5 x SpecularWeight` is not applied.
+
+  Padding and dithering come from `exportParameters`.
+- **TGA.** Refused before writing (`NotYetSupported`, naming item 2.5 and R-322): stb is not vendored, and Painter's TGA files are not recorded.
+- **DDS variant.** `unreal-engine-packed-dds` has the same maps at PNG 16 and a preset-level `dds` block. No Painter name answers to it, and it shares the default preset's `unconfirmed` layout and R-322.
+  - Targets: BaseColor and Emissive `BC7_SRGB` with colour mips, ORM `BC7` with linear mips, Normal `BC5` with normal mips; SpecularWeight has none.
+  - Only a shipped preset may carry `dds`; an inline preset's `dds` key is refused as undocumented. `LoadShippedPreset` checks every target against the preset's maps, and BC5 must go with normal mips and BC7_SRGB with colour mips.
+  - `CompilePlan` attaches each target to its PNG 16 file through `RequestDds` (`docs/DDS.md`), with that function's checks. The dry run lists each `.dds` right after its PNG 16.
+- **Receipt.** Every DDS derivative carries a `cook` consumer gap: UE 5.6 documents DDS 2D import, not BC pass-through through cooking, so whether the engine re-encodes the file is recorded by the consumer fixture (item 3.3).
+- **Tests.** `tests/export/test_unreal_preset.py`, CPU only. It covers the shipped presets' content, provenance and refusal. It also covers a test-only copy whose provenance says `confirmed` and whose ORM R reads `ambientOcclusion`: the dry run, DDS publication with receipts, the SpecularWeight gap and the target checks. The copy is not the shipped preset, and none of this is Painter-parity or UE 5.6 evidence.
 
 ### glTF consumer fixture
 

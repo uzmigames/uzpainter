@@ -30,6 +30,7 @@
 #include <variant>
 #include <vector>
 
+#include "export/bc_encoder.h"
 #include "uzp_core/manifest/json.h"
 #include "uzp_core/types/enums.h"
 
@@ -149,10 +150,23 @@ struct UzEngineTargets {
     friend bool operator==(const UzEngineTargets&, const UzEngineTargets&) = default;
 };
 
+/// One DDS target of a shipped preset's `dds` block (the Unreal Engine (Packed) DDS variant,
+/// phase3.2_unreal-ue56-packed-preset item 2.6, decision 322): the delivered map's unexpanded
+/// `fileName`, whose PNG 16 file gets a DDS companion (plan.h `RequestDds`). Only a shipped preset
+/// carries them: an inline preset's `dds` key stays undocumented and refused.
+struct DdsTarget {
+    std::string map;
+    BcFormat format = BcFormat::Bc7;
+    DerivativeMips mips = DerivativeMips::linear;
+
+    friend bool operator==(const DdsTarget&, const DdsTarget&) = default;
+};
+
 struct PresetSpec {
     std::string name;
     std::vector<MapSpec> maps;
     std::optional<UzEngineTargets> uzengine;
+    std::vector<DdsTarget> dds;
 
     friend bool operator==(const PresetSpec&, const PresetSpec&) = default;
 };

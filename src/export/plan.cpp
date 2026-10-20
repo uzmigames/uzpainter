@@ -1190,6 +1190,15 @@ ExportPlan CompilePlan(const core::Project& project, const ExportConfig& config,
     }
     CheckEngineOutputs(plan);
     plan.hash = core::Sha256Hex(json::WriteCanonical(PlanBody(plan)));
+    // A shipped preset's DDS targets (config.h `DdsTarget`, decision 322): each written file of a
+    // target map gets its DDS companion through `RequestDds`, which checks it and rehashes the plan.
+    std::vector<std::pair<std::string, const DdsTarget*>> dds;
+    for (const PlannedFile& f : plan.files) {
+        for (const DdsTarget& target : PresetNamed(config, f.preset).dds) {
+            if (target.map == f.fileName) dds.emplace_back(f.relativePath, &target);
+        }
+    }
+    for (const auto& [relativePath, target] : dds) RequestDds(plan, project, relativePath, target->format, target->mips);
     return plan;
 }
 

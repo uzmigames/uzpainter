@@ -1,0 +1,96 @@
+{
+  "schema": "uzpainter/export-preset-provenance/1",
+  "version": 1,
+  "author": "UzmiGames",
+  "licence": "Apache-2.0",
+  "date": "2026-10-20",
+  "reviewer": null,
+  "preset": "unreal-engine-packed-dds",
+  "answersTo": [],
+  "sources": [
+    {
+      "kind": "public-documentation",
+      "page": "Adobe Substance 3D Painter Python API documentation, export.html (substance_painter.export)",
+      "section": "Full json_config dict possibilities; Export path wildcards",
+      "facts": "The preset form {name, maps[].{fileName, channels[].{destChannel, srcChannel, srcMapType, srcMapName}, parameters}}; the documentMap, virtualMap names and the $mesh and $textureSet wildcards of unreal-engine-packed, whose maps this variant repeats."
+    },
+    {
+      "kind": "consumer-specification",
+      "page": "Unreal Engine 5.6 documentation, texture import and texture properties (approved source X-CONSUMERS)",
+      "section": "Texture sRGB flag and compression settings; normal maps; DDS 2D import",
+      "facts": "DDS 2D textures are importable; colour textures are sampled with the sRGB flag, packed data and normal maps without it; BC pass-through through cooking is not documented (docs/analysis/technology-options/05-review-response.md finding 13), so the DDS is compact interchange until the consumer fixture records it."
+    },
+    {
+      "kind": "consumer-specification",
+      "page": "Microsoft DDS and DXGI_FORMAT documentation (approved source S-DDS-MS); docs/DDS.md",
+      "section": "DDS_HEADER_DXT10; DXGI_FORMAT BC5_UNORM, BC7_UNORM, BC7_UNORM_SRGB",
+      "facts": "The DX10 header and the BC5 (R, G), BC7 and BC7 sRGB (sRGB R, G, B, linear A) formats the DDS companions are stored in."
+    },
+    {
+      "kind": "public-documentation",
+      "page": "UzPainter decision 023 (owner answer Q10); docs/architecture/08-export.md §4 Unreal Engine (Packed); decision 322",
+      "section": "The optional DDS variant",
+      "facts": "An optional DDS encoding: BC7 for BaseColor, ORM and Emissive, BC5 for Normal; canonical 16-bit maps are written beside cooked derivatives (EXP-10); SpecularWeight is exported and reported as a consumer gap."
+    }
+  ],
+  "privateRecords": [],
+  "packing": [
+    {
+      "fileName": "$mesh_$textureSet_BaseColor",
+      "decision": "The channels of unreal-engine-packed's BaseColor at PNG 16 (the DDS's canonical file), with a BC7_SRGB DDS beside it, colour mips (sRGB-aware averaging; no cutout is assumed for the alpha)",
+      "source": "decision 023 (BC7 BaseColor); decision 322; docs/DDS.md (RequestDds)",
+      "status": "hypothesis"
+    },
+    {
+      "fileName": "$mesh_$textureSet_OcclusionRoughnessMetallic",
+      "decision": "The channels of unreal-engine-packed's ORM at PNG 16 with a linear BC7 DDS beside it, linear mips; refused until AO_Mixed is fitted (decision 131, item 2.10)",
+      "source": "decision 023 (BC7 ORM); decision 322",
+      "status": "hypothesis"
+    },
+    {
+      "fileName": "$mesh_$textureSet_Normal",
+      "decision": "Normal_DirectX at PNG 16 with a BC5 DDS beside it (R and G stored), renormalised normal mips; negative-Z texels refused before compression",
+      "source": "decision 023 (BC5 Normal); docs/DDS.md (BC5 negative-Z refusal)",
+      "status": "hypothesis"
+    },
+    {
+      "fileName": "$mesh_$textureSet_Emissive",
+      "decision": "The channels of unreal-engine-packed's Emissive at PNG 16 with a BC7_SRGB DDS beside it, colour mips",
+      "source": "decision 023 (BC7 Emissive); decision 322",
+      "status": "hypothesis"
+    },
+    {
+      "fileName": "$mesh_$textureSet_SpecularWeight",
+      "decision": "L from documentMap specularweight at PNG 16, written when the stack has the channel, with no DDS (decision 023 names no BC format for it); the receipt reports it as a consumer gap",
+      "source": "decision 023; decision 322",
+      "status": "hypothesis"
+    },
+    {
+      "fileName": "(all)",
+      "decision": "Selected by its UzPainter id only (no Painter preset answers to it); each DDS is <stem>.dds beside its PNG 16 canonical file, cooked from that file's samples; padding and dithering come from exportParameters",
+      "source": "decision 322; docs/DDS.md",
+      "status": "hypothesis"
+    }
+  ],
+  "parity": {
+    "layout": "unconfirmed",
+    "status": "pending",
+    "pending": [
+      {
+        "recording": "R-322",
+        "owner": "phase3.2_unreal-ue56-packed-preset item 2.1",
+        "what": "The recording that confirms unreal-engine-packed's layout (its provenance record), whose maps this variant repeats at PNG 16; the DDS companions are UzPainter's own encoding and are accepted by the UE 5.6 consumer fixture (items 2.8 and 3.3), not by a Painter recording."
+      }
+    ],
+    "tests": [
+      "tests/export/test_export_presets.py::test_provenance_records_are_complete",
+      "tests/export/test_export_presets.py::test_shipped_presets_pass_the_guard",
+      "tests/export/test_unreal_preset.py::test_unreal_presets_load_unconfirmed",
+      "tests/export/test_unreal_preset.py::test_unreal_preset_packs_the_documented_layout",
+      "tests/export/test_unreal_preset.py::test_unreal_presets_are_refused_naming_r322",
+      "tests/export/test_unreal_preset.py::test_dds_variant_lists_each_dds_after_its_png16",
+      "tests/export/test_unreal_preset.py::test_dds_variant_publishes_receipts_with_the_cook_gap",
+      "tests/export/test_unreal_preset.py::test_dds_targets_are_checked"
+    ]
+  }
+}

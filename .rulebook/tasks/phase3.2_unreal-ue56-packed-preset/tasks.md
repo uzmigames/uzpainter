@@ -3,9 +3,9 @@
 
 ## 2. Implementation
 - [ ] 2.1 Record the private observed outputs: Painter's files for `Unreal Engine (Packed)` on a UzmiGames fixture project and the documented `list_output_maps()` result, stored in the private oracle store with hashes in `parity/manifests/`
-- [ ] 2.2 Author `assets/export-presets/unreal-engine-packed.json` by hand from documented semantics (BaseColor+opacity, ORM linear, `Normal_DirectX`, Emissive)
+- [x] 2.2 Author `assets/export-presets/unreal-engine-packed.json` by hand from documented semantics (BaseColor+opacity, ORM linear, `Normal_DirectX`, Emissive)
 - [ ] 2.3 Provenance record `assets/export-presets/unreal-engine-packed.provenance.json` with public sources, observed-output hashes, packing decisions and parity status
-- [ ] 2.4 Compatibility alias so `defaultExportPreset: "Unreal Engine (Packed)"` resolves to the shipped preset (CLR-06)
+- [x] 2.4 Compatibility alias so `defaultExportPreset: "Unreal Engine (Packed)"` resolves to the shipped preset (CLR-06)
 - [ ] 2.5 TGA 8-bit output path through stb for the default encoding
 - [ ] 2.6 DDS header writer and the DDS variant: BC7 for BaseColor, ORM and Emissive, BC5 for Normal, through the BC encoder adapter
 - [ ] 2.7 `_SpecularWeight` written as a separate map when the channel exists and listed as a consumer gap in the receipt
@@ -20,7 +20,7 @@
 - [ ] 3.3 Consumer-matrix row 8 on wand v1, DDS BC7/BC5 variant: same bindings; whether UE re-encodes on cook is recorded
 - [ ] 3.4 Defect detection: an ORM map with swapped G/B channels fails the packing check
 - [ ] 3.5 Fixed-name interruption test: interrupting each fixed-name copy and immediately running the UE import through its adapter yields one complete generation or fails before consumption (EXP-06)
-- [ ] 3.6 Provenance record validates against its schema on the local CPU lane (decision 200)
+- [x] 3.6 Provenance record validates against its schema on the local CPU lane (decision 200)
 
 ## 4. Acceptance
 - [ ] 4.1 Child acceptance met and reported to `phase3.3_unreal-gltf-presets`: UE 5.6 fixture loads both variants; ORM packing confirmed; SpecularWeight gap reported
@@ -107,3 +107,42 @@ request schema/job parsing and the provenance guard. Ruff and mypy pass for
 the three Python files. Evidence: `tmp/scratch/r131/junit.xml` and
 `tmp/scratch/r131/evidence.json`. These are authorship checks, not a Painter
 recording or output-parity verdict.
+
+## 9. Preset, provenance and DDS variant, offline (2026-10-20, decision 322)
+
+Delivered in 7f7db23e:
+- `assets/export-presets/unreal-engine-packed.json`, written by hand from 08-export §4, decision 023 and the UE 5.6 texture documentation (X-CONSUMERS). It has five `$mesh_$textureSet_<map>` maps at PNG 8.
+- `assets/export-presets/unreal-engine-packed-dds.json`, the same maps at PNG 16. Its shipped-only `dds` block names the targets: BC7_SRGB for BaseColor and Emissive, BC7 for ORM, BC5 for Normal. SpecularWeight has none.
+- Both provenance records, with layout `unconfirmed` and pending R-322. Every packing entry is `hypothesis`, and `privateRecords` is empty.
+- The alias `Unreal Engine (Packed)` and its `resource://starter_assets/` URL. An unrecorded `?version=` names R-322.
+- `CompilePlan` attaches each DDS target through `RequestDds`.
+- A `cook` consumer gap on every DDS receipt entry: BC pass-through through UE 5.6 cooking is undocumented, so item 3.3 records it.
+- TGA refused before writing, naming item 2.5 and R-322.
+
+Ticked:
+- **2.2.** Evidence: `test_unreal_preset_packs_the_documented_layout`.
+- **2.4.** Evidence: `test_unreal_presets_load_unconfirmed`. The Painter name and its URL resolve to `unreal-engine-packed`, which is then refused on R-322 as decision 095 requires.
+- **3.6.** Both records validate against the schema on the CPU lane. Evidence: `test_unreal_presets_load_unconfirmed` and `test_export_presets.py::test_provenance_records_are_complete`.
+
+Still open:
+- **2.1.** Recording R-322 is not made, and its request is not authored yet.
+- **2.3.** The record has no observed-output hashes until R-322 is admitted.
+- **2.5.** No TGA writer exists, because stb is not vendored, and Painter's TGA files are not recorded.
+- **2.6 and 2.7.** The shipped presets cannot export: they are refused on R-322, and their ORM reads AO_Mixed.
+- **2.10.** AO_Mixed is unchanged and still refused.
+- **2.8, 3.1 to 3.5 and 4.1.** These need Painter, UE 5.6 or the fitted ORM.
+
+The dry run, the DDS companions, the receipts and the SpecularWeight gap are exercised only on a test-only copy, `variant_presets`. That copy's provenance says `confirmed`, and its ORM R reads `ambientOcclusion`. This is not shipped-preset, Painter-parity or UE 5.6 evidence (the decision 318 pattern).
+
+Validation, CPU only, Debug `uzp-export-tests` built with `-j2`:
+- First run, 18 node ids: 16 passed and 2 failed. The failures were test-side: a skeleton without Emissive, and an inline `dds` key that is NotYetSupported (undocumented), not a ValueError. Exit 1.
+- The 2 failed ids, re-run after the fix: both passed, exit 0.
+
+The 18 node ids:
+- all 10 cases of `tests/export/test_unreal_preset.py`;
+- from `test_export_presets.py`: `test_provenance_records_are_complete`, `test_shipped_presets_pass_the_guard`, `test_painter_names_resolve_to_shipped_presets` and `test_preset_references_resolve_inline_first`;
+- `test_export_plan.py::test_refused_formats_raise_before_any_file`;
+- `test_dds_publication.py::test_dds_real_write_publication_receipt_and_fixed_copy`;
+- from `test_uze_preset.py`: `test_shipped_preset_loads_with_its_targets` and `test_dry_run_lists_outputs_with_formats`.
+
+Logs: `tmp/scratch/ue-preset/run1.{log,xml}` and `run2.{log,xml}`. Ruff and mypy pass on the two Python files.

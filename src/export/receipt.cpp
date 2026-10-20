@@ -37,6 +37,14 @@ constexpr std::string_view kRoutedNormalGap =
     "consumer that reconstructs Z from X and Y (UzEngine's fixed G-buffer path) still loses it: its binding is "
     "accepted by phase3.3_uze-consumer-fixture";
 
+/// The gap of every DDS derivative (08-export.md §4, decision 322): UE 5.6 documents DDS 2D import,
+/// not BC pass-through through cooking, so the DDS is compact interchange until the Unreal consumer
+/// fixture records whether the engine re-encodes it.
+constexpr std::string_view kDdsCookGap =
+    "UE 5.6 documents DDS 2D import, not BC pass-through through cooking: the DDS is compact interchange, and "
+    "whether the engine re-encodes it on cook is recorded by the Unreal consumer fixture "
+    "(phase3.2_unreal-ue56-packed-preset item 3.3)";
+
 std::string BitDepthOf(const PlannedFile& file) {
     return file.parameters ? std::string(BitDepthName(file.parameters->bitDepth)) : std::string();
 }
@@ -466,6 +474,7 @@ json::Object BuildReceipt(const ReceiptInputs& in) {
             const bool srgb = BcIsSrgb(planned.format);
             const std::string derivedSpace = srgb ? "sRGB" : "linear";
             json::Array derivedGaps = ConsumerGaps(file);
+            derivedGaps.push_back(json::Object{{"channel", "cook"}, {"gap", std::string(kDdsCookGap)}});
             for (const json::Value& item : derivedGaps) {
                 openItems.emplace_back(planned.relativePath + ": " +
                                        std::get<std::string>(std::get<json::Object>(item.data).at("gap").data));

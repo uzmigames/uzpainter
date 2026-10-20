@@ -1,0 +1,134 @@
+{
+  "name": "unreal-engine-packed",
+  "maps": [
+    {
+      "fileName": "$mesh_$textureSet_BaseColor",
+      "channels": [
+        {
+          "destChannel": "R",
+          "srcChannel": "R",
+          "srcMapType": "documentMap",
+          "srcMapName": "basecolor"
+        },
+        {
+          "destChannel": "G",
+          "srcChannel": "G",
+          "srcMapType": "documentMap",
+          "srcMapName": "basecolor"
+        },
+        {
+          "destChannel": "B",
+          "srcChannel": "B",
+          "srcMapType": "documentMap",
+          "srcMapName": "basecolor"
+        },
+        {
+          "destChannel": "A",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "opacity"
+        }
+      ],
+      "parameters": {
+        "fileFormat": "png",
+        "bitDepth": "8"
+      }
+    },
+    {
+      "fileName": "$mesh_$textureSet_OcclusionRoughnessMetallic",
+      "channels": [
+        {
+          "destChannel": "R",
+          "srcChannel": "L",
+          "srcMapType": "virtualMap",
+          "srcMapName": "AO_Mixed"
+        },
+        {
+          "destChannel": "G",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "roughness"
+        },
+        {
+          "destChannel": "B",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "metallic"
+        }
+      ],
+      "parameters": {
+        "fileFormat": "png",
+        "bitDepth": "8"
+      }
+    },
+    {
+      "fileName": "$mesh_$textureSet_Normal",
+      "channels": [
+        {
+          "destChannel": "R",
+          "srcChannel": "R",
+          "srcMapType": "virtualMap",
+          "srcMapName": "Normal_DirectX"
+        },
+        {
+          "destChannel": "G",
+          "srcChannel": "G",
+          "srcMapType": "virtualMap",
+          "srcMapName": "Normal_DirectX"
+        },
+        {
+          "destChannel": "B",
+          "srcChannel": "B",
+          "srcMapType": "virtualMap",
+          "srcMapName": "Normal_DirectX"
+        }
+      ],
+      "parameters": {
+        "fileFormat": "png",
+        "bitDepth": "8"
+      }
+    },
+    {
+      "fileName": "$mesh_$textureSet_Emissive",
+      "channels": [
+        {
+          "destChannel": "R",
+          "srcChannel": "R",
+          "srcMapType": "documentMap",
+          "srcMapName": "emissive"
+        },
+        {
+          "destChannel": "G",
+          "srcChannel": "G",
+          "srcMapType": "documentMap",
+          "srcMapName": "emissive"
+        },
+        {
+          "destChannel": "B",
+          "srcChannel": "B",
+          "srcMapType": "documentMap",
+          "srcMapName": "emissive"
+        }
+      ],
+      "parameters": {
+        "fileFormat": "png",
+        "bitDepth": "8"
+      }
+    },
+    {
+      "fileName": "$mesh_$textureSet_SpecularWeight",
+      "channels": [
+        {
+          "destChannel": "L",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "specularweight"
+        }
+      ],
+      "parameters": {
+        "fileFormat": "png",
+        "bitDepth": "8"
+      }
+    }
+  ]
+}

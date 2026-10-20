@@ -1,0 +1,99 @@
+{
+  "schema": "uzpainter/export-preset-provenance/1",
+  "version": 1,
+  "author": "UzmiGames",
+  "licence": "Apache-2.0",
+  "date": "2026-10-20",
+  "reviewer": null,
+  "preset": "unreal-engine-packed",
+  "answersTo": [
+    "Unreal Engine (Packed)"
+  ],
+  "sources": [
+    {
+      "kind": "public-documentation",
+      "page": "Adobe Substance 3D Painter user guide, Export > Output templates > Default Output templates",
+      "section": "List of default templates",
+      "facts": "The default template name this preset answers to; the page gives one-line descriptions only (no maps, channels, naming or parameters)."
+    },
+    {
+      "kind": "public-documentation",
+      "page": "Adobe Substance 3D Painter Python API documentation, export.html (substance_painter.export)",
+      "section": "Full json_config dict possibilities; Export path wildcards",
+      "facts": "The preset form {name, maps[].{fileName, channels[].{destChannel, srcChannel, srcMapType, srcMapName}, parameters}}; the documentMap names basecolor, opacity, roughness, metallic, emissive and specularweight; the virtualMap names AO_Mixed and Normal_DirectX; the $mesh and $textureSet wildcards."
+    },
+    {
+      "kind": "consumer-specification",
+      "page": "Unreal Engine 5.6 documentation, texture import and texture properties (approved source X-CONSUMERS)",
+      "section": "Texture sRGB flag and compression settings; occlusion-roughness-metallic packing; normal maps; DDS 2D import",
+      "facts": "Colour textures (base colour, emissive) are sampled with the sRGB flag; packed data textures (occlusion in R, roughness in G, metallic in B) and normal maps without it; the engine's tangent-space normal maps follow the DirectX convention (green as -v); DDS 2D textures are importable, and BC pass-through through cooking is not documented (docs/analysis/technology-options/05-review-response.md finding 13)."
+    },
+    {
+      "kind": "public-documentation",
+      "page": "UzPainter decision 023 (owner answer Q10); docs/architecture/08-export.md §4 Unreal Engine (Packed)",
+      "section": "UE 5.6 target, encodings and the SpecularWeight consumer gap",
+      "facts": "Target UE 5.6; PNG/TGA 8-bit by default and an optional DDS variant (BC7 BaseColor, ORM and Emissive, BC5 Normal); SpecularWeight exported as a separate map and reported in the receipt as a consumer gap, its mapping Specular = 0.5 x SpecularWeight left to the consumer."
+    }
+  ],
+  "privateRecords": [],
+  "packing": [
+    {
+      "fileName": "$mesh_$textureSet_BaseColor",
+      "decision": "RGB from documentMap basecolor, A from documentMap opacity (dropped when the stack has no opacity channel, probe P7); the colour is written in its channel's encoding (an sRGB8 BaseColor sRGB-encoded, decision 126); PNG 8",
+      "source": "08-export.md §4 (RGB basecolor, A opacity); UE 5.6 texture import (base colour sampled sRGB); decision 023 (8-bit default)",
+      "status": "hypothesis"
+    },
+    {
+      "fileName": "$mesh_$textureSet_OcclusionRoughnessMetallic",
+      "decision": "R from virtualMap AO_Mixed, G from documentMap roughness, B from documentMap metallic, linear; PNG 8; refused until AO_Mixed is fitted (decision 131, item 2.10)",
+      "source": "08-export.md §4 (R AO_Mixed, G roughness, B metallic, linear); UE 5.6 ORM packing (occlusion R, roughness G, metallic B, no sRGB)",
+      "status": "hypothesis"
+    },
+    {
+      "fileName": "$mesh_$textureSet_Normal",
+      "decision": "RGB from virtualMap Normal_DirectX, linear; PNG 8",
+      "source": "08-export.md §4 (Normal_DirectX); UE 5.6 normal maps (DirectX convention)",
+      "status": "hypothesis"
+    },
+    {
+      "fileName": "$mesh_$textureSet_Emissive",
+      "decision": "RGB from documentMap emissive, written in its channel's encoding; PNG 8",
+      "source": "08-export.md §4 (_Emissive); UE 5.6 texture import (emissive sampled sRGB)",
+      "status": "hypothesis"
+    },
+    {
+      "fileName": "$mesh_$textureSet_SpecularWeight",
+      "decision": "L from documentMap specularweight, written when the stack has the channel (an absent documentMap makes the map absent, decision 091); PNG 8; the receipt reports it as a consumer gap",
+      "source": "decision 023; 08-export.md §4 (a separate _SpecularWeight map, Specular = 0.5 x SpecularWeight belongs to the consumer)",
+      "status": "hypothesis"
+    },
+    {
+      "fileName": "(all)",
+      "decision": "Files named $mesh_$textureSet_<map>, each with fileFormat png and bitDepth 8 (the owner's 8-bit default); padding and dithering come from exportParameters until the recording shows what the preset itself sets; TGA is selected by an exportParameters rule and stays refused until its writer and Painter's TGA files exist (item 2.5); the DDS variant is the separate preset unreal-engine-packed-dds (decision 322)",
+      "source": "decision 023; 08-export.md §4; decision 322",
+      "status": "hypothesis"
+    }
+  ],
+  "parity": {
+    "layout": "unconfirmed",
+    "status": "pending",
+    "pending": [
+      {
+        "recording": "R-322",
+        "owner": "phase3.2_unreal-ue56-packed-preset item 2.1",
+        "what": "Painter's files and dry run for Unreal Engine (Packed), by the reference the preset lists give, on a UzmiGames fixture with every channel the preset reads filled distinctly (BaseColor, Opacity, Roughness, Metallic, AO, Emissive, SpecularWeight, Normal, Height) and the AO and Normal mesh maps bound, with the preset's own parameters and with the pipeline's, at PNG 8 and at TGA 8, plus the preset lists and the preset's list_output_maps() (decision 322): confirms or corrects every map, its channels, its name, the preset's own parameters, its reference and Painter's TGA files."
+      }
+    ],
+    "tests": [
+      "tests/export/test_export_presets.py::test_provenance_records_are_complete",
+      "tests/export/test_export_presets.py::test_shipped_presets_pass_the_guard",
+      "tests/export/test_unreal_preset.py::test_unreal_presets_load_unconfirmed",
+      "tests/export/test_unreal_preset.py::test_unreal_preset_packs_the_documented_layout",
+      "tests/export/test_unreal_preset.py::test_unreal_presets_are_refused_naming_r322",
+      "tests/export/test_unreal_preset.py::test_variant_dry_run_lists_the_png8_maps",
+      "tests/export/test_unreal_preset.py::test_ao_mixed_stays_refused_in_the_variant",
+      "tests/export/test_unreal_preset.py::test_specularweight_is_a_separate_map_and_a_consumer_gap",
+      "tests/export/test_unreal_preset.py::test_tga_is_refused_naming_r322"
+    ]
+  }
+}

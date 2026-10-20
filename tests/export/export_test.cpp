@@ -10,6 +10,7 @@
 //       `NotYetSupported`.
 //       Optional "dds": [{"path": relativePath, "format": BcFormat ordinal,
 //       "mips": DerivativeMips ordinal}] requests DDS after plan compilation.
+//       Optional "presets": a directory the shipped presets are read from (an authored variant).
 //       `publish` and `export` also accept --dds <requests.json> with this array.
 //   uzp-export-tests files <templates dir> <spec.json> <config.json> <out dir>
 //       Builds the project of an evaluator spec, compiles the configuration and evaluates every
@@ -93,9 +94,10 @@
 //       file of the delivery by its fixed name and prints {"generation", "files": {path:
 //       sha256 of the bytes read}} or {"error": "Failure", "message"} when it fails before
 //       consumption.
-//   uzp-export-tests receipt <project skeleton.json> <config.json>
+//   uzp-export-tests receipt <project skeleton.json> <config.json> [<preset dir>]
 //       (phase1.17) `BuildReceipt` of the compiled plan, each file's bytes standing in as its
-//       relativePath (no evaluation); prints the receipt.
+//       relativePath (no evaluation); prints the receipt. The shipped presets are read from
+//       <preset dir> when it is given.
 //   uzp-export-tests hold-lock <exportPath> <milliseconds>
 //       (phase1.17) Takes the publication lock, prints "held", keeps it for the given time.
 //   uzp-export-tests recover --recover <exportPath> [--fixed-names <dir>]...
@@ -319,9 +321,13 @@ int RunPlan(const fs::path& casesPath) {
             const json::Value& config = Key(o, "config");
             exporter::PlanContext context;
             if (o.contains("project_path")) context.projectPath = Str(o.at("project_path"), "project_path");
+            // Optional "presets": a directory read for the shipped presets instead of the installed one.
             exporter::ExportPlan plan =
-                config.IsString() ? exporter::CompilePlan(project, Str(config, "config"), context)
-                                  : exporter::CompilePlan(project, exporter::ParseConfig(config), context);
+                config.IsString()        ? exporter::CompilePlan(project, Str(config, "config"), context)
+                : o.contains("presets") ? exporter::CompilePlan(
+                                              project, exporter::ParseConfig(config, fs::path(Str(o.at("presets"), "presets"))),
+                                              context)
+                                        : exporter::CompilePlan(project, exporter::ParseConfig(config), context);
             // Optional "uztexture": [relativePath...], each requested after compilation
             // (`RequestUzTextureNormal`, policy fail).
             if (o.contains("uztexture")) {
@@ -1274,9 +1280,11 @@ int RunConsume(const fs::path& exportPath, const std::optional<fs::path>& direct
     return 0;
 }
 
-int RunReceipt(const fs::path& projectPath, const fs::path& configPath) {
+int RunReceipt(const fs::path& projectPath, const fs::path& configPath, const std::optional<fs::path>& presets) {
     const core::Project project = ParseSkeleton(json::Parse(ReadText(projectPath)));
-    const exporter::ExportPlan plan = exporter::CompilePlan(project, ReadText(configPath));
+    const exporter::ExportPlan plan =
+        presets ? exporter::CompilePlan(project, exporter::ParseConfig(json::Parse(ReadText(configPath)), *presets))
+                : exporter::CompilePlan(project, ReadText(configPath));
     std::vector<exporter::EncodedFile> encoded;
     for (const exporter::PlannedFile& file : plan.files) encoded.push_back({file.relativePath, std::nullopt, file.layout});
     std::cout << json::WriteCanonical(exporter::BuildReceipt(
@@ -1462,7 +1470,8 @@ int main(int argc, char** argv) {
         }
         if (args.size() == 2 && args[0] == "consume-pinned") return RunConsume(args[1], std::nullopt);
         if (args.size() == 3 && args[0] == "consume-locked") return RunConsume(args[1], fs::path(args[2]));
-        if (args.size() == 3 && args[0] == "receipt") return RunReceipt(args[1], args[2]);
+        if (args.size() == 3 && args[0] == "receipt") return RunReceipt(args[1], args[2], std::nullopt);
+        if (args.size() == 4 && args[0] == "receipt") return RunReceipt(args[1], args[2], fs::path(args[3]));
         if (args.size() == 3 && args[0] == "hold-lock") return RunHoldLock(args[1], args[2]);
         if (!args.empty() && args[0] == "recover") {
             std::vector<std::string> verb(args);
@@ -1493,7 +1502,7 @@ int main(int argc, char** argv) {
                  "[--fault <point>[:<n>]] publish <templates> <spec.json> <config.json> "
                  "[--uztexture <relativePath>[:fail|:rgb]] [--presets <dir>] [--dds <requests.json>] | "
                  "[--fault <point>[:<n>]] fixed-copy <exportPath> <dir> | consume-pinned <exportPath> | "
-                 "consume-locked <exportPath> <dir> | receipt <project.json> <config.json> | hold-lock <exportPath> <ms> | recover --recover <exportPath> [--fixed-names <dir>]... | "
+                 "consume-locked <exportPath> <dir> | receipt <project.json> <config.json> [<preset dir>] | hold-lock <exportPath> <ms> | recover --recover <exportPath> [--fixed-names <dir>]... | "
                  "presets <preset dir> <references.json> | aliases\n";
     return 2;
 }

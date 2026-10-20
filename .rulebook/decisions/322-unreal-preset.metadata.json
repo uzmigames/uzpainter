@@ -1,0 +1,11 @@
+{
+  "id": 322,
+  "slug": "322-unreal-preset",
+  "title": "The Unreal Engine (Packed) preset ships unconfirmed, refused until recording R-322; its DDS variant is the separate preset unreal-engine-packed-dds, PNG 16 maps with a dds target block; TGA stays refused",
+  "status": "accepted",
+  "date": "2026-10-20",
+  "relatedTasks": [
+    "phase3.2_unreal-ue56-packed-preset"
+  ],
+  "supersededBy": null
+}

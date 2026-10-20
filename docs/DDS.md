@@ -52,9 +52,14 @@ Its `layout`/`channels` describe the canonical mapping; `dds.stored_channels`
 states RG for BC5 or RGBA for BC7. The canonical file has its own receipt/hash.
 
 This is an explicit native C++ API, separate from Painter's JSON configuration.
-It does not ship the Unreal preset or establish UE 5.6 consumer acceptance.
-Item 2.6 also requires the DDS preset variant, whose observed-output and
-provenance prerequisites remain open.
+It does not establish UE 5.6 consumer acceptance.
+
+The shipped preset `unreal-engine-packed-dds` (decision 322) declares its
+targets in a preset-level `dds` block, and `CompilePlan` attaches each one
+through `RequestDds`. Every DDS receipt entry carries a `cook` consumer gap,
+because BC pass-through through UE 5.6 cooking is not documented. The preset
+stays refused until recording R-322 confirms the layout it shares with
+`unreal-engine-packed`.
 
 ## Sources
 

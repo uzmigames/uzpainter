@@ -143,9 +143,13 @@ std::string FormatOwner(FileFormat format) {
         case FileFormat::png:
         case FileFormat::exr: return {};
         case FileFormat::tga:
+            return "phase3.2_unreal-ue56-packed-preset item 2.5 (the TGA writer over stb, which is not vendored yet; "
+                   "Painter's TGA files: recording R-322, decision 322)";
         case FileFormat::bmp:
-        case FileFormat::jpeg: return "phase3.2_unreal-ue56-packed-preset (TGA, BMP and JPEG writers)";
-        case FileFormat::dds: return "phase3.2_unreal-ue56-packed-preset (DDS BC writer)";
+        case FileFormat::jpeg: return "phase3.2_unreal-ue56-packed-preset (BMP and JPEG writers)";
+        case FileFormat::dds:
+            return "phase3.2_unreal-ue56-packed-preset (Painter's DDS files are not recorded; UzPainter's DDS "
+                   "companions of PNG 16 maps: the shipped preset unreal-engine-packed-dds, decision 322)";
         case FileFormat::tiff:
         case FileFormat::psd:
         case FileFormat::webp:
@@ -622,7 +626,7 @@ ExportConfig ParseConfig(const json::Value& value, const std::filesystem::path& 
                 throw core::NotYetSupported("export: " + path + ": the preset \"" + name +
                                             "\" is a shelf or predefined preset UzPainter does not ship; shipped: " +
                                             JoinNames({ShippedPresetIds().begin(), ShippedPresetIds().end()}) +
-                                            " (decision 095; the Unreal presets: phase3.2)");
+                                            " (decision 095)");
             }
             std::vector<std::string> valid = inlineNames;
             for (std::string_view shipped : ShippedPresetIds()) valid.emplace_back(shipped);

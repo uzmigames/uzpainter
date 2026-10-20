@@ -55,7 +55,11 @@ GLTF = "gltf-pbr-metal-roughness"
 GLTF_NAME = "glTF PBR Metal Roughness"
 GLTF_URL = f"resource://starter_assets/{GLTF_NAME}"
 # The recording an unconfirmed preset's refusal names when it is not R-095 (`parity.pending`).
-PENDING_RECORDING = {GLTF: "R-314"}
+PENDING_RECORDING = {
+    GLTF: "R-314",
+    "unreal-engine-packed": "R-322",
+    "unreal-engine-packed-dds": "R-322",
+}
 
 
 def run(exe: Path, *args: str) -> list[dict[str, Any]]:

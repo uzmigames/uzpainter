@@ -59,6 +59,8 @@ Implemented in `src/export/preset_aliases.{h,cpp}` and `assets/export-presets/` 
 
 `$mesh_$textureSet_BaseColor` RGB=basecolor A=opacity; `_OcclusionRoughnessMetallic` R=`AO_Mixed` G=roughness B=metallic (linear); `_Normal` = `Normal_DirectX`; `_Emissive`. This layout is stated as behaviour and ships only once the preset's provenance record confirms it. Target UE 5.6 (owner Q10): default encoding PNG/TGA 8-bit; optional DDS BC7 (BaseColor, ORM, Emissive) and BC5 (Normal). UE 5.6 documents DDS 2D import; BC pass-through through cooking is not documented (`technology-options/05-review-response.md` finding 13), so "already compressed" means compact interchange until the Unreal consumer fixture (§5.1) proves otherwise. SpecularWeight is exported as a separate `_SpecularWeight` map when the channel exists and reported in the receipt as a **consumer gap**: the stated mapping `Specular = 0.5 × SpecularWeight` (hat v8 report) belongs to the consumer's material and is not executed by the export.
 
+Implemented in `assets/export-presets/unreal-engine-packed{,-dds}.json` and `src/export/` (decision 322; `src/export/EXPORT.md` §5). Both presets are refused until recording R-322 confirms the layout. The DDS variant is the separate preset `unreal-engine-packed-dds`: PNG 16 maps with DDS companions. TGA stays refused until its writer exists and R-322 records Painter's TGA files.
+
 ### UzEngine preset
 
 Target UzEngine (owner Q10): `.uzmat` plus compressed `.uztexture`. Both formats are written by UzPainter's own code from the format definition (`13-engine-integration.md` §2); no UzEngine library is linked or called (owner Q8).
