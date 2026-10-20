@@ -11,7 +11,7 @@
 - [ ] 2.7 Implement `DilationWidth` with optional `ApplyDiffusion` on the baked map only, keeping RAW; record distances in project units
 - [ ] 2.8 Implement the `BakingParameters`/`Property` model (`common()`, `baker(usage)`, `set`, `Property.*`) from the Phase 0 discovery capture; enum integers from `enum_values()` labels
 - [ ] 2.9 Author `assets/defaults/baking.json` with per-entry provenance and a local check on the owner's machine (decision 028) against the private defaults capture
-- [ ] 2.10 Implement linked groups (`set_linked_group`, `set_linked_group_common_parameters`, `unlink_all*`, `get_link_group*`, `get_linked_texture_sets*`) as one transaction across linked sets; persist `bake_settings {common, detail, per_baker}`
+- [x] 2.10 Implement linked groups (`set_linked_group`, `set_linked_group_common_parameters`, `unlink_all*`, `get_link_group*`, `get_linked_texture_sets*`) as one transaction across linked sets; persist `bake_settings {common, detail, per_baker}` — supported Common/Detail and AO surface, with decision 311's explicit refusals retained; project persistence and evidence in section 9
 - [ ] 2.11 Register the MCP Baking parameter tools `bake_inspect`, `bake_configure`, `bake_set_mesh_inputs`, `bake_capture_preset`, `bake_apply_preset`
 
 ## 3. Tests
@@ -68,6 +68,12 @@
   - 2.5: the box size metric is not established, so a relative distance from the Painter parameters is refused.
   - 2.7: `ApplyDiffusion` stays `NotYetSupported`, by the panel's majority.
   - 2.8, 2.9, 3.1 and 3.2: the Tier 0 capture on the owner's machine.
-  - 2.10: link groups are not persisted, and `bake_settings` is not yet written into the project document.
+  - 2.10 was open at this slice: project persistence is completed in section 9.
   - 2.11: the MCP tools.
 - Tests: `zig build bake-feasibility-tests -j4`: exit 0. `uzp-bake-feasibility-tests run`: exit 0, 33 cases passed. `python -m pytest tests/bake/test_bake_feasibility.py`: exit 0, 39 passed. ruff and mypy are clean. The `cage_file` scene's bytes are identical at 1, 4 and 32 threads (SHA-256 `c65e3519...cb284c`), measured on one build and machine; this is not a golden.
+
+## 9. Project persistence (2026-10-20, branch `fix/baking-project-persistence`)
+- Item 2.10 now includes `src/bake/baking_project.{h,cpp}`: independent loading, validated all-set storage, and `EditBakingSession`/`ExecuteBakingSession` through the real document and project-store transactions. Common/Detail and AO groups persist by texture-set ID in `bake_settings.linked_groups`; explicit empty groups survive reopening. Unrelated extension fields remain intact. The legacy common-group default applies only to consistent member values.
+- `tests/bake/test_baking_project.py`: 3 passed, 0 skipped on Debug (29.53 s). The three native cases (`roundtrip`, `transactions`, `invalid`) also passed on each of ReleaseSafe, ReleaseFast and ReleaseSmall. Real `.uzp` save/reopen covers values, groups, rename/reorder and unlink; transaction checks cover no-op, replay, stale revision, idempotency conflict, invalid values and commit-sink failure. Malformed metadata and unsupported original settings are rejected before replacement. Evidence: `tmp/scratch/baking-project/evidence.json`.
+- Documentation: `docs/architecture/06-baking.md` section 3.1 and this task's baker spec. Source citation/revision audit, Python lint/type checks, Zig formatting and Rulebook validation passed. No GPU or Painter session was used.
+- Other baker usages, unrecorded property metadata/defaults and unsupported regrouping retain decision 311's refusals and their existing owners. Items 2.8, 2.9, 3.1, 3.2 and acceptance 4.1 remain open; this persistence result does not accept the parent task or any parity gate.

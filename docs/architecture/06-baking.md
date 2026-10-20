@@ -41,6 +41,37 @@ All key names, labels, widget types, enum labels and ranges are taken from the d
 - Normal baker: tangent space from the texturing mesh's MikkTSpace frame with the project's `TangentSpace` mode; output convention per `NormalMapFormat`; the convention fixture of `14-parity-testing.md` §2 is a prerequisite.
 - Linked groups: `set_linked_group`, `set_linked_group_common_parameters`, `unlink_all*`, `get_link_group*`, `get_linked_texture_sets*` as Painter; a settings change is one transaction across every linked set.
 
+### 3.1 Project persistence of linked parameters
+
+`src/bake/baking_project.h` connects the supported Common/Detail and AO parameter
+model to the project document. `LoadBakingSession(project)` creates an independent
+session; `StoreBakingSession(session, project)` stores all sets together.
+`EditBakingSession(edit, callback)` operates on a transaction's private project,
+and `ExecuteBakingSession(document, request, callback)` uses the document's normal
+admission, revision and commit-sink rules. The document remains the source of
+truth: a refused request, invalid parameter or failed commit publishes no settings
+or link changes. A replay does not invoke the callback again.
+
+Each texture set keeps explicit values in `bake_settings.common`, `detail` and
+`per_baker.AO`. The UzPainter-owned `bake_settings.linked_groups` extension stores
+`{common: [texture_set_id, ...], per_baker: {AO: [texture_set_id, ...]}}`.
+Membership uses persistent texture-set IDs, never display names. Every set stores
+the same group declaration; empty arrays explicitly mean unlinked. Unknown fields
+outside this owned extension remain intact.
+
+Loading first validates every set independently, then checks the complete group
+declarations and equality of the values being shared, and only then links the
+session. Missing members, repeated IDs, inconsistent declarations or values, and
+unsupported groups are refused without changing the project. This prevents the
+last loaded member from silently overwriting another member's settings. If every
+set lacks the extension, the legacy common-group default applies, provided the
+common/detail values agree. Partial presence is invalid. Explicitly unlinked
+projects stay unlinked after save and reopen.
+
+This persistence contract does not establish Painter's unrecorded property types,
+defaults, enum integers or regrouping rules. Those refusals and each remaining
+baker's ownership continue to apply.
+
 ## 4. Outputs and evidence
 
 Per bake and usage: the **compatible map** (what Painter would produce) plus evidence maps that never alter it: `raw` (before dilation), `hit` (straight / cage hit), `coverage` (texel centre, conservative used surface), `miss` (used-surface texels without a hit), `extension` (dilated texels), per-class counts and the per-part Z<0 statistics the pipeline asks for (`docs/analysis/assets3d-pipeline/07-lessons-and-pitfalls.md` §3). AO reports misses from hit evidence, distinct from real holes, hidden surfaces and low AO (BAK-04); a second pass with wider distances applied only to missed texels is a documented option.

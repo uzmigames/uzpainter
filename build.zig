@@ -1200,6 +1200,34 @@ pub fn build(b: *std.Build) void {
         .name = "uzp_store",
         .root_module = store_mod,
     });
+
+    // Baking settings/group persistence: document transactions and a real save/reopen, no GPU.
+    const baking_project_tests_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    baking_project_tests_mod.addIncludePath(b.path("src"));
+    baking_project_tests_mod.linkLibrary(store_lib);
+    baking_project_tests_mod.linkLibrary(uzp_core_lib);
+    baking_project_tests_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &.{ "bake/bake_request.cpp", "bake/baking_parameters.cpp", "bake/baking_project.cpp" },
+        .flags = &uzp_core_flags,
+    });
+    baking_project_tests_mod.addCSourceFiles(.{
+        .root = b.path("tests/bake"),
+        .files = &.{"baking_project_test.cpp"},
+        .flags = &uzp_core_flags,
+    });
+    const baking_project_tests_exe = b.addExecutable(.{
+        .name = "uzp-baking-project-tests",
+        .root_module = baking_project_tests_mod,
+    });
+    const baking_project_tests_step = b.step("baking-project-tests", "Build CPU baking settings persistence tests");
+    baking_project_tests_step.dependOn(&b.addInstallArtifact(baking_project_tests_exe, .{}).step);
+    b.getInstallStep().dependOn(baking_project_tests_step);
     const install_store = b.addInstallArtifact(store_lib, .{});
     const store_step = b.step("uzp-store", "Build the project store as a static library");
     store_step.dependOn(&install_store.step);

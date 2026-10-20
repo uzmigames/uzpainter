@@ -51,3 +51,26 @@ A settings change on a linked group SHALL apply as one transaction across every 
 Given two texture sets in one linked group
 When `set_linked_group_common_parameters` fails validation for one set
 Then neither set's bake settings MUST change and the revision MUST NOT advance
+
+### Requirement: Persistent Linked Set Settings
+The supported bake parameter model MUST persist explicit Common/Detail and per-baker values and link membership in the project document. Membership MUST use persistent texture-set IDs. Loading MUST validate every member before sharing parameter storage; malformed or inconsistent groups MUST be refused without replacing any member's values. Fields outside the owned link metadata MUST be preserved.
+
+#### Scenario: Linked settings survive save and reopen
+Given texture sets with shared Common/Detail and AO parameters
+When their settings are committed, saved and reopened after a texture-set rename or reorder
+Then their values and linked membership MUST refer to the same persistent IDs
+
+#### Scenario: Explicit unlink survives reopen
+Given a project whose common and AO groups have been explicitly unlinked
+When it is saved and reopened
+Then the sets MUST remain unlinked and keep their independent values
+
+#### Scenario: Invalid group or failed durable commit
+Given a document with valid saved bake settings
+When a linked settings edit contains an invalid value or the commit sink fails
+Then the project, its revision and operation records MUST remain unchanged
+
+#### Scenario: Replayed mutation
+Given a previously committed bake settings request with an idempotency key
+When that same request is retried
+Then its stored result MUST be returned without invoking the edit callback again
