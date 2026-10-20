@@ -11,6 +11,7 @@
 #include "store/integrity.h"
 #include "store/planes.h"
 #include "store/save.h"
+#include "store/snapshots.h"
 #include "store/versioning.h"
 #include "uzp_core/manifest/manifest.h"
 #include "uzp_core/manifest/sha256.h"
@@ -120,6 +121,30 @@ Array PlaneBindings(Container& container, const Value& node) {
 }
 
 Value Node(Container& container, const Value& node, const std::set<std::string, std::less<>>& resources);
+
+/// The procedural snapshots of a manifest (`snapshots.h`), with their plane's bound version and
+/// stored row.
+Array Snapshots(Container& container, const Value& manifest) {
+    Array out;
+    for (const SnapshotEntry& entry : ManifestSnapshots(manifest)) {
+        Object row{{"signature_sha256", entry.key},
+                   {"signature", entry.signature},
+                   {"project_uuid", entry.project_uuid},
+                   {"plane_id", entry.plane_id == core::kNoId ? Value() : Value(static_cast<std::int64_t>(entry.plane_id))},
+                   {"version_id", entry.version ? Value(entry.version->version_id) : Value()},
+                   {"chunk_root", entry.version ? Value(entry.version->chunk_root) : Value()}};
+        if (!entry.error.empty()) row["error"] = entry.error;
+        if (entry.plane_id != core::kNoId) {
+            if (const std::optional<PlaneRow> stored = ReadPlaneRow(container, entry.plane_id)) {
+                row["format"] = std::string(core::ToString(stored->format));
+                row["width"] = std::int64_t{stored->width};
+                row["height"] = std::int64_t{stored->height};
+            }
+        }
+        out.push_back(std::move(row));
+    }
+    return out;
+}
 
 Array Nodes(Container& container, const Value* list, const std::set<std::string, std::less<>>& resources) {
     Array out;
@@ -279,6 +304,7 @@ Value Report(Container& container, const std::filesystem::path& project, const I
     }
     report["texture_sets"] = TextureSets(container, manifest, resource_keys);
     report["resources"] = Resources(container, manifest);
+    report["procedural_snapshots"] = Snapshots(container, manifest);
 
     Array checkpoints;
     for (const CheckpointRow& row : ReadCheckpoints(container)) {

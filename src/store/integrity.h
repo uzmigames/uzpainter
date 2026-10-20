@@ -31,8 +31,9 @@ struct AffectedNode {
 std::vector<AffectedNode> NodesBinding(const core::json::Value& manifest, std::string_view sha256);
 
 struct CorruptItem {
-    std::string kind;  // "blob", "manifest", "operation", "foreign_key", "sqlite" or "plane"
-    std::string key;   // the blob's SHA-256, the revision, the idempotency key, the table or the plane_id
+    std::string kind;  // "blob", "manifest", "operation", "foreign_key", "sqlite", "plane" or "snapshot"
+    std::string key;   // the blob's SHA-256, the revision, the idempotency key, the table, the plane_id or
+                       // the snapshot's signature SHA-256
     std::string detail;
     std::vector<AffectedNode> nodes;  // blobs: the nodes of the current manifest that bind it
 };
@@ -77,11 +78,13 @@ private:
 enum class VerifyLevel {
     /// Foreign keys, every retained manifest against its `manifest_sha256`, every operation row
     /// (its project and outcome), the locators of a non-portable project (existence and
-    /// SHA-256), and the plane rules of `plane_integrity.h` with the bytes of the chunks the
-    /// current manifest binds.
+    /// SHA-256), the snapshot entries of the current manifest (`snapshots.h`: well-formed, keyed
+    /// by their signature's SHA-256, recorded for this project) and the plane rules of
+    /// `plane_integrity.h` with the bytes of the chunks the current manifest binds.
     standard,
-    /// `standard` plus the SHA-256 of every stored blob, the chunks every retained manifest binds
-    /// included (`uzpainter inspect --verify`).
+    /// `standard` plus the snapshot entries of every stored manifest and the SHA-256 of every
+    /// stored blob, the chunks every retained manifest binds included (`uzpainter inspect
+    /// --verify`).
     full,
 };
 

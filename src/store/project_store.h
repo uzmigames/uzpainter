@@ -34,6 +34,7 @@
 #include "store/lock.h"
 #include "store/planes.h"
 #include "store/save.h"
+#include "store/snapshots.h"
 #include "store/versioning.h"
 #include "uzp_core/document/document.h"
 #include "uzp_core/transaction/transaction.h"
@@ -173,6 +174,13 @@ public:
     /// The texels of chunk (x, y) of that plane at `revision`; zeros when the version has no row
     /// for it (`ReadPlaneChunkAt`).
     std::string ReadPlaneChunk(std::int64_t revision, core::Id plane_id, int x, int y);
+
+    /// Records a frozen procedural snapshot of this project in the transaction's working copy
+    /// (`StageSnapshot`, snapshots.h): `image` as the first version of a new plane, `signature`
+    /// in the manifest's `procedural_snapshots` under its SHA-256, with this project's uuid. Call
+    /// it from the transaction's call; returns the plane id. The commit refuses any snapshot
+    /// entry recorded for another project (`CheckSnapshots`).
+    core::Id RecordSnapshot(core::Edit& edit, const core::json::Value& signature, const PlaneImage& image);
 
     /// Rows written inside every mutation's SQLite transaction, after the plane rows.
     void AddCommitExtension(CommitExtension extension);

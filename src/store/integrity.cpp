@@ -6,6 +6,7 @@
 
 #include "store/blobs.h"
 #include "store/plane_integrity.h"
+#include "store/snapshots.h"
 #include "uzp_core/manifest/sha256.h"
 
 namespace uzp::store {
@@ -188,6 +189,30 @@ IntegrityReport CheckIntegrity(Container& container, const Value& current_manife
                     "missing: " + (revision == "current" ? std::string("the current manifest") : "the manifest of revision " + revision) +
                         " lists resource " + sha256 + ", which is neither stored nor located",
                     NodesBinding(current_manifest, sha256)});
+            }
+        }
+    }
+    {
+        // Every snapshot entry of the current manifest (with `full`, of every stored revision) is
+        // well-formed, stored under its signature's SHA-256 and recorded for this project.
+        const std::string uuid = container.Meta("project_uuid").value_or("");
+        std::vector<Value> manifests{current_manifest};
+        if (level == VerifyLevel::full) {
+            Statement q(container, "SELECT manifest FROM revision ORDER BY revision");
+            while (q.Step()) {
+                try {
+                    manifests.push_back(core::json::Parse(Decompress(q.Blob(0))));
+                } catch (const std::exception&) {
+                    // reported as a corrupt manifest above
+                }
+            }
+        }
+        std::set<std::string, std::less<>> reported;
+        for (const Value& manifest : manifests) {
+            for (const SnapshotEntry& entry : ManifestSnapshots(manifest)) {
+                const std::string problem = SnapshotProblem(entry, uuid);
+                if (problem.empty() || !reported.insert(entry.path + ": " + problem).second) continue;
+                report.corrupt.push_back(CorruptItem{"snapshot", entry.key, problem, {AffectedNode{std::nullopt, entry.path}}});
             }
         }
     }

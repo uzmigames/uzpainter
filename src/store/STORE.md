@@ -24,7 +24,8 @@ the bundle import and the size census (§10, §11) implement 09 §3 and §6.
 | `integrity.h` | `CheckIntegrity`, `IntegrityReport`, `CorruptionError`, `NodesBinding` (affected nodes), `ReadManifestText`, `QuickCheck` |
 | `planes.h` | Raster planes: plane rows, immutable versions, chunk codec, `chunk_root`, manifest bindings, staging, the commit extension and the read path (§8) |
 | `plane_integrity.h` | `CheckPlaneIntegrity`: the plane rules, run by `CheckIntegrity` (§8) |
-| `project_store.h` | `ProjectStore`: `Create`, `Open`, `Close`, `Attach`, `Submit`, `StageResource`, `StageLocator`, `ReadResource`, `CreatePlane`, `WritePlane`, `ReadPlane`, `ReadPlaneChunk`, `Save`, `NeedsSaving`, `Compact`, `SaveAs`, `SaveAsCopy`, `Revert` |
+| `snapshots.h` | Frozen procedural snapshots: the manifest's `procedural_snapshots` entries, `StageSnapshot`, `CheckSnapshots` (§8, decision 327) |
+| `project_store.h` | `ProjectStore`: `Create`, `Open`, `Close`, `Attach`, `Submit`, `StageResource`, `StageLocator`, `ReadResource`, `CreatePlane`, `WritePlane`, `ReadPlane`, `ReadPlaneChunk`, `RecordSnapshot`, `Save`, `NeedsSaving`, `Compact`, `SaveAs`, `SaveAsCopy`, `Revert` |
 | `save.h` | Checkpoint rows, `save()`'s rows (`WriteSaveCheckpoint`), the dirty flag, the revert project (§9) |
 | `compact.h` | Retention (`ComputeRetention`), reachability, `CollapseAndCollect`, `VacuumInto`, `RenameFile` (§9) |
 | `lock.h` | The lock sidecar `<file>.uzp.lock` (`ProjectLock`, §9) |
@@ -305,6 +306,20 @@ node 5 at texture_sets[0].stacks[0].root_layers[0].paint.plane_versions.12`. `pl
 `compact`; they are not failures. Reads verify the same rules and raise `CorruptionError`; damaged
 bytes are never returned.
 
+**Procedural snapshots** (`snapshots.h`, `05-procedural-content.md` §4, decision 327). A frozen
+procedural snapshot is a project-level raster plane. The manifest's top-level `procedural_snapshots`
+holds one entry per snapshot, keyed by the SHA-256 of its signature's canonical JSON
+(`procedural/seam.h` `SignatureJson`): `{signature, project_uuid, plane, plane_versions}`. The entry
+holds its plane as a mask-stack paint object does, and the manifest walk reads the entries beside
+the paint objects, so every rule above covers them: the binding and its digest, revert,
+compaction, integrity, `inspect` and the bundle. The plane row has no set, stack, channel or UV tile
+(0 and NULL). `ProjectStore::RecordSnapshot` stages one from a transaction's call. A second
+snapshot of one signature is refused. The commit refuses a plane held by two objects, and an
+entry whose key is not its signature's hash or whose `project_uuid` is another project's
+(`CheckSnapshots`, `conflict`): a snapshot is never copied into another project. The bundle import
+refuses such an entry, and `CheckIntegrity` reports it as a `snapshot` corrupt item. The document
+model keeps the key verbatim (`Project::extra`).
+
 ## 9. Saving, retention, compaction, revert and the lock
 
 Every commit is already the autosave (§4). The saving vocabulary of 09 §4 sits on top of it.
@@ -391,7 +406,9 @@ per stack, the layer tree with each node's `bindings.resources` (JSON path and S
 `bindings.planes` (plane id, channel, bound `version_id` and `chunk_root`, format, size, UDIM), and
 `mesh_maps` with their provenance), `resources` (one row per name: SHA-256, bytes, stored bytes,
 MIME, usage, colour space, origin and `storage` = `embedded`, `locator` or `missing`),
-`checkpoints`, `sizes` (`file_bytes`, then the parts of the file — `manifests`, `resources`,
+`procedural_snapshots` (one row per snapshot entry: signature hash, signature, project uuid,
+plane id, bound `version_id` and `chunk_root`, format and size), `checkpoints`, `sizes`
+(`file_bytes`, then the parts of the file — `manifests`, `resources`,
 `plane_chunks`, `operations`, `cache` — and, listed separately, `external_dependencies`: the
 locator targets of a non-portable project with their bytes and the missing count) and
 `recipe_digest` (`{available: true, digest}` with the running application's recipe host,

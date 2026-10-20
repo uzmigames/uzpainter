@@ -231,6 +231,11 @@ std::string ProjectStore::ReadPlaneChunk(std::int64_t revision, core::Id plane_i
     return ReadPlaneChunkAt(container_, revision, plane_id, x, y);
 }
 
+core::Id ProjectStore::RecordSnapshot(core::Edit& edit, const core::json::Value& signature, const PlaneImage& image) {
+    std::lock_guard lock(mutex_);
+    return StageSnapshot(container_, planes_, edit, project_uuid_, signature, image);
+}
+
 void ProjectStore::AddCommitExtension(CommitExtension extension) {
     std::lock_guard lock(mutex_);
     extensions_.push_back(std::move(extension));
@@ -251,8 +256,10 @@ void ProjectStore::Commit(const core::Snapshot& snapshot, const core::OperationR
     pending_.clear();
     PendingPlanes planes = std::move(planes_);
     planes_.clear();
-    std::vector<CommitExtension> extensions{
-        [&planes](Container& container, const core::Snapshot& committed) { WritePlaneRows(container, planes, committed); }};
+    std::vector<CommitExtension> extensions{[&planes, this](Container& container, const core::Snapshot& committed) {
+        CheckSnapshots(*committed.project, project_uuid_);
+        WritePlaneRows(container, planes, committed);
+    }};
     extensions.insert(extensions.end(), extensions_.begin(), extensions_.end());
     CommitMutation(container_, snapshot, record, pending, portable_, extensions);
     current_manifest_ = core::ProjectToJson(*snapshot.project);

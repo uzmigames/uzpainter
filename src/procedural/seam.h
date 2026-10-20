@@ -14,6 +14,7 @@
 
 #include "render/backend.h"
 
+#include "uzp_core/manifest/json.h"
 #include "uzp_core/types/resource_url.h"
 
 #include <cstdint>
@@ -79,14 +80,26 @@ struct ProceduralRequest {
     RasterSpec output;
     TileRect tile;
     uint64_t seed = 0;
+    /// The asset output evaluated (`SourceSubstance.active_output`, 05 §7); empty for an asset
+    /// with one output.
+    std::string outputId;
+    /// The project settings that affect evaluation (`EvaluationSettings`, admission.h), by name.
+    Params settings;
 };
 
 /// `uzasset://<family>/<id>@<version>` of the request.
 [[nodiscard]] std::string AssetName(const ProceduralRequest& request);
 
-/// The request's exact signature (05 §4): asset, version, effective parameters, preset, seed,
-/// mesh class, UV tiles, output spec and image inputs by hash, canonically serialised (sorted
-/// keys, numbers by value). The tile is not part of it: a tile is a part of the same texture.
+/// The request's exact signature (05 §4, decision 327) as a JSON object: `asset` (the asset id,
+/// `uzasset://<family>/<id>`), `version`, `params` (the effective parameters, defaults
+/// included), `preset`, `seed`, `output` {id, resolution, format, colour_space, channels},
+/// `inputs` {name: {sha256, resolution, format, colour_space, channels}}, `mesh` {class,
+/// uv_tiles} and `settings` (the project settings that affect evaluation). Numbers compare by
+/// value: an integral double is written as an integer, so 1 and 1.0 give one signature; a
+/// non-finite number is `{"non_finite": "nan" | "inf" | "-inf"}`. The tile is not part of it:
+/// a tile is a part of the same texture.
+[[nodiscard]] core::json::Value SignatureJson(const ProceduralRequest& request);
+/// The canonical JSON text of `SignatureJson(request)` (MANIFEST.md §2).
 [[nodiscard]] std::string Signature(const ProceduralRequest& request);
 /// SHA-256 (lower-case hex) of `Signature(request)`.
 [[nodiscard]] std::string SignatureHash(const ProceduralRequest& request);

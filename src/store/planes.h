@@ -118,6 +118,9 @@ struct VersionRef {
     core::json::Value ToJson() const;
 };
 
+/// The binding value `{chunk_root, version_id}`, or empty with `error` saying why it is malformed.
+std::optional<VersionRef> ParseBinding(const core::json::Value& value, std::string& error);
+
 /// A plane binding found in a manifest: the plane, the version (when well-formed), the owning
 /// node's id and the JSON path of the binding; `error` says why a malformed entry is unusable.
 struct ManifestBinding {
@@ -128,8 +131,8 @@ struct ManifestBinding {
     std::string error;
 };
 
-/// Every plane binding of a manifest (the `plane_versions` members of paint objects), in document
-/// order.
+/// Every plane binding of a manifest (the `plane_versions` members of paint objects and of
+/// procedural snapshot entries, `snapshots.h`), in document order.
 std::vector<ManifestBinding> ManifestPlaneBindings(const core::json::Value& manifest);
 
 /// A plane a paint object references (`planes` or `plane`), whether that object binds it, its
@@ -141,7 +144,8 @@ struct PlaneReference {
     bool bound = false;
 };
 
-/// Every plane reference of a manifest's paint objects, in document order.
+/// Every plane reference of a manifest's paint objects and procedural snapshot entries, in
+/// document order.
 std::vector<PlaneReference> ManifestPlaneReferences(const core::json::Value& manifest);
 
 /// The texels of a chunk blob: `StoreError(corrupt)` when the blob is absent, does not hold
@@ -186,9 +190,16 @@ core::Id StageNewPlane(Container& container, PendingPlanes& pending, core::Edit&
 VersionRef StagePlaneContent(Container& container, PendingPlanes& pending, core::Edit& edit, core::Id plane_id,
                              const PlaneImage& image);
 
-/// The commit extension: checks that every paint node of the committed project binds exactly the
-/// planes it references, each to a staged version of that plane or a stored one with the same
-/// `chunk_root`, then inserts the staged plane rows, chunk blobs, versions and chunk rows bound by
+/// Stages `image` as a new version of the plane `row` (a plane of the transaction, or a stored
+/// one): every non-empty chunk listed, bytes kept only for chunks the store does not hold. The
+/// caller binds the returned version in the working copy (a procedural snapshot entry,
+/// `snapshots.h`). Throws `core::ValueError` when the image's size, format or byte count differ
+/// from the row's.
+VersionRef StageVersion(Container& container, PendingPlanes& pending, const PlaneRow& row, const PlaneImage& image);
+
+/// The commit extension: checks that every paint node and snapshot entry of the committed project
+/// binds exactly the planes it references, each to a staged version of that plane or a stored one
+/// with the same `chunk_root`, and that no plane is held by two of them, then inserts the staged plane rows, chunk blobs, versions and chunk rows bound by
 /// it (`created_revision = snapshot.revision`). Throws `StoreError(conflict)` otherwise.
 void WritePlaneRows(Container& container, const PendingPlanes& pending, const core::Snapshot& snapshot);
 

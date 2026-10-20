@@ -460,6 +460,7 @@ const procedural_sources = [_][]const u8{
     "procedural/asset_library.cpp",
     "procedural/cli.cpp",
     "procedural/admission.cpp",
+    "procedural/snapshot_backend.cpp",
 };
 /// The asset library and the seam vocabulary it uses (`src/procedural/asset_library.h`, decision
 /// 324), relative to `src/`: compiled into `UzPainter.exe` and into `uzp-pyapi-tests.exe`
@@ -527,6 +528,7 @@ const store_sources = [_][]const u8{
     "store/commit.cpp",
     "store/planes.cpp",
     "store/plane_integrity.cpp",
+    "store/snapshots.cpp",
     "store/project_store.cpp",
     "store/save.cpp",
     "store/compact.cpp",

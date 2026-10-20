@@ -24,6 +24,11 @@
 //                   procedural edits through the seam on a stored project: refusals before
 //                   mutation, a snapshot-served request, the certified path, and the same
 //                   evaluation after save and reopen (CPU; items 3.1, 3.4, 3.6)
+//   snapshot <work-dir>
+//                   SnapshotBackend on stored projects (phase3.2_proc-snapshot-backend): the
+//                   signature, exact-signature serving, each field mismatch unavailable, the
+//                   `.uzp` planes through save/reopen, `inspect --verify` and `export-bundle`,
+//                   and no copy into another project (CPU; items 2.1-2.4, 3.2-3.4)
 //
 // The families here are test probes with authored formulas: none is a Painter asset, and the
 // one whose status is `exact` is a synthetic test double of the seam's certified path.
@@ -38,12 +43,17 @@
 #include "procedural/hlsl_backend.h"
 #include "procedural/primitives.h"
 #include "procedural/seam.h"
+#include "procedural/snapshot_backend.h"
 
 #include "render/engine_thread.h"
 #include "render/kernel_cache.h"
 
+#include "store/bundle.h"
+#include "store/inspect.h"
 #include "store/project_store.h"
+#include "store/snapshots.h"
 #include "uzp_core/document/document.h"
+#include "uzp_core/manifest/sha256.h"
 #include "uzp_core/types/project.h"
 
 #include <bit>
@@ -52,6 +62,9 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
+#include <functional>
+#include <iterator>
 #include <memory>
 #include <random>
 #include <string>
@@ -1618,6 +1631,482 @@ int RunAdmission(const fs::path& work, const fs::path& fixture) {
     return Finish();
 }
 
+// ── snapshot (phase3.2_proc-snapshot-backend 2.1-2.4, 3.2-3.4) ──────────────
+
+/// 64x64 u16 codes, little-endian: a pattern that is not constant and has no empty chunk.
+std::string U16Pattern() {
+    std::string bytes;
+    for (uint32_t i = 0; i < 64 * 64; ++i) {
+        const uint32_t code = (i * 7919u + 1u) & 0xFFFFu;
+        bytes.push_back(static_cast<char>(code & 0xFF));
+        bytes.push_back(static_cast<char>(code >> 8));
+    }
+    return bytes;
+}
+
+/// The half-float bits of sample `i` of the colour snapshot: 1 + m/1024 for most samples, with a
+/// subnormal (2^-24) at sample 1 and a negative zero at sample 2.
+uint16_t HalfBits(uint32_t i) {
+    if (i == 1) return 0x0001;
+    if (i == 2) return 0x8000;
+    return static_cast<uint16_t>(0x3C00u + (i * 31u) % 1024u);
+}
+
+std::string HalfPattern() {
+    std::string bytes;
+    for (uint32_t i = 0; i < 64 * 64 * 3; ++i) {
+        const uint16_t bits = HalfBits(i);
+        bytes.push_back(static_cast<char>(bits & 0xFF));
+        bytes.push_back(static_cast<char>(bits >> 8));
+    }
+    return bytes;
+}
+
+/// The snapshot case's request: a Painter-named asset that no library holds, at 64 texels.
+ProceduralRequest DirtRequest(const uzp::core::ProjectSettings& settings) {
+    ProceduralRequest r;
+    r.asset = Url("painter-generator", "dirt", "1");
+    r.params = {{"amount", 0.5}, {"invert", int64_t{0}}, {"mode", std::string("cavity")}};
+    r.inputs["Curvature"] = ImageInput{RasterSpec{64, ChannelFormat::U16, "linear", 1}, g_curvature};
+    r.meshClass = "sphere";
+    r.output = RasterSpec{64, ChannelFormat::U16, "linear", 1};
+    r.seed = 7;
+    r.outputId = "output";
+    r.settings = EvaluationSettings(settings);
+    return r;
+}
+
+/// Imports the curvature map as a project resource (sets `g_curvature`).
+bool ImportCurvature(uzp::store::ProjectStore& store, uzp::core::Document& document) {
+    namespace core = uzp::core;
+    const Raster curvature = Curvature();
+    std::string bytes(reinterpret_cast<const char*>(curvature.texels.data()), curvature.texels.size() * sizeof(float));
+    const auto imported = store.Submit(
+        document, core::MutationRequest{"resource_import", core::json::Object{{"name", "curvature"}}, "import", document.revision()},
+        [&](core::Edit& edit) {
+            const auto size = static_cast<std::int64_t>(bytes.size());
+            g_curvature = store.StageResource(bytes, "application/octet-stream");
+            core::ResourceMeta meta;
+            meta.id = edit.AllocateId();
+            meta.name = "curvature";
+            meta.mime = "application/octet-stream";
+            meta.size = size;
+            meta.usage = "TEXTURE";
+            meta.imported_at = "2026-10-20T00:00:00Z";
+            edit.project().resources[g_curvature].push_back(meta);
+        });
+    return imported.result && imported.result->status == uzp::core::ResultStatus::committed;
+}
+
+std::string Describe(const std::optional<UnsupportedProcedural>& refusal) {
+    return refusal ? refusal->Describe() : "served";
+}
+
+const uzp::core::json::Value* Find(const uzp::core::json::Value& value, std::string_view key) {
+    const auto* object = std::get_if<uzp::core::json::Object>(&value.data);
+    if (object == nullptr) return nullptr;
+    const auto it = object->find(key);
+    return it == object->end() ? nullptr : &it->second;
+}
+
+/// The keys of a JSON object, in order.
+std::vector<std::string> Keys(const uzp::core::json::Value* value) {
+    std::vector<std::string> keys;
+    if (value == nullptr || !value->IsObject()) return keys;
+    for (const auto& [key, member] : std::get<uzp::core::json::Object>(value->data)) keys.push_back(key);
+    return keys;
+}
+
+/// The snapshots `project` holds, loaded from `store`, each compared with the recorded bytes.
+bool SameSnapshots(uzp::store::ProjectStore& store, const uzp::core::Project& project,
+                   const std::vector<std::pair<ProceduralRequest, std::string>>& recorded, std::string& detail) {
+    const auto loaded = SnapshotBackend::Load(store, project);
+    if (!loaded) {
+        detail = loaded.error();
+        return false;
+    }
+    if (loaded->size() != recorded.size()) {
+        detail = std::to_string(loaded->size()) + " snapshots";
+        return false;
+    }
+    for (const auto& [request, bytes] : recorded) {
+        const auto stored = loaded->Stored(request);
+        if (!stored || (*stored)->bytes != bytes || (*stored)->spec != request.output) {
+            detail = stored ? "the bytes or spec of " + SignatureHash(request) + " differ" : stored.error().Describe();
+            return false;
+        }
+    }
+    return true;
+}
+
+int RunSnapshot(const fs::path& work) {
+    namespace core = uzp::core;
+    namespace json = uzp::core::json;
+    namespace store = uzp::store;
+
+    // Project A, with the curvature map the requests bind.
+    core::Id generator = core::kNoId;
+    core::DocumentState initial;
+    initial.project_uuid = "6f1c2a3e-0000-4000-8000-0000000a3270";
+    initial.project = GeneratorProject(generator);
+    const fs::path file = work / "snapshot-a.uzp";
+    fs::remove(file);
+    auto a = store::ProjectStore::Create(file, initial);
+    core::Document document(initial);
+    a->Attach(document);
+    Check(ImportCurvature(*a, document), "project A imports the curvature map (revision 1)");
+    int keys = 0;
+    const auto submit = [&](store::ProjectStore& s, core::Document& d, const std::function<void(core::Edit&)>& call) {
+        const std::string key = "snapshot-" + std::to_string(++keys);
+        return s.Submit(d, core::MutationRequest{"procedural_snapshot", json::Object{{"key", key}}, key, d.revision()}, call);
+    };
+    const core::ProjectSettings settings = document.snapshot().project->settings;
+
+    // 2.1: the signature names every field of 05 §4, canonically, and hashes its canonical text.
+    const ProceduralRequest grey = DirtRequest(settings);
+    ProceduralRequest colour = grey;
+    colour.outputId = "colour";
+    colour.output = RasterSpec{64, ChannelFormat::F16, "linear", 3};
+    const json::Value signature = SignatureJson(grey);
+    Check(Keys(&signature) == std::vector<std::string>{"asset", "inputs", "mesh", "output", "params", "preset", "seed",
+                                                       "settings", "version"} &&
+              Keys(Find(signature, "output")) ==
+                  std::vector<std::string>{"channels", "colour_space", "format", "id", "resolution"} &&
+              Keys(Find(*Find(signature, "inputs"), "Curvature")) ==
+                  std::vector<std::string>{"channels", "colour_space", "format", "resolution", "sha256"} &&
+              Keys(Find(signature, "mesh")) == std::vector<std::string>{"class", "uv_tiles"} &&
+              Keys(Find(signature, "settings")) ==
+                  std::vector<std::string>{"color_management.config_hash", "color_management.io_rules_sha256",
+                                           "color_management.mode", "color_management.working_space",
+                                           "mesh_unit_scale", "normal_map_format", "tangent_space"} &&
+              *Find(signature, "asset") == json::Value("uzasset://painter-generator/dirt") &&
+              *Find(signature, "version") == json::Value("1"),
+          "the signature names asset id, version, effective parameters, preset, seed, output id, resolution, format, "
+          "colour space, channels, image inputs by hash, mesh and the project settings (2.1)",
+          Signature(grey));
+    Check(Signature(grey) == json::WriteCanonical(json::Parse(Signature(grey))) &&
+              SignatureHash(grey) == uzp::core::Sha256Hex(Signature(grey)),
+          "the signature is canonical JSON and its hash is the SHA-256 of that text (2.1)");
+    ProceduralRequest byValue = grey;
+    byValue.params["invert"] = 0.0;
+    byValue.params["amount"] = 0.5;
+    byValue.tile = TileRect{0, 0, 16, 16};
+    ProceduralRequest nan = grey;
+    nan.params["amount"] = std::nan("");
+    ProceduralRequest nanText = grey;
+    nanText.params["amount"] = std::string("nan");
+    Check(SignatureHash(byValue) == SignatureHash(grey) && SignatureHash(nan) != SignatureHash(nanText) &&
+              SignatureHash(nan) != SignatureHash(grey),
+          "numbers compare by value (0 == 0.0), the tile is left out, a non-finite number is not its text (2.1)");
+
+    // 2.3: both snapshots recorded in one commit, as raster planes with plane ids.
+    const std::string greyBytes = U16Pattern();
+    const std::string colourBytes = HalfPattern();
+    core::Id greyPlane = core::kNoId;
+    core::Id colourPlane = core::kNoId;
+    const auto recorded = submit(*a, document, [&](core::Edit& edit) {
+        greyPlane = RecordSnapshot(*a, edit, grey, greyBytes);
+        colourPlane = RecordSnapshot(*a, edit, colour, colourBytes);
+    });
+    Check(recorded.result && recorded.result->status == core::ResultStatus::committed && document.revision() == 2 &&
+              greyPlane != core::kNoId && colourPlane != core::kNoId && greyPlane != colourPlane,
+          "two snapshots are recorded in one commit as raster planes with their own plane ids (2.3)",
+          recorded.result ? json::WriteCanonical(recorded.result->ToJson()) : "no result");
+    const std::vector<store::SnapshotEntry> entries = store::ProjectSnapshots(*document.snapshot().project);
+    Check(entries.size() == 2 && entries[0].error.empty() && entries[1].error.empty() &&
+              ((entries[0].key == SignatureHash(grey) && entries[1].key == SignatureHash(colour)) ||
+               (entries[0].key == SignatureHash(colour) && entries[1].key == SignatureHash(grey))) &&
+              entries[0].project_uuid == initial.project_uuid && entries[1].project_uuid == initial.project_uuid,
+          "the manifest holds each signature under its SHA-256, with the project's uuid and its plane binding (2.3)");
+    Check(a->ReadPlane(2, greyPlane).texels == greyBytes && a->ReadPlane(2, greyPlane).format == core::ChannelFormat::L16 &&
+              a->ReadPlane(2, colourPlane).texels == colourBytes &&
+              a->ReadPlane(2, colourPlane).format == core::ChannelFormat::RGB16F,
+          "the planes hold the recorded texels unmodified (L16 and RGB16F)");
+    const auto again = submit(*a, document, [&](core::Edit& edit) { RecordSnapshot(*a, edit, grey, greyBytes); });
+    ProceduralRequest tiled = grey;
+    tiled.tile = TileRect{0, 0, 8, 8};
+    const auto tiledRecord = submit(*a, document, [&](core::Edit& edit) { RecordSnapshot(*a, edit, tiled, greyBytes); });
+    ProceduralRequest rgba = grey;
+    rgba.output.channels = 4;
+    const auto rgbaRecord = submit(*a, document, [&](core::Edit& edit) { RecordSnapshot(*a, edit, rgba, greyBytes); });
+    Check(again.result && again.result->status != core::ResultStatus::committed && tiledRecord.result &&
+              tiledRecord.result->status != core::ResultStatus::committed && rgbaRecord.result &&
+              rgbaRecord.result->status != core::ResultStatus::committed && document.revision() == 2,
+          "a second snapshot of one signature, a tile and a 4-channel output are refused; nothing commits");
+
+    // 2.2: served on the exact signature only, byte for byte; status is unavailable.
+    auto loaded = SnapshotBackend::Load(*a, *document.snapshot().project);
+    Check(loaded && loaded->size() == 2, "the project's snapshots load through their plane bindings",
+          loaded ? "" : loaded.error());
+    if (!loaded) return Finish();
+    SnapshotBackend& snapshots = *loaded;
+    const ParityStatus status = snapshots.Status(grey.asset);
+    Check(status.kind == ParityStatus::Kind::Unavailable && status.reason == kSnapshotStatus,
+          "SnapshotBackend.status is unavailable: a snapshot certifies no asset (2.2, decision 222)");
+    const auto greyStored = snapshots.Stored(grey);
+    const auto colourStored = snapshots.Stored(colour);
+    Check(snapshots.CanEvaluate(grey) && snapshots.CanEvaluate(colour) && greyStored &&
+              (*greyStored)->bytes == greyBytes && colourStored && (*colourStored)->bytes == colourBytes &&
+              snapshots.CanEvaluate(byValue),
+          "the exact signature is served, byte for byte (2.2)");
+    const render::Result<Raster> whole = snapshots.Evaluate(grey, {}).get();
+    bool codes = whole && whole->width == 64 && whole->height == 64 && whole->channels == 1;
+    for (uint32_t i = 0; codes && i < 64 * 64; ++i) {
+        const uint32_t code = (i * 7919u + 1u) & 0xFFFFu;
+        codes = Bits(whole->texels[i]) == Bits(static_cast<float>(code) / 65535.0f);
+    }
+    Check(codes, "evaluate returns the stored u16 codes as code / 65535, every texel",
+          whole ? "" : whole.error().Describe());
+    const render::Result<Raster> half = snapshots.Evaluate(colour, {}).get();
+    Check(half && half->channels == 3 && half->texels.size() == 64 * 64 * 3 && half->texels[0] == 1.0f &&
+              Bits(half->texels[1]) == Bits(std::ldexp(1.0f, -24)) && Bits(half->texels[2]) == 0x80000000u &&
+              half->texels[3] == 1.0f + static_cast<float>((3u * 31u) % 1024u) / 1024.0f,
+          "evaluate widens the stored halves exactly (normal, subnormal, negative zero)");
+    ProceduralRequest tile = grey;
+    tile.tile = TileRect{8, 16, 4, 2};
+    const render::Result<Raster> cut = snapshots.Evaluate(tile, {}).get();
+    bool cropped = cut && cut->width == 4 && cut->height == 2 && whole;
+    for (uint32_t y = 0; cropped && y < 2; ++y) {
+        for (uint32_t x = 0; cropped && x < 4; ++x) {
+            cropped = Bits(cut->texels[y * 4 + x]) == Bits(whole->texels[(16 + y) * 64 + 8 + x]);
+        }
+    }
+    ProceduralRequest outside = grey;
+    outside.tile = TileRect{60, 0, 8, 8};
+    Check(cropped && !snapshots.CanEvaluate(outside) && snapshots.Refusal(outside)->field == "tile",
+          "a tile is a copy of the stored texels; a tile outside the output is refused");
+
+    // 3.2: each signature field changed in turn is unavailable; nothing is resampled or extrapolated.
+    struct Mismatch {
+        std::string name;
+        std::function<void(ProceduralRequest&)> change;
+        std::string field;
+    };
+    const auto setting = [&](const std::function<void(core::ProjectSettings&)>& change) {
+        core::ProjectSettings changed = settings;
+        change(changed);
+        return EvaluationSettings(changed);
+    };
+    const std::vector<Mismatch> mismatches{
+        {"a parameter value", [](ProceduralRequest& r) { r.params["amount"] = std::nextafter(0.5, 1.0); }, "params.amount"},
+        {"a default parameter left out", [](ProceduralRequest& r) { r.params.erase("invert"); }, "params.invert"},
+        {"a parameter added", [](ProceduralRequest& r) { r.params["gain"] = int64_t{1}; }, "params.gain"},
+        {"a parameter of another type", [](ProceduralRequest& r) { r.params["mode"] = int64_t{1}; }, "params.mode"},
+        {"the preset", [](ProceduralRequest& r) { r.preset = "Dusty"; }, "preset"},
+        {"the seed", [](ProceduralRequest& r) { r.seed = 8; }, "seed"},
+        {"a larger resolution (no resampling)", [](ProceduralRequest& r) { r.output.resolution = 128; }, "output.resolution"},
+        {"a smaller resolution (no resampling)", [](ProceduralRequest& r) { r.output.resolution = 32; }, "output.resolution"},
+        {"the channel format", [](ProceduralRequest& r) { r.output.format = ChannelFormat::F32; }, "output.format"},
+        {"the colour space", [](ProceduralRequest& r) { r.output.colourSpace = "srgb"; }, "output.colour_space"},
+        {"the channel count", [](ProceduralRequest& r) { r.output.channels = 3; }, "output.channels"},
+        {"the output id", [](ProceduralRequest& r) { r.outputId = "height"; }, "output.id"},
+        {"an image-input hash", [](ProceduralRequest& r) { r.inputs["Curvature"].sha256 = std::string(64, 'd'); },
+         "inputs.Curvature.sha256"},
+        {"an image-input resolution", [](ProceduralRequest& r) { r.inputs["Curvature"].spec.resolution = 32; },
+         "inputs.Curvature.resolution"},
+        {"an image-input colour space", [](ProceduralRequest& r) { r.inputs["Curvature"].spec.colourSpace = "srgb"; },
+         "inputs.Curvature.colour_space"},
+        {"an image input left out", [](ProceduralRequest& r) { r.inputs.clear(); }, "inputs.Curvature"},
+        {"the mesh class", [](ProceduralRequest& r) { r.meshClass = "bevelled-cube"; }, "mesh.class"},
+        {"the UV tiles", [](ProceduralRequest& r) { r.uvTiles = 2; }, "mesh.uv_tiles"},
+        {"the asset version", [](ProceduralRequest& r) { r.asset.version = "2"; }, "version"},
+        {"the project's normal map format",
+         [&](ProceduralRequest& r) { r.settings = setting([](core::ProjectSettings& s) { s.normal_map_format = core::NormalMapFormat::DirectX; }); },
+         "settings.normal_map_format"},
+        {"the project's tangent space",
+         [&](ProceduralRequest& r) { r.settings = setting([](core::ProjectSettings& s) { s.tangent_space = core::TangentSpace::PerFragment; }); },
+         "settings.tangent_space"},
+        {"the project's mesh unit scale",
+         [&](ProceduralRequest& r) { r.settings = setting([](core::ProjectSettings& s) { s.mesh_unit_scale = 0.01; }); },
+         "settings.mesh_unit_scale"},
+        {"the project's colour management mode",
+         [&](ProceduralRequest& r) { r.settings = setting([](core::ProjectSettings& s) { s.color_management.mode = "ocio"; }); },
+         "settings.color_management.mode"},
+        {"the project's OCIO configuration",
+         [&](ProceduralRequest& r) { r.settings = setting([](core::ProjectSettings& s) { s.color_management.config_hash = std::string(64, 'e'); }); },
+         "settings.color_management.config_hash"},
+        {"the project's working colour space",
+         [&](ProceduralRequest& r) { r.settings = setting([](core::ProjectSettings& s) { s.color_management.working_space = "ACEScg"; }); },
+         "settings.color_management.working_space"},
+        {"the project's colour rules",
+         [&](ProceduralRequest& r) {
+             r.settings = setting([](core::ProjectSettings& s) { s.color_management.io_rules.push_back(json::Object{{"pattern", "*"}}); });
+         },
+         "settings.color_management.io_rules_sha256"},
+        {"another asset id (the project holds no snapshot of it)", [](ProceduralRequest& r) { r.asset.id = "dust"; }, ""},
+    };
+    const ProceduralSeam seam(&snapshots, nullptr);
+    for (const Mismatch& m : mismatches) {
+        ProceduralRequest changed = grey;
+        m.change(changed);
+        const std::optional<UnsupportedProcedural> refusal = snapshots.Refusal(changed);
+        const auto selected = seam.Select(changed);
+        const auto evaluated = seam.Evaluate(changed, {});
+        Check(SignatureHash(changed) != SignatureHash(grey) && !snapshots.CanEvaluate(changed) && refusal &&
+                  refusal->reason == kNoSnapshot && refusal->field == m.field && !snapshots.Stored(changed) &&
+                  !selected && selected.error().reason == kNoBackend && !evaluated,
+              "unavailable, the seam refuses and evaluates nothing: " + m.name + " (3.2)", Describe(refusal));
+    }
+
+    // Snapshots do not make assets editable: the exact signature is admitted, an edited parameter
+    // is refused before the mutation commits (no certified family, an empty library).
+    const AssetLibrary library;
+    UseContext context;
+    context.meshClass = "sphere";
+    context.output = grey.output;
+    context.inputs["Curvature"] = grey.inputs.at("Curvature").spec;
+    context.seed = 7;
+    context.outputId = "output";
+    context.settings = EvaluationSettings(document.snapshot().project->settings);
+    core::ProceduralRef ref;
+    ref.asset = "uzasset://painter-generator/dirt@1";
+    ref.params = {{"amount", 0.5}, {"invert", false}, {"mode", "cavity"}};
+    ref.image_inputs["Curvature"] = core::ResourceBinding{g_curvature, std::nullopt, {}};
+    const SubmitEdit edit = [&](const std::function<void(core::Edit&)>& call) { return submit(*a, document, call); };
+    const auto served = SetEffectProcedural(generator, ref, context, library, seam, edit);
+    Check(served && served->result && served->result->status == core::ResultStatus::committed && document.revision() == 3 &&
+              GeneratorOf(*document.snapshot().project)->procedural == ref,
+          "the exact signature is admitted through the snapshot and committed (revision 3)",
+          served ? "" : served.error().Describe());
+    core::ProceduralRef edited = ref;
+    edited.params["amount"] = 0.6;
+    const auto refused = SetEffectProcedural(generator, edited, context, library, seam, edit);
+    Check(!refused && document.revision() == 3 && GeneratorOf(*document.snapshot().project)->procedural == ref,
+          "a parameter edit of the snapshot-served source raises UnsupportedProcedural before the mutation commits",
+          refused ? "admitted" : refused.error().Describe());
+
+    // 3.3: save, close and reopen keep both snapshots bit-exact; inspect --verify passes.
+    a->Save(document);
+    a->Close();
+    a.reset();
+    const std::vector<std::pair<ProceduralRequest, std::string>> both{{grey, greyBytes}, {colour, colourBytes}};
+    {
+        auto reopened = store::ProjectStore::Open(file);
+        core::Document opened(std::move(reopened.state));
+        reopened.store->Attach(opened);
+        std::string detail;
+        Check(reopened.report.ok() && SameSnapshots(*reopened.store, *opened.snapshot().project, both, detail),
+              "save and reopen keep both snapshots bit-exact (3.3)", detail);
+        reopened.store->Close();
+    }
+    const json::Value inspected = store::Inspect(file, store::InspectOptions{std::nullopt, true, nullptr});
+    const json::Value* verify = Find(inspected, "verify");
+    const json::Value* listed = Find(inspected, "procedural_snapshots");
+    bool rows = listed != nullptr && listed->IsArray() && std::get<json::Array>(listed->data).size() == 2;
+    if (rows) {
+        for (const json::Value& row : std::get<json::Array>(listed->data)) {
+            const json::Value* plane = Find(row, "plane_id");
+            rows = rows && plane != nullptr && plane->IsInt() && Find(row, "width") != nullptr &&
+                   *Find(row, "width") == json::Value(64) && Find(row, "project_uuid") != nullptr &&
+                   *Find(row, "project_uuid") == json::Value(initial.project_uuid);
+        }
+    }
+    Check(verify != nullptr && Find(*verify, "ok") != nullptr && *Find(*verify, "ok") == json::Value(true) && rows,
+          "inspect --verify passes and lists both snapshots with their plane ids (3.3)",
+          verify ? json::WriteCanonical(*verify) : "no verify");
+
+    // 2.3: export-bundle carries the snapshot planes; the bundle imports them bit-exact.
+    const fs::path bundle = work / "snapshot-a-bundle";
+    fs::remove_all(bundle);
+    fs::remove(store::BundleImportTarget(bundle));
+    const store::BundleSummary exported = store::ExportBundle(file, bundle);
+    Check(exported.planes == 2 && fs::exists(bundle / ("planes/" + std::to_string(greyPlane) + ".png")) &&
+              fs::exists(bundle / ("planes/" + std::to_string(colourPlane) + ".exr")),
+          "export-bundle writes both snapshot planes (PNG for u16, EXR for half) (2.3)");
+    {
+        auto imported = store::ProjectStore::Open(bundle);
+        core::Document opened(std::move(imported.state));
+        imported.store->Attach(opened);
+        std::string detail;
+        Check(imported.store->project_uuid() == initial.project_uuid &&
+                  SameSnapshots(*imported.store, *opened.snapshot().project, both, detail),
+              "the imported bundle holds both snapshots bit-exact (2.3)", detail);
+        imported.store->Close();
+    }
+    const json::Value importedVerify = store::Inspect(store::BundleImportTarget(bundle), store::InspectOptions{std::nullopt, true, nullptr});
+    Check(Find(importedVerify, "verify") != nullptr && *Find(*Find(importedVerify, "verify"), "ok") == json::Value(true),
+          "inspect --verify passes on the imported bundle");
+
+    // 3.4: a bundle whose manifest carries a snapshot entry of another project is refused on
+    // import (the manifest and its digest rewritten consistently, only the entry's uuid changed).
+    const fs::path tampered = work / "snapshot-tampered-bundle";
+    fs::remove_all(tampered);
+    fs::remove(store::BundleImportTarget(tampered));
+    fs::copy(bundle, tampered, fs::copy_options::recursive);
+    const auto readText = [](const fs::path& path) {
+        std::ifstream in(path, std::ios::binary);
+        return std::string(std::istreambuf_iterator<char>(in), {});
+    };
+    const auto writeText = [](const fs::path& path, const std::string& text) {
+        std::ofstream(path, std::ios::binary | std::ios::trunc) << text;
+    };
+    json::Value manifest = json::Parse(readText(tampered / "manifest.json"));
+    for (auto& [key, entry] : std::get<json::Object>(std::get<json::Object>(manifest.data).at(std::string(store::kSnapshotsKey)).data)) {
+        std::get<json::Object>(entry.data)["project_uuid"] = "6f1c2a3e-0000-4000-8000-0000000c3270";
+    }
+    const std::string manifestText = json::WriteCanonical(manifest);
+    writeText(tampered / "manifest.json", manifestText);
+    json::Value index = json::Parse(readText(tampered / "bundle.json"));
+    std::get<json::Object>(index.data)["manifest_sha256"] = uzp::core::Sha256Hex(manifestText);
+    writeText(tampered / "bundle.json", store::WriteIndented(index));
+    std::string importError;
+    try {
+        auto opened = store::ProjectStore::Open(tampered);
+        opened.store->Close();
+    } catch (const std::exception& error) {
+        importError = error.what();
+    }
+    Check(importError.find("recorded for project 6f1c2a3e-0000-4000-8000-0000000c3270") != std::string::npos &&
+              !fs::exists(store::BundleImportTarget(tampered)),
+          "a bundle carrying another project's snapshot entry is refused on import and leaves no file (3.4)",
+          importError.empty() ? "imported" : importError);
+
+    // 3.4: a snapshot is never copied into another project.
+    core::Id otherGenerator = core::kNoId;
+    core::DocumentState otherInitial;
+    otherInitial.project_uuid = "6f1c2a3e-0000-4000-8000-0000000b3270";
+    otherInitial.project = GeneratorProject(otherGenerator);
+    const fs::path otherFile = work / "snapshot-b.uzp";
+    fs::remove(otherFile);
+    auto b = store::ProjectStore::Create(otherFile, otherInitial);
+    core::Document other(otherInitial);
+    b->Attach(other);
+    Check(ImportCurvature(*b, other), "project B imports the same curvature map");
+    const core::Project projectA = [&] {
+        auto reopened = store::ProjectStore::Open(file);
+        core::Project p = *core::Document(std::move(reopened.state)).snapshot().project;
+        reopened.store->Close();
+        return p;
+    }();
+    const json::Value copiedEntries = projectA.extra.at(std::string(store::kSnapshotsKey));
+    const auto copied = submit(*b, other, [&](core::Edit& e) {
+        e.project().extra[std::string(store::kSnapshotsKey)] = copiedEntries;
+    });
+    Check(copied.result && copied.result->status != core::ResultStatus::committed && other.revision() == 1 &&
+              store::ProjectSnapshots(*other.snapshot().project).empty() &&
+              json::WriteCanonical(copied.result->ToJson()).find("recorded for project " + initial.project_uuid) !=
+                  std::string::npos,
+          "committing project A's snapshot entries into project B is refused; B is unchanged (3.4)",
+          copied.result ? json::WriteCanonical(copied.result->ToJson()) : "no result");
+    core::Project grafted = *other.snapshot().project;
+    grafted.extra[std::string(store::kSnapshotsKey)] = copiedEntries;
+    const auto foreign = SnapshotBackend::Load(*b, grafted);
+    Check(!foreign && foreign.error().find("recorded for project " + initial.project_uuid) != std::string::npos,
+          "project B's snapshot backend refuses an entry recorded for project A (3.4)",
+          foreign ? "loaded" : foreign.error());
+    auto otherLoaded = SnapshotBackend::Load(*b, *other.snapshot().project);
+    Check(otherLoaded && otherLoaded->size() == 0, "project B holds no snapshot");
+    if (!otherLoaded) return Finish();
+    const ProceduralSeam otherSeam(&*otherLoaded, nullptr);
+    const auto copiedRef = SetEffectProcedural(otherGenerator, ref, context, library, otherSeam,
+                                               [&](const std::function<void(core::Edit&)>& call) { return submit(*b, other, call); });
+    Check(!copiedRef && other.revision() == 1 && GeneratorOf(*other.snapshot().project)->procedural == std::nullopt,
+          "the layer's procedural copied into project B raises UnsupportedProcedural there: no snapshot came along (3.4)",
+          copiedRef ? "admitted" : copiedRef.error().Describe());
+    b->Close();
+    return Finish();
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -1636,6 +2125,7 @@ int main(int argc, char** argv) {
     if (mode == "library-load" && argc == 4) return RunLibraryLoad(argv[3]);
     if (mode == "assets-cli" && argc == 5) return RunAssetsCli(dir, argv[3], argv[4]);
     if (mode == "admission" && argc == 4) return RunAdmission(dir, argv[3]);
+    if (mode == "snapshot" && argc == 3) return RunSnapshot(dir);
     std::fprintf(stderr, "unknown case %.*s\n", static_cast<int>(mode.size()), mode.data());
     return 2;
 }

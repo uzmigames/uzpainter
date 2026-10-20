@@ -1,0 +1,12 @@
+{
+  "id": 327,
+  "slug": "327-proc-snapshots",
+  "title": "Frozen procedural snapshots: a canonical JSON signature, one manifest entry per signature that holds its raster plane, exact-signature serving only, and project-private by uuid",
+  "status": "accepted",
+  "date": "2026-10-20",
+  "relatedTasks": [
+    "phase3.2_proc-snapshot-backend",
+    "phase3.3_procedural-families"
+  ],
+  "supersededBy": null
+}

@@ -44,6 +44,9 @@ inline constexpr std::string_view kRecipeHostMissing =
 ///   and `mesh_maps` with their provenance);
 /// - `resources`: one row per resource name {name, sha256, bytes, stored_bytes, mime, usage,
 ///   color_space, origin, storage: embedded | locator | missing};
+/// - `procedural_snapshots`: one row per snapshot entry (`snapshots.h`) {signature_sha256,
+///   signature, project_uuid, plane_id, version_id, chunk_root, format, width, height, and
+///   `error` for a malformed entry};
 /// - `checkpoints` {name, revision, created_at, note, protected};
 /// - `sizes`: `file_bytes`, the project file's parts (`manifests`, `resources`,
 ///   `plane_chunks`, `operations`, `cache`) and, listed separately, `external_dependencies`

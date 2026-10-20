@@ -7,6 +7,7 @@
 
 #include "store/blobs.h"
 #include "store/integrity.h"
+#include "store/snapshots.h"
 #include "uzp_core/document/nodes.h"
 #include "uzp_core/manifest/manifest.h"
 #include "uzp_core/manifest/sha256.h"
@@ -131,9 +132,26 @@ void WalkPaint(const Value& value, const std::string& path, std::optional<Id> ow
     }
 }
 
+/// The paint objects of the manifest's nodes and the procedural snapshot entries (`snapshots.h`:
+/// each entry holds one `plane` and its `plane_versions`, as a mask-stack paint object does), in
+/// document order. The snapshot signatures are not walked for paint objects.
 std::vector<PaintPlanes> ManifestPaintPlanes(const Value& manifest) {
     std::vector<PaintPlanes> out;
-    WalkPaint(manifest, "", std::nullopt, out);
+    const auto* top = std::get_if<Object>(&manifest.data);
+    if (top == nullptr) return out;
+    for (const auto& [key, member] : *top) {
+        if (key != kSnapshotsKey) {
+            WalkPaint(member, key, std::nullopt, out);
+            continue;
+        }
+        const auto* entries = std::get_if<Object>(&member.data);
+        if (entries == nullptr) continue;  // reported by the snapshot checks (snapshots.h)
+        for (const auto& [signature, entry] : *entries) {
+            if (const auto* object = std::get_if<Object>(&entry.data)) {
+                out.push_back(ReadPaintPlanes(*object, key + "." + signature, std::nullopt));
+            }
+        }
+    }
     return out;
 }
 
@@ -250,6 +268,34 @@ bool AllZero(std::string_view bytes) {
     return std::all_of(bytes.begin(), bytes.end(), [](char c) { return c == '\0'; });
 }
 
+/// The version of `row` holding `image` (checked against the row): every non-empty chunk listed,
+/// bytes kept only for chunks the store does not hold.
+StagedVersion BuildVersion(Container& container, const PlaneRow& row, const PlaneImage& image) {
+    const Id plane_id = row.plane_id;
+    if (image.width != row.width || image.height != row.height || image.format != row.format) {
+        throw core::ValueError("plane: plane " + std::to_string(plane_id) + " is " + std::to_string(row.width) + "x" +
+                               std::to_string(row.height) + " " + std::string(core::ToString(row.format)) +
+                               ", the image " + std::to_string(image.width) + "x" + std::to_string(image.height) + " " +
+                               std::string(core::ToString(image.format)));
+    }
+    if (image.texels.size() != static_cast<std::size_t>(image.width) * static_cast<std::size_t>(image.height) *
+                                   TexelBytes(image.format)) {
+        throw core::ValueError("plane: the image holds " + std::to_string(image.texels.size()) + " bytes, not width x height texels");
+    }
+    StagedVersion version{plane_id, {}, {}, {}};
+    for (int x = 0; x < row.chunks_x(); ++x) {
+        for (int y = 0; y < row.chunks_y(); ++y) {
+            std::string chunk = ChunkBytesOf(row, image.texels, x, y);
+            if (AllZero(chunk)) continue;  // an empty chunk has no row
+            std::string sha256 = core::Sha256Hex(chunk);
+            if (version.bytes.count(sha256) == 0 && !HasBlob(container, sha256)) version.bytes.emplace(sha256, std::move(chunk));
+            version.chunks.push_back(ChunkRow{x, y, std::move(sha256)});
+        }
+    }
+    version.chunk_root = ChunkRoot(version.chunks);
+    return version;
+}
+
 /// A stored version after its rows were checked against the binding.
 struct LoadedVersion {
     PlaneRow row;
@@ -345,6 +391,8 @@ std::string ChunkRoot(std::vector<ChunkRow> rows) {
     for (const ChunkRow& row : rows) list.push_back(Array{row.x, row.y, row.sha256});
     return core::Sha256Hex(core::json::WriteCanonical(list));
 }
+
+std::optional<VersionRef> ParseBinding(const Value& value, std::string& error) { return ParseVersionRef(value, error); }
 
 Value VersionRef::ToJson() const { return Object{{"chunk_root", chunk_root}, {"version_id", version_id}}; }
 
@@ -502,28 +550,7 @@ VersionRef StagePlaneContent(Container& container, PendingPlanes& pending, core:
         row = ReadPlaneRow(container, plane_id);
     }
     if (!row) throw StoreError(StoreError::Code::conflict, "plane " + std::to_string(plane_id) + " has no plane row");
-    if (image.width != row->width || image.height != row->height || image.format != row->format) {
-        throw core::ValueError("plane: plane " + std::to_string(plane_id) + " is " + std::to_string(row->width) + "x" +
-                               std::to_string(row->height) + " " + std::string(core::ToString(row->format)) +
-                               ", the image " + std::to_string(image.width) + "x" + std::to_string(image.height) + " " +
-                               std::string(core::ToString(image.format)));
-    }
-    if (image.texels.size() != static_cast<std::size_t>(image.width) * static_cast<std::size_t>(image.height) *
-                                   TexelBytes(image.format)) {
-        throw core::ValueError("plane: the image holds " + std::to_string(image.texels.size()) + " bytes, not width x height texels");
-    }
-
-    StagedVersion version{plane_id, {}, {}, {}};
-    for (int x = 0; x < row->chunks_x(); ++x) {
-        for (int y = 0; y < row->chunks_y(); ++y) {
-            std::string chunk = ChunkBytesOf(*row, image.texels, x, y);
-            if (AllZero(chunk)) continue;  // an empty chunk has no row
-            std::string sha256 = core::Sha256Hex(chunk);
-            if (version.bytes.count(sha256) == 0 && !HasBlob(container, sha256)) version.bytes.emplace(sha256, std::move(chunk));
-            version.chunks.push_back(ChunkRow{x, y, std::move(sha256)});
-        }
-    }
-    version.chunk_root = ChunkRoot(version.chunks);
+    StagedVersion version = BuildVersion(container, *row, image);
     if (version.chunk_root == current->chunk_root) return *current;  // same content: nothing changes
 
     const auto own = pending.versions.find(current->version_id);
@@ -536,11 +563,27 @@ VersionRef StagePlaneContent(Container& container, PendingPlanes& pending, core:
     return ref;
 }
 
+VersionRef StageVersion(Container& container, PendingPlanes& pending, const PlaneRow& row, const PlaneImage& image) {
+    StagedVersion version = BuildVersion(container, row, image);
+    const std::int64_t vid = NextVersionId(container, pending);
+    const VersionRef ref{vid, version.chunk_root};
+    pending.versions[vid] = std::move(version);
+    return ref;
+}
+
 void WritePlaneRows(Container& container, const PendingPlanes& pending, const core::Snapshot& snapshot) {
     const Value manifest = core::ProjectToJson(*snapshot.project);
     std::vector<std::pair<Id, VersionRef>> staged;
+    std::map<Id, std::string> holders;  // plane -> the object that holds it
     for (const PaintPlanes& paint : ManifestPaintPlanes(manifest)) {
-        const std::string where = "node " + (paint.owner ? std::to_string(*paint.owner) : std::string("?"));
+        const std::string where = paint.owner ? "node " + std::to_string(*paint.owner) : paint.path;
+        for (const Id plane : paint.references) {
+            const auto [held, inserted] = holders.emplace(plane, where);
+            if (!inserted) {
+                throw StoreError(StoreError::Code::conflict, where + " holds plane " + std::to_string(plane) +
+                                                                 ", which " + held->second + " already holds");
+            }
+        }
         std::set<Id> bound;
         for (const ManifestBinding& binding : paint.bindings) {
             if (!binding.version) {

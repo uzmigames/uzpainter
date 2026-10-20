@@ -16,6 +16,7 @@
 #include "procedural/seam.h"
 
 #include "uzp_core/transaction/transaction.h"
+#include "uzp_core/types/project.h"
 
 #include <expected>
 #include <functional>
@@ -33,11 +34,23 @@ struct UseContext {
     std::map<std::string, RasterSpec> inputs;
     uint64_t seed = 0;
     TileRect tile;
+    /// The asset output the use evaluates (`ProceduralRequest::outputId`).
+    std::string outputId;
+    /// The project settings that affect evaluation (`EvaluationSettings`).
+    Params settings;
 };
+
+/// The project settings that affect a procedural evaluation, as the signature names them
+/// (05 §4, decision 327): `normal_map_format`, `tangent_space`, `mesh_unit_scale` and the colour
+/// management's `color_management.mode`, `color_management.config_hash`,
+/// `color_management.working_space` and `color_management.io_rules_sha256` (the SHA-256 of the
+/// rules' canonical JSON). Every setting that can change a procedural's texels is listed, so a
+/// snapshot recorded under other settings never matches.
+[[nodiscard]] Params EvaluationSettings(const core::ProjectSettings& settings);
 
 /// The request of `ref` in `context`: its pinned asset; its parameters over the record's defaults
 /// when the library holds the asset (booleans as integers); its preset; its image inputs by
-/// hash, with the specs of `context`. Refused: a URL that is not a pin, a parameter that is not a
+/// hash, with the specs of `context`; the output id and settings of `context`. Refused: a URL that is not a pin, a parameter that is not a
 /// number, a boolean or a string, and an image input whose spec `context` does not give.
 [[nodiscard]] std::expected<ProceduralRequest, UnsupportedProcedural> RequestFor(
     const core::ProceduralRef& ref, const UseContext& context, const AssetLibrary& library);

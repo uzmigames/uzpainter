@@ -17,6 +17,7 @@
 #include "store/inspect.h"
 #include "store/integrity.h"
 #include "store/lock.h"
+#include "store/snapshots.h"
 #include "store/planes.h"
 #include "store/versioning.h"
 #include "uzp_core/manifest/manifest.h"
@@ -351,6 +352,11 @@ void ImportBundle(const fs::path& bundle, const fs::path& target) {
     }
     if (core::SaveManifest(project) != text) Corrupt("manifest.json is not in canonical form");
     const Value manifest = core::json::Parse(text);
+    for (const SnapshotEntry& entry : ProjectSnapshots(project)) {
+        // The import is the bundle's own project (its uuid): a snapshot of another one is refused.
+        const std::string problem = SnapshotProblem(entry, uuid);
+        if (!problem.empty()) Corrupt("manifest.json: " + entry.path + ": " + problem);
+    }
 
     PendingContent pending;
     if (const Value* listed = Member(index, "resources"); listed && listed->IsArray()) {

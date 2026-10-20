@@ -1,6 +1,7 @@
 #include "procedural/admission.h"
 
 #include "uzp_core/document/nodes.h"
+#include "uzp_core/manifest/sha256.h"
 #include "uzp_core/types/errors.h"
 
 namespace uzp::procedural {
@@ -51,7 +52,22 @@ std::expected<ProceduralRequest, UnsupportedProcedural> RequestFor(const core::P
     request.output = context.output;
     request.tile = context.tile;
     request.seed = context.seed;
+    request.outputId = context.outputId;
+    request.settings = context.settings;
     return request;
+}
+
+Params EvaluationSettings(const core::ProjectSettings& settings) {
+    const core::ColorManagement& colour = settings.color_management;
+    return Params{
+        {"normal_map_format", std::string(core::ToString(settings.normal_map_format))},
+        {"tangent_space", std::string(core::ToString(settings.tangent_space))},
+        {"mesh_unit_scale", settings.mesh_unit_scale},
+        {"color_management.mode", colour.mode},
+        {"color_management.config_hash", colour.config_hash},
+        {"color_management.working_space", colour.working_space},
+        {"color_management.io_rules_sha256", core::Sha256Hex(json::WriteCanonical(colour.io_rules))},
+    };
 }
 
 std::expected<IProceduralBackend*, UnsupportedProcedural> Admit(const ProceduralRequest& request,

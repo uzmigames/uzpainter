@@ -157,29 +157,52 @@ std::string AssetName(const ProceduralRequest& request) {
     return core::FormatAssetUrl(request.asset);
 }
 
-std::string Signature(const ProceduralRequest& request) {
-    const auto spec = [](const RasterSpec& s) {
-        return "{\"channels\":" + U64(s.channels) + ",\"colour_space\":" + Quote(s.colourSpace) +
-               ",\"format\":" + Quote(FormatName(s.format)) + ",\"resolution\":" +
-               U64(s.resolution) + "}";
+core::json::Value SignatureJson(const ProceduralRequest& request) {
+    namespace json = core::json;
+    const auto value = [](const ParamValue& v) -> json::Value {
+        if (const auto* s = std::get_if<std::string>(&v)) return *s;
+        if (const auto* i = std::get_if<int64_t>(&v)) return *i;
+        const double d = std::get<double>(v);
+        if (std::isnan(d)) return json::Object{{"non_finite", "nan"}};
+        if (std::isinf(d)) return json::Object{{"non_finite", d > 0 ? "inf" : "-inf"}};
+        // Numbers by value: an integral double inside the int64 range is that integer.
+        if (std::trunc(d) == d && d >= -9223372036854775808.0 && d < 9223372036854775808.0) {
+            return static_cast<int64_t>(d);
+        }
+        return d;
     };
-    std::string out = "{\"asset\":" + Quote(AssetName(request)) + ",\"inputs\":{";
-    bool first = true;
+    const auto params = [&](const Params& map) {
+        json::Object out;
+        for (const auto& [name, v] : map) out[name] = value(v);
+        return out;
+    };
+    const auto spec = [](const RasterSpec& s, json::Object out) {
+        out["resolution"] = int64_t{s.resolution};
+        out["format"] = std::string(FormatName(s.format));
+        out["colour_space"] = s.colourSpace;
+        out["channels"] = int64_t{s.channels};
+        return out;
+    };
+    json::Object inputs;
     for (const auto& [name, input] : request.inputs) {
-        out += (first ? "" : ",") + Quote(name) + ":{\"sha256\":" + Quote(input.sha256) +
-               ",\"spec\":" + spec(input.spec) + "}";
-        first = false;
+        inputs[name] = spec(input.spec, json::Object{{"sha256", input.sha256}});
     }
-    out += "},\"mesh\":[" + Quote(request.meshClass) + "," + U64(request.uvTiles) +
-           "],\"output\":" + spec(request.output) + ",\"params\":{";
-    first = true;
-    for (const auto& [name, value] : request.params) {
-        out += (first ? "" : ",") + Quote(name) + ":" + Text(value);
-        first = false;
-    }
-    out += "},\"preset\":" + (request.preset ? Quote(*request.preset) : std::string("null")) +
-           ",\"seed\":" + U64(request.seed) + "}";
-    return out;
+    return json::Object{
+        {"asset", "uzasset://" + request.asset.family + "/" + request.asset.id},
+        {"version", request.asset.version},
+        {"params", params(request.params)},
+        {"preset", request.preset ? json::Value(*request.preset) : json::Value()},
+        // A seed is 64-bit unsigned; the JSON integer is its two's-complement value.
+        {"seed", static_cast<int64_t>(request.seed)},
+        {"output", spec(request.output, json::Object{{"id", request.outputId}})},
+        {"inputs", std::move(inputs)},
+        {"mesh", json::Object{{"class", request.meshClass}, {"uv_tiles", int64_t{request.uvTiles}}}},
+        {"settings", params(request.settings)},
+    };
+}
+
+std::string Signature(const ProceduralRequest& request) {
+    return core::json::WriteCanonical(SignatureJson(request));
 }
 
 std::string SignatureHash(const ProceduralRequest& request) {
