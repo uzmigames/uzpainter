@@ -1,0 +1,12 @@
+{
+  "id": 321,
+  "slug": "321-ao-mixed-grid",
+  "title": "Recording R-131 is one Tier 0 request, `ao-mixed-grid`, that pins what R-086a left implicit: the fill's Nearest filtering and identity UV at three opacities and one BilinearHQ control, with PNG 8 and OpenEXR 32f exported twice each from one project; designed, recording pending",
+  "status": "accepted",
+  "date": "2026-10-20",
+  "relatedTasks": [
+    "phase3.2_unreal-ue56-packed-preset",
+    "phase3.2_uze-uzmat-preset"
+  ],
+  "supersededBy": null
+}
