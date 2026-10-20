@@ -37,7 +37,10 @@
 //! - `zig build export-tests` `uzp-export-tests.exe`, the native tests of the export plan
 //!   compiler (`src/export/`, `tests/export/export_test.cpp`) with `assets/templates/` and
 //!   `assets/export-presets/` beside it
-//! - `zig build uzp-store`    the project store as a static library (`zig-out/lib/uzp_store.lib`,
+//! - `zig build uzp-texture-tests` `uzp-texture-tests.exe`, the native tests of the UzEngine
+//!   texture path (`uzp_texture.lib`: the BC encoder adapter over etcpak, the mip chains and the
+//!   `.uztexture` writer of `src/export/`; `tests/export/texture_test.cpp`), CPU only
+//! - `zig build uzp-store`   the project store as a static library (`zig-out/lib/uzp_store.lib`,
 //!   `src/store/` with SQLite and zstd); `zig build uzp-store-tests` `uzp-store-tests.exe`, its
 //!   native tests with the test-only fault hooks (`tests/store/store_test.cpp`);
 //!   `zig build uzp-store-save-tests` `uzp-store-save-tests.exe`, the save, retention, compaction
@@ -414,6 +417,25 @@ const export_sources = [_][]const u8{
 /// `-DUZP_EXPORT_FAULT_HOOKS=1` on every export source, into `uzp-export-tests.exe` only, never
 /// into `UzPainter.exe`.
 const export_fault_source = "export/fault.cpp";
+/// The UzEngine texture path (`src/export/`, phase3.1_uze-uztexture-writer, decision 315),
+/// relative to `src/`: the BC encoder adapter, the mip chains and the `.uztexture` writer,
+/// compiled with `uzp_core_flags` into `uzp_texture.lib`.
+const texture_sources = [_][]const u8{
+    "export/bc_encoder.cpp",
+    "export/mips.cpp",
+    "export/uztexture_writer.cpp",
+};
+/// etcpak's BC encoders (`thirdparty/etcpak/`, `tools/vendoring/thirdparty.py`), relative to the
+/// folder; `Dither.cpp` only because `ProcessDxtc.cpp` references it. `bcdec.c` (the test-only
+/// decoder) is compiled into `uzp-texture-tests.exe` alone.
+const etcpak_sources = [_][]const u8{
+    "ProcessDxtc.cpp",
+    "bc7enc.cpp",
+    "Dither.cpp",
+};
+/// Without contraction, so that bc7enc's float error terms are the same operations on every
+/// target CPU (decision 315).
+const etcpak_flags = cxx_flags ++ [_][]const u8{"-ffp-contract=off"};
 /// tinyexr's implementation (`thirdparty/tinyexr/`, decision 089), one translation unit of
 /// third-party code relative to `src/`: compiled without UzPainter's warning flags.
 const tinyexr_unit = "export/tinyexr_unit.cpp";
@@ -1433,6 +1455,65 @@ pub fn build(b: *std.Build) void {
     export_tests_step.dependOn(&install_templates.step);
     export_tests_step.dependOn(&install_export_presets.step);
     b.getInstallStep().dependOn(export_tests_step);
+
+    // ── UzEngine textures (phase3.1_uze-uztexture-writer, decision 315) ──────────────────────
+    // The BC encoder adapter over etcpak, the mip chains and the `.uztexture` writer as the
+    // static library `uzp_texture`, CPU only; the UzEngine preset (phase3.4) links it into
+    // `UzPainter.exe`. The tests add the test-only decoder (bcdec) and `.uztexture` reader.
+    const texture_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    texture_mod.addIncludePath(b.path("src"));
+    texture_mod.addIncludePath(b.path(core_root));
+    texture_mod.addIncludePath(b.path(core_root ++ "/engine/rhi"));
+    texture_mod.addIncludePath(b.path("thirdparty/etcpak"));
+    texture_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &texture_sources,
+        .flags = &uzp_core_flags,
+    });
+    texture_mod.addCSourceFiles(.{
+        .root = b.path("thirdparty/etcpak"),
+        .files = &etcpak_sources,
+        .flags = &etcpak_flags,
+    });
+    const texture_lib = b.addLibrary(.{
+        .linkage = .static,
+        .name = "uzp_texture",
+        .root_module = texture_mod,
+    });
+    const texture_tests_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    texture_tests_mod.addIncludePath(b.path("src"));
+    texture_tests_mod.addIncludePath(b.path(core_root));
+    texture_tests_mod.addIncludePath(b.path(core_root ++ "/engine/rhi"));
+    texture_tests_mod.addIncludePath(b.path("thirdparty/etcpak"));
+    texture_tests_mod.addCSourceFiles(.{
+        .root = b.path("tests/export"),
+        .files = &.{ "texture_test.cpp", "uze_texture_check.cpp" },
+        .flags = &uzp_core_flags,
+    });
+    texture_tests_mod.addCSourceFiles(.{
+        .root = b.path("thirdparty/etcpak"),
+        .files = &.{"bcdec.c"},
+        .flags = &.{"-std=c11"},
+    });
+    texture_tests_mod.linkLibrary(texture_lib);
+    texture_tests_mod.linkLibrary(uzp_core_lib);
+    const texture_tests_exe = b.addExecutable(.{
+        .name = "uzp-texture-tests",
+        .root_module = texture_tests_mod,
+    });
+    const texture_tests_step = b.step("uzp-texture-tests", "Build the native tests of the UzEngine texture path (BC encoder, mips, .uztexture)");
+    texture_tests_step.dependOn(&b.addInstallArtifact(texture_tests_exe, .{}).step);
+    b.getInstallStep().dependOn(texture_tests_step);
 
     // ── The native Python API (phase1.19_pyapi-native-module) ─────────────────────────────────
     // `uzp-pyapi-tests.exe <script.py>` runs one script in the embedded interpreter with the

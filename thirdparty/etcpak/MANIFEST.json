@@ -1,0 +1,489 @@
+{
+  "library": "etcpak",
+  "upstream": "https://github.com/wolfpld/etcpak",
+  "version": "2.1",
+  "commit": "7f15da4739cc5f8562311bdbb800436986d268ca",
+  "archive_url": "https://github.com/wolfpld/etcpak/archive/refs/tags/2.1.tar.gz",
+  "archive_sha256": "7b076ca044318bafeefef28bf5653f2fe6a21cc63f68f628fc696964925f695e",
+  "archive_root": "etcpak-2.1/",
+  "files": [
+    {
+      "path": "AUTHORS.txt",
+      "sha256": "1f64568dbc98dd11987a08a5ffc834a139d7cc36773a8f2c99ee09e94b241e6a",
+      "size": 182
+    },
+    {
+      "path": "Dither.cpp",
+      "sha256": "ccfa7a30039a7d47d89419e9030ae53ee7cb865f94829c3326973b5627b8be28",
+      "size": 5391
+    },
+    {
+      "path": "Dither.hpp",
+      "sha256": "731f74b3b15fa15ecd9bfc0bd4220a2b1fd3b66152ea200304f7d728a5e171b4",
+      "size": 346
+    },
+    {
+      "path": "ForceInline.hpp",
+      "sha256": "7a1b318b27670c71d78d593373802d106fe658d643951ac7836a553537c033ea",
+      "size": 461
+    },
+    {
+      "path": "LICENSE.txt",
+      "sha256": "1de8a55cc43c86e8d58e3272f4e2b4e24107a4a571bbd1ee2ec00c4dbd4245e2",
+      "size": 1610
+    },
+    {
+      "path": "Math.hpp",
+      "sha256": "6bffd0fedf9ca1cc621750e94e5e69bd332c76309c0181ce689a708a3ef4ea3b",
+      "size": 1769
+    },
+    {
+      "path": "ProcessDxtc.cpp",
+      "sha256": "85d7a5b62faae52d334038cf82236d389a71f6a121d48ad38a3253e7872f50ac",
+      "size": 51609
+    },
+    {
+      "path": "ProcessDxtc.hpp",
+      "sha256": "cdc2248a389303a93ce2abb516a6c41f8e528a96749df0afe038984d557b4f72",
+      "size": 718
+    },
+    {
+      "path": "bc7enc.cpp",
+      "sha256": "270acfb5f3ce7a0a5f1f7e52f489c49a8abfec7c777e1c69ec505934383c586f",
+      "size": 162527
+    },
+    {
+      "path": "bc7enc.h",
+      "sha256": "7f8c9402edcc5cc9b52517bff416d92a96f3589e291ef294b3a756f537368acb",
+      "size": 4328
+    },
+    {
+      "path": "bcdec.c",
+      "sha256": "aa3ed6452862bcfa0c98a4ffe8003aedfc9628923a728234a9000805dbd3001c",
+      "size": 48
+    },
+    {
+      "path": "bcdec.h",
+      "sha256": "608f22d4144190f03657968eda68fffc6d75eb175e5ac41305bcefc372fd555f",
+      "size": 70945
+    }
+  ],
+  "uzengine_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+  "uzengine_dir": "runtime/thirdparty/etcpak",
+  "comparison": [
+    {
+      "path": "AUTHORS.txt",
+      "uzengine_blob": "675b4eb2a9d142fb6a9656003609bc21f2af9747",
+      "upstream_sha256": "1f64568dbc98dd11987a08a5ffc834a139d7cc36773a8f2c99ee09e94b241e6a",
+      "upstream_lf_sha256": "1f64568dbc98dd11987a08a5ffc834a139d7cc36773a8f2c99ee09e94b241e6a",
+      "result": "identical"
+    },
+    {
+      "path": "Application.cpp",
+      "uzengine_blob": "86a94f1b39b328bd2c6a9108289a4dd0fc32121c",
+      "upstream_sha256": "b8a62a7a0aa93bd5fd54f8d2ea56cfefd564d8bee27603810efe8e1a75a5dda9",
+      "upstream_lf_sha256": "b8a62a7a0aa93bd5fd54f8d2ea56cfefd564d8bee27603810efe8e1a75a5dda9",
+      "result": "identical"
+    },
+    {
+      "path": "Bitmap.cpp",
+      "uzengine_blob": "0260e781eb1d1065ede4be6e678fd0c35584d270",
+      "upstream_sha256": "1253c2405b59c8f7f10b510834e44e11f547e984d5b7a9ea85e1bc63bbec5539",
+      "upstream_lf_sha256": "1253c2405b59c8f7f10b510834e44e11f547e984d5b7a9ea85e1bc63bbec5539",
+      "result": "identical"
+    },
+    {
+      "path": "Bitmap.hpp",
+      "uzengine_blob": "f197e7d2963a8696fad0fa18b0f3991636b1db84",
+      "upstream_sha256": "a2ecb7cbdb84cd5c707c9847fd0eba257837fb5255a7424724385fdbd7369e0c",
+      "upstream_lf_sha256": "a2ecb7cbdb84cd5c707c9847fd0eba257837fb5255a7424724385fdbd7369e0c",
+      "result": "identical"
+    },
+    {
+      "path": "BitmapDownsampled.cpp",
+      "uzengine_blob": "96fe2b06fe6836ab550f9dd810e443a607354d09",
+      "upstream_sha256": "c5c26a2d5606154ad63f5cac365f9cceae5bb036835a5e7d533ad5989745ea6d",
+      "upstream_lf_sha256": "c5c26a2d5606154ad63f5cac365f9cceae5bb036835a5e7d533ad5989745ea6d",
+      "result": "identical"
+    },
+    {
+      "path": "BitmapDownsampled.hpp",
+      "uzengine_blob": "a78037fbb65cb5b764c1be4edea2d84174cdd898",
+      "upstream_sha256": "658a2b92ef1589837a07890adfb0d85ed878eebd1297393ed9f73c6df0d5c522",
+      "upstream_lf_sha256": "658a2b92ef1589837a07890adfb0d85ed878eebd1297393ed9f73c6df0d5c522",
+      "result": "identical"
+    },
+    {
+      "path": "BlockData.cpp",
+      "uzengine_blob": "8e390d07d1dc0e983403e41a0495ced69e973331",
+      "upstream_sha256": "06056f0c3184f0271fb576a43780bd58fd37e3bfdfd23ac5d0d02487d02edba7",
+      "upstream_lf_sha256": "06056f0c3184f0271fb576a43780bd58fd37e3bfdfd23ac5d0d02487d02edba7",
+      "result": "identical"
+    },
+    {
+      "path": "BlockData.hpp",
+      "uzengine_blob": "90071331d31ef1d953b75f031639ed11359b1060",
+      "upstream_sha256": "998160ea53446575475691b057ea6adc923d6e863b54ef685a5615e79e550890",
+      "upstream_lf_sha256": "998160ea53446575475691b057ea6adc923d6e863b54ef685a5615e79e550890",
+      "result": "identical"
+    },
+    {
+      "path": "CMakeLists.txt",
+      "uzengine_blob": "10eca172c440a3f4bfdad07a1e08bbae2aaa6ce1",
+      "upstream_sha256": "b3e24a1edaf33a0a33e4a03d8135d3ed3c59a319b95c8ca25b881015ebab9a1e",
+      "upstream_lf_sha256": "b3e24a1edaf33a0a33e4a03d8135d3ed3c59a319b95c8ca25b881015ebab9a1e",
+      "result": "identical"
+    },
+    {
+      "path": "CPM.cmake",
+      "uzengine_blob": "8269a8bf6553529b4a10f8fe42dfa62f9805c1a4",
+      "upstream_sha256": "c8cdc32c03816538ce22781ed72964dc864b2a34a310d3b7104812a5ca2d835d",
+      "upstream_lf_sha256": "c8cdc32c03816538ce22781ed72964dc864b2a34a310d3b7104812a5ca2d835d",
+      "result": "identical"
+    },
+    {
+      "path": "ColorSpace.cpp",
+      "uzengine_blob": "0411541066209fc31fcf9199863404fab4d2c521",
+      "upstream_sha256": "117214da4ca5d8e25aea3750ac2754e060bf5e94b89d3e2934bd601604e0980e",
+      "upstream_lf_sha256": "117214da4ca5d8e25aea3750ac2754e060bf5e94b89d3e2934bd601604e0980e",
+      "result": "identical"
+    },
+    {
+      "path": "ColorSpace.hpp",
+      "uzengine_blob": "c9d0a9cf3f0c0b13bb2b8736ca7fed8144072576",
+      "upstream_sha256": "301f9473573ce75bc4621ff84eebc1c18778011e803dea543614d63e7287fe09",
+      "upstream_lf_sha256": "301f9473573ce75bc4621ff84eebc1c18778011e803dea543614d63e7287fe09",
+      "result": "identical"
+    },
+    {
+      "path": "DataProvider.cpp",
+      "uzengine_blob": "3de3668ccf21c357d9b641266793aaf3b76dc1e8",
+      "upstream_sha256": "26e72e039ff7eb12eb79ba30430fd06d8df72c7a7f42568a496e74f62883fa16",
+      "upstream_lf_sha256": "26e72e039ff7eb12eb79ba30430fd06d8df72c7a7f42568a496e74f62883fa16",
+      "result": "identical"
+    },
+    {
+      "path": "DataProvider.hpp",
+      "uzengine_blob": "bdd3af2ee4644eb3e1e68ae6b705b70ff4504c0b",
+      "upstream_sha256": "076e09bc535bde8a4df7a5567d2b521bd89a2ec37332978ec7a29bb6101bfadd",
+      "upstream_lf_sha256": "076e09bc535bde8a4df7a5567d2b521bd89a2ec37332978ec7a29bb6101bfadd",
+      "result": "identical"
+    },
+    {
+      "path": "Debug.cpp",
+      "uzengine_blob": "72dc4e0526809431741af2481d742ce85b7d8f27",
+      "upstream_sha256": "b3463c2f9ab20d7654eccc48b8a231beb8349c7bbe8147bc5351008a88ebad7f",
+      "upstream_lf_sha256": "b3463c2f9ab20d7654eccc48b8a231beb8349c7bbe8147bc5351008a88ebad7f",
+      "result": "identical"
+    },
+    {
+      "path": "Debug.hpp",
+      "uzengine_blob": "524eaa7bafe11cd8ee6fda7927ff15ab66ad8636",
+      "upstream_sha256": "5ec80e1636b94ecbb4f4c31775f9b8d00381de9df5da9bdeccd76b75d059a024",
+      "upstream_lf_sha256": "5ec80e1636b94ecbb4f4c31775f9b8d00381de9df5da9bdeccd76b75d059a024",
+      "result": "identical"
+    },
+    {
+      "path": "Decode.cpp",
+      "uzengine_blob": "e3b613ec147a7140831e4c539bbf918464a0100f",
+      "upstream_sha256": "50451e599a00f84659d51021327b4ffaa105d457228650cba1d4842e525b3940",
+      "upstream_lf_sha256": "50451e599a00f84659d51021327b4ffaa105d457228650cba1d4842e525b3940",
+      "result": "identical"
+    },
+    {
+      "path": "Decode.hpp",
+      "uzengine_blob": "0ed60c29643056f8d785fda6f85923de96fd7f30",
+      "upstream_sha256": "0c937d8553840b58d3641b51977a05558121ed73017629e1e26794312efcd09c",
+      "upstream_lf_sha256": "0c937d8553840b58d3641b51977a05558121ed73017629e1e26794312efcd09c",
+      "result": "identical"
+    },
+    {
+      "path": "Dither.cpp",
+      "uzengine_blob": "355686f26bc1c6ab9376165364a570de060b9070",
+      "upstream_sha256": "ccfa7a30039a7d47d89419e9030ae53ee7cb865f94829c3326973b5627b8be28",
+      "upstream_lf_sha256": "ccfa7a30039a7d47d89419e9030ae53ee7cb865f94829c3326973b5627b8be28",
+      "result": "identical"
+    },
+    {
+      "path": "Dither.hpp",
+      "uzengine_blob": "e43ce5676dbde9fa16e4c1cd4d901636cbd82997",
+      "upstream_sha256": "731f74b3b15fa15ecd9bfc0bd4220a2b1fd3b66152ea200304f7d728a5e171b4",
+      "upstream_lf_sha256": "731f74b3b15fa15ecd9bfc0bd4220a2b1fd3b66152ea200304f7d728a5e171b4",
+      "result": "identical"
+    },
+    {
+      "path": "Error.cpp",
+      "uzengine_blob": "014ecdab66785b9302d48117fdb4d8b26b606c67",
+      "upstream_sha256": "6719c1c13fce773ccb96463940f0da5cfac7c8664471585ca70a923b54e3d938",
+      "upstream_lf_sha256": "6719c1c13fce773ccb96463940f0da5cfac7c8664471585ca70a923b54e3d938",
+      "result": "identical"
+    },
+    {
+      "path": "Error.hpp",
+      "uzengine_blob": "9817754b7419c4fb36e7c767ccdc22f1b021480d",
+      "upstream_sha256": "1ffd1034e14f31e07a3b9c8294921a1d13546416d3b5b1854a5d4a85491a7ae0",
+      "upstream_lf_sha256": "1ffd1034e14f31e07a3b9c8294921a1d13546416d3b5b1854a5d4a85491a7ae0",
+      "result": "identical"
+    },
+    {
+      "path": "ForceInline.hpp",
+      "uzengine_blob": "b6f012841ba36a72951c6a13fae9b1503b5de0ad",
+      "upstream_sha256": "7a1b318b27670c71d78d593373802d106fe658d643951ac7836a553537c033ea",
+      "upstream_lf_sha256": "7a1b318b27670c71d78d593373802d106fe658d643951ac7836a553537c033ea",
+      "result": "identical"
+    },
+    {
+      "path": "LICENSE.txt",
+      "uzengine_blob": "015506c2de0e40b5d741999942d7acc7cf8e2a4f",
+      "upstream_sha256": "1de8a55cc43c86e8d58e3272f4e2b4e24107a4a571bbd1ee2ec00c4dbd4245e2",
+      "upstream_lf_sha256": "1de8a55cc43c86e8d58e3272f4e2b4e24107a4a571bbd1ee2ec00c4dbd4245e2",
+      "result": "identical"
+    },
+    {
+      "path": "Math.hpp",
+      "uzengine_blob": "994e1ac4eae0b82132953f456cb830d6c5f21303",
+      "upstream_sha256": "6bffd0fedf9ca1cc621750e94e5e69bd332c76309c0181ce689a708a3ef4ea3b",
+      "upstream_lf_sha256": "6bffd0fedf9ca1cc621750e94e5e69bd332c76309c0181ce689a708a3ef4ea3b",
+      "result": "identical"
+    },
+    {
+      "path": "MipMap.hpp",
+      "uzengine_blob": "d3b4bc9e7cf67109e7277f2b926d4eb0f97e67ae",
+      "upstream_sha256": "4e3713b36357ac691204cac5688cb88d17924ffad8d427cea375645dccf12ee8",
+      "upstream_lf_sha256": "4e3713b36357ac691204cac5688cb88d17924ffad8d427cea375645dccf12ee8",
+      "result": "identical"
+    },
+    {
+      "path": "ProcessCommon.hpp",
+      "uzengine_blob": "657d68888f97607452ff755f4107c7e0442c0495",
+      "upstream_sha256": "1be53784d85d2b0e2846e7a1c2ed7c66f46a2523f266316582ca0d92c4ee37d8",
+      "upstream_lf_sha256": "1be53784d85d2b0e2846e7a1c2ed7c66f46a2523f266316582ca0d92c4ee37d8",
+      "result": "identical"
+    },
+    {
+      "path": "ProcessDxtc.cpp",
+      "uzengine_blob": "23a3326a898b191300184d55a2e5d7c014f271f8",
+      "upstream_sha256": "85d7a5b62faae52d334038cf82236d389a71f6a121d48ad38a3253e7872f50ac",
+      "upstream_lf_sha256": "85d7a5b62faae52d334038cf82236d389a71f6a121d48ad38a3253e7872f50ac",
+      "result": "identical"
+    },
+    {
+      "path": "ProcessDxtc.hpp",
+      "uzengine_blob": "7655bb33bea3f2ff2e7adf79184506ad179c4924",
+      "upstream_sha256": "cdc2248a389303a93ce2abb516a6c41f8e528a96749df0afe038984d557b4f72",
+      "upstream_lf_sha256": "cdc2248a389303a93ce2abb516a6c41f8e528a96749df0afe038984d557b4f72",
+      "result": "identical"
+    },
+    {
+      "path": "ProcessRGB.cpp",
+      "uzengine_blob": "1391bb9545b8b22515e8e7f9e928c9ff96f59cb9",
+      "upstream_sha256": "289cd8979fd8f4c01c4789aba2ee56052892887b03ad200a335c3e04be4d1d3c",
+      "upstream_lf_sha256": "289cd8979fd8f4c01c4789aba2ee56052892887b03ad200a335c3e04be4d1d3c",
+      "result": "identical"
+    },
+    {
+      "path": "ProcessRGB.hpp",
+      "uzengine_blob": "087118fb0c5ef047eee5fc8949802c027ac0bf66",
+      "upstream_sha256": "c291ca8fa1478ff02b5a28645eae6a493a5351bc33416764236a86074568dce2",
+      "upstream_lf_sha256": "c291ca8fa1478ff02b5a28645eae6a493a5351bc33416764236a86074568dce2",
+      "result": "identical"
+    },
+    {
+      "path": "README.md",
+      "uzengine_blob": "7166f98a9352e6af45e5c960d22525492c371ed4",
+      "upstream_sha256": "90c30d98e4b36fd538b1d0bb2f72040b14ac269b17f50c40646225f0ffadd3ac",
+      "upstream_lf_sha256": "90c30d98e4b36fd538b1d0bb2f72040b14ac269b17f50c40646225f0ffadd3ac",
+      "result": "identical"
+    },
+    {
+      "path": "Semaphore.hpp",
+      "uzengine_blob": "9e42dbb9e0065eff125aaeb9da4e6293648fd281",
+      "upstream_sha256": "b09bb4ad55a48b7c88f18c375515b254d81a042535de4fc2c30614b17c4770d8",
+      "upstream_lf_sha256": "b09bb4ad55a48b7c88f18c375515b254d81a042535de4fc2c30614b17c4770d8",
+      "result": "identical"
+    },
+    {
+      "path": "System.cpp",
+      "uzengine_blob": "1383d0ecd0eb0031ac5d9e2127f1bfab028aacdd",
+      "upstream_sha256": "9cf41965575c32d1f3b8ccccf8081d375ea8e740faef59471556ab6dfce78f92",
+      "upstream_lf_sha256": "9cf41965575c32d1f3b8ccccf8081d375ea8e740faef59471556ab6dfce78f92",
+      "result": "identical"
+    },
+    {
+      "path": "System.hpp",
+      "uzengine_blob": "1a09bb15e1c5c5fcfb2bcc0545e8f76f90043c97",
+      "upstream_sha256": "b4c2c46c2800474a3e2b3024fdc8dd6dc21b98aeca2cf7429ae741effbe71885",
+      "upstream_lf_sha256": "b4c2c46c2800474a3e2b3024fdc8dd6dc21b98aeca2cf7429ae741effbe71885",
+      "result": "identical"
+    },
+    {
+      "path": "Tables.cpp",
+      "uzengine_blob": "65d7db74991ef929f939278e1583976ee509af8b",
+      "upstream_sha256": "630b96a4136b483f924e25871ce39c7bbb3eae259942f5ae0c7cd391458fc351",
+      "upstream_lf_sha256": "630b96a4136b483f924e25871ce39c7bbb3eae259942f5ae0c7cd391458fc351",
+      "result": "identical"
+    },
+    {
+      "path": "Tables.hpp",
+      "uzengine_blob": "398f5271b846569010745d92a4abe8e014cf1041",
+      "upstream_sha256": "878658d2008d1d20aebac573180a9e66ae5d7964b9ec5f4afe2d4b9647ec6dd7",
+      "upstream_lf_sha256": "878658d2008d1d20aebac573180a9e66ae5d7964b9ec5f4afe2d4b9647ec6dd7",
+      "result": "identical"
+    },
+    {
+      "path": "TaskDispatch.cpp",
+      "uzengine_blob": "7287da4de229332abb7d958e37227c166d8b3332",
+      "upstream_sha256": "8a5a6eb18ca57d079adbdd9cef2f8ff7d02e8809a7b06661029151fb20e03eec",
+      "upstream_lf_sha256": "8a5a6eb18ca57d079adbdd9cef2f8ff7d02e8809a7b06661029151fb20e03eec",
+      "result": "identical"
+    },
+    {
+      "path": "TaskDispatch.hpp",
+      "uzengine_blob": "b513de4c0c5cbedc94dd4b0151d540afcae1e201",
+      "upstream_sha256": "d6a1badbd9a31ca3d77b62df1011b8a7e4b793390b022d2660eca6dd7680015d",
+      "upstream_lf_sha256": "d6a1badbd9a31ca3d77b62df1011b8a7e4b793390b022d2660eca6dd7680015d",
+      "result": "identical"
+    },
+    {
+      "path": "TextureHeader.cpp",
+      "uzengine_blob": "bee8152192e7d89f558f4be999bd8df7e1774be0",
+      "upstream_sha256": "a057876254110a8ca8b93d7cd6be4497b2cb7fa18121e3efaa395448a58483d5",
+      "upstream_lf_sha256": "a057876254110a8ca8b93d7cd6be4497b2cb7fa18121e3efaa395448a58483d5",
+      "result": "identical"
+    },
+    {
+      "path": "TextureHeader.hpp",
+      "uzengine_blob": "0deb7178faab8972e251c4b5d642897b5fe6edf7",
+      "upstream_sha256": "96779074cdef6e74890d3578df2e8fe177433eac0e966fd5f4bffd2293640aa2",
+      "upstream_lf_sha256": "96779074cdef6e74890d3578df2e8fe177433eac0e966fd5f4bffd2293640aa2",
+      "result": "identical"
+    },
+    {
+      "path": "Timing.cpp",
+      "uzengine_blob": "2af851f9a9183e21e76c29cc3df3bd4259d9e4ef",
+      "upstream_sha256": "7074c0b853d082a32664032048d6e5afe63413ea6180c9e6f21a5c5867762f22",
+      "upstream_lf_sha256": "7074c0b853d082a32664032048d6e5afe63413ea6180c9e6f21a5c5867762f22",
+      "result": "identical"
+    },
+    {
+      "path": "Timing.hpp",
+      "uzengine_blob": "3767e20f24a80e941ff54cbb693aaa763131e454",
+      "upstream_sha256": "b4b444e0d6b8e7c3a9844c2b49970b0b83995cf51c4ada8bb1e9ee869ff1a80a",
+      "upstream_lf_sha256": "b4b444e0d6b8e7c3a9844c2b49970b0b83995cf51c4ada8bb1e9ee869ff1a80a",
+      "result": "identical"
+    },
+    {
+      "path": "Vector.hpp",
+      "uzengine_blob": "3370a88aea43069e145fab430dec666720ad457c",
+      "upstream_sha256": "8adbe77c4a33c500395fa2802b2c144128e4704c349c02b914bee3d195ad9d42",
+      "upstream_lf_sha256": "8adbe77c4a33c500395fa2802b2c144128e4704c349c02b914bee3d195ad9d42",
+      "result": "identical"
+    },
+    {
+      "path": "bc7enc.cpp",
+      "uzengine_blob": "b8e6e7c4b897fe6282ed5164bb5201d119b1e075",
+      "upstream_sha256": "270acfb5f3ce7a0a5f1f7e52f489c49a8abfec7c777e1c69ec505934383c586f",
+      "upstream_lf_sha256": "270acfb5f3ce7a0a5f1f7e52f489c49a8abfec7c777e1c69ec505934383c586f",
+      "result": "identical"
+    },
+    {
+      "path": "bc7enc.h",
+      "uzengine_blob": "891ca087112cfb6c2cc9ae59e35329e03fd9ccbc",
+      "upstream_sha256": "7f8c9402edcc5cc9b52517bff416d92a96f3589e291ef294b3a756f537368acb",
+      "upstream_lf_sha256": "7f8c9402edcc5cc9b52517bff416d92a96f3589e291ef294b3a756f537368acb",
+      "result": "identical"
+    },
+    {
+      "path": "bcdec.c",
+      "uzengine_blob": "ff8a1f74bb57df33681c4e3e50cea0f860fbea50",
+      "upstream_sha256": "aa3ed6452862bcfa0c98a4ffe8003aedfc9628923a728234a9000805dbd3001c",
+      "upstream_lf_sha256": "aa3ed6452862bcfa0c98a4ffe8003aedfc9628923a728234a9000805dbd3001c",
+      "result": "identical"
+    },
+    {
+      "path": "bcdec.h",
+      "uzengine_blob": "3b2884c8309e82f9cfe1595bfe2191891bdb1b2f",
+      "upstream_sha256": "608f22d4144190f03657968eda68fffc6d75eb175e5ac41305bcefc372fd555f",
+      "upstream_lf_sha256": "608f22d4144190f03657968eda68fffc6d75eb175e5ac41305bcefc372fd555f",
+      "result": "identical"
+    },
+    {
+      "path": "examples/bc7.png",
+      "uzengine_blob": "698fc6a653d347c3035f79ef5ecb2e99dd528f0b",
+      "upstream_sha256": "7205c1008e9a12bef36b03cfd79520b45316528ee70ea652809e800029bd94a1",
+      "upstream_lf_sha256": "b83fe5a481c5a5d188c02d9ab2f5d06a9f4e9de5d29458a08ec4dfb3c733fcc5",
+      "result": "identical"
+    },
+    {
+      "path": "examples/dxtc.png",
+      "uzengine_blob": "b17c595661dc824a8491da9fa201d2065f34af60",
+      "upstream_sha256": "34d8d35eff8c824947943cfe405b2055cc7f8ab5a41255e7091a2eb4ef5642fd",
+      "upstream_lf_sha256": "b6bdef9e3025f485e741ca9a3e19a67975d9918c73e00e2646204735341cc3e6",
+      "result": "identical"
+    },
+    {
+      "path": "examples/etc1.png",
+      "uzengine_blob": "3425f327a91ac171f3ebbe417db21345d10a8c9f",
+      "upstream_sha256": "50041e2f7093483e6e91e0d3db37385519244b3ac7b12fa88f1e414e645646ba",
+      "upstream_lf_sha256": "caf54d4709ef7a9defa47eb03543025b3948aad938da5b165ee99414ec635f9d",
+      "result": "identical"
+    },
+    {
+      "path": "examples/etc2.png",
+      "uzengine_blob": "b165d930a739db67eb772a682c3eaeaafe956e45",
+      "upstream_sha256": "ee002578b9e8c80c404c6b107b6dbb68c2a22cade7da75397c6f6a74ebc515cd",
+      "upstream_lf_sha256": "4b1872cf0077d6a91cc1d3f4022fe8497e9e35576da0ea3c699516d05f7ed24a",
+      "result": "identical"
+    },
+    {
+      "path": "examples/kodim23.png",
+      "uzengine_blob": "e779e24dd3b0dd0144cb7071c3a48b6a661dce47",
+      "upstream_sha256": "08a8bdc9cbd138b1b8c979312c31fbead64f87559ef1ef44b2fd998559a7807f",
+      "upstream_lf_sha256": "cdc49ba5d2ce803f82d075c16b4ce7a69464497b1e9f51c16bf8849df1ae57bc",
+      "result": "identical"
+    },
+    {
+      "path": "getopt/LICENSE.txt",
+      "uzengine_blob": "5541d7c5320dd427bcfb1e7339c6c31ebe94a70e",
+      "upstream_sha256": "ed24404077ba9e23efcfb249cb70dbec342a94ec5cecbb9463ee0cc5ee2240ab",
+      "upstream_lf_sha256": "ed24404077ba9e23efcfb249cb70dbec342a94ec5cecbb9463ee0cc5ee2240ab",
+      "result": "identical"
+    },
+    {
+      "path": "getopt/getopt.c",
+      "uzengine_blob": "eae36a64afff2eba956b7e834f75ab02a2bd9579",
+      "upstream_sha256": "887629c78b5ddd99e750996cdfde8cea61b0376ab2616709a8a21933d0d7935f",
+      "upstream_lf_sha256": "887629c78b5ddd99e750996cdfde8cea61b0376ab2616709a8a21933d0d7935f",
+      "result": "identical"
+    },
+    {
+      "path": "getopt/getopt.h",
+      "uzengine_blob": "a1d6db03ec1442147c7c0edef52d2ecf81d1b4ce",
+      "upstream_sha256": "e4064e6ecfa2e1b83b7c25ec66b82c032ef400708bd91282e5c3a0fc5d1209cc",
+      "upstream_lf_sha256": "e4064e6ecfa2e1b83b7c25ec66b82c032ef400708bd91282e5c3a0fc5d1209cc",
+      "result": "identical"
+    },
+    {
+      "path": "mmap.cpp",
+      "uzengine_blob": "c2460ee9e4e8408692d3c66575de3fc4e015ccf4",
+      "upstream_sha256": "c6f17c047e5daa6923e23aa236a8bd11e3aec4396963c5b10c6d8db086247405",
+      "upstream_lf_sha256": "c6f17c047e5daa6923e23aa236a8bd11e3aec4396963c5b10c6d8db086247405",
+      "result": "identical"
+    },
+    {
+      "path": "mmap.hpp",
+      "uzengine_blob": "e4cfe7759ca7a8ef31958c1410938b03262ebcf0",
+      "upstream_sha256": "af19d6c382d5c9718dfa357bbb2e18a55dd5e0c28de124b7a83818e79efa4986",
+      "upstream_lf_sha256": "af19d6c382d5c9718dfa357bbb2e18a55dd5e0c28de124b7a83818e79efa4986",
+      "result": "identical"
+    },
+    {
+      "path": "simd.py",
+      "uzengine_blob": "e87d0dfcd3dff6b82c6b6f953f04bb8e4dcb2f39",
+      "upstream_sha256": "dc933fecc6955b7cfb11569ac2846c3f68bd1748b7f456cebc93905e19a51687",
+      "upstream_lf_sha256": "dc933fecc6955b7cfb11569ac2846c3f68bd1748b7f456cebc93905e19a51687",
+      "result": "identical"
+    }
+  ],
+  "not_in_uzengine": []
+}

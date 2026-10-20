@@ -80,6 +80,10 @@ IMPORTER_EXPORT = (
     "Rulebook task `phase1.16_export-processing-encoders`, run with "
     "`python -m tools.vendoring.import_thirdparty` for UzmiGames"
 )
+IMPORTER_UZE = (
+    "Rulebook task `phase3.1_uze-uztexture-writer`, run with "
+    "`python -m tools.vendoring.import_thirdparty` for UzmiGames"
+)
 MESH_ROLE = (
     "build-only today: compiled into `uzp_mesh.lib` (UzPainter's mesh importers, `src/mesh/`) "
     "and its native tests `uzp-mesh-tests.exe` (`phase1.4_mesh-importers`); shipped once "
@@ -148,6 +152,7 @@ class Library:
     core: bool = True
     importer: str = IMPORTER
     local_changes: tuple[LocalChange, ...] = ()
+    retrieved: str = RETRIEVED
 
     @property
     def path(self) -> str:
@@ -1242,6 +1247,67 @@ LIBRARIES: tuple[Library, ...] = (
         core=False,
         importer=IMPORTER_MESH,
     ),
+    Library(
+        name="etcpak",
+        folder="etcpak",
+        upstream="https://github.com/wolfpld/etcpak",
+        version="2.1",
+        commit="7f15da4739cc5f8562311bdbb800436986d268ca",
+        archive_url="https://github.com/wolfpld/etcpak/archive/refs/tags/2.1.tar.gz",
+        archive_name="etcpak-2.1.tar.gz",
+        archive_sha256="7b076ca044318bafeefef28bf5653f2fe6a21cc63f68f628fc696964925f695e",
+        archive_root="etcpak-2.1/",
+        version_source=(
+            '`runtime/thirdparty/README.md` records etcpak as "git (master, 2025)" and its '
+            "`README.md` says etcpak 2.1; UzPainter pins release `2.1` (tag commit `7f15da47`, "
+            "published 2026-02-22), the newest release on the retrieval date, for the BC encoder "
+            "adapter of `docs/architecture/08-export.md` §3 (`phase3.1_uze-uztexture-writer`)"
+        ),
+        select=(
+            "ProcessDxtc.cpp",
+            "ProcessDxtc.hpp",
+            "bc7enc.cpp",
+            "bc7enc.h",
+            "Dither.cpp",
+            "Dither.hpp",
+            "Math.hpp",
+            "ForceInline.hpp",
+            "bcdec.c",
+            "bcdec.h",
+            "LICENSE.txt",
+            "AUTHORS.txt",
+        ),
+        licence_files=("LICENSE.txt", "AUTHORS.txt", "bc7enc.cpp", "bcdec.h"),
+        include_dirs=(".",),
+        sources=("ProcessDxtc.cpp", "bc7enc.cpp", "Dither.cpp", "bcdec.c"),
+        licence=(
+            "BSD-3-Clause (etcpak, `LICENSE.txt`, Copyright (c) 2013-2026 Bartosz Taudul; "
+            "contributors in `AUTHORS.txt`); the bundled bc7enc (`bc7enc.cpp`, `bc7enc.h`, "
+            "Richard Geldreich, Jr.) under MIT or the Unlicense, the user's choice, stated at the "
+            "end of `bc7enc.cpp`; the bundled bcdec (`bcdec.h`, `bcdec.c`, Sergii Kudlai) under "
+            "MIT or the Unlicense, stated at the end of `bcdec.h`"
+        ),
+        role=(
+            "build-only today: `ProcessDxtc.cpp`, `bc7enc.cpp` and `Dither.cpp` compiled into "
+            "`uzp_texture.lib` (UzPainter's BC encoder adapter, `src/export/bc_encoder.cpp`) and "
+            "its native tests `uzp-texture-tests.exe`; `bcdec.c` compiled into "
+            "`uzp-texture-tests.exe` only, the test-only BC decoder; shipped once the UzEngine "
+            "preset (`phase3.4_uzengine-preset`) links the library into `UzPainter.exe`"
+        ),
+        features=(
+            "The BC1, BC3, BC4, BC5 and BC7 block encoders of `ProcessDxtc.cpp` (`CompressBc1`, "
+            "`CompressBc3`, `CompressBc4`, `CompressBc5`, `CompressBc7` over bc7enc's "
+            "`bc7enc_compress_block`) compiled as C++ with `-ffp-contract=off`; `Dither.cpp` only "
+            "because `CompressBc1Dither` in the same unit references it (dithering is never "
+            "called); the SIMD branches follow the build's target CPU; bcdec's decoders for the "
+            "tests (`BCDEC_IMPLEMENTATION` through `bcdec.c`); no ETC codecs, command-line "
+            "application, task dispatcher, image I/O, CMake files or examples"
+        ),
+        uzengine_folder="etcpak",
+        core=False,
+        importer=IMPORTER_UZE,
+        retrieved="2026-10-19",
+    ),
 )
 
 LIBRARY_BY_NAME = {lib.name: lib for lib in LIBRARIES}
@@ -1592,7 +1658,7 @@ def render_origin(lib: Library, manifest: LibraryManifest) -> str:
         f"| Archive SHA-256 | `{lib.archive_sha256}` |",
         f"| Archive root | `{lib.archive_root or '(none)'}` (stripped; paths below are relative "
         "to it) |",
-        f"| Retrieved | {RETRIEVED} |",
+        f"| Retrieved | {lib.retrieved} |",
         f"| Importer | {lib.importer} |",
         f"| Version source | {_version_source(lib)} |",
         f"| Licence | {lib.licence} |",
@@ -1866,6 +1932,7 @@ APPLICATION_SYSTEM_INCLUDES: dict[str, str] = {
     "inttypes.h": _CRT,
     "io.h": _CRT,
     "malloc.h": _CRT,
+    "memory.h": _CRT + " (bc7enc)",
     "pthread.h": _OTHER,
     "unixio.h": _OTHER,
     "stdatomic.h": _CRT,

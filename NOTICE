@@ -23,3 +23,26 @@ UzEngine has no NOTICE file at that commit (checked at the repository root,
 runtime/, runtime/engine and runtime/platform), so no upstream attribution
 notice is reproduced here. Provenance and per-file hashes:
 thirdparty/uzengine-render-core/ORIGIN.md and MANIFEST.json.
+
+------------------------------------------------------------------------------
+etcpak with bundled bc7enc and bcdec (vendored copy)
+------------------------------------------------------------------------------
+
+This product includes etcpak 2.1 (https://github.com/wolfpld/etcpak, tag
+2.1, commit 7f15da4739cc5f8562311bdbb800436986d268ca) in thirdparty/etcpak/,
+used for BC1/BC3/BC4/BC5/BC7 texture encoding.
+
+  etcpak: Copyright (c) 2013-2026, Bartosz Taudul <wolf@nereid.pl>
+  Licensed under the BSD 3-Clause licence (thirdparty/etcpak/LICENSE.txt;
+  contributors in thirdparty/etcpak/AUTHORS.txt).
+
+  bc7enc (bundled, thirdparty/etcpak/bc7enc.cpp, bc7enc.h):
+  Copyright (c) 2020-2021 Richard Geldreich, Jr.
+  MIT licence or the Unlicense, the user's choice (text at the end of
+  bc7enc.cpp).
+
+  bcdec (bundled, thirdparty/etcpak/bcdec.h, bcdec.c; test-only decoder):
+  written by Sergii "iOrange" Kudlai; MIT licence or the Unlicense, the
+  user's choice (text at the end of bcdec.h).
+
+Provenance and per-file hashes: thirdparty/etcpak/ORIGIN.md and MANIFEST.json.

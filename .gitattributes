@@ -28,6 +28,7 @@
 /thirdparty/simdjson/** -text
 /thirdparty/fastgltf/** -text
 /thirdparty/tinyexr/** -text
+/thirdparty/etcpak/** -text
 # Parity fixtures are hashed in public manifests: keep their bytes identical on every machine.
 /parity/fixtures/** -text
 # Git hooks run under sh: keep LF endings on every checkout (parity/GUARD.md).

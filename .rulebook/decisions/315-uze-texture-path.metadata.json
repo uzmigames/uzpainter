@@ -1,0 +1,13 @@
+{
+  "id": 315,
+  "slug": "315-uze-texture-path",
+  "title": "UzEngine texture path: etcpak 2.1 behind a BC adapter with fixed settings, 16-bit power-of-two mip chains with pow-free sRGB, and a `.uztexture` writer whose header declarations win over its comments",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase3.1_uze-uztexture-writer",
+    "phase3.4_uzengine-preset",
+    "phase3.2_unreal-ue56-packed-preset"
+  ],
+  "supersededBy": null
+}
