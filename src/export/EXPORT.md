@@ -99,11 +99,54 @@ Task `phase1.17_export-presets`. Local run report: `parity/reports/phase1/export
   - `assets3d-inline-five-map`: the Assets3D pipeline's inline preset (`painter_export.py`), named `$textureSet_<map>`; layout `pipeline`. It plans, file for file, what the pipeline's inline configuration plans.
   - `pbr-metallic-roughness` and `blender-principled-bsdf`: written from public sources and UzmiGames' own observations; layout `unconfirmed`.
   - `gltf-pbr-metal-roughness` (phase3.1_unreal-gltf-pbr-preset, decision 314): written from the glTF 2.0 specification; layout `unconfirmed` until recording R-314. Maps: BaseColor (RGB, A from opacity), MetallicRoughness (R white, G roughness, B metallic), Normal (`Normal_OpenGL`), Occlusion (`AO_Mixed`, refused until it is fitted, decision 131), Emissive and SpecularWeight (a consumer gap in the receipt, decision 023), each `fileFormat: png`.
-- **Resolution.** A reference that names an inline preset is that preset. Otherwise `ShippedPresetId` reads it as a shipped id, a Painter name of the alias table (`PBR Metallic Roughness`, `Blender (Principled BSDF)`, `glTF PBR Metal Roughness`), or `resource://starter_assets/<Painter name>` with no query or a recorded `?version=` (an unrecorded query: `NotYetSupported`, naming the alias's recording: R-095, or R-314 for the glTF preset). The shipped preset joins `exportPresets` under its id, and the reference becomes that id. Painter names are aliases only (CLR-06). An inline preset named like the shipped id a reference resolves to is a `ValueError`. Any other `resource://` or `export-preset-generator://` reference is `NotYetSupported` (the Unreal and UzEngine presets are Phase 3).
+- **Resolution.** A reference that names an inline preset is that preset. The id `uzengine` names the UzEngine preset (below), which no Painter name aliases. Otherwise `ShippedPresetId` reads it as a shipped id, a Painter name of the alias table (`PBR Metallic Roughness`, `Blender (Principled BSDF)`, `glTF PBR Metal Roughness`), or `resource://starter_assets/<Painter name>` with no query or a recorded `?version=` (an unrecorded query: `NotYetSupported`, naming the alias's recording: R-095, or R-314 for the glTF preset). The shipped preset joins `exportPresets` under its id, and the reference becomes that id. Painter names are aliases only (CLR-06). An inline preset named like the shipped id a reference resolves to is a `ValueError`. Any other `resource://` or `export-preset-generator://` reference is `NotYetSupported` (the Unreal presets are Phase 3).
 - **Refusals.**
   - A preset whose layout is `unconfirmed` is refused (`NotYetSupported`) before anything is planned, naming its pending recordings (R-095; R-314 for the glTF preset).
   - The five-map preset writes BaseColor sRGB-encoded (decision 126); on a template whose BaseColor base is inferred the export is refused before writing.
 - **Parity.** The five-map preset's Normal map, written on the recorded plane goldens, is byte-identical to Painter's `Normal_OpenGL` PNG 16 files. Every preset's full output parity waits on a comparison with recording R-095, which decisions 180 and 198 admitted (`export-presets-legacy`, `export-presets-ocio`, `phase1-export-preset-search`) and no test compares yet: a scope split to `phase3.3_unreal-gltf-presets` (decision 103).
+
+### UzEngine preset (phase3.2_uze-uzmat-preset)
+
+`assets/export-presets/uzengine.json` is the table of `08-export.md` §4, in the configuration form, plus a preset-level `uzengine` block. Only a shipped preset may carry that block. In an inline preset the key stays undocumented and is refused. Its provenance record has layout `consumer`: UzmiGames defined it from the UzEngine format definition (U-UZE-RUNTIME a703c95), and no Painter preset answers to it.
+
+- **Maps.**
+  - `$textureSet_albedo`: RGB from basecolor, A from opacity, PNG 8.
+  - `$textureSet_normal`: `Normal_DirectX`, PNG 16. Phase 0 (`parity/reports/phase0/normal-convention.md` §8) found that UzEngine reads green as -v for meshes uzmesh cooks from OBJ. No gbuffer, uzmesh, tangent or material file differs between f4dcfc46 and a703c95. Other import paths are not calibrated.
+  - `$textureSet_orm`: `AO_Mixed`, roughness, metallic, PNG 8.
+  - `$textureSet_emissive`: PNG 8.
+  - `$textureSet_height`: PNG 16.
+  - `$textureSet_specularweight`: PNG 16.
+  - Canonical companions: `canonical/$textureSet_{albedo,orm,emissive}`, PNG 16 copies of the three PNG 8 maps. The normal, height and SpecularWeight maps are their own canonical files (the table's "PNG8/16" resolved to 16).
+  - Padding and dithering come from `exportParameters`.
+- **Targets** (EXP-10: stated, never inferred from a name).
+
+  | Map | Format | Colour | Mips | Binding |
+  |---|---|---|---|---|
+  | albedo | BC7 | sRGB | masked colour | `albedo` |
+  | normal | BC5 | linear | normal | `normal`; negative-Z policy `fail` |
+  | orm | BC7 | linear | linear | `orm` |
+  | emissive | BC7 | sRGB | colour | `emissive` |
+  | height | BC4 | linear | linear | `heightmap` |
+  | specularweight | BC4 | linear | linear | none |
+
+  - The `.uzmat` is `$textureSet.uzmat` at the delivery root. It binds the albedo, normal, ORM and emissive derivatives, and the height derivative as a reported gap.
+- **Plan.** `CompilePlan` attaches each target to its delivered file (`PlannedFile::uztexture`: `<stem>.uztexture` beside it, cooked from `canonical`) and adds `ExportPlan::materials`. The dry run lists each derivative after its file and the `.uzmat` after its stack's last file. `PlanJson` states each derivative's format, sRGB flag, mip class, binding and canonical file. Refused before anything is written:
+  - a filter that keeps a delivered map and drops its canonical map (`ValueError`, EXP-10);
+  - a canonical file that is not a PNG 16 at power-of-two sides;
+  - a layout the format cannot hold (BC4 needs L, BC5 an RGB normal source);
+  - a colour channel whose stored encoding differs from the declared colour space (`NotYetSupported`, `phase3.4_uzengine-preset`). The check reads the encoder's own flags, luma included. Nothing is converted.
+  - a UzEngine output whose path equals any other output's, across every stack, compared as Windows compares file names (`SameDeliveryPath`, `ValueError`). A derivative requested after compilation (`RequestUzTextureNormal`) goes through the same check, and the plan stays as it was when it fails. Two Painter-form files keep Painter's rule (R-091).
+
+  When one of its four textures is not written, the `.uzmat` is skipped (`absent`, with the reason).
+- **Cook** (`EncodeExport`). Each derivative is cooked from its canonical file's PNG 16 samples as written: L as R = G = B, a missing alpha as 65535. The samples are already encoded, so the colour and masked-colour mips decode the sRGB codes once to average them and encode them back; no second transfer is applied. The `.uzmat` is written after cooking (`WriteUzMaterial`). Its blend is `Masked` when the albedo derivative holds an alpha and `Opaque` otherwise. That is an authored UzPainter rule, not an engine fact: an alpha channel alone does not tell a cutout from a translucent surface. So it claims no engine Opacity parity, and the receipt records it as a `blend` consumer gap.
+- **Publication.** Each derivative is written right after its file, and the `.uzmat` after its stack's last file. Test fault points: `kill_after_uztexture:<file>` and `kill_after_uzmat:<material>`.
+- **Receipt.**
+  - A derivative's `uztexture` is {source (its canonical file), delivery, binding or null, format, srgb, mips, encoder, negative_z (normal maps only)}.
+  - The `.uzmat` entry (format `uzmat`) has `uzmat` {albedo, normal, orm, emissive, height, blend, two_sided, inline_material} and the writer's gaps.
+  - Consumer gaps: `Opacity` on an albedo derivative with alpha (SM5 never reads albedo alpha), `Height` on the height derivative (no pin or inline key), `SpecularWeight`, and the `.uzmat`'s `opacity`, `height` and `blend` (the authored blend rule above).
+- **Status.** Every plan that writes `$textureSet_orm` is refused until `AO_Mixed` is fitted (decision 131, `phase3.2_unreal-ue56-packed-preset` item 2.10, provenance pending R-131). So the full shipped preset is not yet exportable. On wand v1 its normal is also refused by the island rule (decision 245).
+- **Tests.** `tests/export/test_uze_preset.py`, CPU only. It covers the shipped preset with its ORM maps filtered out and a test-only variant whose ORM R reads `ambientOcclusion`. Neither is shipped-preset or wand v1 acceptance.
+- **Height sidecar.** The table's "sidecar" is read as the BC4 `.uztexture` companion: the engine probes a cooked companion before its file-name rule, and the companion's header states the format. The receipt also records that format. No engine sidecar format exists in the approved source.
 
 ### glTF consumer fixture
 
@@ -207,12 +250,12 @@ Task `phase1.17_export-publication-receipts`. Tests: `tests/export/test_export_p
   - **`manifest_export`.** The Assets3D block in the form of `manifest-schema-v2.json` `$defs/export`, replacing v1's `exportacao`. `manifest_files` holds the `files` entries its keys name. Their paths are relative to the generation; the pipeline adapter rebases them. The block is null when the export writes no file.
   - **Resources.** `resource_hashes` lists the resources the files read: bitmaps of the read channel DAGs, a diagnostic material's masks, the mesh maps read, and the texturing mesh (its file and the files it reads beside it, such as a glTF's buffers).
   - **Identity.** `app_version` and `build` come from the caller (`PublishRequest::identity`).
-  - **Colour space.** Every image file written today is `linear`.
+  - **Colour space.** `colour_space` states what the file stores: `sRGB` when every colour channel (all but A) is written sRGB-encoded, `linear` when none is, and `mixed` otherwise. For example, an L8 BaseColor's RGB file holds sRGB, linear, sRGB (decision 204). Each image channel also states its `transfer`. Only a PNG writes sRGB-encoded values (decision 126), and the luma of an sRGB8 colour channel is one of them. Until phase3.2_uze-uzmat-preset every receipt said `linear`, so the files that change are exactly the sRGB-encoded PNGs (`test_receipt_colour_space_follows_the_written_encoding`).
   - **Consumer gaps.** A SpecularWeight map carries the consumer gap of `08-export.md` §4.
 - **`.uztexture` normal derivative** (phase3.1_uze-uztexture-writer items 2.7 and 3.5, decision 316).
   - **Request.** `RequestUzTextureNormal(plan, relativePath, policy)` sets the plan field `PlannedFile::uztexture`. The policy is `fail` (the default) or `rgb`. The plan hash covers the field.
   - **Bound.** The file must be an RGB PNG 16 of one normal source, with power-of-two sides. That file is the canonical 16-bit companion. The derivative is `<stem>.uztexture` beside it.
-  - **Preset exposure.** No configuration or preset key sets the field yet. Exposing it, and choosing a policy per preset, belong to `phase3.4_uzengine-preset`.
+  - **Preset exposure.** The UzEngine preset sets the field for its six maps, each cooked from its canonical file (§5, UzEngine preset).
   - **Cook.** `EncodeExport` cooks the derivative from the PNG's samples as written, after padding.
   - **Guard.** It finds the texels with B <= 32767 (Z < 0).
     - `fail`: an `export:` failure naming the count and the first texel, returned before any generation is claimed.

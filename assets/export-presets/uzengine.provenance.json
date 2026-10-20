@@ -1,0 +1,151 @@
+{
+  "schema": "uzpainter/export-preset-provenance/1",
+  "version": 1,
+  "author": "UzmiGames",
+  "licence": "Apache-2.0",
+  "date": "2026-10-20",
+  "reviewer": null,
+  "preset": "uzengine",
+  "answersTo": [],
+  "sources": [
+    {
+      "kind": "public-documentation",
+      "page": "UzPainter docs/architecture/08-export.md",
+      "section": "§4 Presets, UzEngine preset (the preset table); §5 Determinism and verification",
+      "facts": "The seven outputs <set>_albedo (basecolor RGB + opacity A, PNG8, BC7 sRGB, binding albedo), <set>_normal (virtual normal in the Phase 0 convention, PNG8/16, BC5, linear, negative-Z texels fail or route to RGB), <set>_orm (AO_Mixed, roughness, metallic; PNG8, BC7 linear, binding orm), <set>_emissive (PNG8, BC7 sRGB), <set>_height (PNG16 + explicit format metadata, BC4 linear), <set>_specularweight (PNG8/16, BC4, no engine slot: a consumer gap) and <set>.uzmat (TextureSample -> PBROutput pins 0..6 with the inline scene-material block); canonical 16-bit/float maps beside every cooked derivative (EXP-10); the receipt's per-file fields."
+    },
+    {
+      "kind": "public-documentation",
+      "page": "UzPainter decision 023 (owner answer Q10); decision 021 (owner answer Q8)",
+      "section": "UzEngine .uzmat with compressed .uztexture; SpecularWeight as a consumer gap; formats written by UzPainter's own code",
+      "facts": "UzEngine is delivered as .uzmat plus compressed .uztexture (BC7/BC5/BC4), both written by UzPainter's own code from the format definition with no UzEngine library linked or called; SpecularWeight is exported and reported as a consumer gap."
+    },
+    {
+      "kind": "consumer-specification",
+      "page": "UzEngine U-UZE-RUNTIME commit a703c95ada45002a774db9d9cf82b3b7964d09d6, runtime/engine/asset/formats/uztexture_format.h",
+      "section": "UzTextureHeader, UzTextureMipLevel, TextureFormat, kUzTextureFlag_sRGB",
+      "facts": "The .uztexture layout and its formats BC4, BC5 and BC7 with the sRGB flag (decision 315: the declarations win over the header's comments; BC4 and BC5 are always linear).",
+      "sha256": "5048adefe210f15b32efa388c8c422d3a20c198dfce2b44a9f616a69d7d3a7ef"
+    },
+    {
+      "kind": "consumer-specification",
+      "page": "UzEngine U-UZE-RUNTIME commit a703c95ada45002a774db9d9cf82b3b7964d09d6, runtime/engine/material/material_graph.cpp",
+      "section": "the .uzmat graph (PBROutput pins 0..6, TextureSample)",
+      "facts": "PBROutput pins BaseColor, Metallic, Roughness, Normal, Emissive, Opacity and AO, fed by texture samples; no height pin (src/export/EXPORT.md §5, UzEngine material writer).",
+      "sha256": "555db884204ac8abbcb17c50b4661f8cf2dfddb609d30e17c8f58520f6dbd964"
+    },
+    {
+      "kind": "consumer-specification",
+      "page": "UzEngine U-UZE-RUNTIME commit a703c95ada45002a774db9d9cf82b3b7964d09d6, runtime/engine/ecs/loaders/scene_loader.cpp",
+      "section": "the inline scene material block",
+      "facts": "The inline block sets albedo, normal, roughness, metallic, ao, emissive and orm paths and the multipliers; no inline key assigns an opacity or a height map.",
+      "sha256": "b6953e00796407cf27b424680c480d2af41ccf36de98d10ec73fc89f45db207d"
+    },
+    {
+      "kind": "consumer-specification",
+      "page": "UzEngine U-UZE-RUNTIME commit a703c95ada45002a774db9d9cf82b3b7964d09d6, runtime/shaders/runtime/gbuffer/gbuffer_ps.hlsl",
+      "section": "the fixed-PBR path: ORM, normal decode, albedo alpha",
+      "facts": "ORM is sampled as R = AO, G = roughness, B = metallic; the normal's XY is decoded from RG and Z reconstructed (non-negative); the bindless fixed-PBR path reads albedo .a, the SM5 path never reads it as opacity (docs/analysis/uzengine-renderer/10-review-response.md §7).",
+      "sha256": "21d02958eade8a6659311de292a721f04b312a93bc99e47d5986f803294e1dcc"
+    },
+    {
+      "kind": "consumer-specification",
+      "page": "UzEngine U-UZE-RUNTIME commit a703c95ada45002a774db9d9cf82b3b7964d09d6, runtime/engine/renderer/scene/scene_texture_assets.cpp",
+      "section": "the cooked .uztexture companion probe",
+      "facts": "A cooked .uztexture companion beside a texture is probed first, and its GPU format comes from the file's own header (docs/analysis/uzengine-renderer/04-material-and-texture-standard.md §2.1): the BC4 height companion carries the explicit format the cooker's file-name rule would otherwise set to BC7 sRGB.",
+      "sha256": "b690f9d939ff7f40d90cd6e0efe3742742e5da5cf9f38696e54860eb6821231c"
+    },
+    {
+      "kind": "uzmigames-observation",
+      "page": "UzPainter parity/reports/phase0/normal-convention.md §8 (phase0.9_normal-convention-fixture task 2.6)",
+      "section": "External consumer: UzEngine",
+      "facts": "UzEngine (commit f4dcfc46, a descendant of a703c95 with no change to gbuffer_ps.hlsl, uzmesh, mesh tangents, scene_loader or the material files) reads green as -v, the DirectX convention, for meshes uzmesh cooks from OBJ."
+    }
+  ],
+  "privateRecords": [],
+  "packing": [
+    {
+      "fileName": "$textureSet_albedo",
+      "decision": "RGB from documentMap basecolor, A from documentMap opacity (dropped when the stack has no opacity channel, probe P7), PNG 8; its .uztexture is BC7 sRGB with alpha-coverage-preserving mips (binding albedo), cooked from canonical/$textureSet_albedo",
+      "source": "08-export.md §4 (albedo row): opacity in alpha for the bindless fixed-PBR path; the SM5 route is reported unsupported for opacity in the receipt",
+      "status": "defined"
+    },
+    {
+      "fileName": "canonical/$textureSet_albedo",
+      "decision": "The albedo's channels at PNG 16: the canonical 16-bit companion of the PNG 8 file and its derivative",
+      "source": "08-export.md §4 (canonical maps beside the cooked derivatives, EXP-10)",
+      "status": "defined"
+    },
+    {
+      "fileName": "$textureSet_normal",
+      "decision": "RGB from virtualMap Normal_DirectX (combined: mesh normal, Normal channel and height-derived normal), PNG 16, its own canonical companion; its .uztexture is BC5 linear (binding normal), negative-Z policy fail",
+      "source": "08-export.md §4 (normal row; PNG8/16 resolved to 16 so the file is its canonical map, decision 316); the Phase 0 verdict for UzEngine: green -v (parity/reports/phase0/normal-convention.md §8)",
+      "status": "defined"
+    },
+    {
+      "fileName": "$textureSet_orm",
+      "decision": "R from virtualMap AO_Mixed, G from documentMap roughness, B from documentMap metallic, PNG 8; its .uztexture is BC7 linear (binding orm), cooked from canonical/$textureSet_orm; refused until AO_Mixed is fitted (decision 131)",
+      "source": "08-export.md §4 (orm row; gbuffer_ps.hlsl fixed-PBR ORM order)",
+      "status": "defined"
+    },
+    {
+      "fileName": "canonical/$textureSet_orm",
+      "decision": "The ORM's channels at PNG 16: the canonical companion",
+      "source": "08-export.md §4 (EXP-10)",
+      "status": "defined"
+    },
+    {
+      "fileName": "$textureSet_emissive",
+      "decision": "RGB from documentMap emissive, PNG 8; its .uztexture is BC7 sRGB with colour mips (binding emissive), cooked from canonical/$textureSet_emissive",
+      "source": "08-export.md §4 (emissive row)",
+      "status": "defined"
+    },
+    {
+      "fileName": "canonical/$textureSet_emissive",
+      "decision": "The emissive's channels at PNG 16: the canonical companion",
+      "source": "08-export.md §4 (EXP-10)",
+      "status": "defined"
+    },
+    {
+      "fileName": "$textureSet_height",
+      "decision": "L from documentMap height, PNG 16 (written as v * 0.5 + 0.5), its own canonical companion; its .uztexture is BC4 linear (binding heightmap), the explicit-format companion the cooker would otherwise make BC7 sRGB; no .uzmat pin or inline key binds it: a consumer gap",
+      "source": "08-export.md §4 (height row); docs/analysis/uzengine-renderer/04-material-and-texture-standard.md §5.3 and §8",
+      "status": "defined"
+    },
+    {
+      "fileName": "$textureSet_specularweight",
+      "decision": "L from documentMap specularweight, PNG 16 (PNG8/16 resolved to 16, its own canonical companion), written when the stack has the channel; its .uztexture is BC4 linear with no engine binding; the receipt reports it as a consumer gap",
+      "source": "08-export.md §4 (specularweight row); decision 023",
+      "status": "defined"
+    },
+    {
+      "fileName": "(material)",
+      "decision": "$textureSet.uzmat at the delivery root: pins 0..6 bound to the albedo, ORM, normal and emissive derivatives of the same generation (src/export/uzmat_writer.h), blend Masked when the albedo derivative holds an alpha, Opaque otherwise; the inline scene-material block in the receipt; skipped, and listed, when one of its four textures is not written",
+      "source": "08-export.md §4 (.uzmat row); src/export/EXPORT.md §5 (UzEngine material writer)",
+      "status": "defined"
+    },
+    {
+      "fileName": "(all)",
+      "decision": "Files named $textureSet_<output>; every map sets fileFormat png and its bitDepth, while padding and dithering come from exportParameters; each derivative's engine format, colour space, mip class and binding are stated in the preset's uzengine block, never inferred from a file name",
+      "source": "08-export.md §4; EXP-10",
+      "status": "defined"
+    }
+  ],
+  "parity": {
+    "layout": "consumer",
+    "status": "pending",
+    "pending": [
+      {
+        "recording": "R-131",
+        "owner": "phase3.2_unreal-ue56-packed-preset item 2.10",
+        "what": "AO_Mixed, the ORM's R, is fitted exactly (recordings R-086a and R-092, else R-131 of decision 131); until then every plan of this preset that writes $textureSet_orm is refused before anything is written."
+      }
+    ],
+    "tests": [
+      "tests/export/test_uze_preset.py::test_shipped_preset_loads_with_its_targets",
+      "tests/export/test_uze_preset.py::test_full_preset_is_refused_naming_ao_mixed",
+      "tests/export/test_uze_preset.py::test_dry_run_lists_outputs_with_formats",
+      "tests/export/test_uze_preset.py::test_provenance_validates_and_names_the_preset"
+    ]
+  }
+}

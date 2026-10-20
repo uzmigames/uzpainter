@@ -93,9 +93,66 @@ struct MapSpec {
     friend bool operator==(const MapSpec&, const MapSpec&) = default;
 };
 
+/// What the `.uztexture` normal derivative does when its canonical map holds negative-Z texels
+/// (decision 316): `fail` refuses the export before anything is published; `rgb` stores the map as
+/// `Uncompressed_RGBA8` (8 bits per channel, B kept, so Z keeps its sign) instead of BC5.
+enum class NegativeZPolicy : uint8_t { fail, rgb };
+
+/// The stored format of a `.uztexture` derivative (the vendored `TextureFormat` members UzPainter
+/// writes; decision 315). RGBA8 is only reached by a normal map routed under `NegativeZPolicy::rgb`.
+enum class UzTextureStorage : uint8_t { BC4, BC5, BC7, RGBA8 };
+[[nodiscard]] std::string_view UzTextureStorageName(UzTextureStorage storage);
+
+/// The mip class of a derivative (mips.h `MipClass`, decision 315).
+enum class DerivativeMips : uint8_t { linear, colour, normal, masked_colour };
+[[nodiscard]] std::string_view DerivativeMipsName(DerivativeMips mips);
+
+/// One `.uztexture` target of a shipped UzEngine preset (phase3.2_uze-uzmat-preset; 08-export.md
+/// §4; EXP-10: the engine format and binding are stated, never inferred from a file name). `map` is
+/// the delivered map's unexpanded `fileName`, and the derivative is written beside it
+/// (`<stem>.uztexture`). `canonical` is the fileName of the map whose PNG 16 samples the derivative
+/// is cooked from: the canonical 16-bit companion (the same map when that map is itself PNG 16).
+struct UzEngineTexture {
+    std::string map;
+    std::string canonical;
+    /// The engine slot it feeds; empty when the engine has none (a consumer gap).
+    std::string binding;
+    UzTextureStorage format = UzTextureStorage::BC7;
+    bool srgb = false;
+    DerivativeMips mips = DerivativeMips::linear;
+    /// Normal maps only.
+    NegativeZPolicy negativeZ = NegativeZPolicy::fail;
+
+    friend bool operator==(const UzEngineTexture&, const UzEngineTexture&) = default;
+};
+
+/// The `.uzmat` of a shipped UzEngine preset: its unexpanded fileName (no extension, at the delivery
+/// root) and the delivered maps (fileNames of `UzEngineTexture::map`) whose derivatives it binds.
+struct UzEngineMaterial {
+    std::string fileName;
+    std::string albedo;
+    std::string normal;
+    std::string orm;
+    std::string emissive;
+    /// Optional; the pinned engine has no verified height binding (a consumer gap).
+    std::string height;
+
+    friend bool operator==(const UzEngineMaterial&, const UzEngineMaterial&) = default;
+};
+
+/// The UzEngine targets of a shipped preset (`assets/export-presets/<id>.json` `uzengine`). Only a
+/// shipped preset carries them: an inline preset's `uzengine` key stays undocumented and refused.
+struct UzEngineTargets {
+    std::vector<UzEngineTexture> textures;
+    std::optional<UzEngineMaterial> material;
+
+    friend bool operator==(const UzEngineTargets&, const UzEngineTargets&) = default;
+};
+
 struct PresetSpec {
     std::string name;
     std::vector<MapSpec> maps;
+    std::optional<UzEngineTargets> uzengine;
 
     friend bool operator==(const PresetSpec&, const PresetSpec&) = default;
 };

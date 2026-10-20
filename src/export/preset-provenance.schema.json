@@ -74,8 +74,8 @@
       "required": ["layout", "status", "pending", "tests"],
       "properties": {
         "layout": {
-          "description": "pipeline: defined by a UzmiGames pipeline script; confirmed: by Painter's recorded outputs for the preset it answers to; unconfirmed: refused (NotYetSupported) until a recording confirms it.",
-          "enum": ["pipeline", "confirmed", "unconfirmed"]
+          "description": "pipeline: defined by a UzmiGames pipeline script; confirmed: by Painter's recorded outputs for the preset it answers to; unconfirmed: refused (NotYetSupported) until a recording confirms it; consumer: defined by UzmiGames from a consumer's format definition, no Painter preset answers to it (its `uzengine` targets, 08-export.md §4).",
+          "enum": ["pipeline", "confirmed", "unconfirmed", "consumer"]
         },
         "status": {
           "description": "exact: every file of the output-parity test equals Painter's; pending: the items of `pending` keep it from passing.",

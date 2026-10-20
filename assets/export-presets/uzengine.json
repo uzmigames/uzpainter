@@ -1,0 +1,297 @@
+{
+  "name": "uzengine",
+  "maps": [
+    {
+      "fileName": "$textureSet_albedo",
+      "channels": [
+        {
+          "destChannel": "R",
+          "srcChannel": "R",
+          "srcMapType": "documentMap",
+          "srcMapName": "basecolor"
+        },
+        {
+          "destChannel": "G",
+          "srcChannel": "G",
+          "srcMapType": "documentMap",
+          "srcMapName": "basecolor"
+        },
+        {
+          "destChannel": "B",
+          "srcChannel": "B",
+          "srcMapType": "documentMap",
+          "srcMapName": "basecolor"
+        },
+        {
+          "destChannel": "A",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "opacity"
+        }
+      ],
+      "parameters": {
+        "fileFormat": "png",
+        "bitDepth": "8"
+      }
+    },
+    {
+      "fileName": "canonical/$textureSet_albedo",
+      "channels": [
+        {
+          "destChannel": "R",
+          "srcChannel": "R",
+          "srcMapType": "documentMap",
+          "srcMapName": "basecolor"
+        },
+        {
+          "destChannel": "G",
+          "srcChannel": "G",
+          "srcMapType": "documentMap",
+          "srcMapName": "basecolor"
+        },
+        {
+          "destChannel": "B",
+          "srcChannel": "B",
+          "srcMapType": "documentMap",
+          "srcMapName": "basecolor"
+        },
+        {
+          "destChannel": "A",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "opacity"
+        }
+      ],
+      "parameters": {
+        "fileFormat": "png",
+        "bitDepth": "16"
+      }
+    },
+    {
+      "fileName": "$textureSet_normal",
+      "channels": [
+        {
+          "destChannel": "R",
+          "srcChannel": "R",
+          "srcMapType": "virtualMap",
+          "srcMapName": "Normal_DirectX"
+        },
+        {
+          "destChannel": "G",
+          "srcChannel": "G",
+          "srcMapType": "virtualMap",
+          "srcMapName": "Normal_DirectX"
+        },
+        {
+          "destChannel": "B",
+          "srcChannel": "B",
+          "srcMapType": "virtualMap",
+          "srcMapName": "Normal_DirectX"
+        }
+      ],
+      "parameters": {
+        "fileFormat": "png",
+        "bitDepth": "16"
+      }
+    },
+    {
+      "fileName": "$textureSet_orm",
+      "channels": [
+        {
+          "destChannel": "R",
+          "srcChannel": "L",
+          "srcMapType": "virtualMap",
+          "srcMapName": "AO_Mixed"
+        },
+        {
+          "destChannel": "G",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "roughness"
+        },
+        {
+          "destChannel": "B",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "metallic"
+        }
+      ],
+      "parameters": {
+        "fileFormat": "png",
+        "bitDepth": "8"
+      }
+    },
+    {
+      "fileName": "canonical/$textureSet_orm",
+      "channels": [
+        {
+          "destChannel": "R",
+          "srcChannel": "L",
+          "srcMapType": "virtualMap",
+          "srcMapName": "AO_Mixed"
+        },
+        {
+          "destChannel": "G",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "roughness"
+        },
+        {
+          "destChannel": "B",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "metallic"
+        }
+      ],
+      "parameters": {
+        "fileFormat": "png",
+        "bitDepth": "16"
+      }
+    },
+    {
+      "fileName": "$textureSet_emissive",
+      "channels": [
+        {
+          "destChannel": "R",
+          "srcChannel": "R",
+          "srcMapType": "documentMap",
+          "srcMapName": "emissive"
+        },
+        {
+          "destChannel": "G",
+          "srcChannel": "G",
+          "srcMapType": "documentMap",
+          "srcMapName": "emissive"
+        },
+        {
+          "destChannel": "B",
+          "srcChannel": "B",
+          "srcMapType": "documentMap",
+          "srcMapName": "emissive"
+        }
+      ],
+      "parameters": {
+        "fileFormat": "png",
+        "bitDepth": "8"
+      }
+    },
+    {
+      "fileName": "canonical/$textureSet_emissive",
+      "channels": [
+        {
+          "destChannel": "R",
+          "srcChannel": "R",
+          "srcMapType": "documentMap",
+          "srcMapName": "emissive"
+        },
+        {
+          "destChannel": "G",
+          "srcChannel": "G",
+          "srcMapType": "documentMap",
+          "srcMapName": "emissive"
+        },
+        {
+          "destChannel": "B",
+          "srcChannel": "B",
+          "srcMapType": "documentMap",
+          "srcMapName": "emissive"
+        }
+      ],
+      "parameters": {
+        "fileFormat": "png",
+        "bitDepth": "16"
+      }
+    },
+    {
+      "fileName": "$textureSet_height",
+      "channels": [
+        {
+          "destChannel": "L",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "height"
+        }
+      ],
+      "parameters": {
+        "fileFormat": "png",
+        "bitDepth": "16"
+      }
+    },
+    {
+      "fileName": "$textureSet_specularweight",
+      "channels": [
+        {
+          "destChannel": "L",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "specularweight"
+        }
+      ],
+      "parameters": {
+        "fileFormat": "png",
+        "bitDepth": "16"
+      }
+    }
+  ],
+  "uzengine": {
+    "textures": [
+      {
+        "map": "$textureSet_albedo",
+        "canonical": "canonical/$textureSet_albedo",
+        "binding": "albedo",
+        "format": "BC7",
+        "srgb": true,
+        "mips": "masked_colour"
+      },
+      {
+        "map": "$textureSet_normal",
+        "canonical": "$textureSet_normal",
+        "binding": "normal",
+        "format": "BC5",
+        "srgb": false,
+        "mips": "normal",
+        "negativeZ": "fail"
+      },
+      {
+        "map": "$textureSet_orm",
+        "canonical": "canonical/$textureSet_orm",
+        "binding": "orm",
+        "format": "BC7",
+        "srgb": false,
+        "mips": "linear"
+      },
+      {
+        "map": "$textureSet_emissive",
+        "canonical": "canonical/$textureSet_emissive",
+        "binding": "emissive",
+        "format": "BC7",
+        "srgb": true,
+        "mips": "colour"
+      },
+      {
+        "map": "$textureSet_height",
+        "canonical": "$textureSet_height",
+        "binding": "heightmap",
+        "format": "BC4",
+        "srgb": false,
+        "mips": "linear"
+      },
+      {
+        "map": "$textureSet_specularweight",
+        "canonical": "$textureSet_specularweight",
+        "binding": null,
+        "format": "BC4",
+        "srgb": false,
+        "mips": "linear"
+      }
+    ],
+    "material": {
+      "fileName": "$textureSet",
+      "albedo": "$textureSet_albedo",
+      "normal": "$textureSet_normal",
+      "orm": "$textureSet_orm",
+      "emissive": "$textureSet_emissive",
+      "height": "$textureSet_height"
+    }
+  }
+}

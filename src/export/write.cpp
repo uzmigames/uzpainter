@@ -2,6 +2,7 @@
 
 #include "export/encode.h"
 #include "export/padding.h"
+#include "export/uzmat_writer.h"
 #include "export/uztexture_writer.h"
 #include "uzp_core/manifest/sha256.h"
 #include "uzp_core/types/errors.h"
@@ -33,41 +34,109 @@ const core::TextureSet* SetOf(const core::Project& project, core::Id id) {
     return nullptr;
 }
 
-/// The `.uztexture` derivative of `file` from its PNG 16 samples (`EncodedUzTexture`), or the
-/// negative-Z refusal of policy `fail`.
-render::Result<EncodedUzTexture> CookNormalDerivative(const PlannedFile& file, const std::vector<uint16_t>& samples) {
+/// The 16-bit samples of a canonical file as written, and their layout.
+struct CanonicalSamples {
+    FileLayout layout = FileLayout::RGB;
+    std::vector<uint16_t> samples;
+};
+
+/// The `.uztexture` derivative of `file` from its canonical file's PNG 16 samples
+/// (`EncodedUzTexture`), or the negative-Z refusal of policy `fail`.
+render::Result<EncodedUzTexture> CookDerivative(const PlannedFile& file, const PlannedFile& canonicalFile,
+                                                const CanonicalSamples& canonical) {
     const UzTextureOutput& output = *file.uztexture;
-    const size_t texels = size_t{file.width} * file.height;
-    if (samples.size() != texels * 3) {
-        return ExportFail("the samples of " + file.relativePath + " are not the RGB PNG 16 its derivative reads");
+    const size_t texels = size_t{canonicalFile.width} * canonicalFile.height;
+    const size_t channels = canonical.layout == FileLayout::L    ? 1
+                            : canonical.layout == FileLayout::LA  ? 2
+                            : canonical.layout == FileLayout::RGB ? 3
+                                                                  : 4;
+    if (canonical.samples.size() != texels * channels) {
+        return ExportFail("the samples of " + canonicalFile.relativePath + " are not the PNG 16 the derivative of " +
+                          file.relativePath + " reads");
     }
-    Rgba16Image canonical{file.width, file.height, {}};
-    canonical.rgba.reserve(texels * 4);
+    Rgba16Image image{canonicalFile.width, canonicalFile.height, {}};
+    image.rgba.reserve(texels * 4);
     for (size_t t = 0; t < texels; ++t) {
-        canonical.rgba.insert(canonical.rgba.end(), {samples[t * 3], samples[t * 3 + 1], samples[t * 3 + 2], 65535});
-    }
-    const NegativeZ negative = FindNegativeZ(canonical);
-    if (negative.count != 0 && output.negativeZ == NegativeZPolicy::fail) {
-        return ExportFail(std::string(NegativeZNormal(file.relativePath, negative).what()) +
-                          "; the negative-Z policy is fail (decision 316): nothing is published");
+        const uint16_t* v = &canonical.samples[t * channels];
+        switch (channels) {
+            case 1: image.rgba.insert(image.rgba.end(), {v[0], v[0], v[0], 65535}); break;
+            case 2: image.rgba.insert(image.rgba.end(), {v[0], v[0], v[0], v[1]}); break;
+            case 3: image.rgba.insert(image.rgba.end(), {v[0], v[1], v[2], 65535}); break;
+            default: image.rgba.insert(image.rgba.end(), {v[0], v[1], v[2], v[3]}); break;
+        }
     }
     EncodedUzTexture cooked;
+    cooked.layout = canonical.layout;
     cooked.policy = output.negativeZ;
-    cooked.negativeTexels = negative.count;
-    if (negative.count != 0) cooked.firstNegative = std::array<uint32_t, 2>{negative.firstX, negative.firstY};
-    cooked.routed = negative.count != 0;
     UzTextureSpec spec;
-    spec.binding = "normal";
-    spec.format = cooked.routed ? uz::TextureFormat::Uncompressed_RGBA8 : uz::TextureFormat::BC5;
-    spec.srgb = false;
-    spec.mips.mapClass = MipClass::Normal;
+    spec.binding = output.binding;
+    spec.srgb = output.srgb;
+    switch (output.mips) {
+        case DerivativeMips::linear: spec.mips.mapClass = MipClass::Linear; break;
+        case DerivativeMips::colour: spec.mips.mapClass = MipClass::Colour; break;
+        case DerivativeMips::normal: spec.mips.mapClass = MipClass::Normal; break;
+        case DerivativeMips::masked_colour: spec.mips.mapClass = MipClass::MaskedColour; break;
+    }
+    switch (output.format) {
+        case UzTextureStorage::BC4: spec.format = uz::TextureFormat::BC4; break;
+        case UzTextureStorage::BC5: spec.format = uz::TextureFormat::BC5; break;
+        case UzTextureStorage::BC7: spec.format = uz::TextureFormat::BC7; break;
+        case UzTextureStorage::RGBA8: spec.format = uz::TextureFormat::Uncompressed_RGBA8; break;
+    }
+    UzTextureStorage stored = output.format;
+    if (output.mips == DerivativeMips::normal) {
+        const NegativeZ negative = FindNegativeZ(image);
+        if (negative.count != 0 && output.negativeZ == NegativeZPolicy::fail) {
+            return ExportFail(std::string(NegativeZNormal(canonicalFile.relativePath, negative).what()) +
+                              "; the negative-Z policy is fail (decision 316): nothing is published");
+        }
+        cooked.negativeTexels = negative.count;
+        if (negative.count != 0) cooked.firstNegative = std::array<uint32_t, 2>{negative.firstX, negative.firstY};
+        cooked.routed = negative.count != 0 && output.format == UzTextureStorage::BC5;
+        if (cooked.routed) {
+            spec.format = uz::TextureFormat::Uncompressed_RGBA8;
+            stored = UzTextureStorage::RGBA8;
+        }
+    }
     const BcEncoder& encoder = EtcpakEncoder();
-    UzTexture texture = CookUzTexture(encoder, canonical, spec, 0);
+    UzTexture texture = CookUzTexture(encoder, image, spec, 0);
     cooked.bytes.assign(texture.bytes.begin(), texture.bytes.end());
-    cooked.format = cooked.routed ? "RGBA8" : "BC5";
+    cooked.format = std::string(UzTextureStorageName(stored));
     cooked.mips = static_cast<uint32_t>(texture.metadata.mips.size());
     cooked.encoder = std::string(encoder.Name());
     return cooked;
+}
+
+/// The `.uzmat` `index` of `plan` over the cooked derivatives of its files.
+EncodedUzMaterial WriteMaterial(const ExportPlan& plan, size_t index, const std::vector<EncodedFile>& encoded) {
+    const UzMaterialOutput& material = plan.materials[index];
+    bool alpha = false;
+    for (size_t i = 0; i < plan.files.size(); ++i) {
+        const PlannedFile& file = plan.files[i];
+        if (file.uztexture && file.uztexture->relativePath == material.albedo && encoded[i].uztexture) {
+            const FileLayout layout = encoded[i].uztexture->layout;
+            alpha = layout == FileLayout::RGBA || layout == FileLayout::LA;
+        }
+    }
+    UzMaterialSpec spec;
+    spec.name = material.relativePath.substr(0, material.relativePath.size() - std::string_view(".uzmat").size());
+    spec.materialPath = material.relativePath;
+    spec.albedo = material.albedo;
+    spec.normal = material.normal;
+    spec.orm = material.orm;
+    spec.emissive = material.emissive;
+    spec.height = material.height;
+    spec.blend = alpha ? UzMaterialBlend::Masked : UzMaterialBlend::Opaque;
+    UzMaterial written = WriteUzMaterial(spec);
+    EncodedUzMaterial out;
+    out.index = index;
+    out.bytes = std::move(written.bytes);
+    out.inlineMaterial = std::move(written.inlineMaterial);
+    out.blend = alpha ? "Masked" : "Opaque";
+    for (UzMaterialGap& gap : written.gaps) {
+        out.gaps.push_back({std::move(gap.binding), std::move(gap.path), std::move(gap.reason)});
+    }
+    return out;
 }
 
 }  // namespace
@@ -141,6 +210,19 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
     // host keeps running (EXP-06).
     std::vector<EncodedFile> encoded;
     encoded.reserve(plan.files.size());
+    // The canonical files whose samples a derivative is cooked from.
+    std::map<std::string, size_t> canonicalIndex;
+    for (size_t i = 0; i < plan.files.size(); ++i) canonicalIndex.emplace(plan.files[i].relativePath, i);
+    std::map<size_t, CanonicalSamples> canonicals;
+    for (const PlannedFile& file : plan.files) {
+        if (!file.uztexture) continue;
+        const auto it = canonicalIndex.find(file.uztexture->canonical);
+        if (it == canonicalIndex.end()) {
+            return ExportFail("the canonical map " + file.uztexture->canonical + " of " + file.uztexture->relativePath +
+                              " is not in the plan");
+        }
+        canonicals.emplace(it->second, CanonicalSamples{});
+    }
     for (size_t i = 0; i < plan.files.size(); ++i) {
         const PlannedFile& file = plan.files[i];
         if (inputs.beforeFile && !inputs.beforeFile(i, plan.files.size())) {
@@ -163,20 +245,35 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
 #endif
             const Coverage* coverage =
                 file.layout != FileLayout::Statistics ? &coverages.at(file.textureSetId) : nullptr;
-            std::vector<uint16_t> samples;
+            const auto canonical = canonicals.find(i);
             EncodedImage image = EncodeFile(file, *raster, coverage,
                                             diagnostic != nullptr ? InexactPadding::measure : InexactPadding::refuse,
-                                            file.uztexture ? &samples : nullptr);
-            std::optional<EncodedUzTexture> derivative;
-            if (file.uztexture) {
-                render::Result<EncodedUzTexture> cooked = CookNormalDerivative(file, samples);
-                if (!cooked) return render::Unexpected(cooked.error());
-                derivative = std::move(*cooked);
-            }
+                                            canonical != canonicals.end() ? &canonical->second.samples : nullptr);
+            if (canonical != canonicals.end()) canonical->second.layout = image.layout;
             encoded.push_back({std::move(image.bytes), raster->normalTag, image.layout, diagnostic != nullptr,
-                               std::move(bypassed[i]), raster->undecided, std::move(derivative)});
+                               std::move(bypassed[i]), raster->undecided, std::nullopt});
         } catch (const std::exception& e) {
             return ExportFail("encoding " + file.relativePath + " failed: " + e.what());
+        }
+    }
+    // The derivatives, each from its canonical file's samples, then the materials that bind them.
+    for (size_t i = 0; i < plan.files.size(); ++i) {
+        const PlannedFile& file = plan.files[i];
+        if (!file.uztexture) continue;
+        const size_t c = canonicalIndex.at(file.uztexture->canonical);
+        try {
+            render::Result<EncodedUzTexture> cooked = CookDerivative(file, plan.files[c], canonicals.at(c));
+            if (!cooked) return render::Unexpected(cooked.error());
+            encoded[i].uztexture = std::move(*cooked);
+        } catch (const std::exception& e) {
+            return ExportFail("cooking " + file.uztexture->relativePath + " failed: " + e.what());
+        }
+    }
+    for (size_t m = 0; m < plan.materials.size(); ++m) {
+        try {
+            encoded[plan.materials[m].after].material = WriteMaterial(plan, m, encoded);
+        } catch (const std::exception& e) {
+            return ExportFail("writing " + plan.materials[m].relativePath + " failed: " + e.what());
         }
     }
     return encoded;
@@ -209,6 +306,10 @@ render::Result<std::vector<WrittenFile>> WriteExport(const core::Project& projec
         render::Result<void> done = write(file.rootPath, file.relativePath, (*encoded)[i].bytes);
         if (done && (*encoded)[i].uztexture) {
             done = write(file.rootPath, file.uztexture->relativePath, (*encoded)[i].uztexture->bytes);
+        }
+        if (done && (*encoded)[i].material) {
+            const UzMaterialOutput& material = plan.materials[(*encoded)[i].material->index];
+            done = write(material.rootPath, material.relativePath, (*encoded)[i].material->bytes);
         }
         if (!done) return render::Unexpected(done.error());
     }

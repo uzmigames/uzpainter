@@ -2,8 +2,9 @@
 // and 086; src/export/). Driven by tests/export/test_export_plan.py:
 //
 //   uzp-export-tests plan <cases.json>
-//       Each case {"project": <skeleton>, "config": <json_config>, "project_path"?: <path>} is
-//       compiled; prints one JSON line per case: {"plan": PlanJson, "list": [[set, stack,
+//       Each case {"project": <skeleton>, "config": <json_config>, "project_path"?: <path>,
+//       "uztexture"?: [relativePath...]} is compiled, then each listed file's `.uztexture` normal
+//       derivative is requested (`RequestUzTextureNormal`); prints one JSON line per case: {"plan": PlanJson, "list": [[set, stack,
 //       [paths]]]} (the dry run), {"plan": PlanJson, "list_error": text} (the dry run raises
 //       ValueError: CheckExportable) or {"error": class, "message": text}, class `ValueError` or
 //       `NotYetSupported`.
@@ -65,14 +66,15 @@
 //       ("stored") or not stored ("missing": the re-derive fails); "mesh_reads" counts their reads.
 //       Without it the coverage is the spec's mesh, or a known-absent mesh.
 //   uzp-export-tests [--fault <point>[:<n>]] publish <templates dir> <spec.json> <config.json>
-//                    [--uztexture <relativePath>[:fail|:rgb]]
+//                    [--uztexture <relativePath>[:fail|:rgb]] [--presets <preset dir>]
 //       (phase1.17) As `export`, through `PublishExport`: the files and the receipt published as a
 //       new generation under exportPath; the spec's mesh is also the project's imported mesh (a
 //       resource). Prints {"generation", "receipt_sha256", "files": [{rootPath, relativePath,
 //       path, size, sha256}]} or {"error": class, "message": text}. `--fault` arms a test-only
 //       fault hook (src/export/fault.h). `--uztexture` requests the `.uztexture` normal derivative
 //       of the planned file `relativePath` with that negative-Z policy, `fail` when none is given
-//       (`RequestUzTextureNormal`, decision 316).
+//       (`RequestUzTextureNormal`, decision 316). `--presets` reads the shipped presets from that
+//       directory instead of the one beside the executable (an authored variant of a preset).
 //   uzp-export-tests [--fault <point>[:<n>]] fixed-copy <exportPath> <dir>
 //       (phase1.17) `CopyFixedNames`; prints {"generation", "files": [path...]} or {"error"}.
 //   uzp-export-tests project <spec.json> <out.uzp>
@@ -304,9 +306,16 @@ int RunPlan(const fs::path& casesPath) {
             const json::Value& config = Key(o, "config");
             exporter::PlanContext context;
             if (o.contains("project_path")) context.projectPath = Str(o.at("project_path"), "project_path");
-            const exporter::ExportPlan plan =
+            exporter::ExportPlan plan =
                 config.IsString() ? exporter::CompilePlan(project, Str(config, "config"), context)
                                   : exporter::CompilePlan(project, exporter::ParseConfig(config), context);
+            // Optional "uztexture": [relativePath...], each requested after compilation
+            // (`RequestUzTextureNormal`, policy fail).
+            if (o.contains("uztexture")) {
+                for (const json::Value& path : Arr(o.at("uztexture"), "uztexture")) {
+                    exporter::RequestUzTextureNormal(plan, Str(path, "uztexture"));
+                }
+            }
             result["plan"] = exporter::PlanJson(plan);
             try {
                 exporter::CheckExportable(plan);
@@ -1096,7 +1105,7 @@ json::Object FailureJson(const render::Error& error) {
 }
 
 int RunPublish(const fs::path& templatesDir, const fs::path& specPath, const fs::path& configPath,
-               const std::optional<std::string>& uztexture) {
+               const std::optional<std::string>& uztexture, const std::optional<fs::path>& presets) {
     Spec spec = ParseSpec(specPath);
     const json::Value document = json::Parse(ReadText(specPath));
     const json::Object& o = Obj(document, "spec");
@@ -1119,7 +1128,9 @@ int RunPublish(const fs::path& templatesDir, const fs::path& specPath, const fs:
     }
     json::Object result;
     try {
-        exporter::ExportPlan plan = exporter::CompilePlan(spec.project, ReadText(configPath));
+        const json::Value configJson = json::Parse(ReadText(configPath));
+        exporter::ExportPlan plan = exporter::CompilePlan(
+            spec.project, presets ? exporter::ParseConfig(configJson, *presets) : exporter::ParseConfig(configJson));
         if (uztexture) {
             const size_t colon = uztexture->rfind(':');
             const exporter::NegativeZPolicy policy = colon == std::string::npos
@@ -1349,6 +1360,7 @@ std::string_view LayoutName(exporter::PresetLayout layout) {
         case exporter::PresetLayout::pipeline: return "pipeline";
         case exporter::PresetLayout::confirmed: return "confirmed";
         case exporter::PresetLayout::unconfirmed: return "unconfirmed";
+        case exporter::PresetLayout::consumer: return "consumer";
     }
     return "";
 }
@@ -1410,9 +1422,16 @@ int main(int argc, char** argv) {
             exporter::fault::Arm(args[1]);
             args.erase(args.begin(), args.begin() + 2);
         }
-        if (args.size() == 4 && args[0] == "publish") return RunPublish(args[1], args[2], args[3], std::nullopt);
-        if (args.size() == 6 && args[0] == "publish" && args[4] == "--uztexture") {
-            return RunPublish(args[1], args[2], args[3], args[5]);
+        if (args.size() >= 4 && args.size() % 2 == 0 && args[0] == "publish") {
+            std::optional<std::string> uztexture;
+            std::optional<fs::path> presets;
+            bool known = true;
+            for (size_t i = 4; i < args.size(); i += 2) {
+                if (args[i] == "--uztexture") uztexture = args[i + 1];
+                else if (args[i] == "--presets") presets = fs::path(args[i + 1]);
+                else known = false;
+            }
+            if (known) return RunPublish(args[1], args[2], args[3], uztexture, presets);
         }
         if (args.size() == 3 && args[0] == "fixed-copy") return RunFixedCopy(args[1], args[2]);
         if (args.size() == 3 && args[0] == "project") return RunProject(args[1], args[2]);
@@ -1449,7 +1468,7 @@ int main(int argc, char** argv) {
                  "export <templates> <spec.json> <config.json> | "
                  "export-diagnostic <templates> <spec.json> <config.json> | reencode <list.txt> | roundtrip <out> | "
                  "[--fault <point>[:<n>]] publish <templates> <spec.json> <config.json> "
-                 "[--uztexture <relativePath>[:fail|:rgb]] | "
+                 "[--uztexture <relativePath>[:fail|:rgb]] [--presets <dir>] | "
                  "[--fault <point>[:<n>]] fixed-copy <exportPath> <dir> | consume-pinned <exportPath> | "
                  "consume-locked <exportPath> <dir> | receipt <project.json> <config.json> | hold-lock <exportPath> <ms> | recover --recover <exportPath> [--fixed-names <dir>]... | "
                  "presets <preset dir> <references.json> | aliases\n";

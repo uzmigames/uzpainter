@@ -62,16 +62,19 @@ struct DiagnosticMeasure {
 /// refusal of its in-memory views (padding.h, decision 245).
 [[nodiscard]] std::optional<Coverage> CoverageOf(const core::TextureSet& set, const SourceInputs& inputs);
 
-/// A planned file's `.uztexture` normal derivative, cooked in memory (plan.h `UzTextureOutput`,
-/// decision 316): the file's PNG 16 samples, A = 65535, as the `Normal` class of
-/// uztexture_writer.h `CookUzTexture`, binding `normal`, linear. Its negative-Z texels (B <= 32767)
-/// are found first: with any of them, policy `fail` stops the export with an `export:` failure
-/// naming their count and the first, before anything is published, and policy `rgb` stores the map
-/// as RGBA8 (`routed`); otherwise it is stored as BC5.
+/// A planned file's `.uztexture` derivative, cooked in memory (plan.h `UzTextureOutput`, decision
+/// 316; phase3.2_uze-uzmat-preset): the PNG 16 samples of its canonical file as written (an L file
+/// as R = G = B = L, a missing alpha as 65535), through uztexture_writer.h `CookUzTexture` with the
+/// planned format, colour space and mip class. A normal map's negative-Z texels (B <= 32767) are
+/// found first: with any of them, policy `fail` stops the export with an `export:` failure naming
+/// their count and the first, before anything is published, and policy `rgb` stores the map as
+/// RGBA8 (`routed`); otherwise it is stored as BC5.
 struct EncodedUzTexture {
     std::string bytes;
-    /// "BC5" or "RGBA8".
+    /// "BC4", "BC5", "BC7" or "RGBA8".
     std::string format;
+    /// The canonical file's written layout (its alpha dropped when it was 1 everywhere).
+    FileLayout layout = FileLayout::RGB;
     uint32_t mips = 0;
     NegativeZPolicy policy = NegativeZPolicy::fail;
     uint64_t negativeTexels = 0;
@@ -80,6 +83,22 @@ struct EncodedUzTexture {
     bool routed = false;
     /// The block encoder, for the receipt ("etcpak 2.1").
     std::string encoder;
+};
+
+/// A plan's `.uzmat` (plan.h `UzMaterialOutput`), written in memory by uzmat_writer.h
+/// `WriteUzMaterial` after every derivative is cooked: blend `Masked` when the albedo derivative
+/// holds an alpha (opacity in albedo alpha), `Opaque` otherwise; not two-sided. The blend rule is
+/// authored, not an engine fact (an alpha does not tell cutout from translucent): the receipt
+/// reports it as a `blend` consumer gap.
+struct EncodedUzMaterial {
+    /// Its index in `ExportPlan::materials`.
+    size_t index = 0;
+    std::string bytes;
+    /// The JSON of a scene entity's `components.material` block.
+    std::string inlineMaterial;
+    std::string blend;
+    /// The writer's consumer gaps: {binding, path, reason}.
+    std::vector<std::array<std::string, 3>> gaps;
 };
 
 /// A planned file's bytes, encoded in memory.
@@ -98,6 +117,8 @@ struct EncodedFile {
     uint64_t undecided = 0;
     /// The file's `.uztexture` derivative, when the plan requests one.
     std::optional<EncodedUzTexture> uztexture{};
+    /// The `.uzmat` written after this file, its stack's last, when the plan has one.
+    std::optional<EncodedUzMaterial> material{};
 };
 
 /// Steps 1 and 2 above: every file of `plan` (compiled from revision `revision` of `project`)

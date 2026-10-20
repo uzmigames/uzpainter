@@ -144,8 +144,8 @@ constexpr std::array<std::string_view, kVirtualMapCount> kNames{
 
 /// The owners of the virtual maps not reproduced exactly (decision 092).
 constexpr std::string_view kAoMixedOwner =
-    "phase1.18_export-engine: Painter's AO_Mixed arithmetic is not identified (the best model misses r1 "
-    "at 31 values); Tier 0 recording R-092 and its fit (decision 092)";
+    "phase3.2_unreal-ue56-packed-preset item 2.10, decision 131: Painter's AO_Mixed arithmetic is not identified "
+    "(the best model misses r1 at 31 values); Tier 0 recording R-092 and its fit (decision 092)";
 constexpr std::string_view kConvertedOwner =
     "phase1.18_export-engine: fitted, but it needs each channel's per-texel coverage from the evaluator "
     "and the uncovered constants of Tier 0 recording R-092 (decision 092)";

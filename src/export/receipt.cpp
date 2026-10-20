@@ -52,10 +52,57 @@ int ManifestBitDepth(BitDepth depth) {
     return 0;
 }
 
-/// Every image file this build writes holds linear values: legacy colour management, data
-/// channels and normals linear, an sRGB8 User channel as its linear operand; an sRGB-encoded
-/// export is refused before writing (encode.h, decision 090).
-constexpr std::string_view kWrittenColourSpace = "linear";
+/// The gaps of the UzEngine consumer at U-UZE-RUNTIME a703c95 (08-export.md §4; uzmat_writer.h):
+/// the SM5 route never reads albedo alpha as opacity, and no `.uzmat` pin or inline scene key binds
+/// a height map (its `heightmapSrvIndex` has no verified route).
+constexpr std::string_view kSm5OpacityGap =
+    "opacity is carried in albedo alpha, which the bindless fixed-PBR path reads; the SM5 route never reads "
+    "albedo alpha as opacity, so opacity is unsupported there (08-export.md §4)";
+constexpr std::string_view kHeightGap =
+    "no .uzmat pin and no inline scene-material key binds a height map in the pinned UzEngine format "
+    "(U-UZE-RUNTIME a703c95); the heightmap slot has no verified route";
+constexpr std::string_view kNoSlotGap = "the UzEngine material has no slot for this texture";
+/// The `.uzmat` blend is an authored rule (write.h `EncodedUzMaterial`), not an engine fact.
+constexpr std::string_view kBlendGap =
+    "the blend is UzPainter's authored rule (Masked when the albedo derivative holds an alpha, Opaque "
+    "otherwise): an alpha channel alone does not tell a cutout from a translucent surface, so no engine "
+    "opacity behaviour is claimed; the consumer fixture (phase3.3_uze-consumer-fixture) decides it";
+
+/// The channel mapping of a written file (its encoded layout `layout`: a dropped all-opaque alpha
+/// is not a channel of the file). Each channel of an image file also states its `transfer`: `sRGB`
+/// for a channel its PNG writes sRGB-encoded (`SrgbEncodedChannels`), `linear` otherwise.
+json::Array ChannelsJson(const core::Project& project, const PlannedFile& file, FileLayout layout, bool statistics) {
+    const std::vector<bool> encoded = SrgbEncodedChannels(project, file);
+    json::Array channels;
+    for (size_t i = 0; i < file.channels.size(); ++i) {
+        const PlannedChannel& c = file.channels[i];
+        if (c.dest == ChannelLetter::A && layout != file.layout) continue;
+        json::Object channel{{"dest_channel", std::string(ChannelLetterName(c.dest))},
+                             {"src_channel", std::string(ChannelLetterName(c.src))},
+                             {"src_map_type", std::string(SourceTypeName(c.source.type))},
+                             {"src_map_name", c.source.name}};
+        if (!statistics) channel["transfer"] = encoded[i] ? "sRGB" : "linear";
+        channels.push_back(std::move(channel));
+    }
+    return channels;
+}
+
+/// What the image file `file` holds (its encoded layout `layout`): `sRGB` when every colour
+/// channel (all but A) is written sRGB-encoded, `linear` when none is, `mixed` otherwise (an L8
+/// BaseColor's RGB file holds sRGB, linear, sRGB: decision 204). Only a PNG writes sRGB-encoded
+/// values (decision 126); its OpenEXR files hold the linear value.
+std::string ColourSpaceOf(const core::Project& project, const PlannedFile& file) {
+    const std::vector<bool> encoded = SrgbEncodedChannels(project, file);
+    size_t colour = 0;
+    size_t srgb = 0;
+    for (size_t c = 0; c < file.channels.size(); ++c) {
+        if (file.channels[c].dest == ChannelLetter::A) continue;
+        ++colour;
+        if (encoded[c]) ++srgb;
+    }
+    if (srgb == 0) return "linear";
+    return srgb == colour ? "sRGB" : "mixed";
+}
 
 /// A key of Assets3D's manifest `files` (`^[a-z0-9][a-z0-9_-]*$`) for `text`, unique in `used`.
 std::string ManifestKey(std::string_view text, std::set<std::string>& used) {
@@ -305,20 +352,13 @@ json::Object BuildReceipt(const ReceiptInputs& in) {
         const bool statistics = file.layout == FileLayout::Statistics;
         const std::string sha = core::Sha256Hex(encoded.bytes);
         const std::string key = ManifestKey(file.relativePath, used);
-        json::Array channels;
-        for (const PlannedChannel& c : file.channels) {
-            // A dropped all-opaque alpha is not a channel of the file.
-            if (c.dest == ChannelLetter::A && encoded.layout != file.layout) continue;
-            channels.push_back(json::Object{{"dest_channel", std::string(ChannelLetterName(c.dest))},
-                                            {"src_channel", std::string(ChannelLetterName(c.src))},
-                                            {"src_map_type", std::string(SourceTypeName(c.source.type))},
-                                            {"src_map_name", c.source.name}});
-        }
+        json::Array channels = ChannelsJson(in.project, file, encoded.layout, statistics);
         json::Array gaps = ConsumerGaps(file);
         for (const json::Value& gap : gaps) {
             openItems.emplace_back(file.relativePath + ": " +
                                    std::get<std::string>(std::get<json::Object>(gap.data).at("gap").data));
         }
+        const std::string colourSpace = statistics ? std::string() : ColourSpaceOf(in.project, file);
         const json::Array size{static_cast<std::int64_t>(file.width), static_cast<std::int64_t>(file.height)};
         files.push_back(json::Object{
             {"path", file.relativePath},
@@ -329,7 +369,7 @@ json::Object BuildReceipt(const ReceiptInputs& in) {
             {"sha256", sha},
             {"format", statistics ? std::string("json") : std::string(FileFormatName(file.parameters->fileFormat))},
             {"bit_depth", statistics ? json::Value(nullptr) : json::Value(BitDepthOf(file))},
-            {"colour_space", statistics ? json::Value(nullptr) : json::Value(kWrittenColourSpace)},
+            {"colour_space", statistics ? json::Value(nullptr) : json::Value(colourSpace)},
             {"size", size},
             {"layout", std::string(FileLayoutName(encoded.layout))},
             {"channels", std::move(channels)},
@@ -344,33 +384,51 @@ json::Object BuildReceipt(const ReceiptInputs& in) {
         if (!statistics) {
             maps[key] = json::Object{{"resolution", size},
                                      {"bit_depth", ManifestBitDepth(file.parameters->bitDepth)},
-                                     {"color_space", kWrittenColourSpace}};
+                                     {"color_space", colourSpace}};
         }
         presets.insert(file.preset);
-        // The `.uztexture` derivative (write.h `EncodedUzTexture`, decision 316): its own file, with
-        // the format it is stored as and what its negative-Z guard found.
+        // The `.uztexture` derivative (write.h `EncodedUzTexture`, decision 316; phase3.2_uze-uzmat-preset):
+        // its own file, linked to its canonical file, with its engine format and binding and what its
+        // negative-Z guard found.
         if (const std::optional<EncodedUzTexture>& derivative = encoded.uztexture) {
+            const UzTextureOutput& planned = *file.uztexture;
+            const PlannedFile* canonical = &file;
+            for (const PlannedFile& other : plan.files) {
+                if (other.relativePath == planned.canonical) canonical = &other;
+            }
             const std::string derivedSha = core::Sha256Hex(derivative->bytes);
-            const std::string derivedKey = ManifestKey(file.uztexture->relativePath, used);
-            json::Array derivedChannels;
-            for (const PlannedChannel& c : file.channels) {
-                derivedChannels.push_back(json::Object{{"dest_channel", std::string(ChannelLetterName(c.dest))},
-                                                       {"src_channel", std::string(ChannelLetterName(c.src))},
-                                                       {"src_map_type", std::string(SourceTypeName(c.source.type))},
-                                                       {"src_map_name", c.source.name}});
+            const std::string derivedKey = ManifestKey(planned.relativePath, used);
+            json::Array derivedChannels = ChannelsJson(in.project, *canonical, derivative->layout, false);
+            json::Array derivedGaps = ConsumerGaps(*canonical);
+            const auto gap = [&](std::string_view channel, std::string_view text) {
+                derivedGaps.push_back(json::Object{{"channel", std::string(channel)}, {"gap", std::string(text)}});
+            };
+            const bool alpha = derivative->layout == FileLayout::RGBA || derivative->layout == FileLayout::LA;
+            if (derivative->routed) gap("Normal", kRoutedNormalGap);
+            if (planned.binding == "albedo" && alpha) gap("Opacity", kSm5OpacityGap);
+            if (planned.binding == "heightmap") gap("Height", kHeightGap);
+            if (planned.binding.empty() && derivedGaps.empty()) gap(canonical->fileName, kNoSlotGap);
+            for (const json::Value& item : derivedGaps) {
+                openItems.emplace_back(planned.relativePath + ": " +
+                                       std::get<std::string>(std::get<json::Object>(item.data).at("gap").data));
             }
-            json::Array derivedGaps;
-            if (derivative->routed) {
-                derivedGaps.push_back(json::Object{{"channel", "Normal"}, {"gap", std::string(kRoutedNormalGap)}});
-                openItems.emplace_back(file.uztexture->relativePath + ": " + std::string(kRoutedNormalGap));
+            json::Value negativeZ = nullptr;
+            if (planned.mips == DerivativeMips::normal) {
+                json::Value first = nullptr;
+                if (derivative->firstNegative) {
+                    first = json::Array{static_cast<std::int64_t>((*derivative->firstNegative)[0]),
+                                        static_cast<std::int64_t>((*derivative->firstNegative)[1])};
+                }
+                negativeZ = json::Object{{"policy", std::string(NegativeZPolicyName(derivative->policy))},
+                                         {"texels", static_cast<std::int64_t>(derivative->negativeTexels)},
+                                         {"first", std::move(first)},
+                                         {"routed", derivative->routed}};
             }
-            json::Value first = nullptr;
-            if (derivative->firstNegative) {
-                first = json::Array{static_cast<std::int64_t>((*derivative->firstNegative)[0]),
-                                    static_cast<std::int64_t>((*derivative->firstNegative)[1])};
-            }
+            const std::string derivedSpace = planned.srgb ? "sRGB" : "linear";
+            const json::Array derivedSize{static_cast<std::int64_t>(canonical->width),
+                                          static_cast<std::int64_t>(canonical->height)};
             files.push_back(json::Object{
-                {"path", file.uztexture->relativePath},
+                {"path", planned.relativePath},
                 {"key", derivedKey},
                 {"root_path", file.rootPath},
                 {"preset", file.preset},
@@ -378,31 +436,79 @@ json::Object BuildReceipt(const ReceiptInputs& in) {
                 {"sha256", derivedSha},
                 {"format", "uztexture"},
                 {"bit_depth", "8"},
-                {"colour_space", std::string(kWrittenColourSpace)},
-                {"size", size},
-                {"layout", std::string(FileLayoutName(encoded.layout))},
+                {"colour_space", derivedSpace},
+                {"size", derivedSize},
+                {"layout", std::string(FileLayoutName(derivative->layout))},
                 {"channels", std::move(derivedChannels)},
-                {"normal", NormalJson(encoded.normalTag)},
+                {"normal", NormalJson(in.encoded[static_cast<size_t>(canonical - plan.files.data())].normalTag)},
                 {"consumer_gaps", std::move(derivedGaps)},
                 {"uztexture",
-                 json::Object{{"source", file.relativePath},
-                              {"binding", "normal"},
+                 json::Object{{"source", planned.canonical},
+                              {"delivery", file.relativePath},
+                              {"binding", planned.binding.empty() ? json::Value(nullptr) : json::Value(planned.binding)},
                               {"format", derivative->format},
-                              {"srgb", false},
+                              {"srgb", planned.srgb},
                               {"mips", static_cast<std::int64_t>(derivative->mips)},
                               {"encoder", derivative->encoder},
-                              {"negative_z",
-                               json::Object{{"policy", std::string(NegativeZPolicyName(derivative->policy))},
-                                            {"texels", static_cast<std::int64_t>(derivative->negativeTexels)},
-                                            {"first", std::move(first)},
-                                            {"routed", derivative->routed}}}}},
+                              {"negative_z", std::move(negativeZ)}}},
             });
-            manifestFiles[derivedKey] = json::Object{{"path", "files/" + file.uztexture->relativePath},
+            manifestFiles[derivedKey] = json::Object{{"path", "files/" + planned.relativePath},
                                                      {"role", "map"},
                                                      {"sha256", Sha256Field(derivedSha, true)},
                                                      {"bytes", static_cast<std::int64_t>(derivative->bytes.size())}};
             outputs.emplace_back(derivedKey);
-            maps[derivedKey] = json::Object{{"resolution", size}, {"bit_depth", 8}, {"color_space", kWrittenColourSpace}};
+            maps[derivedKey] = json::Object{{"resolution", derivedSize}, {"bit_depth", 8}, {"color_space", derivedSpace}};
+        }
+        // The `.uzmat` written after this file (write.h `EncodedUzMaterial`): its textures, blend,
+        // the inline scene-material block and the writer's consumer gaps.
+        if (const std::optional<EncodedUzMaterial>& material = encoded.material) {
+            const UzMaterialOutput& planned = plan.materials[material->index];
+            const std::string materialSha = core::Sha256Hex(material->bytes);
+            const std::string materialKey = ManifestKey(planned.relativePath, used);
+            json::Array materialGaps;
+            for (const std::array<std::string, 3>& g : material->gaps) {
+                const std::string text = g[2] + " (" + g[1] + ")";
+                materialGaps.push_back(json::Object{{"channel", g[0]}, {"gap", text}});
+                openItems.emplace_back(planned.relativePath + ": " + text);
+            }
+            materialGaps.push_back(json::Object{{"channel", "blend"}, {"gap", std::string(kBlendGap)}});
+            openItems.emplace_back(planned.relativePath + ": " + std::string(kBlendGap));
+            json::Value inlineMaterial = nullptr;
+            try {
+                inlineMaterial = json::Parse(material->inlineMaterial);
+            } catch (const json::ParseError&) {
+                inlineMaterial = material->inlineMaterial;
+            }
+            files.push_back(json::Object{
+                {"path", planned.relativePath},
+                {"key", materialKey},
+                {"root_path", planned.rootPath},
+                {"preset", planned.preset},
+                {"bytes", static_cast<std::int64_t>(material->bytes.size())},
+                {"sha256", materialSha},
+                {"format", "uzmat"},
+                {"bit_depth", nullptr},
+                {"colour_space", nullptr},
+                {"size", nullptr},
+                {"layout", nullptr},
+                {"channels", json::Array{}},
+                {"normal", nullptr},
+                {"consumer_gaps", std::move(materialGaps)},
+                {"uzmat",
+                 json::Object{{"albedo", planned.albedo},
+                              {"normal", planned.normal},
+                              {"orm", planned.orm},
+                              {"emissive", planned.emissive},
+                              {"height", planned.height.empty() ? json::Value(nullptr) : json::Value(planned.height)},
+                              {"blend", material->blend},
+                              {"two_sided", false},
+                              {"inline_material", std::move(inlineMaterial)}}},
+            });
+            manifestFiles[materialKey] = json::Object{{"path", "files/" + planned.relativePath},
+                                                      {"role", "export"},
+                                                      {"sha256", Sha256Field(materialSha, true)},
+                                                      {"bytes", static_cast<std::int64_t>(material->bytes.size())}};
+            outputs.emplace_back(materialKey);
         }
     }
     // The diagnostic measure export (write.h, decision 286): the generation is not conformant.

@@ -21,6 +21,10 @@ enum class Point {
     fail_write,
     /// Terminates the process after file n of the generation was written and flushed.
     kill_after_file,
+    /// Terminates the process after the `.uztexture` derivative of plan file n was written and flushed.
+    kill_after_uztexture,
+    /// Terminates the process after the `.uzmat` n of the plan was written and flushed.
+    kill_after_uzmat,
     /// Terminates the process after the generation's plan.json was written.
     kill_after_plan,
     /// Terminates the process after the generation's receipt was written.

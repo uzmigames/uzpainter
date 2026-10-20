@@ -22,8 +22,9 @@ constexpr std::string_view kRecording = "recording R-095, decision 095";
 /// (`SM/10-Chapeu/report.json → painter_recipe.export.preset_details.preset.url`).
 constexpr std::array<std::string_view, 1> kBlenderVersions{"13120355637414252359"};
 
-constexpr std::array<std::string_view, 4> kShippedIds{"pbr-metallic-roughness", "blender-principled-bsdf",
-                                                       "assets3d-inline-five-map", "gltf-pbr-metal-roughness"};
+constexpr std::array<std::string_view, 5> kShippedIds{"pbr-metallic-roughness", "blender-principled-bsdf",
+                                                       "assets3d-inline-five-map", "gltf-pbr-metal-roughness",
+                                                       "uzengine"};
 
 const std::array<PresetAlias, 3> kAliases{{
     {"PBR Metallic Roughness", "pbr-metallic-roughness", {}, kRecording},
@@ -57,6 +58,107 @@ const json::Value* Member(const json::Value& value, std::string_view key) {
 const std::string* StringMember(const json::Value& value, std::string_view key) {
     const json::Value* member = Member(value, key);
     return member != nullptr && member->IsString() ? &std::get<std::string>(member->data) : nullptr;
+}
+
+/// The preset's map whose unexpanded fileName is `fileName`.
+const MapSpec* MapNamed(const PresetSpec& spec, std::string_view fileName) {
+    for (const MapSpec& map : spec.maps) {
+        if (map.fileName == fileName) return &map;
+    }
+    return nullptr;
+}
+
+/// The `uzengine` block of a shipped preset (config.h `UzEngineTargets`), checked against its maps.
+/// Throws `core::ManifestError` naming the preset.
+UzEngineTargets ParseUzEngine(const json::Value& block, const PresetSpec& spec, std::string_view id,
+                              const std::string& file) {
+    const auto fail = [&](const std::string& problem) { Fail(id, file + ": uzengine: " + problem); };
+    if (!block.IsObject()) fail("expected an object");
+    const auto string = [&](const json::Value& object, std::string_view key, bool required) -> std::string {
+        const json::Value* member = Member(object, key);
+        if (member == nullptr && !required) return {};
+        if (member == nullptr || !member->IsString()) fail("\"" + std::string(key) + "\" must be a string");
+        return std::get<std::string>(member->data);
+    };
+    const auto allowed = [&](const json::Value& object, std::initializer_list<std::string_view> keys) {
+        for (const auto& [key, _] : std::get<json::Object>(object.data)) {
+            if (std::find(keys.begin(), keys.end(), key) == keys.end()) fail("unknown key \"" + key + "\"");
+        }
+    };
+    allowed(block, {"textures", "material"});
+    UzEngineTargets targets;
+    const json::Value* textures = Member(block, "textures");
+    if (textures == nullptr || !textures->IsArray()) fail("\"textures\" must be an array");
+    for (const json::Value& item : std::get<json::Array>(textures->data)) {
+        if (!item.IsObject()) fail("a texture must be an object");
+        allowed(item, {"map", "canonical", "binding", "format", "srgb", "mips", "negativeZ"});
+        UzEngineTexture t;
+        t.map = string(item, "map", true);
+        t.canonical = string(item, "canonical", true);
+        const json::Value* binding = Member(item, "binding");
+        if (binding == nullptr || !(binding->IsString() || binding->IsNull())) {
+            fail(t.map + ": \"binding\" must be a string or null");
+        }
+        if (binding->IsString()) t.binding = std::get<std::string>(binding->data);
+        const std::string format = string(item, "format", true);
+        if (format == "BC4") t.format = UzTextureStorage::BC4;
+        else if (format == "BC5") t.format = UzTextureStorage::BC5;
+        else if (format == "BC7") t.format = UzTextureStorage::BC7;
+        else fail(t.map + ": format \"" + format + "\" is not BC4, BC5 or BC7");
+        const json::Value* srgb = Member(item, "srgb");
+        if (srgb == nullptr || !srgb->IsBool()) fail(t.map + ": \"srgb\" must be a boolean");
+        t.srgb = std::get<bool>(srgb->data);
+        const std::string mips = string(item, "mips", true);
+        if (mips == "linear") t.mips = DerivativeMips::linear;
+        else if (mips == "colour") t.mips = DerivativeMips::colour;
+        else if (mips == "normal") t.mips = DerivativeMips::normal;
+        else if (mips == "masked_colour") t.mips = DerivativeMips::masked_colour;
+        else fail(t.map + ": mips \"" + mips + "\" is not linear, colour, normal or masked_colour");
+        const std::string negativeZ = string(item, "negativeZ", false);
+        if (t.mips == DerivativeMips::normal) {
+            if (negativeZ == "fail") t.negativeZ = NegativeZPolicy::fail;
+            else if (negativeZ == "rgb") t.negativeZ = NegativeZPolicy::rgb;
+            else fail(t.map + ": a normal map needs \"negativeZ\" fail or rgb (decision 316)");
+            if (t.format != UzTextureStorage::BC5 || t.srgb) fail(t.map + ": a normal map is a linear BC5");
+        } else if (!negativeZ.empty()) {
+            fail(t.map + ": \"negativeZ\" is for normal maps only");
+        }
+        if (t.srgb && t.format != UzTextureStorage::BC7) fail(t.map + ": BC4 and BC5 are always linear (decision 315)");
+        if (t.srgb != (t.mips == DerivativeMips::colour || t.mips == DerivativeMips::masked_colour)) {
+            fail(t.map + ": an sRGB texture has colour mips and a linear one has none");
+        }
+        const MapSpec* map = MapNamed(spec, t.map);
+        const MapSpec* canonical = MapNamed(spec, t.canonical);
+        if (map == nullptr) fail("no map \"" + t.map + "\"");
+        if (canonical == nullptr) fail(t.map + ": no canonical map \"" + t.canonical + "\"");
+        if (canonical->channels != map->channels) fail(t.map + ": its canonical map reads other channels");
+        for (const UzEngineTexture& other : targets.textures) {
+            if (other.map == t.map) fail("two textures of the map \"" + t.map + "\"");
+        }
+        targets.textures.push_back(std::move(t));
+    }
+    if (const json::Value* material = Member(block, "material")) {
+        if (!material->IsObject()) fail("\"material\" must be an object");
+        allowed(*material, {"fileName", "albedo", "normal", "orm", "emissive", "height"});
+        UzEngineMaterial m;
+        m.fileName = string(*material, "fileName", true);
+        m.albedo = string(*material, "albedo", true);
+        m.normal = string(*material, "normal", true);
+        m.orm = string(*material, "orm", true);
+        m.emissive = string(*material, "emissive", true);
+        m.height = string(*material, "height", false);
+        if (m.fileName.empty() || m.fileName.find('/') != std::string::npos) {
+            fail("the material's fileName must be a name at the delivery root");
+        }
+        for (const std::string* ref : {&m.albedo, &m.normal, &m.orm, &m.emissive, &m.height}) {
+            if (ref->empty()) continue;
+            const bool known = std::any_of(targets.textures.begin(), targets.textures.end(),
+                                           [&](const UzEngineTexture& t) { return t.map == *ref; });
+            if (!known) fail("the material names \"" + *ref + "\", which is no texture");
+        }
+        targets.material = std::move(m);
+    }
+    return targets;
 }
 
 }  // namespace
@@ -105,8 +207,19 @@ ShippedPreset LoadShippedPreset(const std::filesystem::path& directory, std::str
     }
     ShippedPreset shipped;
     shipped.id = std::string(id);
-    shipped.spec = ParsePreset(ReadJson(presetFile, id), presetFile.filename().string());
+    json::Value presetJson = ReadJson(presetFile, id);
+    // The UzEngine targets: a key only a shipped preset may carry (an inline one is refused).
+    std::optional<json::Value> uzengine;
+    if (presetJson.IsObject()) {
+        json::Object& object = std::get<json::Object>(presetJson.data);
+        if (const auto it = object.find("uzengine"); it != object.end()) {
+            uzengine = std::move(it->second);
+            object.erase(it);
+        }
+    }
+    shipped.spec = ParsePreset(presetJson, presetFile.filename().string());
     if (shipped.spec.name != id) Fail(id, presetFile.string() + ": the preset's name is not its id");
+    if (uzengine) shipped.spec.uzengine = ParseUzEngine(*uzengine, shipped.spec, id, presetFile.string());
 
     const json::Value record = ReadJson(recordFile, id);
     const std::string* schema = StringMember(record, "schema");
@@ -121,7 +234,14 @@ ShippedPreset LoadShippedPreset(const std::filesystem::path& directory, std::str
     if (*layout == "pipeline") shipped.layout = PresetLayout::pipeline;
     else if (*layout == "confirmed") shipped.layout = PresetLayout::confirmed;
     else if (*layout == "unconfirmed") shipped.layout = PresetLayout::unconfirmed;
-    else Fail(id, recordFile.string() + ": parity.layout \"" + *layout + "\" is not pipeline, confirmed or unconfirmed");
+    else if (*layout == "consumer") shipped.layout = PresetLayout::consumer;
+    else {
+        Fail(id, recordFile.string() + ": parity.layout \"" + *layout +
+                     "\" is not pipeline, confirmed, unconfirmed or consumer");
+    }
+    if ((shipped.layout == PresetLayout::consumer) != shipped.spec.uzengine.has_value()) {
+        Fail(id, recordFile.string() + ": a consumer layout goes with uzengine targets, and only with them");
+    }
     if (const json::Value* pending = Member(*parity, "pending"); pending != nullptr && pending->IsArray()) {
         for (const json::Value& item : std::get<json::Array>(pending->data)) {
             const std::string* recording = StringMember(item, "recording");

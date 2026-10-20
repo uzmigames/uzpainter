@@ -58,6 +58,9 @@ enum class PresetLayout : uint8_t {
     confirmed,
     /// Written by hand from public sources; no recording confirms it yet.
     unconfirmed,
+    /// Defined by UzmiGames from a consumer's format definition, with no Painter preset that
+    /// answers to it (the UzEngine preset, 08-export.md §4): its `uzengine` targets.
+    consumer,
 };
 
 struct ShippedPreset {

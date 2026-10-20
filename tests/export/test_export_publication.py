@@ -546,6 +546,8 @@ def test_receipt_schema_and_fields(export_tests: Path, tmp_path: Path) -> None:
             "src_channel": "L",
             "src_map_type": "documentMap",
             "src_map_name": "roughness",
+            # phase3.2_uze-uzmat-preset: each image channel states its transfer.
+            "transfer": "linear",
         }
     ]
     assert files["maps/s0_Roughness.png"]["normal"] is None
@@ -821,6 +823,7 @@ def test_uztexture_negative_z_fail_publishes_nothing(export_tests: Path, tmp_pat
     assert entry["path"] == "s0_n.uztexture" and entry["bit_depth"] == "8"
     assert entry["uztexture"] == {
         "source": "s0_n.png",
+        "delivery": "s0_n.png",
         "binding": "normal",
         "format": "BC5",
         "srgb": False,
@@ -837,6 +840,11 @@ def test_uztexture_negative_z_fail_publishes_nothing(export_tests: Path, tmp_pat
         "relativePath": "s0_n.uztexture",
         "path": (out / "s0_n.uztexture").as_posix(),
         "binding": "normal",
+        # phase3.2_uze-uzmat-preset: the derivative's format, colour space, mips and canonical file.
+        "format": "BC5",
+        "srgb": False,
+        "mips": "normal",
+        "canonical": "s0_n.png",
         "negativeZ": "fail",
     }
 

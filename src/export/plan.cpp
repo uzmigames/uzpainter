@@ -1,6 +1,7 @@
 #include "export/plan.h"
 
 #include "export/encode.h"
+#include "export/uzmat_writer.h"
 
 #include <algorithm>
 #include <array>
@@ -733,12 +734,35 @@ json::Value FileJson(const PlannedFile& f) {
                       {"channels", std::move(channels)}};
     // Only a file with a derivative has the member, so every other plan keeps its hash.
     if (f.uztexture) {
-        file["uztexture"] = json::Object{{"relativePath", f.uztexture->relativePath},
-                                         {"path", f.uztexture->path},
-                                         {"binding", "normal"},
-                                         {"negativeZ", std::string(NegativeZPolicyName(f.uztexture->negativeZ))}};
+        const UzTextureOutput& u = *f.uztexture;
+        json::Object derivative{{"relativePath", u.relativePath},
+                                {"path", u.path},
+                                {"binding", u.binding.empty() ? json::Value(nullptr) : json::Value(u.binding)},
+                                {"format", std::string(UzTextureStorageName(u.format))},
+                                {"srgb", u.srgb},
+                                {"mips", std::string(DerivativeMipsName(u.mips))},
+                                {"canonical", u.canonical}};
+        if (u.mips == DerivativeMips::normal) derivative["negativeZ"] = std::string(NegativeZPolicyName(u.negativeZ));
+        file["uztexture"] = std::move(derivative);
     }
     return file;
+}
+
+json::Value MaterialJson(const UzMaterialOutput& m) {
+    return json::Object{{"textureSet", m.textureSet},
+                        {"stack", m.stack},
+                        {"rootPath", m.rootPath},
+                        {"preset", m.preset},
+                        {"fileName", m.fileName},
+                        {"relativePath", m.relativePath},
+                        {"path", m.path},
+                        {"format", "uzmat"},
+                        {"albedo", m.albedo},
+                        {"normal", m.normal},
+                        {"orm", m.orm},
+                        {"emissive", m.emissive},
+                        {"height", m.height.empty() ? json::Value(nullptr) : json::Value(m.height)},
+                        {"after", static_cast<std::int64_t>(m.after)}};
 }
 
 /// True when `source` holds normal vectors: the Normal channel, a virtual normal or `normal_base`.
@@ -761,10 +785,156 @@ json::Value PlanBody(const ExportPlan& plan) {
                                        {"reason", s.reason},
                                        {"kind", std::string(SkipKindName(s.kind))}});
     }
-    return json::Object{{"schema", std::string(kPlanSchema)},
-                        {"exportPath", plan.exportPath},
-                        {"files", std::move(files)},
-                        {"skipped", std::move(skipped)}};
+    json::Object body{{"schema", std::string(kPlanSchema)},
+                      {"exportPath", plan.exportPath},
+                      {"files", std::move(files)},
+                      {"skipped", std::move(skipped)}};
+    // Only a plan with a material has the member, so every other plan keeps its hash.
+    if (!plan.materials.empty()) {
+        json::Array materials;
+        for (const UzMaterialOutput& m : plan.materials) materials.push_back(MaterialJson(m));
+        body["materials"] = std::move(materials);
+    }
+    return body;
+}
+
+/// The channels of `file` a PNG writes sRGB-encoded, in its channel order, exactly as
+/// `EvaluateFileOn` flags them for the encoder: `SrgbEncodedRead` of a documentMap source, its luma
+/// included (decisions 126 and 204); all false for any other format.
+std::vector<bool> EncodedChannels(const core::Stack& stack, const PlannedFile& file) {
+    std::vector<bool> encoded(file.channels.size(), false);
+    if (!file.parameters || file.parameters->fileFormat != FileFormat::png) return encoded;
+    for (size_t c = 0; c < file.channels.size(); ++c) {
+        const PlannedChannel& channel = file.channels[c];
+        const PlannedSource& s = channel.source;
+        if (s.type != SourceType::documentMap || !s.channel) continue;
+        const auto it = stack.channels.find(*s.channel);
+        encoded[c] = it != stack.channels.end() && SrgbEncodedRead(*s.channel, it->second.format, channel.src);
+    }
+    return encoded;
+}
+
+/// The `.uztexture` targets and the `.uzmat` of a UzEngine preset (config.h `UzEngineTargets`,
+/// phase3.2_uze-uzmat-preset) for the files plan.files[first..] of one exportList entry.
+void AttachUzEngine(ExportPlan& plan, size_t first, const ExportListEntry& entry, const Root& root,
+                    const PresetSpec& preset, const core::Project& project, const PlanContext& context,
+                    const std::string& exportPath) {
+    const UzEngineTargets& targets = *preset.uzengine;
+    constexpr std::string_view kOwner = "phase3.4_uzengine-preset";
+    const auto fileOf = [&](const std::string& fileName) -> PlannedFile* {
+        for (size_t f = first; f < plan.files.size(); ++f) {
+            if (plan.files[f].fileName == fileName) return &plan.files[f];
+        }
+        return nullptr;
+    };
+    for (const UzEngineTexture& target : targets.textures) {
+        PlannedFile* file = fileOf(target.map);
+        if (file == nullptr) continue;  // filtered out or absent: no derivative
+        const std::string what = root.rootPath + ": preset \"" + preset.name + "\" map \"" + target.map + "\" (.uztexture)";
+        PlannedFile* canonical = fileOf(target.canonical);
+        if (canonical == nullptr) {
+            Invalid(what, "its canonical map \"" + target.canonical +
+                              "\" is not written (filtered out); a derivative is always written beside its canonical "
+                              "16-bit map (EXP-10)");
+        }
+        const auto bound = [&](const std::string& problem) {
+            Gap(what, problem + "; the derivative reads a PNG 16 canonical map at power-of-two sides (decisions 315 "
+                                "and 316)", kOwner);
+        };
+        if (!canonical->parameters || canonical->parameters->fileFormat != FileFormat::png ||
+            canonical->parameters->bitDepth != BitDepth::u16) {
+            bound("its canonical map " + canonical->relativePath + " is not a PNG 16");
+        }
+        if (!std::has_single_bit(canonical->width) || !std::has_single_bit(canonical->height)) {
+            bound("the size " + std::to_string(canonical->width) + "x" + std::to_string(canonical->height) +
+                  " of " + canonical->relativePath + " is not a power of two on both sides");
+        }
+        const FileLayout layout = canonical->layout;
+        const bool fits = target.format == UzTextureStorage::BC4   ? layout == FileLayout::L
+                          : target.format == UzTextureStorage::BC5 ? layout == FileLayout::RGB
+                                                                   : layout != FileLayout::Statistics;
+        if (!fits) {
+            bound(std::string(UzTextureStorageName(target.format)) + " of the " +
+                  std::string(FileLayoutName(layout)) + " file " + canonical->relativePath);
+        }
+        if (target.mips == DerivativeMips::normal) {
+            const PlannedSource& source = canonical->channels.front().source;
+            const bool normal = source.normalRole.has_value() ||
+                                (source.type == SourceType::documentMap && source.channel == ChannelType::Normal);
+            for (uint32_t c = 0; c < canonical->channels.size(); ++c) {
+                const PlannedChannel& ch = canonical->channels[c];
+                if (!normal || ch.component != c || ch.luma || ch.source.components != 3 ||
+                    ch.source.type != source.type || ch.source.name != source.name) {
+                    bound("its R, G and B do not read components 0, 1 and 2 of one normal source");
+                }
+            }
+        }
+        // The stored transfer function is the file's: an sRGB derivative of sRGB-encoded colour, a
+        // linear one of linear values (the alpha is linear in both).
+        const std::vector<bool> encoded = EncodedChannels(*root.stack, *canonical);
+        for (size_t c = 0; c < canonical->channels.size(); ++c) {
+            if (canonical->channels[c].dest == ChannelLetter::A) continue;
+            if (encoded[c] != target.srgb) {
+                bound("its channel " + std::string(ChannelLetterName(canonical->channels[c].dest)) + " (" +
+                      canonical->channels[c].source.name + ") is written " + (encoded[c] ? "sRGB-encoded" : "linear") +
+                      " and the texture is declared " + (target.srgb ? "sRGB" : "linear") +
+                      "; converting it is not implemented");
+            }
+        }
+        const std::string derived = file->relativePath.substr(0, file->relativePath.rfind('.')) + ".uztexture";
+        UzTextureOutput output;
+        output.relativePath = derived;
+        output.path = JoinPath(exportPath, derived);
+        output.negativeZ = target.negativeZ;
+        output.binding = target.binding;
+        output.format = target.format;
+        output.srgb = target.srgb;
+        output.mips = target.mips;
+        output.canonical = canonical->relativePath;
+        file->uztexture = std::move(output);
+    }
+    if (!targets.material) return;
+    const UzEngineMaterial& material = *targets.material;
+    if (entry.filter && !Selects(*entry.filter, root, material.fileName)) return;
+    const std::string what = root.rootPath + ": preset \"" + preset.name + "\" material \"" + material.fileName + "\"";
+    PlannedFile naming;
+    naming.textureSet = root.set->name;
+    naming.stack = root.stack->name;
+    const std::string name = ExpandName(material.fileName, project, context, root, naming, what);
+    if (name.find('/') != std::string::npos) Invalid(what, "a .uzmat sits at the delivery root; \"" + name + "\" is not");
+    UzMaterialOutput out;
+    out.textureSet = root.set->name;
+    out.stack = root.stack->name;
+    out.rootPath = root.rootPath;
+    out.preset = preset.name;
+    out.fileName = material.fileName;
+    out.relativePath = name + ".uzmat";
+    out.path = JoinPath(exportPath, out.relativePath);
+    std::vector<std::string> missing;
+    const auto derivative = [&](const std::string& fileName, std::string& into, bool required) {
+        if (fileName.empty()) return;
+        const PlannedFile* file = fileOf(fileName);
+        if (file != nullptr && file->uztexture) {
+            into = file->uztexture->relativePath;
+        } else if (required) {
+            missing.push_back(fileName);
+        }
+    };
+    derivative(material.albedo, out.albedo, true);
+    derivative(material.normal, out.normal, true);
+    derivative(material.orm, out.orm, true);
+    derivative(material.emissive, out.emissive, true);
+    derivative(material.height, out.height, false);
+    if (!missing.empty()) {
+        plan.skipped.push_back({root.set->name, root.stack->name, root.rootPath, preset.name, preset.maps.size(),
+                                material.fileName,
+                                "the UzEngine material binds the albedo, normal, ORM and emissive textures of its "
+                                "stack, and these are not written: " + JoinNames(missing),
+                                SkipKind::absent});
+        return;
+    }
+    out.after = plan.files.size() - 1;
+    plan.materials.push_back(std::move(out));
 }
 
 }  // namespace
@@ -788,6 +958,38 @@ NegativeZPolicy ParseNegativeZPolicy(std::string_view text) {
     if (text == "rgb") return NegativeZPolicy::rgb;
     throw core::ValueError("export: the negative-Z policy \"" + std::string(text) + "\": expected fail or rgb");
 }
+
+namespace {
+
+/// The UzEngine outputs (`.uztexture` derivatives and `.uzmat` files; no Painter behaviour to
+/// follow): a path equal to any other output's of any stack, compared as Windows compares file names
+/// (ordinal, ignoring case over Unicode: uzmat_writer.h `SameDeliveryPath`), is a `ValueError`. Two
+/// Painter-form files keep Painter's rule (`CompilePlan`, R-091).
+void CheckEngineOutputs(const ExportPlan& plan) {
+    struct Output {
+        const std::string* rootPath;
+        const std::string* relativePath;
+        bool engine;
+    };
+    std::vector<Output> outputs;
+    for (const PlannedFile& f : plan.files) {
+        outputs.push_back({&f.rootPath, &f.relativePath, false});
+        if (f.uztexture) outputs.push_back({&f.rootPath, &f.uztexture->relativePath, true});
+    }
+    for (const UzMaterialOutput& m : plan.materials) outputs.push_back({&m.rootPath, &m.relativePath, true});
+    for (size_t a = 0; a < outputs.size(); ++a) {
+        for (size_t b = a + 1; b < outputs.size(); ++b) {
+            // Two Painter-form files follow Painter's rule (CompilePlan, R-091).
+            if (!outputs[a].engine && !outputs[b].engine) continue;
+            if (!SameDeliveryPath(*outputs[a].relativePath, *outputs[b].relativePath)) continue;
+            Invalid(*outputs[b].rootPath + ": \"" + *outputs[b].relativePath + "\"",
+                    "the path is the output \"" + *outputs[a].relativePath + "\" of " + *outputs[a].rootPath +
+                        " (compared as Windows compares file names, ignoring case)");
+        }
+    }
+}
+
+}  // namespace
 
 void RequestUzTextureNormal(ExportPlan& plan, std::string_view relativePath, NegativeZPolicy policy) {
     const auto found = std::find_if(plan.files.begin(), plan.files.end(),
@@ -822,12 +1024,19 @@ void RequestUzTextureNormal(ExportPlan& plan, std::string_view relativePath, Neg
               " is not a power of two on both sides (decision 315: a 2x2 box does not tile it)");
     }
     const std::string derived = file.relativePath.substr(0, file.relativePath.rfind('.')) + ".uztexture";
-    for (const PlannedFile& other : plan.files) {
-        const bool clash = Lower(other.relativePath) == Lower(derived) ||
-                           (&other != &file && other.uztexture && Lower(other.uztexture->relativePath) == Lower(derived));
-        if (clash) Invalid(what, "its path \"" + derived + "\" is another output's");
+    UzTextureOutput output;
+    output.relativePath = derived;
+    output.path = JoinPath(plan.exportPath, derived);
+    output.negativeZ = policy;
+    output.canonical = file.relativePath;
+    std::optional<UzTextureOutput> previous = std::move(file.uztexture);
+    file.uztexture = std::move(output);
+    try {
+        CheckEngineOutputs(plan);
+    } catch (...) {
+        file.uztexture = std::move(previous);  // the plan is left as it was
+        throw;
     }
-    file.uztexture = UzTextureOutput{derived, JoinPath(plan.exportPath, derived), policy};
     plan.hash = core::Sha256Hex(json::WriteCanonical(PlanBody(plan)));
 }
 
@@ -876,6 +1085,7 @@ ExportPlan CompilePlan(const core::Project& project, const ExportConfig& config,
             file.path = JoinPath(config.exportPath, file.relativePath);
             seen.emplace(renamed, true);
         }
+        if (preset.uzengine) AttachUzEngine(plan, first, entry, root, preset, project, context, config.exportPath);
     }
     for (const std::string& name : diagnosticsNamed) {
         if (!diagnosticsSeen.contains(name)) {
@@ -892,6 +1102,7 @@ ExportPlan CompilePlan(const core::Project& project, const ExportConfig& config,
                 "\"; what Painter does on such a collision is not recorded (" + std::string(kRecording) + ")");
         }
     }
+    CheckEngineOutputs(plan);
     plan.hash = core::Sha256Hex(json::WriteCanonical(PlanBody(plan)));
     return plan;
 }
@@ -933,6 +1144,9 @@ std::vector<StackFiles> FilesByStack(const ExportPlan& plan) {
         }
         it->files.push_back(f.path);
         if (f.uztexture) it->files.push_back(f.uztexture->path);
+        for (const UzMaterialOutput& m : plan.materials) {
+            if (&plan.files[m.after] == &f) it->files.push_back(m.path);
+        }
     }
     return out;
 }
@@ -999,6 +1213,12 @@ render::Result<void> RequireIdentifiedBase(const core::Project& project, core::I
 
 bool SrgbEncodedOnExport(ChannelType type) {
     return type == ChannelType::BaseColor || type == ChannelType::Specular || type == ChannelType::Emissive;
+}
+
+std::vector<bool> SrgbEncodedChannels(const core::Project& project, const PlannedFile& file) {
+    const core::Stack* stack = core::FindStack(project, file.textureSetId, file.stackId);
+    if (stack == nullptr) return std::vector<bool>(file.channels.size(), false);
+    return EncodedChannels(*stack, file);
 }
 
 bool SrgbEncodedRead(ChannelType type, core::ChannelFormat format, ChannelLetter src) {

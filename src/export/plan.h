@@ -121,26 +121,52 @@ struct ResolvedParameters {
     std::optional<int> dilationDistance;
 };
 
-/// What the `.uztexture` normal derivative does when its canonical map holds negative-Z texels
-/// (decision 316): `fail` refuses the export before anything is published; `rgb` stores the map as
-/// `Uncompressed_RGBA8` (8 bits per channel, B kept, so Z keeps its sign) instead of BC5.
-enum class NegativeZPolicy : uint8_t { fail, rgb };
 [[nodiscard]] std::string_view NegativeZPolicyName(NegativeZPolicy policy);
 /// The policy named `text` ("fail" or "rgb"); throws `core::ValueError` for any other text.
 [[nodiscard]] NegativeZPolicy ParseNegativeZPolicy(std::string_view text);
 
 /// A planned file's `.uztexture` derivative (task phase3.1_uze-uztexture-writer items 2.7 and 3.5,
-/// decision 316): the UzEngine normal texture cooked from the file's own 16-bit samples, the file
-/// being its canonical 16-bit companion (EXP-10). Bound: the file is an RGB PNG 16 whose R, G and B
-/// read components 0, 1 and 2 of one normal source, at power-of-two sides (`RequestUzTextureNormal`).
-/// The engine binding is `normal`; the stored format is BC5, or RGBA8 under `NegativeZPolicy::rgb`
-/// when the map holds negative-Z texels.
+/// decision 316; phase3.2_uze-uzmat-preset). It is cooked from the 16-bit samples of its canonical
+/// file (EXP-10), which is the file itself or the PNG 16 companion a UzEngine preset names
+/// (`UzEngineTexture`). Bound: the canonical file is a PNG 16 at power-of-two sides; BC5 reads an
+/// RGB file of one normal source, BC4 an L file, BC7 an L, L+A, RGB or RGB+A file; an sRGB
+/// derivative reads only sRGB-encoded colour channels and a linear one none. A normal map stored as
+/// BC5 is stored as RGBA8 instead under `NegativeZPolicy::rgb` when it holds negative-Z texels.
 struct UzTextureOutput {
     /// The file's relativePath with its extension replaced by `.uztexture`.
     std::string relativePath;
     /// exportPath / relativePath.
     std::string path;
     NegativeZPolicy negativeZ = NegativeZPolicy::fail;
+    /// The engine slot; empty when the engine has none (a consumer gap).
+    std::string binding = "normal";
+    UzTextureStorage format = UzTextureStorage::BC5;
+    bool srgb = false;
+    DerivativeMips mips = DerivativeMips::normal;
+    /// The relativePath of the canonical file its samples are cooked from.
+    std::string canonical;
+};
+
+/// A `.uzmat` of a UzEngine preset (`UzEngineMaterial`; uzmat_writer.h), planned for one stack: at
+/// the delivery root, binding the stack's albedo, normal, ORM and emissive derivatives (and its
+/// height derivative, when there is one). It is written after plan file `after`, its stack's last.
+struct UzMaterialOutput {
+    std::string textureSet;
+    std::string stack;
+    std::string rootPath;
+    std::string preset;
+    /// The unexpanded fileName.
+    std::string fileName;
+    /// `<expanded fileName>.uzmat`, a basename.
+    std::string relativePath;
+    std::string path;
+    /// Derivative relativePaths; `height` empty when there is none.
+    std::string albedo;
+    std::string normal;
+    std::string orm;
+    std::string emissive;
+    std::string height;
+    size_t after = 0;
 };
 
 struct PlannedFile {
@@ -167,7 +193,8 @@ struct PlannedFile {
     /// The written size (sizeLog2 applied); for a statistics file the set's resolution.
     uint32_t width = 0;
     uint32_t height = 0;
-    /// Written beside the file when requested (`RequestUzTextureNormal`); never set by CompilePlan.
+    /// Written beside the file: set by CompilePlan for a UzEngine preset's target, or requested
+    /// (`RequestUzTextureNormal`).
     std::optional<UzTextureOutput> uztexture;
 };
 
@@ -199,6 +226,8 @@ struct ExportPlan {
     /// In exportList order, then preset map order.
     std::vector<PlannedFile> files;
     std::vector<SkippedMap> skipped;
+    /// The `.uzmat` files of UzEngine presets, in plan order.
+    std::vector<UzMaterialOutput> materials;
     /// Lower-case hex SHA-256 of the canonical JSON of `PlanJson` without its `hash` member.
     std::string hash;
 };
@@ -221,9 +250,8 @@ struct PlanContext {
                                      const PlanContext& context = {});
 
 /// Adds the `.uztexture` normal derivative (`UzTextureOutput`, decision 316) with negative-Z policy
-/// `policy` to the file of `plan` whose relativePath is `relativePath`, and updates the plan's hash.
-/// This plan field is the whole surface here: which preset maps get a derivative and the choice of
-/// policy in a preset belong to phase3.4_uzengine-preset. Throws `core::ValueError` when no file has
+/// `policy` to the file of `plan` whose relativePath is `relativePath`, its own canonical file, and
+/// updates the plan's hash. A UzEngine preset's derivatives are planned by CompilePlan instead. Throws `core::ValueError` when no file has
 /// that path or the derivative's path is another output's (compared ignoring case), and
 /// `core::NotYetSupported` naming phase3.4_uzengine-preset for a file outside the bound above.
 void RequestUzTextureNormal(ExportPlan& plan, std::string_view relativePath,
@@ -249,7 +277,8 @@ struct StackFiles {
 };
 
 /// The plan's files grouped by (texture set, stack) in first-appearance order: Painter's
-/// `list_project_textures` result. A file's `.uztexture` derivative follows it.
+/// `list_project_textures` result. A file's `.uztexture` derivative follows it, and a `.uzmat`
+/// follows its stack's last file.
 [[nodiscard]] std::vector<StackFiles> FilesByStack(const ExportPlan& plan);
 
 /// The dry run: the files `export_project_textures(json_config)` writes on `project`, grouped as
@@ -315,6 +344,12 @@ struct FileRaster {
 /// (decision 126), or stored as L8 and read through R, B or L; through G an L8 one holds its linear
 /// value (export-l8-material: an RGB file holds (sRGB, linear, sRGB), decision 204).
 [[nodiscard]] bool SrgbEncodedRead(core::ChannelType type, core::ChannelFormat format, ChannelLetter src);
+
+/// Per channel of `file` (planned on `project`), in its channel order: whether its PNG holds the
+/// channel sRGB-encoded (`SrgbEncodedRead` of a documentMap source that is not a luma). All false
+/// for a file that is not a PNG. The receipt's colour space and the UzEngine derivatives' sRGB
+/// check read it.
+[[nodiscard]] std::vector<bool> SrgbEncodedChannels(const core::Project& project, const PlannedFile& file);
 
 /// Refuses (`evaluator:unsupported_source`) a source of stack `stack` of texture set `textureSet`
 /// whose values depend on a stack channel whose template base value is `inferred` (templates.h): a

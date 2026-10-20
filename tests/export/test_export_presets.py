@@ -123,7 +123,8 @@ def test_provenance_records_are_complete(export_tests: Path) -> None:
         problems = [e.message for e in validator.iter_errors(record)]
         assert problems == [], f"{preset_id}: {problems}"
         assert record["preset"] == preset["name"] == preset_id
-        maps = [e["fileName"] for e in record["packing"] if e["fileName"] != "(all)"]
+        # "(all)" and "(material)" entries describe the preset as a whole and its .uzmat.
+        maps = [e["fileName"] for e in record["packing"] if not e["fileName"].startswith("(")]
         assert maps == [m["fileName"] for m in preset["maps"]], preset_id
         aliases = sorted(name for name, target, _ in table["aliases"] if target == preset_id)
         assert sorted(record["answersTo"]) == aliases, preset_id
@@ -132,7 +133,12 @@ def test_provenance_records_are_complete(export_tests: Path) -> None:
             assert record["privateRecords"], f"{preset_id}: exact parity without private records"
         for test in parity["tests"]:
             path, _, name = test.partition("::")
-            assert path == "tests/export/test_export_presets.py" and name in tests_here, test
+            assert path.startswith("tests/export/test_") and path.endswith(".py"), test
+            if path == "tests/export/test_export_presets.py":
+                assert name in tests_here, test
+            else:
+                module = ast.parse((REPO_ROOT / path).read_text(encoding="utf-8")).body
+                assert any(isinstance(n, ast.FunctionDef) and n.name == name for n in module), test
         if parity["layout"] == "unconfirmed":
             recording = PENDING_RECORDING.get(preset_id, "R-095")
             assert any(p["recording"] == recording for p in parity["pending"]), preset_id

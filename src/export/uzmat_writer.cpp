@@ -96,6 +96,8 @@ std::string Serialize(const json::Object& object) {
 }
 }  // namespace
 
+bool SameDeliveryPath(const std::string& left, const std::string& right) { return SamePath(left, right); }
+
 UzMaterial WriteUzMaterial(const UzMaterialSpec& spec) {
     Require(!spec.name.empty() && spec.name.find('\0') == std::string::npos,
             "material name must be nonempty and contain no NUL");

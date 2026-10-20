@@ -233,7 +233,8 @@
             "jpeg",
             "dds",
             "json",
-            "uztexture"
+            "uztexture",
+            "uzmat"
           ]
         },
         "bit_depth": {
@@ -249,17 +250,26 @@
           "enum": [
             "linear",
             "sRGB",
+            "mixed",
             null
-          ]
+          ],
+          "description": "What the file holds: sRGB when every colour channel (all but A) is written sRGB-encoded, linear when none is, mixed otherwise (each channel's transfer says which); null for a statistics file or a .uzmat."
         },
         "size": {
-          "type": "array",
-          "items": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "minItems": 2,
-          "maxItems": 2
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "layout": {
           "enum": [
@@ -267,12 +277,12 @@
             "LA",
             "RGB",
             "RGBA",
-            "Statistics"
+            "Statistics",
+            null
           ]
         },
         "channels": {
           "type": "array",
-          "minItems": 1,
           "items": {
             "$ref": "#/$defs/channel_mapping"
           }
@@ -295,6 +305,9 @@
         },
         "uztexture": {
           "$ref": "#/$defs/uztexture_derivative"
+        },
+        "uzmat": {
+          "$ref": "#/$defs/uzmat_material"
         }
       },
       "allOf": [
@@ -316,6 +329,62 @@
               },
               "layout": {
                 "const": "Statistics"
+              },
+              "channels": {
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "format": {
+                "const": "uzmat"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "uzmat"
+            ],
+            "properties": {
+              "bit_depth": {
+                "const": null
+              },
+              "colour_space": {
+                "const": null
+              },
+              "size": {
+                "const": null
+              },
+              "layout": {
+                "const": null
+              },
+              "channels": {
+                "maxItems": 0
+              },
+              "normal": {
+                "const": null
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "uzmat"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "format": {
+                "enum": [
+                  "json",
+                  "uzmat"
+                ]
               }
             }
           },
@@ -326,6 +395,20 @@
               },
               "colour_space": {
                 "type": "string"
+              },
+              "size": {
+                "type": "array"
+              },
+              "layout": {
+                "type": "string"
+              },
+              "channels": {
+                "minItems": 1,
+                "items": {
+                  "required": [
+                    "transfer"
+                  ]
+                }
               }
             }
           }
@@ -347,7 +430,10 @@
                 "const": "8"
               },
               "colour_space": {
-                "const": "linear"
+                "enum": [
+                  "linear",
+                  "sRGB"
+                ]
               }
             }
           },
@@ -362,10 +448,11 @@
       ]
     },
     "uztexture_derivative": {
-      "description": "A .uztexture normal derivative (src/export/write.h EncodedUzTexture, decision 316): cooked from its canonical PNG 16 file `source`; stored as BC5, or as RGBA8 when the negative-Z policy rgb routed a map holding negative-Z texels (B <= 32767). Policy fail with such texels publishes nothing, so a published derivative under fail has none.",
+      "description": "A .uztexture derivative (src/export/write.h EncodedUzTexture; decision 316, phase3.2_uze-uzmat-preset): cooked from the PNG 16 samples of its canonical file `source`, written beside its delivered file `delivery` (the same file when that file is the canonical one). Its engine binding (null: the engine has no slot, a consumer gap), stored format and colour space are the plan's, never inferred from a name. A normal map is stored as BC5, or as RGBA8 when the negative-Z policy rgb routed a map holding negative-Z texels (B <= 32767); policy fail with such texels publishes nothing. `negative_z` is null for every other map.",
       "type": "object",
       "required": [
         "source",
+        "delivery",
         "binding",
         "format",
         "srgb",
@@ -378,17 +465,26 @@
         "source": {
           "$ref": "#/$defs/delivery_path"
         },
+        "delivery": {
+          "$ref": "#/$defs/delivery_path"
+        },
         "binding": {
-          "const": "normal"
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
         },
         "format": {
           "enum": [
+            "BC4",
             "BC5",
+            "BC7",
             "RGBA8"
           ]
         },
         "srgb": {
-          "const": false
+          "type": "boolean"
         },
         "mips": {
           "type": "integer",
@@ -399,77 +495,84 @@
           "minLength": 1
         },
         "negative_z": {
-          "type": "object",
-          "required": [
-            "policy",
-            "texels",
-            "first",
-            "routed"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "policy": {
-              "enum": [
-                "fail",
-                "rgb"
-              ]
-            },
-            "texels": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "first": {
-              "anyOf": [
-                {
-                  "type": "array",
-                  "items": {
-                    "type": "integer",
-                    "minimum": 0
-                  },
-                  "minItems": 2,
-                  "maxItems": 2
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "routed": {
-              "type": "boolean"
-            }
-          },
-          "allOf": [
+          "anyOf": [
             {
-              "if": {
-                "properties": {
-                  "routed": {
-                    "const": true
-                  }
+              "type": "object",
+              "required": [
+                "policy",
+                "texels",
+                "first",
+                "routed"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "policy": {
+                  "enum": [
+                    "fail",
+                    "rgb"
+                  ]
+                },
+                "texels": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "first": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "minItems": 2,
+                      "maxItems": 2
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "routed": {
+                  "type": "boolean"
                 }
               },
-              "then": {
-                "properties": {
-                  "policy": {
-                    "const": "rgb"
+              "allOf": [
+                {
+                  "if": {
+                    "properties": {
+                      "routed": {
+                        "const": true
+                      }
+                    }
                   },
-                  "texels": {
-                    "minimum": 1
+                  "then": {
+                    "properties": {
+                      "policy": {
+                        "const": "rgb"
+                      },
+                      "texels": {
+                        "minimum": 1
+                      },
+                      "first": {
+                        "type": "array"
+                      }
+                    }
                   },
-                  "first": {
-                    "type": "array"
+                  "else": {
+                    "properties": {
+                      "texels": {
+                        "const": 0
+                      },
+                      "first": {
+                        "type": "null"
+                      }
+                    }
                   }
                 }
-              },
-              "else": {
-                "properties": {
-                  "texels": {
-                    "const": 0
-                  },
-                  "first": {
-                    "type": "null"
-                  }
-                }
-              }
+              ]
+            },
+            {
+              "type": "null"
             }
           ]
         }
@@ -478,31 +581,93 @@
         {
           "if": {
             "properties": {
-              "negative_z": {
-                "properties": {
-                  "routed": {
-                    "const": true
-                  }
-                }
+              "srgb": {
+                "const": true
               }
             }
           },
           "then": {
             "properties": {
               "format": {
-                "const": "RGBA8"
+                "const": "BC7"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "binding": {
+                "const": "normal"
               }
             }
           },
-          "else": {
+          "then": {
             "properties": {
               "format": {
-                "const": "BC5"
+                "enum": [
+                  "BC5",
+                  "RGBA8"
+                ]
+              },
+              "negative_z": {
+                "type": "object"
               }
             }
           }
         }
       ]
+    },
+    "uzmat_material": {
+      "description": "A UzEngine .uzmat (src/export/uzmat_writer.h, phase3.2_uze-uzmat-preset) at the delivery root: the derivatives its TextureSample -> PBROutput pins 0..6 bind, its blend (Masked when the albedo derivative holds an alpha), and the inline scene-material block (`components.material`) the writer emits with it.",
+      "type": "object",
+      "required": [
+        "albedo",
+        "normal",
+        "orm",
+        "emissive",
+        "height",
+        "blend",
+        "two_sided",
+        "inline_material"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "albedo": {
+          "$ref": "#/$defs/delivery_path"
+        },
+        "normal": {
+          "$ref": "#/$defs/delivery_path"
+        },
+        "orm": {
+          "$ref": "#/$defs/delivery_path"
+        },
+        "emissive": {
+          "$ref": "#/$defs/delivery_path"
+        },
+        "height": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/delivery_path"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "blend": {
+          "enum": [
+            "Opaque",
+            "Masked"
+          ]
+        },
+        "two_sided": {
+          "type": "boolean"
+        },
+        "inline_material": {
+          "type": "object"
+        }
+      }
     },
     "channel_mapping": {
       "type": "object",
@@ -544,6 +709,13 @@
         "src_map_name": {
           "type": "string",
           "minLength": 1
+        },
+        "transfer": {
+          "description": "Image files: sRGB for a channel the PNG writes sRGB-encoded (decisions 126 and 204), linear otherwise.",
+          "enum": [
+            "sRGB",
+            "linear"
+          ]
         }
       }
     },

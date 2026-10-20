@@ -427,8 +427,23 @@ render::Result<Publication> PublishExport(const core::Project& project, std::int
             const fs::path cooked = directory / "files" / Utf8Path(file.uztexture->relativePath);
             render::Result<void> cookedWritten = WriteDurable(cooked, derivative->bytes);
             if (!cookedWritten) return failed(cookedWritten.error());
+#if defined(UZP_EXPORT_FAULT_HOOKS)
+            fault::Reach(fault::Point::kill_after_uztexture, i);
+#endif
             publication.files.push_back({file.rootPath, file.uztexture->relativePath, Utf8String(cooked),
                                          derivative->bytes.size(), core::Sha256Hex(derivative->bytes)});
+        }
+        // The `.uzmat` of a UzEngine preset, after its stack's last file (phase3.2_uze-uzmat-preset).
+        if (const std::optional<EncodedUzMaterial>& material = (*encoded)[i].material) {
+            const UzMaterialOutput& planned = plan.materials[material->index];
+            const fs::path written = directory / "files" / Utf8Path(planned.relativePath);
+            render::Result<void> materialWritten = WriteDurable(written, material->bytes);
+            if (!materialWritten) return failed(materialWritten.error());
+#if defined(UZP_EXPORT_FAULT_HOOKS)
+            fault::Reach(fault::Point::kill_after_uzmat, material->index);
+#endif
+            publication.files.push_back({planned.rootPath, planned.relativePath, Utf8String(written),
+                                         material->bytes.size(), core::Sha256Hex(material->bytes)});
         }
     }
     for (const WrittenFile& file : publication.files) {

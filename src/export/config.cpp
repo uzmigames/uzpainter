@@ -399,6 +399,16 @@ std::string_view FileFormatName(FileFormat format) { return kFormats[static_cast
 std::string_view BitDepthName(BitDepth depth) { return kDepths[static_cast<size_t>(depth)]; }
 std::string_view PaddingName(Padding padding) { return kPaddings[static_cast<size_t>(padding)]; }
 
+std::string_view UzTextureStorageName(UzTextureStorage storage) {
+    static constexpr std::array<std::string_view, 4> names{"BC4", "BC5", "BC7", "RGBA8"};
+    return names[static_cast<size_t>(storage)];
+}
+
+std::string_view DerivativeMipsName(DerivativeMips mips) {
+    static constexpr std::array<std::string_view, 4> names{"linear", "colour", "normal", "masked_colour"};
+    return names[static_cast<size_t>(mips)];
+}
+
 bool NeedsDilation(Padding padding) {
     return padding == Padding::transparent || padding == Padding::color || padding == Padding::diffusion;
 }
@@ -612,8 +622,7 @@ ExportConfig ParseConfig(const json::Value& value, const std::filesystem::path& 
                 throw core::NotYetSupported("export: " + path + ": the preset \"" + name +
                                             "\" is a shelf or predefined preset UzPainter does not ship; shipped: " +
                                             JoinNames({ShippedPresetIds().begin(), ShippedPresetIds().end()}) +
-                                            " (decision 095; the Unreal and UzEngine presets: phase3.2 and "
-                                            "phase3.4)");
+                                            " (decision 095; the Unreal presets: phase3.2)");
             }
             std::vector<std::string> valid = inlineNames;
             for (std::string_view shipped : ShippedPresetIds()) valid.emplace_back(shipped);

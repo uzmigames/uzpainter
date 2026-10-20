@@ -1160,3 +1160,16 @@ def test_write16_rule() -> None:
 
     k = np.arange(256)
     assert np.array_equal(write16((k / 255.0).astype(np.float32)), k * 257)
+
+
+def test_ao_mixed_refusal_names_its_owner(export_tests: Path, tmp_path: Path) -> None:
+    """Decision 131: the AO_Mixed refusal names its owner, `phase3.2_unreal-ue56-packed-preset`
+    item 2.10, and still refuses before anything is planned."""
+    [result] = plan_many(
+        export_tests,
+        [(TWO_SETS, config([mapping("$textureSet_ao", grey("virtualMap", "AO_Mixed"))], ["s0"]))],
+        tmp_path,
+    )
+    message = refused(result, "NotYetSupported", '"AO_Mixed"', "not identified", "R-092")
+    assert "phase3.2_unreal-ue56-packed-preset item 2.10, decision 131" in message
+    assert "phase1.18_export-engine" not in message

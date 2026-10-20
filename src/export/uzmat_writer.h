@@ -42,4 +42,9 @@ struct UzMaterial {
 // std::invalid_argument. This pure writer does not publish files or infer formats.
 [[nodiscard]] UzMaterial WriteUzMaterial(const UzMaterialSpec& spec);
 
+// True when two UTF-8 delivery paths name one file on Windows: CompareStringOrdinal ignoring case,
+// over Unicode (so "É.uztexture" and "é.uztexture" are one file). The plan compares every UzEngine
+// output with every other output of every stack this way.
+[[nodiscard]] bool SameDeliveryPath(const std::string& left, const std::string& right);
+
 }  // namespace uzp::exporter
