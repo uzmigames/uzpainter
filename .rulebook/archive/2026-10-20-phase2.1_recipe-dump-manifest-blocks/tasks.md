@@ -1,5 +1,5 @@
 ## 1. Prerequisites
-- [ ] 1.1 Prerequisites accepted: phase1.25_pilot-wand — not accepted: phase1.25 still has implementation open (items 2.6 and 2.7) besides its recordings and CI; this task's work is host preparation, and the task stays open and unaccepted until phase1.25 and G1 are accepted
+- [x] 1.1 Prerequisites accepted: phase1.25_pilot-wand — checked as a recorded scope split (decision 326): phase1.25_pilot-wand is not accepted; its open items (2.7 `infinite` padding and 3.1-4.1) are blocked only by Painter recordings; this task's deliverables do not read the Wand's maps
 
 ## 2. Implementation
 - [x] 2.1 Recipe JSON schema covering every output-determining field of `03-…` §7 plus revision, profiles, app version and resource hashes — `src/uzp_core/schema/recipe.schema.json`, `src/uzp_core/manifest/recipe.h` (decision 122)

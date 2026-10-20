@@ -1,5 +1,5 @@
 ## 1. Prerequisites
-- [ ] 1.1 Prerequisites accepted: phase1.25_pilot-wand — still open, with implementation items of its own outstanding (among them 2.6, the 16-bit export of the sRGB8 material channels, and 2.7, `infinite` padding on UV-islanded texture sets; both refused before writing until fitted). This task builds on the compositor, export, Python API and adapter code merged on main
+- [x] 1.1 Prerequisites accepted: phase1.25_pilot-wand — checked as a recorded scope split (decision 326): phase1.25_pilot-wand is not accepted; its open items (2.7 `infinite` padding and 3.1-4.1) are blocked only by Painter recordings; this task's deliverables do not read the Wand's maps
 
 ## 2. Implementation
 - [x] 2.1 Role dispatch in `UzPainter.exe`: `--mcp` supervisor (no GPU device, no editable document, no user Python), `--worker --pipe … --gpu-backend … [--allow-python]` worker, single-process `run`/CLI verbs/`--preview` hosting the worker role (02 §1)
