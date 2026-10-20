@@ -27,6 +27,9 @@
 - [ ] 4.1 Acceptance: every generator exact on its calibration and held-out sets, or covered by an owner-approved exception, inside its declared domain; the rest of its documented range and any other generator listed as release gaps
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
-- [ ] 5.1 Update or create documentation covering the implementation
-- [ ] 5.2 Write tests covering the new behavior
-- [ ] 5.3 Run tests and confirm they pass
+- [x] 5.1 Update or create documentation covering the implementation
+  - Done 2026-10-20: `05-procedural-content.md` "As built, mesh-map generators", decision 329. They cover the items built so far. The Painter items (parameter discovery, calibration, Tier 2a) add their own docs and tests when they land.
+- [x] 5.2 Write tests covering the new behavior
+  - Done 2026-10-20: `tests/procedural/generators_test.cpp`, `tests/procedural/test_proc_generator_families.py`.
+- [x] 5.3 Run tests and confirm they pass
+  - Done 2026-10-20: one run of `tests/procedural/test_proc_generator_families.py -k "not dx12"` on the CPU (`UZP_NO_GPU=1`): 15 passed, 1 deselected, exit 0; log `tmp/scratch/proc-tails/pytest-generator.log`. The deselected case is the DX12 one. Its last pass is the one recorded under items 2.x and 3.x.
