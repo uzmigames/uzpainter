@@ -8,6 +8,12 @@ A plugins directory holds `plugins/` (optional components), `startup/` (always l
 resource directory of its own to add. A started module's `start_plugin()` runs after loading and
 its `close_plugin()` before unloading. A module that needs Painter's desktop UI (PySide6) fails to
 import: only non-UI modules are supported.
+
+As Painter's, `plugin_module_names()` and `startup_module_names()` import the modules they list
+(`p22b-host-plugins`: both probe modules were imported, plugin then startup, before the first
+`start_plugin`), and `reload_plugin` reloads the module before its `reload_plugin()` hook runs
+(s12: close, import, reload, start). A listed module that fails to import is reported on the
+standard error and still listed.
 """
 
 from __future__ import annotations
@@ -16,6 +22,7 @@ import gc
 import importlib
 import os
 import sys
+import traceback
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -65,6 +72,11 @@ def _module_names(sub: str) -> list[str]:
                 continue
             if name not in names:
                 names.append(name)
+    for name in names:
+        try:
+            importlib.import_module(name)
+        except Exception:  # a broken plugin is reported, and the others still load
+            traceback.print_exc(file=sys.stderr)
     return names
 
 
@@ -104,11 +116,11 @@ def is_plugin_started(module: ModuleType) -> bool:
 
 
 def reload_plugin(module: ModuleType) -> ModuleType:
-    """Close the plugin, reload it (running its `reload_plugin()` if any) and start it."""
+    """Close the plugin, reload it, run its `reload_plugin()` if any and start it."""
     close_plugin(module)
-    if hasattr(module, "reload_plugin"):
-        module.reload_plugin()
     reloaded = importlib.reload(module)
+    if hasattr(reloaded, "reload_plugin"):
+        reloaded.reload_plugin()
     start_plugin(reloaded)
     return reloaded
 

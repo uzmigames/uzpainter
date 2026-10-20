@@ -544,6 +544,8 @@ result = {"started": STARTED, "first": first, "used": used, "nothing": nothing, 
           "still_bound": fill.get_source(CT.BaseColor).resource_id.version,
           "versions": sorted(r.version for r in resource.list_project_resources()
                              if r.name == "checker"),
+          "imports": len([r for r in uzpainter.resource.list_project_resources()
+                          if r.name == "checker"]),
           "bad_filter": raises(resource.reload_modified_resources_async, object()),
           "structure_events": [entry[0] for entry in LOG]}
 
@@ -587,7 +589,8 @@ def test_resource_reload_and_shelf_crawling_events(facade: Run) -> None:
     assert old == result["bound"] and new != old and result["used"]["errors"] == []
     assert result["nothing"] == {"filter": "ProjectFilter", "reloaded": [], "errors": []}
     assert result["still_bound"] == result["bound"]
-    assert result["versions"] == sorted([old, new])
+    # Only the bound version is used; the reloaded one stays imported (native list).
+    assert result["versions"] == [old] and result["imports"] == 2
     assert result["bad_filter"].startswith("ValueError")
     assert result["structure_events"] == ["LayerStacksModelDataChanged"]
     started = ["ShelfCrawlingStarted", "uzp-shelf", True]

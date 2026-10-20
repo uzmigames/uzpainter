@@ -16,8 +16,12 @@ before any native call, so nothing changes. A whitelisted call given the wrong a
   `updateShaderInstance(id, url)`: NotYetSupported. Painter's shader instance ids and parameter
   keys are unrecorded (recording R-132-D); the shader is the default `open-pbr` instance under
   UzPainter's identifiers, `uzpainter.render.shader` (decisions 042, 132).
-- `alg.mapexport.channelIdentifiers()`, `convertedMapIdentifiers()`, `meshMapIdentifiers()`:
-  the identifier lists of the JavaScript API documentation.
+- `alg.mapexport.convertedMapIdentifiers()`, `meshMapIdentifiers()`: the identifier lists Painter
+  returns (`p22b-host-application` s24-s25, both recordings; decision 297).
+  `channelIdentifiers` takes a stack path: called without one it raises Painter's binding error
+  (s23); the identifiers of one stack, like `meshMapIdentifiers(path)`, are NotYetSupported.
+- A whitelisted call given fewer arguments than it requires raises `RuntimeError` with Painter's
+  JavaScript binding message (s23).
 - `alg.mapexport.save`, `saveChannelMap`, `saveMeshMap`, `saveConvertedMap`: NotYetSupported, as
   no golden records a JavaScript export (decision 107).
 """
@@ -35,21 +39,19 @@ EXPRESSION = re.compile(
     r"\s*(?P<path>alg(?:\.[A-Za-z_][A-Za-z0-9_]*)+)\s*(?:\((?P<args>.*)\))?\s*;?\s*", re.DOTALL
 )
 
-# The channel, converted-map and mesh-map identifiers of the JavaScript API documentation.
-CHANNEL_IDENTIFIERS = [
-    "basecolor", "height", "specular", "opacity", "emissive", "displacement", "glossiness",
-    "roughness", "anisotropylevel", "anisotropyangle", "transmissive", "scattering",
-    "reflection", "ior", "metallic", "normal", "ambientOcclusion", "diffuse", "specularlevel",
-    "blendingmask",
-]  # fmt: skip
+# The converted-map and mesh-map identifiers Painter returns (`p22b-host-application` s24-s25).
 CONVERTED_MAP_IDENTIFIERS = [
-    "1/ior", "ao_mixed", "diffuse", "f0", "glossiness", "glossiness2", "normal",
-    "normal_directx", "reflection", "specular", "unity4diff", "unity4gloss",
+    "1/ior", "ao_mixed", "diffuse", "f0", "glossiness", "glossiness2", "normal_directx",
+    "normal_opengl", "reflection", "specular", "unity4diff", "unity4gloss", "view_2d",
 ]  # fmt: skip
 MESH_MAP_IDENTIFIERS = [
     "normal_base", "world_space_normals", "id", "ambient_occlusion", "curvature", "position",
-    "thickness",
+    "thickness", "height", "bent_normals", "opacity",
 ]  # fmt: skip
+# Painter's error for a JavaScript call into C++ with missing arguments (s23).
+INCOMPATIBLE_ARGUMENTS = (
+    "TypeError: Passing incompatible arguments to C++ functions from JavaScript is not allowed."
+)
 
 
 def _save_and_close(mode: str = "Incremental") -> None:
@@ -85,6 +87,12 @@ def _shader_gap(name: str) -> Callable[..., Any]:
     return call
 
 
+def _stack_identifiers(*context: Any) -> Any:
+    raise uzpainter.NotYetSupported(
+        "the identifiers of one texture set or stack are not recorded (decision 107)"
+    )
+
+
 def _identifiers(values: list[str]) -> Callable[..., Any]:
     def call(*context: Any) -> Any:
         if context:
@@ -112,7 +120,7 @@ WHITELIST: dict[str, tuple[tuple[int, int] | None, Callable[..., Any]]] = {
     "alg.mapexport.saveChannelMap": ((3, 4), _export_gap("saveChannelMap")),
     "alg.mapexport.saveMeshMap": ((3, 4), _export_gap("saveMeshMap")),
     "alg.mapexport.saveConvertedMap": ((3, 4), _export_gap("saveConvertedMap")),
-    "alg.mapexport.channelIdentifiers": ((0, 1), _identifiers(CHANNEL_IDENTIFIERS)),
+    "alg.mapexport.channelIdentifiers": ((1, 1), _stack_identifiers),
     "alg.mapexport.convertedMapIdentifiers": ((0, 0), _identifiers(CONVERTED_MAP_IDENTIFIERS)),
     "alg.mapexport.meshMapIdentifiers": ((0, 1), _identifiers(MESH_MAP_IDENTIFIERS)),
 }
@@ -148,6 +156,8 @@ def evaluate(js_code: str) -> Any:
     except json.JSONDecodeError as error:
         raise _unsupported(js_code, f"the arguments are not JSON literals ({error.msg})") from None
     low, high = arity
-    if not low <= len(args) <= high:
+    if len(args) < low:
+        raise RuntimeError(INCOMPATIBLE_ARGUMENTS)
+    if len(args) > high:
         raise RuntimeError(f"{path}: expected {low} to {high} arguments, got {len(args)}")
     return call(*args)

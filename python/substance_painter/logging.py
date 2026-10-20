@@ -2,7 +2,7 @@
 module (messages to the script's log). Documented symbols only; the implementation is
 `uzpainter_facade` (`python/FACADE.md`)."""
 
-from uzpainter.logging import (
+from uzpainter_facade.logging import (
     DBG_ERROR,
     DBG_INFO,
     DBG_WARNING,

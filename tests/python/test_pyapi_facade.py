@@ -277,8 +277,12 @@ def test_js_evaluate_maps_the_whitelist_and_rejects_everything_else_before_mutat
     assert result["alg.version.painter"]["value"] == result["application"]
     assert result["alg.project.isOpen()"]["value"] is True
     assert result["alg.project.name();"]["value"] == "Untitled"
-    assert "basecolor" in result["alg.mapexport.channelIdentifiers()"]["value"]
-    assert "normal_directx" in result["alg.mapexport.convertedMapIdentifiers()"]["value"]
+    assert result["alg.mapexport.channelIdentifiers()"]["value"] == {
+        "raised": "RuntimeError",
+        "message": "TypeError: Passing incompatible arguments to C++ functions from JavaScript "
+        "is not allowed.",
+    }
+    assert "normal_opengl" in result["alg.mapexport.convertedMapIdentifiers()"]["value"]
     assert "normal_base" in result["alg.mapexport.meshMapIdentifiers()"]["value"]
     for code in [
         "alg.shaders.instances()",

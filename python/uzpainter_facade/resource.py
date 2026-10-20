@@ -39,10 +39,12 @@ Resource reload and shelves (phase1.21, decision 110):
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import os
 import re
 import threading
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
@@ -76,7 +78,10 @@ class ResourceID:
         """A ResourceID from its `resource://context/name?version=...` URL."""
         parts = urlsplit(url)
         if parts.scheme != "resource":
-            raise ValueError(f"'{url}' is not a resource:// URL")
+            # Painter's refusal (`p22b-host-resources` s13: an empty scheme names nothing).
+            raise ValueError(
+                f"Invalid resource URL scheme {parts.scheme}. Only 'resource' scheme is allowed."
+            )
         versions = parse_qs(parts.query).get("version")
         return cls(parts.netloc, parts.path.lstrip("/"), versions[0] if versions else None)
 
@@ -161,7 +166,8 @@ def from_native(native: Any, context: str | None = None) -> ResourceID:
 
 def to_native(identifier: Any) -> Any:
     """The native resource id a facade identifier names: by name, and by Painter's version when
-    it has one. `ResourceNotFoundError` when the project holds no such resource."""
+    it has one. `ResourceNotFoundError`, whose message is the identifier's URL as Painter's
+    (`p22b-host-resources` s14), when the project holds no such resource."""
     if isinstance(identifier, Resource):
         identifier = identifier.identifier()
     if not isinstance(identifier, ResourceID):
@@ -173,7 +179,25 @@ def to_native(identifier: Any) -> Any:
         fact = known.get(native.version)
         if identifier.version is None or (fact and f"{fact[0]}.image" == identifier.version):
             return native
-    raise uzpainter.ResourceNotFoundError(f"no project resource {identifier.url()}")
+    raise uzpainter.ResourceNotFoundError(identifier.url())
+
+
+# The project Metadata key of the reload origin of each imported content (`reload_origins`).
+ORIGIN_KEY = "resource_origin"
+
+
+def reload_origins() -> dict[str, str]:
+    """`{sha256: file}`: the file a reload reads again for the resources holding those bytes,
+    whatever their name. It is the file of the last import that added a new name or version for
+    them; importing a name and version the project holds already changes nothing
+    (`p22b-host-resources`: after reopen, s20 reloads `checker` and `checker-reload`, imported
+    with equal bytes from two files, from the second file). Saved with the project."""
+    value = uzpainter.project.Metadata(RESOURCE_METADATA).get(ORIGIN_KEY)
+    return dict(value) if isinstance(value, dict) else {}
+
+
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+PROCEDURAL_USAGES = (Usage.GENERATOR, Usage.SMART_MATERIAL)
 
 
 # ── Module functions ────────────────────────────────────────────────────────────────────────────
@@ -191,21 +215,47 @@ def import_project_resource(
         data = Path(file_path).read_bytes()
     except OSError as error:
         raise uzpainter.ResourceNotFoundError(f"cannot read {file_path}: {error}") from error
+    if resource_usage in PROCEDURAL_USAGES and data.startswith(PNG_SIGNATURE):
+        # A bitmap is no procedural resource: Painter refuses it before any change
+        # (`p22b-host-resources` s6-s7). Other files of these usages stay NotYetSupported.
+        usage = resource_usage.name.lower().replace("_", "")
+        raise ValueError(f"Resource '{file_path}' is incompatible with usage '{usage}'.")
     sha1 = hashlib.sha1(data).hexdigest()
     sha256 = hashlib.sha256(data).hexdigest()
     colour = len(data) > 25 and data[25] in (2, 6)  # PNG IHDR colour type: RGB or RGBA
+    held = {(n.name, n.version) for n in uzpainter.resource.list_project_resources()}
     with one_transaction("resource.import_project_resource"):
         native = uzpainter.resource.import_project_resource(file_path, resource_usage, name, group)
+        metadata = uzpainter.project.Metadata(RESOURCE_METADATA)
         known = facts()
         if known.get(sha256) != [sha1, colour]:
             known[sha256] = [sha1, colour]
-            uzpainter.project.Metadata(RESOURCE_METADATA).set(RESOURCE_KEY, known)
+            metadata.set(RESOURCE_KEY, known)
+        identifier = native.identifier()
+        if (identifier.name, identifier.version) not in held:
+            # A new name or version: its file becomes the reload origin of these bytes.
+            origins = reload_origins()
+            origins[identifier.version] = file_path
+            metadata.set(ORIGIN_KEY, origins)
     return Resource(from_native(native.identifier()), resource_usage)
 
 
 def list_project_resources() -> list[ResourceID]:
-    """The resources of the current project."""
-    return [from_native(native) for native in uzpainter.resource.list_project_resources()]
+    """The resources used in the current project, as Painter documents them: those the layer
+    stacks and mesh maps bind, and the environment map. An imported resource nothing uses is not
+    listed (`p22b-host-resources` s9 and s31); the native `uzpainter.resource
+    .list_project_resources` still holds every import. `ProjectError` with Painter's message
+    while no project is open (s27)."""
+    if not uzpainter.project.is_open():
+        raise uzpainter.ProjectError("No project loaded.")
+    natives = list(uzpainter.resource.list_used_resources())
+    environment = uzpainter.display.get_environment_resource()
+    if environment is not None:
+        natives.append(environment)
+    used: dict[tuple[str, str], Any] = {}
+    for native in natives:
+        used.setdefault((native.name, native.version), native)
+    return [from_native(native) for native in used.values()]
 
 
 @edits
@@ -321,6 +371,7 @@ class ShelvesListFilter:
         self.shelves = list(shelves)
 
 
+PROJECT_CONTEXT = re.compile(r"^project\d+$")
 FILTERS = (
     AllResourcesFilter,
     ProjectFilter,
@@ -363,6 +414,14 @@ def reload_modified_resources_async(resource_filter: Any) -> bool:
     if isinstance(resource_filter, ResourcesListFilter):
         problems = []
         for identifier in resource_filter.resources:
+            if (
+                isinstance(identifier, ResourceID)
+                and PROJECT_CONTEXT.match(identifier.context)
+                and identifier.context != SESSION.context()
+            ):
+                # The context of a closed project is gone (`p22b-host-resources` r2 s22, s24).
+                problems.append(f"For resource {identifier.url()}, context not found.")
+                continue
             try:
                 to_native(identifier)
             except (TypeError, uzpainter.ResourceNotFoundError) as error:
@@ -373,6 +432,7 @@ def reload_modified_resources_async(resource_filter: Any) -> bool:
         if _RELOAD["running"]:
             return False
         _RELOAD["running"] = True
+    returned = threading.Event()
     try:
         candidates = _candidates(resource_filter)
         context = SESSION.context()
@@ -380,29 +440,41 @@ def reload_modified_resources_async(resource_filter: Any) -> bool:
         uzpainter.event.hold()
         worker = threading.Thread(
             target=_reload_resources,
-            args=(resource_filter, candidates, context),
+            args=(resource_filter, candidates, context, returned),
             name="uzpainter-reload-resources",
             daemon=True,
         )
         worker.start()
+        if not candidates:
+            # Nothing to reload: the operation is over when the call returns, and its end is
+            # still delivered after it (`p22b-host-resources` s19 and s21, both recordings).
+            _RELOAD["running"] = False
     except BaseException:
         _RELOAD["running"] = False
         raise
+    finally:
+        returned.set()
     return True
 
 
-def _reload_resources(resource_filter: Any, candidates: list[Any], context: str) -> None:
-    """The reload's worker: one import per modified resource, then `ReloadResourcesEnded`."""
+def _reload_resources(
+    resource_filter: Any, candidates: list[Any], context: str, returned: threading.Event
+) -> None:
+    """The reload's worker: once the starting call returned, one import per modified resource,
+    then `ReloadResourcesEnded`, which Painter never delivers during that call (its recordings
+    have no step marker on it, whatever the filter)."""
     reloaded: list[event.ReloadedResourceResult] = []
     errors: list[event.ReloadedResourceError] = []
+    returned.wait()
     try:
         versions: dict[str, set[str]] = {}
         for native in uzpainter.resource.list_project_resources():
             versions.setdefault(native.name, set()).add(native.version)
         seen: set[tuple[str, str]] = set()
+        origins = reload_origins()
         for native in candidates:
             old = from_native(native, context)
-            origin = uzpainter.resource.resource_origin(native)
+            origin = origins.get(native.version) or uzpainter.resource.resource_origin(native)
             if origin is None or (native.name, origin) in seen:
                 continue
             seen.add((native.name, origin))
@@ -435,17 +507,30 @@ SHELF_GAP = "phase3.3_procedural-families: shelf resources are procedural conten
 _SHELVES: dict[str, dict[str, Any]] = {}
 
 
-def _crawl(name: str) -> None:
+@contextlib.contextmanager
+def _call_returning() -> Iterator[threading.Event]:
+    """An event set once the public call that starts crawls is returning: a walk starts after
+    it, so `ShelfCrawlingEnded` is never delivered during that call, as in every Painter
+    recording (`phase1-shelves` s3 and s9, `p22b-host-resources` s16 and s17)."""
+    returned = threading.Event()
+    try:
+        yield returned
+    finally:
+        returned.set()
+
+
+def _crawl(name: str, returned: threading.Event) -> None:
     """Walks a shelf's folder on a worker thread between the crawling events:
     `ShelfCrawlingStarted` is delivered before the call that starts the crawl returns, and
-    `ShelfCrawlingEnded` once the walk is done (`phase1-shelves` s3 and s9, both recordings;
-    decision 319)."""
+    `ShelfCrawlingEnded` once the walk, which starts after that call returned, is done
+    (`phase1-shelves` s3 and s9, both recordings; decision 319)."""
     shelf = _SHELVES[name]
     shelf["crawling"] = True
     event.emit_sync(event.ShelfCrawlingStarted(name))
     uzpainter.event.hold()
 
     def walk() -> None:
+        returned.wait()
         try:
             shelf["files"] = sorted(
                 os.path.relpath(os.path.join(folder, file), shelf["path"])
@@ -490,7 +575,8 @@ class Shelf:
         """Forces discovering of resources in the shelf's folder."""
         if self._name not in _SHELVES:
             raise ValueError(f"the shelf {self._name!r} doesn't exist")
-        _crawl(self._name)
+        with _call_returning() as returned:
+            _crawl(self._name, returned)
 
     def can_import_resources(self) -> bool:
         raise uzpainter.NotYetSupported(
@@ -528,7 +614,8 @@ class Shelves:
         if not os.path.isdir(path):
             raise ValueError(f"the shelf folder {path!r} does not exist")
         _SHELVES[name] = {"path": os.path.abspath(path), "crawling": False, "files": []}
-        _crawl(name)  # a new shelf crawls its folder, as Painter's does (P21-D s3)
+        with _call_returning() as returned:
+            _crawl(name, returned)  # a new shelf crawls its folder, as Painter's does (P21-D s3)
         return Shelf(name)
 
     @staticmethod
@@ -555,13 +642,15 @@ class Shelves:
 
     @staticmethod
     def refresh_all() -> None:
-        for name in list(_SHELVES):
-            _crawl(name)
+        with _call_returning() as returned:
+            for name in list(_SHELVES):
+                _crawl(name, returned)
 
     @staticmethod
     def remove(name: str) -> None:
         if uzpainter.project.is_open():
-            raise uzpainter.ProjectError("a shelf cannot be removed while a project is open")
+            # Painter's refusal while a project is open (`p22b-host-resources` s18).
+            raise uzpainter.ProjectError("The project is loaded.")
         if name not in _SHELVES:
             raise ValueError(f"the shelf {name!r} doesn't exist")
         del _SHELVES[name]

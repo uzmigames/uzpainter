@@ -157,9 +157,10 @@ class TextureStateEvent(Event):
 
     @staticmethod
     def set_cache_key_invalidation_throttling_period(period: datetime.timedelta) -> None:
-        """Set the minimum duration between two texture update events (at least 500 ms)."""
+        """Set the minimum duration between two texture update events (at least 500 ms; Painter's
+        refusal of 499 ms, `p22b-host-events` s15)."""
         if period < datetime.timedelta(milliseconds=500):
-            raise ValueError("the throttling period can't be lower than 500ms")
+            raise ValueError("duration below 500ms are invalid")
         _THROTTLING["period"] = period
 
 

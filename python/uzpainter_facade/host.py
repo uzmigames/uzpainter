@@ -18,7 +18,9 @@ again (P21-F, P21-G; decision 319).
 - **Engine computations.** The native state (`uzpainter.application`): while disabled, background
   jobs stay queued. Explicit synchronous exports finish without enabling computations (observed
   R10), and their busy section covers only that export. Each state change delivers
-  `EngineComputationsStatusChanged`.
+  `EngineComputationsStatusChanged`. `engine_computations_status()` also reads False while the UI
+  mode is Baking or Visualisation, and the script's state again in Edition
+  (`p22b-host-application` s27-s32, both recordings; decision 297).
 """
 
 from __future__ import annotations
@@ -31,6 +33,7 @@ from typing import Any
 import uzpainter
 
 from uzpainter_facade import event
+from uzpainter_facade.state import SESSION
 
 
 class Host:
@@ -116,14 +119,15 @@ def execute_when_not_busy(callback: Callable[[], Any]) -> None:
 
 
 def engine_computations_status() -> bool:
-    """Whether engine computations are enabled."""
-    return bool(uzpainter.application.engine_computations_status())
+    """Whether engine computations are enabled: the script's state, in the Edition UI mode."""
+    in_edition_mode = SESSION.ui_mode is None or SESSION.ui_mode.name == "Edition"
+    return in_edition_mode and bool(uzpainter.application.engine_computations_status())
 
 
 def enable_engine_computations(enable: bool) -> None:
     """Enables or disables engine computations."""
     enable = bool(enable)
-    changed = engine_computations_status() != enable
+    changed = bool(uzpainter.application.engine_computations_status()) != enable
     uzpainter.application.enable_engine_computations(enable)
     if changed:
         event.emit_sync(event.EngineComputationsStatusChanged(enable))
