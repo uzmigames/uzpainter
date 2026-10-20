@@ -41,7 +41,13 @@ used for BC1/BC3/BC4/BC5/BC7 texture encoding.
   MIT licence or the Unlicense, the user's choice (text at the end of
   bc7enc.cpp).
 
-  bcdec (bundled, thirdparty/etcpak/bcdec.h, bcdec.c; test-only decoder):
+  UzPainter's own test-only BC7 decoder also uses the partition and anchor
+  constants from this pinned bc7enc.cpp under its MIT licence. The decoding
+  algorithm is authored by UzPainter; the constants retain the attribution
+  above. See docs/BC-DECODER.md. The complete MIT notice remains in the
+  distributed thirdparty/etcpak/bc7enc.cpp.
+
+  bcdec (bundled, thirdparty/etcpak/bcdec.h, bcdec.c; test-only decoder oracle):
   written by Sergii "iOrange" Kudlai; MIT licence or the Unlicense, the
   user's choice (text at the end of bcdec.h).
 

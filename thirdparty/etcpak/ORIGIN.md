@@ -13,15 +13,21 @@
 | Version source | UzEngine commit `380c142e481d`: `runtime/thirdparty/README.md` records etcpak as "git (master, 2025)" and its `README.md` says etcpak 2.1; UzPainter pins release `2.1` (tag commit `7f15da47`, published 2026-02-22), the newest release on the retrieval date, for the BC encoder adapter of `docs/architecture/08-export.md` §3 (`phase3.1_uze-uztexture-writer`) |
 | Licence | BSD-3-Clause (etcpak, `LICENSE.txt`, Copyright (c) 2013-2026 Bartosz Taudul; contributors in `AUTHORS.txt`); the bundled bc7enc (`bc7enc.cpp`, `bc7enc.h`, Richard Geldreich, Jr.) under MIT or the Unlicense, the user's choice, stated at the end of `bc7enc.cpp`; the bundled bcdec (`bcdec.h`, `bcdec.c`, Sergii Kudlai) under MIT or the Unlicense, stated at the end of `bcdec.h` |
 | Licence files | `LICENSE.txt`, `AUTHORS.txt`, `bc7enc.cpp`, `bcdec.h` (verbatim) |
-| Distribution role | build-only today: `ProcessDxtc.cpp`, `bc7enc.cpp` and `Dither.cpp` compiled into `uzp_texture.lib` (UzPainter's BC encoder adapter, `src/export/bc_encoder.cpp`) and its native tests `uzp-texture-tests.exe`; `bcdec.c` compiled into `uzp-texture-tests.exe` only, the test-only BC decoder; shipped once the UzEngine preset (`phase3.4_uzengine-preset`) links the library into `UzPainter.exe` |
+| Distribution role | build-only today: `ProcessDxtc.cpp`, `bc7enc.cpp` and `Dither.cpp` compiled into `uzp_texture.lib` (UzPainter's BC encoder adapter, `src/export/bc_encoder.cpp`) and its native tests `uzp-texture-tests.exe`; `bcdec.c` compiled into `uzp-texture-tests.exe` only, the independent decoder oracle; shipped once the UzEngine preset (`phase3.4_uzengine-preset`) links the library into `UzPainter.exe` |
 | Selected features | The BC1, BC3, BC4, BC5 and BC7 block encoders of `ProcessDxtc.cpp` (`CompressBc1`, `CompressBc3`, `CompressBc4`, `CompressBc5`, `CompressBc7` over bc7enc's `bc7enc_compress_block`) compiled as C++ with `-ffp-contract=off`; `Dither.cpp` only because `CompressBc1Dither` in the same unit references it (dithering is never called); the SIMD branches follow the build's target CPU; bcdec's decoders for the tests (`BCDEC_IMPLEMENTATION` through `bcdec.c`); no ETC codecs, command-line application, task dispatcher, image I/O, CMake files or examples |
 | Include directories | `thirdparty/etcpak/.` |
 
-Every file below is byte-equal to the archive member at the same path; none was taken from a UzEngine tree. `MANIFEST.json` records the SHA-256 of each file.
+Every file below is byte-equal to the archive member at the same path, except for the local changes listed below; none was taken from a UzEngine tree. `MANIFEST.json` records the SHA-256 of each vendored file.
 
 ## Licence inventory
 
 - Status: confirmed against the pinned package (licence text, notices, hash, features, role)
+
+## Local changes
+
+- `bcdec.h`: BC7 RGB-only modes do not read alpha endpoints, but the shared P-bit and endpoint expansion loops shift those uninitialised integers before overwriting alpha with 255. Initialise the array so the independent test oracle has defined behaviour; keep undefined-behaviour checks enabled. The authored all-mode corpus exposes the ReleaseSafe trap on mode-0 block 61ea9fd86740340322a13f24c7fc4362.
+  - Upstream: `int endpoints[6][4];`
+  - Vendored: `int endpoints[6][4] = {0}; /* UzPainter: RGB-only modes still shift alpha before setting it. */`
 
 ## Selected files (12)
 
@@ -36,7 +42,7 @@ Every file below is byte-equal to the archive member at the same path; none was 
 - `bc7enc.cpp` (162,527 bytes)
 - `bc7enc.h` (4,328 bytes)
 - `bcdec.c` (48 bytes)
-- `bcdec.h` (70,945 bytes)
+- `bcdec.h` (71,020 bytes)
 
 ## Comparison with UzEngine's copy
 

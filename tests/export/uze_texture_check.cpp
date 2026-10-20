@@ -3,71 +3,10 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <string>
 
-#include "bcdec.h"
-
 namespace uzp::exporter::testing {
-
-Rgba8Image DecodeBc(BcFormat format, const std::vector<uint8_t>& blocks, uint32_t width,
-                    uint32_t height) {
-    if (blocks.size() != BcEncodedSize(format, width, height))
-        throw std::invalid_argument("DecodeBc: block bytes do not match the size");
-    const uint32_t blocksX = (width + 3) / 4;
-    const uint32_t blocksY = (height + 3) / 4;
-    const uint32_t blockBytes = BcBlockBytes(format);
-    Rgba8Image out;
-    out.width = width;
-    out.height = height;
-    out.rgba.assign(uint64_t{width} * height * 4, 0);
-    const uint8_t* block = blocks.data();
-    for (uint32_t by = 0; by < blocksY; ++by) {
-        for (uint32_t bx = 0; bx < blocksX; ++bx, block += blockBytes) {
-            uint8_t rgba[16 * 4] = {};
-            uint8_t channels[16 * 2] = {};
-            switch (format) {
-                case BcFormat::Bc1:
-                case BcFormat::Bc1Srgb:
-                    bcdec_bc1(block, rgba, 16);
-                    break;
-                case BcFormat::Bc3:
-                case BcFormat::Bc3Srgb:
-                    bcdec_bc3(block, rgba, 16);
-                    break;
-                case BcFormat::Bc7:
-                case BcFormat::Bc7Srgb:
-                    bcdec_bc7(block, rgba, 16);
-                    break;
-                case BcFormat::Bc4:
-                    bcdec_bc4(block, channels, 4);
-                    for (int i = 0; i < 16; ++i) {
-                        rgba[i * 4] = channels[i];
-                        rgba[i * 4 + 3] = 255;
-                    }
-                    break;
-                case BcFormat::Bc5:
-                    bcdec_bc5(block, channels, 8);
-                    for (int i = 0; i < 16; ++i) {
-                        rgba[i * 4] = channels[i * 2];
-                        rgba[i * 4 + 1] = channels[i * 2 + 1];
-                        rgba[i * 4 + 3] = 255;
-                    }
-                    break;
-            }
-            for (uint32_t y = 0; y < 4; ++y) {
-                const uint32_t ty = by * 4 + y;
-                if (ty >= height) break;
-                for (uint32_t x = 0; x < 4; ++x) {
-                    const uint32_t tx = bx * 4 + x;
-                    if (tx >= width) break;
-                    std::memcpy(out.rgba.data() + (uint64_t{ty} * width + tx) * 4,
-                                rgba + (y * 4 + x) * 4, 4);
-                }
-            }
-        }
-    }
-    return out;
-}
 
 namespace {
 
@@ -115,14 +54,19 @@ ReadUzTexture ParseUzTexture(const std::vector<uint8_t>& file) {
     for (uint32_t level = 0; level < h.mipCount; ++level) {
         const uz::UzTextureMipLevel& mip = out.mips[level];
         const std::string at = "mip " + std::to_string(level) + ": ";
-        if (mip.offset + mip.size > file.size()) Fail("rule 9: " + at + "blob exceeds the file");
+        if (mip.offset > file.size() || mip.size > file.size() - mip.offset)
+            Fail("rule 9: " + at + "blob exceeds the file");
         if (mip.width != std::max(1u, h.width >> level) ||
             mip.height != std::max(1u, h.height >> level))
             Fail(at + "dimensions are not max(1, base >> level)");
-        const uint64_t size =
-            h.format == static_cast<uint32_t>(uz::TextureFormat::Uncompressed_RGBA8)
-                ? uint64_t{mip.width} * mip.height * 4
-                : uint64_t{(mip.width + 3) / 4} * ((mip.height + 3) / 4) * BlockBytes(h.format);
+        const bool rgba = h.format == static_cast<uint32_t>(uz::TextureFormat::Uncompressed_RGBA8);
+        const uint64_t units = rgba ? uint64_t{mip.width} * mip.height
+                                   : ((uint64_t{mip.width} + 3) / 4) *
+                                         ((uint64_t{mip.height} + 3) / 4);
+        const uint32_t bytesPerUnit = rgba ? 4 : BlockBytes(h.format);
+        if (units > std::numeric_limits<uint64_t>::max() / bytesPerUnit)
+            Fail("rule 10: " + at + "size overflows");
+        const uint64_t size = units * bytesPerUnit;
         if (mip.size != size) Fail("rule 10: " + at + "size does not match its format");
         if (mip.offset != expectedOffset) Fail(at + "blob is not packed after the previous one");
         expectedOffset += mip.size;
@@ -139,6 +83,12 @@ std::array<ChannelError, 4> LossyDerivativeError(const Rgba16Image& canonical,
         canonical.rgba.size() != decoded.rgba.size())
         throw std::invalid_argument("LossyDerivativeError: sizes differ");
     const uint64_t texels = uint64_t{canonical.width} * canonical.height;
+    if (texels == 0)
+        throw std::invalid_argument("LossyDerivativeError: empty image");
+    if (texels > std::numeric_limits<size_t>::max() / 4)
+        throw std::invalid_argument("LossyDerivativeError: image size overflows");
+    if (canonical.rgba.size() != static_cast<size_t>(texels) * 4)
+        throw std::invalid_argument("LossyDerivativeError: pixels do not match dimensions");
     std::array<ChannelError, 4> result{};
     std::vector<double> errors(texels);
     for (uint32_t c = 0; c < 4; ++c) {
@@ -151,7 +101,7 @@ std::array<ChannelError, 4> LossyDerivativeError(const Rgba16Image& canonical,
         std::sort(errors.begin(), errors.end());
         result[c].max = errors.back();
         result[c].mean = sum / static_cast<double>(texels);
-        const uint64_t rank = (texels * 99 + 99) / 100;  // ceil(0.99 n), 1-based
+        const uint64_t rank = texels - texels / 100;  // ceil(0.99 n), 1-based, without overflow
         result[c].p99 = errors[rank - 1];
     }
     return result;

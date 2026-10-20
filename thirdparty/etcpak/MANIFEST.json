@@ -64,8 +64,8 @@
     },
     {
       "path": "bcdec.h",
-      "sha256": "608f22d4144190f03657968eda68fffc6d75eb175e5ac41305bcefc372fd555f",
-      "size": 70945
+      "sha256": "7606e211929de736a65e508cbdd41c3bfe3674a9c57de7161b53e3de228f68ab",
+      "size": 71020
     }
   ],
   "uzengine_commit": "380c142e481d56fe16b045f63315b42359e86a7d",

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 #include <thread>
 
@@ -32,9 +33,15 @@ bool BcIsSrgb(BcFormat format) {
 }
 
 uint64_t BcEncodedSize(BcFormat format, uint32_t width, uint32_t height) {
+    if (width == 0 || height == 0)
+        throw std::invalid_argument("BcEncodedSize: empty size");
     const uint64_t blocksX = (uint64_t{width} + 3) / 4;
     const uint64_t blocksY = (uint64_t{height} + 3) / 4;
-    return blocksX * blocksY * BcBlockBytes(format);
+    const uint64_t count = blocksX * blocksY;
+    const uint32_t bytes = BcBlockBytes(format);
+    if (count > std::numeric_limits<uint64_t>::max() / bytes)
+        throw std::invalid_argument("BcEncodedSize: byte size overflows");
+    return count * bytes;
 }
 
 std::string_view BcFormatName(BcFormat format) {
@@ -134,12 +141,22 @@ std::vector<uint8_t> EncodeBc(const BcEncoder& encoder, const Rgba8Image& image,
                               BcFormat format, uint32_t threads) {
     if (image.width == 0 || image.height == 0)
         throw std::invalid_argument("EncodeBc: empty image");
-    if (image.rgba.size() != uint64_t{image.width} * image.height * 4)
+    const uint64_t texels = uint64_t{image.width} * image.height;
+    if (texels > std::numeric_limits<size_t>::max() / 4)
+        throw std::invalid_argument("EncodeBc: image size overflows");
+    if (image.rgba.size() != static_cast<size_t>(texels) * 4)
         throw std::invalid_argument("EncodeBc: texel count does not match the image size");
+    if (image.width > std::numeric_limits<uint32_t>::max() - 3 ||
+        image.height > std::numeric_limits<uint32_t>::max() - 3)
+        throw std::invalid_argument("EncodeBc: padded dimensions overflow");
 
     const uint32_t paddedWidth = (image.width + 3) / 4 * 4;
     const uint32_t paddedHeight = (image.height + 3) / 4 * 4;
-    std::vector<uint32_t> padded(uint64_t{paddedWidth} * paddedHeight);
+    const uint64_t paddedTexels = uint64_t{paddedWidth} * paddedHeight;
+    std::vector<uint32_t> padded;
+    if (paddedTexels > padded.max_size())
+        throw std::invalid_argument("EncodeBc: padded image exceeds the buffer limit");
+    padded.resize(static_cast<size_t>(paddedTexels));
     for (uint32_t y = 0; y < paddedHeight; ++y) {
         const uint8_t* row = image.rgba.data() + uint64_t{std::min(y, image.height - 1)} *
                                                      image.width * 4;

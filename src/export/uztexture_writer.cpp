@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <bit>
 #include <cstring>
+#include <limits>
 #include <utility>
 
 namespace uzp::exporter {
@@ -11,6 +12,16 @@ static_assert(std::endian::native == std::endian::little,
               "the .uztexture structs are copied as little-endian bytes");
 
 namespace {
+
+void ValidateImage(const Rgba16Image& image, const char* caller) {
+    const uint64_t texels = uint64_t{image.width} * image.height;
+    if (texels == 0)
+        throw std::invalid_argument(std::string(caller) + ": empty image");
+    if (texels > std::numeric_limits<size_t>::max() / 4)
+        throw std::invalid_argument(std::string(caller) + ": image size overflows");
+    if (image.rgba.size() != static_cast<size_t>(texels) * 4)
+        throw std::invalid_argument(std::string(caller) + ": texel count does not match the image size");
+}
 
 bool KnownFormat(uz::TextureFormat format) {
     switch (format) {
@@ -48,7 +59,14 @@ std::string NegativeZMessage(const std::string& binding, const NegativeZ& found)
 }  // namespace
 
 uint64_t UzTextureMipBytes(uz::TextureFormat format, uint32_t width, uint32_t height) {
-    if (format == uz::TextureFormat::Uncompressed_RGBA8) return uint64_t{width} * height * 4;
+    if (width == 0 || height == 0)
+        throw std::invalid_argument("UzTextureMipBytes: empty size");
+    if (format == uz::TextureFormat::Uncompressed_RGBA8) {
+        const uint64_t texels = uint64_t{width} * height;
+        if (texels > std::numeric_limits<uint64_t>::max() / 4)
+            throw std::invalid_argument("UzTextureMipBytes: byte size overflows");
+        return texels * 4;
+    }
     return BcEncodedSize(ToBcFormat(format, false), width, height);
 }
 
@@ -89,6 +107,8 @@ UzTexture WriteUzTextureFile(std::string binding, uz::TextureFormat format, bool
                                         " holds " + std::to_string(mips[level].size()) +
                                         " bytes, expected " + std::to_string(mip.size));
         mip.offset = offset;
+        if (mip.size > std::numeric_limits<uint64_t>::max() - offset)
+            throw std::invalid_argument("WriteUzTextureFile: file size overflows");
         offset += mip.size;
         meta.mips.push_back(mip);
     }
@@ -102,7 +122,9 @@ UzTexture WriteUzTextureFile(std::string binding, uz::TextureFormat format, bool
     header.format = static_cast<uint32_t>(format);
     header.flags = srgb ? uz::kUzTextureFlag_sRGB : 0u;
 
-    out.bytes.resize(offset);
+    if (offset > out.bytes.max_size())
+        throw std::invalid_argument("WriteUzTextureFile: file exceeds the byte buffer limit");
+    out.bytes.resize(static_cast<size_t>(offset));
     std::memcpy(out.bytes.data(), &header, sizeof(header));
     for (uint32_t level = 0; level < count; ++level) {
         uz::UzTextureMipLevel descriptor;
@@ -120,6 +142,7 @@ UzTexture WriteUzTextureFile(std::string binding, uz::TextureFormat format, bool
 }
 
 NegativeZ FindNegativeZ(const Rgba16Image& normal) {
+    ValidateImage(normal, "FindNegativeZ");
     NegativeZ found;
     for (uint64_t i = 0; i < uint64_t{normal.width} * normal.height; ++i) {
         if (normal.rgba[i * 4 + 2] > 32767) continue;
@@ -137,8 +160,7 @@ NegativeZNormal::NegativeZNormal(const std::string& binding, const NegativeZ& ne
 
 UzTexture CookUzTexture(const BcEncoder& encoder, const Rgba16Image& canonical,
                         const UzTextureSpec& spec, uint32_t threads) {
-    if (canonical.rgba.size() != uint64_t{canonical.width} * canonical.height * 4)
-        throw std::invalid_argument("CookUzTexture: texel count does not match the image size");
+    ValidateImage(canonical, "CookUzTexture");
     if (spec.mips.mapClass == MipClass::Normal && spec.srgb)
         throw std::invalid_argument("CookUzTexture: normal maps must be linear, not sRGB");
     if (spec.mips.mapClass == MipClass::Normal && spec.format == uz::TextureFormat::BC5) {

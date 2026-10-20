@@ -59,6 +59,7 @@ struct UzTexture {
 
 /// The byte size of one mip of `format`: width * height * 4 for RGBA8, else
 /// ceil(width / 4) * ceil(height / 4) * the block size (8 for BC1 and BC4, 16 otherwise).
+/// Throws std::invalid_argument for empty dimensions, an unknown format or uint64 overflow.
 [[nodiscard]] uint64_t UzTextureMipBytes(uz::TextureFormat format, uint32_t width, uint32_t height);
 
 /// The `.uztexture` file of the mip blobs `mips` (level 0 first). Throws std::invalid_argument for
@@ -74,6 +75,7 @@ struct NegativeZ {
     uint32_t firstX = 0;
     uint32_t firstY = 0;
 };
+/// Throws std::invalid_argument for an empty image or a mismatched/overflowing pixel count.
 [[nodiscard]] NegativeZ FindNegativeZ(const Rgba16Image& normal);
 
 /// A BC5 normal map that holds negative-Z texels: BC5 keeps X and Y only and the engine

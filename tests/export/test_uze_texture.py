@@ -23,6 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 NATIVE_CASES = (
     "encoder_determinism",  # 3.1
     "encoder_channels",  # 2.2
+    "bc_decoder",  # 2.8: own decoder, every BC7 mode, independent oracle.
     "colour_mips",  # 3.2
     "normal_mips",  # 3.3
     "alpha_coverage",  # 3.4

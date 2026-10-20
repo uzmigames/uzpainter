@@ -97,10 +97,10 @@ def test_apply_local_changes() -> None:
 
 
 def test_local_changes_are_recorded_in_origin() -> None:
-    """Only tinyexr carries a local change: its ORIGIN.md lists it, and its vendored header holds
+    """Each admitted local change has an ORIGIN.md entry, and its vendored header holds
     the replacement once and the upstream text nowhere."""
     changed = [lib for lib in LIBRARIES if lib.local_changes]
-    assert [lib.name for lib in changed] == ["tinyexr"]
+    assert [lib.name for lib in changed] == ["tinyexr", "etcpak"]
     for lib in changed:
         origin = (REPO_ROOT / lib.path / "ORIGIN.md").read_text(encoding="utf-8")
         assert "## Local changes" in origin

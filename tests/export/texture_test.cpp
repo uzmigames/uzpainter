@@ -5,16 +5,21 @@
 // Usage:
 //   uzp-texture-tests run [case]   run every case (or one); exit 0 when all pass
 
+#include "../no_error_dialogs.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <functional>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include "bc_decoder_test.h"
 #include "export/bc_encoder.h"
 #include "export/mips.h"
 #include "export/uztexture_writer.h"
@@ -89,6 +94,16 @@ Rgba16Image HemisphereNormals(uint32_t size) {
 // ── 3.1 Encoder determinism ─────────────────────────────────────────────────────────────────
 
 void CaseEncoderDeterminism() {
+    for (const Rgba8Image& invalid : {
+             Rgba8Image{0, 0, {}}, Rgba8Image{1, 0, {}}, Rgba8Image{1, 1, {}},
+             Rgba8Image{1, 1, {0, 0, 0}}, Rgba8Image{1, 1, {0, 0, 0, 0, 0}},
+             Rgba8Image{0x80000000u, 0x80000000u, {}},
+             Rgba8Image{0xffffffffu, 1, {}}}) {
+        bool refused = false;
+        try { (void)EncodeBc(EtcpakEncoder(), invalid, BcFormat::Bc7, 1); }
+        catch (const std::invalid_argument&) { refused = true; }
+        CHECK(refused);
+    }
     const uint32_t maxThreads = ResolveBcThreads(0);
     std::printf("  hardware threads: %u\n", maxThreads);
     for (auto [w, h] : {std::pair<uint32_t, uint32_t>{256, 256}, {260, 134}, {3, 5}}) {
@@ -318,6 +333,17 @@ void CaseNegativeZ() {
     Rgba16Image normal = HemisphereNormals(64);
     CHECK(FindNegativeZ(normal).count == 0);
     const UzTextureSpec bc5{"normal", uz::TextureFormat::BC5, false, {MipClass::Normal, 0.5}};
+    for (const Rgba16Image& invalid : {
+             Rgba16Image{0, 0, {}}, Rgba16Image{0, 1, {}}, Rgba16Image{1, 1, {}},
+             Rgba16Image{1, 1, {0, 0, 0}}, Rgba16Image{1, 1, {0, 0, 0, 0, 0}},
+             Rgba16Image{0x80000000u, 0x80000000u, {}}}) {
+        bool findRefused = false, cookRefused = false;
+        try { (void)FindNegativeZ(invalid); }
+        catch (const std::invalid_argument&) { findRefused = true; }
+        try { (void)CookUzTexture(EtcpakEncoder(), invalid, bc5, 1); }
+        catch (const std::invalid_argument&) { cookRefused = true; }
+        CHECK(findRefused && cookRefused);
+    }
     CHECK(!CookUzTexture(EtcpakEncoder(), normal, bc5, 0).bytes.empty());
 
     normal.rgba[(uint64_t{9} * 64 + 5) * 4 + 2] = 32767;  // Z = -1/65535
@@ -448,6 +474,64 @@ void CaseUzTextureLayout() {
         rejected = true;
     }
     CHECK(rejected);
+
+    struct InvalidMip {
+        uz::TextureFormat format;
+        uint32_t width, height;
+        uint64_t offset, size;
+        const char* rule;
+    };
+    constexpr uint32_t max32 = std::numeric_limits<uint32_t>::max();
+    constexpr uint64_t max64 = std::numeric_limits<uint64_t>::max();
+    // Huge dimensions with empty heap buffers must fail before allocation or pixel access.
+    CHECK(throws([&] { (void)UzTextureMipBytes(uz::TextureFormat::Uncompressed_RGBA8,
+                                              0x80000000u, 0x80000000u); }));
+    CHECK(throws([&] { (void)WriteUzTextureFile("a", uz::TextureFormat::Uncompressed_RGBA8,
+                                               false, 0x80000000u, 0x80000000u, {{}}); }));
+    CHECK(throws([&] { (void)WriteUzTextureFile("a", uz::TextureFormat::BC7,
+                                               false, max32, max32, {{}}); }));
+    for (BcFormat format : kAllFormats) {
+        CHECK(throws([&] { (void)BcEncodedSize(format, 0, 1); }));
+        CHECK(throws([&] { (void)BcEncodedSize(format, 1, 0); }));
+        if (BcBlockBytes(format) == 16)
+            CHECK(throws([&] { (void)BcEncodedSize(format, max32, max32); }));
+        else
+            CHECK(BcEncodedSize(format, max32, max32) == (uint64_t{1} << 63));
+        CHECK(BcEncodedSize(format, max32, 1) == (uint64_t{1} << 30) * BcBlockBytes(format));
+    }
+    for (uz::TextureFormat format : {uz::TextureFormat::Uncompressed_RGBA8,
+                                     uz::TextureFormat::BC1, uz::TextureFormat::BC7}) {
+        CHECK(throws([&] { (void)UzTextureMipBytes(format, 0, 1); }));
+        CHECK(throws([&] { (void)UzTextureMipBytes(format, 1, 0); }));
+        CHECK(throws([&] { (void)WriteUzTextureFile("a", format, false, 1, 1, {{}}); }));
+    }
+    // Build descriptors directly: the writer must not sanitize these malformed inputs.
+    for (const InvalidMip& c : {
+             InvalidMip{uz::TextureFormat::BC1, max32, 1, 88, 0, "rule 10:"},
+             InvalidMip{uz::TextureFormat::BC4, 1, max32, 88, 0, "rule 10:"},
+             InvalidMip{uz::TextureFormat::BC7, max32, max32, 88, 0, "rule 10:"},
+             InvalidMip{uz::TextureFormat::Uncompressed_RGBA8, 0x80000000u, 0x80000000u,
+                        88, 0, "rule 10:"},
+             InvalidMip{uz::TextureFormat::BC1, 1, 1, max64, 1, "rule 9:"},
+             InvalidMip{uz::TextureFormat::Uncompressed_RGBA8, 0x7fffffffu, 0x80000001u,
+                        88, max64 - 3, "rule 9:"}}) {
+        uz::UzTextureHeader header;
+        header.width = c.width;
+        header.height = c.height;
+        header.mipCount = 1;
+        header.format = static_cast<uint32_t>(c.format);
+        const uz::UzTextureMipLevel mip{c.offset, c.size, c.width, c.height};
+        std::vector<uint8_t> malformed(sizeof(header) + sizeof(mip));
+        std::memcpy(malformed.data(), &header, sizeof(header));
+        std::memcpy(malformed.data() + sizeof(header), &mip, sizeof(mip));
+        bool refused = false;
+        try {
+            (void)ParseUzTexture(malformed);
+        } catch (const UzTextureReadError& e) {
+            refused = std::string_view(e.what()).starts_with(c.rule);
+        }
+        CHECK(refused);
+    }
 }
 
 // ── 3.7 Lossy-derivative report ─────────────────────────────────────────────────────────────
@@ -473,6 +557,35 @@ void ReportLossy(const char* map, BcFormat bc, const UzTextureSpec& spec, const 
 }
 
 void CaseLossyDerivative() {
+    auto refuses = [](const Rgba16Image& canonical, const Rgba8Image& decoded,
+                      const char* message) {
+        try {
+            (void)LossyDerivativeError(canonical, decoded);
+        } catch (const std::invalid_argument& e) {
+            return std::string_view(e.what()) == message;
+        }
+        return false;
+    };
+    CHECK(refuses({0, 0, {}}, {0, 0, {}}, "LossyDerivativeError: empty image"));
+    CHECK(refuses({0, 1, {}}, {0, 1, {}}, "LossyDerivativeError: empty image"));
+    CHECK(refuses({1, 1, {}}, {1, 1, {}},
+                  "LossyDerivativeError: pixels do not match dimensions"));
+    CHECK(refuses({1, 1, {0, 0, 0}}, {1, 1, {0, 0, 0}},
+                  "LossyDerivativeError: pixels do not match dimensions"));
+    CHECK(refuses({1, 1, {0, 0, 0, 0, 0}}, {1, 1, {0, 0, 0, 0, 0}},
+                  "LossyDerivativeError: pixels do not match dimensions"));
+    CHECK(refuses({1, 1, {0, 0, 0, 0}}, {1, 1, {}},
+                  "LossyDerivativeError: sizes differ"));
+    constexpr uint32_t max32 = std::numeric_limits<uint32_t>::max();
+    CHECK(refuses({max32, max32, {}}, {max32, max32, {}},
+                  "LossyDerivativeError: image size overflows"));
+    const auto single = LossyDerivativeError({1, 1, {0, 65535, 0, 65535}},
+                                            {1, 1, {255, 255, 0, 0}});
+    for (unsigned channel = 0; channel < 4; ++channel) {
+        const double expected = channel == 0 || channel == 3 ? 1.0 : 0.0;
+        CHECK(single[channel].max == expected && single[channel].mean == expected &&
+              single[channel].p99 == expected);
+    }
     Rgba16Image orm{256, 256, std::vector<uint16_t>(256 * 256 * 4)};
     for (uint32_t y = 0; y < 256; ++y)
         for (uint32_t x = 0; x < 256; ++x) {
@@ -493,6 +606,7 @@ const std::vector<std::pair<std::string, std::function<void()>>>& Cases() {
     static const std::vector<std::pair<std::string, std::function<void()>>> cases = {
         {"encoder_determinism", CaseEncoderDeterminism},
         {"encoder_channels", CaseEncoderChannels},
+        {"bc_decoder", RunBcDecoderTests},
         {"colour_mips", CaseColourMips},
         {"normal_mips", CaseNormalMips},
         {"alpha_coverage", CaseAlphaCoverage},

@@ -9,7 +9,7 @@
 - [x] 2.5 Mip generation for masked albedo: alpha-coverage preservation per level
 - [x] 2.6 `.uztexture` writer from the vendored `uztexture_format.h` constants and layout, with explicit format, colour space, binding and mip metadata per texture
 - [ ] 2.7 Normal guard: detect negative-Z texels before BC5 encoding; export fails or routes the map to an RGB format per the plan option; the choice is recorded in the receipt
-- [ ] 2.8 Test-only BC decoder and `.uztexture` reader (UzPainter's own code; the vendored header's read/write declarations stay unimplemented) — open: the `.uztexture` reader is ours, but BC blocks are decoded by the vendored bcdec (decision 315), not by UzPainter's own code as this item requires
+- [x] 2.8 Test-only BC decoder and `.uztexture` reader (UzPainter's own code; the vendored header's read/write declarations stay unimplemented) — BC1/3/4/5 and all eight BC7 modes; attributed format constants, independent oracle and numerical contract in `docs/BC-DECODER.md`
 
 ## 3. Tests
 - [x] 3.1 Encoder determinism: each BC format encoded twice and at 1, 4 and max worker threads yields identical bytes (local CPU lane, decision 200, `14-parity-testing.md` §7)
@@ -27,3 +27,9 @@
 - [ ] 5.1 Update or create documentation covering the implementation
 - [ ] 5.2 Write tests covering the new behavior
 - [ ] 5.3 Run tests and confirm they pass
+
+## 6. Item 2.8 validation (2026-10-20)
+- Authored decoder, reader and size-validation regressions: all 11 `tests/export/test_uze_texture.py` tests passed on Debug; all 10 native cases passed separately on ReleaseSafe, ReleaseFast and ReleaseSmall. The source audit passed 57 tests. Run evidence: `tmp/scratch/bc-decoder/`.
+- The all-mode corpus exposed an uninitialised alpha read in the bcdec oracle. The recorded, archive-reproducible initialisation fix retains sanitizers. Vendoring checks: two passed initially; the remaining check's obsolete single-patched-library expectation was updated and its rerun passed. No skipped tests counted as evidence.
+- Reader and writer reject overflowing dimensions/offsets and malformed image buffers before access or publication. BC7 format constants retain their upstream MIT notice; bcdec is called only by the differential test, never by `DecodeBc` or the lossy report.
+- Items 2.7 and 3.5 still require the real export plan, receipt and publication integration. Their library guard tests do not close those obligations. Prerequisite and final acceptance remain open.

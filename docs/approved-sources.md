@@ -17,6 +17,16 @@ Audit of 2026-10-10 (task `phase0.1_approved-source-index`). Reviewer of every e
 
 ### A. Public specifications and papers
 
+BC decoder audit, Codex, 2026-10-20: the following public sources are approved
+implementation inputs for the project's own test-only BC decoder. They do not
+authorize copying proprietary implementations or claim hardware equivalence.
+
+| ID | Source | Category | Revision / hash | Licence | Cleared scope | Cited as | Reviewer |
+|---|---|---|---|---|---|---|---|
+| S-BC-MS | Microsoft, Block Compression; BC7 Format; BC7 Format Mode Reference: https://learn.microsoft.com/en-us/windows/win32/direct3d10/d3d10-graphics-programming-guide-resources-block-compression ; https://learn.microsoft.com/en-us/windows/win32/direct3d11/bc7-format ; https://learn.microsoft.com/en-us/windows/win32/direct3d11/bc7-format-mode-reference | Public documentation | Retrieved 2026-10-20 | Consulted, no prose or pseudocode copied into implementation | BC1/3/4/5 block layout and palettes; all eight BC7 modes, endpoint expansion, indices and weights | `S-BC-MS` | Codex source audit 2026-10-20 |
+| S-BC-KHR | Khronos OpenGL-Registry, EXT_texture_compression_s3tc, ARB_texture_compression_rgtc and ARB_texture_compression_bptc; official repository https://github.com/KhronosGroup/OpenGL-Registry/tree/main/extensions | Public specifications | Retrieved 2026-10-20; RGTC revision 1.7, BPTC revision 9; exact consulted URLs and retrieval hashes in `docs/BC-DECODER.md` | Consulted | S3TC/RGTC byte layout, palettes, component semantics; BPTC BC7 format rules | `S-BC-KHR` | Codex source audit 2026-10-20 |
+| X-BC-TEST-REFERENCE | etcpak 2.1 bundled `bc7enc.cpp` and `bcdec.h`, https://github.com/wolfpld/etcpak/tree/7f15da4739cc5f8562311bdbb800436986d268ca | Licensed public source | Pin and per-file hashes: `thirdparty/etcpak/ORIGIN.md`, `MANIFEST.json` | MIT selected; complete notices retained in the vendored files and NOTICE | bc7enc partition/anchor constants may be reused with attribution; bcdec may be inspected for the existing CPU rounding convention and used only as a test oracle, not called by the authored decoder | `X-BC-TEST-REFERENCE` | Codex source audit 2026-10-20 |
+
 | ID | Source | Category | Revision / hash | Licence | Cleared scope | Cited as | Reviewer |
 |---|---|---|---|---|---|---|---|
 | S-OPENPBR | OpenPBR Surface specification, Academy Software Foundation — https://academysoftwarefoundation.github.io/OpenPBR/ (retrieved 2026-10-10) | Public specification | Version cited per use (record the spec version in `parity/semantics/*.json`) | — (consulted) | Lobe definitions, channel names, layering for the compositor, viewport and path tracer | `OpenPBR` | Claude audit 2026-10-10 |

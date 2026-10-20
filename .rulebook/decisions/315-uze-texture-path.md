@@ -34,7 +34,8 @@
    - Each texture returns its metadata (binding, format, colour space, mips) for the preset's receipt.
 5. **Normal guard.** `CookUzTexture` refuses a Normal-class BC5 map that has any texel with B <= 32767 (Z < 0). It throws `NegativeZNormal` with the count and the first texel, before anything is encoded. The plan option (fail or route to RGB) and its receipt record belong to the preset, `phase3.4_uzengine-preset`.
 6. **Test-only decoding.**
-   - BC blocks are decoded by the vendored bcdec. It comes from the same pinned archive and is independent of the encoder (MIT/Unlicense, by a different author).
+   - Amendment, 2026-10-20: BC1/3/4/5 and all eight BC7 modes are decoded by UzPainter's own test-only code (`tests/export/bc_decoder.cpp`, `bc7_decoder.cpp`). BC7 format constants retain the pinned bc7enc MIT attribution. The BC1-5 integer convention preserves the prior CPU metrics; it does not claim exact GPU reconstruction. Sources and arithmetic: `docs/BC-DECODER.md`.
+   - The vendored bcdec remains only an independent differential oracle. Its recorded local fix initialises alpha endpoints before RGB-only modes shift them; the authored corpus exposed the undefined read in ReleaseSafe. The same corpus passes with the fix and sanitizers enabled. This supersedes the original use of bcdec as the production test reader, satisfying item 2.8's own-code requirement.
    - The `.uztexture` reader and the lossy-derivative error (max, mean, p99 per channel and mip) are UzPainter's own code in `tests/export/`.
 
 ## Consequences

@@ -1291,8 +1291,8 @@ LIBRARIES: tuple[Library, ...] = (
             "build-only today: `ProcessDxtc.cpp`, `bc7enc.cpp` and `Dither.cpp` compiled into "
             "`uzp_texture.lib` (UzPainter's BC encoder adapter, `src/export/bc_encoder.cpp`) and "
             "its native tests `uzp-texture-tests.exe`; `bcdec.c` compiled into "
-            "`uzp-texture-tests.exe` only, the test-only BC decoder; shipped once the UzEngine "
-            "preset (`phase3.4_uzengine-preset`) links the library into `UzPainter.exe`"
+            "`uzp-texture-tests.exe` only, the independent decoder oracle; shipped once the "
+            "UzEngine preset (`phase3.4_uzengine-preset`) links the library into `UzPainter.exe`"
         ),
         features=(
             "The BC1, BC3, BC4, BC5 and BC7 block encoders of `ProcessDxtc.cpp` (`CompressBc1`, "
@@ -1307,6 +1307,24 @@ LIBRARIES: tuple[Library, ...] = (
         core=False,
         importer=IMPORTER_UZE,
         retrieved="2026-10-19",
+        local_changes=(
+            LocalChange(
+                path="bcdec.h",
+                upstream="    int endpoints[6][4];",
+                replacement=(
+                    "    int endpoints[6][4] = {0}; /* UzPainter: RGB-only modes still shift "
+                    "alpha before setting it. */"
+                ),
+                cause=(
+                    "BC7 RGB-only modes do not read alpha endpoints, but the shared P-bit and "
+                    "endpoint expansion loops shift those uninitialised integers before "
+                    "overwriting alpha with 255. Initialise the array so the independent test "
+                    "oracle has defined behaviour; keep undefined-behaviour checks enabled. "
+                    "The authored all-mode corpus exposes the ReleaseSafe trap on mode-0 block "
+                    "61ea9fd86740340322a13f24c7fc4362"
+                ),
+            ),
+        ),
     ),
 )
 

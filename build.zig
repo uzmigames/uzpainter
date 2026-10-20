@@ -426,8 +426,8 @@ const texture_sources = [_][]const u8{
     "export/uztexture_writer.cpp",
 };
 /// etcpak's BC encoders (`thirdparty/etcpak/`, `tools/vendoring/thirdparty.py`), relative to the
-/// folder; `Dither.cpp` only because `ProcessDxtc.cpp` references it. `bcdec.c` (the test-only
-/// decoder) is compiled into `uzp-texture-tests.exe` alone.
+/// folder; `Dither.cpp` only because `ProcessDxtc.cpp` references it. `bcdec.c` (the independent
+/// decoder oracle) is compiled into `uzp-texture-tests.exe` alone.
 const etcpak_sources = [_][]const u8{
     "ProcessDxtc.cpp",
     "bc7enc.cpp",
@@ -1503,7 +1503,8 @@ pub fn build(b: *std.Build) void {
     // ── UzEngine textures (phase3.1_uze-uztexture-writer, decision 315) ──────────────────────
     // The BC encoder adapter over etcpak, the mip chains and the `.uztexture` writer as the
     // static library `uzp_texture`, CPU only; the UzEngine preset (phase3.4) links it into
-    // `UzPainter.exe`. The tests add the test-only decoder (bcdec) and `.uztexture` reader.
+    // `UzPainter.exe`. The tests add our decoder and `.uztexture` reader; bcdec is only
+    // the differential oracle for the decoder tests.
     const texture_mod = b.createModule(.{
         .target = target,
         .optimize = optimize,
@@ -1541,7 +1542,7 @@ pub fn build(b: *std.Build) void {
     texture_tests_mod.addIncludePath(b.path("thirdparty/etcpak"));
     texture_tests_mod.addCSourceFiles(.{
         .root = b.path("tests/export"),
-        .files = &.{ "texture_test.cpp", "uze_texture_check.cpp" },
+        .files = &.{ "texture_test.cpp", "uze_texture_check.cpp", "bc_decoder.cpp", "bc7_decoder.cpp", "bc_decoder_test.cpp" },
         .flags = &uzp_core_flags,
     });
     texture_tests_mod.addCSourceFiles(.{

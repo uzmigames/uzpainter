@@ -52,6 +52,7 @@ struct Rgba8Image {
 /// True for the sRGB variants.
 [[nodiscard]] bool BcIsSrgb(BcFormat format);
 /// `ceil(width / 4) * ceil(height / 4) * BcBlockBytes(format)`.
+/// Throws std::invalid_argument for empty dimensions, an unknown format or uint64 overflow.
 [[nodiscard]] uint64_t BcEncodedSize(BcFormat format, uint32_t width, uint32_t height);
 /// "BC1", "BC1_SRGB", …, "BC7_SRGB".
 [[nodiscard]] std::string_view BcFormatName(BcFormat format);
@@ -82,6 +83,7 @@ public:
 /// The BC blocks of `image` in `format`: `BcEncodedSize(format, width, height)` bytes. `threads`
 /// is the worker count (0: `ResolveBcThreads(0)`); it never changes the bytes. Throws
 /// std::invalid_argument for an empty image or a texel count that does not match its size.
+/// Overflowing image sizes or padded dimensions are also refused before allocation.
 [[nodiscard]] std::vector<uint8_t> EncodeBc(const BcEncoder& encoder, const Rgba8Image& image,
                                             BcFormat format, uint32_t threads);
 

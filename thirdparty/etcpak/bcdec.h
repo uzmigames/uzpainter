@@ -1067,7 +1067,7 @@ BCDECDEF void bcdec_bc7(const void* compressedBlock, void* decompressedBlock, in
     bcdec__bitstream_t bstream;
     int mode, partition, numPartitions, numEndpoints, i, j, k, rotation, partitionSet;
     int indexSelectionBit, indexBits, indexBits2, index, index2;
-    int endpoints[6][4];
+    int endpoints[6][4] = {0}; /* UzPainter: RGB-only modes still shift alpha before setting it. */
     char indices[4][4];
     int r, g, b, a;
     int* weights, * weights2;
