@@ -2,11 +2,11 @@
   "cases": [
     {
       "backend": "dx12",
-      "date": "2026-10-12",
-      "exe_sha256": "c4831f56dbaddd3b8269c7eaf53034413b51d0f229fb72c321b0927e9f618a73",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "id": "viewport_capture_headless",
       "result": "pass",
-      "seconds": 37.548
+      "seconds": 46.439
     },
     {
       "backend": "vulkan",
@@ -16,27 +16,27 @@
     },
     {
       "backend": "cpu",
-      "date": "2026-10-12",
-      "exe_sha256": "c4831f56dbaddd3b8269c7eaf53034413b51d0f229fb72c321b0927e9f618a73",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "id": "diagnostic_captures_headless",
       "result": "pass",
-      "seconds": 11.321
+      "seconds": 15.61
     },
     {
       "backend": "cpu",
-      "date": "2026-10-19",
-      "exe_sha256": "ee810a0e0390fc85bf6d0643c4461b61a5991f899df20541b72aef82be2c82e9",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "id": "painter_iray_unavailable",
       "result": "pass",
-      "seconds": 0.138
+      "seconds": 2.19
     },
     {
       "backend": "dx12",
-      "date": "2026-10-12",
-      "exe_sha256": "c4831f56dbaddd3b8269c7eaf53034413b51d0f229fb72c321b0927e9f618a73",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "id": "preview_stall",
       "result": "pass",
-      "seconds": 6.595
+      "seconds": 7.318
     },
     {
       "backend": "vulkan",
@@ -46,11 +46,11 @@
     },
     {
       "backend": "dx12",
-      "date": "2026-10-12",
-      "exe_sha256": "c4831f56dbaddd3b8269c7eaf53034413b51d0f229fb72c321b0927e9f618a73",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "id": "preview_window_lifecycle",
       "result": "pass",
-      "seconds": 10.095
+      "seconds": 7.346
     },
     {
       "backend": "vulkan",

@@ -467,6 +467,8 @@ def test_export_mesh_and_render_families(
     presets = session.call("export_presets_list")["result"]["presets"]
     ids = {preset["id"] for preset in presets}
     assert {"pbr-metallic-roughness", "assets3d-inline-five-map"} <= ids
+    layouts = {preset["id"]: preset["layout"] for preset in presets}
+    assert layouts["uzengine"] == "consumer"  # every PresetLayout value has a name
     out = tmp_path / "out" / "export"
     arguments = {"preset": "assets3d-inline-five-map", "output_dir": str(out), "size_log2": 8}
     dry = session.call("export", {**arguments, "dry_run": True, "wait": True})

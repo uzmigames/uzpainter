@@ -1,5 +1,5 @@
 ## 1. Prerequisites
-- [ ] 1.1 Prerequisites accepted: phase2.4_supervisor-worker, phase2.5_mcp-transport-registry
+- [x] 1.1 Prerequisites accepted: phase2.4_supervisor-worker, phase2.5_mcp-transport-registry — accepted: both are archived as accepted, phase2.4_supervisor-worker in `.rulebook/archive/2026-10-20-phase2.4_supervisor-worker/` (e276fda2) and phase2.5_mcp-transport-registry in `.rulebook/archive/2026-10-20-phase2.5_mcp-transport-registry/` (e42cb825)
 
 ## 2. Implementation
 - [x] 2.1 Status and Project groups (`status`, `capabilities`, `project_create/open/save/save_as/close/inspect/recipe/revert`)

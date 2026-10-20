@@ -1,5 +1,5 @@
 ## 1. Prerequisites
-- [ ] 1.1 Prerequisites accepted: phase2.4_supervisor-worker, phase2.6_mcp-typed-tool-families
+- [x] 1.1 Prerequisites accepted: phase2.4_supervisor-worker, phase2.6_mcp-typed-tool-families — accepted: both are archived as accepted, phase2.4_supervisor-worker in `.rulebook/archive/2026-10-20-phase2.4_supervisor-worker/` (e276fda2) and phase2.6_mcp-typed-tool-families in `.rulebook/archive/2026-10-20-phase2.6_mcp-typed-tool-families/` (5e68a8fe)
 
 ## 2. Implementation
 - [x] 2.1 Matrix row model `{operation, requirement ids, tool, conformance fixture id, status}` with statuses `available`, `capability gap`, `needs Python` (reported as a gap)

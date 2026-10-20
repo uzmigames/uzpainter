@@ -1,8 +1,8 @@
 ## 1. Prerequisites
-- [ ] 1.1 Prerequisites accepted: phase2.4_supervisor-worker
-- [ ] 1.2 Child accepted: phase2.5_mcp-transport-registry
-- [ ] 1.3 Child accepted: phase2.6_mcp-typed-tool-families
-- [ ] 1.4 Child accepted: phase2.7_mcp-operation-matrix
+- [x] 1.1 Prerequisites accepted: phase2.4_supervisor-worker — accepted: archived as accepted in `.rulebook/archive/2026-10-20-phase2.4_supervisor-worker/` (e276fda2)
+- [x] 1.2 Child accepted: phase2.5_mcp-transport-registry — accepted: archived in `.rulebook/archive/2026-10-20-phase2.5_mcp-transport-registry/` (e42cb825)
+- [x] 1.3 Child accepted: phase2.6_mcp-typed-tool-families — accepted: archived in `.rulebook/archive/2026-10-20-phase2.6_mcp-typed-tool-families/` (5e68a8fe)
+- [x] 1.4 Child accepted: phase2.7_mcp-operation-matrix — accepted: archived in `.rulebook/archive/2026-10-20-phase2.7_mcp-operation-matrix/` (1325dfaa)
 
 ## 2. Implementation
 - [x] 2.1 Synthetic UzmiGames-authored project and long-job fixtures for the contract suite (no oracle data)
@@ -57,4 +57,4 @@
   - Rerun of those nodes and of the changed stdio lost-acknowledgement node: 3 passed, exit 0.
   - `tests/parity/test_guard.py` in two disjoint invocations: 10 + 69 passed, exit 0.
   - ruff, `ruff format --check` and mypy on the touched files: clean.
-
+- 1.1-1.4, 4.1 (2026-10-20, worktree `wt/close-p2` at bbc83b54, Debug `UzPainter.exe` SHA-256 `c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c`): phase2.4 and the three children are archived as accepted (e276fda2, e42cb825, 5e68a8fe, 1325dfaa). The contract suite re-ran in the same command as phase2.4's Vulkan settling lane, `UZP_NO_GPU=1 UZP_SETTLING_REPORT=… UZP_MCP_CONTRACT_REPORT=… python -m pytest tests/supervisor -m "settling or mcp_contract"`: 26 passed, 2 skipped (the DX12 device tests), exit 0, 221 s (log `tmp/scratch/close-p2/vulkan.log`). `parity/reports/phase2/mcp-contract.json` was rewritten from that run: 16 entries, all `pass`. `tests/parity/test_guard.py -k "supervisor_settling or mcp_contract or settling_merge"`: 23 passed, exit 0.

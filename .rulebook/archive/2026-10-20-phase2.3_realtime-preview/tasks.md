@@ -1,8 +1,8 @@
 ## 1. Prerequisites
-- [ ] 1.1 Prerequisites accepted: phase1.25_pilot-wand
-- [ ] 1.2 Child accepted: phase2.1_preview-display-presets
-- [ ] 1.3 Child accepted: phase2.1_preview-viewport-window
-- [ ] 1.4 Child accepted: phase2.2_preview-capture
+- [x] 1.1 Prerequisites accepted: phase1.25_pilot-wand — checked as a recorded scope split (decision 326): phase1.25_pilot-wand is not accepted; its open items (2.7 `infinite` padding and 3.1-4.1) are blocked only by Painter recordings; this task's deliverables do not read the Wand's map parity: its wand v1 tests compare a worker with and without the preview on the same build, never against Painter, and their switch to `infinite` padding and the Normal map stays with phase1.25 item 2.7 (§7, note 2.1)
+- [x] 1.2 Child accepted: phase2.1_preview-display-presets — archived as accepted in `.rulebook/archive/2026-10-20-phase2.1_preview-display-presets/` (4dff1255, decision 326)
+- [x] 1.3 Child accepted: phase2.1_preview-viewport-window — archived as accepted in `.rulebook/archive/2026-10-20-phase2.1_preview-viewport-window/` (4dff1255, decision 326)
+- [x] 1.4 Child accepted: phase2.2_preview-capture — archived as accepted in `.rulebook/archive/2026-10-20-phase2.2_preview-capture/` (4dff1255, decision 326)
 
 ## 2. Implementation
 - [x] 2.1 Integration scenario on the wand v1 project: worker with an attached preview window running evaluation, export and captures in all Phase 2 modes
@@ -18,7 +18,7 @@
 - [x] 3.3 `painter_iray` reported as an explicit unavailable capability in `uzpainter://capabilities` and by `capture`
 
 ## 4. Acceptance
-- [ ] 4.1 DAG gate met: captures window-independent and preview never pauses evaluation; report written to `parity/reports/phase2/preview-settling.json`
+- [x] 4.1 DAG gate met: captures window-independent and preview never pauses evaluation; report written to `parity/reports/phase2/preview-settling.json`
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [x] 5.1 Update or create documentation covering the implementation
@@ -114,3 +114,10 @@
 - Baseline, window-open and stalled exports matched bytes. Reported export durations were 111.452 s, 123.921 s and 92.503 s respectively. Timing is measured, with no threshold (decision 162); no claim of equal execution time follows from this pass. The minimised/stalled test also proves evaluation/publication progresses while preview frame consumption is held, and resumes afterwards.
 - The report updates only `wand_integration` (DX12), `wand_export_preview` (DX12) and `painter_iray_unavailable` (CPU). Existing entries retain their original dates and binary hashes; Vulkan stays pending. Report dates use the local day, 2026-10-19; UTC start/end are in run.json.
 - Prerequisites 1.1-1.4 and acceptance 4.1 remain open. Their Wand and child-acceptance obligations are unchanged.
+
+## 12. Acceptance (2026-10-20, worktree `wt/close-p2` at bbc83b54)
+- 1.1-1.4: the three children are archived as accepted (4dff1255); 1.1 is decision 326's scope split.
+- 4.1: met. Its splits are closed: phase1.15_compositor-colour-fits is archived (2026-10-19) and the full-size run of section 11 rendered the wand in the window and in a `painter_viewport` capture; phase2.6_mcp-typed-tool-families is archived (5e68a8fe); the five Vulkan entries are phase3.1_vulkan-compute-parity's items 2.7 and 4.1 (decision 221) and stay `pending` with decision 121.
+  - Window-independent captures and the never-pausing preview, refreshed on today's Debug `UzPainter.exe` (SHA-256 `c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c`), DX12: `UZP_PREVIEW_SETTLING_REPORT=… python -m pytest tests/preview -m preview_settling -k "not wand"`: 6 passed, exit 0, 116 s (log `tmp/scratch/close-p2/preview.log`, JUnit `preview.xml`). Nodes: `test_preview_capture.py::test_headless_viewport_capture` (`viewport_capture_headless`, a worker that owns no window), `::test_diagnostic_captures_equal_channel_exports` (`diagnostic_captures_headless`), `::test_painter_iray_fails_before_any_work` and `test_preview_settling.py::test_painter_iray_is_an_unavailable_capability` (`painter_iray_unavailable`), `test_preview_window.py::test_stalled_preview_never_delays_evaluation_or_export` (`preview_stall`), `::test_window_lifecycle_during_evaluation_changes_nothing` (`preview_window_lifecycle`).
+  - The two wand entries (`wand_integration`, `wand_export_preview`, DX12) stay from section 11's full-size run at 4e5c12fa (3 passed, exit 0, 722 s; `tmp/scratch/preview-full/4e5c12f/`). That run takes 12 minutes, beyond an agent's 10-minute budget, so it was not repeated. Since 4e5c12fa, main changed only the Vulkan kernels (d58e0921, bc0e461d), the HLSL header split and build fixes (4493d8dc) and the native tests' crash dialogs (7f6fbbe5); both wand tests compare a worker with and without the preview on one build, so a kernel change does not alter what they measure. A re-run on a newer build belongs to the coordinator's batch.
+  - `parity/reports/phase2/preview-settling.json`: every DX12 and CPU entry `pass`, the five Vulkan entries `pending` (decision 121). `tests/parity/test_guard.py -k preview_settling`: 12 passed, exit 0.

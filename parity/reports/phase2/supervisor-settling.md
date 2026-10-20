@@ -59,9 +59,39 @@ Each snippet ran as 50 `run_python` calls through the supervisor and 50 times in
 
 The parent's CPU run above repeats all three children's `tests/supervisor` cases on the merged tree: 81 passed, exit 0.
 
+## Acceptance run (2026-10-20, item 4.1)
+
+Worktree `wt/close-p2` at bbc83b54, Debug `UzPainter.exe` SHA-256 `c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c` (both runs). Each run merged its backend into `supervisor-settling.json`, replacing the 2026-10-12 entries. A Painter recording session was using the GPU during the DX12 run, which may explain its longer recoveries; no threshold is set (decision 150).
+
+| Run | Command | Result |
+|---|---|---|
+| Vulkan workers, no device | `UZP_NO_GPU=1 UZP_SETTLING_REPORT=… UZP_MCP_CONTRACT_REPORT=… python -m pytest tests/supervisor -m "settling or mcp_contract"` | 26 passed, 2 skipped (DX12 device tests), exit 0, 221 s |
+| DX12 (one GPU run) | `UZP_SUPERVISOR_BACKEND=dx12 UZP_SETTLING_REPORT=… python -m pytest tests/supervisor -m settling` | 14 passed, 1 skipped (`gpu_backend_unavailable`), exit 0, 138 s |
+| Guard | `python -m pytest tests/parity/test_guard.py -k "supervisor_settling or mcp_contract or settling_merge"` | 23 passed, exit 0 |
+
+| Case | Vulkan (no device), recovery ms | DX12, recovery ms |
+|---|---|---|
+| Worker killed during a long job | pass, 116 / 74 | pass, 1097 / 1428 |
+| Worker killed inside a save's checkpoint commit | pass, 399 | pass, 399 |
+| Worker killed inside a full save's compaction | pass, 386 | pass, 476 |
+| Worker terminated from outside | pass, 69 | pass, 1246 |
+| `abort()` with minidump | pass, 97 | pass, 702 |
+| Access violation with minidump | pass, 112 | pass, 1326 |
+| Commit-then-die retry | pass, 73 | pass, 1093 |
+| Known-key replay inside the window | pass | pass |
+| Replay beyond retention, compacted, ledger lost | pass | pass |
+| GPU stall | pending, decision 121 | pass, 2493 |
+| Device removal / loss | pending, decision 121 | pass, 511 |
+| Client disconnect and reconnect | pass, reconnect 1380 | pass, reconnect 1020 |
+| Single call vs unwrapped script vs native `Transaction` failure | pass | pass |
+| `--allow-python` off | pass | pass |
+| Unavailable backend | pass | not applicable |
+
+Per-call overhead (ms; MCP median, `run` median, overhead median, p90, max): Vulkan read 17.7, 0.009, 17.7, 20.1, 21.7; Vulkan insert 56.2, 49.5, 6.7, 34.5, 59.4; DX12 read 20.6, 0.008, 20.6, 44.7, 1583; DX12 insert 64.4, 40.0, 24.3, 478, 1825.
+
 ## Open
 
 - **Vulkan device cases.** The Vulkan device-loss hook and GPU stall wait for the Vulkan device: phase3.1_vulkan-compute-parity items 2.2 and 3.4 (decision 121). They are `pending` in the report.
 - **Hosted CPU lane.** Removed by the owner (decision 200). The local CPU-lane run above is the evidence of the children's item 4.1.
-- **G1.** phase1.25_pilot-wand is not accepted yet, so no prerequisite item is checked.
+- **G1.** phase1.25_pilot-wand is not accepted yet. The children and this task close on decision 326's recorded scope split (2026-10-20); the Wand's parity stays with phase1.25 and G1.
 - **HTTP reconnect.** Reconnecting to a running supervisor over HTTP is phase2.5_mcp-transport-registry's (decision 150).

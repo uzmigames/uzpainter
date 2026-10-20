@@ -1,8 +1,8 @@
 ## 1. Prerequisites
-- [ ] 1.1 Prerequisites accepted: phase1.25_pilot-wand
-- [ ] 1.2 Child accepted: phase2.1_supervisor-ipc-worker
-- [ ] 1.3 Child accepted: phase2.2_supervisor-admission-ledger
-- [ ] 1.4 Child accepted: phase2.3_supervisor-jobs
+- [x] 1.1 Prerequisites accepted: phase1.25_pilot-wand — checked as a recorded scope split (decision 326): phase1.25_pilot-wand is not accepted; its open items (2.7 `infinite` padding and 3.1-4.1) are blocked only by Painter recordings; this task's deliverables do not read the Wand's maps
+- [x] 1.2 Child accepted: phase2.1_supervisor-ipc-worker — archived as accepted in `.rulebook/archive/2026-10-20-phase2.1_supervisor-ipc-worker/` (4dff1255, decision 326)
+- [x] 1.3 Child accepted: phase2.2_supervisor-admission-ledger — archived as accepted in `.rulebook/archive/2026-10-20-phase2.2_supervisor-admission-ledger/` (4dff1255, decision 326)
+- [x] 1.4 Child accepted: phase2.3_supervisor-jobs — archived as accepted in `.rulebook/archive/2026-10-20-phase2.3_supervisor-jobs/` (4dff1255, decision 326)
 
 ## 2. Implementation
 - [x] 2.1 Integration test harness running the `02-…` §7 scenarios end to end through the supervisor's stdio MCP session against a real worker on DX12 and Vulkan
@@ -19,7 +19,7 @@
 - [x] 3.7 `--allow-python` off: `run_python` rejected at the IPC boundary; unavailable backend: `gpu_backend_unavailable` while GPU-free operations run
 
 ## 4. Acceptance
-- [ ] 4.1 DAG gate met: `02-…` §7 tests pass including commit-then-die retry, on DX12 and, for every GPU-free case, on Vulkan, with the settling report written to `parity/reports/phase2/supervisor-settling.json`; the Vulkan device cases (`gpu_stall`, `device_lost`) and the §7 re-run on a real Vulkan device stay `pending` there and are settled by `phase3.1_vulkan-compute-parity` 4.1 (decision 221)
+- [x] 4.1 DAG gate met: `02-…` §7 tests pass including commit-then-die retry, on DX12 and, for every GPU-free case, on Vulkan, with the settling report written to `parity/reports/phase2/supervisor-settling.json`; the Vulkan device cases (`gpu_stall`, `device_lost`) and the §7 re-run on a real Vulkan device stay `pending` there and are settled by `phase3.1_vulkan-compute-parity` 4.1 (decision 221)
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [x] 5.1 Update or create documentation covering the implementation
@@ -43,3 +43,7 @@
 - 4.1: open. It was held by the Vulkan device cases (decision 121; split by decision 221 below), the hosted CPU lane (removed by decision 200) and the children's acceptance (G1).
 - 1.1-1.4, 4.1 (Decision 200 (2026-10-13): the owner removed the hosted Parity CI; the local CPU lane on the owner's machine (the coordinator's full gate before the owner pushes) replaces it.): the hosted CPU lane is no longer a condition; the local CPU-lane run above (81 passed, exit 0) is its evidence. phase2.2 and phase2.3 have their 4.1 checked; every child stays open on G1, and phase2.1 also on the Vulkan variant. 4.1 waits only on the Vulkan device cases (decision 121) and G1.
 - 3.4, 4.1 (decision 221, 2026-10-13): sequencing split, nothing waived. Supervisor acceptance (and G2's recovery clause) is DX12 plus the GPU-free cases on both backends. The real-Vulkan obligations move to `phase3.1_vulkan-compute-parity` items 3.4 and 4.1: the `gpu_stall` and `device_lost` cases on Vulkan through the supervisor, and the §7 settling suite re-run with a Vulkan device (`UZP_SUPERVISOR_BACKEND=vulkan`: recovery, commit-then-die retry, lost-ledger replay, no duplicate commit). They stay `pending` with decision 121 in `parity/reports/phase2/supervisor-settling.json`, and they reach G3 (through `phase3.3_vulkan-backend-ray-tracing`) and G5 (P5-REPORT, DX12 and Vulkan). Waiting here closed an acceptance cycle (phase3.1 → phase2.10 → phase2.8 → this task → phase3.1); `python -m tools.planning.acceptance_graph` checks the open tasks for such cycles. 3.4 is checked on its DX12 evidence above. 4.1 is not checked here; it still needs 1.1-1.4 (G1 through phase1.25_pilot-wand).
+- 1.1-1.4, 4.1 (acceptance run, 2026-10-20, worktree `wt/close-p2` at bbc83b54, Debug `UzPainter.exe` SHA-256 `c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c`, the same bytes in both runs): the three children are archived as accepted (4dff1255) and 1.1 is decision 326's scope split. The 02 §7 suite ran once per backend and merged into `parity/reports/phase2/supervisor-settling.json`:
+  - `UZP_NO_GPU=1 UZP_SETTLING_REPORT=… UZP_MCP_CONTRACT_REPORT=… python -m pytest tests/supervisor -m "settling or mcp_contract"` (Vulkan workers, no device): 26 passed, 2 skipped (the DX12 device tests under `UZP_NO_GPU`), exit 0, 221 s. Log `tmp/scratch/close-p2/vulkan.log`, JUnit `vulkan.xml`.
+  - `UZP_SUPERVISOR_BACKEND=dx12 UZP_SETTLING_REPORT=… python -m pytest tests/supervisor -m settling` (the one GPU run): 14 passed, 1 skipped (`gpu_backend_unavailable` needs a backend without a device), exit 0, 138 s. Log `tmp/scratch/close-p2/dx12.log`, JUnit `dx12.xml`.
+  - The report: every case `pass` on DX12 (14 cases) and every GPU-free case `pass` on Vulkan (13 cases, `gpu_backend_unavailable` included), commit-then-die retry on both; `gpu_stall` and `device_lost` stay `pending` on Vulkan with decision 121, owned by phase3.1_vulkan-compute-parity 3.4 and 4.1 (decision 221). `tests/parity/test_guard.py -k "supervisor_settling or mcp_contract or settling_merge"`: 23 passed, exit 0. Numbers in `parity/reports/phase2/supervisor-settling.md`.

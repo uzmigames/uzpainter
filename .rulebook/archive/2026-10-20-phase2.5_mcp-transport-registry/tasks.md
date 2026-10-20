@@ -1,5 +1,5 @@
 ## 1. Prerequisites
-- [ ] 1.1 Prerequisites accepted: phase2.4_supervisor-worker
+- [x] 1.1 Prerequisites accepted: phase2.4_supervisor-worker — accepted: phase2.4_supervisor-worker is archived as accepted in `.rulebook/archive/2026-10-20-phase2.4_supervisor-worker/` (e276fda2; its 4.1 settling run of 2026-10-20 passed on DX12 and every GPU-free case on Vulkan)
 
 ## 2. Implementation
 - [x] 2.1 Tool registry shared by both transports; handlers forward to the worker over the pipe inside an executor

@@ -2,289 +2,289 @@
   "cases": [
     {
       "backend": "dx12",
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "gpu_status": "ready",
       "id": "worker_killed_during_long_job",
       "recoveries": [
         {
           "attempts": 1,
           "cause": "terminated",
-          "recovery_ms": 413.962
+          "recovery_ms": 1097.32
         },
         {
           "attempts": 1,
           "cause": "terminated",
-          "recovery_ms": 336.77
+          "recovery_ms": 1428.189
         }
       ],
       "result": "pass",
-      "seconds": 3.823
+      "seconds": 14.303
     },
     {
       "backend": "vulkan",
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "gpu_status": "unavailable",
       "id": "worker_killed_during_long_job",
       "recoveries": [
         {
           "attempts": 1,
           "cause": "terminated",
-          "recovery_ms": 233.168
+          "recovery_ms": 115.938
         },
         {
           "attempts": 1,
           "cause": "terminated",
-          "recovery_ms": 550.876
+          "recovery_ms": 73.719
         }
       ],
       "result": "pass",
-      "seconds": 5.588
+      "seconds": 2.517
     },
     {
       "backend": "dx12",
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "gpu_status": "ready",
       "id": "worker_killed_during_save",
       "recoveries": [
         {
           "attempts": 1,
           "cause": "terminated",
-          "recovery_ms": 362.899
+          "recovery_ms": 399.198
         }
       ],
       "result": "pass",
-      "seconds": 4.403
+      "seconds": 7.859
     },
     {
       "backend": "vulkan",
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "gpu_status": "unavailable",
       "id": "worker_killed_during_save",
       "recoveries": [
         {
           "attempts": 1,
           "cause": "terminated",
-          "recovery_ms": 1075.95
+          "recovery_ms": 399.135
         }
       ],
       "result": "pass",
-      "seconds": 4.986
+      "seconds": 4.925
     },
     {
       "backend": "dx12",
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "gpu_status": "ready",
       "id": "worker_killed_during_compaction",
       "recoveries": [
         {
           "attempts": 1,
           "cause": "terminated",
-          "recovery_ms": 384.466
+          "recovery_ms": 475.7
         }
       ],
       "result": "pass",
-      "seconds": 2.662
+      "seconds": 2.526
     },
     {
       "backend": "vulkan",
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "gpu_status": "unavailable",
       "id": "worker_killed_during_compaction",
       "recoveries": [
         {
           "attempts": 1,
           "cause": "terminated",
-          "recovery_ms": 86.594
+          "recovery_ms": 386.15
         }
       ],
       "result": "pass",
-      "seconds": 3.256
+      "seconds": 4.852
     },
     {
       "backend": "dx12",
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "gpu_status": "ready",
       "id": "worker_killed_from_outside",
       "recoveries": [
         {
           "attempts": 1,
           "cause": "terminated",
-          "recovery_ms": 332.248
+          "recovery_ms": 1246.03
         }
       ],
       "result": "pass",
-      "seconds": 2.534
+      "seconds": 10.831
     },
     {
       "backend": "vulkan",
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "gpu_status": "unavailable",
       "id": "worker_killed_from_outside",
       "recoveries": [
         {
           "attempts": 1,
           "cause": "terminated",
-          "recovery_ms": 69.25
+          "recovery_ms": 69.47
         }
       ],
       "result": "pass",
-      "seconds": 2.993
+      "seconds": 1.856
     },
     {
       "backend": "dx12",
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "gpu_status": "ready",
       "id": "native_abort",
       "recoveries": [
         {
           "attempts": 1,
           "cause": "abort",
-          "recovery_ms": 332.715
+          "recovery_ms": 701.826
         }
       ],
       "result": "pass",
-      "seconds": 2.965
+      "seconds": 11.163
     },
     {
       "backend": "vulkan",
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "gpu_status": "unavailable",
       "id": "native_abort",
       "recoveries": [
         {
           "attempts": 1,
           "cause": "abort",
-          "recovery_ms": 105.635
+          "recovery_ms": 97.143
         }
       ],
       "result": "pass",
-      "seconds": 3.424
+      "seconds": 2.389
     },
     {
       "backend": "dx12",
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "gpu_status": "ready",
       "id": "native_access_violation",
       "recoveries": [
         {
           "attempts": 1,
           "cause": "native_fault",
-          "recovery_ms": 349.001
+          "recovery_ms": 1325.717
         }
       ],
       "result": "pass",
-      "seconds": 2.727
+      "seconds": 13.289
     },
     {
       "backend": "vulkan",
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "gpu_status": "unavailable",
       "id": "native_access_violation",
       "recoveries": [
         {
           "attempts": 1,
           "cause": "native_fault",
-          "recovery_ms": 143.047
+          "recovery_ms": 111.76
         }
       ],
       "result": "pass",
-      "seconds": 4.214
+      "seconds": 2.191
     },
     {
       "backend": "dx12",
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "gpu_status": "ready",
       "id": "commit_then_die_retry",
       "recoveries": [
         {
           "attempts": 1,
           "cause": "terminated",
-          "recovery_ms": 327.35
+          "recovery_ms": 1093.401
         }
       ],
       "result": "pass",
-      "seconds": 2.598
+      "seconds": 3.032
     },
     {
       "backend": "vulkan",
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "gpu_status": "unavailable",
       "id": "commit_then_die_retry",
       "recoveries": [
         {
           "attempts": 1,
           "cause": "terminated",
-          "recovery_ms": 174.301
+          "recovery_ms": 72.981
         }
       ],
       "result": "pass",
-      "seconds": 4.175
+      "seconds": 1.801
     },
     {
       "backend": "dx12",
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "id": "replay_inside_window",
       "recoveries": [],
       "result": "pass",
-      "seconds": 5.797
+      "seconds": 16.037
     },
     {
       "backend": "vulkan",
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "id": "replay_inside_window",
       "recoveries": [],
       "result": "pass",
-      "seconds": 11.349
+      "seconds": 5.07
     },
     {
       "backend": "dx12",
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "id": "replay_beyond_retention_lost_ledger",
       "recoveries": [],
       "result": "pass",
-      "seconds": 5.797
+      "seconds": 16.037
     },
     {
       "backend": "vulkan",
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "id": "replay_beyond_retention_lost_ledger",
       "recoveries": [],
       "result": "pass",
-      "seconds": 11.349
+      "seconds": 5.07
     },
     {
       "backend": "dx12",
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "gpu_status": "ready",
       "id": "gpu_stall",
       "recoveries": [
         {
           "attempts": 1,
           "cause": "device_fault",
-          "recovery_ms": 368.019
+          "recovery_ms": 2492.505
         }
       ],
       "result": "pass",
-      "seconds": 6.497
+      "seconds": 11.297
     },
     {
       "backend": "vulkan",
@@ -294,19 +294,19 @@
     },
     {
       "backend": "dx12",
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "gpu_status": "ready",
       "id": "device_lost",
       "recoveries": [
         {
           "attempts": 1,
           "cause": "device_fault",
-          "recovery_ms": 401.394
+          "recovery_ms": 511.407
         }
       ],
       "result": "pass",
-      "seconds": 3.475
+      "seconds": 4.851
     },
     {
       "backend": "vulkan",
@@ -316,128 +316,128 @@
     },
     {
       "backend": "dx12",
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "gpu_status": "ready",
       "id": "client_disconnect_reconnect",
       "metrics": {
-        "reconnect_ms": 1453.495
+        "reconnect_ms": 1019.906
       },
       "recoveries": [],
       "result": "pass",
-      "seconds": 8.05
+      "seconds": 7.404
     },
     {
       "backend": "vulkan",
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "gpu_status": "unavailable",
       "id": "client_disconnect_reconnect",
       "metrics": {
-        "reconnect_ms": 1217.698
+        "reconnect_ms": 1380.063
       },
       "recoveries": [],
       "result": "pass",
-      "seconds": 7.836
+      "seconds": 10.013
     },
     {
       "backend": "dx12",
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "gpu_status": "ready",
       "id": "failure_comparison",
       "recoveries": [],
       "result": "pass",
-      "seconds": 2.182
+      "seconds": 1.715
     },
     {
       "backend": "vulkan",
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "gpu_status": "unavailable",
       "id": "failure_comparison",
       "recoveries": [],
       "result": "pass",
-      "seconds": 3.639
+      "seconds": 3.876
     },
     {
       "backend": "dx12",
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "gpu_status": "ready",
       "id": "python_disabled",
       "recoveries": [],
       "result": "pass",
-      "seconds": 2.037
+      "seconds": 1.646
     },
     {
       "backend": "vulkan",
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "gpu_status": "unavailable",
       "id": "python_disabled",
       "recoveries": [],
       "result": "pass",
-      "seconds": 3.744
+      "seconds": 2.766
     },
     {
       "backend": "vulkan",
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
       "gpu_status": "unavailable",
       "id": "gpu_backend_unavailable",
       "recoveries": [],
       "result": "pass",
-      "seconds": 4.539
+      "seconds": 4.688
     }
   ],
   "overhead": [
     {
       "backend": "dx12",
       "calls": 50,
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
-      "mcp_median_ms": 35.992,
-      "overhead_max_ms": 44.219,
-      "overhead_median_ms": 14.153,
-      "overhead_p90_ms": 25.362,
-      "run_median_ms": 21.838,
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
+      "mcp_median_ms": 64.362,
+      "overhead_max_ms": 1824.706,
+      "overhead_median_ms": 24.322,
+      "overhead_p90_ms": 478.343,
+      "run_median_ms": 40.04,
       "snippet": "mutation"
     },
     {
       "backend": "dx12",
       "calls": 50,
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
-      "mcp_median_ms": 11.356,
-      "overhead_max_ms": 30.135,
-      "overhead_median_ms": 11.347,
-      "overhead_p90_ms": 12.816,
-      "run_median_ms": 0.009,
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
+      "mcp_median_ms": 20.586,
+      "overhead_max_ms": 1583.246,
+      "overhead_median_ms": 20.577,
+      "overhead_p90_ms": 44.707,
+      "run_median_ms": 0.008,
       "snippet": "read"
     },
     {
       "backend": "vulkan",
       "calls": 50,
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
-      "mcp_median_ms": 51.982,
-      "overhead_max_ms": 48.433,
-      "overhead_median_ms": 17.892,
-      "overhead_p90_ms": 40.466,
-      "run_median_ms": 34.089,
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
+      "mcp_median_ms": 56.16,
+      "overhead_max_ms": 59.409,
+      "overhead_median_ms": 6.689,
+      "overhead_p90_ms": 34.469,
+      "run_median_ms": 49.471,
       "snippet": "mutation"
     },
     {
       "backend": "vulkan",
       "calls": 50,
-      "date": "2026-10-12",
-      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
-      "mcp_median_ms": 12.598,
-      "overhead_max_ms": 32.712,
-      "overhead_median_ms": 12.586,
-      "overhead_p90_ms": 16.407,
-      "run_median_ms": 0.012,
+      "date": "2026-10-20",
+      "exe_sha256": "c416de4fd732000f0acc819e1106157b174d922ccde25a30a00617d8a1f7467c",
+      "mcp_median_ms": 17.674,
+      "overhead_max_ms": 21.664,
+      "overhead_median_ms": 17.666,
+      "overhead_p90_ms": 20.085,
+      "run_median_ms": 0.009,
       "snippet": "read"
     }
   ],

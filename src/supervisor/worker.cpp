@@ -1105,7 +1105,7 @@ json::Object Worker::ExportPresetsList(const json::Object&) {
         for (const exporter::MapSpec& map : preset.spec.maps) maps.push_back(map.fileName);
         json::Array pending;
         for (const std::string& recording : preset.pendingRecordings) pending.push_back(recording);
-        static constexpr const char* kLayouts[] = {"pipeline", "confirmed", "unconfirmed"};
+        static constexpr const char* kLayouts[] = {"pipeline", "confirmed", "unconfirmed", "consumer"};
         presets.push_back(json::Object{{"id", preset.id},
                                        {"aliases", std::move(aliases)},
                                        {"maps", std::move(maps)},

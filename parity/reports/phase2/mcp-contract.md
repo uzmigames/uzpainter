@@ -17,6 +17,8 @@ The runs were on the owner's machine on 2026-10-12, worktree `wt/p2-mcp-server`,
 | Contract suite (CPU lane) | `UZP_NO_GPU=1 UZP_MCP_CONTRACT_REPORT=… python -m pytest tests/supervisor -m mcp_contract` | 12 passed, 2 failed, exit 1, 132 s |
 | Rerun of the failed and changed nodes | the lost-acknowledgement test (both transports) and `test_a_path_outside_the_roots_over_http` | 3 passed, exit 0, 19 s |
 | Guard | `python -m pytest tests/parity/test_guard.py` (two invocations, disjoint) | 10 + 69 passed, exit 0 |
+| Acceptance re-run (2026-10-20, worktree `wt/close-p2` at bbc83b54, Debug `UzPainter.exe` `c416de4f…467c`) | `UZP_NO_GPU=1 UZP_SETTLING_REPORT=… UZP_MCP_CONTRACT_REPORT=… python -m pytest tests/supervisor -m "settling or mcp_contract"` | 26 passed, 2 skipped (DX12 device tests), exit 0, 221 s; every fixture `pass` on every transport it runs on (16 entries), `mcp-contract.json` rewritten from this run |
+| Guard (2026-10-20) | `python -m pytest tests/parity/test_guard.py -k "supervisor_settling or mcp_contract or settling_merge"` | 23 passed, exit 0 |
 
 The two failures in the first run were mistakes in the new tests:
 
@@ -41,5 +43,5 @@ The lost-acknowledgement test also gained a changed request with the same key (d
 
 ## Open
 
-- **Acceptance of the prerequisites (1.1-1.4).** phase2.4_supervisor-worker is not accepted. It waits on G1 and on the Vulkan device cases (decision 121); the hosted CPU lane was removed (decision 200). The three children each have their 1.1 open for that reason.
+- **Acceptance of the prerequisites (1.1-1.4).** Met on 2026-10-20: phase2.4_supervisor-worker is accepted (its 4.1 settling run passed; 1.1 on decision 326's scope split), and phase2.5, phase2.6 and phase2.7 are accepted and archived after it.
 - **Hosted CPU lane.** Removed by the owner (decision 200). These local results are the evidence.
