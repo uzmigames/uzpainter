@@ -1,5 +1,9 @@
 {
   "schema": "uzpainter/asset-library/1",
-  "records": [],
+  "records": [
+    "records/filter.grayscale@1.json",
+    "records/filter.levels@1.json",
+    "records/filter.sharpen@1.json"
+  ],
   "aliases": "aliases.json"
 }

@@ -69,6 +69,12 @@ class IHlslFamily {
 public:
     virtual ~IHlslFamily() = default;
     [[nodiscard]] virtual const FamilyRecord& Record() const = 0;
+    /// A rule between fields that the domain's JSON cannot state (an input with the output's
+    /// resolution, ...), checked after `CheckDomain`: its `outside certified domain` refusal, or
+    /// empty. None by default.
+    [[nodiscard]] virtual std::optional<UnsupportedProcedural> JointRefusal(const ProceduralRequest&) const {
+        return std::nullopt;
+    }
     /// The kernel passes of a request inside the domain.
     [[nodiscard]] virtual std::vector<KernelPass> Plan(const ProceduralRequest& request) const = 0;
     /// The CPU reference of the same request: the kernels' texels bit for bit.
@@ -116,7 +122,8 @@ public:
 
 private:
     const IHlslFamily* Find(const core::AssetUrl& asset) const;
-    /// The refusal of a request for the candidate lanes: unknown asset or outside the domain.
+    /// The refusal of a request for the candidate lanes: unknown asset, outside the domain or
+    /// outside the family's joint rule.
     std::optional<UnsupportedProcedural> CandidateRefusal(const ProceduralRequest& request) const;
     RasterFuture Run(const ProceduralRequest& request, const InputImages& inputs);
 

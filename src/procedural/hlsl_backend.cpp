@@ -363,7 +363,10 @@ std::optional<UnsupportedProcedural> HlslBackend::CandidateRefusal(
     const ProceduralRequest& request) const {
     const IHlslFamily* family = Find(request.asset);
     if (family == nullptr) return Refuse(AssetName(request), kNoFamily);
-    return CheckDomain(request, family->Record().domain);
+    if (std::optional<UnsupportedProcedural> refusal = CheckDomain(request, family->Record().domain)) {
+        return refusal;
+    }
+    return family->JointRefusal(request);
 }
 
 std::optional<UnsupportedProcedural> HlslBackend::Refusal(const ProceduralRequest& request) const {

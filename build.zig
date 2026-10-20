@@ -464,6 +464,14 @@ const procedural_sources = [_][]const u8{
     "procedural/admission.cpp",
     "procedural/snapshot_backend.cpp",
 };
+/// The filter families (`src/procedural/filters.h`, decision 328), relative to `src/`: compiled
+/// into `uzp-proc-filter-tests.exe` with `procedural_sources`, with the evaluator's arithmetic
+/// (the Levels filter is the native levels effect; filter effects blend through its effect mix).
+const procedural_filter_sources = [_][]const u8{
+    "procedural/filters.cpp",
+    "evaluator/arith.cpp",
+    "evaluator/hwmath.cpp",
+};
 /// The asset library and the seam vocabulary it uses (`src/procedural/asset_library.h`, decision
 /// 324), relative to `src/`: compiled into `UzPainter.exe` and into `uzp-pyapi-tests.exe`
 /// (`resource.search`), without the HlslBackend host.
@@ -1568,6 +1576,50 @@ pub fn build(b: *std.Build) void {
     procedural_tests_step.dependOn(&b.addInstallArtifact(procedural_tests_exe, .{}).step);
     for (dx_runtime) |step| procedural_tests_step.dependOn(step);
     b.getInstallStep().dependOn(procedural_tests_step);
+
+    // ── The filter families (phase3.2_proc-filter-families, decision 328) ────────────────────
+    // `src/procedural/filters.cpp` over the seam and the HLSL host, in its own test executable.
+    const proc_filter_tests_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    addCoreIncludePaths(b, proc_filter_tests_mod);
+    proc_filter_tests_mod.addIncludePath(b.path("src"));
+    proc_filter_tests_mod.addCSourceFiles(.{
+        .root = b.path("tests/procedural"),
+        .files = &.{"filters_test.cpp"},
+        .flags = &evaluator_flags,
+    });
+    embed_inputs.add(proc_filter_tests_mod, "src", &(procedural_sources ++ procedural_filter_sources), &evaluator_flags);
+    embed_inputs.add(proc_filter_tests_mod, "src", &render_sources, &(cxx_flags ++ own_warning_flags));
+    proc_filter_tests_mod.addCSourceFiles(.{
+        .root = b.path(core_root),
+        .files = &.{agility_export_source},
+        .flags = &cxx_flags,
+    });
+    // zlib inflates the evaluator's hardware arithmetic tables (`src/evaluator/hwmath.h`).
+    proc_filter_tests_mod.addIncludePath(b.path("thirdparty/zlib"));
+    proc_filter_tests_mod.addCSourceFiles(.{
+        .root = b.path("thirdparty/zlib"),
+        .files = &zlib_sources,
+        .flags = &.{"-std=c11"},
+    });
+    proc_filter_tests_mod.linkLibrary(core_lib);
+    // `procedural_sources` holds the snapshot backend, which reads and records project planes.
+    proc_filter_tests_mod.linkLibrary(store_lib);
+    proc_filter_tests_mod.linkLibrary(uzp_core_lib);
+    for (system_libraries) |name| proc_filter_tests_mod.linkSystemLibrary(name, .{});
+    proc_filter_tests_mod.linkSystemLibrary("version", .{});
+    const proc_filter_tests_exe = b.addExecutable(.{
+        .name = "uzp-proc-filter-tests",
+        .root_module = proc_filter_tests_mod,
+    });
+    const proc_filter_tests_step = b.step("proc-filter-tests", "Build the native tests of the procedural filter families");
+    proc_filter_tests_step.dependOn(&b.addInstallArtifact(proc_filter_tests_exe, .{}).step);
+    for (dx_runtime) |step| proc_filter_tests_step.dependOn(step);
+    b.getInstallStep().dependOn(proc_filter_tests_step);
 
     // ── The export plan compiler (phase1.15_export-plan-compiler) ─────────────────────────────
     // `src/export/` over the evaluator; its tests evaluate on the CPU store only, so they run on

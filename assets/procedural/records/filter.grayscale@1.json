@@ -1,0 +1,25 @@
+{
+  "schema": "uzpainter/asset-provenance/1",
+  "asset": "uzasset://filter/grayscale@1",
+  "name": "UzPainter Grayscale Conversion",
+  "usage": "FILTER",
+  "author": "UzmiGames (UzPainter procedural families, phase3.2_proc-filter-families)",
+  "license": "Apache-2.0",
+  "sources": [
+    {"kind": "standard", "citation": "Recommendation ITU-R BT.709-6 (06/2015), Parameter values for the HDTV standards for production and international programme exchange, item 3.2: luma E'Y = 0.2126 E'R + 0.7152 E'G + 0.0722 E'B (the default weights)"},
+    {"kind": "book", "citation": "R. C. Gonzalez, R. E. Woods, Digital Image Processing, 4th ed., Pearson, 2018, chapter 6 (colour image processing: a grey level as a weighted sum of the R, G and B components)"}
+  ],
+  "defaults": {"red": 0.2126, "green": 0.7152, "blue": 0.0722},
+  "domain": {
+    "parameters": {"red": {"range": [0, 1]}, "green": {"range": [0, 1]}, "blue": {"range": [0, 1]}},
+    "seeds": {"policy": "listed", "seeds": [0]},
+    "geometry": {
+      "mesh_classes": ["sphere", "bevelled-cube", "garment"],
+      "uv_tiles": 1,
+      "inputs": {"content": {"resolutions": [1024, 2048, 4096], "formats": ["u8"], "colour_spaces": ["srgb"], "channels": [3]}}
+    },
+    "output": {"resolutions": [1024, 2048, 4096], "formats": ["f32"], "colour_spaces": ["srgb"], "channels": [3]}
+  },
+  "corpus": {},
+  "parity": {"status": "unavailable", "reason": "not certified: the parameter discovery (2.1), the calibration against private Painter oracles (2.5) and Tier 2a (3.1) of phase3.2_proc-filter-families wait on Painter recordings"}
+}

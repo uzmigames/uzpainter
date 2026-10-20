@@ -21,9 +21,15 @@
 #include <expected>
 #include <functional>
 #include <map>
+#include <optional>
 #include <string>
+#include <string_view>
 
 namespace uzp::procedural {
+
+/// The image input of a filter: the layer content at the filter's position in the effect list
+/// (05 §3; filters.h).
+inline constexpr std::string_view kContentInput = "content";
 
 /// What a procedural use needs from its place in the document.
 struct UseContext {
@@ -32,6 +38,10 @@ struct UseContext {
     RasterSpec output;
     /// The spec of each image input the reference binds, by input name.
     std::map<std::string, RasterSpec> inputs;
+    /// A filter's `content` input: the spec and the hash of the layer content at the filter's
+    /// position in the effect list (05 §3). It is not stored in the reference: it changes with
+    /// every edit below the filter.
+    std::optional<ImageInput> content;
     uint64_t seed = 0;
     TileRect tile;
     /// The asset output the use evaluates (`ProceduralRequest::outputId`).
@@ -50,8 +60,10 @@ struct UseContext {
 
 /// The request of `ref` in `context`: its pinned asset; its parameters over the record's defaults
 /// when the library holds the asset (booleans as integers); its preset; its image inputs by
-/// hash, with the specs of `context`; the output id and settings of `context`. Refused: a URL that is not a pin, a parameter that is not a
-/// number, a boolean or a string, and an image input whose spec `context` does not give.
+/// hash, with the specs of `context`; the output id and settings of `context`; and the
+/// context's `content` input of a filter. Refused: a URL that is not a pin, a parameter that is
+/// not a number, a boolean or a string, an image input whose spec `context` does not give, and a
+/// bound input named `content` beside the context's.
 [[nodiscard]] std::expected<ProceduralRequest, UnsupportedProcedural> RequestFor(
     const core::ProceduralRef& ref, const UseContext& context, const AssetLibrary& library);
 

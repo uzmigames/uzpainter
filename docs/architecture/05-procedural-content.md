@@ -35,6 +35,13 @@ Smart masks and smart materials are *structures* of layers and effects. **Public
 
 The library ships beside the executable as `assets/procedural/`: one provenance record per pinned asset and the alias table. Its load refuses any record that breaks the clean room (licence, public sources, UzPainter name), and any alias to an asset that is not `exact`. A pin resolves only at its exact version. `resource.search` answers only from the library, and raises `UnsupportedProcedural` for a Painter name with no certified family (decision 324).
 
+**As built, filters (`phase3.2_proc-filter-families`, decision 328, `src/procedural/filters.h`).**
+- A filter reads one image input, `content`: the layer content at the filter's position. It must have the output's resolution, channels and colour space, and a mismatch is refused as outside the domain.
+- Sharpen (Laplacian sharpening) and grayscale conversion (a weighted RGB sum) are HLSL families. Each kernel equals its CPU reference bit for bit on DX12.
+- The Levels filter maps onto the native levels effect, with its Tier 0 semantics.
+- A filter effect's source carries no resolution override (§7).
+- The three domains are declared in `assets/procedural/` before calibration. None is certified, and no alias names them.
+
 Parity status per asset is `exact` (zero residual on every calibration and held-out case of §6) or `calibrated{max |Δ|, mean |Δ|, p99 |Δ|, corpus id}`, published by `uzpainter assets list --parity`. Under Q1 there is no preset tolerance: a calibrated asset passes only through an owner-approved, versioned exception in the register (`14-parity-testing.md` §5); without one it is a failure.
 
 ## 4. Frozen snapshots (`SnapshotBackend`)

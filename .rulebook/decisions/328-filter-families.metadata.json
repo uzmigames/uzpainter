@@ -1,0 +1,11 @@
+{
+  "id": 328,
+  "slug": "328-filter-families",
+  "title": "The filter families: Sharpen and grayscale conversion are HLSL families on the layer content, the Levels filter maps onto the native levels effect, the content is an implicit input with a joint rule, a filter's source has no resolution override, and the domains are declared uncertified",
+  "status": "accepted",
+  "date": "2026-10-20",
+  "relatedTasks": [
+    "phase3.2_proc-filter-families"
+  ],
+  "supersededBy": null
+}

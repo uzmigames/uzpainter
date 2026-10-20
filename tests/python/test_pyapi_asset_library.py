@@ -1,11 +1,11 @@
 """`resource.search` over the asset library and the `.sbsar` import refusal
 (phase3.1_proc-backend-seam items 2.4 and 2.5, decision 324).
 
-`search` answers only from UzPainter's asset library: the shipped library holds no asset yet, so
-every Painter name is refused; with the synthetic fixture library (`UZP_ASSET_LIBRARY`) a Painter
-name resolves through the alias table to the UzPainter asset, with its UzPainter name and its
-provenance. Importing a `.sbsar` file raises `UnsupportedProcedural` (reason "no runtime") before
-the file is read and before any mutation. CPU only.
+`search` answers only from UzPainter's asset library: the shipped library holds no certified asset
+and no alias yet, so every Painter name is refused; with the synthetic fixture library
+(`UZP_ASSET_LIBRARY`) a Painter name resolves through the alias table to the UzPainter asset, with
+its UzPainter name and its provenance. Importing a `.sbsar` file raises `UnsupportedProcedural`
+(reason "no runtime") before the file is read and before any mutation. CPU only.
 """
 
 from __future__ import annotations
@@ -96,7 +96,13 @@ def test_search_with_the_shipped_library_answers_no_painter_name(facade: Run) ->
     report = facade(SHIPPED)
     assert report["status"] == "ok", report
     result = report["result"]
-    assert result["own"] == []
+    # The shipped records declare their domains before calibration and are not certified
+    # (phase3.2_proc-filter-families 2.6): listed on UzPainter's shelf, never aliased.
+    assert sorted(result["own"]) == [
+        "resource://uzasset/filter/grayscale?version=1",
+        "resource://uzasset/filter/levels?version=1",
+        "resource://uzasset/filter/sharpen?version=1",
+    ]
     name, asset, reason, message = result["painter"]
     assert (name, asset, reason) == (
         "UnsupportedProcedural",

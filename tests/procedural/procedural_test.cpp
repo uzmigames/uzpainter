@@ -56,6 +56,7 @@
 #include "uzp_core/manifest/sha256.h"
 #include "uzp_core/types/project.h"
 
+#include <algorithm>
 #include <bit>
 #include <chrono>
 #include <cmath>
@@ -1190,8 +1191,10 @@ uzp::core::Project PinningProject(const std::string& source, const std::string& 
 
 int RunLibrary(const fs::path& fixture, const fs::path& shipped) {
     const auto shippedLibrary = AssetLibrary::Load(shipped);
-    Check(shippedLibrary && shippedLibrary->records().empty() && shippedLibrary->aliases().empty(),
-          "the shipped library loads and holds no asset and no alias (no family is certified yet)",
+    Check(shippedLibrary && shippedLibrary->aliases().empty() &&
+              std::all_of(shippedLibrary->records().begin(), shippedLibrary->records().end(),
+                          [](const AssetRecord& r) { return r.status.kind == ParityStatus::Kind::Unavailable; }),
+          "the shipped library loads and holds no certified asset and no alias (no family is certified yet)",
           shippedLibrary ? std::to_string(shippedLibrary->records().size()) : shippedLibrary.error());
     const auto loaded = AssetLibrary::Load(fixture);
     Check(loaded.has_value(), "the fixture library loads", loaded ? "" : loaded.error());
@@ -1383,9 +1386,19 @@ int RunAssetsCli(const fs::path& work, const fs::path& fixture, const fs::path& 
     Check(domain != nullptr && Field(*domain, "parameters") != nullptr && Field(*domain, "output") != nullptr,
           "assets list --parity gives each asset's certified editable domain", parity.out);
 
-    const CliRun empty = Cli({"assets", "list", "--parity", "--library", shipped.generic_string()});
-    Check(empty.status == 0 && Assets(empty) != nullptr && Assets(empty)->empty(),
-          "the shipped library lists no asset", empty.out);
+    // The shipped records declare their domains before calibration (phase3.2 filter 2.6); none
+    // is certified.
+    const CliRun shippedRun = Cli({"assets", "list", "--parity", "--library", shipped.generic_string()});
+    const json::Array* shippedRows = Assets(shippedRun);
+    Check(shippedRun.status == 0 && shippedRows != nullptr &&
+              std::all_of(shippedRows->begin(), shippedRows->end(),
+                          [](const json::Value& row) {
+                              const json::Value* p = Field(row, "parity");
+                              return p != nullptr && Field(*p, "status") != nullptr &&
+                                     *Field(*p, "status") == json::Value("unavailable") &&
+                                     Field(row, "domain") != nullptr;
+                          }),
+          "the shipped library lists no certified asset, each with its declared domain", shippedRun.out);
 
     const fs::path broken = work / "broken-library";
     fs::create_directories(broken);

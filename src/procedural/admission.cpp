@@ -47,6 +47,18 @@ std::expected<ProceduralRequest, UnsupportedProcedural> RequestFor(const core::P
         }
         request.inputs[name] = ImageInput{spec->second, binding.sha256};
     }
+    if (context.content) {
+        const std::string content(kContentInput);
+        if (const auto bound = ref.image_inputs.find(content); bound != ref.image_inputs.end()) {
+            UnsupportedProcedural refusal =
+                Refuse(ref.asset, "the content input is the layer content at the filter's position, not a bound input");
+            refusal.field = "inputs." + content;
+            refusal.value = bound->second.sha256;
+            refusal.certified = "the use context's content";
+            return Refused(std::move(refusal));
+        }
+        request.inputs[content] = *context.content;
+    }
     request.meshClass = context.meshClass;
     request.uvTiles = context.uvTiles;
     request.output = context.output;

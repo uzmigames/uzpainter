@@ -311,6 +311,11 @@ private:
         if (is_fill != effect.fill.has_value()) Fail(what + ": a fill payload belongs to fill effects only, which need one");
         if (is_paint != effect.paint.has_value()) Fail(what + ": a paint payload belongs to paint effects only, which need one");
         if (!is_procedural && effect.procedural) Fail(what + ": a procedural payload belongs to generator and filter effects");
+        // SourceSubstance.resolution raises ValueError for a source used by a FilterEffectNode
+        // (python-doc; phase3.2_proc-filter-families 2.4, decision 328).
+        if (effect.kind == EffectKind::filter && effect.procedural && effect.procedural->resolution_override) {
+            Fail(what + ": the source of a filter effect has no resolution override");
+        }
         if (effect.kind != EffectKind::levels && effect.levels) Fail(what + ": levels parameters belong to levels effects");
         if (effect.kind != EffectKind::compare_mask && effect.compare_mask) Fail(what + ": compare_mask parameters belong to compare mask effects");
         if (effect.kind != EffectKind::color_selection && effect.color_selection) {
