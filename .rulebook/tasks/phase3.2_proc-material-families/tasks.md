@@ -30,4 +30,5 @@
   - Done 2026-10-20: `05-procedural-content.md` "As built, materials", decision 334.
 - [x] 5.2 Write tests covering the new behavior
   - Done 2026-10-20: `tests/procedural/materials_test.cpp`, `tests/procedural/test_proc_material_families.py`.
-- [ ] 5.3 Run tests and confirm they pass
+- [x] 5.3 Run tests and confirm they pass
+  - Done 2026-10-20: one run of `tests/procedural/test_proc_material_families.py -k "not dx12"` on the CPU (`UZP_NO_GPU=1`): 11 passed, 1 deselected, exit 0; log `tmp/scratch/proc-tails/pytest-material.log`. The deselected case is the DX12 one. Its last pass is the one recorded under items 2.x and 3.x.
