@@ -1,0 +1,14 @@
+{
+  "id": 337,
+  "slug": "337-geometry-bakers",
+  "title": "Geometry bakers on the CPU core: WorldSpaceNormal as the signed float32 high normal at the hit; Position as the hit point with Mode and Axis and only Normalization None (centimetres); ID as Mesh ID labels with no colour generator; every unrecorded parameter value refused before any work; parity pending-evidence",
+  "status": "accepted",
+  "date": "2026-10-20",
+  "relatedTasks": [
+    "phase3.4_baker-world-space-normal",
+    "phase3.4_baker-position",
+    "phase3.4_baker-id",
+    "phase3.5_embree-bakers"
+  ],
+  "supersededBy": null
+}

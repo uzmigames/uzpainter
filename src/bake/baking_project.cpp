@@ -91,12 +91,18 @@ Groups ReadGroups(const Value& value, const Sets& sets) {
     return groups;
 }
 
+/// The AO values of `settings` (the only baker values a link group shares).
+Object AoValues(const core::BakeSettings& settings) {
+    const auto it = settings.per_baker.find("AO");
+    return it == settings.per_baker.end() ? Object{} : it->second;
+}
+
 void LinkChecked(BakingSession& session, const std::vector<std::string>& group, bool ao) {
     if (group.empty()) return;
     const core::BakeSettings reference = ToBakeSettings(session.parameters(group.front()));
     for (const auto& name : group) {
         const core::BakeSettings settings = ToBakeSettings(session.parameters(name));
-        if (ao ? settings.per_baker != reference.per_baker
+        if (ao ? AoValues(settings) != AoValues(reference)
                : settings.common != reference.common || settings.detail != reference.detail)
             throw ValueError("bake linked_groups: linked members have conflicting values");
     }
@@ -142,9 +148,13 @@ void StoreBakingSession(const BakingSession& session, core::Project& project) {
         const auto values = ToBakeSettings(session.parameters(set.name));
         set.bake_settings.common = values.common;
         set.bake_settings.detail = values.detail;
-        const auto ao = values.per_baker.find("AO");
-        if (ao != values.per_baker.end()) set.bake_settings.per_baker["AO"] = ao->second;
-        else set.bake_settings.per_baker.erase("AO");
+        for (int u = 0; u <= static_cast<int>(MeshMapUsage::Opacity); ++u) {
+            const auto usage = static_cast<MeshMapUsage>(u);
+            if (!StoresBakerValues(usage)) continue;
+            const auto stored = values.per_baker.find(UsageName(usage));
+            if (stored != values.per_baker.end()) set.bake_settings.per_baker[UsageName(usage)] = stored->second;
+            else set.bake_settings.per_baker.erase(UsageName(usage));
+        }
         set.bake_settings.extra[kGroups] = groups;
     }
     // Also rejects unsupported persisted settings; never overwrite a file we cannot load.

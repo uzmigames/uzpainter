@@ -81,7 +81,7 @@ baker's ownership continue to apply.
 
 ### 3.2 Native Normal calculation
 
-The CPU request accepts `Normal`, `AO`, or both. For `Normal`, it interpolates the
+The CPU request accepts `Normal`, `AO`, or both, with the geometry maps of §3.3. For `Normal`, it interpolates the
 high mesh's authored corner normals at the primary hit, normalizes that vector,
 and expresses it through the inverse of the low mesh's interpolated MikkTSpace
 frame. The frame is not orthonormalized. `normal.tangent_space` selects
@@ -114,6 +114,46 @@ outside the canonical bytes. Both usages remain `pending-evidence`, owned by
 does not expose baking through Python/MCP, establish unrecorded defaults or
 certify Painter equality. Phase 0's calibrated residual of up to one RGB16 code
 does not satisfy the Tier 2b equality gate.
+
+### 3.3 Native geometry maps
+
+Decision 337 adds geometry maps to the CPU request, on the same primary hits as AO and Normal.
+Each map has its own file in `src/bake/` and its own owner task. The rules they share:
+- A parameter value whose label names one computation on the bake mesh's data is implemented.
+  Any other value is refused before a job starts, with `NotYetSupported` naming the owner task.
+- `SubSampling` above 1 and `DilationWidth` above 0 are refused: the resolve and padding rules of
+  these maps are not recorded.
+- Non-hit texels hold zero and keep their class. Nothing is filled.
+- Combined with AO or Normal, a map shares the primary hits and leaves the other maps' bytes
+  unchanged.
+- In the canonical bytes, each map present follows the distance record as a tagged block. A result
+  without these maps keeps its `UZPBAKE3`/`UZPBAKE4` bytes.
+
+**WorldSpaceNormal** (`world_normal_baker.*`, phase3.4_baker-world-space-normal). The map holds the
+high mesh's interpolated corner normal at the hit, normalised in double. The frame is the meshes'
+scene frame (object transforms applied, normals through the inverse transpose). With `LowAsHigh`,
+the normal is the low mesh's own. `world_normal` stores float32 xyz, signed and unencoded: Painter's
+channel format and value mapping wait on the Tier 2b goldens. Block tag: `WSN1`.
+
+**Position** (`position_baker.*`, phase3.4_baker-position). The map holds the high surface point at
+the hit, in the same frame. All axis writes xyz; One axis writes the coordinate on `Axis`.
+`Normalization` None writes centimetres (mesh units times `scale_to_internal`); with no bounds,
+`NormalizationScale` has no effect. BBox and BSphere, Painter's default, are refused: their bounds
+and mapping are not recorded. `position` is float32 and unclamped. `PositionNormalizationRecord`
+holds the applied normalisation, and `PositionNormalizationJson` gives it as the binding's
+`baked.effective_normalization`. Block tag: `POS1`. Position's parameter values are stored per
+texture set (`StoresBakerValues`) in `bake_settings.per_baker.Position`, with no link group.
+
+**ID** (`id_baker.*`, phase3.4_baker-id). With `ColorSource` Mesh ID / Polygroup, a hit texel's
+label is the index of the high mesh it hit plus one, in request order (`LowAsHigh`: the low part).
+`id_labels` is uint16, 0 off hits, and `id_label_meshes` names the meshes in label order. Block tag:
+`IDM1`. Vertex color, Material color (Painter's default), File ID and Submesh are refused: the bake
+mesh carries no such input, or nothing recorded describes it. Every `ColorGenerator` is refused too,
+because the colour Painter gives a label is not recorded. So no colour map exists yet: a request
+without a generator bakes the labels only, and a request made from parameters always names one. ID's
+values are stored per texture set in `bake_settings.per_baker.ID`, with no link group.
+
+Parity is `pending-evidence` for every map. Python and MCP expose no bake.
 
 ## 4. Outputs and evidence
 

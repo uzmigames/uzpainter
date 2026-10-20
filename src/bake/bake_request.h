@@ -44,7 +44,7 @@ struct BakeMesh {
     bool normal_frame_supported = true;
 };
 
-/// Painter's ten `MeshMapUsage` bakers (`06-baking.md` §2). CPU: AO and Normal.
+/// Painter's ten `MeshMapUsage` bakers (`06-baking.md` §2). CPU: AO, Normal, WorldSpaceNormal, Position and ID.
 enum class MeshMapUsage {
     Normal,
     WorldSpaceNormal,
@@ -117,6 +117,33 @@ struct NormalSettings {
     core::NormalMapFormat format = core::NormalMapFormat::OpenGL;
 };
 
+/// Position `Mode`, `Axis`, `Normalization` and `NormalizationScale` (decision 337), by Painter's
+/// labels: "All axis" / "One axis", "X" / "Y" / "Z", "BBox" / "BSphere" / "None" and
+/// "Per Material" / "Full Scene". The defaults are Painter's (`assets/defaults/baking.json`).
+enum class PositionMode { AllAxis, OneAxis };
+enum class PositionAxis { X, Y, Z };
+enum class PositionNormalization { BBox, BSphere, None };
+enum class PositionNormalizationScale { PerMaterial, FullScene };
+
+struct PositionSettings {
+    PositionMode mode = PositionMode::AllAxis;
+    PositionAxis axis = PositionAxis::X;
+    PositionNormalization normalization = PositionNormalization::BSphere;
+    PositionNormalizationScale scale = PositionNormalizationScale::FullScene;
+};
+
+/// ID `ColorSource` and `ColorGenerator` (decision 337), by Painter's labels: "Vertex color",
+/// "Material color", "File ID", "Mesh ID / Polygroup" and "Submesh"; "Random", "Hue shift" and
+/// "Grayscale". The defaults are Painter's (`assets/defaults/baking.json`).
+enum class IdColorSource { VertexColor, MaterialColor, FileId, MeshId, Submesh };
+enum class IdColorGenerator { Random, HueShift, Grayscale };
+
+struct IdSettings {
+    IdColorSource source = IdColorSource::MaterialColor;
+    /// Absent: the label map only, without colours (an evidence request no parameter makes).
+    std::optional<IdColorGenerator> generator = IdColorGenerator::HueShift;
+};
+
 /// An axis-aligned box in mesh units (`lower` <= `upper` on every axis).
 struct BoundingBox {
     Float3 lower;
@@ -146,6 +173,8 @@ struct BakeRequest {
     DetailSettings detail;
     AoSettings ao;
     NormalSettings normal;
+    PositionSettings position;
+    IdSettings id;
     /// The texture set's low mesh parts. Where UV islands overlap, the lowest part index, then
     /// the lowest triangle index, wins.
     std::vector<const BakeMesh*> low;
@@ -247,6 +276,16 @@ struct DistanceRecord {
 /// relative distance without a size metric).
 DistanceRecord EffectiveDistances(const BakeRequest& request);
 
+/// The normalisation a Position bake applied (`baked.effective_normalization`, decision 337).
+/// With `Normalization` None a value is the mesh-unit coordinate times `scale_to_internal`, in
+/// centimetres, and no bounds apply, so `NormalizationScale` has no effect (`bounds_applied` false).
+struct PositionNormalizationRecord {
+    PositionSettings settings;
+    std::uint32_t channels = 0;
+    double scale_to_internal = 0.0;
+    bool bounds_applied = false;
+};
+
 /// The baked AO map, its RAW map and its evidence maps (`06-baking.md` §4), row 0 at the top
 /// (v = 1). `ao_raw` is the escaped fraction of the rays of a texel's hit sub-samples,
 /// round(65535 * escaped / (hits * rays)) in integers; every other texel holds 0 and is told
@@ -266,6 +305,18 @@ struct BakeResult {
     /// RGB16 interleaved, zero on non-hit texels; no negative-Z repair.
     std::vector<std::uint16_t> normal_raw;
     std::vector<std::uint16_t> normal;
+    /// WorldSpaceNormal (decision 337): the unit high normal at the hit, in the meshes' scene frame,
+    /// as float32 xyz interleaved, signed and unencoded (the channel format and value mapping wait
+    /// on the Tier 2b goldens); zero on non-hit texels.
+    std::vector<float> world_normal;
+    /// Position (decision 337): the high surface point at the hit, `position_normalization.channels`
+    /// float32 per texel (xyz for All axis, the axis for One axis); zero on non-hit texels.
+    std::vector<float> position;
+    PositionNormalizationRecord position_normalization;
+    /// ID (decision 337): per texel the label of the high mesh the hit is on, its index in the
+    /// request plus one (0 on non-hit texels), and the mesh names in label order.
+    std::vector<std::uint16_t> id_labels;
+    std::vector<std::string> id_label_meshes;
     core::TangentSpace tangent_space = core::TangentSpace::PerVertex;
     core::NormalMapFormat normal_format = core::NormalMapFormat::OpenGL;
     std::vector<std::uint8_t> texel_class;
@@ -285,7 +336,8 @@ struct BakeResult {
 
 /// The canonical bytes of a result (little-endian; AO-only keeps `UZPBAKE3`; Normal uses
 /// `UZPBAKE4` with usage flags, mode, format and RGB maps before the existing sizes/maps/counts,
-/// then the distance record): what the determinism proof compares across thread counts.
+/// then the distance record; each geometry map present, and only then, follows as a tagged block:
+/// `WSN1` for WorldSpaceNormal, `POS1` for Position, `IDM1` for ID): what the determinism proof compares across thread counts.
 /// `threads_used` is not part of it.
 std::string SerializeResult(const BakeResult& result);
 

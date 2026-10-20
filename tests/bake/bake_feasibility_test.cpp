@@ -36,7 +36,9 @@
 #include "bake/baker.h"
 #include "bake/baking_parameters.h"
 #include "bake/embree_baker.h"
+#include "bake/id_baker.h"
 #include "bake/mesh_inputs.h"
+#include "bake/position_baker.h"
 #include "bake/sampling.h"
 #include "bake_fixtures.h"
 #include "uzp_core/manifest/sha256.h"
@@ -344,8 +346,9 @@ void CaseCapabilityErrors() {
     CHECK(baker.caps().parity_owner_task == "phase3.4_baker-ao");
     CHECK(baker.caps().embree_version == "4.4.1");
     const Capabilities capabilities = baker.caps();
-    CHECK(capabilities.usages.size() == 2);
-    for (MeshMapUsage usage : {MeshMapUsage::AO, MeshMapUsage::Normal}) {
+    CHECK(capabilities.usages.size() == 5);
+    for (MeshMapUsage usage : {MeshMapUsage::AO, MeshMapUsage::Normal, MeshMapUsage::WorldSpaceNormal,
+                               MeshMapUsage::Position, MeshMapUsage::ID}) {
         CHECK(std::find(capabilities.usages.begin(), capabilities.usages.end(), usage) != capabilities.usages.end());
     }
     CHECK(capabilities.parity_owner_tasks.at(MeshMapUsage::AO) == "phase3.4_baker-ao");
@@ -357,9 +360,9 @@ void CaseCapabilityErrors() {
     CHECK(Contains(message, "phase3.4_baker-thickness"));
 
     request = PlaneRequest(low);
-    request.usages = {MeshMapUsage::WorldSpaceNormal};
+    request.usages = {MeshMapUsage::Curvature};
     message = ExpectThrow<CapabilityError>([&] { baker.bake(request); });
-    CHECK(Contains(message, "WorldSpaceNormal"));
+    CHECK(Contains(message, "Curvature") && Contains(message, "phase3.4_baker-curvature"));
 
     request = PlaneRequest(low);
     request.detail.cage_mode = CageMode::Automatic;
@@ -1651,6 +1654,9 @@ void CaseCageFileThreadsInProcess() {
 }
 
 #include "normal_bake_cases.h"
+#include "world_normal_bake_cases.h"
+#include "position_bake_cases.h"
+#include "id_bake_cases.h"
 
 const std::vector<std::pair<std::string, std::function<void()>>>& Cases() {
     static const std::vector<std::pair<std::string, std::function<void()>>> cases = {
@@ -1699,6 +1705,26 @@ const std::vector<std::pair<std::string, std::function<void()>>>& Cases() {
         {"normal_refusals", CaseNormalRefusals},
         {"normal_material_split", CaseNormalMaterialSplit},
         {"normal_retained_corners", CaseNormalRetainedCorners},
+        {"world_normal_plane", CaseWorldNormalPlane},
+        {"world_normal_sphere", CaseWorldNormalSphere},
+        {"world_normal_bevel", CaseWorldNormalBevel},
+        {"world_normal_threads_in_process", CaseWorldNormalThreadsInProcess},
+        {"world_normal_isolation", CaseWorldNormalIsolation},
+        {"world_normal_refusals", CaseWorldNormalRefusals},
+        {"position_plane", CasePositionPlane},
+        {"position_sphere", CasePositionSphere},
+        {"position_bevel", CasePositionBevel},
+        {"position_threads_in_process", CasePositionThreadsInProcess},
+        {"position_record", CasePositionRecord},
+        {"position_refusals", CasePositionRefusals},
+        {"position_parameters", CasePositionParameters},
+        {"id_plane", CaseIdPlane},
+        {"id_sphere", CaseIdSphere},
+        {"id_bevel", CaseIdBevel},
+        {"id_threads_in_process", CaseIdThreadsInProcess},
+        {"id_isolation", CaseIdIsolation},
+        {"id_refusals", CaseIdRefusals},
+        {"id_parameters", CaseIdParameters},
     };
     return cases;
 }
@@ -1746,7 +1772,9 @@ std::string Json(const BakeResult& r, const Capabilities& caps, const std::strin
 /// The `bake` command's fixtures: `scene` (the sphere on the ground at 256², 64 rays, low as
 /// high), `scene_self` (the same with min_distance 0, where self hits occur), `bevel` (the
 /// bevelled cube with highs and every path of decision 306 on) and `cage_file` (the cube, its
-/// high and its cage from OBJ files with relative AO distances and a unit scale, decision 311).
+/// high and its cage from OBJ files with relative AO distances and a unit scale, decision 311),
+/// `normal`, `world_normal`, `position` and `id` (the bevelled cube's WorldSpaceNormal, Position and
+/// ID labels, decision 337).
 int BakeCommand(int argc, char** argv) {
     if (argc < 4) throw ValueError("bake needs <fixture> <threads>");
     const std::string fixture = argv[2];
@@ -1788,6 +1816,12 @@ int BakeCommand(int argc, char** argv) {
         request.normal.tangent_space = uzp::core::TangentSpace::PerFragment;
     } else if (fixture == "bevel") {
         request = BevelDeterminismRequest(bevel, mask);
+    } else if (fixture == "world_normal") {
+        request = WorldNormalBevelRequest(bevel);
+    } else if (fixture == "position") {
+        request = PositionBevelRequest(bevel);
+    } else if (fixture == "id") {
+        request = IdLabelsRequest(bevel.Request(0.07f));
     } else if (fixture == "cage_file") {
         request = cage_file.emplace().Request();
     } else {

@@ -143,6 +143,34 @@ std::string SerializeResult(const BakeResult& result) {
     for (float v : {d.max_height, d.max_depth, d.ao_min_distance, d.ao_max_distance}) {
         PutLe(out, std::bit_cast<std::uint32_t>(v), 4);
     }
+    if (!result.world_normal.empty()) {
+        out += "WSN1";
+        PutLe(out, result.world_normal.size(), 8);
+        for (float v : result.world_normal) PutLe(out, std::bit_cast<std::uint32_t>(v), 4);
+    }
+    if (!result.position.empty()) {
+        const PositionNormalizationRecord& p = result.position_normalization;
+        out += "POS1";
+        PutLe(out, static_cast<std::uint64_t>(p.settings.mode), 1);
+        PutLe(out, static_cast<std::uint64_t>(p.settings.axis), 1);
+        PutLe(out, static_cast<std::uint64_t>(p.settings.normalization), 1);
+        PutLe(out, static_cast<std::uint64_t>(p.settings.scale), 1);
+        PutLe(out, p.bounds_applied ? 1 : 0, 1);
+        PutLe(out, p.channels, 4);
+        PutLe(out, std::bit_cast<std::uint64_t>(p.scale_to_internal), 8);
+        PutLe(out, result.position.size(), 8);
+        for (float v : result.position) PutLe(out, std::bit_cast<std::uint32_t>(v), 4);
+    }
+    if (!result.id_labels.empty()) {
+        out += "IDM1";
+        PutLe(out, result.id_labels.size(), 8);
+        for (std::uint16_t v : result.id_labels) PutLe(out, v, 2);
+        PutLe(out, result.id_label_meshes.size(), 8);
+        for (const std::string& name : result.id_label_meshes) {
+            PutLe(out, name.size(), 8);
+            out += name;
+        }
+    }
     return out;
 }
 

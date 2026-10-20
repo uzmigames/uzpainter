@@ -15,6 +15,9 @@
 
 #include "bake/sampling.h"
 #include "bake/mesh_inputs.h"
+#include "bake/id_baker.h"
+#include "bake/position_baker.h"
+#include "bake/world_normal_baker.h"
 #include "mesh/tangents.h"
 #include "uzp_core/types/errors.h"
 
@@ -89,7 +92,8 @@ std::string VersionText(long version) {
 }  // namespace
 
 EmbreeBaker::EmbreeBaker(BakerConfig config) : config_(std::move(config)), core_(std::make_shared<Core>()) {
-    caps_.usages = {MeshMapUsage::AO, MeshMapUsage::Normal};
+    caps_.usages = {MeshMapUsage::AO, MeshMapUsage::Normal, MeshMapUsage::WorldSpaceNormal, MeshMapUsage::Position,
+                    MeshMapUsage::ID};
     caps_.max_output_size_log2 = kMaxOutputSizeLog2;
     caps_.determinism_class = "repeatable-on-one-build-and-cpu-isa";
     caps_.isa = kQualifiedIsa;
@@ -97,6 +101,9 @@ EmbreeBaker::EmbreeBaker(BakerConfig config) : config_(std::move(config)), core_
     caps_.parity_owner_task = "phase3.4_baker-ao";
     caps_.parity_owner_tasks = {{MeshMapUsage::AO, "phase3.4_baker-ao"},
                                 {MeshMapUsage::Normal, "phase3.2_baker-normal"}};
+    for (MeshMapUsage usage : {MeshMapUsage::WorldSpaceNormal, MeshMapUsage::Position, MeshMapUsage::ID}) {
+        caps_.parity_owner_tasks[usage] = UsageOwnerTask(usage);
+    }
 
     const CpuFeatures features = config_.cpu_features ? *config_.cpu_features : DetectCpuFeatures();
     std::string reason = UnqualifiedIsaReason(features);
@@ -240,6 +247,9 @@ DistanceRecord ValidateRequest(const Capabilities& caps, const BakeRequest& requ
                                   " (owned by " + UsageOwnerTask(usage) + ")");
         }
     }
+    if (HasUsage(request, MeshMapUsage::WorldSpaceNormal)) ValidateWorldSpaceNormal(request);
+    if (HasUsage(request, MeshMapUsage::Position)) ValidatePosition(request);
+    if (HasUsage(request, MeshMapUsage::ID)) ValidateId(request);
     for (std::uint32_t log2 : request.output_size_log2) {
         if (log2 > caps.max_output_size_log2) {
             throw CapabilityError("OutputSize 2^" + std::to_string(log2) + " exceeds 2^" +
@@ -869,6 +879,9 @@ void BakeTexel(const Context& ctx, std::uint32_t x, std::uint32_t y, TileCounts&
                     ? static_cast<std::uint16_t>(65535u - green) : green;
                 out.normal_raw[3 * index + 2] = EncodeNormal(normal.z);
             }
+            if (!out.world_normal.empty()) WriteWorldSpaceNormal(out, index, nh);
+            if (!out.position.empty()) WritePosition(out, index, ph);
+            if (!out.id_labels.empty()) WriteId(out, index, origin_geom);
             if (!has_ao) continue;
             // AO secondary rays, in sample order; one Hammersley set over the texel's sub-samples.
             const std::uint32_t texel_rays = ao.secondary_rays * k * k;
@@ -1022,6 +1035,7 @@ BakeResult RunBake(EmbreeBaker::Core& core, const BakerConfig& config, const Job
     const EmbreeApi& api = *core.api;
     const bool has_ao = HasUsage(request, MeshMapUsage::AO);
     const bool has_normal = HasUsage(request, MeshMapUsage::Normal);
+    const bool has_id = HasUsage(request, MeshMapUsage::ID);
 
     BakeResult result;
     result.width = 1u << request.output_size_log2[0];
@@ -1042,11 +1056,14 @@ BakeResult RunBake(EmbreeBaker::Core& core, const BakerConfig& config, const Job
         result.tangent_space = request.normal.tangent_space;
         result.normal_format = request.normal.format;
     }
+    if (HasUsage(request, MeshMapUsage::WorldSpaceNormal)) PrepareWorldSpaceNormal(result);
+    if (HasUsage(request, MeshMapUsage::Position)) PreparePosition(request, result);
     result.texel_class.assign(texels, 0);
     result.coverage.assign(texels, 0);
     result.subsample_hits.assign(texels, 0);
 
     const std::vector<const BakeMesh*> high = request.detail.low_as_high ? request.low : request.high;
+    if (has_id) PrepareId(high, result);
     const Matching matching = MatchMeshes(request, high);
     const Scene scene(core, high, matching.any_filter, config.faults);
     if (api.getDeviceError(core.device) != RTC_ERROR_NONE) {

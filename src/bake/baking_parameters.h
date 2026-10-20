@@ -16,7 +16,8 @@
 //   reproduced;
 // - a default the observation does not establish (`OutputSize`, `TonemappingBounds`);
 // - a value outside a key's range: how Painter treats it is not recorded;
-// - storing a value for a baker other than AO, which its owner baker task brings.
+// - storing a value for a baker other than AO, Position and ID (decision 337), which its owner
+//   baker task brings.
 //
 // Decision 311 adds the mapping to a `BakeRequest`, linked groups (`BakingSession`, the documented
 // `substance_painter.baking` link functions) and the project manifest's `bake_settings`.
@@ -77,6 +78,10 @@ struct PropertySpec {
     std::string output_id;
 };
 
+/// True for the bakers whose values `set()` stores: AO, Position and ID (decision 337). Only AO's
+/// form link groups; a Position or ID value is always the texture set's own.
+bool StoresBakerValues(MeshMapUsage usage);
+
 /// Every key: `common()`'s in Painter's order, then each baker's, in `MeshMapUsage` order.
 const std::vector<PropertySpec>& PropertySpecs();
 
@@ -131,12 +136,12 @@ public:
     /// The common and detail parameters.
     std::map<std::string, Property> common() const;
     /// The parameters of `usage` (none for `Normal`, `WorldSpaceNormal` and `Opacity`). Every
-    /// baker's are readable; only AO's take values (`set`).
+    /// baker's are readable; those `StoresBakerValues` names take values (`set`).
     std::map<std::string, Property> baker(MeshMapUsage usage) const;
     /// Sets the values in one transaction: every value is checked first, and one failure leaves
     /// every parameter, of every texture set in the batch, unchanged. Refusals: `ValueError` (a
     /// wrong type or an unknown enum label), `NotYetSupported` (a value outside the key's range, or
-    /// a baker other than AO, naming its owner task). A value set on a member of a link group is
+    /// a baker `StoresBakerValues` refuses, naming its owner task). A value set on a member of a link group is
     /// the whole group's (one parameter, so naming it twice is a `ValueError`).
     static void set(const std::vector<std::pair<Property, PropertyValue>>& values);
 
@@ -203,14 +208,14 @@ private:
 };
 
 /// The values set on `parameters` (never a default) as the manifest's `bake_settings`: common
-/// keys in `common`, detail keys in `detail`, AO keys in `per_baker["AO"]`, by Painter short
+/// keys in `common`, detail keys in `detail`, a stored baker's keys in `per_baker[<usage>]`, by Painter short
 /// name; a `Bool` as a JSON bool, an `Int` as an integer, a `Float` as a number, an `IntPair` as
 /// `[a, b]`, an `Enum` as its label and a `String` as a string.
 core::BakeSettings ToBakeSettings(const BakingParameters& parameters);
 
 /// Replaces `parameters`' values with `settings` (its `extra` is not read), as one transaction
 /// checked like `set()`: an unknown key, a key in the wrong group, a wrong JSON type, a value
-/// `set()` refuses or a baker other than AO with values refuses the whole load. Loading a linked
+/// `set()` refuses or a baker `StoresBakerValues` refuses with values refuses the whole load. Loading a linked
 /// set loads its group.
 void LoadBakeSettings(const BakingParameters& parameters, const core::BakeSettings& settings);
 
@@ -219,7 +224,8 @@ void LoadBakeSettings(const BakingParameters& parameters, const core::BakeSettin
 /// `NotYetSupported`). A value selecting behaviour the baker does not implement is refused with
 /// `NotYetSupported` naming its owner: `OffsetMap` given, AO `Attenuation` other than None,
 /// `Spread` other than 180, `IgnoreBackfaceSecondary` other than Never, `FilterMethodSecondary`
-/// other than Always, `GroundPlane` on. `SmoothNormals` and `SkewFaceBehavior` are not read: the
+/// other than Always, `GroundPlane` on. Position's four labels map to `BakeRequest::position` and
+/// ID's two to `BakeRequest::id`; the baker refuses the values it does not establish (decision 337). `SmoothNormals` and `SkewFaceBehavior` are not read: the
 /// baker's own ray-direction reading applies (decision 302), and they are listed in
 /// `keys_not_read`. The mesh inputs (`HipolyMesh`, `CageMesh`) are the mesh-input step's: `base`
 /// carries the meshes.

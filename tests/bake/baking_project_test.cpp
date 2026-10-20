@@ -59,7 +59,8 @@ void Configure(BakingSession& session) {
     const auto a = session.parameters("a");
     BakingParameters::set({{a.common().at("OutputSize"), std::pair<std::int64_t, std::int64_t>{10, 11}},
                            {a.common().at("HipolySuffix"), std::string("_hi")},
-                           {a.baker(MeshMapUsage::AO).at("GroundPlane"), true}});
+                           {a.baker(MeshMapUsage::AO).at("GroundPlane"), true},
+                           {a.baker(MeshMapUsage::Position).at("Normalization"), EnumLabel{"None"}}});
     session.set_linked_group({"a", "c"}, "a", MeshMapUsage::AO);
 }
 
@@ -70,6 +71,10 @@ void CheckConfigured(const BakingSession& session) {
     CHECK((b.common.at("OutputSize") == json::Value(json::Array{std::int64_t{10}, std::int64_t{11}})));
     CHECK(b.detail.at("HipolySuffix") == json::Value("_hi"));
     CHECK(std::get<bool>(session.parameters("c").baker(MeshMapUsage::AO).at("GroundPlane").value()));
+    // Position values are the set's own (decision 337): "a" keeps its value, its AO partner "c" none.
+    const auto a = ToBakeSettings(session.parameters("a"));
+    CHECK(a.per_baker.at("Position").at("Normalization") == json::Value("None"));
+    CHECK(!ToBakeSettings(session.parameters("c")).per_baker.contains("Position"));
 }
 
 void Roundtrip(const std::filesystem::path& directory) {

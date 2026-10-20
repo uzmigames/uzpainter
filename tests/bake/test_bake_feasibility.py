@@ -68,6 +68,26 @@ NATIVE_CASES = (
     "normal_refusals",
     "normal_material_split",
     "normal_retained_corners",
+    "world_normal_plane",  # WSN 2.1: the high normal at the hit, signed float32
+    "world_normal_sphere",  # WSN 2.1: low as high, the low mesh's own normal
+    "world_normal_bevel",  # WSN 2.1: faces, edge chamfers and corners of the bevelled cube
+    "world_normal_threads_in_process",  # WSN 3.3 (one ISA): identical bytes at 1, 4 and N threads
+    "world_normal_isolation",  # WSN: shares AO's primary hits without changing AO
+    "world_normal_refusals",  # WSN: SubSampling and DilationWidth refused, owner named
+    "position_plane",  # Position 2.1: each Mode and Axis, centimetres over scale_to_internal
+    "position_sphere",  # Position 2.1: low as high, ground mapping and sphere radius
+    "position_bevel",  # Position 2.1: the bevelled cube's analytic hit points
+    "position_threads_in_process",  # Position (one ISA): identical bytes at 1, 4 and N threads
+    "position_record",  # Position 2.2 (None only): the effective normalisation and its JSON
+    "position_refusals",  # Position: BBox, BSphere, SubSampling, DilationWidth refused
+    "position_parameters",  # Position: stored, saved, loaded and mapped through the model
+    "id_plane",  # ID 2.1 (Mesh ID only): two high planes, one label each
+    "id_sphere",  # ID 2.1: low as high, one label per part
+    "id_bevel",  # ID 2.1: the bevelled cube's highs matched by name
+    "id_threads_in_process",  # ID (one ISA): identical bytes at 1, 4 and N threads
+    "id_isolation",  # ID: shares AO's primary hits without changing AO
+    "id_refusals",  # ID: other sources, every generator, SubSampling, DilationWidth refused
+    "id_parameters",  # ID: stored, saved, loaded and mapped through the model
 )
 
 
@@ -116,7 +136,16 @@ def test_native_case(bake_tests: Path, case: str) -> None:
 
 
 @pytest.mark.parametrize(
-    ("fixture", "tiles"), [("scene", 256), ("bevel", 32), ("cage_file", 32), ("normal", 16)]
+    ("fixture", "tiles"),
+    [
+        ("scene", 256),
+        ("bevel", 32),
+        ("cage_file", 32),
+        ("normal", 16),
+        ("world_normal", 32),
+        ("position", 32),
+        ("id", 32),
+    ],
 )
 def test_bytes_equal_across_thread_counts(
     bake_tests: Path, tmp_path: Path, fixture: str, tiles: int

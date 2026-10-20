@@ -210,7 +210,17 @@ void RefuseOtherUsage(MeshMapUsage usage, const std::string& what) {
     }
 }
 
+void RefuseUnstored(MeshMapUsage usage, const std::string& what) {
+    if (!StoresBakerValues(usage)) {
+        throw NotYetSupported(what + " of " + UsageName(usage) + " (owned by " + Owner(usage) + ")");
+    }
+}
+
 }  // namespace
+
+bool StoresBakerValues(MeshMapUsage usage) {
+    return usage == MeshMapUsage::AO || usage == MeshMapUsage::Position || usage == MeshMapUsage::ID;
+}
 
 const std::vector<PropertySpec>& PropertySpecs() { return TheCatalog().specs; }
 
@@ -225,13 +235,21 @@ struct ParameterStore {
     std::string texture_set;
     std::shared_ptr<ParameterSlot> common = std::make_shared<ParameterSlot>();  // common and detail keys
     std::shared_ptr<ParameterSlot> ao = std::make_shared<ParameterSlot>();
+    /// The set's own values of the other stored bakers (decision 337): never in a link group.
+    std::shared_ptr<ParameterSlot> position = std::make_shared<ParameterSlot>();
+    std::shared_ptr<ParameterSlot> id = std::make_shared<ParameterSlot>();
     /// Shared by the texture sets of one session; null for a set outside a session.
     std::shared_ptr<std::uint64_t> revision;
 
-    /// The slot holding `spec`'s values; null for a baker other than AO (its values are not stored).
+    /// The slot holding `spec`'s values; null for a baker whose values are not stored.
     ParameterSlot* SlotOf(const PropertySpec& spec) const {
         if (spec.group != PropertyGroup::Baker) return common.get();
-        return spec.usage == MeshMapUsage::AO ? ao.get() : nullptr;
+        switch (spec.usage) {
+            case MeshMapUsage::AO: return ao.get();
+            case MeshMapUsage::Position: return position.get();
+            case MeshMapUsage::ID: return id.get();
+            default: return nullptr;
+        }
     }
 };
 
@@ -392,7 +410,7 @@ void BakingParameters::set(const std::vector<std::pair<Property, PropertyValue>>
     std::set<std::pair<const ParameterSlot*, std::string>> seen;
     for (const auto& [property, value] : values) {
         const PropertySpec& spec = *property.spec_;
-        if (spec.group == PropertyGroup::Baker) RefuseOtherUsage(spec.usage, "storing the bake parameters");
+        if (spec.group == PropertyGroup::Baker) RefuseUnstored(spec.usage, "storing the bake parameters");
         const ParameterSlot* slot = property.store_->SlotOf(spec);
         if (!seen.emplace(slot, spec.short_name).second) {
             throw ValueError(spec.short_name + " of texture set '" + property.store_->texture_set +
@@ -617,33 +635,40 @@ core::BakeSettings ToBakeSettings(const BakingParameters& parameters) {
 }
 
 void LoadBakeSettings(const BakingParameters& parameters, const core::BakeSettings& settings) {
-    ParameterSlot common, ao;
-    const auto load = [](const json::Object& object, PropertyGroup group, const std::string& where,
+    ParameterSlot common, ao, position, id;
+    const auto load = [](const json::Object& object, PropertyGroup group, MeshMapUsage usage, const std::string& where,
                          ParameterSlot& into) {
         for (const auto& [key, value] : object) {
-            const PropertySpec* spec = SpecOf(key, group, MeshMapUsage::AO);
+            const PropertySpec* spec = SpecOf(key, group, usage);
             if (!spec) throw ValueError(where + " has no key '" + key + "'");
             into.values[key] = Checked(*spec, FromJson(*spec, value, where));
         }
     };
-    load(settings.common, PropertyGroup::Common, "bake_settings.common", common);
-    load(settings.detail, PropertyGroup::Detail, "bake_settings.detail", common);
+    load(settings.common, PropertyGroup::Common, MeshMapUsage::AO, "bake_settings.common", common);
+    load(settings.detail, PropertyGroup::Detail, MeshMapUsage::AO, "bake_settings.detail", common);
     for (const auto& [baker, object] : settings.per_baker) {
-        if (baker == UsageName(MeshMapUsage::AO)) {
-            load(object, PropertyGroup::Baker, "bake_settings.per_baker.AO", ao);
-            continue;
-        }
         bool known = false;
         for (MeshMapUsage usage : kUsages) {
             if (baker != UsageName(usage)) continue;
             known = true;
-            if (!object.empty()) RefuseOtherUsage(usage, "the bake parameters");
+            const std::string where = "bake_settings.per_baker." + baker;
+            if (usage == MeshMapUsage::AO) {
+                load(object, PropertyGroup::Baker, usage, where, ao);
+            } else if (usage == MeshMapUsage::Position) {
+                load(object, PropertyGroup::Baker, usage, where, position);
+            } else if (usage == MeshMapUsage::ID) {
+                load(object, PropertyGroup::Baker, usage, where, id);
+            } else if (!object.empty()) {
+                RefuseUnstored(usage, "the bake parameters");
+            }
         }
         if (!known) throw ValueError("bake_settings.per_baker has no baker '" + baker + "'");
     }
     ParameterStore& store = *parameters.store_;
     store.common->values = std::move(common.values);
     store.ao->values = std::move(ao.values);
+    store.position->values = std::move(position.values);
+    store.id->values = std::move(id.values);
     Advance({&store});
 }
 
@@ -721,6 +746,34 @@ MappedRequest RequestFromParameters(const BakingParameters& parameters, BakeRequ
         r.ao.max_distance = real(ao, "MaxDistance");
         r.ao.relative_to_bounding_box = boolean(ao, "MaxDistanceRelativeScale");
         r.ao.distribution = label(ao, "Distribution") == "Cosine" ? Distribution::Cosine : Distribution::Uniform;
+    }
+    if (std::find(r.usages.begin(), r.usages.end(), MeshMapUsage::Position) != r.usages.end()) {
+        // Every label maps; the baker refuses the values it does not establish (decision 337).
+        const std::map<std::string, Property> position = parameters.baker(MeshMapUsage::Position);
+        r.position.mode = label(position, "Mode") == "All axis" ? PositionMode::AllAxis : PositionMode::OneAxis;
+        const std::string axis = label(position, "Axis");
+        r.position.axis = axis == "X" ? PositionAxis::X : axis == "Y" ? PositionAxis::Y : PositionAxis::Z;
+        const std::string normalization = label(position, "Normalization");
+        r.position.normalization = normalization == "BBox"      ? PositionNormalization::BBox
+                                   : normalization == "BSphere" ? PositionNormalization::BSphere
+                                                                : PositionNormalization::None;
+        r.position.scale = label(position, "NormalizationScale") == "Per Material"
+                               ? PositionNormalizationScale::PerMaterial
+                               : PositionNormalizationScale::FullScene;
+    }
+    if (std::find(r.usages.begin(), r.usages.end(), MeshMapUsage::ID) != r.usages.end()) {
+        // Both labels map, the generator always; the baker refuses what it does not establish.
+        const std::map<std::string, Property> id = parameters.baker(MeshMapUsage::ID);
+        const std::string source = label(id, "ColorSource");
+        r.id.source = source == "Vertex color"          ? IdColorSource::VertexColor
+                      : source == "Material color"      ? IdColorSource::MaterialColor
+                      : source == "File ID"             ? IdColorSource::FileId
+                      : source == "Mesh ID / Polygroup" ? IdColorSource::MeshId
+                                                        : IdColorSource::Submesh;
+        const std::string generator = label(id, "ColorGenerator");
+        r.id.generator = generator == "Random"      ? IdColorGenerator::Random
+                         : generator == "Hue shift" ? IdColorGenerator::HueShift
+                                                    : IdColorGenerator::Grayscale;
     }
     out.request = std::move(r);
     return out;
