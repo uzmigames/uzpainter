@@ -26,6 +26,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include "../no_error_dialogs.h"
 
 namespace {
 

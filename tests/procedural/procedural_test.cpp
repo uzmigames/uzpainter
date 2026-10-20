@@ -37,6 +37,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include "../no_error_dialogs.h"
 
 namespace {
 

@@ -76,6 +76,7 @@
 #include <vector>
 
 #include <xmmintrin.h>
+#include "../no_error_dialogs.h"
 
 namespace {
 

@@ -32,6 +32,7 @@
 
 #include "mesh/mesh_import.h"
 #include "mesh/tangents.h"
+#include "../no_error_dialogs.h"
 
 namespace {
 

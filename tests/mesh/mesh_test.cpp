@@ -41,6 +41,7 @@
 #include "uzp_core/manifest/json.h"
 #include "uzp_core/transaction/transaction.h"
 #include "uzp_core/types/errors.h"
+#include "../no_error_dialogs.h"
 
 namespace {
 

@@ -151,6 +151,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include "../no_error_dialogs.h"
 
 namespace {
 

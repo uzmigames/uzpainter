@@ -13,6 +13,7 @@
 #include <functional>
 #include <map>
 #include <string>
+#include "../no_error_dialogs.h"
 
 namespace {
 

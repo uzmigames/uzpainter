@@ -39,6 +39,7 @@
 #include "bake_fixtures.h"
 #include "uzp_core/manifest/sha256.h"
 #include "uzp_core/types/errors.h"
+#include "../no_error_dialogs.h"
 
 namespace {
 

@@ -35,6 +35,7 @@
 #include "uzp_core/types/receipt.h"
 #include "uzp_core/types/resource_url.h"
 #include "uzp_core/types/validation.h"
+#include "../no_error_dialogs.h"
 
 namespace {
 
