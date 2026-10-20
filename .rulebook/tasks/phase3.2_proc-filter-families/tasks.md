@@ -27,6 +27,9 @@
 - [ ] 4.1 Acceptance: each filter exact on its calibration and held-out sets, or covered by an owner-approved exception, inside its declared domain; the rest of its documented range listed as a release gap
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
-- [ ] 5.1 Update or create documentation covering the implementation
-- [ ] 5.2 Write tests covering the new behavior
-- [ ] 5.3 Run tests and confirm they pass
+- [x] 5.1 Update or create documentation covering the implementation
+  - Done 2026-10-20: `05-procedural-content.md` "As built, filters", decision 328. They cover the items built so far. The Painter items (parameter discovery, calibration, Tier 2a) add their own docs and tests when they land. Item 3.4, the Tier 0 `effect-order` set, is also still open.
+- [x] 5.2 Write tests covering the new behavior
+  - Done 2026-10-20: `tests/procedural/filters_test.cpp`, `tests/procedural/test_proc_filter_families.py`.
+- [x] 5.3 Run tests and confirm they pass
+  - Done 2026-10-20: one run of `tests/procedural/test_proc_filter_families.py -k "not dx12"` on the CPU (`UZP_NO_GPU=1`): 11 passed, 1 deselected, exit 0; log `tmp/scratch/proc-tails/pytest-filter.log`. The deselected case is the DX12 one. Its last pass is the one recorded under items 2.x and 3.x.
