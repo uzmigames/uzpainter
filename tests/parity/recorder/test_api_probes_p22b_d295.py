@@ -47,13 +47,20 @@ SOFTWARE = {
 # The modules of decision 295's group, and the symbols it routes to another evidence route.
 MODULES = ("textureset", "project", "export", "baking", "source")
 ROUTED = {
-    "substance_painter.baking": "phase3.5_embree-bakers",
+    # The module is supported since 8fa4f517 (baking-defaults replay); these members still wait
+    # for a recorded baking probe, owned by phase3.5_embree-bakers (their inventory notes).
+    **{
+        f"substance_painter.baking.{name}": "phase3.5_embree-bakers"
+        for name in (
+            "BakingParameters.from_texture_set_name",
+            "BakingParameters.set",
+            "BakingParameters.texture_set",
+            "CurvatureMethod.FromNormalMap",
+        )
+    },
     "substance_painter.source.SourceMode.Material": "phase3.2_proc-material-families",
     "substance_painter.export.ExportStatus.Cancelled": "G5 open item",
     "substance_painter.export.ExportStatus.Warning": "observed only",
-    "substance_painter.export.get_default_export_path": (
-        "phase1.24_python-api-facade item 4.1: host-path difference, decision 320"
-    ),
 }
 # Decision 188's requests exercise these (decision 189 §2).
 REQUESTED_BY_188 = {
@@ -154,8 +161,11 @@ def test_every_pending_symbol_of_the_group_is_requested_or_routed() -> None:
     covered = set(exercised())
     assert pending - covered - set(ROUTED) - REQUESTED_BY_188 == set()
     assert set(ROUTED) <= pending and not set(ROUTED) & covered
-    # Every enum member a channel request passes is one the recorder resolves.
-    assert len([s for s in pending if ".ChannelType." in s]) == 52
+    # Every enum member a channel request passes is one the recorder resolves. The 52 members
+    # p22b-textureset-channels passes were pending until abd94980 promoted them on its replay.
+    channel_types = {s for s in covered if ".ChannelType." in s}
+    assert len(channel_types) == 52
+    assert channel_types <= {e["symbol"] for e in load_json(INVENTORY)["entries"]}
 
 
 def test_the_requests_name_the_symbols_they_exercise() -> None:
