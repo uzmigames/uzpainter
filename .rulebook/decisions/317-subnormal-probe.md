@@ -15,7 +15,7 @@ Acceptance is equality with Painter (decision 001), so the choice depends on wha
 
 Two facts limit how far decision 313's numbers reach:
 
-- Its subnormal operands are all non-negative. In `SubnormalImage` (`tests/evaluator/evaluator_test.cpp`), the sign `(k >> 7) & 0x80000000u` of a 32-bit `k` is always 0.
+- Its subnormal operands are all non-negative. In `SubnormalImage` (`tests/evaluator/evaluator_test.cpp`), the sign `(k >> 7) & 0x80000000u` of a 32-bit `k` is always 0. Fixed afterwards to `(k << 7) & 0x80000000u` (bit 24 of `k`), so both signs occur; the re-run sweep still reports 172 of 240 and names the modes: Color, ColorBurn, ColorDodge, Darken, Difference, Exclusion, HardLight, InverseSubtract, Lighten, LinearDodge, LinearLight, Multiply, Normal, NormalMapCombine, NormalMapDetail, NormalMapInverseDetail, Overlay, PinLight, Replace, Saturation, Screen, SoftLight, Subtract, Tint, Value, VividLight.
 - Its 240 combinations are L32F and RGB32F, each with and without coverage, over 30 modes at opacities 1 and 0.7. Decision 313 does not say which modes the 172 are.
 
 The coordinator's brief asked for one small Tier 0 semantics request: at most 256 px, under 1 minute of Painter time, reusing the tier0 semantics machinery and its EXR fixture writer.

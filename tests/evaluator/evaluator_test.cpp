@@ -2698,7 +2698,7 @@ std::shared_ptr<DecodedImage> SubnormalImage(const TileFormat& format, bool rows
     std::shared_ptr<DecodedImage> image = SweepImage(format, rows, size);
     for (size_t i = 0; i < image->values.size(); ++i) {
         const uint32_t k = static_cast<uint32_t>(i * 2654435761u);
-        const uint32_t sign = (k >> 7) & 0x80000000u;
+        const uint32_t sign = (k << 7) & 0x80000000u;  // bit 24 of k: both signs occur
         if (i % 3 == 0) {
             image->values[i] = sign | ((k & 0x007FFFFFu) | 1u);  // exponent 0: subnormal
         } else if (i % 3 == 1) {
