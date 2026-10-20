@@ -483,6 +483,23 @@ Decision 297 adds four Legacy P22-B API probes (the host modules), recorded with
 
 Decision 317 adds one Legacy probe, `blend-subnormal-f32` (decision 313's subnormal finding), recorded as in 11.1 step 3: `python -m tools.parity.recorder record "$req/tier0/semantics/blend-subnormal-f32.json"`. On the 4x2 grid at 256 px, every set adds User0-User7 as RGB32F and gets a lower fill (`subnormal-acc.exr`) and an upper fill (`subnormal-src.exr`), both with `Nearest` filtering. The upper fill's mode and opacity per channel are each of the 30 blend modes except Disable at opacity 1 and 0.7. s0 User0 and s7 User6 hold the upper fill alone, s0 User1 and s7 User7 the lower fill alone, and the upper bitmap is the Normal mesh map of every set. One export step writes User0-User7 and `normal_base` at OpenEXR 32f with `passthrough`. The record is void, and must be reported, if a template capture shows a user channel other than RGB32F, if a step is refused, if an R or B block is not uniform over its 16 x 16 texels, or if a texel whose operands and exact result are all normal differs from the CPU reference. Not yet recorded.
 
+Decision 321 authors R-131, `ao-mixed-grid`, as one separate Legacy request:
+`python -m tools.parity.recorder record "$req/tier0/semantics/ao-mixed-grid.json"`.
+The existing `grid2x2` gives four full-UV sets at 256 px, each using the existing
+grey A mesh map and grey B AO fill (all 65,536 code pairs, already covered by
+R-086a). The new controls explicitly pin identity UV and `RepeatNone`: s0/s1/s2
+use `Nearest` at opacity 0.5/0.75/1; s3 uses `BilinearHQ` at 0.5. Only the fill's
+bitmap filtering is set; the mesh-map binding exposes no such control. All edits
+precede four exports: PNG 8 and its immediate repeat, then OpenEXR 32f and its
+immediate repeat. Each exports AO_Mixed, the AO channel and the AO mesh map on
+all four sets (48 maps per recording, r1 and r2). The same project and each
+set's fill pair the formats; s0 and s3 are separate fills. Check AO L16 in the
+template capture and the mesh-map control exports before interpreting the
+outputs; the projection settings are pinned in the instruction sequence.
+Channel readbacks do not reveal the pre-write AO_Mixed operand, and
+the request presumes no operator or exact result. Authored only; not recorded
+or admitted, and not part of the existing Wand recording operation.
+
 ### 11.3 After the sessions
 
 - For each admitted Tier 0 golden, add its name to `recording_requests.ADMITTED` (the generator then plans its manifest under `manifests/`) and delete its request file. `python -m tools.parity.tier0_semantics check` must pass.

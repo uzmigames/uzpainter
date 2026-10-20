@@ -86,3 +86,24 @@ Item 2.6 remains open for the shipped DDS preset variant: no admitted
 `Unreal Engine (Packed)` observation/provenance was found for items 2.1-2.3.
 The native opt-in does not impersonate Painter JSON or establish UE 5.6
 import/cook acceptance, and no task acceptance is claimed here.
+
+## 8. AO_Mixed recording request (authorship only, 2026-10-20)
+
+Decision 321 supplies the missing R-131 request `ao-mixed-grid` for item 2.10.
+It reuses the 65,536 operand pairs already covered by R-086a, now with explicit
+Nearest/identity UV controls, one BilinearHQ comparison, and PNG 8/OpenEXR 32f
+plus immediate repeats from the same project. Four full-UV sets cover opacities
+0.5, 0.75 and 1; AO channel and mesh-map exports accompany AO_Mixed.
+
+The request uses the existing fixtures and recorder vocabulary. It remains
+under the envelope's `requests/` with no private records. Recording, admission,
+the exact operator fit and consumer parity remain open; the production refusal
+and item 2.10's checkbox are unchanged. Recording instructions: `parity/RECORDER.md`
+section 11.2.
+
+Validation: eight targeted tests pass (12.29 s), covering the operand/UV grid,
+node state, format repeats, committed request versus generator/input hashes,
+request schema/job parsing and the provenance guard. Ruff and mypy pass for
+the three Python files. Evidence: `tmp/scratch/r131/junit.xml` and
+`tmp/scratch/r131/evidence.json`. These are authorship checks, not a Painter
+recording or output-parity verdict.

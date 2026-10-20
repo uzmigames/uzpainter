@@ -1692,6 +1692,57 @@ COMBINE_BITMAPS = (
 )
 
 
+def ao_mixed_grid_probe() -> Golden:
+    """R-131 (decision 131): R-086 already covers the full code grid. Pin identity UV and
+    Nearest, pair PNG 8 and EXR 32f on the same fill, and isolate filtering with BilinearHQ."""
+    s = start("grid2x2")
+    s.channels((("AO", "L16"),))
+    res = s.imports("grey-a", "grey-b")
+    s.add(ps.SET_MESH_MAP, usage="AO", resource_step=res["grey-a"])
+    maps = [
+        "virtualMap/AO_Mixed:L",
+        "documentMap/ambientOcclusion:L",
+        "meshMap/ambient_occlusion:L",
+    ]
+    for index, (filtering, opacity) in enumerate(
+        (
+            ("Nearest", 0.5),
+            ("Nearest", 0.75),
+            ("Nearest", 1.0),
+            ("BilinearHQ", 0.5),
+        )
+    ):
+        node = s.fill(["AO"], texture_set=f"s{index}")
+        s.bitmap(node, "AO", res["grey-b"])
+        projection(s, node, filtering, "RepeatNone")
+        s.blend(node, "AO", "Normal", opacity)
+    export(s, maps, PNG8, "passthrough")
+    export(s, maps, EXR32F, "passthrough")
+    return Golden(
+        "ao-mixed-grid",
+        "tier0/ao-mixed/operator",
+        "R-131 (decision 131, phase3.2_unreal-ue56-packed-preset item 2.10): the full "
+        "256 x 256 mesh-map/channel code grid already present in R-086, now with identity "
+        "UV projection and filtering explicit. On grid2x2, four full-UV sets at 256 px "
+        "under Legacy, "
+        "grey-a binds AO mesh-map code x and grey-b supplies channel code y (both authored "
+        "PNG 16, code8 * 257), every pair 0..255 once per set. Each set has one AO L16 fill "
+        "in Normal: s0/s1/s2 use Nearest at opacity 0.5/0.75/1; s3 uses BilinearHQ at "
+        "opacity 0.5 as the sole filtering "
+        "control against s0; scale 1, rotation 0, offset 0, RepeatNone throughout. "
+        "After all edits, "
+        "AO_Mixed, the AO channel and AO mesh map are exported twice immediately as PNG 8 "
+        "and twice immediately as OpenEXR 32f, passthrough, no dithering. The same document "
+        "and each set's fill pair the formats and expose source readbacks; s0/s3 are separate "
+        "fills, differing only in filtering. Channel exports are "
+        "observations, not assumed exact pre-write AO_Mixed operands. Recorder repeats "
+        "the exports after save/close/reopen (r2). No operator result is presumed.",
+        "grid2x2",
+        ["grid2x2", "grey-a", "grey-b"],
+        s,
+    )
+
+
 def padding_normal_combine_probe() -> Golden:
     """Decision 276 item 5's recording: the float32 form (item 4 (b)) and the order (item 4 (c))
     of Painter's gutter combination of a bound Normal mesh map with the padded mesh-free normal,
@@ -2010,6 +2061,7 @@ def later_goldens() -> list[Golden]:
         export_presets_gltf(ocio=False),
         export_presets_gltf(ocio=True),
         blend_subnormal(),
+        ao_mixed_grid_probe(),
     ]
 
 
