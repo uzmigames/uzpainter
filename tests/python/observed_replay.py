@@ -60,11 +60,16 @@ from tools.parity.recorder.probes import (
     INPUT_ARGS,
     MESH_MAPS,
     PAINTER_PROBES,
+    PLUGIN_FOLDER,
+    PLUGINS_PATH,
+    RELOAD_RESOURCES,
+    REWRITE_ARGS,
     SHELF_FOLDER,
     SHELF_INPUTS,
     WORK_FILE,
     ProbeJob,
     ProbeStep,
+    plugin_root,
     probe_job_from_manifest,
 )
 from tools.parity.recorder.texture import export_roots
@@ -210,6 +215,9 @@ def run_step(step, work_dir):
         for source in step["shelf_inputs"]:
             shutil.copyfile(source, folder + "/" + os.path.basename(source))
         resolved["shelf_path"] = folder
+    if "rewrite_inputs" in step:
+        target, source = step["rewrite_inputs"]
+        shutil.copyfile(source, target)
     return call("probe_step", step=step["step"], call=step["call"], args=args, resolved=resolved)
 
 
@@ -371,13 +379,15 @@ result = {"defaults": defaults, "same_session": same_session, "after_save_reopen
 RECORDINGS = {"same_session": "r1", "after_save_reopen": "r2"}
 
 
-def step_payload(step: ProbeStep, staged: dict[str, Path]) -> dict[str, Any]:
+def step_payload(step: ProbeStep, staged: dict[str, Path], run: Path) -> dict[str, Any]:
     """A state or probe step as the script runs it: the staged input paths resolved, and for
     `Shelves.add` the staged inputs it copies into its folder."""
     resolved: dict[str, str] = {}
     key = INPUT_ARGS.get(step.call)
     if key is not None and key in step.args:
         resolved[key] = staged[step.args[key]].as_posix()
+    if step.call == PLUGINS_PATH and PLUGIN_FOLDER in step.args:
+        resolved["plugin_root"] = plugin_root(step, run / "r1" / "work-files").as_posix()
     out: dict[str, Any] = {
         "step": step.step,
         "call": step.call,
@@ -388,6 +398,8 @@ def step_payload(step: ProbeStep, staged: dict[str, Path]) -> dict[str, Any]:
     }
     if SHELF_FOLDER in step.args and SHELF_INPUTS in step.args:
         out["shelf_inputs"] = [staged[i].as_posix() for i in step.args[SHELF_INPUTS]]
+    if step.call == RELOAD_RESOURCES and REWRITE_ARGS[0] in step.args:
+        out["rewrite_inputs"] = [staged[step.args[name]].as_posix() for name in REWRITE_ARGS]
     return out
 
 
@@ -457,7 +469,7 @@ def replay_observed(
     roots = [ts if not st else f"{ts}/{st}" for ts, st in export_roots(template)]
     probes: list[dict[str, Any]] = []
     for step in job.probe_steps:
-        payload = step_payload(step, staged)
+        payload = step_payload(step, staged, run)
         if step.call == EXPORT:
             payload["exports"] = probe_export_payload(step, run, roots)
         probes.append(payload)
@@ -486,7 +498,7 @@ def replay_observed(
             "args": job.create.args,
             "resolved": create_resolved(job, staged, run),
         },
-        "state": [step_payload(s, staged) for s in job.state_steps],
+        "state": [step_payload(s, staged, run) for s in job.state_steps],
         "probes": probes,
         "captures": captures,
         "export": EXPORT,

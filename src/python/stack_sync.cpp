@@ -140,8 +140,13 @@ void RemoveNode(core::Project& project, core::Id uid) {
 std::string ImportResource(core::Edit& edit, store::ProjectStore& store, std::string bytes, const std::string& name,
                            const std::string& mime, const std::string& usage, const std::string& origin) {
     const std::int64_t size = static_cast<std::int64_t>(bytes.size());
-    const std::string sha256 = store.StageResource(std::move(bytes), mime);
     core::Project& project = edit.project();
+    const std::string content_hash = core::Sha256Hex(bytes);
+    const auto existing = project.resources.find(content_hash);
+    // MIME describes shared bytes; usage, name and origin belong to each alias.
+    const std::string& canonical_mime = existing != project.resources.end() && !existing->second.empty()
+                                            ? existing->second.front().mime : mime;
+    const std::string sha256 = store.StageResource(std::move(bytes), canonical_mime);
     std::vector<core::ResourceMeta>& entries = project.resources[sha256];
     const bool known = std::any_of(entries.begin(), entries.end(), [&](const core::ResourceMeta& m) { return m.name == name; });
     if (known) {
@@ -152,7 +157,7 @@ std::string ImportResource(core::Edit& edit, store::ProjectStore& store, std::st
     core::ResourceMeta meta;
     meta.id = edit.AllocateId();
     meta.name = name;
-    meta.mime = mime;
+    meta.mime = canonical_mime;
     meta.size = size;
     meta.usage = usage;
     meta.origin = origin;
