@@ -905,7 +905,11 @@ def run_path(value: Any) -> Any:
     root = ROOT["dir"]
     if root is not None:
         base = os.path.normpath(str(root))
-        if os.path.normcase(os.path.commonpath([path, base])) == os.path.normcase(base):
+        try:
+            common = os.path.commonpath([path, base])
+        except ValueError:  # different drives: the path cannot lie under the run directory
+            common = None
+        if common is not None and os.path.normcase(common) == os.path.normcase(base):
             return {"run_relative": os.path.relpath(path, base).split(os.sep)}
     return {"path": str(value)}
 
