@@ -44,6 +44,7 @@ TOOL = 4  # a free sys.monitoring tool id (0, 1, 2 and 5 are named by CPython)
 EVENTS = sys.monitoring.events
 
 _code: dict[types.CodeType, set[str]] = {}  # Python callables and constructors
+_receivers: dict[types.CodeType, dict[str, type]] = {}  # the class owning each method alias
 _native: dict[int, set[str]] = {}  # native callables by id (kept alive by their modules)
 _classes: dict[type, set[str]] = {}
 _fields: dict[type, set[str]] = {}  # data attributes of a class, exercised with it
@@ -75,6 +76,13 @@ def _is_enum(cls: type) -> bool:
     )
 
 
+def _index_python(function: Any, qualified: str, receiver: type | None = None) -> None:
+    code = inspect.unwrap(function).__code__
+    _add(_code, code, qualified)
+    if receiver is not None:
+        _receivers.setdefault(code, {})[qualified] = receiver
+
+
 def _index_class(qualified: str, cls: type, depth: int) -> None:
     """Indexes a class under one of its public names (a re-exported class has several)."""
     _add(_classes, cls, qualified)
@@ -82,7 +90,7 @@ def _index_class(qualified: str, cls: type, depth: int) -> None:
     _keep.append(cls)
     init = cls.__dict__.get("__init__")
     if isinstance(init, types.FunctionType):
-        _add(_code, init.__code__, qualified)
+        _index_python(init, qualified, cls)
     enum_class = _is_enum(cls)
     if enum_class:
         members: dict[str, Any] = getattr(cls, "__members__")  # noqa: B009 (pybind11 enums too)
@@ -96,7 +104,7 @@ def _index_class(qualified: str, cls: type, depth: int) -> None:
         protocol = enum_class and (name in ("name", "value") or isinstance(value, cls))
         if protocol:
             continue
-        if not _index_value(f"{qualified}.{name}", value, depth + 1):
+        if not _index_value(f"{qualified}.{name}", value, depth + 1, cls):
             _add(_fields, cls, f"{qualified}.{name}")  # a field, a slot or a constant
 
 
@@ -113,15 +121,18 @@ def _members_of(cls: type) -> list[tuple[str, Any]]:
     return members
 
 
-def _index_value(qualified: str, value: Any, depth: int) -> bool:
+def _index_value(qualified: str, value: Any, depth: int, receiver: type | None = None) -> bool:
     """Indexes a callable or a class; False for a data attribute."""
-    if isinstance(value, (staticmethod, classmethod)):
+    if isinstance(value, staticmethod):
+        receiver = None
+        value = value.__func__
+    elif isinstance(value, classmethod):
         value = value.__func__
     if isinstance(value, property):
         _names.add(qualified)
         for accessor in (value.fget, value.fset, value.fdel):
             if isinstance(accessor, types.FunctionType):
-                _add(_code, inspect.unwrap(accessor).__code__, qualified)
+                _index_python(accessor, qualified, receiver)
         return True
     if inspect.isclass(value):
         if depth < 4:
@@ -130,7 +141,7 @@ def _index_value(qualified: str, value: Any, depth: int) -> bool:
     if isinstance(value, types.FunctionType):
         # A decorator's wrapper code is shared by every function it wraps: the wrapped one's
         # code identifies the call.
-        _add(_code, inspect.unwrap(value).__code__, qualified)
+        _index_python(value, qualified, receiver)
         return True
     if callable(value) and not isinstance(value, enum.Enum):
         _add(_native, id(value), qualified)
@@ -236,7 +247,22 @@ def _finish(code: types.CodeType, raised: BaseException | None, value: Any = Non
     _, arguments = frames.pop()
     if raised is not None and any(c.__name__ in REFUSALS for c in type(raised).__mro__):
         return
-    _note(_code[code])
+    # Private-base methods share code across public sibling classes. Only the receiver's
+    # class (and its real aliases or public bases) exercised that method.
+    receiver = arguments[0] if arguments else None
+    owners = _receivers.get(code, {})
+    _note(
+        {
+            name
+            for name in _code[code]
+            if name not in owners
+            or (
+                issubclass(receiver, owners[name])
+                if isinstance(receiver, type)
+                else isinstance(receiver, owners[name])
+            )
+        }
+    )
     for argument in arguments:
         _scan(argument)
     if raised is not None:
@@ -270,6 +296,9 @@ def _drop_shared_code() -> None:
     a call to it does not say which of them ran."""
     for code, names in list(_code.items()):
         if len({n.rsplit(".", 1)[1] for n in names}) > 1:
+            owners = _receivers.get(code, {})
+            if all(name in owners and name in _classes.get(owners[name], set()) for name in names):
+                continue  # Shared constructors remain distinguishable by their instance.
             del _code[code]
 
 
