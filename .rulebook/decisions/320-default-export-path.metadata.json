@@ -1,0 +1,11 @@
+{
+  "id": 320,
+  "slug": "320-default-export-path",
+  "title": "`export.get_default_export_path` returns UzPainter's own export folder under the user's Documents Known Folder; it is a host policy, not Painter-path parity, and the symbol stays pending evidence",
+  "status": "accepted",
+  "date": "2026-10-20",
+  "relatedTasks": [
+    "phase1.24_python-api-facade"
+  ],
+  "supersededBy": null
+}

@@ -152,7 +152,7 @@ Every run used the same runner, `uzp-pyapi-tests.exe` SHA-256 `f8c5a64b5b255aef6
 | Golden | Verdict | Exclusions, with owners |
 |---|---|---|
 | `phase1-create-mesh-maps` (P21-A) | exact | none |
-| `phase1-create-default-paths` (P21-B) | exact apart from one open seam | `s3/get_default_export_path` is a release gap: the facade has no such function and raises AttributeError. Painter returns its user's export folder. This is an **open 4.1 seam** owned by phase1.24_python-api-facade item 4.1. The symbol stays `release-gap`, and its excluded output promotes no symbol. |
+| `phase1-create-default-paths` (P21-B) | exact apart from one open seam | `s3/get_default_export_path` returns UzPainter's own absolute export folder, `<Documents>/UzPainter/export` (decision 320, commit f819cc0). Painter returns its host's export folder, so s3 is recorded as an explicit host difference, not literal parity. The symbol is `pending-evidence`, and the excluded output promotes no symbol. |
 | `phase1-texture-throttling` (P21-C) | exact | none |
 | `phase1-shelves` (P21-D) | exact apart from the host environment | `s4/all`, `s5/application_shelf`, `s6/user_shelf`: Painter's installed and user shelves are Adobe content that UzPainter never ships (decision 006). |
 | `phase1-layer-stack-events` (P21-E) | exact apart from refusals and one unstable output | Refused before any change, together with each step's event:<br>• s14 `insert_paint` (phase4.1_nodes-paint-layers)<br>• s16 and s17, compare mask and colour selection (phase4.1_nodes-mask-effects)<br>• s18 anchor point (phase4.1_nodes-instances-anchors)<br>Also excluded:<br>• r2 `identity/reopen`, which lists those nodes<br>• `s30/set_parameters`: Painter's TypeError text holds an object address that differs between its two recordings (decision 205) |
@@ -181,4 +181,4 @@ Every run used the same runner, `uzp-pyapi-tests.exe` SHA-256 `f8c5a64b5b255aef6
 
 Item 4.1 stays open for:
 - the 18 P22-B recordings (decisions 295-297), with their admission and compared replays;
-- the `get_default_export_path` release gap (P21-B s3), owned by phase1.24_python-api-facade item 4.1.
+- the `get_default_export_path` host-path difference (P21-B s3, decision 320): implemented as a UzPainter host policy, symbol `pending-evidence`, owned by phase1.24_python-api-facade item 4.1.
