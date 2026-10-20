@@ -10,7 +10,7 @@ from typing import Any
 import uzpainter
 
 from uzpainter_facade import resource
-from uzpainter_facade.state import SESSION, edits
+from uzpainter_facade.state import RESOURCE_METADATA, SESSION, edits, one_transaction
 
 MODULE = "substance_painter.textureset"
 _ts = uzpainter.textureset
@@ -19,6 +19,18 @@ ChannelType = _ts.ChannelType
 ChannelFormat = _ts.ChannelFormat
 MeshMapUsage = _ts.MeshMapUsage
 Resolution = _ts.Resolution
+
+
+# The project Metadata key of the resource names the mesh-map bindings were given:
+# `{"<texture set>/<usage>": [name, sha256]}`. A native binding holds the content hash only, and
+# two project resources may hold the same bytes under two names, which Painter keeps apart
+# (`phase1-create-mesh-maps` s7 and s10, s3 and s11, s8 and s12; decision 319).
+MESH_MAP_NAMES = "mesh_map_names"
+
+
+def mesh_map_names() -> dict[str, list[str]]:
+    value = uzpainter.project.Metadata(RESOURCE_METADATA).get(MESH_MAP_NAMES)
+    return dict(value) if isinstance(value, dict) else {}
 
 
 def native_of(value: Any) -> Any:
@@ -161,17 +173,29 @@ class TextureSet:
         if native is None:
             return None
         key = ("mesh_map", self._native.uid(), usage.name)
-        return resource.from_native(native, SESSION.bound_context.get(key))
+        found = resource.from_native(native, SESSION.bound_context.get(key))
+        given = mesh_map_names().get(f"{self._native.name()}/{usage.name}")
+        if given is not None and given[1] == native.version:
+            return resource.ResourceID(found.context, given[0], found.version)
+        return found
 
     @edits
     def set_mesh_map_resource(self, usage: Any, new_mesh_map: Any) -> None:
         key = ("mesh_map", self._native.uid(), usage.name)
-        if new_mesh_map is None:
-            self._native.set_mesh_map_resource(usage, None)
-            SESSION.bound_context.pop(key, None)
-            return
-        self._native.set_mesh_map_resource(usage, resource.to_native(new_mesh_map))
-        SESSION.bound_context[key] = new_mesh_map.context
+        name = f"{self._native.name()}/{usage.name}"
+        names = mesh_map_names()
+        with one_transaction("textureset.TextureSet.set_mesh_map_resource"):
+            if new_mesh_map is None:
+                self._native.set_mesh_map_resource(usage, None)
+                SESSION.bound_context.pop(key, None)
+                names.pop(name, None)
+            else:
+                native = resource.to_native(new_mesh_map)
+                self._native.set_mesh_map_resource(usage, native)
+                SESSION.bound_context[key] = new_mesh_map.context
+                names[name] = [str(native.name), str(native.version)]
+            if names != mesh_map_names():
+                uzpainter.project.Metadata(RESOURCE_METADATA).set(MESH_MAP_NAMES, names)
 
     def __eq__(self, other: object) -> bool:
         return isinstance(other, TextureSet) and self._native == other._native

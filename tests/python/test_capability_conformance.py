@@ -211,8 +211,6 @@ def recipes() -> dict[Any, tuple[str, str]]:
         "neffect.set_material_source(None)",
     )
     for field, value in (
-        ("default_save_path", "WORK"),
-        ("export_path", "WORK"),
         ("mesh_settings", "object()"),
         ("auto_unwrap_settings", "object()"),
     ):
@@ -225,10 +223,6 @@ def recipes() -> dict[Any, tuple[str, str]]:
             "",
             f"project.reload_mesh(PLANE, project.MeshReloadingSettings({field}=object()), print)",
         )
-    r["substance_painter.event.TextureStateEvent.cache_key_invalidation_throttling_period"] = (
-        "",
-        "sp.event.TextureStateEvent.cache_key_invalidation_throttling_period()",
-    )
     r["substance_painter.resource.Shelf.can_import_resources"] = (
         SHELF,
         "shelf.can_import_resources()",

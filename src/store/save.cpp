@@ -201,12 +201,34 @@ core::Checkpoints ProjectStore::CheckpointState() {
 }
 
 core::Checkpoints ProjectStore::SaveAs(core::Document& document, const std::filesystem::path& target,
-                                       const SaveOptions& options) {
+                                       const SaveOptions& options, SaveTargetPolicy policy) {
     std::lock_guard lock(mutex_);
     CheckDocument(document);
     std::error_code ec;
-    if (std::filesystem::exists(target, ec)) throw StoreError(StoreError::Code::exists, Utf8(target) + " already exists");
+    const bool exists = std::filesystem::exists(target, ec);
+    if (ec) throw StoreError(StoreError::Code::io, "cannot inspect " + Utf8(target) + ": " + ec.message());
+    if (exists) {
+        if (policy == SaveTargetPolicy::create_only) {
+            throw StoreError(StoreError::Code::exists, Utf8(target) + " already exists");
+        }
+        const bool same_file = std::filesystem::equivalent(path_, target, ec);
+        if (ec) throw StoreError(StoreError::Code::io, "cannot compare " + Utf8(target) + ": " + ec.message());
+        if (same_file) {
+            throw StoreError(StoreError::Code::conflict, "save_as target is the open project; use save()");
+        }
+    }
     ProjectLock target_lock = ProjectLock::Acquire(target);
+    // A crashed destination may recover old SQLite pages over the replacement on its first open.
+    for (const char* suffix : {"-journal", "-wal", "-shm"}) {
+        std::filesystem::path companion = target;
+        companion += suffix;
+        const bool pending = std::filesystem::exists(companion, ec);
+        if (ec) throw StoreError(StoreError::Code::io, "cannot inspect " + Utf8(companion) + ": " + ec.message());
+        if (pending) {
+            throw StoreError(StoreError::Code::conflict,
+                             "save_as destination requires recovery before replacement: " + Utf8(companion));
+        }
+    }
     const std::filesystem::path output = SiblingPath(target, "vacuum");
     core::Checkpoints checkpoints;
     Container relocated = [&] {
@@ -218,7 +240,7 @@ core::Checkpoints ProjectStore::SaveAs(core::Document& document, const std::file
                 checkpoints = WriteSaveCheckpoint(copy, options);
                 transaction.Commit();
             }
-            RenameFile(output, target, false);
+            RenameFile(output, target, policy == SaveTargetPolicy::replace_existing);
         } catch (const StoreError& error) {
             RemoveQuietly(output);
             throw StoreError(error.code(), "save_as " + Utf8(target) + ": " + ErrorDetail(error));

@@ -117,11 +117,14 @@ public:
 
     /// `save_as(path)`: `VACUUM INTO` a temporary file beside `target`, writes `save()`'s
     /// checkpoint into it, renames it to `target` and relocates the open project and its lock
-    /// there; the original file is not changed. Throws `StoreError(exists)` when `target` exists
-    /// and `StoreError(locked)` when another worker holds its lock; on failure nothing is left at
-    /// `target` and the project stays where it was.
+    /// there; the original file is not changed. The default policy refuses an existing target;
+    /// `replace_existing` replaces a closed target atomically and refuses aliases of this file.
+    /// Another owner holding the target lock, or a target with SQLite recovery companions, is
+    /// refused. A failed copy or rename preserves both
+    /// files and keeps the project where it was.
     core::Checkpoints SaveAs(core::Document& document, const std::filesystem::path& target,
-                             const SaveOptions& options = {});
+                             const SaveOptions& options = {},
+                             SaveTargetPolicy policy = SaveTargetPolicy::create_only);
     /// `save_as_copy(path)`: `VACUUM INTO` a temporary file beside `target` and renames it to
     /// `target`; the project keeps its path, lock and dirty state. Throws `StoreError(exists)`
     /// when `target` exists; on failure nothing is left at `target`.

@@ -1,0 +1,11 @@
+{
+  "id": 319,
+  "slug": "319-observed-host-behaviour",
+  "title": "The admitted P21, R10 and P23-A goldens settle host behaviours that decisions 105, 109 and 110 left open",
+  "status": "accepted",
+  "date": "2026-10-20",
+  "relatedTasks": [
+    "phase1.24_python-api-facade"
+  ],
+  "supersededBy": null
+}

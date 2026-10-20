@@ -363,14 +363,17 @@ _SHELVES: dict[str, dict[str, Any]] = {}
 
 
 def _crawl(name: str) -> None:
-    """Walks a shelf's folder on a worker thread between the crawling events."""
+    """Walks a shelf's folder on a worker thread between the crawling events:
+    `ShelfCrawlingStarted` is delivered before the call that starts the crawl returns, and
+    `ShelfCrawlingEnded` once the walk is done (`phase1-shelves` s3 and s9, both recordings;
+    decision 319)."""
     shelf = _SHELVES[name]
     shelf["crawling"] = True
+    event.emit_sync(event.ShelfCrawlingStarted(name))
     uzpainter.event.hold()
 
     def walk() -> None:
         try:
-            event.emit_sync(event.ShelfCrawlingStarted(name))
             shelf["files"] = sorted(
                 os.path.relpath(os.path.join(folder, file), shelf["path"])
                 for folder, _, files in os.walk(shelf["path"])
@@ -452,6 +455,7 @@ class Shelves:
         if not os.path.isdir(path):
             raise ValueError(f"the shelf folder {path!r} does not exist")
         _SHELVES[name] = {"path": os.path.abspath(path), "crawling": False, "files": []}
+        _crawl(name)  # a new shelf crawls its folder, as Painter's does (P21-D s3)
         return Shelf(name)
 
     @staticmethod

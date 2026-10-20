@@ -757,6 +757,95 @@ void SaveAsAndCopy() {
     CHECK(b.report.ok() && b.doc->revision() == 3 && b.doc->checkpoints() == (uzp::core::Checkpoints{3, 2, std::nullopt}));
 }
 
+void SaveAsReplace() {
+    using fault::Fault;
+    const fs::path dir = WorkDir("save-as-replace");
+    const fs::path original = CreateProject(dir, "original.uzp");
+    const fs::path target = CreateProject(dir, "target.uzp");
+    Session s = OpenSession(original);
+    const Id plane = Paint(s, "paint", Synthetic(1024, 1024, 67));
+    AddLayer(s, "dirty");
+    const std::string source_bytes = ReadBytes(original);
+    const std::string target_bytes = ReadBytes(target);
+    const auto checkpoints = s.doc->checkpoints();
+    const auto revision = s.doc->revision();
+    const std::string manifest = SaveManifest(*s.doc->snapshot().project);
+    const auto unchanged = [&] {
+        CHECK(ReadBytes(original) == source_bytes && ReadBytes(target) == target_bytes);
+        CHECK(s.store->path() == original && s.store->lock_path() == LockPath(original));
+        CHECK(fs::exists(LockPath(original)));
+        CHECK(s.doc->revision() == revision && s.doc->checkpoints() == checkpoints);
+        CHECK(s.store->CheckpointState() == checkpoints);
+        CHECK(s.doc->NeedsSaving() && s.store->NeedsSaving());
+        CHECK(NoTemporaries(original) && NoTemporaries(target));
+    };
+    const auto replace = [&](const fs::path& destination) {
+        return s.store->SaveAs(*s.doc, destination, {}, SaveTargetPolicy::replace_existing);
+    };
+
+    CHECK(EXPECT_THROW(StoreError, s.store->SaveAs(*s.doc, target)).code() == StoreError::Code::exists);
+    unchanged();
+    {
+        const ProjectLock held = ProjectLock::Acquire(target);
+        CHECK(EXPECT_THROW(StoreError, replace(target)).code() == StoreError::Code::locked);
+        unchanged();
+        CHECK(fs::exists(LockPath(target)));
+    }
+    for (const auto& [kind, step] : {std::pair{Fault::fail_during_vacuum, "VACUUM INTO"},
+                                    std::pair{Fault::fail_rename, "rename"}}) {
+        fault::Arm(kind);
+        const auto error = EXPECT_THROW(StoreError, replace(target));
+        fault::Arm(Fault::none);
+        CHECK(Contains(error.what(), "save_as") && Contains(error.what(), step));
+        unchanged();
+        CHECK(!fs::exists(LockPath(target)));
+    }
+    CHECK(EXPECT_THROW(StoreError, replace(original)).code() == StoreError::Code::conflict);
+    unchanged();
+    const fs::path alias = dir / "alias.uzp";
+    fs::create_hard_link(original, alias);
+    CHECK(fs::equivalent(original, alias));
+    CHECK(EXPECT_THROW(StoreError, replace(alias)).code() == StoreError::Code::conflict);
+    unchanged();
+    CHECK(ReadBytes(alias) == source_bytes && !fs::exists(LockPath(alias)) && NoTemporaries(alias));
+
+    const fs::path directory = dir / "directory.uzp";
+    fs::create_directory(directory);
+    WriteBytes(directory / "sentinel", "keep");
+    EXPECT_THROW(StoreError, replace(directory));
+    unchanged();
+    CHECK(fs::is_directory(directory) && ReadBytes(directory / "sentinel") == "keep");
+    CHECK(!fs::exists(LockPath(directory)) && NoTemporaries(directory));
+
+    for (const char* suffix : {"-journal", "-wal", "-shm"}) {
+        const fs::path pending = CreateProject(dir, std::string("pending") + suffix + ".uzp");
+        const std::string pending_bytes = ReadBytes(pending);
+        const fs::path companion = With(pending, suffix);
+        WriteBytes(companion, "pending recovery sentinel");
+        CHECK(EXPECT_THROW(StoreError, replace(pending)).code() == StoreError::Code::conflict);
+        unchanged();
+        CHECK(ReadBytes(pending) == pending_bytes && ReadBytes(companion) == "pending recovery sentinel");
+        CHECK(!fs::exists(LockPath(pending)) && NoTemporaries(pending));
+    }
+
+    const auto saved = replace(target);
+    CHECK(saved == (uzp::core::Checkpoints{revision, revision, std::nullopt}));
+    CHECK(s.doc->checkpoints() == saved && s.store->CheckpointState() == saved);
+    CHECK(!s.doc->NeedsSaving() && !s.store->NeedsSaving());
+    CHECK(s.store->path() == target && s.store->lock_path() == LockPath(target));
+    CHECK(fs::exists(LockPath(target)) && !fs::exists(LockPath(original)));
+    CHECK(ReadBytes(original) == source_bytes && ReadBytes(alias) == source_bytes);
+    CHECK(ReadBytes(target) != target_bytes && AtRest(target) && NoTemporaries(target));
+    s.Close();
+    CHECK(!fs::exists(LockPath(target)));
+    Session reopened = OpenSession(target, VerifyLevel::full);
+    CHECK(reopened.report.ok() && reopened.doc->checkpoints() == saved);
+    CHECK(SaveManifest(*reopened.doc->snapshot().project) == manifest);
+    CHECK(reopened.store->ReadPlane(revision, plane) == Synthetic(1024, 1024, 67));
+    Session source = OpenSession(original, VerifyLevel::full);
+    CHECK(source.report.ok() && source.doc->checkpoints() == checkpoints && source.doc->NeedsSaving());
+}
+
 // ── 3.8 Interrupted rewrites ────────────────────────────────────────────────────────────────
 
 /// A project with history to compact: a plane and enough mutations to collapse some.
@@ -988,6 +1077,7 @@ int Run(const std::string& only) {
         {"garbage_collection", GarbageCollection},             // 3.5
         {"pruned_key_replay", PrunedKeyReplay},                // 3.6
         {"save_as_and_copy", SaveAsAndCopy},                   // 3.7
+        {"save_as_replace", SaveAsReplace},
         {"interrupted_rewrite", InterruptedRewrite},           // 3.8
         {"portability", Portability},                          // 3.9
         {"lock_sidecar", LockSidecar},                         // 3.10

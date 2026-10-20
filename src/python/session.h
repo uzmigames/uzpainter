@@ -155,7 +155,8 @@ public:
     bool IsOpen() const;
     /// `ProjectError` for an untitled project (it has no path yet).
     core::Checkpoints Save(store::SaveMode mode);
-    core::Checkpoints SaveAs(const std::filesystem::path& path, store::SaveMode mode);
+    core::Checkpoints SaveAs(const std::filesystem::path& path, store::SaveMode mode,
+                            store::SaveTargetPolicy policy = store::SaveTargetPolicy::create_only);
     void SaveAsCopy(const std::filesystem::path& path);
     /// Appends a revision whose project is the one of `revision` (or the checkpoint `name`).
     CallResult Revert(std::optional<std::int64_t> revision, const std::string& checkpoint);

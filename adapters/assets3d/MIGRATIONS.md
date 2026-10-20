@@ -101,7 +101,11 @@ Any Python 3.13 runs it; the script needs only the standard library. Environment
 - **Painter:** `project.create` takes its colour management from the environment, as documented: `OCIO` naming a configuration gives an OCIO project, else `PAINTER_ACE_CONFIG` an ACE project, else Legacy. The script sets `os.environ["OCIO"]` to Painter's substance config just before `create`.
 - **UzPainter:** nothing is adapted. The script runs in the `run` process, and the facade's `create` reads both variables at the call (decision 207). The file `OCIO` names is hashed: Painter's substance config (SHA-256 `15059d4b…`) creates an OCIO project with that hash. Any other configuration, and ACE, raise `NotYetSupported`, and a file that cannot be read raises `ProjectError`, before anything is created. The adapter passes the caller's environment unchanged, so an `OCIO` set in the shell reaches `create` too.
 
+### M10. Saving onto an existing project
+
+- **Painter:** `project.save_as(path)` replaces an existing, closed project without raising (P23-A, decision 180).
+- **UzPainter:** the facade now replaces that destination through an explicit store policy; the adapter makes no change to the script. The compared `phase1-save-as-existing` replay verifies the result, events and reopened content. A locked destination, the current project or its alias, and a destination with SQLite recovery companions are refused before replacement. Native `save_as` and facade `save_as_copy` retain their create-only policy.
+
 ## Not adapted (UzPainter differs; owners named)
 
-- **`painter_create.py` run again onto an existing `.spp`:** `save_as` onto an existing file raises `ProjectError` (native store semantics, decision 105). Painter raises nothing there: recording **P23-A** (decision 113), admitted by decision 180. Matching it is not implemented; owner `phase1.24_python-api-facade`.
 - **The wand's five-map export:** its BaseColor is written exactly (decision 126), but `infinite` padding on the wand's UV islands is refused before writing, naming recording R-090 (decision 127). Owner: `phase1.25_pilot-wand` item 2.7.

@@ -170,6 +170,14 @@ void BindProject(py::module_& m) {
         },
         py::arg("project_file_path"), py::arg("mode") = ProjectSaveMode::Incremental);
     m.def(
+        "_save_as_replace",
+        [](const std::string& path, ProjectSaveMode mode) {
+            py::gil_scoped_release release;
+            Session::Get().SaveAs(PathOf(path), ModeOf(mode), store::SaveTargetPolicy::replace_existing);
+        },
+        py::arg("project_file_path"), py::arg("mode") = ProjectSaveMode::Incremental,
+        "Facade save_as: atomically replace a closed destination (recorded P23-A).");
+    m.def(
         "save_as_copy",
         [](const std::string& path, ProjectSaveMode) {
             // A copy is always written compacted (VACUUM INTO): both modes give the smallest file.

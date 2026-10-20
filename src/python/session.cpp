@@ -442,11 +442,12 @@ core::Checkpoints Session::Save(store::SaveMode mode) {
     return project->store->Save(*project->document, {}, mode);
 }
 
-core::Checkpoints Session::SaveAs(const std::filesystem::path& path, store::SaveMode mode) {
+core::Checkpoints Session::SaveAs(const std::filesystem::path& path, store::SaveMode mode,
+                                store::SaveTargetPolicy policy) {
     const std::shared_ptr<OpenProject> project = Current();
     RequireNotBusy("save_as()");
     if (path.has_parent_path()) std::filesystem::create_directories(path.parent_path());
-    core::Checkpoints checkpoints = project->store->SaveAs(*project->document, path);
+    core::Checkpoints checkpoints = project->store->SaveAs(*project->document, path, {}, policy);
     project->project_source = std::filesystem::absolute(project->store->path());
     if (mode == store::SaveMode::full) project->store->Compact(*project->document);
     if (!project->untitled_dir.empty()) {

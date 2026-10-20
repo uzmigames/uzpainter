@@ -6,7 +6,11 @@ Painter's asynchronous host (task phase1.21_pyapi-dispatcher-lifecycle, decision
   thread and in Tier 0 `lifecycle-events` order, `BusyStatusChanged(True)` ->
   `BusyStatusChanged(False)` -> `ProjectCreated`/`ProjectOpened` -> `ProjectEditionEntered`, and
   return once the project is in edition: Painter's recorded polls see it ready right after the
-  call, 4 times out of 4.
+  call, 4 times out of 4. `ProjectEditionEntered` is queued and delivered after the call
+  returns, as Painter delivers it from its event loop (no P21-F or P21-G recording delivers it
+  during the call; decision 319).
+- `create(mesh_map_file_paths=...)` imports each `<texture set>_<suffix>` file and binds it to its
+  usage, for the seven suffixes P21-A records (`MESH_MAP_SUFFIXES`, decision 319).
 - `close` delivers `ProjectEditionLeft` -> `BusyStatusChanged(True)` -> `ProjectAboutToClose` ->
   `ProjectClosed` -> `BusyStatusChanged(False)`, and discards what was not saved, as Painter does
   ("any unsaved data will be lost"): the project returns to its last save before it closes, so
@@ -98,13 +102,66 @@ class Settings:
 Settings.__module__ = MODULE
 
 # Settings the native project does not take yet, with what settles each (decision 110).
+# `default_save_path` and `export_path` are taken and change nothing a documented call reads, as
+# Painter's P21-B recordings show (decision 319): `get_default_export_path`, an export without
+# `exportPath`, `save()` of the untitled project and `file_path()` are as without them.
 SETTING_GAPS = {
-    "default_save_path": "no documented call reads it back; recording P21-B, decision 110",
-    "export_path": "what an export without exportPath writes is unrecorded; recording P21-B, "
-    "decision 110",
     "mesh_settings": "phase3.1_assets3d-cutover",
     "auto_unwrap_settings": "phase4.5_uv-tiles",
 }
+
+# The mesh-map files `create` binds, by the suffix of their name `<texture set>_<suffix>`: the
+# seven Painter's P21-A recordings bind (decision 319). Any other name is unrecorded.
+MESH_MAP_SUFFIXES = {
+    "ambient_occlusion": "AO",
+    "curvature": "Curvature",
+    "id": "ID",
+    "normal_base": "Normal",
+    "position": "Position",
+    "thickness": "Thickness",
+    "world_space_normals": "WorldSpaceNormal",
+}
+
+
+def mesh_map_binding(path: str) -> tuple[str, str]:
+    """The texture set name and the `MeshMapUsage` name a mesh-map file of `create` binds, from
+    its file name; any other file raises `NotYetSupported` before anything changes."""
+    stem = os.path.splitext(os.path.basename(path))[0]
+    for suffix in sorted(MESH_MAP_SUFFIXES, key=len, reverse=True):
+        texture_set = stem[: -len(suffix) - 1]
+        if stem.endswith("_" + suffix) and texture_set:
+            if not os.path.isfile(path):
+                raise uzpainter.NotYetSupported(
+                    f"create(mesh_map_file_paths=[{path!r}]): the file does not exist, and what "
+                    "Painter does then is unrecorded (recording P21-A, decision 319)"
+                )
+            return texture_set, MESH_MAP_SUFFIXES[suffix]
+    raise uzpainter.NotYetSupported(
+        f"create(mesh_map_file_paths=[{path!r}]): Painter's binding of this file name is "
+        "unrecorded; recording P21-A binds `<texture set>_<suffix>` for the suffixes "
+        f"{', '.join(sorted(MESH_MAP_SUFFIXES))} (decision 319)"
+    )
+
+
+def bind_mesh_maps(bindings: list[tuple[str, str, str]]) -> None:
+    """Imports each mesh-map file as a project resource named by its file and binds it to its
+    texture set's usage (P21-A); a name that matches no texture set raises `NotYetSupported`."""
+    if not bindings:
+        return
+    from uzpainter_facade import resource, textureset
+
+    sets = {ts.name(): ts for ts in textureset.all_texture_sets()}
+    for path, set_name, _ in bindings:
+        if set_name not in sets:
+            raise uzpainter.NotYetSupported(
+                f"create(mesh_map_file_paths=[{path!r}]): no texture set is named {set_name!r}, "
+                "and what Painter does then is unrecorded (recording P21-A, decision 319)"
+            )
+    for path, set_name, usage in bindings:
+        imported = resource.import_project_resource(path, resource.Usage.TEXTURE)
+        sets[set_name].set_mesh_map_resource(
+            getattr(textureset.MeshMapUsage, usage), imported.identifier()
+        )
 
 
 def template_id(template_file_path: str) -> str:
@@ -136,12 +193,7 @@ def create(
     settings: Settings | None = None,
 ) -> None:
     """Create a project from a mesh; returns once it is in edition."""
-    if mesh_map_file_paths:
-        raise uzpainter.NotYetSupported(
-            "create(mesh_map_file_paths=...) is a release gap: Painter's binding of a map file "
-            "name to a texture set and usage is unrecorded (recording P21-A, decision 110); "
-            "import the maps and bind them with TextureSet.set_mesh_map_resource"
-        )
+    bindings = [(path, *mesh_map_binding(path)) for path in mesh_map_file_paths or []]
     template = None if template_file_path is None else template_id(template_file_path)
     settings = settings or Settings()
     for name, owner in SETTING_GAPS.items():
@@ -163,8 +215,14 @@ def create(
     with host.busy_section():
         _p.create(mesh_file_path, native)
         SESSION.project_started()
+        try:
+            bind_mesh_maps(bindings)
+        except uzpainter.NotYetSupported:
+            _p.close()
+            SESSION.reset()
+            raise
     event.emit_sync(event.ProjectCreated())
-    host.set_edition(True)
+    host.enter_edition()
 
 
 def open(project_file_path: str) -> None:
@@ -181,7 +239,7 @@ def open(project_file_path: str) -> None:
             SESSION.reset()
             raise
     event.emit_sync(event.ProjectOpened())
-    host.set_edition(True)
+    host.enter_edition()
 
 
 def close() -> None:
@@ -245,7 +303,8 @@ def save(mode: Any = ProjectSaveMode.Incremental) -> None:
     _check_save()
     path = _p.file_path()
     if path is None:
-        _p.save(mode)  # raises: the project has never been saved
+        event.emit_sync(event.ProjectAboutToSave(""))
+        raise uzpainter.ProjectError("Failed to save project")
     event.emit_sync(event.ProjectAboutToSave(str(path)))
     nodes.drop_group_content_effects()
     _p.save(mode)
@@ -258,7 +317,7 @@ def save_as(project_file_path: str, mode: Any = ProjectSaveMode.Incremental) -> 
     _p.file_path()  # ProjectError when no project is open
     event.emit_sync(event.ProjectAboutToSave(project_file_path))
     nodes.drop_group_content_effects()
-    _p.save_as(project_file_path, mode)
+    _p._save_as_replace(project_file_path, mode)
     SESSION.saved()
     event.emit_sync(event.ProjectSaved())
 

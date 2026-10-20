@@ -50,6 +50,11 @@ enum class SaveMode {
     full,         // `save(Full)`: a named checkpoint, then `compact`
 };
 
+enum class SaveTargetPolicy {
+    create_only,
+    replace_existing,
+};
+
 struct SaveOptions {
     /// The checkpoint's name; empty: `save-<revision>`.
     std::string name;

@@ -12,9 +12,9 @@ sees `is_busy()` true, `ProjectEditionEntered` sees `is_in_edition_state()` true
   else the operation delivers (Tier 0 `phase1-execute-when-not-busy`, second recording).
 - **Edition.** True from `ProjectEditionEntered` to `ProjectEditionLeft`; false while no project is
   open (Painter returns False there rather than raising).
-- **Engine computations.** The native state (`uzpainter.application`): while disabled, export jobs
-  stay queued; a facade export waits for them, inside its busy section, so `is_busy()` reports the
-  deferred backlog until it drains after re-enabling. Each change delivers
+- **Engine computations.** The native state (`uzpainter.application`): while disabled, background
+  jobs stay queued. Explicit synchronous exports finish without enabling computations (observed
+  R10), and their busy section covers only that export. Each state change delivers
   `EngineComputationsStatusChanged`.
 """
 
@@ -83,8 +83,18 @@ def busy_section() -> Iterator[None]:
 
 def set_edition(edition: bool) -> None:
     """Enters or leaves the edition state and delivers its event."""
+    # A queued entry must observe its state before close or reload changes that state.
+    uzpainter.event.flush()
     HOST.edition = edition
     event.emit_sync(event.ProjectEditionEntered() if edition else event.ProjectEditionLeft())
+
+
+def enter_edition() -> None:
+    """Enters the edition state at the end of `project.create` or `open` and queues
+    `ProjectEditionEntered`, delivered after the call returns: Painter's recordings deliver it
+    without the call's step marker (P21-F, P21-G; decision 319)."""
+    HOST.edition = True
+    event.emit(event.ProjectEditionEntered())
 
 
 def execute_when_not_busy(callback: Callable[[], Any]) -> None:

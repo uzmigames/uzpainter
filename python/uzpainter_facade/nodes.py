@@ -22,10 +22,14 @@ without rolling back. Nothing evaluates until an export asks for it, so there is
 invalidation to batch.
 
 `LayerStacksModelDataChanged` is delivered before the call returns by the calls the Tier 0 R10
-probes record emitting it: `insert_fill` (layer or effect), `insert_group`, `set_name`,
-`delete_node` and `add_mask` (`structural`). The recorded silent ones stay silent
-(`active_channels`, `set_source`); every other edit call is unrecorded, emits nothing, and is
-named with its recording P21-E in decision 110.
+probes and P21-E (`phase1-layer-stack-events`, decision 319) record emitting it: `insert_fill`
+(layer or effect), `insert_group`, `insert_levels_effect`, `set_name`, `delete_node`, `add_mask`,
+`remove_mask`, `set_blending_mode` and `set_opacity`, even when the value is unchanged
+(`structural`), and `set_visible` when the visibility changes. The recorded silent ones stay
+silent: `active_channels`, `set_source`, `set_mask_background`, `enable_mask`,
+`set_projection_mode`, `set_projection_parameters`, `LevelsEffectNode.affected_channel`,
+`SourceUniformColor.set_color`, `reset_source`, `SourceBitmap.set_color_space` and
+`reset_color_space`. Every other edit call is unrecorded and emits nothing.
 """
 
 from __future__ import annotations
@@ -324,7 +328,11 @@ class Node:
 
     @edits
     def set_visible(self, visible: bool) -> None:
-        self._native().set_visible(visible)
+        native = self._native()
+        changed = bool(native.is_visible()) != bool(visible)
+        native.set_visible(visible)
+        if changed:  # P21-E s19: a change emits, the same visibility again does not
+            event.emit_sync(event.LayerStacksModelDataChanged())
 
     def get_name(self) -> str:
         return str(self._native().get_name())
@@ -368,6 +376,7 @@ class Node:
         return self._blending(channel).get_blending_mode(channel)
 
     @edits
+    @structural
     def set_blending_mode(self, blending_mode: Any, channel: Any = None) -> None:
         self._blending(channel).set_blending_mode(blending_mode, channel)
 
@@ -375,6 +384,7 @@ class Node:
         return float(self._blending(channel).get_opacity(channel))
 
     @edits
+    @structural
     def set_opacity(self, opacity: float, channel: Any = None) -> None:
         self._blending(channel).set_opacity(opacity, channel)
 
@@ -414,6 +424,7 @@ class LayerNode(Node):
         native.add_mask(mask_background)
 
     @edits
+    @structural
     def remove_mask(self) -> None:
         self._native().remove_mask()
 
@@ -561,7 +572,12 @@ class _Fill(Node):
 
     @edits
     def set_symmetry_enabled(self, enabled: bool) -> None:
-        self._native().set_symmetry_enabled(enabled)
+        native = self._native()
+        if enabled and native.get_projection_mode() == _ls.ProjectionMode.UV:
+            # Painter's refusal on a UV fill, both P21-E recordings (s28, decision 319); the 3D
+            # projection modes stay a release gap (phase3.4_smart-projections).
+            raise ValueError("Symmetry is only available when using 3D projection modes")
+        native.set_symmetry_enabled(enabled)
 
     def get_material_source(self) -> Any:
         return self._native().get_material_source()
@@ -857,6 +873,7 @@ def insert_group(position: Any) -> Any:
 
 
 @edits
+@structural
 def insert_levels_effect(position: Any) -> Any:
     node, _ = insert("insert_levels_effect", position, Kind.EFFECT)
     return node

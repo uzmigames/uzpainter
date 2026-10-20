@@ -11,8 +11,8 @@
 // new generation under the configuration's `exportPath`
 // with its receipt (`PublishExport`, decision 097); `fixed_names` folders then receive the
 // generation's files under their fixed names (`CopyFixedNames`; `exportPath` itself gives Painter's
-// flat layout). `export.export_project_textures` is the synchronous convenience: start, then wait
-// with the GIL released. A refusal (`ValueError`, `NotYetSupported`) happens before anything is
+// flat layout). `export.export_project_textures` starts work even when computations are paused,
+// then waits with the GIL released (observed R10). A refusal (`ValueError`, `NotYetSupported`) happens before anything is
 // written; an evaluation failure raises the class of decision 082. The job's result names the
 // project file and the imported mesh the export was started from (`project_path`, `mesh_path`),
 // absolute, as resolved when the call that named each one ran (None when there is none), so a
@@ -277,7 +277,8 @@ void BindExport(py::module_& m, py::module_& jobs) {
     m.def(
         "export_project_textures",
         [](const py::object& config, const std::vector<std::string>& fixed_names) {
-            return WaitFor(StartExport(config, fixed_names), std::nullopt);
+            return WaitFor({JobEngine::Get().Start("export", ExportJob(ConfigText(config), fixed_names), {}, true)},
+                           std::nullopt);
         },
         py::arg("json_config"), py::arg("fixed_names") = std::vector<std::string>{},
         "Exports and waits (the GIL released): {generation, directory, receipt, receipt_sha256, plan_hash, "

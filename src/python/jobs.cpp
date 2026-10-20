@@ -62,8 +62,9 @@ void JobContext::NoOp() {
     job_.no_op_ = true;
 }
 
-Job::Job(std::string id, std::string kind, JobBody body, JobObserver observer)
-    : id_(std::move(id)), kind_(std::move(kind)), body_(std::move(body)), observer_(std::move(observer)) {}
+Job::Job(std::string id, std::string kind, JobBody body, JobObserver observer, bool run_when_paused)
+    : id_(std::move(id)), kind_(std::move(kind)), body_(std::move(body)), observer_(std::move(observer)),
+      run_when_paused_(run_when_paused) {}
 
 JobStatus Job::status() const {
     std::lock_guard lock(mutex_);
@@ -174,10 +175,10 @@ JobEngine& JobEngine::Get() {
     return *engine;
 }
 
-std::shared_ptr<Job> JobEngine::Start(std::string kind, JobBody body, JobObserver observer) {
+std::shared_ptr<Job> JobEngine::Start(std::string kind, JobBody body, JobObserver observer, bool run_when_paused) {
     std::lock_guard lock(mutex_);
     auto job = std::make_shared<Job>("job-" + std::to_string(next_++), std::move(kind), std::move(body),
-                                     std::move(observer));
+                                     std::move(observer), run_when_paused);
     jobs_.push_back(job);
     queue_.push_back(job);
     if (!started_) {
@@ -219,9 +220,15 @@ void JobEngine::Work() {
         std::shared_ptr<Job> job;
         {
             std::unique_lock lock(mutex_);
-            queued_.wait(lock, [this] { return !queue_.empty() && !paused_; });
-            job = std::move(queue_.front());
-            queue_.pop_front();
+            const auto eligible = [this] {
+                return std::find_if(queue_.begin(), queue_.end(), [this](const auto& queued) {
+                    return !paused_ || queued->run_when_paused_;
+                });
+            };
+            queued_.wait(lock, [&] { return eligible() != queue_.end(); });
+            const auto next = eligible();
+            job = std::move(*next);
+            queue_.erase(next);
         }
         job->Run();
     }

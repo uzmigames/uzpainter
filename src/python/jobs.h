@@ -26,8 +26,9 @@
 // leaves the job `succeeded`, with `cancel_requested` and `stopped: after_commit`.
 //
 // Engine computations (`application.enable_engine_computations`, phase1.21): while they are
-// disabled the worker starts no queued job, so an evaluation request is deferred, not dropped, and
-// `Busy` keeps naming it; enabling them again releases the backlog in submission order.
+// disabled ordinary queued jobs are deferred, not dropped, and `Busy` keeps naming them. Explicit
+// synchronous exports opt into running while paused (observed R10); they skip deferred jobs without
+// enabling computations. Enabling computations releases the remaining backlog in submission order.
 
 #include <chrono>
 #include <condition_variable>
@@ -77,7 +78,7 @@ using JobObserver = std::function<void(const Job&)>;
 
 class Job {
 public:
-    Job(std::string id, std::string kind, JobBody body, JobObserver observer = {});
+    Job(std::string id, std::string kind, JobBody body, JobObserver observer = {}, bool run_when_paused = false);
 
     const std::string& id() const { return id_; }
     const std::string& kind() const { return kind_; }
@@ -107,6 +108,7 @@ private:
     const std::string kind_;
     JobBody body_;
     const JobObserver observer_;
+    const bool run_when_paused_;
     mutable std::mutex mutex_;
     std::condition_variable ended_;
     JobStatus status_ = JobStatus::queued;
@@ -123,14 +125,16 @@ class JobEngine {
 public:
     static JobEngine& Get();
 
-    /// Queues `body` as a job of `kind` (`export`, ...) and returns it; `observer` sees its progress.
-    std::shared_ptr<Job> Start(std::string kind, JobBody body, JobObserver observer = {});
+    /// Queues `body` as a job of `kind` (`export`, ...); `observer` sees its progress.
+    /// `run_when_paused` opts explicit synchronous work into bypassing the computations pause.
+    std::shared_ptr<Job> Start(std::string kind, JobBody body, JobObserver observer = {},
+                               bool run_when_paused = false);
     /// Every job of this process, in submission order.
     std::vector<std::shared_ptr<Job>> List() const;
     /// A job that is queued or running, if any, other than the one whose body runs on the calling
     /// thread: a job is not busy with itself.
     std::optional<std::string> Busy() const;
-    /// Engine computations: while paused, queued jobs wait (see above).
+    /// Engine computations: while paused, ordinary queued jobs wait (see above).
     void SetPaused(bool paused);
     bool Paused() const;
 

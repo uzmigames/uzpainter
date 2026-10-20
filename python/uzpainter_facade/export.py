@@ -9,12 +9,9 @@ probes s50-s51) and the files per (texture set, stack). Before anything is evalu
 colour profile (`colour.require_supported_configuration`) and that no fill reads an unrecorded
 default source (`nodes.check_exportable`); a failure raises, as Painter documents.
 
-The export makes UzPainter busy: `BusyStatusChanged(True)` and `(False)` around it, as Painter's
-exports deliver them (Tier 0 R10 probes, the export before each reopen), with
-`ExportTexturesAboutToStart(textures)` and `ExportTexturesEnded(status, message, textures)` inside
-that window; their order relative to the busy events is unrecorded (recording
-`phase1-engine-computations`, decision 110). While engine computations are disabled the native
-export job stays queued, so the call waits, busy, until they are enabled again.
+The observed R10 export emits `ExportTexturesAboutToStart(textures)` before becoming busy,
+then `ExportTexturesEnded(status, message, textures)` before clearing busy. Explicit synchronous
+exports finish even while engine computations remain disabled; deferred background jobs stay paused.
 """
 
 from __future__ import annotations
@@ -68,9 +65,11 @@ def export_project_textures(json_config: dict[str, Any]) -> TextureExportResult:
     """Export the project's textures as `json_config` describes; raises on failure."""
     colour.require_supported_configuration()
     nodes.check_exportable()
+    if "exportPath" not in json_config:
+        raise ValueError("at /exportPath: Expected a string value")
     textures = list_project_textures(json_config)
+    event.emit_sync(event.ExportTexturesAboutToStart(textures))
     with host.busy_section():
-        event.emit_sync(event.ExportTexturesAboutToStart(textures))
         try:
             uzpainter.export.export_project_textures(json_config, [str(json_config["exportPath"])])
         except Exception as error:

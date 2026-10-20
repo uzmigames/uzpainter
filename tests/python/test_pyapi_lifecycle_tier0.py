@@ -63,7 +63,7 @@ EXCLUDED: dict[str, dict[str, dict[str, str]]] = {
 }
 
 LOADER = """
-import base64, shutil
+import base64, shutil, uzpainter
 PAYLOAD = json.loads(base64.b64decode("__PAYLOAD__").decode("utf-8"))
 TRACE = {"__name__": "uzp_capability_trace"}
 exec(compile(PAYLOAD["trace"], "capability_trace.py", "exec"), TRACE)
@@ -78,7 +78,11 @@ OPERATIONS = probes["OPERATIONS"]
 
 
 def call(operation, **kwargs):
-    return OPERATIONS[operation](kwargs)
+    try:
+        return OPERATIONS[operation](kwargs)
+    finally:
+        # The host pumps events between remote calls, after the recorder clears CURRENT.
+        uzpainter.event.flush()
 
 
 def settle():

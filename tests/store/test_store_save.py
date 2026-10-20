@@ -25,6 +25,7 @@ NATIVE_CASES = (
     "garbage_collection",  # 3.5
     "pruned_key_replay",  # 3.6
     "save_as_and_copy",  # 3.7
+    "save_as_replace",
     "interrupted_rewrite",  # 3.8
     "portability",  # 3.9
     "lock_sidecar",  # 3.10

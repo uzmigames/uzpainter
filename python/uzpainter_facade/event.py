@@ -134,8 +134,9 @@ class TextureStateEventAction(enum.Enum):
     REMOVE = 2
 
 
-# The minimum period between two texture update events, once a script set it. Painter's default
-# is unrecorded (recording P21-C).
+# The minimum period between two texture update events: Painter's default until a script sets
+# it, 2000 ms in both recordings of Tier 0 `phase1-texture-throttling` (P21-C, decision 319).
+DEFAULT_THROTTLING_PERIOD = datetime.timedelta(milliseconds=2000)
 _THROTTLING: dict[str, datetime.timedelta] = {}
 
 
@@ -152,12 +153,7 @@ class TextureStateEvent(Event):
     @staticmethod
     def cache_key_invalidation_throttling_period() -> datetime.timedelta:
         """The minimum duration between two texture update events (for a given texture)."""
-        if "period" not in _THROTTLING:
-            raise uzpainter.NotYetSupported(
-                "TextureStateEvent.cache_key_invalidation_throttling_period: Painter's default "
-                "period is unrecorded (recording P21-C, decision 110)"
-            )
-        return _THROTTLING["period"]
+        return _THROTTLING.get("period", DEFAULT_THROTTLING_PERIOD)
 
     @staticmethod
     def set_cache_key_invalidation_throttling_period(period: datetime.timedelta) -> None:

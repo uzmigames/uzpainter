@@ -121,3 +121,64 @@ python -m pytest -q tests/python/test_pyapi_native.py tests/python/test_pyapi_fa
 python -m pytest -q tests/python/test_pyapi_tier0.py tests/python/test_pyapi_lifecycle_tier0.py tests/python/test_pyapi_facade_tier0.py
 python -m pytest -q tests/adapters
 ```
+
+## 7. Compared replays of the ten observed API-probe goldens (item 4.1), 2026-10-20
+
+An audit found ten API-probe goldens that were admitted (decisions 180, 198 and 205) but had no compared replay: P21-A to P21-G, R-095 P7, R10 engine computations and P23-A.
+
+Each one is now replayed through the facade with the recorder's own Painter-side code, step for step as `record_api_probe` drives Painter, including the events and states it observes after every step. The helper is `tests/python/observed_replay.py`. The queued events are delivered at the recorder's remote-call boundary.
+
+Every output of both recordings is compared field by field with the golden, read from the private store at run time. An excluded output must be recorded in the golden and must still differ. No Painter value is copied into the repository.
+
+The behaviours these goldens settled are in decision 319, which supersedes parts of decisions 105, 109 and 110. The facade was fixed to match them.
+
+### 7.1 Runs (separate identities)
+
+Every run used the same runner, `uzp-pyapi-tests.exe` SHA-256 `f8c5a64b5b255aef66808305d87a3bdb589e8fd605481e173047a67d5c7af5b1`, from one build: `zig build pyapi-tests uzp-store-save-tests -j2`, exit 0, on CPU. The pytest fixtures' own builds install the same binary from the cache. The logs are under `tmp/scratch/api-replays/`.
+
+| Run | What | Result |
+|---|---|---|
+| Combined first run (`combined/`) | Claude's 5 replays, Codex's 3 files, dispatcher, lifecycle, conformance, `tests/store/test_store_save.py` | The failures led to the fixes and exclusions below. Store save tests: 13 passed. Dispatcher: 11 passed. |
+| 39-test batch, before the host fix (`trace-regen/pytest.log`) | `test_pyapi_facade_tier0.py` (26), `test_pyapi_lifecycle_tier0.py` (8) and `test_pyapi_observed_tier0.py` (5), one pytest session, `UZP_UPDATE_TIER0_TRACE=1` | exit 0, 39 passed in 967.8 s |
+| Native 2 (`trace-regen/native.log`) | `test_pyapi_tier0.py`: fill-layer-readback and textureset-project-readback, by node id, `UZP_UPDATE_TIER0_TRACE=1` | exit 0, 2 passed in 9.3 s |
+| Codex 5 (`codex-final/evidence.json`) | P21-F, P21-G, R10, P23-A and R-095 P7: the original test functions run directly on the existing binary, not through pytest | 5/5 passed, exit 0 |
+| Final-async 30 (`final-async/evidence.json`) | After Codex's fix that delivers queued events before the edition state changes: dispatcher (12), lifecycle (8) and the 10 new replays. The original functions ran on the existing binary with the committed Python sources as an overlay. | 30/30 passed, exit 0, 112.5 s |
+| Conformance and manifest (`trace-regen/conformance.log`, `capabilities-tests.log`) | `test_capability_conformance.py` and `tests/capabilities`, on the consolidated trace | exit 0: 5 passed and 44 passed |
+
+### 7.2 Results by golden (exact-behaviour verdicts)
+
+"Exact" means exact apart from the named exclusions, in both recordings.
+
+| Golden | Verdict | Exclusions, with owners |
+|---|---|---|
+| `phase1-create-mesh-maps` (P21-A) | exact | none |
+| `phase1-create-default-paths` (P21-B) | exact apart from one open seam | `s3/get_default_export_path` is a release gap: the facade has no such function and raises AttributeError. Painter returns its user's export folder. This is an **open 4.1 seam** owned by phase1.24_python-api-facade item 4.1. The symbol stays `release-gap`, and its excluded output promotes no symbol. |
+| `phase1-texture-throttling` (P21-C) | exact | none |
+| `phase1-shelves` (P21-D) | exact apart from the host environment | `s4/all`, `s5/application_shelf`, `s6/user_shelf`: Painter's installed and user shelves are Adobe content that UzPainter never ships (decision 006). |
+| `phase1-layer-stack-events` (P21-E) | exact apart from refusals and one unstable output | Refused before any change, together with each step's event:<br>• s14 `insert_paint` (phase4.1_nodes-paint-layers)<br>• s16 and s17, compare mask and colour selection (phase4.1_nodes-mask-effects)<br>• s18 anchor point (phase4.1_nodes-instances-anchors)<br>Also excluded:<br>• r2 `identity/reopen`, which lists those nodes<br>• `s30/set_parameters`: Painter's TypeError text holds an object address that differs between its two recordings (decision 205) |
+| `phase1-create-open-timing` (P21-F) | exact | the raw `thread_polls`, which are wall-clock samples (decision 198) |
+| `phase1-close-without-saving` (P21-G) | exact | the lock-file suffix rule (decision 319 §9a) |
+| `phase1-export-preset-search` (R-095 P7) | exact apart from refusals | `s3`, `s4` `search`: a release gap (decision 113, phase3.1_proc-backend-seam item 2.4) |
+| `phase1-engine-computations` (R10) | exact | the export-publication metadata rule (decision 319 §9b; decisions 097, 105): the plan, receipt and published copies are checked, and only the declared housekeeping files are left out |
+| `phase1-save-as-existing` (P23-A) | exact | the lock-file suffix rule (decision 319 §9a) |
+
+### 7.3 Trace verdicts (decision 112)
+
+- **The 46 entries.** `tools/capabilities/tier0-trace.json` now holds 46 replays: the 36 historical ones plus the 10 new.
+  - The 26 facade and 2 native entries come from the 39-test batch and the native run.
+  - The 8 lifecycle and 10 new entries come from the final-async records. For the 13 replays both runs traced, their symbol sets are identical.
+- **`save_as`.**
+  - Every facade and lifecycle entry dropped `uzpainter.project.save_as`. The facade's `save_as` now uses the private `_save_as_replace`, so only the native replays credit the native `save_as`.
+  - The public `substance_painter.project.save_as` is credited by the facade replays.
+- **Manifest.** The manifest follows the trace:
+  - 64 symbols that the exact replays exercised become `supported`;
+  - 344 entries' `tier_evidence` is updated;
+  - none is demoted;
+  - refused calls and excluded outputs credit nothing.
+- **Limitation.** The rich per-output trace records of final-async (`by_output`, exclusions, differences) were overwritten by the symbol records, because of a helper naming bug fixed in `cc635174`. Only `{replay, golden, symbols}` remain. The evidence of that run is the binary and source SHA-256s in `final-async/evidence.json`.
+
+### 7.4 Open
+
+Item 4.1 stays open for:
+- the 18 P22-B recordings (decisions 295-297), with their admission and compared replays;
+- the `get_default_export_path` release gap (P21-B s3), owned by phase1.24_python-api-facade item 4.1.

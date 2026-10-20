@@ -109,7 +109,8 @@ ev.DISPATCHER.connect(ev.LayerStacksModelDataChanged, Keep.on)
 ls.insert_fill(top(stack))
 result = {"count": len(names), "first": first, "second": second, "third": sorted(calls),
           "gui": raises(ev.GraphicalUserInterfaceStarted),
-          "throttle": raises(ev.TextureStateEvent.cache_key_invalidation_throttling_period),
+          "throttle": ev.TextureStateEvent.cache_key_invalidation_throttling_period()
+          .total_seconds(),
           "short": raises(ev.TextureStateEvent.set_cache_key_invalidation_throttling_period,
                           __import__("datetime").timedelta(milliseconds=100)),
           "busy_field": ev.BusyStatusChanged(True).busy,
@@ -129,7 +130,7 @@ def test_the_27_classes_connect_weakly_strongly_and_disconnect(facade: Run) -> N
     assert result["third"] == ["after the failing handler", "strong"]
     assert "RuntimeError: handler error" in report["stderr"]
     assert result["gui"].startswith("UnsupportedInUzPainter")
-    assert result["throttle"].startswith("NotYetSupported")
+    assert result["throttle"] == 2.0  # Painter's default (P21-C, decision 319)
     assert result["short"].startswith("ValueError")
     assert result["busy_field"] is True
     assert result["save_field"] == "x.spp"
@@ -208,9 +209,8 @@ def test_close_discards_what_was_not_saved(facade: Run) -> None:
 # ── 3.3 A handler outlives the script ───────────────────────────────────────────────────────────
 
 OUTLIVES = """
-listen("ProjectEditionEntered")
 project.create(GRID2, settings=project.Settings(default_texture_resolution=256))
-opened_on_dispatcher = LOG[-1][2]
+uzpainter.event.flush()
 
 def entered(e):
     with open(WORK + "/entered.json", "w") as out:
@@ -229,8 +229,7 @@ gate = threading.Event()
 uzpainter.event.post(gate.wait)  # the dispatcher waits for the gate: the script returns first
 threading.Timer(1.0, gate.set).start()
 project.reload_mesh(GRID4, project.MeshReloadingSettings(import_cameras=False), loaded)
-result = {"main": MAIN, "dispatcher": uzpainter.event.dispatcher_thread_id(),
-          "opened_on_dispatcher": opened_on_dispatcher}
+result = {"main": MAIN, "dispatcher": uzpainter.event.dispatcher_thread_id()}
 with open(WORK + "/returned", "w") as out:
     out.write("returned")
 """
@@ -244,7 +243,6 @@ def test_a_handler_still_receives_edition_entered_after_the_script_returned(
     result = ok(facade(GRIDS + LOG + OUTLIVES))
     entered = json.loads((tmp_path / "entered.json").read_text(encoding="utf-8"))
     loaded = json.loads((tmp_path / "loaded.json").read_text(encoding="utf-8"))
-    assert result["opened_on_dispatcher"] is True
     assert result["dispatcher"] not in (0, result["main"])
     assert entered["thread"] == loaded["thread"] == result["dispatcher"]
     assert entered["returned"] is True and loaded["returned"] is True
@@ -255,8 +253,29 @@ def test_a_handler_still_receives_edition_entered_after_the_script_returned(
 
 # ── 3.4 No Python under the document lock ───────────────────────────────────────────────────────
 
+
+def test_immediate_close_delivers_entry_before_leaving_edition(facade: Run) -> None:
+    """Queued create events keep their state when close follows without an intervening flush."""
+    result = ok(
+        facade(
+            LOG
+            + """
+listen("ProjectEditionEntered", "ProjectEditionLeft")
+create()
+project.close()
+result = {"log": LOG}
+"""
+        )
+    )
+    assert result["log"] == [
+        ["ProjectEditionEntered", [True, True, False], True],
+        ["ProjectEditionLeft", [True, False, False], True],
+    ]
+
+
 LOCK = """
 stack = create()
+uzpainter.event.flush()
 fill = ls.insert_fill(top(stack))
 fill.set_name("before")
 project.save_as(WORK + "/lock.spp")
@@ -273,14 +292,15 @@ def reads_and_edits(e):
 
 ev.DISPATCHER.connect(ev.ProjectEditionEntered, reads_and_edits)
 project.open(WORK + "/lock.spp")
+uzpainter.event.flush()
 result = {"seen": SEEN,
           "after": [n.get_name() for n in ls.get_root_layer_nodes(ts.get_active_stack())]}
 """
 
 
 def test_a_handler_calling_back_into_the_api_observes_the_committed_state(facade: Run) -> None:
-    """Item 3.4: a handler that reads the stack and commits a native Transaction while the
-    script's `open` waits for it does not deadlock and sees the committed state."""
+    """Item 3.4: an asynchronous edition handler reads committed state and commits a native
+    Transaction without deadlocking; flush waits for its delivery before checking the edit."""
     result = ok(facade(LOG + LOCK))
     assert result["seen"] == {"name": "before", "sets": ["uzp_plane"], "thread": True}
     assert result["after"] == ["set by the handler"]
@@ -291,6 +311,7 @@ def test_a_handler_calling_back_into_the_api_observes_the_committed_state(facade
 WHEN_NOT_BUSY = """
 listen("BusyStatusChanged", "ProjectEditionEntered", "ProjectEditionLeft")
 stack = create()
+uzpainter.event.flush()
 LOG.clear()
 CURRENT = ["idle call"]
 
@@ -334,6 +355,7 @@ def test_execute_when_not_busy_runs_now_or_right_after_busy_clears(facade: Run) 
 RELOAD = """
 create_settings = project.Settings(default_texture_resolution=256)
 project.create(GRID2, settings=create_settings)
+uzpainter.event.flush()
 listen("BusyStatusChanged", "ProjectEditionEntered", "ProjectEditionLeft")
 fill = ls.insert_fill(top(ts.get_active_stack()))
 fill.set_name("kept")
@@ -408,70 +430,74 @@ CONFIG = {
     "exportPath": WORK + "/deferred",
     "exportList": [{"rootPath": "uzp_plane"}],
 }
-OUT = {}
-BUSY_AT_ENABLE = []
-
-def on_status(e):
-    BUSY_AT_ENABLE.append([e.engine_computations_enabled, project.is_busy()])
-ev.DISPATCHER.connect(ev.EngineComputationsStatusChanged, on_status)
-
 sp.application.enable_engine_computations(False)
 disabled = sp.application.engine_computations_status()
-def export_now():
-    OUT["result"] = sp.export.export_project_textures(CONFIG)
-worker = threading.Thread(target=export_now)
-worker.start()
-deadline = time.monotonic() + 30
-while not project.is_busy() and time.monotonic() < deadline:
-    time.sleep(0.001)
-time.sleep(0.5)
-def pngs():
-    folder = WORK + "/deferred"
-    if not os.path.isdir(folder):
-        return []
-    return sorted(f for f in os.listdir(folder) if f.endswith(".png"))
-
-deferred = {"busy": project.is_busy(), "job": uzpainter.jobs.list()[-1].status, "files": pngs(),
-            "save": raises(project.save_as, WORK + "/busy.spp")}
+exported = sp.export.export_project_textures(CONFIG)
+after = {"busy": project.is_busy(), "status": exported.status.name,
+         "engine": sp.application.engine_computations_status(),
+         "files": sorted(f for f in os.listdir(CONFIG["exportPath"]) if f.endswith(".png"))}
 sp.application.enable_engine_computations(True)
-worker.join(120)
 with sp.application.disable_engine_computations():
     inside = sp.application.engine_computations_status()
-result = {"disabled": disabled, "deferred": deferred, "busy_at_enable": BUSY_AT_ENABLE,
-          "after": {"busy": project.is_busy(), "status": OUT["result"].status.name,
-                    "files": pngs()},
+result = {"disabled": disabled, "after": after,
           "inside": inside, "enabled": sp.application.engine_computations_status(),
-          "log": [entry[0] + ("" if len(entry) < 4 else f"({entry[3]})") for entry in LOG]}
+          "log": [entry[0] + ("" if len(entry) < 4 else f"({entry[3]})") for entry in LOG],
+          "busy": [entry[1][2] for entry in LOG]}
 """
 
 
-def test_disabled_computations_defer_an_export_until_reenabled(facade: Run) -> None:
-    """Items 2.6 and 3.5: with computations disabled an export request is deferred (its job stays
-    queued, no file is written), `engine_computations_status` reports disabled, and re-enabling
-    fires `EngineComputationsStatusChanged` with `is_busy()` true until the backlog drains."""
+def test_disabled_computations_allow_synchronous_export(facade: Run) -> None:
+    """Observed R10: explicit export completes without enabling computations."""
     result = ok(facade(LOG + ENGINE))
     assert result["disabled"] is False
-    assert result["deferred"]["busy"] is True
-    assert result["deferred"]["job"] == "queued"
-    assert result["deferred"]["files"] == []
-    assert result["deferred"]["save"].startswith("ProjectError")
-    assert result["busy_at_enable"][:2] == [[False, False], [True, True]]
     assert result["after"] == {
         "busy": False,
         "status": "Success",
+        "engine": False,
         "files": ["uzp_plane_height.png"],
     }
     assert result["inside"] is False and result["enabled"] is True
     assert result["log"] == [
         "EngineComputationsStatusChanged(False)",
-        "BusyStatusChanged(True)",
         "ExportTexturesAboutToStart",
-        "EngineComputationsStatusChanged(True)",
+        "BusyStatusChanged(True)",
         "ExportTexturesEnded",
         "BusyStatusChanged(False)",
+        "EngineComputationsStatusChanged(True)",
         "EngineComputationsStatusChanged(False)",
         "EngineComputationsStatusChanged(True)",
     ]
+    assert result["busy"] == [False, False, True, True, False, False, False, False]
+
+
+ENGINE_BACKLOG = (
+    ENGINE[: ENGINE.index("sp.application.enable_engine_computations(False)")]
+    + """
+sp.application.enable_engine_computations(False)
+background_config = dict(CONFIG, exportPath=WORK + "/background")
+background = uzpainter.export.start(background_config)
+before = background.status
+exported = sp.export.export_project_textures(CONFIG)
+paused = {"background": background.status, "engine": sp.application.engine_computations_status(),
+          "files": os.path.exists(WORK + "/background"), "status": exported.status.name}
+sp.application.enable_engine_computations(True)
+background.wait(120)
+result = {"before": before, "paused": paused, "resumed": background.status}
+"""
+)
+
+
+def test_synchronous_export_skips_paused_background_job(facade: Run) -> None:
+    """Eligibility must scan past queued background work without running that work."""
+    result = ok(facade(LOG + ENGINE_BACKLOG))
+    assert result["before"] == "queued"
+    assert result["paused"] == {
+        "background": "queued",
+        "engine": False,
+        "files": False,
+        "status": "Success",
+    }
+    assert result["resumed"] == "succeeded"
 
 
 # ── 2.8 Resource reload and shelf crawling ──────────────────────────────────────────────────────
@@ -530,6 +556,8 @@ def crawl(e):
 ev.DISPATCHER.connect(ev.ShelfCrawlingStarted, crawl)
 ev.DISPATCHER.connect(ev.ShelfCrawlingEnded, crawl)
 shelf = resource.Shelves.add("uzp-shelf", IMAGES)
+CRAWLED.wait(60)
+CRAWLED.clear()
 shelf.refresh()
 CRAWLED.wait(60)
 result["crawl"] = CRAWL
@@ -547,7 +575,7 @@ def test_resource_reload_and_shelf_crawling_events(facade: Run) -> None:
     """Item 2.8: `ReloadResourcesStarted` before the call returns, `ReloadResourcesEnded` with the
     new version once reloaded and the binding unchanged (Tier 0 `phase1-reload-resources`, first
     recording); a second reload while one runs returns False; script-defined shelves crawl between
-    `ShelfCrawlingStarted` and `ShelfCrawlingEnded`."""
+    `ShelfCrawlingStarted` and `ShelfCrawlingEnded` when added and when refreshed."""
     result = ok(facade(LOG + RESOURCES))
     assert result["started"] == [
         ["ResourcesUsedByProjectFilter", False, True, False],
@@ -562,10 +590,9 @@ def test_resource_reload_and_shelf_crawling_events(facade: Run) -> None:
     assert result["versions"] == sorted([old, new])
     assert result["bad_filter"].startswith("ValueError")
     assert result["structure_events"] == ["LayerStacksModelDataChanged"]
-    assert result["crawl"] == [
-        ["ShelfCrawlingStarted", "uzp-shelf", True],
-        ["ShelfCrawlingEnded", "uzp-shelf", False],
-    ]
+    started = ["ShelfCrawlingStarted", "uzp-shelf", True]
+    crawl = [started, ["ShelfCrawlingEnded", "uzp-shelf", False]]
+    assert result["crawl"] == crawl * 2  # `add` crawls, then `refresh` (P21-D, decision 319)
     shelves = result["shelves"]
     assert shelves["exists"] is True and shelves["all"] == ["uzp-shelf"] and shelves["path"]
     assert shelves["bad_name"].startswith("ValueError")
@@ -588,19 +615,23 @@ result = {"stop": [before, requested, stop.stop_requested()], "order": order,
           "mesh_maps": raises(project.create, PLANE,
                               mesh_map_file_paths=[IMAGES + "/ao-white.png"]),
           "template": raises(project.create, PLANE, template_file_path="x.spt"),
-          "export_path": raises(project.create, PLANE,
-                                settings=project.Settings(export_path=WORK)),
-          "no_project_edition": project.is_in_edition_state()}
+          "no_project_edition": project.is_in_edition_state(),
+          "export_path": raises(project.create, PLANE, settings=project.Settings(
+              export_path=WORK, default_save_path=WORK)),
+          "inert": [project.file_path(), project.needs_saving()]}
+project.close()
 """
 
 
 def test_stop_source_create_gaps_and_dispatcher_order(facade: Run) -> None:
     """Item 2.9 and the `create` arguments phase1.20 handed over: `StopSource`, the release gaps
-    named with their recordings, and the native dispatcher's queue order."""
+    named with their recordings, the inert default save and export paths (P21-B, decision 319)
+    and the native dispatcher's queue order."""
     result = ok(facade(MISC))
     assert result["stop"] == [False, True, True]
     assert result["order"] == [0, 1, 2, 3, 4]
     assert "P21-A" in result["mesh_maps"] and result["mesh_maps"].startswith("NotYetSupported")
     assert result["template"].startswith("NotYetSupported")
-    assert "P21-B" in result["export_path"]
+    assert result["export_path"] is None
+    assert result["inert"] == [None, True]
     assert result["no_project_edition"] is False
