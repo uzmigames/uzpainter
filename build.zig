@@ -481,6 +481,11 @@ const procedural_generator_sources = [_][]const u8{
 /// The grunge and noise family (`src/procedural/grunges.h`, decision 331), relative to `src/`:
 /// compiled into `uzp-proc-grunge-tests.exe` with `procedural_sources`.
 const procedural_grunge_sources = [_][]const u8{"procedural/grunges.cpp"};
+
+/// The material family (`src/procedural/materials.h`, decision 334), relative to `src/`: compiled
+/// into `uzp-proc-material-tests.exe` with `procedural_sources`. `materials.cpp` embeds and includes
+/// `procedural/shaders/proc_materials.hlsli`, the kernel text both lanes compile.
+const procedural_material_sources = [_][]const u8{"procedural/materials.cpp"};
 /// The asset library and the seam vocabulary it uses (`src/procedural/asset_library.h`, decision
 /// 324), relative to `src/`: compiled into `UzPainter.exe` and into `uzp-pyapi-tests.exe`
 /// (`resource.search`), without the HlslBackend host.
@@ -1703,6 +1708,45 @@ pub fn build(b: *std.Build) void {
     proc_grunge_tests_step.dependOn(&b.addInstallArtifact(proc_grunge_tests_exe, .{}).step);
     for (dx_runtime) |step| proc_grunge_tests_step.dependOn(step);
     b.getInstallStep().dependOn(proc_grunge_tests_step);
+
+    // ── The material family (phase3.2_proc-material-families, decision 334) ──────────────────
+    // `src/procedural/materials.cpp` over the seam and the HLSL host, in its own test executable.
+    // The mesh importers (`uzp_mesh`) give the physical-size test real import reports.
+    const proc_material_tests_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    addCoreIncludePaths(b, proc_material_tests_mod);
+    proc_material_tests_mod.addIncludePath(b.path("src"));
+    proc_material_tests_mod.addCSourceFiles(.{
+        .root = b.path("tests/procedural"),
+        .files = &.{"materials_test.cpp"},
+        .flags = &evaluator_flags,
+    });
+    embed_inputs.add(proc_material_tests_mod, "src", &(procedural_sources ++ procedural_material_sources), &evaluator_flags);
+    embed_inputs.add(proc_material_tests_mod, "src", &render_sources, &(cxx_flags ++ own_warning_flags));
+    proc_material_tests_mod.addCSourceFiles(.{
+        .root = b.path(core_root),
+        .files = &.{agility_export_source},
+        .flags = &cxx_flags,
+    });
+    proc_material_tests_mod.linkLibrary(core_lib);
+    // `procedural_sources` holds the snapshot backend, which reads and records project planes.
+    proc_material_tests_mod.linkLibrary(store_lib);
+    proc_material_tests_mod.linkLibrary(mesh_lib);
+    proc_material_tests_mod.linkLibrary(uzp_core_lib);
+    for (system_libraries) |name| proc_material_tests_mod.linkSystemLibrary(name, .{});
+    proc_material_tests_mod.linkSystemLibrary("version", .{});
+    const proc_material_tests_exe = b.addExecutable(.{
+        .name = "uzp-proc-material-tests",
+        .root_module = proc_material_tests_mod,
+    });
+    const proc_material_tests_step = b.step("proc-material-tests", "Build the native tests of the procedural material family");
+    proc_material_tests_step.dependOn(&b.addInstallArtifact(proc_material_tests_exe, .{}).step);
+    for (dx_runtime) |step| proc_material_tests_step.dependOn(step);
+    b.getInstallStep().dependOn(proc_material_tests_step);
 
     // ── The export plan compiler (phase1.15_export-plan-compiler) ─────────────────────────────
     // `src/export/` over the evaluator; its tests evaluate on the CPU store only, so they run on

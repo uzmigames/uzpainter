@@ -1,0 +1,11 @@
+{
+  "id": 334,
+  "slug": "334-material-families",
+  "title": "The material family: four multi-output HLSL families written once for both lanes, outputs reached through output_mapping, a physical size per record under the project unit rule, and domains declared uncertified",
+  "status": "accepted",
+  "date": "2026-10-20",
+  "relatedTasks": [
+    "phase3.2_proc-material-families"
+  ],
+  "supersededBy": null
+}

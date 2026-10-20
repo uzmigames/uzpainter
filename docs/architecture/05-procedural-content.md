@@ -54,6 +54,14 @@ The library ships beside the executable as `assets/procedural/`: one provenance 
 - A recipe's projection scale belongs to the fill, not to the asset.
 - The domains are declared before calibration. None is certified, and no alias names them.
 
+**As built, materials (`phase3.2_proc-material-families`, decision 334, `src/procedural/materials.h`).**
+- Four assets `uzasset://material/{felt, burlap, leather-grain, leather-pattern}@1`. Each has six outputs, listed in its record: `basecolor`, `normal`, `roughness`, `metallic`, `height` and `ambient_occlusion`.
+- A request names its output (`active_output`), and a joint rule ties its channels and colour space to that output. `output_mapping` reaches every output: one request per mapped channel, each admitted before the material source's transaction (§7).
+- Felt (fibres over fBm clouds), burlap (a plain weave with twisted yarns), leather grain (domed Worley cells with grooves and pores) and leather pattern (creases, ridged wrinkles and grain), all periodic. The normal and the occlusion read the height of neighbouring texels in a second pass.
+- The kernel functions are written once (`shaders/proc_materials.hlsli`), in a subset of HLSL that is also C++. DX12 equals the CPU reference bit for bit.
+- Physical size: a record's `physical_size_cm` (`MaterialPhysicalSize`) or the custom size in centimetres (`CustomPhysicalSize`) sets how often the texture repeats. It follows the mesh's effective units (`12-mesh-import.md` §3) and the certificate's texel density, and the receipt records the units. Painter's own rule is not discovered yet.
+- The domains are declared before calibration. None is certified, and no alias names them.
+
 Parity status per asset is `exact` (zero residual on every calibration and held-out case of §6) or `calibrated{max |Δ|, mean |Δ|, p99 |Δ|, corpus id}`, published by `uzpainter assets list --parity`. Under Q1 there is no preset tolerance: a calibrated asset passes only through an owner-approved, versioned exception in the register (`14-parity-testing.md` §5); without one it is a failure.
 
 ## 4. Frozen snapshots (`SnapshotBackend`)

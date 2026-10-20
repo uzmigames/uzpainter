@@ -32,6 +32,7 @@
 #include "uzp_core/manifest/json.h"
 #include "uzp_core/types/project.h"
 
+#include <array>
 #include <expected>
 #include <filesystem>
 #include <map>
@@ -60,6 +61,17 @@ struct ProvenanceSource {
     std::string approvedSourceId;  ///< `approved-source` only.
 };
 
+/// One output of a multi-output asset (a material; `SourceSubstance.image_outputs`, 05 §7): its
+/// id (`ProceduralRequest::outputId`, the value side of `output_mapping`), the channel it feeds
+/// by default (a `ChannelType` name), and its channel count and colour space, which must be
+/// among the domain's output rule.
+struct AssetOutput {
+    std::string id;
+    std::string channel;
+    uint32_t channels = 1;
+    std::string colourSpace;
+};
+
 /// One pinned asset of the library and its provenance record (05 §3).
 struct AssetRecord {
     core::AssetUrl asset;
@@ -71,6 +83,13 @@ struct AssetRecord {
     /// The effective defaults of every declared parameter (booleans as integers).
     Params defaults;
     CertifiedDomain domain;
+    /// The outputs of a multi-output asset (`outputs`), in record order; empty for an asset with
+    /// one output (its request names no output id).
+    std::vector<AssetOutput> outputs;
+    /// The size in centimetres one texture of the asset spans (`physical_size_cm`, width then
+    /// height), which `ScaleMode.MaterialPhysicalSize` projects by; absent for an asset without
+    /// a physical size.
+    std::optional<std::array<double, 2>> physicalSizeCm;
     ParityStatus status;     ///< `corpusIds` = {calibration, held-out}.
     std::string report;      ///< The certification report that gives the status (path or "").
     core::json::Value json;  ///< The record as stored.

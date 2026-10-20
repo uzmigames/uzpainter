@@ -28,7 +28,11 @@
     "records/grunge.spots-bw-a@1.json",
     "records/grunge.spots-bw-b@1.json",
     "records/grunge.spots-soft@1.json",
-    "records/grunge.stone-details@1.json"
+    "records/grunge.stone-details@1.json",
+    "records/material.burlap@1.json",
+    "records/material.felt@1.json",
+    "records/material.leather-grain@1.json",
+    "records/material.leather-pattern@1.json"
   ],
   "aliases": "aliases.json"
 }

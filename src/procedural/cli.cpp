@@ -88,6 +88,10 @@ int RunAssetsCommand(const std::vector<std::string>& args, std::FILE* out, std::
             entry["parity"] = Parity(record);
             const json::Object& document = std::get<json::Object>(record.json.data);
             entry["domain"] = document.at("domain");
+            // A material's outputs and physical size belong to its declaration (05 §6).
+            for (const std::string_view key : {"outputs", "physical_size_cm"}) {
+                if (const auto it = document.find(key); it != document.end()) entry[std::string(key)] = it->second;
+            }
         }
         assets.push_back(std::move(entry));
     }

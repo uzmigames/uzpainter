@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <regex>
@@ -300,7 +301,7 @@ AssetRecord RecordOf(const fs::path& file) {
     record.json = ReadJson(file);
     const json::Object& object = ObjectOf(record.json, file, "the record");
     OnlyKeys(object, {"schema", "asset", "name", "usage", "author", "license", "sources", "defaults",
-                      "domain", "corpus", "parity"},
+                      "domain", "outputs", "physical_size_cm", "corpus", "parity"},
              file, "the record");
     if (Required(object, "schema", file, "the record") != json::Value(kRecordSchema)) {
         Fail(file, "schema is not " + std::string(kRecordSchema));
@@ -357,6 +358,55 @@ AssetRecord RecordOf(const fs::path& file) {
     }
     for (const auto& [name, rule] : record.domain.parameters) {
         if (!record.defaults.contains(name)) Fail(file, "parameter " + name + " has no default");
+    }
+
+    // A multi-output asset (a material, phase3.2_proc-material-families): its outputs, each
+    // inside the domain's output rule, and its physical size.
+    if (const json::Value* outputs = Member(object, "outputs")) {
+        const json::Array& list = ArrayOf(*outputs, file, "outputs");
+        if (list.empty()) Fail(file, "outputs lists at least one output");
+        const RasterRule& rule = record.domain.output;
+        for (const json::Value& o : list) {
+            const json::Object& entry = ObjectOf(o, file, "an output");
+            OnlyKeys(entry, {"id", "channel", "channels", "colour_space"}, file, "an output");
+            AssetOutput output;
+            output.id = StringOf(Required(entry, "id", file, "an output"), file, "output id");
+            const std::string where = "output " + output.id;
+            output.channel = StringOf(Required(entry, "channel", file, where), file, where + " channel");
+            if (!core::FromString<core::ChannelType>(output.channel)) {
+                Fail(file, where + ": channel " + output.channel + " is not a ChannelType");
+            }
+            const json::Value& channels = Required(entry, "channels", file, where);
+            if (!channels.IsInt() || std::get<int64_t>(channels.data) < 1 || std::get<int64_t>(channels.data) > 4) {
+                Fail(file, where + ": channels is an integer in [1, 4]");
+            }
+            output.channels = static_cast<uint32_t>(std::get<int64_t>(channels.data));
+            if (std::find(rule.channels.begin(), rule.channels.end(), output.channels) == rule.channels.end()) {
+                Fail(file, where + ": channels is not one of the domain's output channels");
+            }
+            output.colourSpace = StringOf(Required(entry, "colour_space", file, where), file, where + " colour_space");
+            if (std::find(rule.colourSpaces.begin(), rule.colourSpaces.end(), output.colourSpace) ==
+                rule.colourSpaces.end()) {
+                Fail(file, where + ": colour_space is not one of the domain's output colour spaces");
+            }
+            for (const AssetOutput& other : record.outputs) {
+                if (other.id == output.id) Fail(file, where + " is listed twice");
+                if (other.channel == output.channel) Fail(file, where + ": channel " + output.channel + " is fed twice");
+            }
+            record.outputs.push_back(std::move(output));
+        }
+    }
+    if (const json::Value* size = Member(object, "physical_size_cm")) {
+        const json::Array& sides = ArrayOf(*size, file, "physical_size_cm");
+        if (sides.size() != 2) Fail(file, "physical_size_cm is [width, height] in centimetres");
+        std::array<double, 2> cm{};
+        for (size_t i = 0; i < 2; ++i) {
+            if (!sides[i].IsNumber() || !std::isfinite(NumberOf(sides[i])) || !(NumberOf(sides[i]) > 0.0)) {
+                Fail(file, "physical_size_cm holds two finite positive centimetre values");
+            }
+            cm[i] = NumberOf(sides[i]);
+        }
+        record.physicalSizeCm = cm;
     }
 
     const json::Object& corpus = ObjectOf(Required(object, "corpus", file, "the record"), file, "corpus");
