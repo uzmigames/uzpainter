@@ -67,7 +67,8 @@ COLLINEAR_LOW = 1e-6
 COLLINEAR_HIGH = 0.0305
 # The reaches of `Ring.candidates` (decision 285's cap, decision 294's two corner caps and its
 # collinear threshold), as Painter's are taken.
-REACHES = (REACH_CAP, CORNER_GATED, CORNER_OPEN, COLLINEAR)
+# Seam-strip ownership replaces nominal corner caps; their brackets remain diagnostics.
+REACHES = (REACH_CAP, REACH_CAP, REACH_CAP, COLLINEAR)
 # Decision 294: adjacent own taps whose distances lie within OWN_BAND relative are ordered by
 # decision 273's comparator.
 OWN_BAND = 1e-4
@@ -176,6 +177,29 @@ def seam_gate(
         bool(d <= FOLD_GATE and side < 0.0),
         bool(FOLD_LOW < d <= FOLD_HIGH and side < 0.0),
         bool(side == 0.0 and d <= FOLD_HIGH),
+    )
+
+
+def strip_covers(a: tuple[float, float], b: tuple[float, float], px: float, py: float) -> bool:
+    """Whether the one-texel seam strip of the UV segment a b (straight ends) covers the sample
+    point (px, py): inside, or on an edge of the strip whose outward normal points to -u, or to -v
+    (up the tile) for an edge with no u component (the top-left fill rule)."""
+    ex, ey = b[0] - a[0], b[1] - a[1]
+    length2 = ex * ex + ey * ey
+    along = (px - a[0]) * ex + (py - a[1]) * ey
+    cross = (px - a[0]) * ey - (py - a[1]) * ex
+    half = 0.5 * math.sqrt(length2)
+    if along < 0 or along > length2 or abs(cross) > half:
+        return False
+
+    def kept(nx: float, ny: float) -> bool:
+        return nx < 0 or (nx == 0 and ny < 0)
+
+    return (
+        (along != 0 or kept(-ex, -ey))
+        and (along != length2 or kept(ex, ey))
+        and (cross != half or kept(ey, -ex))
+        and (cross != -half or kept(-ey, ex))
     )
 
 
@@ -556,6 +580,8 @@ class Ring:
                         self.links[fi][fj] = (i, j, va, vb)
         self.paths: dict[tuple[int, int], list[list[int]]] = {}
         self.hinges: dict[tuple[int, int], tuple[tuple[int, int, int, int], Hinge] | None] = {}
+        # Per island, its seams' runs (seam_runs).
+        self.runs: dict[int, dict[tuple[int, int, int], int]] = {}
         # Per ring texel (texels()): where decision 278's gate does not decide its taps.
         self.undecided: dict[tuple[int, int], set[str]] = {}
 
@@ -770,6 +796,52 @@ class Ring:
                     changed = True
         return result[:KEPT], ties
 
+    def strip_winners(self, chart: int, x: int, y: int) -> set[tuple[int, int, int]]:
+        """Last seam drawn at each sample of the ring texel's 3x3 neighbourhood (`strip_covers`)."""
+        winners: set[tuple[int, int, int]] = set()
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                winner = None
+                for e, edge, j in self.seams.get(chart, []):
+                    triangle = self.tris[e]
+                    a, b = triangle.t[(edge + 1) % 3], triangle.t[(edge + 2) % 3]
+                    if strip_covers(a, b, x + dx + 0.5, y + dy + 0.5):
+                        winner = (e, edge, j)
+                if winner is not None:
+                    winners.add(winner)
+        return winners
+
+    def seam_runs(self, chart: int) -> dict[tuple[int, int, int], int]:
+        """Each seam of `chart`'s run: seams joined end to end through a shared UV end, collinear
+        (UV |sin| at most COLLINEAR) and with far triangles of one island, transitively."""
+        if chart not in self.runs:
+            seams = self.seams.get(chart, [])
+            parent = list(range(len(seams)))
+
+            def find(i: int) -> int:
+                while parent[i] != i:
+                    parent[i] = parent[parent[i]]
+                    i = parent[i]
+                return i
+
+            at: dict[tuple[float, float], list[int]] = {}
+            for i, (e, edge, _) in enumerate(seams):
+                for end in (1, 2):
+                    at.setdefault(self.tris[e].t[(edge + end) % 3], []).append(i)
+            for lst in at.values():
+                for i, k in itertools.combinations(lst, 2):
+                    (e, f, j), (e2, f2, j2) = seams[i], seams[k]
+                    if self.tris[j].chart != self.tris[j2].chart:
+                        continue
+                    a, b = self.tris[e].t[(f + 1) % 3], self.tris[e].t[(f + 2) % 3]
+                    c, d = self.tris[e2].t[(f2 + 1) % 3], self.tris[e2].t[(f2 + 2) % 3]
+                    ex, ey, fx, fy = b[0] - a[0], b[1] - a[1], d[0] - c[0], d[1] - c[1]
+                    lengths = math.sqrt(ex * ex + ey * ey) * math.sqrt(fx * fx + fy * fy)
+                    if abs(ex * fy - ey * fx) <= COLLINEAR * lengths:
+                        parent[find(i)] = find(k)
+            self.runs[chart] = {s: find(i) for i, s in enumerate(seams)}
+        return self.runs[chart]
+
     def candidates(
         self,
         x: int,
@@ -825,13 +897,17 @@ class Ring:
         sides: list[tuple[int, int]] = []
         charts = sorted({self.tris[int(self.owner[ty, tx])].chart for tx, ty in own})
         for chart in charts:
+            # A strip writes its seam's run; the query discovers every seam of a run that owns a
+            # sample of the 3x3 neighbourhood.
+            runs = self.seam_runs(chart)
+            owned = {runs[w] for w in self.strip_winners(chart, x, y)}
             for e_index, edge, j in self.seams.get(chart, []):
                 E, J = self.tris[e_index], self.tris[j]
                 ua, ub = E.t[(edge + 1) % 3][0], E.t[(edge + 2) % 3][0]
                 if j == tau or (ua == ub and ua in (0.0, float(self.width))):
                     continue
                 reach = segment_distance(E.t[(edge + 1) % 3], E.t[(edge + 2) % 3], x + 0.5, y + 0.5)
-                if reach >= REACH_HIGH:
+                if reach >= REACH_HIGH or runs[(e_index, edge, j)] not in owned:
                     continue
                 va, vb = E.vertex[(edge + 1) % 3], E.vertex[(edge + 2) % 3]
                 edges.append((seam_gate(T.normal, J.normal, q, E.p[(edge + 1) % 3]), reach))

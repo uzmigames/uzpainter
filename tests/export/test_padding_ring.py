@@ -482,10 +482,17 @@ def test_ring_point_neighbours_and_reach_follow_decision_279(
       both, the other island's at min(|q_k - P|, |q - P|), and their ring point comes from the
       triangle of the neighbour nearest under decision 273's comparator, which on some of them is
       not the highest-index triangle;
-    - a seam edge that ends 1.7768 texels from a ring texel (A's right edge only along its upper
-      part, shared with B, whose UV island continues below it): the ring texel (8, 15) takes B's
-      texels through that edge's window (decision 285's cap, 1.78 texels), and is flagged
-      "reach-bracket", since a cap at the bracket's low end, 1.772004 texels, would drop them."""
+    - a seam edge that ends 1.7768 texels from a ring texel (A's right edge along its upper part,
+      shared with B's upper quad), with a collinear seam neighbour to B below it (A's right edge
+      along its lower part, shared with B's lower quad, which narrows to x = 1.2 at its bottom, so
+      its far window lies two columns right of the upper edge's): the neighbour's strip owns the
+      ring texel (8, 15)'s samples, so the run's 1.7768 edge is discovered (decision 339), as in
+      decision 285's recorded basis, bevelled-cube-256 (4, 234), whose 1.772004 endpoint edge is
+      found through its collinear seam neighbour to the same far island. (8, 15) takes B's texel
+      (16, 15) through that edge's window (decision 285's cap, 1.78 texels), and is flagged
+      "reach-bracket", since a cap at the bracket's low end, 1.772004 texels, would drop it. A lone
+      endpoint edge (no seam of its run owning a sample) is not discovered: Painter drops that
+      edge class on the recorded window-side texel (28, 82) and 77 more window texels."""
     from tests.export.padding_reference import Ring
 
     vgap = Mesh(
@@ -512,13 +519,18 @@ def test_ring_point_neighbours_and_reach_follow_decision_279(
         switched += reference.tau(x, y, own) != max(int(reference.owner[ty, tx]) for tx, ty in own)
     assert switched > 0
 
+    # B's lower quad, its bottom-right corner moved to x = 1.2 and its corners rotated so that the
+    # triangle on its left (seam) edge holds that corner.
+    p, uv = _quad((1.0, 2.0), (16.25, 20.25), (14.095, 16.3), 16.3)
+    narrowed: Quad = ([(1.2, 0.0, 0.0), p[2], p[3], p[0]], [uv[1], uv[2], uv[3], uv[0]])
     reach = Mesh(
         [
             _quad((0.0, 0.875), (4.0, 7.5), (12.0, 13.795), 16.0),
             _quad((0.875, 1.0), (7.5, 8.0), (12.0, 13.795), 16.0),
             _quad((0.0, 0.875), (4.0, 7.5), (13.795, 16.0), 16.0),
+            _quad((0.875, 1.0), (7.5, 8.0), (13.795, 16.0), 16.0),
             _quad((1.0, 2.0), (16.25, 20.25), (12.3, 14.095), 16.3),
-            _quad((1.0, 2.0), (16.25, 20.25), (14.095, 16.3), 16.3),
+            narrowed,
         ],
         32,
     )
@@ -1097,51 +1109,41 @@ def _corner(vrow: float, bend: float, fold: float) -> Mesh:
     )
 
 
-def test_corner_edge_reach_follows_decision_294(
-    export_tests: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Decision 294 (a): ring texel (8, 13), beyond A1's right edge in `_corner`, reaches A2's right
-    edge only through its end V, A's UV corner, and A2 lies outside its triangle's planar face.
-    - With B1 folded concave by 30 degrees, A1's edge ending at V is gated: A2's edge, 1.1002 texels
-      away, is beyond the 1.0-texel cap and gives no far tap of B.
-    - With B1 flat, A1's edge is open and the cap is 1.15 texels: at 1.1002 texels B's taps are
-      kept, and flagged "corner-reach-bracket" (in [1.0759265, 1.208074)); at 1.3928 texels (V at
-      row 12.2) B gives none, where decision 285's 1.78-texel reach takes B's taps.
-    - With A2's edge collinear with A1's at V (no bend), it is exempt and keeps that reach: B's
-      taps stay, and capping it would drop them.
-    Each case equals `padding_reference` bit for bit, candidates and flags included."""
-    from tests.export import padding_reference
+def test_corner_edge_reach_uses_raster_strip(export_tests: Path, tmp_path: Path) -> None:
+    """A corner participates when its seam owns a sample in the 3x3 lookup.
 
+    The bend at row 12.52 reaches B even with the other seam gated. At row 12.2,
+    both bent and collinear variants miss B's strip; analytic endpoint caps no
+    longer decide eligibility. Native candidates and diagnostic flags must agree
+    with the independent reference for the whole tile.
+    """
     cases = {
         "gated": (12.52, 1.0, 30.0),
         "bracket": (12.52, 1.0, 0.0),
         "open": (12.2, 1.0, 0.0),
         "collinear": (12.2, 0.0, 0.0),
     }
-    texel: dict[str, dict[str, Any]] = {}
     for label, (vrow, bend, fold) in cases.items():
         name = f"corner-{label}"
         values, out, ring = run(export_tests, tmp_path, _corner(vrow, bend, fold), name, 294)
         _matches_reference(tmp_path, name, values, out, ring)
-        texel[label] = next(r for r in ring if (r["x"], r["y"]) == (8, 13))
+        texel = next(r for r in ring if (r["x"], r["y"]) == (8, 13))
+        has_b = any(c[0] >= 24 for c in texel["candidates"][: texel["taps"]])
+        assert has_b == (label in {"gated", "bracket"})
 
-    def of_b(candidates: list[Any]) -> bool:
-        """Whether any candidate is a texel of island B (columns 24 to 27)."""
-        return any(c[0] >= 24 for c in candidates)
 
-    def reference_of_b(label: str, reaches: tuple[float, float, float, float]) -> bool:
-        with monkeypatch.context() as m:
-            m.setattr(padding_reference, "REACHES", reaches)
-            rows = Ring(tmp_path / f"corner-{label}.obj", "m", 32, 32).texels()
-        return of_b(
-            [(*c[2], c[0], c[1]) for x, y, cands, _ in rows if (x, y) == (8, 13) for c in cands]
-        )
-
-    uncapped = (REACH_CAP, REACH_CAP, REACH_CAP, padding_reference.COLLINEAR)
-    assert not of_b(texel["gated"]["candidates"]) and reference_of_b("gated", uncapped)
-    assert of_b(texel["bracket"]["candidates"][: texel["bracket"]["taps"]])
-    assert "corner-reach-bracket" in texel["bracket"]["undecided"]
-    assert not of_b(texel["open"]["candidates"]) and reference_of_b("open", uncapped)
-    assert "corner-reach-bracket" not in texel["open"]["undecided"]
-    assert of_b(texel["collinear"]["candidates"][: texel["collinear"]["taps"]])
-    assert not reference_of_b("collinear", (*padding_reference.REACHES[:3], -1.0))
+def test_seam_strip_last_draw_owns_uncovered_samples(tmp_path: Path) -> None:
+    """Overlapping seam IDs obey draw order even without covered texels."""
+    mesh = _corner(12.52, 1.0, 0.0)
+    ring = Ring(mesh.obj(tmp_path / "strip.obj"), "m", 32, 32)
+    chart, seams = next(iter(ring.seams.items()))
+    e, edge, j = seams[0]
+    triangle = ring.tris[e]
+    a, b = triangle.t[(edge + 1) % 3], triangle.t[(edge + 2) % 3]
+    x, y = math.floor((a[0] + b[0]) / 2), math.floor((a[1] + b[1]) / 2)
+    first, last = (e, edge, j), (e, edge, j + 1)
+    ring.owner[:] = -1
+    ring.seams[chart] = [first, last]
+    assert ring.strip_winners(chart, x, y) == {last}
+    ring.seams[chart] = [last, first]
+    assert ring.strip_winners(chart, x, y) == {first}

@@ -1,0 +1,11 @@
+{
+  "id": 339,
+  "slug": "seam-strip-ownership-selects-diagnostic-infinite-padding-candidates",
+  "title": "Seam strip ownership selects diagnostic infinite-padding candidates",
+  "status": "accepted",
+  "date": "2026-10-20",
+  "relatedTasks": [
+    "phase1.25_pilot-wand"
+  ],
+  "supersededBy": null
+}

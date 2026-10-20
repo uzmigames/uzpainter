@@ -68,7 +68,7 @@ constexpr float kFoldHigh = 0.98501915f;
 constexpr double kReachCap = 1.78;
 constexpr double kReachLow = 1.7720044;
 constexpr double kReachHigh = 1.787242;
-// The corner reach (decision 294): a seam edge of a triangle outside tau's planar face whose nearest
+// Legacy corner sensitivity diagnostic (decision 294): a seam edge outside tau's planar face whose nearest
 // point to the ring texel's centre is an end V, and which is not collinear (UV |sin| at most
 // kCollinear) with another seam edge of the island ending at V, reaches kCornerGated texels when
 // another seam edge of the ring texel ending at V is gated, else kCornerOpen. Painter's caps lie in
@@ -76,11 +76,12 @@ constexpr double kReachHigh = 1.787242;
 // threshold below kCollinearHigh (flagged from kCollinearLow: an exact continuation is exempt).
 // The bounds round the Wand's edges inward: kept at 0.97461490 (274, 1989) and 1.07592644
 // (634, 1418), dropped at 1.02000402 (175, 1101) and 1.20807410 (566, 1439); decision 294 writes
-// the open low end 1.075926, which would drop (634, 1418)'s edge.
-constexpr double kCornerGated = 1.0;
+// the open low end 1.075926, which would drop (634, 1418)'s edge. Nominal eligibility now uses
+// last-drawn seam-strip ownership; both nominal corner caps retain the global reach cap.
+constexpr double kCornerGated = kReachCap;
 constexpr double kCornerGatedLow = 0.974615;
 constexpr double kCornerGatedHigh = 1.020004;
-constexpr double kCornerOpen = 1.15;
+constexpr double kCornerOpen = kReachCap;
 constexpr double kCornerOpenLow = 1.0759265;
 constexpr double kCornerOpenHigh = 1.208074;
 constexpr double kCollinear = 1e-3;
@@ -242,11 +243,12 @@ uint32_t Find(std::vector<uint32_t>& parent, uint32_t i) {
 }
 
 /// A UV seam edge: edge `edge` (opposite corner `edge`) of triangle `own`, shared in 3D with
-/// triangle `far`, whose UVs there differ.
+/// triangle `far`, whose UVs there differ; `run`, its run (RingGeometry's constructor).
 struct SeamEdge {
     uint32_t own = 0;
     size_t edge = 0;
     uint32_t farTriangle = 0;
+    uint32_t run = 0;
 };
 
 /// The coverage's triangles, their islands and planar faces, the UV seam edges of each island, and
@@ -434,6 +436,43 @@ RingGeometry::RingGeometry(const Coverage& coverage) : width(coverage.width), he
                 seams[own.chart].push_back({i, e, j});
             }
         }
+    }
+    // Each island's seam runs: seams joined end to end through a shared UV end, collinear (UV |sin|
+    // at most kCollinear) and with far triangles of one island, transitively. A run is named by one
+    // of its seams' indices; only the equality of runs is read.
+    for (auto& islandSeams : seams) {
+        std::vector<SeamEdge>& list = islandSeams.second;
+        std::vector<uint32_t> parent(list.size());
+        std::iota(parent.begin(), parent.end(), 0u);
+        std::map<std::array<double, 2>, std::vector<uint32_t>> at;  // UV end -> the seams ending there
+        for (uint32_t i = 0; i < list.size(); ++i) {
+            const KernelTriangle& k = triangles[list[i].own];
+            at[k.t[(list[i].edge + 1) % 3]].push_back(i);
+            at[k.t[(list[i].edge + 2) % 3]].push_back(i);
+        }
+        for (const auto& atEnd : at) {
+            const std::vector<uint32_t>& ids = atEnd.second;
+            for (size_t m = 0; m < ids.size(); ++m) {
+                for (size_t n = m + 1; n < ids.size(); ++n) {
+                    const SeamEdge& s = list[ids[m]];
+                    const SeamEdge& r = list[ids[n]];
+                    if (triangles[s.farTriangle].chart != triangles[r.farTriangle].chart) continue;
+                    const auto& sa = triangles[s.own].t[(s.edge + 1) % 3];
+                    const auto& sb = triangles[s.own].t[(s.edge + 2) % 3];
+                    const auto& ra = triangles[r.own].t[(r.edge + 1) % 3];
+                    const auto& rb = triangles[r.own].t[(r.edge + 2) % 3];
+                    const double ex = sb[0] - sa[0];
+                    const double ey = sb[1] - sa[1];
+                    const double fx = rb[0] - ra[0];
+                    const double fy = rb[1] - ra[1];
+                    const double lengths = std::sqrt(ex * ex + ey * ey) * std::sqrt(fx * fx + fy * fy);
+                    if (std::abs(ex * fy - ey * fx) <= kCollinear * lengths) {
+                        parent[Find(parent, ids[m])] = Find(parent, ids[n]);
+                    }
+                }
+            }
+        }
+        for (uint32_t i = 0; i < list.size(); ++i) list[i].run = Find(parent, i);
     }
     // The covering triangle of each texel, by the coverage's own test (evaluator/geometry_mask.h).
     owner.assign(size_t{width} * height, -1);
@@ -657,6 +696,24 @@ double SegmentDistance(const KernelTriangle& k, size_t edge, double px, double p
     const double length = ex * ex + ey * ey;
     const double u = length == 0.0 ? 0.0 : std::clamp(((px - a[0]) * ex + (py - a[1]) * ey) / length, 0.0, 1.0);
     return std::hypot(px - a[0] - u * ex, py - a[1] - u * ey);
+}
+
+/// Whether the one-texel seam strip of edge `edge` of `k` (straight ends) covers the sample point
+/// (px, py): inside, or on an edge of the strip whose outward normal points to -u, or to -v (up the
+/// tile) for an edge with no u component (the top-left fill rule).
+bool StripCovers(const KernelTriangle& k, size_t edge, double px, double py) {
+    const auto& a = k.t[(edge + 1) % 3];
+    const auto& b = k.t[(edge + 2) % 3];
+    const double ex = b[0] - a[0];
+    const double ey = b[1] - a[1];
+    const double length2 = ex * ex + ey * ey;
+    const double along = (px - a[0]) * ex + (py - a[1]) * ey;
+    const double cross = (px - a[0]) * ey - (py - a[1]) * ex;
+    const double half = 0.5 * std::sqrt(length2);
+    if (along < 0.0 || along > length2 || std::abs(cross) > half) return false;
+    const auto kept = [](double nx, double ny) { return nx < 0.0 || (nx == 0.0 && ny < 0.0); };
+    return (along != 0.0 || kept(-ex, -ey)) && (along != length2 || kept(ex, ey)) &&
+           (cross != half || kept(ey, -ex)) && (cross != -half || kept(-ey, ex));
 }
 
 /// The rank in `order` of the offset (du, dv).
@@ -902,6 +959,20 @@ CandidateSet Candidates(const RingGeometry& g, uint32_t x, uint32_t y, const std
     for (const uint32_t chart : charts) {
         const auto seams = g.seams.find(chart);
         if (seams == g.seams.end()) continue;
+        // A one-texel seam strip (top-left fill) writes its run's ID in mesh order, including
+        // uncovered samples. Resolve ownership before gate, tau and tile-border exclusions; the query
+        // discovers every seam of a run that owns a sample of the 3x3 neighbourhood.
+        std::array<std::optional<uint32_t>, 9> ownedRuns{};
+        size_t sample = 0;
+        for (int dx = -1; dx <= 1; ++dx) {
+            for (int dy = -1; dy <= 1; ++dy, ++sample) {
+                const double px = static_cast<double>(x) + dx + 0.5;
+                const double py = static_cast<double>(y) + dy + 0.5;
+                for (const SeamEdge& drawn : seams->second) {
+                    if (StripCovers(g.triangles[drawn.own], drawn.edge, px, py)) ownedRuns[sample] = drawn.run;
+                }
+            }
+        }
         for (const SeamEdge& seam : seams->second) {
             const KernelTriangle& E = g.triangles[seam.own];
             const double ua = E.t[(seam.edge + 1) % 3][0];
@@ -909,7 +980,10 @@ CandidateSet Candidates(const RingGeometry& g, uint32_t x, uint32_t y, const std
                 continue;
             }
             const double reach = SegmentDistance(E, seam.edge, x + 0.5, y + 0.5);
-            if (reach >= kReachHigh) continue;
+            if (reach >= kReachHigh ||
+                std::find(ownedRuns.begin(), ownedRuns.end(), std::optional<uint32_t>(seam.run)) == ownedRuns.end()) {
+                continue;
+            }
             const KernelTriangle& J = g.triangles[seam.farTriangle];
             const uint32_t va = E.vertex[(seam.edge + 1) % 3];
             const uint32_t vb = E.vertex[(seam.edge + 2) % 3];
