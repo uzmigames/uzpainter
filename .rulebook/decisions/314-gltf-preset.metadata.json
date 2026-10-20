@@ -1,0 +1,11 @@
+{
+  "id": 314,
+  "slug": "314-gltf-preset",
+  "title": "The glTF PBR Metal Roughness preset is written by hand from the glTF 2.0 specification, answers to its Painter name, and is refused until recording R-314 confirms its layout",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase3.1_unreal-gltf-pbr-preset"
+  ],
+  "supersededBy": null
+}

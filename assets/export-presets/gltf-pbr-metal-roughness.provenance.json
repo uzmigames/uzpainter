@@ -1,0 +1,119 @@
+{
+  "schema": "uzpainter/export-preset-provenance/1",
+  "version": 1,
+  "author": "UzmiGames",
+  "licence": "Apache-2.0",
+  "date": "2026-10-19",
+  "reviewer": null,
+  "preset": "gltf-pbr-metal-roughness",
+  "answersTo": [
+    "glTF PBR Metal Roughness"
+  ],
+  "sources": [
+    {
+      "kind": "public-documentation",
+      "page": "Adobe Substance 3D Painter user guide, Export > Output templates > Default Output templates",
+      "section": "List of default templates",
+      "facts": "The default template name this preset answers to; the page gives one-line descriptions only (no maps, channels, naming or parameters)."
+    },
+    {
+      "kind": "public-documentation",
+      "page": "Adobe Substance 3D Painter Python API documentation, export.html (substance_painter.export)",
+      "section": "Full json_config dict possibilities; Export path wildcards",
+      "facts": "The preset form {name, maps[].{fileName, channels[].{destChannel, srcChannel, srcMapType, srcMapName}, parameters}}; the documentMap, virtualMap and defaultMap names used here; the $textureSet wildcard."
+    },
+    {
+      "kind": "consumer-specification",
+      "page": "Khronos glTF 2.0 Specification, version 2.0.1 (registry.khronos.org/glTF/specs/2.0/glTF-2.0.html)",
+      "section": "3.9.2 Metallic-Roughness Material; 5.22 Material PBR Metallic Roughness (baseColorTexture, metallicRoughnessTexture)",
+      "facts": "Base colour: RGB encoded with the sRGB transfer function; the fourth component (A), when present, is the linear alpha coverage. Metallic-roughness: metalness sampled from B, roughness from G, linear transfer function; R and A are ignored for metallic-roughness calculations."
+    },
+    {
+      "kind": "consumer-specification",
+      "page": "Khronos glTF 2.0 Specification, version 2.0.1 (registry.khronos.org/glTF/specs/2.0/glTF-2.0.html)",
+      "section": "3.9.3 Additional Textures (Normal Texture, Occlusion Texture); 5.19 Material (normalTexture, occlusionTexture, emissiveTexture)",
+      "facts": "Normal: tangent-space XYZ as RGB with the linear transfer function, the convention +X right and +Y up, +Z toward the viewer, A ignored. Occlusion: linearly sampled from R, higher values receive full indirect lighting, G, B and A ignored. Emissive: RGB encoded with the sRGB transfer function, A ignored."
+    },
+    {
+      "kind": "consumer-specification",
+      "page": "Khronos glTF 2.0 Specification, version 2.0.1 (registry.khronos.org/glTF/specs/2.0/glTF-2.0.html)",
+      "section": "3.9.4 Alpha Coverage",
+      "facts": "The alpha value of the metallic-roughness material model is taken from the fourth component of the base colour."
+    },
+    {
+      "kind": "consumer-specification",
+      "page": "Khronos glTF 2.0 Specification, version 2.0.1 (registry.khronos.org/glTF/specs/2.0/glTF-2.0.html)",
+      "section": "2.6 File Extensions and Media Types; 3.8.3 Images",
+      "facts": "Core images are image/png or image/jpeg; JPEG has one or three 8-bit components (no alpha); colour-space information in PNG or JPEG files is ignored, so the transfer function is the one the referring glTF property defines."
+    },
+    {
+      "kind": "public-documentation",
+      "page": "UzPainter decision 023 (owner answer Q10); docs/architecture/08-export.md §4",
+      "section": "SpecularWeight as a consumer gap",
+      "facts": "SpecularWeight is exported and reported in the export receipt as a consumer gap wherever the consumer has no binding for it; omitting it silently was rejected."
+    }
+  ],
+  "privateRecords": [],
+  "packing": [
+    {
+      "fileName": "$textureSet_BaseColor",
+      "decision": "RGB from documentMap basecolor, A from documentMap opacity (dropped when the stack has no opacity channel, probe P7); the colour is written in its channel's encoding (an sRGB8 BaseColor sRGB-encoded, decision 126)",
+      "source": "glTF 2.0 §3.9.2 and §5.22 baseColorTexture (sRGB RGB, linear alpha coverage in A); §3.9.4 Alpha Coverage",
+      "status": "hypothesis"
+    },
+    {
+      "fileName": "$textureSet_MetallicRoughness",
+      "decision": "R from defaultMap white, G from documentMap roughness, B from documentMap metallic, linear",
+      "source": "glTF 2.0 §3.9.2 and §5.22 metallicRoughnessTexture (roughness in G, metalness in B, linear, R and A ignored); R holds 1.0, full indirect lighting, so a consumer that also binds this texture as occlusion (R, §5.19 occlusionTexture) sees none (decision 314)",
+      "status": "hypothesis"
+    },
+    {
+      "fileName": "$textureSet_Normal",
+      "decision": "RGB from virtualMap Normal_OpenGL, linear",
+      "source": "glTF 2.0 §3.9.3 Normal Texture and §5.19 normalTexture (tangent space, +X right and +Y up: the OpenGL convention; linear)",
+      "status": "hypothesis"
+    },
+    {
+      "fileName": "$textureSet_Occlusion",
+      "decision": "L from virtualMap AO_Mixed (the AO mesh map combined with the AO channel), linear; refused until AO_Mixed is fitted (decision 131)",
+      "source": "glTF 2.0 §3.9.3 Occlusion Texture and §5.19 occlusionTexture (R sampled linearly; a greyscale PNG decodes to R = G = B = L); the source map: decision 314",
+      "status": "hypothesis"
+    },
+    {
+      "fileName": "$textureSet_Emissive",
+      "decision": "RGB from documentMap emissive, written in its channel's encoding",
+      "source": "glTF 2.0 §5.19 emissiveTexture (sRGB RGB, A ignored)",
+      "status": "hypothesis"
+    },
+    {
+      "fileName": "$textureSet_SpecularWeight",
+      "decision": "L from documentMap specularweight, written when the stack has the channel; the receipt reports it as a consumer gap",
+      "source": "decision 023; glTF 2.0 §3.9.2 (the core metallic-roughness material has no specular input); decision 314",
+      "status": "hypothesis"
+    },
+    {
+      "fileName": "(all)",
+      "decision": "Files named $textureSet_<glTF texture>, each with fileFormat png and no other parameter: bit depth, padding and dithering come from exportParameters until the recording shows what the preset itself sets; no Height map (no glTF core slot)",
+      "source": "glTF 2.0 §2.6 and §3.8.3 (PNG or JPEG; JPEG has no alpha and is lossy); decision 314",
+      "status": "hypothesis"
+    }
+  ],
+  "parity": {
+    "layout": "unconfirmed",
+    "status": "pending",
+    "pending": [
+      {
+        "recording": "R-314",
+        "owner": "phase3.1_unreal-gltf-pbr-preset item 2.1",
+        "what": "Painter's files and dry run for resource://starter_assets/glTF PBR Metal Roughness on the authored bevelled cube with every channel the preset reads filled distinctly (Opacity, Emissive and SpecularWeight too) and an AO mesh map bound, with the preset's own parameters and with the pipeline's, plus the preset's list_output_maps() (request tier0/semantics/export-presets-gltf): confirms or corrects every map, its channels, its name, the preset's own parameters and the URL."
+      }
+    ],
+    "tests": [
+      "tests/export/test_export_presets.py::test_painter_names_resolve_to_shipped_presets",
+      "tests/export/test_export_presets.py::test_gltf_preset_is_refused_naming_r314",
+      "tests/export/test_export_presets.py::test_provenance_records_are_complete",
+      "tests/export/test_export_presets.py::test_gltf_preset_packs_the_gltf_slots",
+      "tests/export/test_export_presets.py::test_shipped_presets_pass_the_guard"
+    ]
+  }
+}

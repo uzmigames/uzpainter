@@ -52,6 +52,7 @@ Implemented in `src/export/preset_aliases.{h,cpp}` and `assets/export-presets/` 
 
 - `assets3d-inline-five-map` is the pipeline's inline preset. It writes BaseColor sRGB-encoded (decision 126).
 - `pbr-metallic-roughness` and `blender-principled-bsdf` answer to their Painter names and `resource://starter_assets/` URLs through the alias table. They are refused until recording R-095 confirms their layouts.
+- `gltf-pbr-metal-roughness` answers to `glTF PBR Metal Roughness`. It is written from the glTF 2.0 specification (decision 314) and refused until recording R-314 confirms its layout (`phase3.1_unreal-gltf-pbr-preset`).
 - Full output parity moved from `phase1.18_export-engine` item 6.2 to `phase3.3_unreal-gltf-presets` item 3.5 (decision 103).
 
 ### Unreal Engine (Packed)

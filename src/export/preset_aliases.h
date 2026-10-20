@@ -30,11 +30,13 @@ namespace uzp::exporter {
 
 /// One alias: a Painter preset name that keeps working as a preset reference, the shipped preset
 /// that answers to it, and the `?version=` values of its `resource://starter_assets/` URL that are
-/// recorded (UzmiGames' own observations, the preset's provenance record).
+/// recorded (UzmiGames' own observations, the preset's provenance record), and the recording that
+/// settles any other query.
 struct PresetAlias {
     std::string_view painterName;
     std::string_view presetId;
     std::span<const std::string_view> versions;
+    std::string_view recording;
 };
 
 /// The alias table, in shipped-preset order.
@@ -44,8 +46,8 @@ struct PresetAlias {
 
 /// The shipped preset a preset reference names: its id, an alias's Painter name, or
 /// `resource://starter_assets/<Painter name>` with no query or `?version=<recorded version>`;
-/// nullopt for any other text. Throws `core::NotYetSupported` naming recording R-095 for an
-/// alias's URL with an unrecorded query (decision 095).
+/// nullopt for any other text. Throws `core::NotYetSupported` naming the alias's recording (R-095,
+/// or R-314 for the glTF preset) for an alias's URL with an unrecorded query (decision 095).
 [[nodiscard]] std::optional<std::string> ShippedPresetId(std::string_view reference);
 
 /// Whether a shipped preset's layout is confirmed (provenance `parity.layout`).

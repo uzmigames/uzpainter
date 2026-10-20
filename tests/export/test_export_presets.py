@@ -2,13 +2,14 @@
 `docs/licensing-and-clean-room.md` §6; `assets/export-presets/`, `src/export/preset_aliases.h`;
 decision 095).
 
-The CPU cases run `uzp-export-tests.exe` (`presets`, `aliases`, `plan`, `export`) on every lane,
-with the shipped presets installed beside it: the provenance record of every preset, the alias
-table, the refusal of the presets whose layout no recording confirms (recording R-095), and the
-Assets3D five-map preset planning what the pipeline's own inline configuration plans. The Tier 0
-case reads the private oracle store and skips, saying so, on a machine without it (decision 028):
-the five-map preset's normal map, written on the recorded plane goldens, is byte-identical to
-Painter's files.
+The CPU cases run `uzp-export-tests.exe` (`presets`, `aliases`, `plan`, `export`, `receipt`) on
+every lane, with the shipped presets installed beside it: the provenance record of every preset,
+the alias table, the refusal of the presets whose layout no recording confirms (recording R-095;
+R-314 for the glTF preset of phase3.1_unreal-gltf-pbr-preset, decision 314), the glTF preset's
+packing, and the Assets3D five-map preset planning what the pipeline's own inline configuration
+plans. The Tier 0 case reads the private oracle store and skips, saying so, on a machine without
+it (decision 028): the five-map preset's normal map, written on the recorded plane goldens, is
+byte-identical to Painter's files.
 """
 
 from __future__ import annotations
@@ -50,6 +51,11 @@ UNCONFIRMED = {
 }
 BLENDER_URL = "resource://starter_assets/Blender (Principled BSDF)"
 BLENDER_VERSION = "13120355637414252359"
+GLTF = "gltf-pbr-metal-roughness"
+GLTF_NAME = "glTF PBR Metal Roughness"
+GLTF_URL = f"resource://starter_assets/{GLTF_NAME}"
+# The recording an unconfirmed preset's refusal names when it is not R-095 (`parity.pending`).
+PENDING_RECORDING = {GLTF: "R-314"}
 
 
 def run(exe: Path, *args: str) -> list[dict[str, Any]]:
@@ -128,7 +134,8 @@ def test_provenance_records_are_complete(export_tests: Path) -> None:
             path, _, name = test.partition("::")
             assert path == "tests/export/test_export_presets.py" and name in tests_here, test
         if parity["layout"] == "unconfirmed":
-            assert any(p["recording"] == "R-095" for p in parity["pending"]), preset_id
+            recording = PENDING_RECORDING.get(preset_id, "R-095")
+            assert any(p["recording"] == recording for p in parity["pending"]), preset_id
 
 
 def test_a_preset_without_provenance_fails_naming_it(export_tests: Path, tmp_path: Path) -> None:
@@ -153,7 +160,8 @@ def test_a_preset_without_provenance_fails_naming_it(export_tests: Path, tmp_pat
 def test_painter_names_resolve_to_shipped_presets(export_tests: Path, tmp_path: Path) -> None:
     """3.3: Painter's preset names, and their `resource://starter_assets/` URLs without a query or
     with the recorded version, resolve to the shipped presets (UzPainter ids); an unrecorded
-    version is refused naming R-095; other text names no shipped preset."""
+    version is refused naming R-095 (R-314 for the glTF preset, phase3.1 item 2.4); other text
+    names no shipped preset."""
     installed = export_tests.parent / "assets" / "export-presets"
     references = [
         "Blender (Principled BSDF)",
@@ -180,6 +188,11 @@ def test_painter_names_resolve_to_shipped_presets(export_tests: Path, tmp_path: 
     for x in r[6:8]:
         assert x["error"] == "NotYetSupported" and "R-095" in x["message"], x
     assert r[8]["id"] is None and r[9]["id"] is None
+    gltf = resolve(
+        export_tests, installed, [GLTF_NAME, GLTF_URL, GLTF, f"{GLTF_URL}?version=1"], tmp_path
+    )
+    assert [x.get("id") for x in gltf[:3]] == [GLTF] * 3
+    assert gltf[3]["error"] == "NotYetSupported" and "R-314" in gltf[3]["message"], gltf[3]
 
     # defaultExportPreset "Blender (Principled BSDF)" reaches the shipped preset via ParseConfig.
     [planned] = plan_many(
@@ -210,6 +223,32 @@ def test_unconfirmed_presets_are_refused_naming_r095(export_tests: Path, tmp_pat
             "NotYetSupported",
             "no recording of Painter's output confirms its layout",
             "R-095",
+            "decision 095",
+        )
+
+
+def test_gltf_preset_is_refused_naming_r314(export_tests: Path, tmp_path: Path) -> None:
+    """phase3.1 item 2.4, decision 314: `defaultExportPreset: "glTF PBR Metal Roughness"`, its
+    URL, the id, or an `exportList` entry naming any of them reaches the shipped glTF preset, which
+    is refused before anything is planned until recording R-314 confirms its layout."""
+    cases = []
+    for reference in (GLTF_NAME, GLTF_URL, GLTF):
+        cases.append((ONE_SET, shipped_config(reference)))
+        cases.append(
+            (
+                ONE_SET,
+                shipped_config(
+                    FIVE_MAP, exportList=[{"rootPath": "s0", "exportPreset": reference}]
+                ),
+            )
+        )
+    for result in plan_many(export_tests, cases, tmp_path):
+        refused(
+            result,
+            "NotYetSupported",
+            f'(shipped preset "{GLTF}")',
+            "no recording of Painter's output confirms its layout",
+            "R-314",
             "decision 095",
         )
 
@@ -262,6 +301,112 @@ def test_preset_references_resolve_inline_first(export_tests: Path, tmp_path: Pa
     assert "Blender (Principled BSDF)" in message and FIVE_MAP in message
     for x in r[3:]:
         refused(x, "NotYetSupported", "UzPainter does not ship", "decision 095")
+
+
+# ── The glTF preset (phase3.1_unreal-gltf-pbr-preset, decision 314) ──────────
+
+GLTF_CHANNELS = {
+    "BaseColor": "sRGB8",
+    "SpecularRoughness": "L8",
+    "BaseMetalness": "L8",
+    "Height": "L16F",
+    "Normal": "RGB16F",
+    "AO": "L16",
+    "Emissive": "sRGB8",
+    "SpecularWeight": "L8",
+}
+GLTF_PARAMETERS = {"bitDepth": "16", "paddingAlgorithm": "infinite", "dithering": False}
+NO_OCCLUSION = [
+    "$textureSet_BaseColor",
+    "$textureSet_MetallicRoughness",
+    "$textureSet_Normal",
+    "$textureSet_Emissive",
+    "$textureSet_SpecularWeight",
+]
+
+
+def gltf_inline(*output_maps: str) -> dict[str, Any]:
+    """The shipped glTF preset's maps as the inline preset `gltf-copy` (so that its packing plans
+    while the shipped preset stays refused, R-314), filtered to `output_maps` when given."""
+    preset = json.loads((PRESETS / f"{GLTF}.json").read_text(encoding="utf-8"))
+    preset["name"] = "gltf-copy"
+    entry: dict[str, Any] = {"rootPath": "s0"}
+    if output_maps:
+        entry["filter"] = {"outputMaps": list(output_maps)}
+    return {
+        "exportPath": "C:/export",
+        "defaultExportPreset": "gltf-copy",
+        "exportPresets": [preset],
+        "exportList": [entry],
+        "exportParameters": [{"parameters": dict(GLTF_PARAMETERS)}],
+    }
+
+
+def packing(file: dict[str, Any]) -> list[tuple[str, str, str, str]]:
+    return [
+        (c["destChannel"], c["srcChannel"], c["source"]["srcMapType"], c["source"]["srcMapName"])
+        for c in file["channels"]
+    ]
+
+
+def test_gltf_preset_packs_the_gltf_slots(export_tests: Path, tmp_path: Path) -> None:
+    """2.2, 2.5 (decision 314): the glTF preset's maps plan as the glTF 2.0 metallic-roughness
+    material binds them: base colour RGB (A from opacity, dropped without an opacity channel),
+    metallic-roughness with roughness in G and metalness in B, the OpenGL (+Y up) normal and
+    emissive RGB, each a PNG; the occlusion map reads AO_Mixed and is refused until it is fitted
+    (decision 131); SpecularWeight, which has no glTF core slot, is its own file, and the receipt
+    reports it as a consumer gap (decision 023); Height has no map."""
+    one_set = project(texture_set("s0", GLTF_CHANNELS, mesh_maps=("AO",)))
+    with_opacity = project(texture_set("s0", {**GLTF_CHANNELS, "Opacity": "L8"}))
+    planned, occlusion, alpha = plan_many(
+        export_tests,
+        [
+            (one_set, gltf_inline(*NO_OCCLUSION)),
+            (one_set, gltf_inline()),
+            (with_opacity, gltf_inline("$textureSet_BaseColor")),
+        ],
+        tmp_path,
+    )
+    files = {f["relativePath"]: f for f in planned["plan"]["files"]}
+    assert list(files) == [
+        "s0_BaseColor.png",
+        "s0_MetallicRoughness.png",
+        "s0_Normal.png",
+        "s0_Emissive.png",
+        "s0_SpecularWeight.png",
+    ]
+    assert all(f["parameters"]["fileFormat"] == "png" for f in files.values())
+    assert packing(files["s0_BaseColor.png"]) == [(c, c, "documentMap", "basecolor") for c in "RGB"]
+    mr = files["s0_MetallicRoughness.png"]
+    assert mr["layout"] == "RGB"
+    assert packing(mr) == [
+        ("R", "L", "defaultMap", "white"),
+        ("G", "L", "documentMap", "roughness"),
+        ("B", "L", "documentMap", "metallic"),
+    ]
+    assert [c["source"].get("channel") for c in mr["channels"]] == [
+        None,
+        "SpecularRoughness",
+        "BaseMetalness",
+    ]
+    assert packing(files["s0_Normal.png"]) == [(c, c, "virtualMap", "Normal_OpenGL") for c in "RGB"]
+    assert packing(files["s0_Emissive.png"]) == [(c, c, "documentMap", "emissive") for c in "RGB"]
+    assert packing(files["s0_SpecularWeight.png"]) == [("L", "L", "documentMap", "specularweight")]
+    refused(occlusion, "NotYetSupported", '"$textureSet_Occlusion"', "AO_Mixed")
+    [base] = alpha["plan"]["files"]
+    assert base["layout"] == "RGBA" and packing(base)[3] == ("A", "L", "documentMap", "opacity")
+
+    (tmp_path / "project.json").write_text(json.dumps(one_set), encoding="utf-8")
+    (tmp_path / "config.json").write_text(
+        json.dumps(gltf_inline("$textureSet_SpecularWeight")), encoding="utf-8"
+    )
+    [receipt] = run(
+        export_tests, "receipt", str(tmp_path / "project.json"), str(tmp_path / "config.json")
+    )
+    [spec_file] = receipt["files"]
+    assert spec_file["path"] == "s0_SpecularWeight.png"
+    [gap] = spec_file["consumer_gaps"]
+    assert gap["channel"] == "SpecularWeight" and "not applied by the export" in gap["gap"]
 
 
 # ── The Assets3D five-map preset ─────────────────────────────────────────────

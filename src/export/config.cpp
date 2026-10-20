@@ -612,7 +612,7 @@ ExportConfig ParseConfig(const json::Value& value, const std::filesystem::path& 
                 throw core::NotYetSupported("export: " + path + ": the preset \"" + name +
                                             "\" is a shelf or predefined preset UzPainter does not ship; shipped: " +
                                             JoinNames({ShippedPresetIds().begin(), ShippedPresetIds().end()}) +
-                                            " (decision 095; the Unreal, glTF and UzEngine presets: phase3.1 to "
+                                            " (decision 095; the Unreal and UzEngine presets: phase3.2 and "
                                             "phase3.4)");
             }
             std::vector<std::string> valid = inlineNames;

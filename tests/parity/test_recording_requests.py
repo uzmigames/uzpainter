@@ -41,7 +41,11 @@ def request_paths() -> list[Path]:
 
 def test_every_requested_golden_is_committed_once() -> None:
     assert sorted(p.stem for p in request_paths()) == sorted(g.name for g in requested_goldens())
-    assert ocio_goldens() == {"export-ocio-encode", "export-presets-ocio"}
+    assert ocio_goldens() == {
+        "export-ocio-encode",
+        "export-presets-ocio",
+        "export-presets-gltf-ocio",
+    }
 
 
 @pytest.mark.parametrize("path", request_paths(), ids=lambda p: p.stem)

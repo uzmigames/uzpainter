@@ -1,0 +1,143 @@
+{
+  "name": "gltf-pbr-metal-roughness",
+  "maps": [
+    {
+      "fileName": "$textureSet_BaseColor",
+      "channels": [
+        {
+          "destChannel": "R",
+          "srcChannel": "R",
+          "srcMapType": "documentMap",
+          "srcMapName": "basecolor"
+        },
+        {
+          "destChannel": "G",
+          "srcChannel": "G",
+          "srcMapType": "documentMap",
+          "srcMapName": "basecolor"
+        },
+        {
+          "destChannel": "B",
+          "srcChannel": "B",
+          "srcMapType": "documentMap",
+          "srcMapName": "basecolor"
+        },
+        {
+          "destChannel": "A",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "opacity"
+        }
+      ],
+      "parameters": {
+        "fileFormat": "png"
+      }
+    },
+    {
+      "fileName": "$textureSet_MetallicRoughness",
+      "channels": [
+        {
+          "destChannel": "R",
+          "srcChannel": "L",
+          "srcMapType": "defaultMap",
+          "srcMapName": "white"
+        },
+        {
+          "destChannel": "G",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "roughness"
+        },
+        {
+          "destChannel": "B",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "metallic"
+        }
+      ],
+      "parameters": {
+        "fileFormat": "png"
+      }
+    },
+    {
+      "fileName": "$textureSet_Normal",
+      "channels": [
+        {
+          "destChannel": "R",
+          "srcChannel": "R",
+          "srcMapType": "virtualMap",
+          "srcMapName": "Normal_OpenGL"
+        },
+        {
+          "destChannel": "G",
+          "srcChannel": "G",
+          "srcMapType": "virtualMap",
+          "srcMapName": "Normal_OpenGL"
+        },
+        {
+          "destChannel": "B",
+          "srcChannel": "B",
+          "srcMapType": "virtualMap",
+          "srcMapName": "Normal_OpenGL"
+        }
+      ],
+      "parameters": {
+        "fileFormat": "png"
+      }
+    },
+    {
+      "fileName": "$textureSet_Occlusion",
+      "channels": [
+        {
+          "destChannel": "L",
+          "srcChannel": "L",
+          "srcMapType": "virtualMap",
+          "srcMapName": "AO_Mixed"
+        }
+      ],
+      "parameters": {
+        "fileFormat": "png"
+      }
+    },
+    {
+      "fileName": "$textureSet_Emissive",
+      "channels": [
+        {
+          "destChannel": "R",
+          "srcChannel": "R",
+          "srcMapType": "documentMap",
+          "srcMapName": "emissive"
+        },
+        {
+          "destChannel": "G",
+          "srcChannel": "G",
+          "srcMapType": "documentMap",
+          "srcMapName": "emissive"
+        },
+        {
+          "destChannel": "B",
+          "srcChannel": "B",
+          "srcMapType": "documentMap",
+          "srcMapName": "emissive"
+        }
+      ],
+      "parameters": {
+        "fileFormat": "png"
+      }
+    },
+    {
+      "fileName": "$textureSet_SpecularWeight",
+      "channels": [
+        {
+          "destChannel": "L",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "specularweight"
+        }
+      ],
+      "parameters": {
+        "fileFormat": "png"
+      }
+    }
+  ]
+}

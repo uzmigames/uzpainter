@@ -22,12 +22,14 @@ constexpr std::string_view kRecording = "recording R-095, decision 095";
 /// (`SM/10-Chapeu/report.json → painter_recipe.export.preset_details.preset.url`).
 constexpr std::array<std::string_view, 1> kBlenderVersions{"13120355637414252359"};
 
-constexpr std::array<std::string_view, 3> kShippedIds{"pbr-metallic-roughness", "blender-principled-bsdf",
-                                                       "assets3d-inline-five-map"};
+constexpr std::array<std::string_view, 4> kShippedIds{"pbr-metallic-roughness", "blender-principled-bsdf",
+                                                       "assets3d-inline-five-map", "gltf-pbr-metal-roughness"};
 
-const std::array<PresetAlias, 2> kAliases{{
-    {"PBR Metallic Roughness", "pbr-metallic-roughness", {}},
-    {"Blender (Principled BSDF)", "blender-principled-bsdf", kBlenderVersions},
+const std::array<PresetAlias, 3> kAliases{{
+    {"PBR Metallic Roughness", "pbr-metallic-roughness", {}, kRecording},
+    {"Blender (Principled BSDF)", "blender-principled-bsdf", kBlenderVersions, kRecording},
+    // phase3.1_unreal-gltf-pbr-preset item 2.4 (CLR-06); its URL's versions: recording R-314.
+    {"glTF PBR Metal Roughness", "gltf-pbr-metal-roughness", {}, "recording R-314, decision 314"},
 }};
 
 [[noreturn]] void Fail(std::string_view id, const std::string& problem) {
@@ -88,7 +90,7 @@ std::optional<std::string> ShippedPresetId(std::string_view reference) {
                                     std::string(text) + "\" of the Painter preset \"" + std::string(alias.painterName) +
                                     "\" is not recorded; the shipped preset \"" + std::string(alias.presetId) +
                                     "\" answers to its URL without a query or with a recorded version (" +
-                                    std::string(kRecording) + ")");
+                                    std::string(alias.recording) + ")");
     }
     return std::nullopt;
 }

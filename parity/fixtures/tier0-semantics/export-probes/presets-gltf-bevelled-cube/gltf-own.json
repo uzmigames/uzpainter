@@ -1,0 +1,9 @@
+{
+  "defaultExportPreset": "resource://starter_assets/glTF PBR Metal Roughness",
+  "exportList": [
+    {
+      "rootPath": "uzp_bevelled_cube"
+    }
+  ],
+  "exportShaderParams": false
+}

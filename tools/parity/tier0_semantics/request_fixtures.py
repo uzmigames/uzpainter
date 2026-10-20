@@ -2326,6 +2326,23 @@ def preset_probes(root: str) -> dict[str, Config]:
     return probes
 
 
+GLTF_PRESET = "resource://starter_assets/glTF PBR Metal Roughness"
+
+
+def gltf_preset_probes(root: str) -> dict[str, Config]:
+    """Decision 314 (recording R-314): the glTF PBR Metal Roughness preset with its own
+    parameters and with the pipeline's overrides."""
+    base: Config = {
+        "exportShaderParams": False,
+        "defaultExportPreset": GLTF_PRESET,
+        "exportList": [{"rootPath": root}],
+    }
+    return {
+        "gltf-own": base,
+        "gltf-pipeline": {**base, "exportParameters": [{"parameters": dict(PIPELINE_PARAMETERS)}]},
+    }
+
+
 def recipe(data: Config) -> bytes:
     """One configuration as an authored recipe (JSON, LF, sorted keys)."""
     return (json.dumps(data, indent=2, sort_keys=True) + "\n").encode()

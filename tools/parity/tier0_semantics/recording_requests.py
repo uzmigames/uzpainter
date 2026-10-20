@@ -16,11 +16,12 @@ and P-tie (decision 157), the other 21 inferred template bases (decision 168), d
 sRGB bitmap minification and decision 169's L8 material channels, decision 210's ring-sign probes
 and a position-encoded seam probe (decision 216), decision 225's sRGB minification on random
 content, decision 266's kernel-code padding probes, decision 272's tie-order sweeps and decision
-293's Normal mesh-map combination probe.
+293's Normal mesh-map combination probe, and decision 314's glTF preset recording R-314.
 
 Colour management: every golden runs under Legacy (Painter started without `OCIO`) except the
-two that name `OCIO` in `applied_settings` (`export-ocio-encode`, `export-presets-ocio`), which
-run in a session started with Painter's `resources/ocio/substance/config.ocio`.
+three that name `OCIO` in `applied_settings` (`export-ocio-encode`, `export-presets-ocio`,
+`export-presets-gltf-ocio`), which run in a session started with Painter's
+`resources/ocio/substance/config.ocio`.
 """
 
 from __future__ import annotations
@@ -87,6 +88,7 @@ def probe_groups() -> dict[str, dict[str, Config]]:
         "resize": rf.resize_probes(),
         "colour-space": rf.colour_space_probes(),
         "presets-bevelled-cube": rf.preset_probes("uzp_bevelled_cube"),
+        "presets-gltf-bevelled-cube": rf.gltf_preset_probes("uzp_bevelled_cube"),
     }
 
 
@@ -871,6 +873,86 @@ BASE_SRGB = [0.2, 0.5, 0.8]
 # The wand stack's hammer-mark layer (Pipeline/painting stack-wand.json, I02): base [75, 70, 65]
 # (0-255, sRGB), Height -0.003, BaseColor opacity 0.25, set as the sync script sets them.
 WAND_BASE = [75 / 255, 70 / 255, 65 / 255]
+
+
+# --- Decision 314: the glTF PBR Metal Roughness preset (recording R-314) ------------------
+
+
+def export_presets_gltf(ocio: bool) -> Golden:
+    """Recording R-314 (phase3.1_unreal-gltf-pbr-preset item 2.1): Painter's files, dry run and
+    `list_output_maps()` for its glTF PBR Metal Roughness preset, every channel the shipped preset
+    reads filled with a distinct source."""
+    s = start("bevelled-cube", None if ocio else ALPHA_BLEND)
+    added = (("AO", "L16"), ("SpecularWeight", "L8"))
+    s.channels(((("Opacity", "L8"), ("EmissionColor", "sRGB8")) if ocio else ()) + added)
+    res = s.imports(
+        "field-a",
+        "field-b",
+        "grey-a",
+        "grey-b",
+        "grey-173",
+        "height-ramps",
+        "hue-grid-grey",
+        "hue-grid-transposed-grey",
+        "normal-a",
+        "normal-b",
+    )
+    s.add(ps.SET_MESH_MAP, usage="Normal", resource_step=res["normal-b"])
+    s.add(ps.SET_MESH_MAP, usage="AO", resource_step=res["grey-a"])
+    sources = {
+        "BaseColor": "field-a",
+        "SpecularRoughness" if ocio else "Roughness": "grey-a",
+        "BaseMetalness" if ocio else "Metallic": "grey-b",
+        "Height": "height-ramps",
+        "Normal": "normal-a",
+        "Opacity": "hue-grid-grey",
+        "EmissionColor": "field-b",
+        "AO": "hue-grid-transposed-grey",
+        "SpecularWeight": "grey-173",
+    }
+    fill(s, sources, res, position="top", texture_set="uzp_bevelled_cube")
+    s.add(PREDEFINED_PRESETS)
+    s.add(RESOURCE_PRESETS)
+    s.add(PREDEFINED_OUTPUT_MAPS, texture_set="uzp_bevelled_cube")
+    s.add(RESOURCE_OUTPUT_MAPS, preset=rf.GLTF_PRESET)
+    inputs = probes(s, "presets-gltf-bevelled-cube")
+    template = (
+        "no template (the pipeline's default OpenPBR channels) with Opacity, EmissionColor, AO "
+        "and SpecularWeight added, under OCIO"
+        if ocio
+        else f"the shipped template {ALPHA_BLEND!r} with AO and SpecularWeight added, under Legacy"
+    )
+    return Golden(
+        "export-presets-gltf-" + ("ocio" if ocio else "legacy"),
+        "tier0/export/presets",
+        f"Recording R-314 (decision 314, phase3.1_unreal-gltf-pbr-preset item 2.1) on the "
+        f"authored bevelled cube at 256 px, OpenGL, {template}: normal-b bound as the Normal mesh "
+        "map and grey A as AO; one fill with field A on BaseColor, grey A on roughness, grey B on "
+        "metalness, the height ramps, normal-a, the hue-grid grey on Opacity, field B on "
+        "EmissionColor, the transposed hue-grid grey on AO and grey 173 on SpecularWeight. "
+        "Captures: the predefined and resource export presets, every predefined preset's output "
+        "maps on the set, and the output maps of the starter glTF PBR Metal Roughness preset. "
+        "Probes: that preset with its own parameters and with the pipeline's (PNG 16, infinite, no "
+        "dithering). Confirms or corrects every map of the shipped gltf-pbr-metal-roughness preset "
+        "(assets/export-presets/), its channels, its name, its parameters and its URL.",
+        "bevelled-cube",
+        [
+            "bevelled-cube",
+            "field-a",
+            "field-b",
+            "grey-a",
+            "grey-b",
+            "grey-173",
+            "height-ramps",
+            "hue-grid-grey",
+            "hue-grid-transposed-grey",
+            "normal-a",
+            "normal-b",
+            *inputs,
+        ],
+        s,
+        [OCIO_SETTING] if ocio else [],
+    )
 
 
 def export_ocio_encode(ocio: bool) -> Golden:
@@ -1818,7 +1900,7 @@ def later_goldens() -> list[Golden]:
     then decision 266's kernel-code padding probes, then decision 272's tie-order sweeps, then
     decision 278's concave seam-gate probes and decision 289's far-side hinge and
     window-side probes, then decision 293's Normal mesh-map combination probe, then decision
-    298's corner-reach probe."""
+    298's corner-reach probe, then decision 314's glTF preset recording (Legacy, then OCIO)."""
     return [
         srgb_bitmap_variants(),
         *(template_base(t) for t in INFERRED_BASE_TEMPLATES),
@@ -1839,6 +1921,8 @@ def later_goldens() -> list[Golden]:
         padding_window_side_probe(),
         padding_normal_combine_probe(),
         padding_corner_reach_probe(),
+        export_presets_gltf(ocio=False),
+        export_presets_gltf(ocio=True),
     ]
 
 
