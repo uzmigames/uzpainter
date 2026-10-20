@@ -97,6 +97,7 @@ struct UzTextureSpec {
 /// each level quantised to 8 bits and stored as `spec.format` (BC through `encoder`, RGBA8 as
 /// is) with `threads` workers, then written. A `Normal` map stored as BC5 is checked first and
 /// refused with `NegativeZNormal` when any texel has a negative Z; nothing is encoded then.
+/// Normal maps with `srgb` set are refused before mip generation for every storage format.
 [[nodiscard]] UzTexture CookUzTexture(const BcEncoder& encoder, const Rgba16Image& canonical,
                                       const UzTextureSpec& spec, uint32_t threads);
 

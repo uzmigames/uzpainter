@@ -139,6 +139,8 @@ UzTexture CookUzTexture(const BcEncoder& encoder, const Rgba16Image& canonical,
                         const UzTextureSpec& spec, uint32_t threads) {
     if (canonical.rgba.size() != uint64_t{canonical.width} * canonical.height * 4)
         throw std::invalid_argument("CookUzTexture: texel count does not match the image size");
+    if (spec.mips.mapClass == MipClass::Normal && spec.srgb)
+        throw std::invalid_argument("CookUzTexture: normal maps must be linear, not sRGB");
     if (spec.mips.mapClass == MipClass::Normal && spec.format == uz::TextureFormat::BC5) {
         const NegativeZ negative = FindNegativeZ(canonical);
         if (negative.count != 0) throw NegativeZNormal(spec.binding, negative);

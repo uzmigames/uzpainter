@@ -340,6 +340,35 @@ void CaseNegativeZ() {
 
 // ── 3.6 Layout ──────────────────────────────────────────────────────────────────────────────
 
+void CaseNormalColourSpace() {
+    const Rgba16Image normal = HemisphereNormals(4);
+    for (const uz::TextureFormat format : {uz::TextureFormat::Uncompressed_RGBA8,
+                                          uz::TextureFormat::BC1, uz::TextureFormat::BC3,
+                                          uz::TextureFormat::BC7}) {
+        UzTextureSpec spec{"normal", format, true, {MipClass::Normal, 0.5}};
+        // An invalid mip option also proves rejection precedes mip generation.
+        for (double threshold : {0.5, -1.0}) {
+            spec.mips.alphaThreshold = threshold;
+            bool refused = false;
+            try {
+                (void)CookUzTexture(EtcpakEncoder(), normal, spec, 1);
+            } catch (const std::invalid_argument& e) {
+                refused = std::string(e.what()) ==
+                          "CookUzTexture: normal maps must be linear, not sRGB";
+            }
+            CHECK(refused);
+        }
+        spec.mips.alphaThreshold = 0.5;
+        spec.srgb = false;
+        const ReadUzTexture linear = ParseUzTexture(CookUzTexture(EtcpakEncoder(), normal, spec, 1).bytes);
+        CHECK(linear.header.flags == 0 && linear.header.mipCount == 3);
+        spec.srgb = true;
+        spec.mips.mapClass = MipClass::Colour;
+        const ReadUzTexture colour = ParseUzTexture(CookUzTexture(EtcpakEncoder(), AuthoredRgba16(4, 4), spec, 1).bytes);
+        CHECK(colour.header.flags == uz::kUzTextureFlag_sRGB && colour.header.mipCount == 3);
+    }
+}
+
 void CaseUzTextureLayout() {
     struct Layout {
         const char* binding;
@@ -469,6 +498,7 @@ const std::vector<std::pair<std::string, std::function<void()>>>& Cases() {
         {"alpha_coverage", CaseAlphaCoverage},
         {"negative_z", CaseNegativeZ},
         {"uztexture_layout", CaseUzTextureLayout},
+        {"normal_colour_space", CaseNormalColourSpace},
         {"lossy_derivative", CaseLossyDerivative},
     };
     return cases;

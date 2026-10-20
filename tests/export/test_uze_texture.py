@@ -28,6 +28,7 @@ NATIVE_CASES = (
     "alpha_coverage",  # 3.4
     "negative_z",  # 3.5 (library guard)
     "uztexture_layout",  # 3.6
+    "normal_colour_space",  # Normal maps must not be sampled as sRGB.
     "lossy_derivative",  # 3.7
 )
 
