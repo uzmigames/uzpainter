@@ -212,25 +212,29 @@ std::array<float, 3> HeightVector(HeightToNormalMethod method, const HeightNeigh
 }
 
 std::array<float, 3> VirtualNormalTexel(const std::array<float, 3>& v, const NormalInputs& inputs,
-                                        core::NormalMapFormat convention) {
+                                        core::NormalMapFormat convention, VirtualNormalComponent component) {
     const Vec3 heightNormal = arith::NormalNormalise(v);
+    if (component == VirtualNormalComponent::Height) return heightNormal;
+    const Vec3 detail = ChannelNormal(inputs.channel, inputs.coverage);
+    if (component == VirtualNormalComponent::Channel) return detail;
     Vec3 mesh{0.0f, 0.0f, 1.0f};
     if (inputs.hasMesh) {
         mesh = arith::NormalDecode(inputs.mesh);
         if (inputs.meshDirectX) mesh[1] = -mesh[1];
     }
     const Vec3 base = arith::NormalNormalise(arith::NormalReoriented(mesh, heightNormal));
-    const Vec3 detail = ChannelNormal(inputs.channel, inputs.coverage);
     const Vec3 n = arith::NormalNormalise(arith::NormalReoriented(base, detail));
     const float y = convention == core::NormalMapFormat::DirectX ? -n[1] : n[1];
     return {arith::Fma(n[0], 0.5f, 0.5f), arith::Fma(y, 0.5f, 0.5f), arith::Fma(n[2], 0.5f, 0.5f)};
 }
 
 std::array<float, 3> MeshOnPaddedNormal(const std::array<float, 3>& mesh, bool meshDirectX,
-                                        const std::array<float, 3>& free, core::NormalMapFormat convention) {
+                                        const std::array<float, 3>& heightNormal,
+                                        const std::array<float, 3>& channelNormal, core::NormalMapFormat convention) {
     Vec3 f = arith::NormalDecode(mesh);
     if (meshDirectX) f[1] = -f[1];
-    const Vec3 n = arith::NormalNormalise(arith::NormalReoriented(f, arith::NormalDecode(free)));
+    const Vec3 base = arith::NormalNormalise(arith::NormalReoriented(f, heightNormal));
+    const Vec3 n = arith::NormalNormalise(arith::NormalReoriented(base, channelNormal));
     const float y = convention == core::NormalMapFormat::DirectX ? -n[1] : n[1];
     return {arith::Fma(n[0], 0.5f, 0.5f), arith::Fma(y, 0.5f, 0.5f), arith::Fma(n[2], 0.5f, 0.5f)};
 }
@@ -313,6 +317,9 @@ render::Result<VirtualNormalResult> EvaluateVirtualNormalOn(const core::Project&
 
     HashWriter readoutKey;
     readoutKey.Str("virtual-normal");
+    if (request.component != VirtualNormalComponent::Combined) {
+        readoutKey.Str("raw-normal-component").U32(static_cast<uint32_t>(request.component));
+    }
     WriteChannelInputs(readoutKey, heightDag ? &*heightDag : nullptr);
     readoutKey.F32(heightConstant);
     WriteChannelInputs(readoutKey, normalDag ? &*normalDag : nullptr);
@@ -324,7 +331,8 @@ render::Result<VirtualNormalResult> EvaluateVirtualNormalOn(const core::Project&
     Digest key = readoutKey.Finish();
     const TileGrid grid{width, height};
     // Held by this tile cache: read there (result_cache.h). A padded Height is never persisted.
-    render::DiskCache* persistent = request.heightPadding ? nullptr : cache.persistent();
+    render::DiskCache* persistent = request.heightPadding || request.component != VirtualNormalComponent::Combined
+                                        ? nullptr : cache.persistent();
     if (persistent != nullptr && cache.Contains(CacheKey{stack->id, CacheKind::Readout, key, 0, 0})) persistent = nullptr;
     if (persistent != nullptr) {
         const ChannelDag* dags[] = {heightDag ? &*heightDag : nullptr, normalDag ? &*normalDag : nullptr};
@@ -490,6 +498,7 @@ render::Result<VirtualNormalResult> EvaluateVirtualNormalOn(const core::Project&
             op.meshDirectX = meshDirectX;
             op.method = set->height_to_normal_method;
             op.convention = request.convention;
+            op.component = request.component;
             render::Result<void> queued = store.VirtualNormal(op);
             if (!queued) return render::Unexpected(queued.error());
             render::Result<void> read = ReadInto(store, *dst, tx * kTileSize, ty * kTileSize, result);

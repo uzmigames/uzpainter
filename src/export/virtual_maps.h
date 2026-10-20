@@ -23,7 +23,8 @@
 //      with the Normal channel there (decision 287 §4);
 //   4. without a Normal mesh map, the uncovered texels are that padded normal (decision 287
 //      §5); with one, each is `MeshOnPaddedNormal` of the mesh map at the texel and the padded
-//      encoded normal, the best-known form, flagged undecided (decision 276 items 4 (b), (c)).
+//      unit Hn and C separately, in covered order (decision 293). The diagnostic undecided
+//      marker remains pending the wider Height-ring and border evidence.
 //   A measurement reads the float32 Height before and after step 1 when the environment variable
 //   `UZP_DIAGNOSTIC_NORMAL_DUMP` names a directory (`<set>-height-readout.f32`,
 //   `<set>-height-padded.f32`, raw rows top first); nothing else reads it.

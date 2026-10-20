@@ -200,6 +200,8 @@ std::array<uint32_t, kBlendParamsStride> EncodeVirtualNormalParams(const Virtual
     if (op.convention == core::NormalMapFormat::DirectX) flags |= 8u;
     if (op.mesh.kind == Operand::Kind::Tile) flags |= 16u;
     if (op.meshDirectX) flags |= 32u;
+    if (op.component == VirtualNormalComponent::Height) flags |= 64u;
+    if (op.component == VirtualNormalComponent::Channel) flags |= 128u;
     params[2] = flags;
     params[3] = bindings.dstUav;
     params[4] = bindings.table16Srv;

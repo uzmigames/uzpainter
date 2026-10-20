@@ -6970,21 +6970,29 @@ int RunHeightNormalGpuVsCpu(const fs::path& assets, const fs::path& dir) {
             request.convention = convention;
             request.resources = resources;
             CpuEvaluator cpu(templates, kWideLimits);
-            render::Result<VirtualNormalResult> expected = cpu.EvaluateNormal(b.project, 2, request);
             TwinEvaluator gpu(engine, twin, templates);
-            std::future<render::Result<VirtualNormalResult>> future =
-                gpu.EvaluateNormal(core::Snapshot{2, std::make_shared<const core::Project>(b.project)}, request);
-            render::Result<VirtualNormalResult> actual = Get(future);
+            // Shared caches must distinguish the encoded normal from raw Hn and C.
+            for (const VirtualNormalComponent component : {VirtualNormalComponent::Combined,
+                    VirtualNormalComponent::Height, VirtualNormalComponent::Channel,
+                    VirtualNormalComponent::Combined, VirtualNormalComponent::Height,
+                    VirtualNormalComponent::Channel}) {
+                request.component = component;
+                render::Result<VirtualNormalResult> expected = cpu.EvaluateNormal(b.project, 2, request);
+                std::future<render::Result<VirtualNormalResult>> future =
+                    gpu.EvaluateNormal(core::Snapshot{2, std::make_shared<const core::Project>(b.project)}, request);
+                render::Result<VirtualNormalResult> actual = Get(future);
+                const bool equal = expected && actual && expected->tag == actual->tag &&
+                    expected->texels.size() == actual->texels.size() &&
+                    std::memcmp(expected->texels.data(), actual->texels.data(), expected->texels.size() * 4) == 0;
+                if (!equal) detail += std::string(core::ToString(method)) + "/" +
+                    std::string(core::ToString(convention)) + "/" + std::to_string(static_cast<int>(component)) + " ";
+                same = same && equal;
+            }
             gpu.Shutdown();
-            const bool equal = expected && actual && expected->tag == actual->tag &&
-                               std::memcmp(expected->texels.data(), actual->texels.data(), expected->texels.size() * 4) == 0 &&
-                               expected->texels.size() == actual->texels.size();
-            if (!equal) detail += std::string(core::ToString(method)) + "/" + std::string(core::ToString(convention)) + " ";
-            same = same && equal;
         }
     }
     Check(same, "Evaluator (GPU) and CpuEvaluator give the same virtual normal maps and tags (both methods and "
-                "conventions, a mesh map, a Normal layer at opacity 0.6)",
+                "conventions, a mesh map, a Normal layer at opacity 0.6, raw Hn/C and cache repeats)",
           detail);
     twin.Report();
     return Finish();

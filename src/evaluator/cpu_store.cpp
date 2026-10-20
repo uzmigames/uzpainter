@@ -377,7 +377,7 @@ render::Result<void> CpuTileStore::VirtualNormal(const VirtualNormalOp& op) {
                     for (uint32_t c = 0; c < 3; ++c) inputs.mesh[c] = std::bit_cast<float>(values[c]);
                 }
                 const std::array<float, 3> e =
-                    VirtualNormalTexel(HeightVector(op.method, h, op.z), inputs, op.convention);
+                    VirtualNormalTexel(HeightVector(op.method, h, op.z), inputs, op.convention, op.component);
                 uint32_t* out = &dst.values[texel * stored];
                 for (uint32_t c = 0; c < 3; ++c) out[c] = std::bit_cast<uint32_t>(arith::Float32Store(e[c]));
                 out[3] = std::bit_cast<uint32_t>(1.0f);

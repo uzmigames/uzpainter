@@ -92,16 +92,15 @@ struct NormalInputs {
 /// The encoded normal of one texel: the combination of the height vector `v` with the mesh map
 /// and the Normal channel of `inputs`, as n / 2 + 1/2 in `convention`.
 [[nodiscard]] std::array<float, 3> VirtualNormalTexel(const std::array<float, 3>& v, const NormalInputs& inputs,
-                                                      core::NormalMapFormat convention);
+                                                      core::NormalMapFormat convention,
+                                                      VirtualNormalComponent component = VirtualNormalComponent::Combined);
 
-/// The diagnostic measure export's normal outside the UV islands (export/write.h, decisions 276 and
-/// 308): the mesh map's operands `mesh` (its y negated when `meshDirectX`) combined with the
-/// padded mesh-free normal `free`, encoded in the OpenGL convention, as normalise(reoriented(
-/// decode(mesh), decode(free))), stored n / 2 + 1/2 in `convention`. Painter's float32 form and
-/// combination order there are not recorded (decision 276 items 4 (b) and (c)): this is the
-/// best-known form, not an exact one.
+/// The diagnostic island export combines the destination mesh with separately padded unit
+/// height and channel normals, in the covered-texel order (decision 293). Neither operand is
+/// encoded or normalised again before its RNM.
 [[nodiscard]] std::array<float, 3> MeshOnPaddedNormal(const std::array<float, 3>& mesh, bool meshDirectX,
-                                                      const std::array<float, 3>& free,
+                                                      const std::array<float, 3>& heightNormal,
+                                                      const std::array<float, 3>& channelNormal,
                                                       core::NormalMapFormat convention);
 
 /// What a virtual normal source is.
@@ -150,6 +149,8 @@ struct VirtualNormalRequest {
     /// The diagnostic measure export only: the combined map without the bound Normal mesh map (F
     /// the flat normal), Painter's mesh-free normal (decision 276).
     bool withoutMesh = false;
+    /// Internal diagnostic operand pass; raw Hn or C, independent of output convention.
+    VirtualNormalComponent component = VirtualNormalComponent::Combined;
 };
 
 struct VirtualNormalResult {
@@ -157,7 +158,7 @@ struct VirtualNormalResult {
     core::NormalMapFormat convention = core::NormalMapFormat::OpenGL;
     uint32_t width = 0;
     uint32_t height = 0;
-    /// Rows top first, three float32 per texel: the encoded normal in [0, 1].
+    /// Rows top first, three float32 per texel: encoded normal, or a requested raw unit operand.
     std::vector<float> texels;
     NormalTag tag;
     EvaluationStats stats;

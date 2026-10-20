@@ -67,31 +67,46 @@ render::Result<VirtualMapResult> IslandNormalOn(const core::Project& project, st
         write("height-padded", heights);
     };
     const bool mesh = set->mesh_maps.contains(core::MeshMapUsage::Normal);
-    // The mesh-free normal is encoded in OpenGL when the mesh map is combined with it afterwards.
-    const core::NormalMapFormat freeConvention = mesh ? core::NormalMapFormat::OpenGL : normal.convention;
     try {
         // 2. The covered texels.
         render::Result<evaluator::VirtualNormalResult> combined =
             evaluator::EvaluateVirtualNormalOn(project, revision, padded, templates, store, cache);
         if (!combined) return render::Unexpected(combined.error());
-        // 3. The mesh-free normal, unpadded where a ring texel keeps its value, then padded.
+        // 3. Pad unit Hn/C separately with a mesh map; otherwise copy the encoded normal.
         std::vector<float> free;
+        std::vector<float> heightNormals, channelNormals;
         if (mesh) {
             evaluator::VirtualNormalRequest request = padded;
             request.withoutMesh = true;
-            request.convention = freeConvention;
-            render::Result<evaluator::VirtualNormalResult> evaluated =
+            request.component = evaluator::VirtualNormalComponent::Height;
+            render::Result<evaluator::VirtualNormalResult> heightPart =
                 evaluator::EvaluateVirtualNormalOn(project, revision, request, templates, store, cache);
-            if (!evaluated) return render::Unexpected(evaluated.error());
-            free = std::move(evaluated->texels);
+            if (!heightPart) return render::Unexpected(heightPart.error());
+            heightNormals = std::move(heightPart->texels);
+            request.component = evaluator::VirtualNormalComponent::Channel;
+            render::Result<evaluator::VirtualNormalResult> channelPart =
+                evaluator::EvaluateVirtualNormalOn(project, revision, request, templates, store, cache);
+            if (!channelPart) return render::Unexpected(channelPart.error());
+            channelNormals = std::move(channelPart->texels);
         } else {
             free = combined->texels;
         }
-        if (NormalRingAcrossBorder(coverage)) {
+        if (mesh) {
+            // Across-border-only ring texels retain flat Hn and their own C (decision 287).
+            // Other ring texels copy a covered pair before the common clamped flood.
+            for (size_t t = 0; t < texels; ++t) {
+                if (coverage.covered[t] == 0) {
+                    heightNormals[t * 3] = 0.0f;
+                    heightNormals[t * 3 + 1] = 0.0f;
+                    heightNormals[t * 3 + 2] = 1.0f;
+                }
+            }
+            PadIslandNormal(coverage, heightNormals);
+            PadIslandNormal(coverage, channelNormals);
+        } else if (NormalRingAcrossBorder(coverage)) {
             // A flat height normal combined with the Normal channel (decision 287 §4).
             evaluator::VirtualNormalRequest request = normal;
             request.withoutMesh = true;
-            request.convention = freeConvention;
             request.heightPadding = [](std::vector<float>& heights) { std::fill(heights.begin(), heights.end(), 0.0f); };
             render::Result<evaluator::VirtualNormalResult> flat =
                 evaluator::EvaluateVirtualNormalOn(project, revision, request, templates, store, cache);
@@ -101,7 +116,7 @@ render::Result<VirtualMapResult> IslandNormalOn(const core::Project& project, st
                                                           free.begin() + static_cast<std::ptrdiff_t>(t * 3));
             }
         }
-        PadIslandNormal(coverage, free);
+        if (!mesh) PadIslandNormal(coverage, free);
         // 4. The uncovered texels: the padded normal, under the mesh map at the texel when one is bound.
         std::shared_ptr<const evaluator::DecodedImage> meshImage;
         if (mesh && normal.resources) {
@@ -119,15 +134,19 @@ render::Result<VirtualMapResult> IslandNormalOn(const core::Project& project, st
         std::vector<float>& out = result.values.values;
         for (size_t t = 0; t < texels; ++t) {
             if (coverage.covered[t] != 0) continue;
-            const std::array<float, 3> m{free[t * 3], free[t * 3 + 1], free[t * 3 + 2]};
-            std::array<float, 3> e = m;
+            std::array<float, 3> e{};
             if (mesh) {
                 const auto x = static_cast<uint32_t>(t % coverage.width);
                 const auto y = static_cast<uint32_t>(t / coverage.width);
                 std::array<float, 3> f{};
                 for (uint32_t c = 0; c < 3; ++c) f[c] = evaluator::arith::UnormOperand(meshImage->At(x, y, c) & 0xFFFFu, 16);
-                e = evaluator::MeshOnPaddedNormal(f, meshDirectX, m, normal.convention);
+                const std::array<float, 3> h{heightNormals[t * 3], heightNormals[t * 3 + 1], heightNormals[t * 3 + 2]};
+                const std::array<float, 3> c{channelNormals[t * 3], channelNormals[t * 3 + 1], channelNormals[t * 3 + 2]};
+                e = evaluator::MeshOnPaddedNormal(f, meshDirectX, h, c, normal.convention);
+                // Preserve the diagnostic marker until the Height-ring and border evidence closes.
                 ++result.undecided;
+            } else {
+                e = {free[t * 3], free[t * 3 + 1], free[t * 3 + 2]};
             }
             std::copy(e.begin(), e.end(), out.begin() + static_cast<std::ptrdiff_t>(t * 3));
         }

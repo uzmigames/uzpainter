@@ -36,7 +36,7 @@
 // With UZP_VNORMAL the kernel is one tile of a virtual normal map instead (height_to_normal.cpp,
 // VirtualNormalOp of tile_store.h): parameter block width, height, flags (bit 0 the height is
 // tiles, bit 1 the Normal channel is a tile, bit 2 the Sobel method, bit 3 the DirectX
-// convention, bit 4 the mesh map is a tile, bit 5 the mesh map is DirectX), destination UAV,
+// convention, bit 4 the mesh map is a tile, bit 5 the mesh map is DirectX, bits 6/7 raw Hn/C), destination UAV,
 // operand tables SRV, the constant height, the Normal channel's SRV (its root list from a
 // transparent start, encoding UZP_ENC with coverage) or constant rgb, the SRVs of the nine height
 // tiles around the tile (index (dy + 1) 3 + dx + 1), the mesh map's SRV, the z of the height
@@ -917,6 +917,8 @@ void main(uint3 id : SV_DispatchThreadID) {
 #define V_FLAG_DIRECTX 8u
 #define V_FLAG_MESH_TILE 16u
 #define V_FLAG_MESH_DIRECTX 32u
+#define V_FLAG_HEIGHT_COMPONENT 64u
+#define V_FLAG_CHANNEL_COMPONENT 128u
 
 // P of the GPU's arcsine and arccosine (hwmath.cpp AsinPolynomial).
 float AsinPolynomial(float a) {
@@ -1012,9 +1014,12 @@ void main(uint3 id : SV_DispatchThreadID) {
     }
     const float3 heightNormal = Normalise(v);
     const float3 combined = Normalise(Reoriented(mesh, heightNormal));
-    const float3 n = Normalise(Reoriented(combined, ChannelNormal(channel.xyz, channel.w)));
+    const float3 channelNormal = ChannelNormal(channel.xyz, channel.w);
+    const float3 n = Normalise(Reoriented(combined, channelNormal));
     const float ny = (flags & V_FLAG_DIRECTX) != 0u ? -n.y : n.y;
     float4 result = float4(Fma(n.x, 0.5f, 0.5f), Fma(ny, 0.5f, 0.5f), Fma(n.z, 0.5f, 0.5f), 1.0f);
+    if ((flags & V_FLAG_HEIGHT_COMPONENT) != 0u) result.xyz = heightNormal;
+    if ((flags & V_FLAG_CHANNEL_COMPONENT) != 0u) result.xyz = channelNormal;
     result.x = StoreChannel(result.x);
     result.y = StoreChannel(result.y);
     result.z = StoreChannel(result.z);

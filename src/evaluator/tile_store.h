@@ -104,7 +104,11 @@ struct LevelsOp {
 /// texel from the float32 height read-out of the tile and its eight neighbours (wrap-around at the
 /// set border), combined with the Normal channel, stored in `dst` as n / 2 + 1/2 (32-bit float,
 /// three channels, raw).
+enum class VirtualNormalComponent : uint8_t { Combined, Height, Channel };
+
 struct VirtualNormalOp {
+    /// Internal island-padding operand passes return raw unit vectors, without encoding.
+    VirtualNormalComponent component = VirtualNormalComponent::Combined;
     TileHandle dst = kNoTile;
     /// The grey 32-bit float height read-out tiles at tile offsets (dx, dy) in [-1, 1]^2, index
     /// (dy + 1) 3 + dx + 1, all of the dst's size; every entry kNoTile when the Height is the

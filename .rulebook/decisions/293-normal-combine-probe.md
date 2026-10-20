@@ -120,3 +120,37 @@ One Legacy golden at 256 px in OpenGL, from `recording_requests.padding_normal_c
 
 - **Once recorded, the Wand's Normal outside the islands can be made bit-exact.** Decision 276 items 4 (b) and 4 (c) can be fitted texel by texel. Decision 292 item 4 (f) then closes: the Wand's Normal ring and gutter go from within 1 code to bit-exact.
 - **What G1's Normal still needs after that** is the covered edge texels (decision 263's float32 Height ring), which item 2.7 owns.
+
+## Recording and fitted combination, 2026-10-20
+
+The recording is admitted by commit `8f9eac52`. Both sets repeat exactly in the same session
+and after save/reopen. The fitted uncovered-texel combination is:
+
+```text
+encode(normalise(RNM(normalise(RNM(decode(Fdest), Hn_seed)), C_seed)))
+```
+
+The unit Height vector `Hn` and coverage-adjusted Normal-channel vector `C` are padded
+separately. Combining the mesh map with the decoded, already combined mesh-free normal loses
+float32 information and gives different values. With no mesh map, the encoded normal remains
+the padded quantity.
+
+The diagnostic export now uses this order. `VirtualNormalComponent` separates Combined,
+Height and Channel reads in CPU/GPU evaluation and cache keys; raw component reads are not
+written to the persistent cache. Production refusals in decisions 245 and 259 and the diagnostic
+`undecided` count remain in force.
+
+Validation on the working tree after `8f9eac52`, from one `-j2` build:
+
+- `test_normal_combine_tier0.py`: four cases compare every texel with both repeats of r1 and
+  r2, for EXR32f and PNG16, with and without a mesh map; all 16 comparisons are exact.
+- Together with `test_island_normal.py` and the native CPU Height/Normal test: 8 passed,
+  no skips (`tmp/scratch/closure/normal-integrated-junit.xml`).
+- Native Height/Normal CPU/D3D12/Vulkan equality, including raw Hn/C and shared-cache repeats:
+  2 passed, no skips (`tmp/scratch/closure/normal-gpu-junit.xml`).
+- Export runner SHA-256: `482a81eab6618efbe4d73850ba6c43d05bc7c4ebbe35065269412fa9c936274a`.
+- Evaluator runner SHA-256: `06fbd73f98ad459ff8bfa22b45172bd6fa3a4693431c2dca971b4ddee158ed74`.
+
+These results establish this probe's combination rule. They do not establish Wand parity:
+the new Wand float recordings locate all 49 covered PNG Normal mismatches in Height-padding
+taps. The general seam metric remains open under `phase1.25_pilot-wand` item 2.7.

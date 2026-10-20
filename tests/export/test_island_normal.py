@@ -99,11 +99,17 @@ def combined(height: np.ndarray, mesh: np.ndarray | None) -> np.ndarray:
     return encoded(model.normalise(model.reoriented(base, flat)))
 
 
-def mesh_on_padded(mesh: np.ndarray, free: np.ndarray) -> np.ndarray:
-    """virtual_maps.h step 4: normalise(reoriented(decode(F), decode(M))), encoded in OpenGL."""
+def mesh_on_padded(mesh: np.ndarray, height: np.ndarray, covered: np.ndarray) -> np.ndarray:
+    """Decision 293: pad unit Hn/C independently, then combine with F at the destination."""
     f = model.decode((mesh[..., 0], mesh[..., 1], mesh[..., 2]))
-    m = model.decode((free[..., 0], free[..., 1], free[..., 2]))
-    return encoded(model.normalise(model.reoriented(f, m)))
+    h = np.stack(model.normalise(model.height_vector(height, "Sharp", SIZE)), axis=-1)
+    flat = np.zeros_like(h)
+    flat[..., 2] = F32(1)
+    h = padding_reference.island_normal(np.where(covered[..., None], h, flat), covered)
+    hn = (h[..., 0], h[..., 1], h[..., 2])
+    channel = (flat[..., 0], flat[..., 1], flat[..., 2])
+    base = model.normalise(model.reoriented(f, hn))
+    return encoded(model.normalise(model.reoriented(base, channel)))
 
 
 def bits(a: np.ndarray) -> np.ndarray:
@@ -213,15 +219,15 @@ def test_ring_texels_copy_the_nearest_covered_mesh_free_normal(sphere: dict[str,
 def test_gutter_floods_the_padded_normal_under_the_mesh_map(sphere: dict[str, Any]) -> None:
     """Decisions 197, 276 and 285: without a mesh map every gutter texel is its clamped-flood seed's
     padded normal; with one, every uncovered texel is the mesh map at that texel combined with the
-    same padded mesh-free normal (the best-known form of decision 276 items 4 (b), (c), decision
-    308), and each is counted as undecided. The Height keeps the export's own padding."""
+    separately padded Hn and C (decision 293), and each retains its diagnostic undecided
+    marker pending broader ring evidence. The Height keeps the export's own padding."""
     covered, gutter = sphere["covered"], sphere["gutter"]
     free = sphere["free"]["normal"]
     flat = combined(np.zeros((SIZE, SIZE), F32), None)
     expected = padding_reference.island_normal(np.where(covered[..., None], free, flat), covered)
     assert np.array_equal(bits(free[gutter]), bits(expected[gutter]))
     with_mesh = sphere["mesh"]["normal"]
-    combination = mesh_on_padded(sphere["mesh_operands"], free)
+    combination = mesh_on_padded(sphere["mesh_operands"], sphere["padded_height"], covered)
     assert np.array_equal(bits(with_mesh[~covered]), bits(combination[~covered]))
     assert sphere["mesh"]["written"]["uzp_sphere_n.exr"]["undecided"] == int((~covered).sum())
     assert sphere["mesh"]["written"]["uzp_sphere_h.exr"]["undecided"] == 0
