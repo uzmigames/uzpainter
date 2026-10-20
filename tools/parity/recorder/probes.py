@@ -31,7 +31,9 @@ polled until the step's asynchronous calls answered (`reload_mesh`, `execute_whe
 events to the next step's record. Further step arguments the host resolves: `work_file` (a file
 name in the recording's private work directory, the files of which are listed after every save
 step), and on `reload_modified_resources_async`, `rewrite_input` / `with_input` (the staged copy
-of one input is overwritten with another input's bytes just before the call). An
+of one input is overwritten with another input's bytes just before the call).
+`with_input_after_reopen` selects a different pinned input for that rewrite in r2, so repeated
+reloads can observe new content rather than a version already imported in r1. An
 `export_project_textures` step with `probe: true` is an export request among the probe steps:
 its result or error, then the files present in its directory once the step settled.
 
@@ -46,7 +48,7 @@ import base64
 import shutil
 import sys
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import cache
 from pathlib import Path
 from typing import Any
@@ -170,6 +172,7 @@ WORK_FILE = "work_file"
 SAVE_CALLS = frozenset({PROJECT_SAVE_AS, PROJECT_SAVE_AS_COPY, PROJECT_SAVE})
 # `reload_modified_resources_async`: the staged input to overwrite, and the input it becomes.
 REWRITE_ARGS = ("rewrite_input", "with_input")
+REWRITE_AFTER_REOPEN = "with_input_after_reopen"
 # `project.create` of an API probe (P21-A, P21-B; decision 110): mesh-map files (inputs whose id
 # is the file stem Painter reads, `<texture set>_<suffix>`), and folders the host makes in the
 # recording's private work directory for the default save and export paths.
@@ -302,6 +305,16 @@ def check_input_arg(step: Step, inputs: dict[str, Path]) -> None:
         )
     check_plugin_args(step)
     rewrite = [step.args.get(key) for key in REWRITE_ARGS]
+    if REWRITE_AFTER_REOPEN in step.args and (
+        step.call != RELOAD_RESOURCES
+        or not all(isinstance(value, str) and value in inputs for value in rewrite)
+        or not isinstance(step.args[REWRITE_AFTER_REOPEN], str)
+        or step.args[REWRITE_AFTER_REOPEN] not in inputs
+    ):
+        raise RecorderError(
+            f"step {step.step}: `{REWRITE_AFTER_REOPEN}` requires a reload rewrite "
+            "and must name an input"
+        )
     if step.call == RELOAD_RESOURCES and any(rewrite) and not all(r in inputs for r in rewrite):
         raise RecorderError(
             f"step {step.step}: `{REWRITE_ARGS[0]}` and `{REWRITE_ARGS[1]}` must both name "
@@ -726,6 +739,13 @@ def identity_outputs(session: PainterSession, uids: dict[str, int]) -> list[dict
     return outputs
 
 
+def step_for_recording(step: ProbeStep, condition: str) -> ProbeStep:
+    """Resolve a reload's staged replacement without changing the pinned instruction sequence."""
+    if condition != "after_save_reopen" or REWRITE_AFTER_REOPEN not in step.args:
+        return step
+    return replace(step, args={**step.args, "with_input": step.args[REWRITE_AFTER_REOPEN]})
+
+
 def record_probes(
     session: PainterSession,
     job: ProbeJob,
@@ -757,6 +777,7 @@ def record_probes(
     work_dir = directory / "work-files"
     closed: dict[str, Any] = {}
     for step in job.probe_steps:
+        step = step_for_recording(step, condition)
         if step.call == EXPORT:
             outputs += probe_export(session, job, step, template, directory)
             continue

@@ -1,0 +1,274 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/api-probes/p22b-reload-order-zam-all-origins",
+  "tier": "0",
+  "domain": "tier0/api-probes/p22b-reload-order-zam-all-origins",
+  "description": "Reload order diagnostic with three independent alias origins. Before each ProjectFilter reload, two SessionFilter calls rewrite the first two staged origins; the ProjectFilter call rewrites the third. Record every event and unchanged control without assuming SessionFilter behavior or result ordering. Two new byte versions follow save/reopen.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    },
+    {
+      "input_id": "zeta",
+      "kind": "image",
+      "path": "parity/fixtures/api-probes/checker-16.png",
+      "sha256": "4d1acf002ea180ad1af069b24c114ac41f58784b347174251b665673d7330126",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0",
+        "note": "Authored checker copied to staged zeta.png; one of three equal-content aliases."
+      }
+    },
+    {
+      "input_id": "alpha",
+      "kind": "image",
+      "path": "parity/fixtures/api-probes/checker-16.png",
+      "sha256": "4d1acf002ea180ad1af069b24c114ac41f58784b347174251b665673d7330126",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0",
+        "note": "Authored checker copied to staged alpha.png; one of three equal-content aliases."
+      }
+    },
+    {
+      "input_id": "mu",
+      "kind": "image",
+      "path": "parity/fixtures/api-probes/checker-16.png",
+      "sha256": "4d1acf002ea180ad1af069b24c114ac41f58784b347174251b665673d7330126",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0",
+        "note": "Authored checker copied to staged mu.png; one of three equal-content aliases."
+      }
+    },
+    {
+      "input_id": "reload-order-v1",
+      "kind": "image",
+      "path": "parity/fixtures/api-probes/reload-order-v1.png",
+      "sha256": "19b583281695a3fc863c7aae9d2a08591c98327a920774732102351237e31fc5",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0",
+        "note": "Authored 16x16 RGB8 constant image (17, 31, 47); unique reload version 1, copied byte-for-byte into staged alias origin."
+      }
+    },
+    {
+      "input_id": "reload-order-v2",
+      "kind": "image",
+      "path": "parity/fixtures/api-probes/reload-order-v2.png",
+      "sha256": "00b3ed1a9ef5d37743dc9b71ec65308d242119126b3785bef6b9c1cc1da804ca",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0",
+        "note": "Authored 16x16 RGB8 constant image (61, 79, 97); unique reload version 2, copied byte-for-byte into staged alias origin."
+      }
+    },
+    {
+      "input_id": "reload-order-v3",
+      "kind": "image",
+      "path": "parity/fixtures/api-probes/reload-order-v3.png",
+      "sha256": "8003f75f06a96780deea358224048f702025ddcc7b3fd9c7dd4d385e777a8a10",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0",
+        "note": "Authored 16x16 RGB8 constant image (113, 131, 149); unique reload version 3, copied byte-for-byte into staged alias origin."
+      }
+    },
+    {
+      "input_id": "reload-order-v4",
+      "kind": "image",
+      "path": "parity/fixtures/api-probes/reload-order-v4.png",
+      "sha256": "1f6f10ef173c52042d24c69df4a167a743d00b6e6f02804b4a1bd1b6771bd9a7",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0",
+        "note": "Authored 16x16 RGB8 constant image (163, 181, 199); unique reload version 4, copied byte-for-byte into staged alias origin."
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.event.Dispatcher.connect",
+        "args": {
+          "events": [
+            "ReloadResourcesStarted",
+            "ReloadResourcesEnded"
+          ]
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": {
+          "image": "zeta",
+          "usage": "TEXTURE"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": {
+          "image": "alpha",
+          "usage": "TEXTURE"
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": {
+          "image": "mu",
+          "usage": "TEXTURE"
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.resource.reload_modified_resources_async",
+        "args": {
+          "filter": "SessionFilter",
+          "rewrite_input": "zeta",
+          "with_input": "reload-order-v1",
+          "with_input_after_reopen": "reload-order-v3",
+          "probe": true
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.resource.reload_modified_resources_async",
+        "args": {
+          "filter": "SessionFilter",
+          "rewrite_input": "alpha",
+          "with_input": "reload-order-v1",
+          "with_input_after_reopen": "reload-order-v3",
+          "probe": true
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.resource.reload_modified_resources_async",
+        "args": {
+          "filter": "ProjectFilter",
+          "rewrite_input": "mu",
+          "with_input": "reload-order-v1",
+          "with_input_after_reopen": "reload-order-v3",
+          "probe": true
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.resource.reload_modified_resources_async",
+        "args": {
+          "filter": "SessionFilter",
+          "rewrite_input": "zeta",
+          "with_input": "reload-order-v2",
+          "with_input_after_reopen": "reload-order-v4",
+          "probe": true
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.resource.reload_modified_resources_async",
+        "args": {
+          "filter": "SessionFilter",
+          "rewrite_input": "alpha",
+          "with_input": "reload-order-v2",
+          "with_input_after_reopen": "reload-order-v4",
+          "probe": true
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.resource.reload_modified_resources_async",
+        "args": {
+          "filter": "ProjectFilter",
+          "rewrite_input": "mu",
+          "with_input": "reload-order-v2",
+          "with_input_after_reopen": "reload-order-v4",
+          "probe": true
+        }
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.resource.reload_modified_resources_async",
+        "args": {
+          "filter": "ProjectFilter",
+          "probe": true
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.1.5",
+      "build_id": "12.1.5+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "5bde89e251f881e7660ad5396c7a74776b029db8614c807d650b13e6d202369c",
+      "size_bytes": 63456
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "d280ec54fc433278419447fd2f5d6590c01f444ccfb4fa2dd7c63041e0d3b671",
+      "size_bytes": 402
+    },
+    {
+      "record_id": "source-repeat1",
+      "kind": "private_oracle_record",
+      "sha256": "939abd6f309b88ac4d5da244cf28c83ef09ad3d9e55599e494afca2ec4c099a0",
+      "size_bytes": 22826
+    },
+    {
+      "record_id": "source-repeat2",
+      "kind": "private_oracle_record",
+      "sha256": "f956b89b40c401e8d9305eeeeae2c3e950ae14ffb6851518af6545df8da29898",
+      "size_bytes": 22826
+    },
+    {
+      "record_id": "source-repeat3",
+      "kind": "private_oracle_record",
+      "sha256": "6bd22cfc103eb503cd3b529f9ed37ad7d6f4c170132732f94e660744733c4b8a",
+      "size_bytes": 22826
+    }
+  ]
+}

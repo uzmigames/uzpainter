@@ -1,0 +1,171 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/api-probes/p22b-mesh-map-alias-update",
+  "tier": "0",
+  "domain": "tier0/api-probes/p22b-mesh-map-alias-update",
+  "description": "Mesh-map alias update diagnostic: import identical authored bytes as old and alias, and distinct bytes as new. Bind AO to old and Thickness to alias. Observe update_layer_stack_resource(old, old) as a no-op control, then update_layer_stack_resource(old, new), with return values, errors and events for both state steps. Read AO and Thickness immediately after the updates and after automatic save/reopen. Updates run only in the original context; the reopened recording verifies persisted binding identities without stale handles. No assumption is made about replacement by alias identity versus shared content.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    },
+    {
+      "input_id": "mesh-map-old",
+      "kind": "image",
+      "path": "parity/fixtures/api-probes/mask-left-half.png",
+      "sha256": "f5d8e7f1c0bc3b577833422141afee43682f1b1fe28696e51de48e3031ccc724",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0",
+        "note": "16x16 8-bit grey: left half 255, right half 0."
+      }
+    },
+    {
+      "input_id": "mesh-map-alias",
+      "kind": "image",
+      "path": "parity/fixtures/api-probes/mask-left-half.png",
+      "sha256": "f5d8e7f1c0bc3b577833422141afee43682f1b1fe28696e51de48e3031ccc724",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0",
+        "note": "16x16 8-bit grey: left half 255, right half 0. Second staged name for identical authored bytes."
+      }
+    },
+    {
+      "input_id": "mesh-map-new",
+      "kind": "image",
+      "path": "parity/fixtures/api-probes/ao-white.png",
+      "sha256": "c73222e9295248c64101f2de610f4bc02a512b5600fb7de720840d10bdb13c91",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0",
+        "note": "16x16 8-bit grey, all 255."
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.event.Dispatcher.connect",
+        "args": {
+          "events": [
+            "LayerStacksModelDataChanged",
+            "BusyStatusChanged"
+          ]
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": {
+          "image": "mesh-map-old",
+          "usage": "TEXTURE"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": {
+          "image": "mesh-map-alias",
+          "usage": "TEXTURE"
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": {
+          "image": "mesh-map-new",
+          "usage": "TEXTURE"
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.textureset.TextureSet.set_mesh_map_resource",
+        "args": {
+          "usage": "AO",
+          "resource_step": 3
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.textureset.TextureSet.set_mesh_map_resource",
+        "args": {
+          "usage": "Thickness",
+          "resource_step": 4
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.resource.update_layer_stack_resource",
+        "args": {
+          "resource_step": 3,
+          "new_resource_step": 3
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.resource.update_layer_stack_resource",
+        "args": {
+          "resource_step": 3,
+          "new_resource_step": 5
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.textureset.TextureSet.get_mesh_map_resource",
+        "args": {
+          "usage": "AO"
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.textureset.TextureSet.get_mesh_map_resource",
+        "args": {
+          "usage": "Thickness"
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.1.5",
+      "build_id": "12.1.5+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": []
+}

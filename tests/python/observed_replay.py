@@ -71,6 +71,7 @@ from tools.parity.recorder.probes import (
     ProbeStep,
     plugin_root,
     probe_job_from_manifest,
+    step_for_recording,
 )
 from tools.parity.recorder.texture import export_roots
 
@@ -306,7 +307,7 @@ def record(condition, first, uids):
     directory = RUN + "/" + PAYLOAD["recordings"][condition]
     work_dir = directory + "/work-files"
     closed = {}
-    for step in PAYLOAD["probes"]:
+    for step in PAYLOAD["probes"][condition]:
         if step["call"] == PAYLOAD["export"]:
             outputs.update(probe_export(step, condition))
             continue
@@ -382,9 +383,12 @@ result = {"defaults": defaults, "same_session": same_session, "after_save_reopen
 RECORDINGS = {"same_session": "r1", "after_save_reopen": "r2"}
 
 
-def step_payload(step: ProbeStep, staged: dict[str, Path], run: Path) -> dict[str, Any]:
+def step_payload(
+    step: ProbeStep, staged: dict[str, Path], run: Path, condition: str = "same_session"
+) -> dict[str, Any]:
     """A state or probe step as the script runs it: the staged input paths resolved, and for
     `Shelves.add` the staged inputs it copies into its folder."""
+    step = step_for_recording(step, condition)
     resolved: dict[str, str] = {}
     key = INPUT_ARGS.get(step.call)
     if key is not None and key in step.args:
@@ -470,12 +474,14 @@ def replay_observed(
         o["values"] for o in golden["recordings"][0]["outputs"] if o["kind"] == "template_capture"
     )
     roots = [ts if not st else f"{ts}/{st}" for ts, st in export_roots(template)]
-    probes: list[dict[str, Any]] = []
-    for step in job.probe_steps:
-        payload = step_payload(step, staged, run)
-        if step.call == EXPORT:
-            payload["exports"] = probe_export_payload(step, run, roots)
-        probes.append(payload)
+    probes: dict[str, list[dict[str, Any]]] = {}
+    for condition in RECORDINGS:
+        probes[condition] = []
+        for step in job.probe_steps:
+            payload = step_payload(step, staged, run, condition)
+            if step.call == EXPORT:
+                payload["exports"] = probe_export_payload(step, run, roots)
+            probes[condition].append(payload)
     captures = {
         condition: {
             f"{export.step}/{out.name}": dataclasses.replace(export, maps=(out,)).config(

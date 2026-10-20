@@ -246,7 +246,110 @@ def test_a_rewrite_names_two_inputs() -> None:
         probe_job_from_manifest(manifest)
 
 
+@pytest.mark.parametrize("replacement", ["missing", None, [], 7])
+def test_after_reopen_rewrite_requires_a_pinned_input(replacement: Any) -> None:
+    manifest = load_json(REQUEST_DIR / "p22b-reload-order-zam.json")
+    manifest["instruction_sequence"]["steps"][5]["args"]["with_input_after_reopen"] = replacement
+    with pytest.raises(RecorderError, match="requires a reload rewrite and must name an input"):
+        probe_job_from_manifest(manifest)
+
+
+@pytest.mark.parametrize("removed", ["rewrite_input", "with_input"])
+def test_after_reopen_rewrite_requires_the_original_rewrite(removed: str) -> None:
+    manifest = load_json(REQUEST_DIR / "p22b-reload-order-zam.json")
+    del manifest["instruction_sequence"]["steps"][5]["args"][removed]
+    with pytest.raises(RecorderError, match="requires a reload rewrite and must name an input"):
+        probe_job_from_manifest(manifest)
+
+
+@pytest.mark.parametrize("all_origins", [False, True])
+@pytest.mark.parametrize("order", ["zam", "mza"])
+def test_reload_order_requests_copy_distinct_bytes_after_reopen(
+    probe_fake: types.ModuleType,
+    fake: types.ModuleType,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    order: str,
+    all_origins: bool,
+) -> None:
+    monkeypatch.delenv("OCIO", raising=False)
+    monkeypatch.delenv("PAINTER_ACE_CONFIG", raising=False)
+    suffix = "-all-origins" if all_origins else ""
+    job = load_probe_job(REQUEST_DIR / f"p22b-reload-order-{order}{suffix}.json")
+    assert manifest_symbol_problems(job.manifest) == []
+    assert job.observed and not job.exports and job.manifest["private_records"] == []
+    names = [step.args["image"] for step in job.state_steps[1:]]
+    assert names == ({"zam": ["zeta", "alpha", "mu"], "mza": ["mu", "zeta", "alpha"]}[order])
+    variants = [job.inputs[f"reload-order-v{i}"].read_bytes() for i in range(1, 5)]
+    assert len(set(variants)) == 4
+    assert len({job.inputs[name].read_bytes() for name in names}) == 1
+    session = session_on(probe_fake, fake)
+    original_call = session.call
+    roots: list[Path] = []
+    copied: list[tuple[str, bytes]] = []
+
+    def call(operation: str, **kwargs: Any) -> Any:
+        if operation == "probe_reset":
+            roots.append(Path(kwargs["root"]))
+        if operation == "probe_step" and "rewrite_input" in kwargs["args"]:
+            args = kwargs["args"]
+            staged = roots[-1] / "inputs" / f"{args['rewrite_input']}.png"
+            copied.append((args["with_input"], staged.read_bytes()))
+        return original_call(operation, **kwargs)
+
+    monkeypatch.setattr(session, "call", call)
+    run = record_probe_golden(session, job, tmp_path / "work", tmp_path / "inbox")
+    data = json.loads((run / "record.json").read_text(encoding="utf-8"))
+    assert record_problems(data) == []
+    assert [r["condition"] for r in data["recordings"]] == ["same_session", "after_save_reopen"]
+    repetitions = 3 if all_origins else 1
+    assert copied == [
+        (f"reload-order-v{i}", variants[i - 1])
+        for i in range(1, 5) for _ in range(repetitions)
+    ]
+    assert [s.args.get("with_input") for s in job.probe_steps] == [
+        *(["reload-order-v1"] * repetitions),
+        *(["reload-order-v2"] * repetitions), None,
+    ]
+    if all_origins:
+        assert [s.args["filter"] for s in job.probe_steps] == [
+            "SessionFilter", "SessionFilter", "ProjectFilter",
+            "SessionFilter", "SessionFilter", "ProjectFilter", "ProjectFilter",
+        ]
+        assert [s.args.get("rewrite_input") for s in job.probe_steps] == [
+            *names, *names, None,
+        ]
+    for recording in data["recordings"]:
+        outputs = {o["output_id"]: o for o in recording["outputs"]}
+        for step in range(6, 13 if all_origins else 9):
+            assert event_names(outputs[f"s{step}/events"]) == [
+                "ReloadResourcesStarted", "ReloadResourcesEnded"
+            ]
+
+
 # --- recording against the fake -----------------------------------------------------------
+
+
+def test_mesh_map_alias_request_distinguishes_names_from_shared_content() -> None:
+    job = load_probe_job(REQUEST_DIR / "p22b-mesh-map-alias-update.json")
+    assert manifest_symbol_problems(job.manifest) == []
+    assert job.observed and not job.exports and job.manifest["private_records"] == []
+    assert [s.step for s in job.state_steps] == list(range(2, 10))
+    assert [s.step for s in job.probe_steps] == [10, 11]
+    inputs = {i["input_id"]: i for i in job.manifest["inputs"]}
+    assert inputs["mesh-map-old"]["sha256"] == inputs["mesh-map-alias"]["sha256"]
+    assert inputs["mesh-map-old"]["sha256"] != inputs["mesh-map-new"]["sha256"]
+    steps = {s.step: s for s in (*job.state_steps, *job.probe_steps)}
+    assert [steps[s].args["image"] for s in (3, 4, 5)] == [
+        "mesh-map-old", "mesh-map-alias", "mesh-map-new"
+    ]
+    assert [(steps[s].args["usage"], steps[s].args["resource_step"]) for s in (6, 7)] == [
+        ("AO", 3), ("Thickness", 4)
+    ]
+    assert steps[8].args == {"resource_step": 3, "new_resource_step": 3}
+    assert steps[9].args == {"resource_step": 3, "new_resource_step": 5}
+    assert [steps[s].args["usage"] for s in (10, 11)] == ["AO", "Thickness"]
+    assert all(steps[s].call.endswith("get_mesh_map_resource") for s in (10, 11))
 
 
 @pytest.mark.parametrize("path", PROBES, ids=lambda p: p.stem)
