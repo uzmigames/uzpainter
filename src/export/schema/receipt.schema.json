@@ -306,6 +306,9 @@
         "uztexture": {
           "$ref": "#/$defs/uztexture_derivative"
         },
+        "dds": {
+          "$ref": "#/$defs/dds_derivative"
+        },
         "uzmat": {
           "$ref": "#/$defs/uzmat_material"
         }
@@ -442,6 +445,154 @@
               "required": [
                 "uztexture"
               ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "format": {
+                "const": "dds"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "dds"
+            ],
+            "properties": {
+              "bit_depth": {
+                "const": "8"
+              },
+              "colour_space": {
+                "enum": [
+                  "linear",
+                  "sRGB"
+                ]
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "dds"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "dds_derivative": {
+      "description": "Lossy DDS DX10 derivative of canonical PNG16 source. The receipt file layout/channels describe the canonical mapping; stored_channels names the compressed storage components. The hash covers the entire DDS, including its header and every mip.",
+      "type": "object",
+      "required": [
+        "source",
+        "format",
+        "srgb",
+        "mips",
+        "encoder",
+        "settings",
+        "stored_channels",
+        "lossy"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/delivery_path"
+        },
+        "format": {
+          "enum": [
+            "BC5",
+            "BC7",
+            "BC7_SRGB"
+          ]
+        },
+        "srgb": {
+          "type": "boolean"
+        },
+        "mips": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32
+        },
+        "encoder": {
+          "type": "string",
+          "minLength": 1
+        },
+        "settings": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stored_channels": {
+          "enum": [
+            [
+              "R",
+              "G"
+            ],
+            [
+              "R",
+              "G",
+              "B",
+              "A"
+            ]
+          ]
+        },
+        "lossy": {
+          "const": true
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "format": {
+                "const": "BC5"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "stored_channels": {
+                "const": [
+                  "R",
+                  "G"
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "stored_channels": {
+                "const": [
+                  "R",
+                  "G",
+                  "B",
+                  "A"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "format": {
+                "const": "BC7_SRGB"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "srgb": {
+                "const": true
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "srgb": {
+                "const": false
+              }
             }
           }
         }

@@ -459,6 +459,54 @@ json::Object BuildReceipt(const ReceiptInputs& in) {
             outputs.emplace_back(derivedKey);
             maps[derivedKey] = json::Object{{"resolution", derivedSize}, {"bit_depth", 8}, {"color_space", derivedSpace}};
         }
+        if (const std::optional<EncodedDds>& derivative = encoded.dds) {
+            const DdsOutput& planned = *file.dds;
+            const std::string derivedSha = core::Sha256Hex(derivative->bytes);
+            const std::string derivedKey = ManifestKey(planned.relativePath, used);
+            const bool srgb = BcIsSrgb(planned.format);
+            const std::string derivedSpace = srgb ? "sRGB" : "linear";
+            json::Array derivedGaps = ConsumerGaps(file);
+            for (const json::Value& item : derivedGaps) {
+                openItems.emplace_back(planned.relativePath + ": " +
+                                       std::get<std::string>(std::get<json::Object>(item.data).at("gap").data));
+            }
+            // The mapping describes the canonical source; BC5 stores only its R and G.
+            json::Array storedChannels{"R", "G"};
+            if (planned.format != BcFormat::Bc5) {
+                storedChannels.emplace_back("B");
+                storedChannels.emplace_back("A");
+            }
+            files.push_back(json::Object{
+                {"path", planned.relativePath},
+                {"key", derivedKey},
+                {"root_path", file.rootPath},
+                {"preset", file.preset},
+                {"bytes", static_cast<std::int64_t>(derivative->bytes.size())},
+                {"sha256", derivedSha},
+                {"format", "dds"},
+                {"bit_depth", "8"},
+                {"colour_space", derivedSpace},
+                {"size", size},
+                {"layout", std::string(FileLayoutName(derivative->layout))},
+                {"channels", ChannelsJson(in.project, file, derivative->layout, false)},
+                {"normal", NormalJson(encoded.normalTag)},
+                {"consumer_gaps", std::move(derivedGaps)},
+                {"dds", json::Object{{"source", planned.canonical},
+                                      {"format", derivative->format},
+                                      {"srgb", srgb},
+                                      {"mips", static_cast<std::int64_t>(derivative->mips)},
+                                      {"encoder", derivative->encoder},
+                                      {"settings", derivative->settings},
+                                      {"stored_channels", std::move(storedChannels)},
+                                      {"lossy", true}}},
+            });
+            manifestFiles[derivedKey] = json::Object{{"path", "files/" + planned.relativePath},
+                                                     {"role", "map"},
+                                                     {"sha256", Sha256Field(derivedSha, true)},
+                                                     {"bytes", static_cast<std::int64_t>(derivative->bytes.size())}};
+            outputs.emplace_back(derivedKey);
+            maps[derivedKey] = json::Object{{"resolution", size}, {"bit_depth", 8}, {"color_space", derivedSpace}};
+        }
         // The `.uzmat` written after this file (write.h `EncodedUzMaterial`): its textures, blend,
         // the inline scene-material block and the writer's consumer gaps.
         if (const std::optional<EncodedUzMaterial>& material = encoded.material) {

@@ -8,6 +8,9 @@
 //       [paths]]]} (the dry run), {"plan": PlanJson, "list_error": text} (the dry run raises
 //       ValueError: CheckExportable) or {"error": class, "message": text}, class `ValueError` or
 //       `NotYetSupported`.
+//       Optional "dds": [{"path": relativePath, "format": BcFormat ordinal,
+//       "mips": DerivativeMips ordinal}] requests DDS after plan compilation.
+//       `publish` and `export` also accept --dds <requests.json> with this array.
 //   uzp-export-tests files <templates dir> <spec.json> <config.json> <out dir>
 //       Builds the project of an evaluator spec, compiles the configuration and evaluates every
 //       planned file on the CPU store (`EvaluateFileOn`); writes <out>/index.json and one raw
@@ -296,6 +299,16 @@ json::Value ListJson(const std::vector<exporter::StackFiles>& list) {
     return out;
 }
 
+void ApplyDdsRequests(exporter::ExportPlan& plan, const core::Project& project,
+                      const json::Value& value) {
+    for (const auto& entry : Arr(value, "dds")) {
+        const auto& request = Obj(entry, "dds request");
+        exporter::RequestDds(plan, project, Str(Key(request, "path"), "dds path"),
+            static_cast<exporter::BcFormat>(static_cast<unsigned>(Num(Key(request, "format"), "dds format"))),
+            static_cast<exporter::DerivativeMips>(static_cast<unsigned>(Num(Key(request, "mips"), "dds mips"))));
+    }
+}
+
 int RunPlan(const fs::path& casesPath) {
     const json::Value cases = json::Parse(ReadText(casesPath));
     for (const json::Value& c : Arr(cases, "cases")) {
@@ -316,6 +329,7 @@ int RunPlan(const fs::path& casesPath) {
                     exporter::RequestUzTextureNormal(plan, Str(path, "uztexture"));
                 }
             }
+            if (o.contains("dds")) ApplyDdsRequests(plan, project, o.at("dds"));
             result["plan"] = exporter::PlanJson(plan);
             try {
                 exporter::CheckExportable(plan);
@@ -592,11 +606,13 @@ int RunFiles(const fs::path& templatesDir, const fs::path& specPath, const fs::p
 
 // ── Writers (phase1.16) ─────────────────────────────────────────────────────
 
-int RunExport(const fs::path& templatesDir, const fs::path& specPath, const fs::path& configPath) {
+int RunExport(const fs::path& templatesDir, const fs::path& specPath, const fs::path& configPath,
+              const std::optional<fs::path>& dds = std::nullopt) {
     const Spec spec = ParseSpec(specPath);
     json::Object result;
     try {
-        const exporter::ExportPlan plan = exporter::CompilePlan(spec.project, ReadText(configPath));
+        exporter::ExportPlan plan = exporter::CompilePlan(spec.project, ReadText(configPath));
+        if (dds) ApplyDdsRequests(plan, spec.project, json::Parse(ReadText(*dds)));
         auto templates = std::make_shared<const evaluator::TemplateLibrary>(evaluator::TemplateLibrary::Load(templatesDir));
         evaluator::CpuEvaluator cpu(templates, evaluator::AdmissionLimits{64ull << 30, 1 << 20});
         exporter::SourceInputs inputs;
@@ -1105,7 +1121,8 @@ json::Object FailureJson(const render::Error& error) {
 }
 
 int RunPublish(const fs::path& templatesDir, const fs::path& specPath, const fs::path& configPath,
-               const std::optional<std::string>& uztexture, const std::optional<fs::path>& presets) {
+               const std::optional<std::string>& uztexture, const std::optional<fs::path>& presets,
+               const std::optional<fs::path>& dds) {
     Spec spec = ParseSpec(specPath);
     const json::Value document = json::Parse(ReadText(specPath));
     const json::Object& o = Obj(document, "spec");
@@ -1138,6 +1155,7 @@ int RunPublish(const fs::path& templatesDir, const fs::path& specPath, const fs:
                                                          : exporter::ParseNegativeZPolicy(uztexture->substr(colon + 1));
             exporter::RequestUzTextureNormal(plan, uztexture->substr(0, colon), policy);
         }
+        if (dds) ApplyDdsRequests(plan, spec.project, json::Parse(ReadText(*dds)));
         auto templates = std::make_shared<const evaluator::TemplateLibrary>(evaluator::TemplateLibrary::Load(templatesDir));
         evaluator::CpuEvaluator cpu(templates, evaluator::AdmissionLimits{64ull << 30, 1 << 20});
         exporter::SourceInputs inputs;
@@ -1425,13 +1443,15 @@ int main(int argc, char** argv) {
         if (args.size() >= 4 && args.size() % 2 == 0 && args[0] == "publish") {
             std::optional<std::string> uztexture;
             std::optional<fs::path> presets;
+            std::optional<fs::path> dds;
             bool known = true;
             for (size_t i = 4; i < args.size(); i += 2) {
                 if (args[i] == "--uztexture") uztexture = args[i + 1];
                 else if (args[i] == "--presets") presets = fs::path(args[i + 1]);
+                else if (args[i] == "--dds") dds = fs::path(args[i + 1]);
                 else known = false;
             }
-            if (known) return RunPublish(args[1], args[2], args[3], uztexture, presets);
+            if (known) return RunPublish(args[1], args[2], args[3], uztexture, presets, dds);
         }
         if (args.size() == 3 && args[0] == "fixed-copy") return RunFixedCopy(args[1], args[2]);
         if (args.size() == 3 && args[0] == "project") return RunProject(args[1], args[2]);
@@ -1452,6 +1472,9 @@ int main(int argc, char** argv) {
         if (args.size() == 2 && args[0] == "plan") return RunPlan(args[1]);
         if (args.size() == 5 && args[0] == "files") return RunFiles(args[1], args[2], args[3], args[4]);
         if (args.size() == 4 && args[0] == "export") return RunExport(args[1], args[2], args[3]);
+        if (args.size() == 6 && args[0] == "export" && args[4] == "--dds") {
+            return RunExport(args[1], args[2], args[3], fs::path(args[5]));
+        }
         if (args.size() == 4 && args[0] == "export-diagnostic") return RunExportDiagnostic(args[1], args[2], args[3]);
         if (args.size() == 2 && args[0] == "reencode") return RunReencode(args[1]);
         if (args.size() == 2 && args[0] == "roundtrip") return RunRoundtrip(args[1]);
@@ -1468,7 +1491,7 @@ int main(int argc, char** argv) {
                  "export <templates> <spec.json> <config.json> | "
                  "export-diagnostic <templates> <spec.json> <config.json> | reencode <list.txt> | roundtrip <out> | "
                  "[--fault <point>[:<n>]] publish <templates> <spec.json> <config.json> "
-                 "[--uztexture <relativePath>[:fail|:rgb]] [--presets <dir>] | "
+                 "[--uztexture <relativePath>[:fail|:rgb]] [--presets <dir>] [--dds <requests.json>] | "
                  "[--fault <point>[:<n>]] fixed-copy <exportPath> <dir> | consume-pinned <exportPath> | "
                  "consume-locked <exportPath> <dir> | receipt <project.json> <config.json> | hold-lock <exportPath> <ms> | recover --recover <exportPath> [--fixed-names <dir>]... | "
                  "presets <preset dir> <references.json> | aliases\n";

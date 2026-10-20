@@ -68,6 +68,7 @@
 
 #include "evaluator/diagnostics.h"
 #include "export/config.h"
+#include "export/bc_encoder.h"
 #include "export/virtual_maps.h"
 #include "uzp_core/manifest/json.h"
 #include "uzp_core/types/enums.h"
@@ -147,6 +148,16 @@ struct UzTextureOutput {
     std::string canonical;
 };
 
+/// Explicit native DDS derivative, never a Painter configuration field. The file itself is
+/// its retained PNG16 canonical companion; Normal uses the DirectX virtual map unchanged.
+struct DdsOutput {
+    std::string relativePath;
+    std::string path;
+    std::string canonical;
+    BcFormat format = BcFormat::Bc7;
+    DerivativeMips mips = DerivativeMips::linear;
+};
+
 /// A `.uzmat` of a UzEngine preset (`UzEngineMaterial`; uzmat_writer.h), planned for one stack: at
 /// the delivery root, binding the stack's albedo, normal, ORM and emissive derivatives (and its
 /// height derivative, when there is one). It is written after plan file `after`, its stack's last.
@@ -196,6 +207,7 @@ struct PlannedFile {
     /// Written beside the file: set by CompilePlan for a UzEngine preset's target, or requested
     /// (`RequestUzTextureNormal`).
     std::optional<UzTextureOutput> uztexture;
+    std::optional<DdsOutput> dds;
 };
 
 /// Why the export writes no file for a preset map of a stack (decision 091).
@@ -257,6 +269,13 @@ struct PlanContext {
 void RequestUzTextureNormal(ExportPlan& plan, std::string_view relativePath,
                             NegativeZPolicy policy = NegativeZPolicy::fail);
 
+/// Adds a DDS companion to a canonical PNG16 file, validates its colour transfer and normal
+/// source against project, and rehashes the plan. Invalid requests leave the plan unchanged.
+/// BC5 is bounded to RGB Normal_DirectX; BC7 accepts linear data or sRGB colour. Normal mip
+/// filtering requires RGB Normal_DirectX for either format. No preset or Painter API is implied.
+void RequestDds(ExportPlan& plan, const core::Project& project, std::string_view relativePath,
+                BcFormat format, DerivativeMips mips);
+
 /// Throws `core::ValueError` naming the first `export_error` map of `plan` when the plan writes no
 /// file: Painter's export of that configuration raises ValueError, and so do the dry run and the
 /// export, before anything is written (probes P12, P13, decision 091). With files to write it
@@ -276,9 +295,9 @@ struct StackFiles {
     friend bool operator==(const StackFiles&, const StackFiles&) = default;
 };
 
-/// The plan's files grouped by (texture set, stack) in first-appearance order: Painter's
-/// `list_project_textures` result. A file's `.uztexture` derivative follows it, and a `.uzmat`
-/// follows its stack's last file.
+/// The plan's files grouped by (texture set, stack) in first-appearance order, for dry runs.
+/// Each canonical file is followed by its optional `.uztexture`, then its optional DDS; a
+/// `.uzmat` follows its stack's last file and derivatives. DDS is an explicit native extension.
 [[nodiscard]] std::vector<StackFiles> FilesByStack(const ExportPlan& plan);
 
 /// The dry run: the files `export_project_textures(json_config)` writes on `project`, grouped as

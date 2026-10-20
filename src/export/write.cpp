@@ -1,6 +1,7 @@
 #include "export/write.h"
 
 #include "export/encode.h"
+#include "export/cook_dds.h"
 #include "export/padding.h"
 #include "export/uzmat_writer.h"
 #include "export/uztexture_writer.h"
@@ -39,6 +40,46 @@ struct CanonicalSamples {
     FileLayout layout = FileLayout::RGB;
     std::vector<uint16_t> samples;
 };
+
+EncodedDds CookDdsDerivative(const PlannedFile& file, const CanonicalSamples& canonical) {
+    const DdsOutput& output = *file.dds;
+    const size_t texels = size_t{file.width} * file.height;
+    const size_t channels = canonical.layout == FileLayout::L ? 1 : canonical.layout == FileLayout::LA ? 2
+                           : canonical.layout == FileLayout::RGB ? 3 : 4;
+    if (canonical.samples.size() != texels * channels) {
+        throw std::invalid_argument("DDS canonical samples do not match their PNG16 layout");
+    }
+    Rgba16Image image{file.width, file.height, {}};
+    image.rgba.reserve(texels * 4);
+    for (size_t t = 0; t < texels; ++t) {
+        const uint16_t* v = &canonical.samples[t * channels];
+        switch (channels) {
+            case 1: image.rgba.insert(image.rgba.end(), {v[0], v[0], v[0], 65535}); break;
+            case 2: image.rgba.insert(image.rgba.end(), {v[0], v[0], v[0], v[1]}); break;
+            case 3: image.rgba.insert(image.rgba.end(), {v[0], v[1], v[2], 65535}); break;
+            default: image.rgba.insert(image.rgba.end(), {v[0], v[1], v[2], v[3]}); break;
+        }
+    }
+    DdsSpec spec;
+    spec.format = output.format;
+    switch (output.mips) {
+        case DerivativeMips::linear: spec.mips.mapClass = MipClass::Linear; break;
+        case DerivativeMips::normal: spec.mips.mapClass = MipClass::Normal; break;
+        case DerivativeMips::colour: spec.mips.mapClass = MipClass::Colour; break;
+        case DerivativeMips::masked_colour: spec.mips.mapClass = MipClass::MaskedColour; break;
+        default: throw std::invalid_argument("DDS has an invalid mip class");
+    }
+    const BcEncoder& encoder = EtcpakEncoder();
+    const Dds texture = CookDds(encoder, image, spec, 0);
+    EncodedDds cooked;
+    cooked.bytes.assign(texture.bytes.begin(), texture.bytes.end());
+    cooked.format = std::string(BcFormatName(output.format));
+    cooked.layout = canonical.layout;
+    cooked.mips = static_cast<uint32_t>(texture.metadata.mips.size());
+    cooked.encoder = std::string(encoder.Name());
+    cooked.settings = std::string(encoder.Settings(output.format));
+    return cooked;
+}
 
 /// The `.uztexture` derivative of `file` from its canonical file's PNG 16 samples
 /// (`EncodedUzTexture`), or the negative-Z refusal of policy `fail`.
@@ -215,6 +256,13 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
     for (size_t i = 0; i < plan.files.size(); ++i) canonicalIndex.emplace(plan.files[i].relativePath, i);
     std::map<size_t, CanonicalSamples> canonicals;
     for (const PlannedFile& file : plan.files) {
+        if (file.dds) {
+            const auto it = canonicalIndex.find(file.dds->canonical);
+            if (it == canonicalIndex.end() || file.dds->canonical != file.relativePath) {
+                return ExportFail("DDS must retain its own canonical PNG16 file in the plan");
+            }
+            canonicals.emplace(it->second, CanonicalSamples{});
+        }
         if (!file.uztexture) continue;
         const auto it = canonicalIndex.find(file.uztexture->canonical);
         if (it == canonicalIndex.end()) {
@@ -259,6 +307,13 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
     // The derivatives, each from its canonical file's samples, then the materials that bind them.
     for (size_t i = 0; i < plan.files.size(); ++i) {
         const PlannedFile& file = plan.files[i];
+        if (file.dds) {
+            try {
+                encoded[i].dds = CookDdsDerivative(file, canonicals.at(i));
+            } catch (const std::exception& e) {
+                return ExportFail("cooking " + file.dds->relativePath + " failed: " + e.what());
+            }
+        }
         if (!file.uztexture) continue;
         const size_t c = canonicalIndex.at(file.uztexture->canonical);
         try {
@@ -306,6 +361,9 @@ render::Result<std::vector<WrittenFile>> WriteExport(const core::Project& projec
         render::Result<void> done = write(file.rootPath, file.relativePath, (*encoded)[i].bytes);
         if (done && (*encoded)[i].uztexture) {
             done = write(file.rootPath, file.uztexture->relativePath, (*encoded)[i].uztexture->bytes);
+        }
+        if (done && (*encoded)[i].dds) {
+            done = write(file.rootPath, file.dds->relativePath, (*encoded)[i].dds->bytes);
         }
         if (done && (*encoded)[i].material) {
             const UzMaterialOutput& material = plan.materials[(*encoded)[i].material->index];

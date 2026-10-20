@@ -52,3 +52,37 @@ source hashes and executable hashes; each run verifies unchanged identities.
 Ruff, mypy, source audit and Rulebook validation pass. Item 2.6 remains open:
 the optional preset variant and its observation/provenance prerequisites are
 not delivered by a library alone. UE import/cook acceptance remains in 3.3.
+
+## 7. Native DDS export integration (2026-10-20)
+
+`RequestDds` explicitly attaches a DDS to its own planned PNG16 canonical.
+Plan hashes, dry-run lists, in-memory cooking, direct writing, generational
+publication, receipts and fixed-name delivery carry it end to end. It refuses
+incompatible colour/mip classes, non-PNG16 input, non-DirectX normal mapping,
+negative-Z BC5 and Windows path conflicts before publishing. Conflict checks
+include an output used as another output's parent directory; failed requests
+retain their prior plan/hash. The DDS receipt names canonical source, stored
+channels, BC format, encoder/settings, mip count and lossy status separately
+from the canonical file's hash and values.
+
+`tests/export/test_dds_publication.py`: all 16 cases pass in Debug, ReleaseSafe,
+ReleaseFast and ReleaseSmall. Real files are independently decoded by Pillow;
+canonical bytes and every delivered hash match. Interruption at `kill_after_dds`
+and negative-Z refusal keep the previous generation selected. The suite also
+checks plan/list/write ordering, semantic refusals, case-insensitive path
+conflicts in both ancestor directions and non-conflicting textual prefixes.
+
+Debug regression run `debug-2` produced 83 passes and one test-only Windows
+separator comparison failure; correcting that assertion to compare `Path`
+values produced 16/16 DDS passes in `debug-3`. Native sources, remaining tests
+and executable identity are identical across those runs. This is coverage
+across two runs, not one claimed 84-pass run. Final four-mode records each
+verify stable source and executable identities; index:
+`tmp/scratch/dds-integration/evidence.json`. Ruff, mypy and diff checks pass.
+The pinned Assets3D schema comparison also passes with Git trust scoped to the
+test process, without changing the external checkout or global Git config.
+
+Item 2.6 remains open for the shipped DDS preset variant: no admitted
+`Unreal Engine (Packed)` observation/provenance was found for items 2.1-2.3.
+The native opt-in does not impersonate Painter JSON or establish UE 5.6
+import/cook acceptance, and no task acceptance is claimed here.

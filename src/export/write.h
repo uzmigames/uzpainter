@@ -85,6 +85,18 @@ struct EncodedUzTexture {
     std::string encoder;
 };
 
+/// Explicit DDS companion, cooked from the canonical PNG16 samples after padding/encoding.
+/// The canonical file remains unchanged. BC5 negative Z fails before any file is published;
+/// BC7 retains RGB. Format and fixed encoder settings accompany the file in its receipt.
+struct EncodedDds {
+    std::string bytes;
+    std::string format;
+    FileLayout layout = FileLayout::RGB;
+    uint32_t mips = 0;
+    std::string encoder;
+    std::string settings;
+};
+
 /// A plan's `.uzmat` (plan.h `UzMaterialOutput`), written in memory by uzmat_writer.h
 /// `WriteUzMaterial` after every derivative is cooked: blend `Masked` when the albedo derivative
 /// holds an alpha (opacity in albedo alpha), `Opaque` otherwise; not two-sided. The blend rule is
@@ -119,6 +131,8 @@ struct EncodedFile {
     std::optional<EncodedUzTexture> uztexture{};
     /// The `.uzmat` written after this file, its stack's last, when the plan has one.
     std::optional<EncodedUzMaterial> material{};
+    /// The explicit DDS companion requested through RequestDds.
+    std::optional<EncodedDds> dds{};
 };
 
 /// Steps 1 and 2 above: every file of `plan` (compiled from revision `revision` of `project`)

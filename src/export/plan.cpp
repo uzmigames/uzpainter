@@ -745,6 +745,12 @@ json::Value FileJson(const PlannedFile& f) {
         if (u.mips == DerivativeMips::normal) derivative["negativeZ"] = std::string(NegativeZPolicyName(u.negativeZ));
         file["uztexture"] = std::move(derivative);
     }
+    if (f.dds) {
+        const DdsOutput& d = *f.dds;
+        file["dds"] = json::Object{{"relativePath", d.relativePath}, {"path", d.path},
+                                    {"canonical", d.canonical}, {"format", std::string(BcFormatName(d.format))},
+                                    {"srgb", BcIsSrgb(d.format)}, {"mips", std::string(DerivativeMipsName(d.mips))}};
+    }
     return file;
 }
 
@@ -961,11 +967,16 @@ NegativeZPolicy ParseNegativeZPolicy(std::string_view text) {
 
 namespace {
 
-/// The UzEngine outputs (`.uztexture` derivatives and `.uzmat` files; no Painter behaviour to
-/// follow): a path equal to any other output's of any stack, compared as Windows compares file names
-/// (ordinal, ignoring case over Unicode: uzmat_writer.h `SameDeliveryPath`), is a `ValueError`. Two
+/// Native derivatives and materials cannot share an output path or use another output as a
+/// parent directory. Components use Windows Unicode comparison (`SameDeliveryPath`). Two
 /// Painter-form files keep Painter's rule (`CompilePlan`, R-091).
 void CheckEngineOutputs(const ExportPlan& plan) {
+    const auto ancestor = [](const std::string& parent, const std::string& child) {
+        for (size_t slash = child.find('/'); slash != std::string::npos; slash = child.find('/', slash + 1)) {
+            if (SameDeliveryPath(parent, child.substr(0, slash))) return true;
+        }
+        return false;
+    };
     struct Output {
         const std::string* rootPath;
         const std::string* relativePath;
@@ -975,16 +986,19 @@ void CheckEngineOutputs(const ExportPlan& plan) {
     for (const PlannedFile& f : plan.files) {
         outputs.push_back({&f.rootPath, &f.relativePath, false});
         if (f.uztexture) outputs.push_back({&f.rootPath, &f.uztexture->relativePath, true});
+        if (f.dds) outputs.push_back({&f.rootPath, &f.dds->relativePath, true});
     }
     for (const UzMaterialOutput& m : plan.materials) outputs.push_back({&m.rootPath, &m.relativePath, true});
     for (size_t a = 0; a < outputs.size(); ++a) {
         for (size_t b = a + 1; b < outputs.size(); ++b) {
             // Two Painter-form files follow Painter's rule (CompilePlan, R-091).
             if (!outputs[a].engine && !outputs[b].engine) continue;
-            if (!SameDeliveryPath(*outputs[a].relativePath, *outputs[b].relativePath)) continue;
+            const std::string& first = *outputs[a].relativePath;
+            const std::string& second = *outputs[b].relativePath;
+            if (!SameDeliveryPath(first, second) && !ancestor(first, second) && !ancestor(second, first)) continue;
             Invalid(*outputs[b].rootPath + ": \"" + *outputs[b].relativePath + "\"",
-                    "the path is the output \"" + *outputs[a].relativePath + "\" of " + *outputs[a].rootPath +
-                        " (compared as Windows compares file names, ignoring case)");
+                    "the path conflicts with output \"" + *outputs[a].relativePath + "\" of " + *outputs[a].rootPath +
+                        " (equal paths or a file used as a parent directory, compared as Windows compares file names, ignoring case)");
         }
     }
 }
@@ -1038,6 +1052,78 @@ void RequestUzTextureNormal(ExportPlan& plan, std::string_view relativePath, Neg
         throw;
     }
     plan.hash = core::Sha256Hex(json::WriteCanonical(PlanBody(plan)));
+}
+
+void RequestDds(ExportPlan& plan, const core::Project& project, std::string_view relativePath,
+                BcFormat format, DerivativeMips mips) {
+    const std::string what = "the DDS derivative of \"" + std::string(relativePath) + "\"";
+    const auto found = std::find_if(plan.files.begin(), plan.files.end(),
+                                    [&](const PlannedFile& f) { return f.relativePath == relativePath; });
+    if (found == plan.files.end()) Invalid(what, "the plan has no such file");
+    PlannedFile& file = *found;
+    const auto bound = [&](const std::string& problem) {
+        Gap(what, problem, "phase3.2_unreal-ue56-packed-preset item 2.6");
+    };
+    if (format != BcFormat::Bc5 && format != BcFormat::Bc7 && format != BcFormat::Bc7Srgb) {
+        Invalid(what, "only BC5, BC7 and BC7_SRGB are supported");
+    }
+    bool colour = false;
+    switch (mips) {
+        case DerivativeMips::linear:
+        case DerivativeMips::normal: break;
+        case DerivativeMips::colour:
+        case DerivativeMips::masked_colour: colour = true; break;
+        default: Invalid(what, "invalid mip class");
+    }
+    if (colour != BcIsSrgb(format)) Invalid(what, "mip class and storage colour transfer disagree");
+    if (!file.parameters || file.parameters->fileFormat != FileFormat::png ||
+        file.parameters->bitDepth != BitDepth::u16 || file.layout == FileLayout::Statistics || file.channels.empty()) {
+        bound("its canonical file must be PNG 16 with image channels");
+    }
+    if (!std::has_single_bit(file.width) || !std::has_single_bit(file.height)) bound("canonical dimensions must be powers of two");
+    if (format == BcFormat::Bc5 && mips != DerivativeMips::normal) bound("BC5 is bounded to DirectX normal maps");
+    bool any_normal = false;
+    for (const PlannedChannel& c : file.channels) any_normal = any_normal || IsNormalSource(c.source);
+    if (any_normal && mips != DerivativeMips::normal) bound("normal sources require normal mip filtering");
+    if (mips == DerivativeMips::normal) {
+        if (file.layout != FileLayout::RGB || file.channels.size() != 3) bound("a normal needs RGB channels");
+        constexpr std::array<ChannelLetter, 3> rgb{ChannelLetter::R, ChannelLetter::G, ChannelLetter::B};
+        for (uint32_t c = 0; c < 3; ++c) {
+            const PlannedChannel& channel = file.channels[c];
+            if (channel.dest != rgb[c] || channel.component != c || channel.luma || channel.source.components != 3 ||
+                channel.source.type != SourceType::virtualMap || channel.source.virtualMap != VirtualMap::Normal_DirectX) {
+                bound("normal RGB must read components 0, 1 and 2 of Normal_DirectX");
+            }
+        }
+    }
+    const core::Stack* stack = nullptr;
+    for (const core::TextureSet& set : project.texture_sets) {
+        if (set.id != file.textureSetId) continue;
+        for (const core::Stack& candidate : set.stacks) if (candidate.id == file.stackId) stack = &candidate;
+    }
+    if (!stack) Invalid(what, "its texture set and stack are not in the project");
+    const std::vector<bool> encoded = EncodedChannels(*stack, file);
+    for (size_t c = 0; c < file.channels.size(); ++c) {
+        if (file.channels[c].dest != ChannelLetter::A && encoded[c] != BcIsSrgb(format)) {
+            bound("canonical channel transfer differs from DDS storage; implicit colour conversion is not supported");
+        }
+    }
+    DdsOutput output;
+    output.relativePath = file.relativePath.substr(0, file.relativePath.rfind('.')) + ".dds";
+    output.path = JoinPath(plan.exportPath, output.relativePath);
+    output.canonical = file.relativePath;
+    output.format = format;
+    output.mips = mips;
+    std::optional<DdsOutput> previous = std::move(file.dds);
+    file.dds = std::move(output);
+    try {
+        CheckEngineOutputs(plan);
+        const std::string hash = core::Sha256Hex(json::WriteCanonical(PlanBody(plan)));
+        plan.hash = hash;
+    } catch (...) {
+        file.dds = std::move(previous);
+        throw;
+    }
 }
 
 ExportPlan CompilePlan(const core::Project& project, const ExportConfig& config, const PlanContext& context) {
@@ -1144,6 +1230,7 @@ std::vector<StackFiles> FilesByStack(const ExportPlan& plan) {
         }
         it->files.push_back(f.path);
         if (f.uztexture) it->files.push_back(f.uztexture->path);
+        if (f.dds) it->files.push_back(f.dds->path);
         for (const UzMaterialOutput& m : plan.materials) {
             if (&plan.files[m.after] == &f) it->files.push_back(m.path);
         }

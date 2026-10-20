@@ -23,6 +23,8 @@ enum class Point {
     kill_after_file,
     /// Terminates the process after the `.uztexture` derivative of plan file n was written and flushed.
     kill_after_uztexture,
+    /// Terminates after the DDS derivative of plan file n was written and flushed.
+    kill_after_dds,
     /// Terminates the process after the `.uzmat` n of the plan was written and flushed.
     kill_after_uzmat,
     /// Terminates the process after the generation's plan.json was written.

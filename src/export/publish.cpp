@@ -433,6 +433,16 @@ render::Result<Publication> PublishExport(const core::Project& project, std::int
             publication.files.push_back({file.rootPath, file.uztexture->relativePath, Utf8String(cooked),
                                          derivative->bytes.size(), core::Sha256Hex(derivative->bytes)});
         }
+        if (const std::optional<EncodedDds>& derivative = (*encoded)[i].dds) {
+            const fs::path cooked = directory / "files" / Utf8Path(file.dds->relativePath);
+            render::Result<void> cookedWritten = WriteDurable(cooked, derivative->bytes);
+            if (!cookedWritten) return failed(cookedWritten.error());
+#if defined(UZP_EXPORT_FAULT_HOOKS)
+            fault::Reach(fault::Point::kill_after_dds, i);
+#endif
+            publication.files.push_back({file.rootPath, file.dds->relativePath, Utf8String(cooked),
+                                         derivative->bytes.size(), core::Sha256Hex(derivative->bytes)});
+        }
         // The `.uzmat` of a UzEngine preset, after its stack's last file (phase3.2_uze-uzmat-preset).
         if (const std::optional<EncodedUzMaterial>& material = (*encoded)[i].material) {
             const UzMaterialOutput& planned = plan.materials[material->index];

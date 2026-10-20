@@ -14,6 +14,9 @@
 //   canonical file's path), binding `normal`, format (`BC5`, or `RGBA8` when routed), srgb, mips,
 //   encoder, negative_z {policy, texels, first, routed}}; a routed one carries a Normal consumer gap
 //   (a consumer that reconstructs Z still loses its sign);
+// - per DDS derivative: its own complete-file hash, source canonical PNG16, BC format, sRGB,
+//   mip count, encoder/settings, stored channels and lossy marker. `layout`/`channels` describe
+//   the canonical mapping; `dds.stored_channels` distinguishes BC5 RG from BC7 RGBA storage;
 // - the maps the plan does not write (`skipped`, with their kind and reason: QG-03);
 // - the Assets3D manifest export block (`manifest_export`) in the form of Assets3D's
 //   `manifest-schema-v2.json` `$defs/export` (sources, outputs, moment, preset, maps, comparison,

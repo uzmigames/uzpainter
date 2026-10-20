@@ -31,9 +31,30 @@ with negative Z are refused before compression; BC7 can preserve the B channel.
 Normal renormalization, sRGB filtering, alpha coverage, 16-to-8-bit rounding,
 block padding and encoder settings come from the existing mip/BC components.
 
-This library does not select a preset, publish files or establish UE 5.6
-consumer acceptance. Item 2.6 also requires the integrated DDS preset variant;
-that item remains open until both parts are delivered.
+## Native export opt-in
+
+`RequestDds(plan, project, relativePath, format, mipClass)` attaches a DDS
+companion to an already planned PNG16 file and recomputes the plan hash.
+The canonical file stays byte-for-byte unchanged. Normal companions require
+RGB from `Normal_DirectX`; data/colour companions must match their stored
+transfer and mip class. Windows path collisions, including case and
+file-versus-directory conflicts, reject the request without changing the plan.
+
+Encoding cooks every requested companion before writing any files. Direct
+writing, dry-run lists, generational publication and fixed-name delivery all
+include the DDS immediately after its canonical file (after an optional
+`.uztexture`, before a material). `kill_after_dds` tests an interruption before
+the new generation is committed.
+
+Each receipt includes the DDS's complete-file hash, canonical source path,
+format, sRGB flag, mip count, encoder/settings, stored channels and `lossy: true`.
+Its `layout`/`channels` describe the canonical mapping; `dds.stored_channels`
+states RG for BC5 or RGBA for BC7. The canonical file has its own receipt/hash.
+
+This is an explicit native C++ API, separate from Painter's JSON configuration.
+It does not ship the Unreal preset or establish UE 5.6 consumer acceptance.
+Item 2.6 also requires the DDS preset variant, whose observed-output and
+provenance prerequisites remain open.
 
 ## Sources
 
@@ -49,3 +70,9 @@ No third-party DDS implementation is copied.
 generated BC5/BC7 files with Pillow's independent DDS decoder. The tests cover
 headers, mip payloads, refusal paths, cook semantics and thread determinism.
 Pillow is a development-only decoder on the owner's machine.
+
+`tests/export/test_dds_publication.py` checks native opt-in planning, direct
+writing, publication, fixed-name delivery, receipts, interruption and refusal
+using authored fixtures. The task's evidence sections record the measured
+build modes and preserve the distinction between these checks and UE/Painter
+acceptance.
