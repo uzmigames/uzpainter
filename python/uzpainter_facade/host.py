@@ -131,6 +131,9 @@ def enable_engine_computations(enable: bool) -> None:
     uzpainter.application.enable_engine_computations(enable)
     if changed:
         event.emit_sync(event.EngineComputationsStatusChanged(enable))
+    from uzpainter_facade import texture_state
+
+    texture_state.configure(enabled=enable)
 
 
 @contextlib.contextmanager

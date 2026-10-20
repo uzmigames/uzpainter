@@ -11,16 +11,13 @@ each rule still has a reason to exist:
 
 - `.painter_lock`: only the suffix of the project's lock is mapped to UzPainter's `.lock`
   (decision 319 §9a). The lock's presence, base name and phase stay compared.
-- Texture states (decision 332, amending 297 §3.3), in `test_host_texture_states_equal_painter`:
+- Texture states (decision 332, amending 297 §3.3):
   ADD and REMOVE dispatches stay in their step's event list and are compared exactly, in order
   with the other events; the UPDATE dispatches of the causative window (`UPDATE_WINDOWS`, s7-s8)
   are compared, both recordings, as the distinct (action, channel type) pairs of the whole
   window in the output `s7-s8/texture_updates`, since Painter attributes them asynchronously
   (s8 in r1, s7 in r2); an UPDATE outside the window stays in its list. Cache keys and texture
-  ids are not claimed (`TEXTURE_IDS`). UzPainter emits no texture event until its observer lands:
-  that test is an expected failure (`TEXTURE_GAP`), and passes unchanged once the events arrive.
-  `test_host_probe_equals_painter` compares every other event of those lists exactly, without
-  the `TextureStateEvent` dispatches, which only the texture test compares.
+  ids are not claimed (`TEXTURE_IDS`). Every other event stays compared in the same replay.
 - Shelf crawls of shelves the run did not add are left out of the crawl events. Painter's
   installed and user shelves are Adobe content that UzPainter never ships (decision 006, as
   `phase1-shelves`).
@@ -58,11 +55,6 @@ HOST_VERSION = (
     "host difference (decision 330): UzPainter reports its own version, never Painter's; no "
     "parity credit"
 )
-TEXTURE_GAP = (
-    "release gap, decision 332, owner phase1.24_python-api-facade item 4.1: UzPainter emits no "
-    "TextureStateEvent until its texture observer lands"
-)
-
 # Outputs that cannot equal Painter's, by probe: output key (`<output id>` for both recordings,
 # `<condition> <output id>` for one) -> kind, reason and owner.
 EXCLUDED: dict[str, dict[str, str]] = {
@@ -277,10 +269,10 @@ def unordered_differences(probe: str, ours: dict[str, Any], expected: dict[str, 
 @pytest.mark.parametrize("probe", sorted(EXCLUDED))
 def test_host_probe_equals_painter(facade: Run, tmp_path: Path, probe: str) -> None:
     """Item 4.1: the P22-B host golden is exact apart from the named exclusions, both
-    recordings (texture events: `test_host_texture_states_equal_painter`)."""
+    recordings, including decision 332's texture-state comparison."""
     replayed, golden, job = replay_observed(facade, probe, tmp_path)
     excluded = EXCLUDED[probe]
-    expected, ours = comparable(probe, golden, replayed, tmp_path / "run")
+    expected, ours = comparable(probe, golden, replayed, tmp_path / "run", textures=True)
     differences = compare_observed(ours, expected, job, tmp_path, excluded)
     differences += unordered_differences(probe, ours, expected)
     save_trace(f"facade-observed/{probe}", golden, replayed, excluded, differences)
@@ -288,18 +280,3 @@ def test_host_probe_equals_painter(facade: Run, tmp_path: Path, probe: str) -> N
     assert differences == [], "\n".join(differences)
     symbols = observed_symbols(replayed, golden, excluded)
     check_observed_trace(f"facade-observed/{probe}", golden["golden_id"], symbols)
-
-
-@pytest.mark.xfail(reason=TEXTURE_GAP, strict=False)
-def test_host_texture_states_equal_painter(facade: Run, tmp_path: Path) -> None:
-    """Decision 332: the texture events of `p22b-host-events` equal Painter's, ADD and REMOVE
-    in their step and the UPDATE pairs within their window, both recordings, with every other
-    output exact as well."""
-    probe = "p22b-host-events"
-    replayed, golden, job = replay_observed(facade, probe, tmp_path)
-    excluded = EXCLUDED[probe]
-    expected, ours = comparable(probe, golden, replayed, tmp_path / "run", textures=True)
-    differences = compare_observed(ours, expected, job, tmp_path, excluded)
-    save_trace(f"facade-observed-textures/{probe}", golden, replayed, excluded, differences)
-    assert replayed["cleanup_failures"] == [], replayed["cleanup_failures"]
-    assert differences == [], "\n".join(differences)

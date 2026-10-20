@@ -82,6 +82,9 @@ def export_project_textures(json_config: dict[str, Any]) -> TextureExportResult:
         except Exception as error:
             message = "Error during the export (see logs)."
             event.emit_sync(event.ExportTexturesEnded(ExportStatus.Error, message, {}))
+            # Capability refusals keep their type and reason for callers and the manifest.
+            if isinstance(error, (uzpainter.NotYetSupported, uzpainter.UnsupportedInUzPainter)):
+                raise
             raise ValueError(message) from error
         result = TextureExportResult(ExportStatus.Success, "Export successfully finished", textures)
         event.emit_sync(event.ExportTexturesEnded(result.status, result.message, textures))

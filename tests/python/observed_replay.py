@@ -128,6 +128,9 @@ def call(operation, **kwargs):
     # opened project's ProjectEditionEntered) when its event loop runs between two remote calls,
     # once the call's step marker has cleared: the replay delivers them at the same boundary.
     value = OPERATIONS[operation](kwargs)
+    from uzpainter_facade import texture_state
+
+    texture_state.synchronize()
     uzpainter.event.flush()
     return value
 

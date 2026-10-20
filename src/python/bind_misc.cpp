@@ -6,6 +6,9 @@
 // `.capabilities` (capabilities.h, phase1.22).
 
 #include "python/bindings.h"
+
+#include <bit>
+
 #include "python/capabilities.h"
 #include "python/dispatcher.h"
 #include "python/errors.h"
@@ -14,6 +17,34 @@
 namespace uzp::python {
 
 namespace {
+
+py::dict TextureSnapshotObject(const TextureStateSnapshot& snapshot, const std::vector<TextureAddress>& forced = {}) {
+    py::dict result;
+    result["generation"] = snapshot.generation;
+    result["revision"] = snapshot.revision;
+    py::tuple textures(snapshot.textures.size());
+    for (std::size_t i = 0; i < snapshot.textures.size(); ++i) {
+        const TextureState& texture = snapshot.textures[i];
+        py::dict item;
+        item["set_id"] = texture.address.set;
+        item["stack_id"] = texture.address.stack;
+        item["tile_indices"] = py::make_tuple(texture.address.tile_u, texture.address.tile_v);
+        item["channel_type"] = texture.address.channel;
+        item["digest"] = texture.digest;
+        // Preserve all key bits within the signed integer domain of the JSON transport.
+        item["cache_key"] = std::bit_cast<std::int64_t>(texture.cache_key);
+        textures[i] = std::move(item);
+    }
+    result["textures"] = std::move(textures);
+    py::tuple invalidated(forced.size());
+    for (std::size_t i = 0; i < forced.size(); ++i) {
+        const TextureAddress& address = forced[i];
+        invalidated[i] = py::make_tuple(address.set, address.stack, address.tile_u, address.tile_v, address.channel);
+    }
+    result["invalidated"] = std::move(invalidated);
+    result["errors"] = py::cast(snapshot.errors);
+    return result;
+}
 
 constexpr const char* kLogging = R"PY(
 import sys as _sys
@@ -139,6 +170,29 @@ void BindMisc(py::module_& m) {
     event.def("on_dispatcher_thread", [] { return Dispatcher::Get().OnDispatcherThread(); });
     event.def("dispatcher_thread_id", [] { return Dispatcher::Get().ThreadIdent(); },
               "`threading.get_ident()` of the dispatcher thread (0 before its first task).");
+    event.def("_texture_state_snapshot", [] {
+        std::shared_ptr<const TextureStateSnapshot> snapshot;
+        {
+            py::gil_scoped_release release;
+            snapshot = Session::Get().TextureSnapshot();
+        }
+        return TextureSnapshotObject(*snapshot);
+    });
+    event.def("_texture_state_subscribe", [] { return Session::Get().SubscribeTextures(); });
+    event.def("_texture_state_unsubscribe", [](std::uint64_t token) { Session::Get().UnsubscribeTextures(token); });
+    event.def("_texture_state_wake", [](std::uint64_t token) { Session::Get().WakeTextures(token); });
+    event.def("_texture_state_drain", [](std::uint64_t token, double timeout) {
+        std::vector<TextureStateNotice> notices;
+        {
+            py::gil_scoped_release release;
+            notices = Session::Get().DrainTextures(token, timeout);
+        }
+        py::tuple result(notices.size());
+        for (std::size_t i = 0; i < notices.size(); ++i) {
+            result[i] = TextureSnapshotObject(*notices[i].snapshot, notices[i].invalidated);
+        }
+        return result;
+    }, py::arg("token"), py::arg("timeout") = 0.0);
 
     py::module_ properties = submodule(m, "properties", "uzpainter.properties", "Parameters (the bake parameters' keys).");
     py::module_ baking = submodule(m, "baking", "uzpainter.baking", "Mesh-map baking: the bake parameters.");

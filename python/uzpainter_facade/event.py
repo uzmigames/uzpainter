@@ -12,9 +12,11 @@ the delivery runs inline. `emit` queues without waiting (an asynchronous operati
 `connect_strong` strongly, as Painter documents. A handler's exception is printed on the standard
 error and the other handlers still run.
 
+`TextureStateEvent` follows committed native document-texture invalidations, with lifecycle,
+engine suspension and per-texture throttling handled by `texture_state.py`.
 Events whose operations arrive in later phases are connectable and emitted by their owners:
-`BakingProcessAboutToStart/Progress/Ended` (phase3.5_embree-bakers), `CameraPropertiesChanged`
-and `TextureStateEvent` (phase2.3_realtime-preview). `GraphicalUserInterfaceStarted` is
+`BakingProcessAboutToStart/Progress/Ended` (phase3.5_embree-bakers) and
+`CameraPropertiesChanged` (phase2.3_realtime-preview). `GraphicalUserInterfaceStarted` is
 desktop-only: connectable, never emitted, and creating it raises.
 """
 
@@ -162,6 +164,9 @@ class TextureStateEvent(Event):
         if period < datetime.timedelta(milliseconds=500):
             raise ValueError("duration below 500ms are invalid")
         _THROTTLING["period"] = period
+        from uzpainter_facade import texture_state
+
+        texture_state.configure(period=period.total_seconds())
 
 
 # ── Shelf, baking, layer stack, application, display and resource events ────────────────────────

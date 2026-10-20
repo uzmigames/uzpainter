@@ -22,9 +22,12 @@
 // Every function here may be called with or without the GIL; the bindings release it around
 // `Mutate`, the lifecycle calls and job waits.
 
+#include <condition_variable>
 #include <cstdint>
+#include <deque>
 #include <filesystem>
 #include <functional>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -120,6 +123,38 @@ struct ScriptLog {
     std::vector<CallResult> committed;
 };
 
+struct TextureAddress {
+    core::Id set = core::kNoId, stack = core::kNoId;
+    int tile_u = 0, tile_v = 0;
+    core::ChannelType channel = core::ChannelType::BaseColor;
+    bool operator==(const TextureAddress&) const = default;
+};
+
+struct TextureState {
+    TextureAddress address;
+    std::string digest;
+    std::uint64_t cache_key = 0;
+    std::vector<core::Id> dependencies;
+};
+
+struct TextureStateSnapshot {
+    std::uint64_t generation = 0;
+    std::int64_t revision = 0;
+    std::vector<TextureState> textures;
+    std::vector<std::string> errors;
+};
+
+struct TextureInvalidation {
+    core::Id node = core::kNoId;
+    std::optional<core::ChannelType> channel;
+    bool operator==(const TextureInvalidation&) const = default;
+};
+
+struct TextureStateNotice {
+    std::shared_ptr<const TextureStateSnapshot> snapshot;
+    std::vector<TextureAddress> invalidated;
+};
+
 class Session {
 public:
     static Session& Get();
@@ -213,15 +248,36 @@ public:
     /// the thread that made the change, outside the session's lock.
     std::function<void()> on_durable_change;
 
+    std::shared_ptr<const TextureStateSnapshot> TextureSnapshot() const;
+    std::uint64_t SubscribeTextures();
+    void UnsubscribeTextures(std::uint64_t token);
+    void WakeTextures(std::uint64_t token);
+    std::vector<TextureStateNotice> DrainTextures(std::uint64_t token, double timeout);
+
 private:
     Session() = default;
     void RequireNotBusy(const std::string& what) const;
-    void Record(const CallResult& result);
-    void NotifyDurableChange() const;
+    void Record(const CallResult& result, const std::vector<TextureInvalidation>& invalidated = {},
+                const std::shared_ptr<OpenProject>& origin = {});
+    void NotifyDurableChange(const std::vector<TextureInvalidation>& invalidated = {}) const;
+    void PublishTextures(const std::vector<TextureInvalidation>& invalidated,
+                         const std::shared_ptr<OpenProject>& origin) const;
     void SetCurrent(std::shared_ptr<OpenProject> project);
 
     mutable std::mutex mutex_;  // guards current_
     std::shared_ptr<OpenProject> current_;
+    std::uint64_t generation_ = 0;  // guarded by mutex_
+    struct TextureSubscriber {
+        std::deque<TextureStateNotice> pending;
+        bool wake = false;
+        bool overflow = false;
+        std::uint64_t generation = 0;
+        std::int64_t revision = 0;
+    };
+    mutable std::mutex texture_mutex_;
+    mutable std::condition_variable texture_changed_;
+    mutable std::map<std::uint64_t, TextureSubscriber> texture_subscribers_;
+    std::uint64_t next_texture_subscriber_ = 0;
 };
 
 /// A UTF-8 path as a filesystem path, and a filesystem path as UTF-8 with `/` separators.

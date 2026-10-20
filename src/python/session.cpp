@@ -2,7 +2,9 @@
 
 #include "python/session.h"
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <chrono>
 #include <ctime>
 #include <fstream>
@@ -13,6 +15,7 @@
 #include <system_error>
 #include <utility>
 
+#include "evaluator/dag.h"
 #include "evaluator/profile.h"
 #include "evaluator/sources.h"
 #include "evaluator/support.h"
@@ -40,11 +43,39 @@ struct ThreadState {
     std::int64_t base_revision = 0;
     std::optional<CallResult> last;
     std::optional<ScriptLog> log;
+    core::Snapshot committed_base;
+    std::vector<TextureInvalidation> texture_invalidations;
 };
 
 ThreadState& Thread() {
     thread_local ThreadState state;
     return state;
+}
+
+std::vector<TextureInvalidation> SourceInvalidation(const std::string& tool, const core::json::Object& args) {
+    if (tool != "layerstack.FillLayerNode.set_source" && tool != "source.SourceUniformColor.set_color" &&
+        tool != "source_set") return {};
+    const auto node = args.find(tool == "source_set" ? "uid" : "node");
+    if (node == args.end() || !node->second.IsInt()) return {};
+    TextureInvalidation target;
+    target.node = static_cast<core::Id>(std::get<std::int64_t>(node->second.data));
+    if (const auto channel = args.find("channel"); channel != args.end() && !channel->second.IsNull()) {
+        if (!channel->second.IsString()) return {};
+        target.channel = core::FromString<core::ChannelType>(std::get<std::string>(channel->second.data));
+        if (!target.channel) return {};
+    }
+    return {target};
+}
+
+void TextureDependencies(const evaluator::DagList& list, std::vector<core::Id>& out) {
+    for (const evaluator::DagLayer& layer : list.layers) {
+        out.push_back(layer.uid);
+        for (const evaluator::DagEffect& effect : layer.effects) out.push_back(effect.uid);
+        if (layer.maskStack) {
+            for (const evaluator::DagEffect& effect : layer.maskStack->effects) out.push_back(effect.uid);
+        }
+        if (layer.group) TextureDependencies(*layer.group, out);
+    }
 }
 
 /// The support check's reader of PNG headers (evaluator/support.h `BitmapShapes`, decision 240):
@@ -173,6 +204,7 @@ Session& Session::Get() {
 void Session::SetCurrent(std::shared_ptr<OpenProject> project) {
     std::lock_guard lock(mutex_);
     current_ = std::move(project);
+    ++generation_;
 }
 
 bool Session::IsOpen() const {
@@ -283,12 +315,13 @@ core::TransactionResult Session::Create(const std::filesystem::path& mesh_path, 
         }
     });
     core::TransactionResult result = Settle(outcome, error);
-    Record(FromResult(result));
+    Record(FromResult(result), {}, project);
     SetActiveDefault(*project);
     {
         std::lock_guard lock(mutex_);
         if (current_) ThrowProjectError("a project is already open");
         current_ = std::move(project);
+        ++generation_;
     }
     NotifyDurableChange();
     return result;
@@ -324,6 +357,7 @@ void Session::Open(const std::filesystem::path& path, bool untitled) {
         std::lock_guard lock(mutex_);
         if (current_) ThrowProjectError("a project is already open");
         current_ = std::move(project);
+        ++generation_;
     }
     NotifyDurableChange();
 }
@@ -405,12 +439,13 @@ void Session::Rebuild(const core::json::Value& dump, const std::filesystem::path
             throw;
         }
     });
-    Record(FromResult(Settle(outcome, error)));
+    Record(FromResult(Settle(outcome, error)), {}, project);
     SetActiveDefault(*project);
     {
         std::lock_guard lock(mutex_);
         if (current_) ThrowProjectError("a project is already open");
         current_ = std::move(project);
+        ++generation_;
     }
     NotifyDurableChange();  // the rebuilt project is now the open one, as after Create
 }
@@ -476,7 +511,7 @@ CallResult Session::Revert(std::optional<std::int64_t> revision, const std::stri
     const core::RequestOutcome outcome = revision ? project->store->Revert(*project->document, request, *revision)
                                                   : project->store->Revert(*project->document, request, checkpoint);
     CallResult result = FromResult(Settle(outcome, nullptr));
-    Record(result);
+    Record(result, {}, project);
     return result;
 }
 
@@ -486,7 +521,7 @@ core::RequestOutcome Session::RevertRequest(core::MutationRequest request, std::
     if (Thread().transaction) throw ApiError("RuntimeError", "a typed tool call inside an open Transaction");
     core::RequestOutcome outcome = revision ? project->store->Revert(*project->document, request, *revision)
                                             : project->store->Revert(*project->document, request, checkpoint);
-    if (outcome.result) Record(FromResult(*outcome.result));
+    if (outcome.result) Record(FromResult(*outcome.result), {}, project);
     return outcome;
 }
 
@@ -510,17 +545,23 @@ std::int64_t Session::Revision() const {
     return Current()->document->revision();
 }
 
-void Session::Record(const CallResult& result) {
+void Session::Record(const CallResult& result, const std::vector<TextureInvalidation>& invalidated,
+                      const std::shared_ptr<OpenProject>& origin) {
     ThreadState& thread = Thread();
     thread.last = result;
     if (thread.log && result.status == "committed") {
         thread.log->last_committed_revision = result.revision;
         thread.log->committed.push_back(result);
     }
-    if (result.status == "committed") NotifyDurableChange();
+    if (result.status == "committed") {
+        // Keep the supervisor notification separate from the texture producer's identity.
+        if (origin) DropSupersededEvaluation(*origin);
+        if (on_durable_change) on_durable_change();
+        PublishTextures(invalidated, origin);
+    } else if (result.status == "no_op" && !invalidated.empty()) PublishTextures(invalidated, origin);
 }
 
-void Session::NotifyDurableChange() const {
+void Session::NotifyDurableChange(const std::vector<TextureInvalidation>& invalidated) const {
     std::shared_ptr<OpenProject> project;
     {
         std::lock_guard lock(mutex_);
@@ -529,11 +570,175 @@ void Session::NotifyDurableChange() const {
     // A commit supersedes the evaluation kept for the revision before it (evaluation.h).
     if (project) DropSupersededEvaluation(*project);
     if (on_durable_change) on_durable_change();
+    PublishTextures(invalidated, project);
+}
+
+std::shared_ptr<const TextureStateSnapshot> Session::TextureSnapshot() const {
+    auto result = std::make_shared<TextureStateSnapshot>();
+    std::shared_ptr<OpenProject> open;
+    {
+        std::lock_guard lock(mutex_);
+        open = current_;
+        result->generation = generation_;
+    }
+    if (!open) return result;
+    const ThreadState& thread = Thread();
+    const core::Snapshot snapshot = thread.transaction && thread.project == open
+                                        ? thread.committed_base : open->document->snapshot();
+    result->revision = snapshot.revision;
+    try {
+        const core::Project& project = *snapshot.project;
+        if (project.settings.workflow != core::ProjectWorkflow::Default) {
+            result->errors.push_back("texture state is qualified for the Default workflow only");
+            return result;
+        }
+        const evaluator::TemplateLibrary templates =
+            evaluator::TemplateLibrary::Load(evaluator::TemplateLibrary::DefaultDirectory());
+        for (const core::TextureSet& set : project.texture_sets) {
+            for (const core::Stack& stack : set.stacks) {
+                for (const auto& [channel, unused] : stack.channels) {
+                    (void)unused;
+                    const auto dag = evaluator::BuildDag(project, set.id, stack.id, channel, templates,
+                                                         project.settings.template_id);
+                    if (!dag) {
+                        result->errors.push_back("unsupported texture DAG: " + std::to_string(stack.id) + "/" +
+                                                 std::string(core::ToString(channel)));
+                        continue;
+                    }
+                    if (dag->root.layers.empty()) continue;
+                    TextureState texture;
+                    texture.address = {set.id, stack.id, 0, 0, channel};
+                    const evaluator::Digest digest = dag->root.isolated ? dag->readoutHash
+                                                                        : dag->root.layers.back().prefixHash;
+                    texture.digest = evaluator::Hex(digest);
+                    evaluator::HashWriter key;
+                    key.Str("document-texture-state-v1").Str(open->document->project_uuid())
+                        .U64(set.id).U64(stack.id).U32(0).U32(0).U32(static_cast<std::uint32_t>(channel)).Sub(digest);
+                    const evaluator::Digest bytes = key.Finish();
+                    for (std::size_t i = 0; i < 8; ++i) texture.cache_key |= std::uint64_t{bytes[i]} << (i * 8);
+                    TextureDependencies(dag->root, texture.dependencies);
+                    result->textures.push_back(std::move(texture));
+                }
+            }
+        }
+    } catch (const std::exception& error) {
+        // Observation cannot turn an already committed edit into an apparent failed edit.
+        result->errors.push_back(error.what());
+    }
+    return result;
+}
+
+void Session::PublishTextures(const std::vector<TextureInvalidation>& invalidated,
+                               const std::shared_ptr<OpenProject>& origin) const {
+    {
+        std::lock_guard lock(mutex_);
+        if (current_ != origin) return;
+    }
+    {
+        std::lock_guard lock(texture_mutex_);
+        if (texture_subscribers_.empty()) return;
+    }
+    TextureStateNotice notice{TextureSnapshot(), {}};
+    for (const TextureState& texture : notice.snapshot->textures) {
+        const bool forced = std::any_of(invalidated.begin(), invalidated.end(), [&](const TextureInvalidation& target) {
+            return (!target.channel || *target.channel == texture.address.channel) &&
+                   std::find(texture.dependencies.begin(), texture.dependencies.end(), target.node) != texture.dependencies.end();
+        });
+        if (forced) notice.invalidated.push_back(texture.address);
+    }
+    {
+        std::lock_guard session_lock(mutex_);
+        if (current_ != origin || notice.snapshot->generation != generation_) return;
+        std::lock_guard lock(texture_mutex_);
+        for (auto& [token, subscriber] : texture_subscribers_) {
+            (void)token;
+            if (subscriber.overflow) continue;
+            TextureStateNotice next = notice;
+            if (subscriber.generation > next.snapshot->generation ||
+                (subscriber.generation == next.snapshot->generation && subscriber.revision > next.snapshot->revision)) continue;
+            if (subscriber.generation != next.snapshot->generation) subscriber.pending.clear();
+            subscriber.generation = next.snapshot->generation;
+            subscriber.revision = next.snapshot->revision;
+            bool coalesce = false;
+            if (!subscriber.pending.empty()) {
+                const TextureStateNotice& old = subscriber.pending.back();
+                coalesce = old.snapshot->generation == next.snapshot->generation &&
+                    old.snapshot->errors.empty() && next.snapshot->errors.empty() &&
+                    old.snapshot->textures.size() == next.snapshot->textures.size() &&
+                    std::equal(old.snapshot->textures.begin(), old.snapshot->textures.end(), next.snapshot->textures.begin(),
+                        [](const TextureState& a, const TextureState& b) { return a.address == b.address; });
+                if (coalesce) {
+                    for (const TextureState& texture : next.snapshot->textures) {
+                        const auto previous = std::find_if(old.snapshot->textures.begin(), old.snapshot->textures.end(),
+                            [&](const TextureState& value) { return value.address == texture.address; });
+                        const bool changed = previous != old.snapshot->textures.end() && previous->digest != texture.digest;
+                        if ((changed || std::find(old.invalidated.begin(), old.invalidated.end(), texture.address) !=
+                                        old.invalidated.end()) &&
+                            std::find(next.invalidated.begin(), next.invalidated.end(), texture.address) == next.invalidated.end()) {
+                            next.invalidated.push_back(texture.address);
+                        }
+                    }
+                }
+            }
+            if (coalesce) subscriber.pending.back() = std::move(next);
+            else if (subscriber.pending.size() < 64) subscriber.pending.push_back(std::move(next));
+            else {
+                auto failed = std::make_shared<TextureStateSnapshot>(*notice.snapshot);
+                failed->errors.push_back("texture state observer overflow: resubscribe and take a fresh snapshot");
+                subscriber.pending.clear();
+                subscriber.pending.push_back({std::move(failed), {}});
+                subscriber.overflow = true;
+            }
+        }
+    }
+    texture_changed_.notify_all();
+}
+
+std::uint64_t Session::SubscribeTextures() {
+    std::lock_guard lock(texture_mutex_);
+    const std::uint64_t token = ++next_texture_subscriber_;
+    texture_subscribers_.emplace(token, TextureSubscriber{});
+    return token;
+}
+
+void Session::UnsubscribeTextures(std::uint64_t token) {
+    {
+        std::lock_guard lock(texture_mutex_);
+        texture_subscribers_.erase(token);
+    }
+    texture_changed_.notify_all();
+}
+
+void Session::WakeTextures(std::uint64_t token) {
+    {
+        std::lock_guard lock(texture_mutex_);
+        if (auto it = texture_subscribers_.find(token); it != texture_subscribers_.end()) it->second.wake = true;
+    }
+    texture_changed_.notify_all();
+}
+
+std::vector<TextureStateNotice> Session::DrainTextures(std::uint64_t token, double timeout) {
+    if (!std::isfinite(timeout) || timeout < 0.0) throw core::ValueError("texture drain timeout must be finite and nonnegative");
+    std::unique_lock lock(texture_mutex_);
+    texture_changed_.wait_for(lock, std::chrono::duration<double>(timeout), [&] {
+        const auto it = texture_subscribers_.find(token);
+        return it == texture_subscribers_.end() || !it->second.pending.empty() || it->second.wake;
+    });
+    const auto it = texture_subscribers_.find(token);
+    if (it == texture_subscribers_.end()) return {};
+    it->second.wake = false;
+    std::vector<TextureStateNotice> result;
+    while (!it->second.pending.empty()) {
+        result.push_back(std::move(it->second.pending.front()));
+        it->second.pending.pop_front();
+    }
+    return result;
 }
 
 CallResult Session::Mutate(const std::string& tool, core::json::Object arguments,
                            const std::function<void(core::Edit&)>& call) {
     ThreadState& thread = Thread();
+    const std::vector<TextureInvalidation> invalidated = SourceInvalidation(tool, arguments);
     // Inside a native Transaction the bitmaps' images and the set changes are checked once, by the
     // commit (`CommitTransaction`): its calls may resize a set and rebind its bitmaps in either order.
     const evaluator::BitmapShapes shapes = thread.transaction ? evaluator::BitmapShapes{} : ShapesOf(*Current()->store);
@@ -544,6 +749,10 @@ CallResult Session::Mutate(const std::string& tool, core::json::Object arguments
     if (thread.transaction) {
         const core::Project before = thread.edit->project();
         thread.transaction->Apply(checked);  // a throwing call fails the transaction and propagates
+        for (const TextureInvalidation& target : invalidated) {
+            if (std::find(thread.texture_invalidations.begin(), thread.texture_invalidations.end(), target) ==
+                thread.texture_invalidations.end()) thread.texture_invalidations.push_back(target);
+        }
         CallResult result{"pending", thread.base_revision, core::Diff(before, thread.edit->project()), {}};
         Record(result);
         return result;
@@ -561,20 +770,21 @@ CallResult Session::Mutate(const std::string& tool, core::json::Object arguments
             }
         });
     CallResult result = FromResult(Settle(outcome, error));
-    Record(result);
+    Record(result, invalidated, project);
     return result;
 }
 
 core::RequestOutcome Session::Submit(core::MutationRequest request, const std::function<void(core::Edit&)>& call) {
     if (Thread().transaction) throw ApiError("RuntimeError", "a typed tool call inside an open Transaction");
     const std::shared_ptr<OpenProject> project = Current();
+    const std::vector<TextureInvalidation> invalidated = SourceInvalidation(request.tool, request.arguments);
     const evaluator::BitmapShapes shapes = ShapesOf(*project->store);
     core::RequestOutcome outcome =
         project->store->Submit(*project->document, std::move(request), [&call, &shapes](core::Edit& edit) {
             call(edit);
             evaluator::RequireSupported(edit.base(), edit.project(), shapes);
         });
-    if (outcome.result) Record(FromResult(*outcome.result));
+    if (outcome.result) Record(FromResult(*outcome.result), invalidated, project);
     return outcome;
 }
 
@@ -582,7 +792,8 @@ void Session::OpenTransaction(const std::string& name) {
     ThreadState& thread = Thread();
     if (thread.transaction) throw ApiError("RuntimeError", "a Transaction is already open on this thread");
     std::shared_ptr<OpenProject> project = Current();
-    const std::int64_t base = project->document->revision();
+    const core::Snapshot committed_base = project->document->snapshot();
+    const std::int64_t base = committed_base.revision;
     core::MutationRequest request{"transaction", core::json::Object{{"name", name}}, NewKey(), base};
     auto transaction = std::make_unique<core::Transaction>(*project->document, std::move(request));
     if (!transaction->open()) {
@@ -599,6 +810,8 @@ void Session::OpenTransaction(const std::string& name) {
     thread.edit = edit;
     thread.project = std::move(project);
     thread.base_revision = base;
+    thread.committed_base = committed_base;
+    thread.texture_invalidations.clear();
 }
 
 CallResult Session::CommitTransaction() {
@@ -606,6 +819,9 @@ CallResult Session::CommitTransaction() {
     if (!thread.transaction) throw ApiError("RuntimeError", "no Transaction is open on this thread");
     std::unique_ptr<core::Transaction> transaction = std::move(thread.transaction);
     const std::shared_ptr<OpenProject> project = std::move(thread.project);
+    const std::vector<TextureInvalidation> invalidated = std::move(thread.texture_invalidations);
+    thread.texture_invalidations.clear();
+    thread.committed_base = {};
     thread.edit = nullptr;
     // The support check of the state that commits, with the bitmaps' images (support.h): a refusal
     // fails the transaction, which then commits nothing and raises it.
@@ -621,7 +837,7 @@ CallResult Session::CommitTransaction() {
     }
     const core::RequestOutcome outcome = transaction->Commit();
     CallResult result = FromResult(Settle(outcome, error));
-    Record(result);
+    Record(result, invalidated, project);
     return result;
 }
 
@@ -632,6 +848,8 @@ void Session::RollbackTransaction() {
     thread.transaction.reset();
     thread.edit = nullptr;
     thread.project.reset();
+    thread.committed_base = {};
+    thread.texture_invalidations.clear();
 }
 
 bool Session::TransactionOpen() const { return Thread().transaction != nullptr; }

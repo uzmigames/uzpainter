@@ -41,7 +41,7 @@ from typing import Any
 
 import uzpainter
 
-from uzpainter_facade import colour, event, host, nodes
+from uzpainter_facade import colour, event, host, nodes, texture_state
 from uzpainter_facade.state import SESSION, unsaved
 
 MODULE = "substance_painter.project"
@@ -51,6 +51,7 @@ NormalMapFormat = _p.NormalMapFormat
 TangentSpace = _p.TangentSpace
 ProjectWorkflow = _p.ProjectWorkflow
 ProjectSaveMode = _p.ProjectSaveMode
+
 
 class Metadata:
     """Project metadata; Painter's setter returns None while the native API keeps its receipt."""
@@ -257,6 +258,7 @@ def create(
             _p.close()
             SESSION.reset()
             raise
+        texture_state.opened()
     event.emit_sync(event.ProjectCreated())
     host.enter_edition()
 
@@ -274,6 +276,7 @@ def open(project_file_path: str) -> None:
             _p.close()
             SESSION.reset()
             raise
+        texture_state.opened()
     event.emit_sync(event.ProjectOpened())
     host.enter_edition()
 
@@ -290,6 +293,7 @@ def close() -> None:
     host.set_edition(False)
     with host.busy_section():
         event.emit_sync(event.ProjectAboutToClose())
+        texture_state.closing()
         discard_unsaved()
         _p.close()
         SESSION.reset()
