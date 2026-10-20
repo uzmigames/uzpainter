@@ -68,8 +68,10 @@ def _add(index: dict[Any, set[str]], key: Any, name: str) -> None:
 
 
 def _is_enum(cls: type) -> bool:
+    # A pybind11 enum, or a facade subclass of one whose metaclass derives from pybind11's.
     return issubclass(cls, enum.Enum) or (
-        "__members__" in dir(cls) and type(cls).__name__ == "pybind11_type"
+        "__members__" in dir(cls)
+        and any(meta.__name__ == "pybind11_type" for meta in type(cls).__mro__)
     )
 
 
