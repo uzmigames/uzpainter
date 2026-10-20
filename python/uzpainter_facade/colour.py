@@ -282,18 +282,23 @@ class Color:
 
     def _space(self) -> str:
         if self.color_space is None:
-            raise RuntimeError("Color.color_space is None: the colour has no colour space")
+            raise RuntimeError("color_space is undefined, no conversion can be done.")
         return color_space_name(self.color_space)
 
     def convert(self, color_space: Any) -> tuple[float, float, float]:
         """Get r,g,b values encoded in the given color space."""
-        working = to_working(self.value_raw, self._space())
-        return from_working(working, color_space_name(color_space))
+        source = self._space()
+        target = color_space_name(color_space)
+        if (source == target and source in _SRGB | _LINEAR | _RAW) or source in _RAW:
+            r, g, b = self.value_raw
+            return (f32(r), f32(g), f32(b))
+        working = to_working(self.value_raw, source)
+        return from_working(working, target)
 
     @property
     def value(self) -> tuple[float, float, float]:
         """The colour encoded in sRGB if its space is defined and not Raw, else `value_raw`."""
-        if self.color_space is None or color_space_name(self.color_space) in _RAW:
+        if self.color_space is None:
             return self.value_raw
         return self.sRGB
 
@@ -303,7 +308,8 @@ class Color:
 
     @sRGB.setter
     def sRGB(self, rgb: tuple[float, float, float]) -> None:
-        self.value_raw = from_working(to_working(_rgb(rgb), "sRGB"), self._space())
+        self.value_raw = _rgb(rgb)
+        self.color_space = GenericColorSpace.sRGB
 
     @property
     def working(self) -> tuple[float, float, float]:
@@ -346,10 +352,12 @@ def stored_color(color: Any, colour_managed: bool) -> Any:
     return uzpainter.colormanagement.Color(r, g, b, "Working")
 
 
-def read_color(native: Any) -> Color:
+def read_color(native: Any, colour_managed: bool = True) -> Color:
     """A native uniform colour as Painter returns it: always with a defined space."""
     space = native.color_space
     r, g, b = native.value_raw
+    if not colour_managed:
+        return Color(r, g, b, GenericColorSpace.Raw)
     if space in (None, "", "Working"):
         return Color(r, g, b, GenericColorSpace.Working)
     return Color(r, g, b, space_member(space))

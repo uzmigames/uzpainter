@@ -12,6 +12,8 @@
 // project's template, as `create` gives them. A refused reload commits nothing and raises its typed
 // error.
 
+#include <algorithm>
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -225,6 +227,41 @@ void BindProject(py::module_& m) {
         return py::module_::import("uuid").attr("UUID")(Session::Get().Current()->document->project_uuid());
     });
     m.def("last_imported_mesh_path", [] { return Session::Get().Current()->mesh_path; });
+    m.def("_scene_bounding_box", [] {
+        const auto open = Session::Get().Current();
+        const auto project = Read();
+        std::array<float, 3> center{}, dimensions{};
+        {
+            py::gil_scoped_release release;
+            const mesh::ImportResult imported = mesh::RederiveMesh(
+                *project, [open](const std::string& sha) { return open->store->ReadResource(sha); }, false);
+            // Painter reports scene coordinates before mesh_unit_scale (P22-B mesh-unit-scale).
+            std::array<double, 3> lo{}, hi{};
+            bool any = false;
+            for (const mesh::Object& object : imported.mesh.objects) {
+                const mesh::Matrix4& t = object.transform;
+                for (const mesh::Triangle& triangle : object.triangles) {
+                    for (const std::uint32_t corner : triangle.corners) {
+                        const mesh::Float3& p = imported.mesh.positions[imported.mesh.corners[corner].position];
+                        for (size_t axis = 0; axis < 3; ++axis) {
+                            const double value = static_cast<float>(t[axis] * double(p.x) + t[4 + axis] * double(p.y) +
+                                                                    t[8 + axis] * double(p.z) + t[12 + axis]);
+                            lo[axis] = any ? std::min(lo[axis], value) : value;
+                            hi[axis] = any ? std::max(hi[axis], value) : value;
+                        }
+                        any = true;
+                    }
+                }
+            }
+            if (!any) throw core::ValueError("the mesh has no triangle: it has no bounding box");
+            for (size_t axis = 0; axis < 3; ++axis) {
+                center[axis] = static_cast<float>((lo[axis] + hi[axis]) * 0.5);
+                dimensions[axis] = static_cast<float>(hi[axis] - lo[axis]);
+            }
+        }
+        const float radius = *std::max_element(dimensions.begin(), dimensions.end()) * 0.5f;
+        return py::make_tuple(center, dimensions, radius);
+    }, "Scene bounds from the project's stored mesh resources, before mesh_unit_scale.");
     m.def(
         "dump_recipe",
         [] {

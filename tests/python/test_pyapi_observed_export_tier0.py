@@ -19,6 +19,7 @@ from tests.python.observed_replay import (
 )
 
 EXCLUDED: dict[str, dict[str, str]] = {
+    "p22b-export-error-status": {},
     "phase1-engine-computations": {},
     "phase1-save-as-existing": {},
 }

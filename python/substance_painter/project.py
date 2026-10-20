@@ -3,6 +3,7 @@ module (projects and Painter's asynchronous lifecycle, phase1.21). Documented sy
 implementation is `uzpainter_facade` (`python/FACADE.md`)."""
 
 from uzpainter_facade.project import (
+    BoundingBox,
     MeshReloadingSettings,
     Metadata,
     NormalMapFormat,
@@ -15,6 +16,7 @@ from uzpainter_facade.project import (
     create,
     execute_when_not_busy,
     file_path,
+    get_scene_bounding_box,
     get_uuid,
     is_busy,
     is_in_edition_state,
@@ -30,6 +32,7 @@ from uzpainter_facade.project import (
 )
 
 __all__ = [
+    "BoundingBox",
     "MeshReloadingSettings",
     "Metadata",
     "NormalMapFormat",
@@ -42,6 +45,7 @@ __all__ = [
     "create",
     "execute_when_not_busy",
     "file_path",
+    "get_scene_bounding_box",
     "get_uuid",
     "is_busy",
     "is_in_edition_state",

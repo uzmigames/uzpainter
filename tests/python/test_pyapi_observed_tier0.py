@@ -48,13 +48,7 @@ def excluded(reason: str, *ids: str) -> dict[str, str]:
 # `<condition> <output id>` for one) -> kind, reason and owner.
 EXCLUDED: dict[str, dict[str, str]] = {
     "phase1-create-mesh-maps": {},
-    "phase1-create-default-paths": {
-        "s3/get_default_export_path": (
-            "host path, pending evidence (decision 320; phase1.24_python-api-facade item 4.1): "
-            "UzPainter returns this host's Documents/UzPainter/export; Painter returns its "
-            "user's Painter export folder. The excluded path gives no parity credit"
-        ),
-    },
+    "phase1-create-default-paths": {},
     "phase1-texture-throttling": {},
     "phase1-shelves": excluded(
         "host environment, permanent (decision 006): Painter's installed and user shelves "
@@ -98,7 +92,11 @@ def test_observed_probe_equals_painter(facade: Run, tmp_path: Path, probe: str) 
             assert isinstance(output["value"], dict), output
             assert isinstance(output["value"].get("path"), str), output
             path = Path(output["value"]["path"])
-            assert path.is_absolute() and path.parts[-2:] == ("UzPainter", "export"), output
+            assert path.is_absolute() and path.parts[-3:] == (
+                "Adobe",
+                "Adobe Substance 3D Painter",
+                "export",
+            ), output
     differences = compare_observed(replayed, golden, job, tmp_path, EXCLUDED[probe])
     save_trace(f"facade-observed/{probe}", golden, replayed, EXCLUDED[probe], differences)
     assert replayed["cleanup_failures"] == [], replayed["cleanup_failures"]

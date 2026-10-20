@@ -1,7 +1,7 @@
 {
   "id": 320,
   "slug": "320-default-export-path",
-  "title": "`export.get_default_export_path` returns UzPainter's own export folder under the user's Documents Known Folder; it is a host policy, not Painter-path parity, and the symbol stays pending evidence",
+  "title": "The native default export folder stays under Documents/UzPainter; the facade returns Painter's observed application folder without using it, pending exact replay evidence",
   "status": "accepted",
   "date": "2026-10-20",
   "relatedTasks": [

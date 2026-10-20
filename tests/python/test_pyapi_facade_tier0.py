@@ -254,7 +254,7 @@ def record(condition, first, uids):
 
 
 TRACE["mark"]("bookkeeping")
-call("probe_reset")
+call("probe_reset", root=PAYLOAD["run"])
 TRACE["mark"]("setup")
 create = PAYLOAD["create"]
 call("apply_step", step=create["step"], call=create["call"], args=create["args"],
@@ -351,6 +351,7 @@ def replay(facade: Run, probe: str, work: Path) -> tuple[dict[str, Any], dict[st
     payload = {
         "painter_side": PAINTER_SIDE.as_posix(),
         "painter_probes": PAINTER_PROBES.as_posix(),
+        "run": work.as_posix(),
         "create": {
             **step_payload(job.create, staged),
             "resolved": {"mesh": staged[job.create.args["mesh"]].as_posix()},

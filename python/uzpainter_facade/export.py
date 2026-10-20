@@ -17,6 +17,7 @@ exports finish even while engine computations remain disabled; deferred backgrou
 from __future__ import annotations
 
 import enum
+from pathlib import Path
 from typing import Any
 
 import uzpainter
@@ -56,9 +57,9 @@ for _cls in (ExportStatus, TextureExportResult):
 
 
 def get_default_export_path() -> str:
-    """Return this host's Documents/UzPainter/export path without creating it (decision 320)."""
-    path: str = uzpainter.export._default_export_path()
-    return path
+    """Return Painter's observed default under this host's Documents folder (decision 320)."""
+    documents = Path(uzpainter.export._default_export_path()).parents[1]
+    return (documents / "Adobe" / "Adobe Substance 3D Painter" / "export").as_posix()
 
 
 def list_project_textures(json_config: dict[str, Any]) -> dict[tuple[str, str], list[str]]:
@@ -79,8 +80,9 @@ def export_project_textures(json_config: dict[str, Any]) -> TextureExportResult:
         try:
             uzpainter.export.export_project_textures(json_config, [str(json_config["exportPath"])])
         except Exception as error:
-            event.emit_sync(event.ExportTexturesEnded(ExportStatus.Error, str(error), {}))
-            raise
+            message = "Error during the export (see logs)."
+            event.emit_sync(event.ExportTexturesEnded(ExportStatus.Error, message, {}))
+            raise ValueError(message) from error
         result = TextureExportResult(ExportStatus.Success, "Export successfully finished", textures)
         event.emit_sync(event.ExportTexturesEnded(result.status, result.message, textures))
     return result

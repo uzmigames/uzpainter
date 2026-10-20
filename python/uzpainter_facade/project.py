@@ -51,7 +51,43 @@ NormalMapFormat = _p.NormalMapFormat
 TangentSpace = _p.TangentSpace
 ProjectWorkflow = _p.ProjectWorkflow
 ProjectSaveMode = _p.ProjectSaveMode
-Metadata = _p.Metadata
+
+class Metadata:
+    """Project metadata; Painter's setter returns None while the native API keeps its receipt."""
+
+    __slots__ = ("_native",)
+
+    def __init__(self, context: str) -> None:
+        self._native = _p.Metadata(context)
+
+    def list(self) -> list[str]:
+        keys: list[str] = self._native.list()
+        return keys
+
+    def get(self, key: str) -> Any:
+        return self._native.get(key)
+
+    def set(self, key: str, value: Any) -> None:
+        self._native.set(key, value)
+
+
+class BoundingBox:
+    """Axis-aligned scene bounds, before mesh_unit_scale."""
+
+    __slots__ = ("center", "dimensions", "radius")
+
+    def __init__(
+        self,
+        dimensions: list[float],
+        center: list[float],
+        radius: float,
+    ) -> None:
+        self.center = list(center)
+        self.dimensions = list(dimensions)
+        self.radius = radius
+
+
+Metadata.__module__ = BoundingBox.__module__ = MODULE
 
 
 class Settings:
@@ -278,12 +314,12 @@ def is_busy() -> bool:
     """Whether UzPainter is busy: a project is loading or closing, a mesh is reloading or an
     export runs. An explicit export finishes while engine computations are disabled (R10,
     decision 319), so none waits deferred."""
-    return host.is_busy()
+    return bool(host.is_busy())
 
 
 def is_in_edition_state() -> bool:
     """Whether the current project is ready to work with."""
-    return host.is_in_edition_state()
+    return bool(host.is_in_edition_state())
 
 
 def execute_when_not_busy(callback: Callable[[], None]) -> None:
@@ -333,7 +369,7 @@ def save_as_copy(backup_file_path: str, mode: Any = ProjectSaveMode.Incremental)
 
 
 def needs_saving() -> bool:
-    return unsaved()
+    return bool(unsaved())
 
 
 def file_path() -> str | None:
@@ -351,6 +387,11 @@ def get_uuid() -> Any:
 
 def last_imported_mesh_path() -> str:
     return str(_p.last_imported_mesh_path())
+
+
+def get_scene_bounding_box() -> BoundingBox:
+    center, dimensions, radius = _p._scene_bounding_box()
+    return BoundingBox(dimensions=list(dimensions), center=list(center), radius=radius)
 
 
 # ── Mesh reload ─────────────────────────────────────────────────────────────────────────────────

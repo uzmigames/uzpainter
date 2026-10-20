@@ -179,9 +179,8 @@ Every run used the same runner, `uzp-pyapi-tests.exe` SHA-256 `f8c5a64b5b255aef6
 
 ### 7.4 Open
 
-Item 4.1 stays open for:
-- the 18 P22-B recordings (decisions 295-297), with their admission and compared replays;
-- the `get_default_export_path` host-path difference (P21-B s3, decision 320): implemented as a UzPainter host policy, symbol `pending-evidence`, owned by phase1.24_python-api-facade item 4.1.
+At the end of this run, item 4.1 remained open for P22-B recording/admission/replays and the
+P21-B default-path difference. Section 9 records the subsequent admission and compared fixes.
 
 ## 8. `get_default_export_path` as a UzPainter host policy (decision 320), 2026-10-20
 
@@ -193,4 +192,53 @@ Section 7's runner (`f8c5a64b…`) predates this change; this section's evidence
   - Evidence: `tmp/scratch/default-export/validation-run3/{evidence.json,junit.xml,pytest.log}`, including the source hashes of the five changed files.
   - Earlier attempts (run1 with 2 skips, run2 with no collection) are not evidence.
 - **Verdict:** P21-B s3 returns a valid absolute path and is recorded as an explicit host difference from Painter's path. It is not literal parity. The symbol is `pending-evidence` and is not `supported`.
+
+## 9. P22-B admission and compared corrections, 2026-10-20
+
+Commit `8f9eac52` admits all 18 P22-B recordings, together with ten rendering diagnostics.
+The public manifests contain hashes only; oracle data remains in the private store. The Tier 0
+stability report now covers all 269 admitted Tier 0 goldens. Admission checks: 502 passed before
+the report completed; the sole failing coverage check passed after regeneration, in a 35-test
+batch that also verified script-pilot authoring. No recording is still required for P22-B.
+
+The first strict replay exposed real facade differences. Corrections now have these compared
+results, with no new exclusions:
+
+| Golden | Result in both recordings |
+|---|---|
+| `p22b-project-mesh-unit-scale` | exact; scene bounds use stored mesh geometry before the unit-scale setting |
+| `p22b-project-tangent-per-fragment` | exact |
+| `p22b-project-tangent-per-vertex` | exact, including Metadata setter return and persisted values |
+| `p22b-project-workflow-default` | exact |
+| `p22b-textureset-channels` | exact, including canonical channel aliases and error messages |
+| `p22b-textureset-texture-set` | exact, including description persistence and property forms |
+| `p22b-textureset-user-channels` | exact, including label clearing |
+| `p22b-export-error-status` | exact, including raised ValueError and event message/status/order |
+| `phase1-create-default-paths` (P21-B) | exact, including literal default-path equality; s3 exclusion removed |
+
+The replay harness now passes its root to `probe_reset`, as the recorder does, and stages the
+same authored plugin modules through `probes.plugin_root`. These fixes restore the recorded
+instructions; they do not normalize differences. Native export errors remain the chained cause
+of the facade's recorded ValueError. The default-path amendment in decision 320 changes only
+the facade's returned string; the native destination policy and explicit-export-path requirement
+remain unchanged.
+
+Validation identities are separate:
+
+- `tmp/scratch/closure/api-integrated-junit.xml`: 10 passed, no skips; focused contracts plus
+  P21-B and export-error replays. Runner SHA-256
+  `b881b10a0f41212b998e83126239447e146fad610fdb20573943ce5d1b77c9fd`.
+- `tmp/scratch/closure/p22b-final-junit.xml`: 31 passed, no skips; seven permanent Project/
+  TextureSet replays plus facade and dispatcher regressions. Runner SHA-256
+  `d6f2b025a85feccdbc47ffd366d222c52327770da6ef710438f034df70c74be6`.
+- `tmp/scratch/closure/project-final-junit.xml`: 2 passed after correcting BoundingBox's
+  public constructor order and list-valued fields; stored geometry survives source changes
+  and save/reopen.
+- Installed Python hashes accompany these runs in the corresponding `*-build-identity.json`;
+  traces are in `integrated-api-traces/` and `p22b-final-traces/`. No full-suite claim is made.
+
+Item 4.1 remains open for the four HOST and six Layer/Color/Levels compared replays and final
+trace/capability reconciliation. Successful comparisons do not by themselves promote inventory
+entries. The BoundingBox radius evidence is the recorded plane; no separate arbitrary-3D-radius
+qualification is claimed. Wand export parity remains owned by `phase1.25_pilot-wand`.
 

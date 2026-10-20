@@ -210,6 +210,13 @@ void BindTextureSet(py::module_& m) {
         .def("name", [](const TextureSetHandle& t) { return ResolveSet(*Read(), t.id).name; })
         .def("original_name", [](const TextureSetHandle& t) { return ResolveSet(*Read(), t.id).original_name; })
         .def("description", [](const TextureSetHandle& t) { return ResolveSet(*Read(), t.id).description; })
+        .def("_set_description", [](const TextureSetHandle& t, const std::string& description) {
+            core::json::Object args = SetArgs(t.id);
+            args["description"] = description;
+            return Mutate("textureset.TextureSet.description", args, [&](core::Edit& edit) {
+                EditSet(edit, t.id).description = description;
+            });
+        })
         .def("get_resolution", [](const TextureSetHandle& t) { return ResolveSet(*Read(), t.id).resolution; })
         .def("set_resolution",
              [](const TextureSetHandle& t, const core::Resolution& resolution) {

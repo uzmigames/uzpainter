@@ -15,7 +15,53 @@ from uzpainter_facade.state import RESOURCE_METADATA, SESSION, edits, one_transa
 MODULE = "substance_painter.textureset"
 _ts = uzpainter.textureset
 
-ChannelType = _ts.ChannelType
+_CHANNEL_ALIASES = {
+    "AbsorptionColor": "TransmissionColor",
+    "Anisotropylevel": "SpecularRoughnessAnisotropy",
+    "CoatOpacity": "CoatWeight",
+    "Emissive": "EmissionColor",
+    "Metallic": "BaseMetalness",
+    "Roughness": "SpecularRoughness",
+    "Scattering": "SubsurfaceRadiusScale",
+    "ScatteringColor": "SubsurfaceColor",
+    "SheenColor": "FuzzColor",
+    "SheenOpacity": "FuzzWeight",
+    "SheenRoughness": "FuzzRoughness",
+    "SpecularEdgeColor": "SpecularColor",
+    "Translucency": "SubsurfaceWeight",
+}
+
+
+class _ChannelTypeMeta(type(_ts.ChannelType)):  # type: ignore[misc]
+    @property
+    def __members__(cls) -> dict[str, Any]:
+        return dict(cls._members)
+
+    def __call__(cls, value: Any) -> Any:
+        native = _ts.ChannelType(value)
+        return cls._members[_CHANNEL_ALIASES.get(native.name, native.name)]
+
+
+ChannelType = _ChannelTypeMeta(
+    "ChannelType",
+    (_ts.ChannelType,),
+    {"__module__": MODULE, "__doc__": "Painter channel names and their canonical aliases."},
+)
+
+
+# Keep native channel identities unchanged. Facade members remain native-compatible values.
+ChannelType._members = {}
+for _name, _native in _ts.ChannelType.__members__.items():
+    if _name not in _CHANNEL_ALIASES:
+        _member = type(_ts.ChannelType).__call__(ChannelType, _native)
+        ChannelType._members[_name] = _member
+        setattr(ChannelType, _name, _member)
+for _alias, _canonical in _CHANNEL_ALIASES.items():
+    _member = ChannelType._members[_canonical]
+    ChannelType._members[_alias] = _member
+    setattr(ChannelType, _alias, _member)
+ChannelType.__module__ = MODULE
+
 ChannelFormat = _ts.ChannelFormat
 MeshMapUsage = _ts.MeshMapUsage
 Resolution = _ts.Resolution
@@ -62,11 +108,13 @@ class Channel:
         return int(self._native.bit_depth())
 
     def type(self) -> Any:
-        return self._native.type()
+        return ChannelType(self._native.type())
 
     @edits
     def edit(self, channel_format: Any, label: str | None = None) -> None:
-        self._native.edit(channel_format, label)
+        self._native.edit(
+            channel_format, label or "" if self.type().name.startswith("User") else ""
+        )
 
     def __eq__(self, other: object) -> bool:
         return isinstance(other, Channel) and self._native == other._native
@@ -97,29 +145,52 @@ class Stack:
         return TextureSet(self._native.material())
 
     def all_channels(self) -> dict[Any, Channel]:
-        return {kind: Channel(channel) for kind, channel in self._native.all_channels().items()}
+        return {
+            ChannelType(kind): Channel(channel)
+            for kind, channel in self._native.all_channels().items()
+        }
 
     @edits
     def add_channel(
         self, channel_type: Any, channel_format: Any, label: str | None = None
     ) -> Channel:
-        return Channel(self._native.add_channel(channel_type, channel_format, label))
+        kind = ChannelType(channel_type)
+        if self._native.has_channel(kind):
+            raise ValueError("This channel already exists.")
+        return Channel(
+            self._native.add_channel(
+                kind, channel_format, label if kind.name.startswith("User") else None
+            )
+        )
 
     @edits
     def remove_channel(self, channel_type: Any) -> None:
-        self._native.remove_channel(channel_type)
+        self._native.remove_channel(self._require_channel(channel_type))
 
     @edits
     def edit_channel(
         self, channel_type: Any, channel_format: Any, label: str | None = None
     ) -> None:
-        self._native.edit_channel(channel_type, channel_format, label)
+        kind = self._require_channel(channel_type)
+        self._native.edit_channel(
+            kind, channel_format, label or "" if kind.name.startswith("User") else ""
+        )
 
     def has_channel(self, channel_type: Any) -> bool:
-        return bool(self._native.has_channel(channel_type))
+        return bool(self._native.has_channel(ChannelType(channel_type)))
 
     def get_channel(self, channel_type: Any) -> Channel:
-        return Channel(self._native.get_channel(channel_type))
+        return Channel(self._native.get_channel(self._require_channel(channel_type)))
+
+    def _require_channel(self, channel_type: Any) -> Any:
+        kind = ChannelType(channel_type)
+        if not self._native.has_channel(kind):
+            name = kind.name[0].lower() + kind.name[1:]
+            raise ValueError(
+                f"There is no channel '{name}' in the texture set "
+                f"'{self._native.material().name()}'."
+            )
+        return kind
 
     def __eq__(self, other: object) -> bool:
         return isinstance(other, Stack) and self._native == other._native
@@ -129,6 +200,11 @@ class Stack:
 
     def __repr__(self) -> str:
         return f"Stack({self._native.material().name()!r}, {self._native.name()!r})"
+
+
+class _CallableName(str):
+    def __call__(self) -> str:
+        return str(self)
 
 
 class TextureSet:
@@ -141,16 +217,27 @@ class TextureSet:
 
     @staticmethod
     def from_name(texture_set_name: str) -> TextureSet:
-        return TextureSet(_ts.TextureSet.from_name(texture_set_name))
+        try:
+            return TextureSet(_ts.TextureSet.from_name(texture_set_name))
+        except ValueError:
+            raise ValueError(f"Texture Set '{texture_set_name}' not found.") from None
 
-    def name(self) -> str:
-        return str(self._native.name())
+    @property
+    def name(self) -> _CallableName:
+        return _CallableName(self._native.name())
 
+    @property
     def original_name(self) -> str:
         return str(self._native.original_name())
 
+    @property
     def description(self) -> str:
         return str(self._native.description())
+
+    @description.setter
+    @edits
+    def description(self, value: str) -> None:
+        self._native._set_description(value)
 
     def is_layered_material(self) -> bool:
         return False  # material layering is a release gap; no Phase 1 texture set is layered
@@ -166,6 +253,13 @@ class TextureSet:
 
     @edits
     def set_resolution(self, new_resolution: Any) -> None:
+        for dimension in (new_resolution.width, new_resolution.height):
+            if dimension > 0 and dimension & (dimension - 1):
+                raise ValueError(
+                    f"{dimension} is not a power of two. The resolution must be power of two "
+                    "and in the range [128,4096]. The available resolutions are "
+                    "128,256,512,1024,2048."
+                )
         self._native.set_resolution(new_resolution)
 
     def get_mesh_map_resource(self, usage: Any) -> resource.ResourceID | None:

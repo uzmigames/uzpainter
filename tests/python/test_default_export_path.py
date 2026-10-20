@@ -1,4 +1,4 @@
-"""UzPainter's own export directory contract; not equality with Painter's host path."""
+"""Native Documents policy and the facade's observed Painter default-path contract."""
 
 from __future__ import annotations
 
@@ -40,24 +40,31 @@ def documents_folder() -> Path:
 
 
 def test_default_export_path_is_host_documents_and_stable(facade: Run) -> None:
-    expected = documents_folder() / "UzPainter" / "export"
+    documents = documents_folder()
+    expected = documents / "Adobe" / "Adobe Substance 3D Painter" / "export"
+    native_expected = documents / "UzPainter" / "export"
     report = facade(
         "EXPECTED = "
-        + repr(str(expected))
+        + repr(expected.as_posix())
+        + "\nNATIVE_EXPECTED = "
+        + repr(str(native_expected))
         + "\n"
         + r"""
 from pathlib import Path
 
 samples = []
 def sample():
-    locations = [Path(EXPECTED).parent, Path(EXPECTED)]
+    locations = [Path(EXPECTED).parents[1], Path(EXPECTED).parent, Path(EXPECTED),
+                 Path(NATIVE_EXPECTED).parent, Path(NATIVE_EXPECTED)]
     def snapshot():
         return [(p.exists(), p.stat().st_mtime_ns if p.exists() else None) for p in locations]
     before = snapshot()
     value = export.get_default_export_path()
+    native = uzpainter.export._default_export_path()
     assert snapshot() == before, "getter created or changed the export directory"
     assert isinstance(value, str) and Path(value).is_absolute()
-    assert os.path.normcase(os.path.normpath(value)) == os.path.normcase(os.path.normpath(EXPECTED))
+    assert value == EXPECTED
+    assert Path(native) == Path(NATIVE_EXPECTED)
     samples.append(value)
 
 sample()
@@ -85,3 +92,22 @@ result = {"samples": samples, "missing_export_path": missing_export_path}
     assert report["status"] == "ok", json.dumps(report.get("error", report), indent=2)
     values = report["result"]["samples"]
     assert len(values) == 6 and len(set(values)) == 1
+
+
+def test_facade_path_derives_redirected_documents_without_touching_disk(facade: Run) -> None:
+    report = facade(
+        r"""
+from pathlib import Path
+original = uzpainter.export._default_export_path
+try:
+    redirected = Path(WORK) / "redirected-\u00e1rea" / "Documents"
+    uzpainter.export._default_export_path = lambda: str(redirected / "UzPainter" / "export")
+    assert export.get_default_export_path() == (
+        redirected / "Adobe" / "Adobe Substance 3D Painter" / "export"
+    ).as_posix()
+    assert not redirected.parent.exists(), "getter touched the redirected Documents path"
+finally:
+    uzpainter.export._default_export_path = original
+"""
+    )
+    assert report["status"] == "ok", json.dumps(report.get("error", report), indent=2)
