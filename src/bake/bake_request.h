@@ -44,8 +44,8 @@ struct BakeMesh {
     bool normal_frame_supported = true;
 };
 
-/// Painter's ten `MeshMapUsage` bakers (`06-baking.md` §2). CPU: AO, Normal, WorldSpaceNormal, Position, ID
-/// and Opacity.
+/// Painter's ten `MeshMapUsage` bakers (`06-baking.md` §2). CPU: AO, Normal, WorldSpaceNormal, Position, ID,
+/// Height and Opacity.
 enum class MeshMapUsage {
     Normal,
     WorldSpaceNormal,
@@ -145,6 +145,18 @@ struct IdSettings {
     std::optional<IdColorGenerator> generator = IdColorGenerator::HueShift;
 };
 
+/// Height `MaximizeRange` ("Normalization") and `Divisor` ("Scaling divisor") (decision 341), by
+/// Painter's labels: "Relative to ray distances", "Relative to low mesh (per UV tile)",
+/// "Relative to min/max (per UV tile)" and "Manual". The defaults are Painter's
+/// (`assets/defaults/baking.json`).
+enum class HeightNormalization { RelativeToRayDistances, RelativeToLowMesh, RelativeToMinMax, Manual };
+
+struct HeightSettings {
+    /// Absent: the signed distance only, unnormalised (an evidence request no parameter makes).
+    std::optional<HeightNormalization> normalization = HeightNormalization::RelativeToLowMesh;
+    float divisor = 1.0f;
+};
+
 /// An axis-aligned box in mesh units (`lower` <= `upper` on every axis).
 struct BoundingBox {
     Float3 lower;
@@ -176,6 +188,7 @@ struct BakeRequest {
     NormalSettings normal;
     PositionSettings position;
     IdSettings id;
+    HeightSettings height;
     /// The texture set's low mesh parts. Where UV islands overlap, the lowest part index, then
     /// the lowest triangle index, wins.
     std::vector<const BakeMesh*> low;
@@ -287,6 +300,16 @@ struct PositionNormalizationRecord {
     bool bounds_applied = false;
 };
 
+/// What a Height bake applied (`baked.effective_normalization`, decision 341): the settings, the
+/// unit scale (a value is the mesh-unit distance times `scale_to_internal`, in centimetres) and
+/// whether a normalisation or the divisor was applied (neither is, until a golden settles them).
+struct HeightNormalizationRecord {
+    HeightSettings settings;
+    double scale_to_internal = 0.0;
+    bool normalization_applied = false;
+    bool divisor_applied = false;
+};
+
 /// The baked AO map, its RAW map and its evidence maps (`06-baking.md` §4), row 0 at the top
 /// (v = 1). `ao_raw` is the escaped fraction of the rays of a texel's hit sub-samples,
 /// round(65535 * escaped / (hits * rays)) in integers; every other texel holds 0 and is told
@@ -322,6 +345,11 @@ struct BakeResult {
     /// [0, 1] and unencoded; a bake mesh carries no transparency input, so a hit is 1. Zero on
     /// non-hit texels.
     std::vector<float> opacity;
+    /// Height (decision 341): per texel the signed distance from the low surface to the high
+    /// surface along the primary ray, positive where the high surface lies in front of the low one
+    /// (towards the ray's origin), in centimetres, float32 and unnormalised; zero on non-hit texels.
+    std::vector<float> height_map;
+    HeightNormalizationRecord height_normalization;
     core::TangentSpace tangent_space = core::TangentSpace::PerVertex;
     core::NormalMapFormat normal_format = core::NormalMapFormat::OpenGL;
     std::vector<std::uint8_t> texel_class;
@@ -342,7 +370,8 @@ struct BakeResult {
 /// The canonical bytes of a result (little-endian; AO-only keeps `UZPBAKE3`; Normal uses
 /// `UZPBAKE4` with usage flags, mode, format and RGB maps before the existing sizes/maps/counts,
 /// then the distance record; each geometry map present, and only then, follows as a tagged block:
-/// `WSN1` for WorldSpaceNormal, `POS1` for Position, `IDM1` for ID, `OPA1` for Opacity): what the
+/// `WSN1` for WorldSpaceNormal, `POS1` for Position, `IDM1` for ID, `OPA1` for Opacity, `HGT1` for
+/// Height): what the
 /// determinism proof compares across thread counts.
 /// `threads_used` is not part of it.
 std::string SerializeResult(const BakeResult& result);

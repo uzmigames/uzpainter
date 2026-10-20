@@ -36,6 +36,7 @@
 #include "bake/baker.h"
 #include "bake/baking_parameters.h"
 #include "bake/embree_baker.h"
+#include "bake/height_baker.h"
 #include "bake/id_baker.h"
 #include "bake/mesh_inputs.h"
 #include "bake/position_baker.h"
@@ -346,9 +347,10 @@ void CaseCapabilityErrors() {
     CHECK(baker.caps().parity_owner_task == "phase3.4_baker-ao");
     CHECK(baker.caps().embree_version == "4.4.1");
     const Capabilities capabilities = baker.caps();
-    CHECK(capabilities.usages.size() == 6);
+    CHECK(capabilities.usages.size() == 7);
     for (MeshMapUsage usage : {MeshMapUsage::AO, MeshMapUsage::Normal, MeshMapUsage::WorldSpaceNormal,
-                               MeshMapUsage::Position, MeshMapUsage::ID, MeshMapUsage::Opacity}) {
+                               MeshMapUsage::Position, MeshMapUsage::ID, MeshMapUsage::Height,
+                               MeshMapUsage::Opacity}) {
         CHECK(std::find(capabilities.usages.begin(), capabilities.usages.end(), usage) != capabilities.usages.end());
     }
     CHECK(capabilities.parity_owner_tasks.at(MeshMapUsage::AO) == "phase3.4_baker-ao");
@@ -1658,6 +1660,7 @@ void CaseCageFileThreadsInProcess() {
 #include "position_bake_cases.h"
 #include "id_bake_cases.h"
 #include "opacity_bake_cases.h"
+#include "height_bake_cases.h"
 
 const std::vector<std::pair<std::string, std::function<void()>>>& Cases() {
     static const std::vector<std::pair<std::string, std::function<void()>>> cases = {
@@ -1732,6 +1735,13 @@ const std::vector<std::pair<std::string, std::function<void()>>>& Cases() {
         {"opacity_threads_in_process", CaseOpacityThreadsInProcess},
         {"opacity_isolation", CaseOpacityIsolation},
         {"opacity_refusals", CaseOpacityRefusals},
+        {"height_plane", CaseHeightPlane},
+        {"height_sphere", CaseHeightSphere},
+        {"height_bevel", CaseHeightBevel},
+        {"height_threads_in_process", CaseHeightThreadsInProcess},
+        {"height_record", CaseHeightRecord},
+        {"height_refusals", CaseHeightRefusals},
+        {"height_parameters", CaseHeightParameters},
     };
     return cases;
 }
@@ -1781,7 +1791,7 @@ std::string Json(const BakeResult& r, const Capabilities& caps, const std::strin
 /// bevelled cube with highs and every path of decision 306 on) and `cage_file` (the cube, its
 /// high and its cage from OBJ files with relative AO distances and a unit scale, decision 311),
 /// `normal`, `world_normal`, `position` and `id` (the bevelled cube's WorldSpaceNormal, Position and
-/// ID labels, decision 337) and `opacity` (its Opacity, decision 341).
+/// ID labels, decision 337), `opacity` and `height` (its Opacity and signed Height, decision 341).
 int BakeCommand(int argc, char** argv) {
     if (argc < 4) throw ValueError("bake needs <fixture> <threads>");
     const std::string fixture = argv[2];
@@ -1831,6 +1841,8 @@ int BakeCommand(int argc, char** argv) {
         request = IdLabelsRequest(bevel.Request(0.07f));
     } else if (fixture == "opacity") {
         request = OpacityRequest(bevel.Request(0.07f));
+    } else if (fixture == "height") {
+        request = HeightRequest(bevel.Request(0.07f));
     } else if (fixture == "cage_file") {
         request = cage_file.emplace().Request();
     } else {

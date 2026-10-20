@@ -1,11 +1,12 @@
 {
   "id": 341,
   "slug": "341-more-bakers",
-  "title": "More bakers on the CPU core: Opacity as 1 on a hit and 0 elsewhere; every value Painter's labels leave open refused before any work; parity pending-evidence",
+  "title": "More bakers on the CPU core: Opacity as 1 on a hit and 0 elsewhere; Height as the signed low-to-high distance in centimetres with every MaximizeRange refused; every value Painter's labels leave open refused before any work; parity pending-evidence",
   "status": "accepted",
   "date": "2026-10-20",
   "relatedTasks": [
     "phase3.4_baker-opacity",
+    "phase3.4_baker-height",
     "phase3.5_embree-bakers"
   ],
   "supersededBy": null

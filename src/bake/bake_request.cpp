@@ -176,6 +176,17 @@ std::string SerializeResult(const BakeResult& result) {
         PutLe(out, result.opacity.size(), 8);
         for (float v : result.opacity) PutLe(out, std::bit_cast<std::uint32_t>(v), 4);
     }
+    if (!result.height_map.empty()) {
+        const HeightNormalizationRecord& h = result.height_normalization;
+        out += "HGT1";
+        PutLe(out, h.settings.normalization ? 1u + static_cast<std::uint64_t>(*h.settings.normalization) : 0u, 1);
+        PutLe(out, std::bit_cast<std::uint32_t>(h.settings.divisor), 4);
+        PutLe(out, h.normalization_applied ? 1 : 0, 1);
+        PutLe(out, h.divisor_applied ? 1 : 0, 1);
+        PutLe(out, std::bit_cast<std::uint64_t>(h.scale_to_internal), 8);
+        PutLe(out, result.height_map.size(), 8);
+        for (float v : result.height_map) PutLe(out, std::bit_cast<std::uint32_t>(v), 4);
+    }
     return out;
 }
 

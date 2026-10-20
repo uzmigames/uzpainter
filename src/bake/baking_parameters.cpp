@@ -219,7 +219,8 @@ void RefuseUnstored(MeshMapUsage usage, const std::string& what) {
 }  // namespace
 
 bool StoresBakerValues(MeshMapUsage usage) {
-    return usage == MeshMapUsage::AO || usage == MeshMapUsage::Position || usage == MeshMapUsage::ID;
+    return usage == MeshMapUsage::AO || usage == MeshMapUsage::Position || usage == MeshMapUsage::ID ||
+           usage == MeshMapUsage::Height;
 }
 
 const std::vector<PropertySpec>& PropertySpecs() { return TheCatalog().specs; }
@@ -238,6 +239,7 @@ struct ParameterStore {
     /// The set's own values of the other stored bakers (decision 337): never in a link group.
     std::shared_ptr<ParameterSlot> position = std::make_shared<ParameterSlot>();
     std::shared_ptr<ParameterSlot> id = std::make_shared<ParameterSlot>();
+    std::shared_ptr<ParameterSlot> height = std::make_shared<ParameterSlot>();  // decision 341
     /// Shared by the texture sets of one session; null for a set outside a session.
     std::shared_ptr<std::uint64_t> revision;
 
@@ -248,6 +250,7 @@ struct ParameterStore {
             case MeshMapUsage::AO: return ao.get();
             case MeshMapUsage::Position: return position.get();
             case MeshMapUsage::ID: return id.get();
+            case MeshMapUsage::Height: return height.get();
             default: return nullptr;
         }
     }
@@ -635,7 +638,7 @@ core::BakeSettings ToBakeSettings(const BakingParameters& parameters) {
 }
 
 void LoadBakeSettings(const BakingParameters& parameters, const core::BakeSettings& settings) {
-    ParameterSlot common, ao, position, id;
+    ParameterSlot common, ao, position, id, height;
     const auto load = [](const json::Object& object, PropertyGroup group, MeshMapUsage usage, const std::string& where,
                          ParameterSlot& into) {
         for (const auto& [key, value] : object) {
@@ -658,6 +661,8 @@ void LoadBakeSettings(const BakingParameters& parameters, const core::BakeSettin
                 load(object, PropertyGroup::Baker, usage, where, position);
             } else if (usage == MeshMapUsage::ID) {
                 load(object, PropertyGroup::Baker, usage, where, id);
+            } else if (usage == MeshMapUsage::Height) {
+                load(object, PropertyGroup::Baker, usage, where, height);
             } else if (!object.empty()) {
                 RefuseUnstored(usage, "the bake parameters");
             }
@@ -669,6 +674,7 @@ void LoadBakeSettings(const BakingParameters& parameters, const core::BakeSettin
     store.ao->values = std::move(ao.values);
     store.position->values = std::move(position.values);
     store.id->values = std::move(id.values);
+    store.height->values = std::move(height.values);
     Advance({&store});
 }
 
@@ -774,6 +780,17 @@ MappedRequest RequestFromParameters(const BakingParameters& parameters, BakeRequ
         r.id.generator = generator == "Random"      ? IdColorGenerator::Random
                          : generator == "Hue shift" ? IdColorGenerator::HueShift
                                                     : IdColorGenerator::Grayscale;
+    }
+    if (std::find(r.usages.begin(), r.usages.end(), MeshMapUsage::Height) != r.usages.end()) {
+        // Both keys map, the normalisation always; the baker refuses what it does not establish
+        // (decision 341).
+        const std::map<std::string, Property> height = parameters.baker(MeshMapUsage::Height);
+        const std::string range = label(height, "MaximizeRange");
+        r.height.normalization = range == "Relative to ray distances"             ? HeightNormalization::RelativeToRayDistances
+                                 : range == "Relative to low mesh (per UV tile)" ? HeightNormalization::RelativeToLowMesh
+                                 : range == "Relative to min/max (per UV tile)"  ? HeightNormalization::RelativeToMinMax
+                                                                                 : HeightNormalization::Manual;
+        r.height.divisor = real(height, "Divisor");
     }
     out.request = std::move(r);
     return out;

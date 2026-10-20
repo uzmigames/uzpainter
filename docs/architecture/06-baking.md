@@ -158,6 +158,18 @@ the high surface at the hit. A bake mesh carries no transparency input, so a hit
 other texel 0 with its class. `opacity` is float32 in [0, 1], unencoded: Painter's channel format
 waits on the Tier 2b goldens. Opacity has no parameters. Block tag: `OPA1`.
 
+**Height** (`height_baker.*`, phase3.4_baker-height, decision 341). The map holds the signed distance
+from the low surface to the high surface along the primary ray, positive where the high surface lies
+in front of the low one (towards the ray's origin), in centimetres (mesh units times
+`scale_to_internal`). Every `MaximizeRange` value is refused, Painter's default "Relative to low
+mesh (per UV tile)" included: how each maps a signed distance to a value, and how `Divisor` composes
+with it, are not recorded. So only a request without a normalisation bakes, an evidence request no
+parameter makes; `Divisor` is recorded and not applied. `height_map` is float32 and unclamped.
+`HeightNormalizationRecord` holds what was applied, and `HeightNormalizationJson` gives it as the
+binding's `baked.effective_normalization`. Block tag: `HGT1`. Height's values are stored per texture
+set in `bake_settings.per_baker.Height`, with no link group. Painter's Height has no secondary-ray
+keys (decision 323's record), so none is read.
+
 Parity is `pending-evidence` for every map. Python and MCP expose no bake.
 
 ## 4. Outputs and evidence

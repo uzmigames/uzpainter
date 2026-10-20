@@ -16,8 +16,8 @@
 //   reproduced;
 // - a default the observation does not establish (`OutputSize`, `TonemappingBounds`);
 // - a value outside a key's range: how Painter treats it is not recorded;
-// - storing a value for a baker other than AO, Position and ID (decision 337), which its owner
-//   baker task brings.
+// - storing a value for a baker other than AO, Position, ID (decision 337) and Height (decision
+//   341), which its owner baker task brings.
 //
 // Decision 311 adds the mapping to a `BakeRequest`, linked groups (`BakingSession`, the documented
 // `substance_painter.baking` link functions) and the project manifest's `bake_settings`.
@@ -78,8 +78,8 @@ struct PropertySpec {
     std::string output_id;
 };
 
-/// True for the bakers whose values `set()` stores: AO, Position and ID (decision 337). Only AO's
-/// form link groups; a Position or ID value is always the texture set's own.
+/// True for the bakers whose values `set()` stores: AO, Position and ID (decision 337) and Height
+/// (decision 341). Only AO's form link groups; another baker's value is always the texture set's own.
 bool StoresBakerValues(MeshMapUsage usage);
 
 /// Every key: `common()`'s in Painter's order, then each baker's, in `MeshMapUsage` order.
@@ -225,7 +225,8 @@ void LoadBakeSettings(const BakingParameters& parameters, const core::BakeSettin
 /// `NotYetSupported` naming its owner: `OffsetMap` given, AO `Attenuation` other than None,
 /// `Spread` other than 180, `IgnoreBackfaceSecondary` other than Never, `FilterMethodSecondary`
 /// other than Always, `GroundPlane` on. Position's four labels map to `BakeRequest::position` and
-/// ID's two to `BakeRequest::id`; the baker refuses the values it does not establish (decision 337). `SmoothNormals` and `SkewFaceBehavior` are not read: the
+/// ID's two to `BakeRequest::id` (decision 337), Height's two to `BakeRequest::height` (decision 341);
+/// the baker refuses the values it does not establish. `SmoothNormals` and `SkewFaceBehavior` are not read: the
 /// baker's own ray-direction reading applies (decision 302), and they are listed in
 /// `keys_not_read`. The mesh inputs (`HipolyMesh`, `CageMesh`) are the mesh-input step's: `base`
 /// carries the meshes.

@@ -1067,7 +1067,7 @@ pub fn build(b: *std.Build) void {
     bake_tests_mod.linkLibrary(uzp_core_lib);
     bake_tests_mod.addCSourceFiles(.{
         .root = b.path("src"),
-        .files = &.{ "bake/bake_request.cpp", "bake/baker.cpp", "bake/baking_parameters.cpp", "bake/embree_api.cpp", "bake/embree_baker.cpp", "bake/mesh_inputs.cpp", "bake/sampling.cpp", "bake/id_baker.cpp", "bake/position_baker.cpp", "bake/world_normal_baker.cpp", "bake/opacity_baker.cpp" },
+        .files = &.{ "bake/bake_request.cpp", "bake/baker.cpp", "bake/baking_parameters.cpp", "bake/embree_api.cpp", "bake/embree_baker.cpp", "bake/mesh_inputs.cpp", "bake/sampling.cpp", "bake/id_baker.cpp", "bake/position_baker.cpp", "bake/world_normal_baker.cpp", "bake/opacity_baker.cpp", "bake/height_baker.cpp" },
         .flags = &bake_flags,
     });
     bake_tests_mod.addCSourceFiles(.{

@@ -94,6 +94,13 @@ NATIVE_CASES = (
     "opacity_threads_in_process",  # Opacity (one ISA): identical bytes at 1, 4 and N threads
     "opacity_isolation",  # Opacity: shares AO's primary hits without changing AO
     "opacity_refusals",  # Opacity: SubSampling and DilationWidth refused, owner named
+    "height_plane",  # Height: signed distances in centimetres, distance-based and custom cage
+    "height_sphere",  # Height: zero low as high; an inflated sphere and ground at +d
+    "height_bevel",  # Height: the bevelled cube's chamfer depths below the low faces
+    "height_threads_in_process",  # Height (one ISA): identical bytes at 1, 4 and N threads
+    "height_record",  # Height: the record, its JSON, Divisor not applied, AO unchanged
+    "height_refusals",  # Height: every MaximizeRange, SubSampling, DilationWidth refused
+    "height_parameters",  # Height: stored, saved, loaded and mapped through the model
 )
 
 
@@ -152,6 +159,7 @@ def test_native_case(bake_tests: Path, case: str) -> None:
         ("position", 32),
         ("id", 32),
         ("opacity", 32),
+        ("height", 32),
     ],
 )
 def test_bytes_equal_across_thread_counts(

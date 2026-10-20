@@ -60,7 +60,8 @@ void Configure(BakingSession& session) {
     BakingParameters::set({{a.common().at("OutputSize"), std::pair<std::int64_t, std::int64_t>{10, 11}},
                            {a.common().at("HipolySuffix"), std::string("_hi")},
                            {a.baker(MeshMapUsage::AO).at("GroundPlane"), true},
-                           {a.baker(MeshMapUsage::Position).at("Normalization"), EnumLabel{"None"}}});
+                           {a.baker(MeshMapUsage::Position).at("Normalization"), EnumLabel{"None"}},
+                           {a.baker(MeshMapUsage::Height).at("Divisor"), 2.0}});
     session.set_linked_group({"a", "c"}, "a", MeshMapUsage::AO);
 }
 
@@ -75,6 +76,9 @@ void CheckConfigured(const BakingSession& session) {
     const auto a = ToBakeSettings(session.parameters("a"));
     CHECK(a.per_baker.at("Position").at("Normalization") == json::Value("None"));
     CHECK(!ToBakeSettings(session.parameters("c")).per_baker.contains("Position"));
+    // So are Height values (decision 341).
+    CHECK(a.per_baker.at("Height").at("Divisor") == json::Value(2.0));
+    CHECK(!ToBakeSettings(session.parameters("c")).per_baker.contains("Height"));
 }
 
 void Roundtrip(const std::filesystem::path& directory) {
