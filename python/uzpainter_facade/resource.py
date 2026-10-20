@@ -29,9 +29,10 @@ Resource reload and shelves (phase1.21, decision 110):
   reloaded_resources, resource_errors)` (Tier 0 `phase1-reload-resources`). A resource is modified
   when the bytes of the file it was imported from match none of the versions its name holds; the
   reload imports them as a new version under the same name and leaves every binding as it was
-  ("this does not update the resources currently used in the project document"). Painter also
-  reported a reload of unchanged bytes after save and reopen; that residual is named in decision
-  110, not reproduced.
+  ("this does not update the resources currently used in the project document"). The recorded
+  alias controls retain distinct origins during the session; aliases restored with the same
+  current version share the saved origin. Repeated reloads report the latest imported version
+  as `old`, including after reopening (`p22b-reload-order-*`).
 - Shelves are folders of user files the script adds (`Shelves.add`). `refresh` crawls the folder
   on a worker thread between `ShelfCrawlingStarted` and `ShelfCrawlingEnded`. The application and
   user shelves, whose Painter names are unrecorded, and the resources of a shelf are release gaps.
@@ -52,7 +53,14 @@ from urllib.parse import parse_qs, urlsplit
 import uzpainter
 
 from uzpainter_facade import event
-from uzpainter_facade.state import RESOURCE_KEY, RESOURCE_METADATA, SESSION, edits, one_transaction
+from uzpainter_facade.state import (
+    RESOURCE_KEY,
+    RESOURCE_METADATA,
+    RESOURCE_ORIGIN_KEY,
+    SESSION,
+    edits,
+    one_transaction,
+)
 
 MODULE = "substance_painter.resource"
 Usage = uzpainter.resource.Usage
@@ -182,18 +190,24 @@ def to_native(identifier: Any) -> Any:
     raise uzpainter.ResourceNotFoundError(identifier.url())
 
 
-# The project Metadata key of the reload origin of each imported content (`reload_origins`).
-ORIGIN_KEY = "resource_origin"
+# Chronological imports survive the native catalog's hash ordering and project reopen.
+IMPORT_ORDER_KEY = "resource_import_order"
 
 
 def reload_origins() -> dict[str, str]:
-    """`{sha256: file}`: the file a reload reads again for the resources holding those bytes,
-    whatever their name. It is the file of the last import that added a new name or version for
-    them; importing a name and version the project holds already changes nothing
+    """`{sha256: file}`: the shared origin restored when the project is reopened. The last
+    import among names still holding that version supplies it; a name that advances to another
+    version no longer supplies the old content's origin. Idempotent imports change nothing
     (`p22b-host-resources`: after reopen, s20 reloads `checker` and `checker-reload`, imported
     with equal bytes from two files, from the second file). Saved with the project."""
-    value = uzpainter.project.Metadata(RESOURCE_METADATA).get(ORIGIN_KEY)
+    value = uzpainter.project.Metadata(RESOURCE_METADATA).get(RESOURCE_ORIGIN_KEY)
     return dict(value) if isinstance(value, dict) else {}
+
+
+def import_order() -> list[list[str]]:
+    """`[name, sha256, file]` in import order, persisted in the import's transaction."""
+    value = uzpainter.project.Metadata(RESOURCE_METADATA).get(IMPORT_ORDER_KEY)
+    return list(value) if isinstance(value, list) else []
 
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
@@ -233,10 +247,17 @@ def import_project_resource(
             metadata.set(RESOURCE_KEY, known)
         identifier = native.identifier()
         if (identifier.name, identifier.version) not in held:
-            # A new name or version: its file becomes the reload origin of these bytes.
+            order = import_order()
+            order.append([identifier.name, identifier.version, file_path])
+            metadata.set(IMPORT_ORDER_KEY, order)
+            latest = {name: version for name, version, _ in order}
             origins = reload_origins()
-            origins[identifier.version] = file_path
-            metadata.set(ORIGIN_KEY, origins)
+            for _, version, _ in order:
+                origins.pop(version, None)
+            for name, version, origin in order:
+                if latest[name] == version:
+                    origins[version] = origin
+            metadata.set(RESOURCE_ORIGIN_KEY, origins)
     return Resource(from_native(native.identifier()), resource_usage)
 
 
@@ -406,6 +427,8 @@ def _candidates(resource_filter: Any) -> list[Any]:
         return []
     if isinstance(resource_filter, (AllResourcesFilter, ProjectFilter)):
         natives = list(uzpainter.resource.list_project_resources())
+        latest = {name: version for name, version, _ in import_order()}
+        natives = [n for n in natives if n.version == latest.get(n.name, n.version)]
     elif isinstance(resource_filter, ResourcesUsedByProjectFilter):
         natives = list(uzpainter.resource.list_used_resources())
     elif isinstance(resource_filter, ResourcesListFilter):
@@ -479,14 +502,25 @@ def _reload_resources(
         versions: dict[str, set[str]] = {}
         for native in uzpainter.resource.list_project_resources():
             versions.setdefault(native.name, set()).add(native.version)
-        seen: set[tuple[str, str]] = set()
-        origins = reload_origins()
+        # Within a session, names imported from distinct files keep distinct origins. Only
+        # contents restored from a saved project share its captured canonical origin.
+        origins = SESSION.opened_resource_origins
+        ranks = {(name, version): i for i, (name, version, _) in enumerate(import_order())}
+        latest: dict[tuple[str, str], Any] = {}
         for native in candidates:
-            old = from_native(native, context)
             origin = origins.get(native.version) or uzpainter.resource.resource_origin(native)
-            if origin is None or (native.name, origin) in seen:
+            if origin is None:
                 continue
-            seen.add((native.name, origin))
+            key = (native.name, origin)
+            previous = latest.get(key)
+            # Native enumeration is hash-ordered, not chronological. Each file reload starts
+            # from its last imported version, including after save/reopen and prior reloads.
+            if previous is None or ranks.get((native.name, native.version), -1) > ranks.get(
+                (previous.name, previous.version), -1
+            ):
+                latest[key] = native
+        for (_, origin), native in latest.items():
+            old = from_native(native, context)
             try:
                 data = Path(origin).read_bytes()
             except OSError as error:

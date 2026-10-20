@@ -27,6 +27,9 @@ each rule still has a reason to exist:
 - Resource contexts inside an error message are renumbered from each side's first project, as
   `normalised` does for every `context` field (decision 107). A staged input's path inside an
   error message is compared relative to the run's root (the recorder's `inputs/` folder).
+- Decision 338: only after-save/reopen s20's ReloadResourcesEnded result list compares as
+  a multiset of complete objects. Duplicates and all other event fields/order stay exact.
+  Raw result order is fresh-process-unstable, not claimed as exact parity.
 
 The outputs that cannot equal Painter's are in `EXCLUDED`, with their kind and owner; each must
 be recorded in the golden and still differ.
@@ -49,7 +52,12 @@ from tests.python.observed_replay import (
     replay_observed,
     save_trace,
 )
-from tests.python.test_pyapi_facade_tier0 import CONDITIONS, contexts, golden_outputs, normalised
+from tests.python.reload_result_multiset import (
+    comparable_reload,
+    comparison_contract,
+    write_raw_replay,
+)
+from tests.python.test_pyapi_facade_tier0 import CONDITIONS, contexts
 
 HOST_VERSION = (
     "host difference (decision 330): UzPainter reports its own version, never Painter's; no "
@@ -77,16 +85,8 @@ EXCLUDED: dict[str, dict[str, str]] = {
             "reload has no UzPainter resource to check, so it ends before the call returns "
             "(running_after_call); its events stay compared"
         ),
-        "after_save_reopen s20/events": (
-            "order unproven, owner phase1.24_python-api-facade item 4.1: the two reloads of one "
-            "content (`checker`, `checker-reload`) equal Painter's as a set (`UNORDERED`), but "
-            "the one recording that reloads two resources at once cannot settle their order"
-        ),
     },
 }
-# Excluded event outputs whose events must still equal Painter's apart from the order of each
-# `ReloadResourcesEnded`'s reloaded resources.
-UNORDERED: dict[str, list[str]] = {"p22b-host-resources": ["after_save_reopen s20/events"]}
 
 
 PAINTER_LOCK, LOCK = ".painter_lock", ".lock"
@@ -244,38 +244,25 @@ def comparable(
     return golden, replayed
 
 
-def without_reload_order(events: list[Any]) -> list[Any]:
-    """The events with each `ReloadResourcesEnded`'s reloaded resources sorted."""
-    return [
-        {**e, "reloaded_resources_argument": sorted(e["reloaded_resources_argument"], key=repr)}
-        if "reloaded_resources_argument" in e
-        else e
-        for e in events
-    ]
-
-
-def unordered_differences(probe: str, ours: dict[str, Any], expected: dict[str, Any]) -> list[str]:
-    """`UNORDERED` outputs that differ in more than the order of their reloaded resources."""
-    differences = []
-    for key in UNORDERED.get(probe, []):
-        condition, output_id = key.split(" ")
-        mine = normalised(ours[condition]["outputs"])[output_id]["value"]
-        painter = golden_outputs(expected)[condition][output_id]["value"]
-        if without_reload_order(mine) != without_reload_order(painter):
-            differences.append(f"{key} differs beyond the reload order: {mine!r} != {painter!r}")
-    return differences
-
-
 @pytest.mark.parametrize("probe", sorted(EXCLUDED))
 def test_host_probe_equals_painter(facade: Run, tmp_path: Path, probe: str) -> None:
     """Item 4.1: the P22-B host golden is exact apart from the named exclusions, both
     recordings, including decision 332's texture-state comparison."""
     replayed, golden, job = replay_observed(facade, probe, tmp_path)
+    if probe == "p22b-host-resources":
+        write_raw_replay(tmp_path, replayed)
     excluded = EXCLUDED[probe]
     expected, ours = comparable(probe, golden, replayed, tmp_path / "run", textures=True)
+    expected, ours = comparable_reload(probe, expected, ours)
     differences = compare_observed(ours, expected, job, tmp_path, excluded)
-    differences += unordered_differences(probe, ours, expected)
-    save_trace(f"facade-observed/{probe}", golden, replayed, excluded, differences)
+    save_trace(
+        f"facade-observed/{probe}",
+        golden,
+        replayed,
+        excluded,
+        differences,
+        comparison_contract=comparison_contract(probe),
+    )
     assert replayed["cleanup_failures"] == [], replayed["cleanup_failures"]
     assert differences == [], "\n".join(differences)
     symbols = observed_symbols(replayed, golden, excluded)

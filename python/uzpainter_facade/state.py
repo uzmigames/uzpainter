@@ -21,6 +21,7 @@ import uzpainter
 # from which Painter's resource version `<sha1>.image` is rebuilt after save and reopen.
 RESOURCE_METADATA = "uzpainter.facade"
 RESOURCE_KEY = "resource_sha1"
+RESOURCE_ORIGIN_KEY = "resource_origin"
 
 
 @dataclasses.dataclass
@@ -59,6 +60,8 @@ class Session:
         # The context of the ResourceID last bound per binding key, in this session only
         # (Painter keeps the identifier it was given until the project is reloaded).
         self.bound_context: dict[tuple[Any, ...], str] = {}
+        # Canonical origins belong to contents restored at open, not later imports or saves.
+        self.opened_resource_origins: dict[str, str] = {}
 
     def project_started(self) -> None:
         """A project was created or opened: Painter then selects the top root layer of the active
@@ -66,6 +69,9 @@ class Session:
         default paint layer, which UzPainter does not create yet: phase4.1_nodes-paint-layers)."""
         self.projects += 1
         self.reset()
+        origins = uzpainter.project.Metadata(RESOURCE_METADATA).get(RESOURCE_ORIGIN_KEY)
+        if isinstance(origins, dict):
+            self.opened_resource_origins = dict(origins)
         stack = uzpainter.textureset.get_active_stack()
         roots = uzpainter.layerstack.get_root_layer_nodes(stack)
         if roots:

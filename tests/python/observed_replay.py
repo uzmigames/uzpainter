@@ -632,25 +632,30 @@ def save_trace(
     replayed: dict[str, Any],
     excluded: dict[str, str],
     differences: list[str],
+    *,
+    comparison_contract: dict[str, Any] | None = None,
 ) -> None:
     """With a trace folder set (`trace_folder`), writes `<replay id>.trace.json` there: the
     symbols of the compared outputs (`observed_symbols`), the per-output trace, the exclusions
-    and the differences. Without one it does nothing."""
+    and the differences. An explicit semantic contract reports `comparison_passed` separately
+    and never claims raw exactness. Callers pass the original golden and replay, not normalized
+    copies. Without a trace folder it does nothing; ordinary traces retain their existing shape.
+    """
     if trace_folder() is None:
         return
-    write_trace(
-        replay_id,
-        "trace",
-        {
-            "replay": replay_id,
-            "golden": golden["golden_id"],
-            "exact_apart_from_exclusions": not differences,
-            "differences": differences,
-            "excluded": dict(sorted(excluded.items())),
-            "symbols": observed_symbols(replayed, golden, excluded),
-            "by_output": replayed["trace"],
-        },
-    )
+    entry = {
+        "replay": replay_id,
+        "golden": golden["golden_id"],
+        "exact_apart_from_exclusions": not differences and comparison_contract is None,
+        "differences": differences,
+        "excluded": dict(sorted(excluded.items())),
+        "symbols": observed_symbols(replayed, golden, excluded),
+        "by_output": replayed["trace"],
+    }
+    if comparison_contract is not None:
+        entry["comparison_passed"] = not differences
+        entry["comparison_contract"] = comparison_contract
+    write_trace(replay_id, "trace", entry)
 
 
 def check_observed_trace(replay: str, golden: str, symbols: list[str]) -> None:
