@@ -4241,5 +4241,882 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "d0d9789ad3ae82b8ce956c9315f9cc69a8f235d20ae580918fb32371c67c1c53",
+      "size_bytes": 308616
+    },
+    {
+      "record_id": "r1-s0-user0",
+      "kind": "exported_map",
+      "sha256": "f28ac49dfae95b76dda1cb122cad0b12d0124d137ffc7c8cbcbf0966c821dbff",
+      "size_bytes": 251413
+    },
+    {
+      "record_id": "r1-s0-user1",
+      "kind": "exported_map",
+      "sha256": "af4921d5ac6840147d359d47f55ef047222f4f660da4b95f0920a72c0018b944",
+      "size_bytes": 248854
+    },
+    {
+      "record_id": "r1-s0-user2",
+      "kind": "exported_map",
+      "sha256": "f28ac49dfae95b76dda1cb122cad0b12d0124d137ffc7c8cbcbf0966c821dbff",
+      "size_bytes": 251413
+    },
+    {
+      "record_id": "r1-s0-user3",
+      "kind": "exported_map",
+      "sha256": "2e842108952246dac16d9507a87fca90f83ab2c8996c8739c91e6dedea32188e",
+      "size_bytes": 314139
+    },
+    {
+      "record_id": "r1-s0-user4",
+      "kind": "exported_map",
+      "sha256": "f28ac49dfae95b76dda1cb122cad0b12d0124d137ffc7c8cbcbf0966c821dbff",
+      "size_bytes": 251413
+    },
+    {
+      "record_id": "r1-s0-user5",
+      "kind": "exported_map",
+      "sha256": "06b79f0f6f585b546ff8925812c6d991c0767d23bca52a0957056189a57d220c",
+      "size_bytes": 314087
+    },
+    {
+      "record_id": "r1-s0-user6",
+      "kind": "exported_map",
+      "sha256": "07e2f02e1740020c2d2372473fafa53147c8b3cec217d9f2429fa999a1b10d8c",
+      "size_bytes": 204502
+    },
+    {
+      "record_id": "r1-s0-user7",
+      "kind": "exported_map",
+      "sha256": "092f9630df025282de954dae76b8fa300682eebe258ca008ac8bbe5addda983d",
+      "size_bytes": 256354
+    },
+    {
+      "record_id": "r1-s0-normal_base",
+      "kind": "exported_map",
+      "sha256": "10c8c5ba4005920f60a251726c99473f6d4c5643b13261db7f30aec171ee16fc",
+      "size_bytes": 318596
+    },
+    {
+      "record_id": "r1-s1-user0",
+      "kind": "exported_map",
+      "sha256": "4aeaeb14ce78943b7d746b533ece6acdf80d48e3bb87775e503da67ec77be8b1",
+      "size_bytes": 175130
+    },
+    {
+      "record_id": "r1-s1-user1",
+      "kind": "exported_map",
+      "sha256": "d4c8e38e453d857dd904bf6b69c5631afc1f55ee7e652df4893e28aab4d6b777",
+      "size_bytes": 262416
+    },
+    {
+      "record_id": "r1-s1-user2",
+      "kind": "exported_map",
+      "sha256": "d71db80404020e80d22e0ebfdef0353ece1deeeb6eb2fc00cee8f8b315952455",
+      "size_bytes": 69785
+    },
+    {
+      "record_id": "r1-s1-user3",
+      "kind": "exported_map",
+      "sha256": "f297a4d3757899d36b59b7eeb5b0a0944ecce665e790e2540544310f1b7ab5ab",
+      "size_bytes": 270624
+    },
+    {
+      "record_id": "r1-s1-user4",
+      "kind": "exported_map",
+      "sha256": "fcd8dda620da21ab9756b08fc51c44416a450d4c1b23f0082060ca820d05fa26",
+      "size_bytes": 199453
+    },
+    {
+      "record_id": "r1-s1-user5",
+      "kind": "exported_map",
+      "sha256": "5219c0d0ad4bc770772fb5c473aa298c66e9c9468465e8733e0ee4ea0e7551bb",
+      "size_bytes": 255975
+    },
+    {
+      "record_id": "r1-s1-user6",
+      "kind": "exported_map",
+      "sha256": "529c663fbd8dd58a3d4eeea7b744ce522bdf4db60fbbff3caca0a1728086454b",
+      "size_bytes": 312050
+    },
+    {
+      "record_id": "r1-s1-user7",
+      "kind": "exported_map",
+      "sha256": "82d3109f51a1f3cff52c8360c9c10023601a948e52c7051be0c0b05fcc199250",
+      "size_bytes": 313223
+    },
+    {
+      "record_id": "r1-s1-normal_base",
+      "kind": "exported_map",
+      "sha256": "10c8c5ba4005920f60a251726c99473f6d4c5643b13261db7f30aec171ee16fc",
+      "size_bytes": 318596
+    },
+    {
+      "record_id": "r1-s2-user0",
+      "kind": "exported_map",
+      "sha256": "798f1bdbda9752e219eab04e6fa4a53dfb157ff76f270a47778a6b7e77455fea",
+      "size_bytes": 312220
+    },
+    {
+      "record_id": "r1-s2-user1",
+      "kind": "exported_map",
+      "sha256": "c1ba5c3570c1db3e0060746c72cfb7c25da5b235b32cd54676742d5b1013782b",
+      "size_bytes": 314433
+    },
+    {
+      "record_id": "r1-s2-user2",
+      "kind": "exported_map",
+      "sha256": "d00b451a23e99105c7b5a1ad973aca8aee40cc04893db9589d852197c17c495d",
+      "size_bytes": 315241
+    },
+    {
+      "record_id": "r1-s2-user3",
+      "kind": "exported_map",
+      "sha256": "5c58046da3e548bebfcf2cd3df196667da7d38400b65ecb071385f70b3a2629b",
+      "size_bytes": 323714
+    },
+    {
+      "record_id": "r1-s2-user4",
+      "kind": "exported_map",
+      "sha256": "d58da264180748e4d5578b4d0097f8f3a1f0542760761b35ea9130958f76695e",
+      "size_bytes": 315423
+    },
+    {
+      "record_id": "r1-s2-user5",
+      "kind": "exported_map",
+      "sha256": "43a8643350267e479a0bb1cba03f70a23b694951f445ba90b667b468a4ae30c3",
+      "size_bytes": 321084
+    },
+    {
+      "record_id": "r1-s2-user6",
+      "kind": "exported_map",
+      "sha256": "bcf7c8a917174bfd6473fe0e540098fec0b09625bf15873f2549b0f9b87a7aa6",
+      "size_bytes": 306981
+    },
+    {
+      "record_id": "r1-s2-user7",
+      "kind": "exported_map",
+      "sha256": "8da871f1251c4a8ae588e1405e4eb93350acdae8d096ebf8f5bb6fb4b2d3a6ea",
+      "size_bytes": 313983
+    },
+    {
+      "record_id": "r1-s2-normal_base",
+      "kind": "exported_map",
+      "sha256": "10c8c5ba4005920f60a251726c99473f6d4c5643b13261db7f30aec171ee16fc",
+      "size_bytes": 318596
+    },
+    {
+      "record_id": "r1-s3-user0",
+      "kind": "exported_map",
+      "sha256": "d7b7d03c5dc44f7803b534d38b64f6f4de4b7895accbd5a0ea04877700a2dc5d",
+      "size_bytes": 313361
+    },
+    {
+      "record_id": "r1-s3-user1",
+      "kind": "exported_map",
+      "sha256": "c170714e7f8ffe836c77fba875b32b4aef2feb75d11ea87421e24ff3099e7dec",
+      "size_bytes": 314085
+    },
+    {
+      "record_id": "r1-s3-user2",
+      "kind": "exported_map",
+      "sha256": "cdef74eb5c16668467820b147d72652edd31a19050b47c0a9e1c18bffffa788b",
+      "size_bytes": 317114
+    },
+    {
+      "record_id": "r1-s3-user3",
+      "kind": "exported_map",
+      "sha256": "53b03f3f1e53bf444df4322d9632686ff738e6b092d02865731becd03cb46b12",
+      "size_bytes": 319244
+    },
+    {
+      "record_id": "r1-s3-user4",
+      "kind": "exported_map",
+      "sha256": "5db2080f9072bd841b6c4c8e918dbadda379324489ded113afab76a250ad9c9b",
+      "size_bytes": 313295
+    },
+    {
+      "record_id": "r1-s3-user5",
+      "kind": "exported_map",
+      "sha256": "f758cc48688a7abc01bdc6e2db7dbbde8212da56ae0f18943467426f1a0c287f",
+      "size_bytes": 313748
+    },
+    {
+      "record_id": "r1-s3-user6",
+      "kind": "exported_map",
+      "sha256": "fcaebf506524626af1ff677730893e6e13531396e2edcd1adcde8234d4d858ec",
+      "size_bytes": 306577
+    },
+    {
+      "record_id": "r1-s3-user7",
+      "kind": "exported_map",
+      "sha256": "19dbec31857e16955fb7678c7700b64286155706ce880f79fa5ed3af0e00ad00",
+      "size_bytes": 311775
+    },
+    {
+      "record_id": "r1-s3-normal_base",
+      "kind": "exported_map",
+      "sha256": "10c8c5ba4005920f60a251726c99473f6d4c5643b13261db7f30aec171ee16fc",
+      "size_bytes": 318596
+    },
+    {
+      "record_id": "r1-s4-user0",
+      "kind": "exported_map",
+      "sha256": "b0805de5c995308465044751b5b982f74edd3b2482d21e7a2fdae6c174077b2d",
+      "size_bytes": 239789
+    },
+    {
+      "record_id": "r1-s4-user1",
+      "kind": "exported_map",
+      "sha256": "e5f5817891538611d8cd9f22464d8cad596d0b16a18d35a1ed02eca95bcbf7ef",
+      "size_bytes": 257982
+    },
+    {
+      "record_id": "r1-s4-user2",
+      "kind": "exported_map",
+      "sha256": "2d6e3b2915ea56ea914601c49e2d2fdb370f34a0998e95b2e6a84e7378d161b0",
+      "size_bytes": 147195
+    },
+    {
+      "record_id": "r1-s4-user3",
+      "kind": "exported_map",
+      "sha256": "5c124f20787af35ec83b34c96510f3cc45e97d07169a9bdc21314cd7c9c184a5",
+      "size_bytes": 255319
+    },
+    {
+      "record_id": "r1-s4-user4",
+      "kind": "exported_map",
+      "sha256": "c460062a6a3ef8c45a77e04fa43efbd4788de685b2b4a881342d12d8901d2c79",
+      "size_bytes": 249567
+    },
+    {
+      "record_id": "r1-s4-user5",
+      "kind": "exported_map",
+      "sha256": "9f61c8258c4d3ac4d064656655c95984abf6a11f91f9106d1e346f4003533802",
+      "size_bytes": 253959
+    },
+    {
+      "record_id": "r1-s4-user6",
+      "kind": "exported_map",
+      "sha256": "3fb5e55d58a0c8e7d231761a5c25e90ad4e646596da6c7e1e649572b829c0b6b",
+      "size_bytes": 256621
+    },
+    {
+      "record_id": "r1-s4-user7",
+      "kind": "exported_map",
+      "sha256": "2f214ef82033415dc09bfc3076577e60a75898e5cca90e48e4759a6bebf33068",
+      "size_bytes": 254645
+    },
+    {
+      "record_id": "r1-s4-normal_base",
+      "kind": "exported_map",
+      "sha256": "10c8c5ba4005920f60a251726c99473f6d4c5643b13261db7f30aec171ee16fc",
+      "size_bytes": 318596
+    },
+    {
+      "record_id": "r1-s5-user0",
+      "kind": "exported_map",
+      "sha256": "fe3a88ed512e650161cb69169b13ad242118bef7309c7e902ca97245738f55d2",
+      "size_bytes": 243290
+    },
+    {
+      "record_id": "r1-s5-user1",
+      "kind": "exported_map",
+      "sha256": "1e04ff0fad92e7ef63e32f3f832f840c09e762a418794aec11382ba7b2292034",
+      "size_bytes": 301292
+    },
+    {
+      "record_id": "r1-s5-user2",
+      "kind": "exported_map",
+      "sha256": "a2d4ada2ad41000987c2c57fc3c3361ad67bbcd905458c467cb6d8bb6be0f55c",
+      "size_bytes": 138039
+    },
+    {
+      "record_id": "r1-s5-user3",
+      "kind": "exported_map",
+      "sha256": "d6b3b3439ca3afc1376984b723c1d86444459202c3a2409c7024e9c819488fdb",
+      "size_bytes": 256768
+    },
+    {
+      "record_id": "r1-s5-user4",
+      "kind": "exported_map",
+      "sha256": "288b0e613614015c96da761935d3a348b10f3b596410a81d5d1fca62b7fe7092",
+      "size_bytes": 216037
+    },
+    {
+      "record_id": "r1-s5-user5",
+      "kind": "exported_map",
+      "sha256": "070284813cc005b80bb78d1aad24a5b95ea0574764e70f8e1150497c720462b1",
+      "size_bytes": 301115
+    },
+    {
+      "record_id": "r1-s5-user6",
+      "kind": "exported_map",
+      "sha256": "035ac0b8da6deb3a91219feed2c64e7ee75efcc54894116a8f13368c308d380d",
+      "size_bytes": 240742
+    },
+    {
+      "record_id": "r1-s5-user7",
+      "kind": "exported_map",
+      "sha256": "95a3f8e5b1dba108b34aacece06d54fe1d69069013154cfb983b811a8372ecfb",
+      "size_bytes": 300604
+    },
+    {
+      "record_id": "r1-s5-normal_base",
+      "kind": "exported_map",
+      "sha256": "10c8c5ba4005920f60a251726c99473f6d4c5643b13261db7f30aec171ee16fc",
+      "size_bytes": 318596
+    },
+    {
+      "record_id": "r1-s6-user0",
+      "kind": "exported_map",
+      "sha256": "9bb9e3ee357f5b675ae456fd39893e2be6cf5388c8a11f5128ff9467d5088a79",
+      "size_bytes": 549212
+    },
+    {
+      "record_id": "r1-s6-user1",
+      "kind": "exported_map",
+      "sha256": "0d9b5fde177e4b1af54e00f449e0fb2d5dd53ed96293ada0144ba7e9273e2a7a",
+      "size_bytes": 563602
+    },
+    {
+      "record_id": "r1-s6-user2",
+      "kind": "exported_map",
+      "sha256": "e77d8e64d8350e37907342f40cee75f02b0f0cc94358ae72bd20904e8a4722fe",
+      "size_bytes": 553095
+    },
+    {
+      "record_id": "r1-s6-user3",
+      "kind": "exported_map",
+      "sha256": "6ff0d026f79a9420660b82ded06719cfec2e5585e3fa902f86c72ca5a1e2964d",
+      "size_bytes": 542774
+    },
+    {
+      "record_id": "r1-s6-user4",
+      "kind": "exported_map",
+      "sha256": "3530fbf99180d896bf89e646ef78f0799eedaa55f1cc3ddd72cb5547611d9964",
+      "size_bytes": 604453
+    },
+    {
+      "record_id": "r1-s6-user5",
+      "kind": "exported_map",
+      "sha256": "9c64019bd63a2227f60e14aba0ddcf57f8dcb3b482b378ca51c31372ce18954b",
+      "size_bytes": 624823
+    },
+    {
+      "record_id": "r1-s6-user6",
+      "kind": "exported_map",
+      "sha256": "99972b6154eab0a4f7a177574d1c3ce11ce2d14906bce5ce6d8d62d92e9acd55",
+      "size_bytes": 597008
+    },
+    {
+      "record_id": "r1-s6-user7",
+      "kind": "exported_map",
+      "sha256": "1fea5f3f3d3f5619a7d66484da64ea91e21c24e60c64ab7648de907ba63194fe",
+      "size_bytes": 608478
+    },
+    {
+      "record_id": "r1-s6-normal_base",
+      "kind": "exported_map",
+      "sha256": "10c8c5ba4005920f60a251726c99473f6d4c5643b13261db7f30aec171ee16fc",
+      "size_bytes": 318596
+    },
+    {
+      "record_id": "r1-s7-user0",
+      "kind": "exported_map",
+      "sha256": "44def6df7456e06a970b7ce1ae8737f5d40d59f324ed5294f05abcde9fe5e0ab",
+      "size_bytes": 522081
+    },
+    {
+      "record_id": "r1-s7-user1",
+      "kind": "exported_map",
+      "sha256": "a4063f9b58bd977ce1f5acf31b4bfc715a2e29c277d138b7600b5e51c2993833",
+      "size_bytes": 608049
+    },
+    {
+      "record_id": "r1-s7-user2",
+      "kind": "exported_map",
+      "sha256": "33460bb1284fc4395c3b5cf67774f706642795669d45d0ea5c7132643be820c4",
+      "size_bytes": 715159
+    },
+    {
+      "record_id": "r1-s7-user3",
+      "kind": "exported_map",
+      "sha256": "4c41d9a93e9ce0d7baf16308b5a8b2284be03a31419a7e791497b41fbf5846c0",
+      "size_bytes": 708082
+    },
+    {
+      "record_id": "r1-s7-user4",
+      "kind": "exported_map",
+      "sha256": "76a76d739c0ed1fe6b1e410506ed400be048cfc26f588f37ed549142e9e25fff",
+      "size_bytes": 715674
+    },
+    {
+      "record_id": "r1-s7-user5",
+      "kind": "exported_map",
+      "sha256": "7c57d541bbde4c77eef3852c36e35f208bdd904aeedfa0861afecc08e56be5d3",
+      "size_bytes": 703563
+    },
+    {
+      "record_id": "r1-s7-user6",
+      "kind": "exported_map",
+      "sha256": "f28ac49dfae95b76dda1cb122cad0b12d0124d137ffc7c8cbcbf0966c821dbff",
+      "size_bytes": 251413
+    },
+    {
+      "record_id": "r1-s7-user7",
+      "kind": "exported_map",
+      "sha256": "af4921d5ac6840147d359d47f55ef047222f4f660da4b95f0920a72c0018b944",
+      "size_bytes": 248854
+    },
+    {
+      "record_id": "r1-s7-normal_base",
+      "kind": "exported_map",
+      "sha256": "10c8c5ba4005920f60a251726c99473f6d4c5643b13261db7f30aec171ee16fc",
+      "size_bytes": 318596
+    },
+    {
+      "record_id": "r2-s0-user0",
+      "kind": "exported_map",
+      "sha256": "f28ac49dfae95b76dda1cb122cad0b12d0124d137ffc7c8cbcbf0966c821dbff",
+      "size_bytes": 251413
+    },
+    {
+      "record_id": "r2-s0-user1",
+      "kind": "exported_map",
+      "sha256": "af4921d5ac6840147d359d47f55ef047222f4f660da4b95f0920a72c0018b944",
+      "size_bytes": 248854
+    },
+    {
+      "record_id": "r2-s0-user2",
+      "kind": "exported_map",
+      "sha256": "f28ac49dfae95b76dda1cb122cad0b12d0124d137ffc7c8cbcbf0966c821dbff",
+      "size_bytes": 251413
+    },
+    {
+      "record_id": "r2-s0-user3",
+      "kind": "exported_map",
+      "sha256": "2e842108952246dac16d9507a87fca90f83ab2c8996c8739c91e6dedea32188e",
+      "size_bytes": 314139
+    },
+    {
+      "record_id": "r2-s0-user4",
+      "kind": "exported_map",
+      "sha256": "f28ac49dfae95b76dda1cb122cad0b12d0124d137ffc7c8cbcbf0966c821dbff",
+      "size_bytes": 251413
+    },
+    {
+      "record_id": "r2-s0-user5",
+      "kind": "exported_map",
+      "sha256": "06b79f0f6f585b546ff8925812c6d991c0767d23bca52a0957056189a57d220c",
+      "size_bytes": 314087
+    },
+    {
+      "record_id": "r2-s0-user6",
+      "kind": "exported_map",
+      "sha256": "07e2f02e1740020c2d2372473fafa53147c8b3cec217d9f2429fa999a1b10d8c",
+      "size_bytes": 204502
+    },
+    {
+      "record_id": "r2-s0-user7",
+      "kind": "exported_map",
+      "sha256": "092f9630df025282de954dae76b8fa300682eebe258ca008ac8bbe5addda983d",
+      "size_bytes": 256354
+    },
+    {
+      "record_id": "r2-s0-normal_base",
+      "kind": "exported_map",
+      "sha256": "10c8c5ba4005920f60a251726c99473f6d4c5643b13261db7f30aec171ee16fc",
+      "size_bytes": 318596
+    },
+    {
+      "record_id": "r2-s1-user0",
+      "kind": "exported_map",
+      "sha256": "4aeaeb14ce78943b7d746b533ece6acdf80d48e3bb87775e503da67ec77be8b1",
+      "size_bytes": 175130
+    },
+    {
+      "record_id": "r2-s1-user1",
+      "kind": "exported_map",
+      "sha256": "d4c8e38e453d857dd904bf6b69c5631afc1f55ee7e652df4893e28aab4d6b777",
+      "size_bytes": 262416
+    },
+    {
+      "record_id": "r2-s1-user2",
+      "kind": "exported_map",
+      "sha256": "d71db80404020e80d22e0ebfdef0353ece1deeeb6eb2fc00cee8f8b315952455",
+      "size_bytes": 69785
+    },
+    {
+      "record_id": "r2-s1-user3",
+      "kind": "exported_map",
+      "sha256": "f297a4d3757899d36b59b7eeb5b0a0944ecce665e790e2540544310f1b7ab5ab",
+      "size_bytes": 270624
+    },
+    {
+      "record_id": "r2-s1-user4",
+      "kind": "exported_map",
+      "sha256": "fcd8dda620da21ab9756b08fc51c44416a450d4c1b23f0082060ca820d05fa26",
+      "size_bytes": 199453
+    },
+    {
+      "record_id": "r2-s1-user5",
+      "kind": "exported_map",
+      "sha256": "5219c0d0ad4bc770772fb5c473aa298c66e9c9468465e8733e0ee4ea0e7551bb",
+      "size_bytes": 255975
+    },
+    {
+      "record_id": "r2-s1-user6",
+      "kind": "exported_map",
+      "sha256": "529c663fbd8dd58a3d4eeea7b744ce522bdf4db60fbbff3caca0a1728086454b",
+      "size_bytes": 312050
+    },
+    {
+      "record_id": "r2-s1-user7",
+      "kind": "exported_map",
+      "sha256": "82d3109f51a1f3cff52c8360c9c10023601a948e52c7051be0c0b05fcc199250",
+      "size_bytes": 313223
+    },
+    {
+      "record_id": "r2-s1-normal_base",
+      "kind": "exported_map",
+      "sha256": "10c8c5ba4005920f60a251726c99473f6d4c5643b13261db7f30aec171ee16fc",
+      "size_bytes": 318596
+    },
+    {
+      "record_id": "r2-s2-user0",
+      "kind": "exported_map",
+      "sha256": "798f1bdbda9752e219eab04e6fa4a53dfb157ff76f270a47778a6b7e77455fea",
+      "size_bytes": 312220
+    },
+    {
+      "record_id": "r2-s2-user1",
+      "kind": "exported_map",
+      "sha256": "c1ba5c3570c1db3e0060746c72cfb7c25da5b235b32cd54676742d5b1013782b",
+      "size_bytes": 314433
+    },
+    {
+      "record_id": "r2-s2-user2",
+      "kind": "exported_map",
+      "sha256": "d00b451a23e99105c7b5a1ad973aca8aee40cc04893db9589d852197c17c495d",
+      "size_bytes": 315241
+    },
+    {
+      "record_id": "r2-s2-user3",
+      "kind": "exported_map",
+      "sha256": "5c58046da3e548bebfcf2cd3df196667da7d38400b65ecb071385f70b3a2629b",
+      "size_bytes": 323714
+    },
+    {
+      "record_id": "r2-s2-user4",
+      "kind": "exported_map",
+      "sha256": "d58da264180748e4d5578b4d0097f8f3a1f0542760761b35ea9130958f76695e",
+      "size_bytes": 315423
+    },
+    {
+      "record_id": "r2-s2-user5",
+      "kind": "exported_map",
+      "sha256": "43a8643350267e479a0bb1cba03f70a23b694951f445ba90b667b468a4ae30c3",
+      "size_bytes": 321084
+    },
+    {
+      "record_id": "r2-s2-user6",
+      "kind": "exported_map",
+      "sha256": "bcf7c8a917174bfd6473fe0e540098fec0b09625bf15873f2549b0f9b87a7aa6",
+      "size_bytes": 306981
+    },
+    {
+      "record_id": "r2-s2-user7",
+      "kind": "exported_map",
+      "sha256": "8da871f1251c4a8ae588e1405e4eb93350acdae8d096ebf8f5bb6fb4b2d3a6ea",
+      "size_bytes": 313983
+    },
+    {
+      "record_id": "r2-s2-normal_base",
+      "kind": "exported_map",
+      "sha256": "10c8c5ba4005920f60a251726c99473f6d4c5643b13261db7f30aec171ee16fc",
+      "size_bytes": 318596
+    },
+    {
+      "record_id": "r2-s3-user0",
+      "kind": "exported_map",
+      "sha256": "d7b7d03c5dc44f7803b534d38b64f6f4de4b7895accbd5a0ea04877700a2dc5d",
+      "size_bytes": 313361
+    },
+    {
+      "record_id": "r2-s3-user1",
+      "kind": "exported_map",
+      "sha256": "c170714e7f8ffe836c77fba875b32b4aef2feb75d11ea87421e24ff3099e7dec",
+      "size_bytes": 314085
+    },
+    {
+      "record_id": "r2-s3-user2",
+      "kind": "exported_map",
+      "sha256": "cdef74eb5c16668467820b147d72652edd31a19050b47c0a9e1c18bffffa788b",
+      "size_bytes": 317114
+    },
+    {
+      "record_id": "r2-s3-user3",
+      "kind": "exported_map",
+      "sha256": "53b03f3f1e53bf444df4322d9632686ff738e6b092d02865731becd03cb46b12",
+      "size_bytes": 319244
+    },
+    {
+      "record_id": "r2-s3-user4",
+      "kind": "exported_map",
+      "sha256": "5db2080f9072bd841b6c4c8e918dbadda379324489ded113afab76a250ad9c9b",
+      "size_bytes": 313295
+    },
+    {
+      "record_id": "r2-s3-user5",
+      "kind": "exported_map",
+      "sha256": "f758cc48688a7abc01bdc6e2db7dbbde8212da56ae0f18943467426f1a0c287f",
+      "size_bytes": 313748
+    },
+    {
+      "record_id": "r2-s3-user6",
+      "kind": "exported_map",
+      "sha256": "fcaebf506524626af1ff677730893e6e13531396e2edcd1adcde8234d4d858ec",
+      "size_bytes": 306577
+    },
+    {
+      "record_id": "r2-s3-user7",
+      "kind": "exported_map",
+      "sha256": "19dbec31857e16955fb7678c7700b64286155706ce880f79fa5ed3af0e00ad00",
+      "size_bytes": 311775
+    },
+    {
+      "record_id": "r2-s3-normal_base",
+      "kind": "exported_map",
+      "sha256": "10c8c5ba4005920f60a251726c99473f6d4c5643b13261db7f30aec171ee16fc",
+      "size_bytes": 318596
+    },
+    {
+      "record_id": "r2-s4-user0",
+      "kind": "exported_map",
+      "sha256": "b0805de5c995308465044751b5b982f74edd3b2482d21e7a2fdae6c174077b2d",
+      "size_bytes": 239789
+    },
+    {
+      "record_id": "r2-s4-user1",
+      "kind": "exported_map",
+      "sha256": "e5f5817891538611d8cd9f22464d8cad596d0b16a18d35a1ed02eca95bcbf7ef",
+      "size_bytes": 257982
+    },
+    {
+      "record_id": "r2-s4-user2",
+      "kind": "exported_map",
+      "sha256": "2d6e3b2915ea56ea914601c49e2d2fdb370f34a0998e95b2e6a84e7378d161b0",
+      "size_bytes": 147195
+    },
+    {
+      "record_id": "r2-s4-user3",
+      "kind": "exported_map",
+      "sha256": "5c124f20787af35ec83b34c96510f3cc45e97d07169a9bdc21314cd7c9c184a5",
+      "size_bytes": 255319
+    },
+    {
+      "record_id": "r2-s4-user4",
+      "kind": "exported_map",
+      "sha256": "c460062a6a3ef8c45a77e04fa43efbd4788de685b2b4a881342d12d8901d2c79",
+      "size_bytes": 249567
+    },
+    {
+      "record_id": "r2-s4-user5",
+      "kind": "exported_map",
+      "sha256": "9f61c8258c4d3ac4d064656655c95984abf6a11f91f9106d1e346f4003533802",
+      "size_bytes": 253959
+    },
+    {
+      "record_id": "r2-s4-user6",
+      "kind": "exported_map",
+      "sha256": "3fb5e55d58a0c8e7d231761a5c25e90ad4e646596da6c7e1e649572b829c0b6b",
+      "size_bytes": 256621
+    },
+    {
+      "record_id": "r2-s4-user7",
+      "kind": "exported_map",
+      "sha256": "2f214ef82033415dc09bfc3076577e60a75898e5cca90e48e4759a6bebf33068",
+      "size_bytes": 254645
+    },
+    {
+      "record_id": "r2-s4-normal_base",
+      "kind": "exported_map",
+      "sha256": "10c8c5ba4005920f60a251726c99473f6d4c5643b13261db7f30aec171ee16fc",
+      "size_bytes": 318596
+    },
+    {
+      "record_id": "r2-s5-user0",
+      "kind": "exported_map",
+      "sha256": "fe3a88ed512e650161cb69169b13ad242118bef7309c7e902ca97245738f55d2",
+      "size_bytes": 243290
+    },
+    {
+      "record_id": "r2-s5-user1",
+      "kind": "exported_map",
+      "sha256": "1e04ff0fad92e7ef63e32f3f832f840c09e762a418794aec11382ba7b2292034",
+      "size_bytes": 301292
+    },
+    {
+      "record_id": "r2-s5-user2",
+      "kind": "exported_map",
+      "sha256": "a2d4ada2ad41000987c2c57fc3c3361ad67bbcd905458c467cb6d8bb6be0f55c",
+      "size_bytes": 138039
+    },
+    {
+      "record_id": "r2-s5-user3",
+      "kind": "exported_map",
+      "sha256": "d6b3b3439ca3afc1376984b723c1d86444459202c3a2409c7024e9c819488fdb",
+      "size_bytes": 256768
+    },
+    {
+      "record_id": "r2-s5-user4",
+      "kind": "exported_map",
+      "sha256": "288b0e613614015c96da761935d3a348b10f3b596410a81d5d1fca62b7fe7092",
+      "size_bytes": 216037
+    },
+    {
+      "record_id": "r2-s5-user5",
+      "kind": "exported_map",
+      "sha256": "070284813cc005b80bb78d1aad24a5b95ea0574764e70f8e1150497c720462b1",
+      "size_bytes": 301115
+    },
+    {
+      "record_id": "r2-s5-user6",
+      "kind": "exported_map",
+      "sha256": "035ac0b8da6deb3a91219feed2c64e7ee75efcc54894116a8f13368c308d380d",
+      "size_bytes": 240742
+    },
+    {
+      "record_id": "r2-s5-user7",
+      "kind": "exported_map",
+      "sha256": "95a3f8e5b1dba108b34aacece06d54fe1d69069013154cfb983b811a8372ecfb",
+      "size_bytes": 300604
+    },
+    {
+      "record_id": "r2-s5-normal_base",
+      "kind": "exported_map",
+      "sha256": "10c8c5ba4005920f60a251726c99473f6d4c5643b13261db7f30aec171ee16fc",
+      "size_bytes": 318596
+    },
+    {
+      "record_id": "r2-s6-user0",
+      "kind": "exported_map",
+      "sha256": "9bb9e3ee357f5b675ae456fd39893e2be6cf5388c8a11f5128ff9467d5088a79",
+      "size_bytes": 549212
+    },
+    {
+      "record_id": "r2-s6-user1",
+      "kind": "exported_map",
+      "sha256": "0d9b5fde177e4b1af54e00f449e0fb2d5dd53ed96293ada0144ba7e9273e2a7a",
+      "size_bytes": 563602
+    },
+    {
+      "record_id": "r2-s6-user2",
+      "kind": "exported_map",
+      "sha256": "e77d8e64d8350e37907342f40cee75f02b0f0cc94358ae72bd20904e8a4722fe",
+      "size_bytes": 553095
+    },
+    {
+      "record_id": "r2-s6-user3",
+      "kind": "exported_map",
+      "sha256": "6ff0d026f79a9420660b82ded06719cfec2e5585e3fa902f86c72ca5a1e2964d",
+      "size_bytes": 542774
+    },
+    {
+      "record_id": "r2-s6-user4",
+      "kind": "exported_map",
+      "sha256": "3530fbf99180d896bf89e646ef78f0799eedaa55f1cc3ddd72cb5547611d9964",
+      "size_bytes": 604453
+    },
+    {
+      "record_id": "r2-s6-user5",
+      "kind": "exported_map",
+      "sha256": "9c64019bd63a2227f60e14aba0ddcf57f8dcb3b482b378ca51c31372ce18954b",
+      "size_bytes": 624823
+    },
+    {
+      "record_id": "r2-s6-user6",
+      "kind": "exported_map",
+      "sha256": "99972b6154eab0a4f7a177574d1c3ce11ce2d14906bce5ce6d8d62d92e9acd55",
+      "size_bytes": 597008
+    },
+    {
+      "record_id": "r2-s6-user7",
+      "kind": "exported_map",
+      "sha256": "1fea5f3f3d3f5619a7d66484da64ea91e21c24e60c64ab7648de907ba63194fe",
+      "size_bytes": 608478
+    },
+    {
+      "record_id": "r2-s6-normal_base",
+      "kind": "exported_map",
+      "sha256": "10c8c5ba4005920f60a251726c99473f6d4c5643b13261db7f30aec171ee16fc",
+      "size_bytes": 318596
+    },
+    {
+      "record_id": "r2-s7-user0",
+      "kind": "exported_map",
+      "sha256": "44def6df7456e06a970b7ce1ae8737f5d40d59f324ed5294f05abcde9fe5e0ab",
+      "size_bytes": 522081
+    },
+    {
+      "record_id": "r2-s7-user1",
+      "kind": "exported_map",
+      "sha256": "a4063f9b58bd977ce1f5acf31b4bfc715a2e29c277d138b7600b5e51c2993833",
+      "size_bytes": 608049
+    },
+    {
+      "record_id": "r2-s7-user2",
+      "kind": "exported_map",
+      "sha256": "33460bb1284fc4395c3b5cf67774f706642795669d45d0ea5c7132643be820c4",
+      "size_bytes": 715159
+    },
+    {
+      "record_id": "r2-s7-user3",
+      "kind": "exported_map",
+      "sha256": "4c41d9a93e9ce0d7baf16308b5a8b2284be03a31419a7e791497b41fbf5846c0",
+      "size_bytes": 708082
+    },
+    {
+      "record_id": "r2-s7-user4",
+      "kind": "exported_map",
+      "sha256": "76a76d739c0ed1fe6b1e410506ed400be048cfc26f588f37ed549142e9e25fff",
+      "size_bytes": 715674
+    },
+    {
+      "record_id": "r2-s7-user5",
+      "kind": "exported_map",
+      "sha256": "7c57d541bbde4c77eef3852c36e35f208bdd904aeedfa0861afecc08e56be5d3",
+      "size_bytes": 703563
+    },
+    {
+      "record_id": "r2-s7-user6",
+      "kind": "exported_map",
+      "sha256": "f28ac49dfae95b76dda1cb122cad0b12d0124d137ffc7c8cbcbf0966c821dbff",
+      "size_bytes": 251413
+    },
+    {
+      "record_id": "r2-s7-user7",
+      "kind": "exported_map",
+      "sha256": "af4921d5ac6840147d359d47f55ef047222f4f660da4b95f0920a72c0018b944",
+      "size_bytes": 248854
+    },
+    {
+      "record_id": "r2-s7-normal_base",
+      "kind": "exported_map",
+      "sha256": "10c8c5ba4005920f60a251726c99473f6d4c5643b13261db7f30aec171ee16fc",
+      "size_bytes": 318596
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "555283f4be0cfdab7b58738f3980ca117005894cdfb5797ae2a8360b21278730",
+      "size_bytes": 402
+    }
+  ]
 }

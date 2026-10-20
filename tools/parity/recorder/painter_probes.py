@@ -19,6 +19,8 @@ import dataclasses
 import datetime
 import enum
 import importlib
+import importlib.util
+import inspect
 import json
 import os
 import sys
@@ -2354,7 +2356,7 @@ def fresh_spec(name: str) -> Any:
     return None
 
 
-def own_module(name: str) -> Any:
+def own_module(name: str, *, discovered: bool = False) -> Any:
     """Before any import, start, reload or close of a probe module (SUP-016): the file Python
     would import under that name now is the run's (in its plugin root's folder for it), and a
     module of that name already imported is the one the run imported. Returns that module, or
@@ -2365,13 +2367,45 @@ def own_module(name: str) -> Any:
     expected = normal_path(os.path.join(root, PROBE_PLUGIN_FOLDERS[name], f"{name}.py"))
     own = PLUGIN_STATE["modules"].get(name)
     present = sys.modules.get(name)
-    if present is not None and present is not own:
+    if present is not None and present is not own and (own is not None or not discovered):
         raise ProbeGuardError(f"the imported module {name!r} is not the probe run's")
     spec = fresh_spec(name)
     origin = None if spec is None else spec.origin
     if origin is None or normal_path(origin) != expected:
         raise ProbeGuardError(f"{name!r} would import from {origin!r}, not the run's plugin root")
+    if present is not None and own is None:
+        # Painter's discovery can import modules before start_plugin. Claim only the
+        # staged file, with both the loaded spec and the fresh finder agreeing.
+        try:
+            cached = importlib.util.find_spec(name)
+            loaded = None if cached is None else cached.origin
+            filename = inspect.getfile(present)
+        except (TypeError, ValueError):
+            loaded, filename = None, None
+        if (
+            loaded is None
+            or filename is None
+            or normal_path(loaded) != expected
+            or normal_path(filename) != expected
+        ):
+            raise ProbeGuardError(f"the discovered module {name!r} is not the probe run's")
+        own = PLUGIN_STATE["modules"][name] = present
     return own
+
+
+def plugin_discovery(call: Callable[[], Any], *, path_update: bool = False) -> Any:
+    """Keep ownership of staged modules imported by a documented discovery call, even
+    when the call fails after importing one; never claim an existing foreign module."""
+    for name in PROBE_PLUGIN_MODULES:
+        if name in sys.modules or (PLUGIN_STATE["roots"] and not path_update):
+            own_module(name)
+    try:
+        return call()
+    finally:
+        if PLUGIN_STATE["roots"]:
+            for name in PROBE_PLUGIN_MODULES:
+                if name in sys.modules:
+                    own_module(name, discovered=True)
 
 
 def probe_module(name: str) -> Any:
@@ -2475,7 +2509,7 @@ def host_edit(step: int, call: str, args: dict[str, Any], resolved: dict[str, An
     if call == PLUGINS_PATH:
         return add_plugin_root(resolved)
     if call == PLUGINS_UPDATE_SYS_PATH:
-        returned = substance_painter_plugins.update_sys_path()
+        returned = plugin_discovery(substance_painter_plugins.update_sys_path, path_update=True)
         return {"returned": describe(returned), "probe_folders": run_entries(sys.path)}
     return plugin_call(call, args)
 
@@ -2504,9 +2538,9 @@ def host_read(call: str, args: dict[str, Any]) -> Any:
     if call == PLUGINS_PATH:
         return {"probe_roots": run_entries(plugin_roots())}
     if call == PLUGIN_MODULE_NAMES:
-        return module_names(substance_painter_plugins.plugin_module_names())
+        return module_names(plugin_discovery(substance_painter_plugins.plugin_module_names))
     if call == STARTUP_MODULE_NAMES:
-        return module_names(substance_painter_plugins.startup_module_names())
+        return module_names(plugin_discovery(substance_painter_plugins.startup_module_names))
     if call == IS_PLUGIN_STARTED:
         return substance_painter_plugins.is_plugin_started(probe_module(str(args["module"])))
     if call == STARTED_PLUGINS:

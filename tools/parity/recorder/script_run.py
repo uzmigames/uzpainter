@@ -2,7 +2,7 @@ r"""Tier 1 goldens from UzmiGames pipeline scripts run byte-unchanged in Painter
 
     python -m tools.parity.recorder record-script <manifest.json> --assets-root <Assets3D>
     python -m tools.parity.recorder.script_run manifest --assets-root <Assets3D> --out <path> \
-        [--pilot wand|wand-float|belt|sash|tunic|tunic-rebuild] [--store]
+        [--pilot wand|wand-float|wand-normal-float|belt|sash|tunic|tunic-rebuild] [--store]
 
 The manifest's `instruction_sequence.interface` is `uzmigames_pipeline_scripts`: every step is one
 script run (`uzmigames.pipeline.run_script`), and its inputs live in the UzmiGames asset
@@ -1073,6 +1073,35 @@ def wand_float_manifest(assets_root: Path) -> dict[str, Any]:
     return manifest
 
 
+WAND_NORMAL_FLOAT_CONFIG = "parity/fixtures/tier1/wand-v1-normal-float/export-config.json"
+WAND_NORMAL_FLOAT_DESCRIPTION = (
+    "Wand v1 immutable pipeline replay, followed by EXR32f Normal_OpenGL, Normal channel and "
+    "normal_base mesh map exports. Same 2048 resolution, infinite padding, no dithering, OCIO "
+    "and original PNG16 exports as decision 283. PNG16 outputs must equal the existing Wand "
+    "reference before admission. Three float maps must repeat bit exactly across r1, r1-repeat "
+    "and r2. This separate exploratory request leaves decision 283 unchanged."
+)
+
+
+def wand_normal_float_manifest(assets_root: Path) -> dict[str, Any]:
+    """The admitted Normal diagnostic, preserving its original float-pilot domain and pins."""
+    manifest = wand_float_manifest(assets_root)
+    manifest["golden_id"] = "phase1/tier1/wand-v1-normal-float"
+    manifest["description"] = WAND_NORMAL_FLOAT_DESCRIPTION
+    config = manifest["inputs"][-1]
+    config["path"] = WAND_NORMAL_FLOAT_CONFIG
+    config["sha256"] = sha256_file(REPO_ROOT / WAND_NORMAL_FLOAT_CONFIG)
+    config["provenance"]["note"] = (
+        "Authored normal-only diagnostic export configuration; documented export map sources "
+        "already used by tier0 normal probes."
+    )
+    problems = validation_errors(manifest, Schema.GOLDEN_PUBLIC)
+    if problems:
+        raise RecorderError(f"the wand-v1-normal-float manifest is invalid: {problems}")
+    script_job_from_manifest(manifest, assets_root)
+    return manifest
+
+
 # --- The Belt v5 request (phase2/tier1/belt-v5; phase2.9, decision 192) -------------------------
 
 # The round folder of `Pipeline/retopology/waist-v5/` (its README: the folder is copied to
@@ -1301,6 +1330,7 @@ def sash_manifest(assets_root: Path) -> dict[str, Any]:
 PILOTS = {
     "wand": wand_manifest,
     "wand-float": wand_float_manifest,
+    "wand-normal-float": wand_normal_float_manifest,
     "belt": belt_manifest,
     "sash": sash_manifest,
 }

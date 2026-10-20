@@ -1,0 +1,96 @@
+{
+  "exportShaderParams": false,
+  "defaultExportPreset": "wand-normal-f32",
+  "exportPresets": [
+    {
+      "name": "wand-normal-f32",
+      "maps": [
+        {
+          "fileName": "11-Varinha-Madeira_v1r2_Normal_f32",
+          "channels": [
+            {
+              "destChannel": "R",
+              "srcChannel": "R",
+              "srcMapType": "virtualMap",
+              "srcMapName": "Normal_OpenGL"
+            },
+            {
+              "destChannel": "G",
+              "srcChannel": "G",
+              "srcMapType": "virtualMap",
+              "srcMapName": "Normal_OpenGL"
+            },
+            {
+              "destChannel": "B",
+              "srcChannel": "B",
+              "srcMapType": "virtualMap",
+              "srcMapName": "Normal_OpenGL"
+            }
+          ]
+        },
+        {
+          "fileName": "11-Varinha-Madeira_v1r2_NormalChannel_f32",
+          "channels": [
+            {
+              "destChannel": "R",
+              "srcChannel": "R",
+              "srcMapType": "documentMap",
+              "srcMapName": "normal"
+            },
+            {
+              "destChannel": "G",
+              "srcChannel": "G",
+              "srcMapType": "documentMap",
+              "srcMapName": "normal"
+            },
+            {
+              "destChannel": "B",
+              "srcChannel": "B",
+              "srcMapType": "documentMap",
+              "srcMapName": "normal"
+            }
+          ]
+        },
+        {
+          "fileName": "11-Varinha-Madeira_v1r2_NormalMesh_f32",
+          "channels": [
+            {
+              "destChannel": "R",
+              "srcChannel": "R",
+              "srcMapType": "meshMap",
+              "srcMapName": "normal_base"
+            },
+            {
+              "destChannel": "G",
+              "srcChannel": "G",
+              "srcMapType": "meshMap",
+              "srcMapName": "normal_base"
+            },
+            {
+              "destChannel": "B",
+              "srcChannel": "B",
+              "srcMapType": "meshMap",
+              "srcMapName": "normal_base"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "exportList": [
+    {
+      "rootPath": "11-Varinha-Madeira"
+    }
+  ],
+  "exportParameters": [
+    {
+      "parameters": {
+        "fileFormat": "exr",
+        "bitDepth": "32f",
+        "sizeLog2": 11,
+        "paddingAlgorithm": "infinite",
+        "dithering": false
+      }
+    }
+  ]
+}

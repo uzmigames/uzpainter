@@ -31,6 +31,7 @@ from tools.parity.recorder.script_run import (
     script_job_from_manifest,
     wand_float_manifest,
     wand_manifest,
+    wand_normal_float_manifest,
 )
 from tools.parity.recorder.session import RecorderError
 from tools.parity.schemas import REPO_ROOT, Schema, load_json, record_problems, validation_errors
@@ -1006,3 +1007,51 @@ def test_committed_float_golden_replays_the_wand_golden(
     pinned = tmp_path / "pinned"
     script_run.stage_inputs(job, pinned)
     assert {**committed, "private_records": []} == wand_float_manifest(pinned)
+
+
+def test_committed_normal_float_golden_preserves_authorship_and_inputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regenerate the admitted request from pinned authored inputs, never oracle pixels."""
+    monkeypatch.undo()  # the owner's store, read only
+    if not (REAL_ASSETS / "AGENTS.md").is_file():
+        pytest.skip(f"the UzmiGames asset repository is not at {REAL_ASSETS}")
+    path = ENVELOPE / "manifests/phase1/tier1/wand-v1-normal-float.json"
+    committed, wand = load_json(path), load_json(COMMITTED)
+    assert committed["inputs"][:-1] == wand["inputs"]
+    assert committed["instruction_sequence"]["steps"][:3] == wand["instruction_sequence"]["steps"]
+    assert committed["applied_settings"][:-1] == wand["applied_settings"]
+    job = load_script_job(path, REAL_ASSETS, locate_store())
+    assert job.config_export is not None
+    config = job.config_export.config
+    assert config["exportParameters"][0]["parameters"] == {
+        "fileFormat": "exr",
+        "bitDepth": "32f",
+        "sizeLog2": 11,
+        "paddingAlgorithm": "infinite",
+        "dithering": False,
+    }
+    maps = config["exportPresets"][0]["maps"]
+    assert [m["fileName"] for m in maps] == [
+        "11-Varinha-Madeira_v1r2_Normal_f32",
+        "11-Varinha-Madeira_v1r2_NormalChannel_f32",
+        "11-Varinha-Madeira_v1r2_NormalMesh_f32",
+    ]
+    assert [
+        [
+            (c["destChannel"], c["srcChannel"], c["srcMapType"], c["srcMapName"])
+            for c in m["channels"]
+        ]
+        for m in maps
+    ] == [
+        [(c, c, kind, name) for c in "RGB"]
+        for kind, name in (
+            ("virtualMap", "Normal_OpenGL"),
+            ("documentMap", "normal"),
+            ("meshMap", "normal_base"),
+        )
+    ]
+    pinned = tmp_path / "pinned"
+    script_run.stage_inputs(job, pinned)
+    assert {**committed, "private_records": []} == wand_normal_float_manifest(pinned)
+    assert script_run.PILOTS["wand-normal-float"] is wand_normal_float_manifest

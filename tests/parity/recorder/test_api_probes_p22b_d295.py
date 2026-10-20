@@ -1,7 +1,7 @@
 """P22-B API probes of decision 295 (phase1.24 item 3.4): texture sets, channels, project and
-export status. The requests are staged, unrecorded, under the envelope's `requests/` root; each
-must validate, load as a probe job, name the pending Painter symbols it exercises, and record `r1`
-and `r2` end to end against the fake Painter (`fake_probe_painter.py`).
+export status. The authored jobs live under the envelope's `requests/` or admitted `manifests/`
+root; each must validate, load as a probe job, name the Painter symbols it exercises, and
+record `r1` and `r2` end to end against the fake Painter (`fake_probe_painter.py`).
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ from tools.parity.schemas import REPO_ROOT, load_json, record_problems
 
 ENVELOPE = REPO_ROOT / "parity" / "envelopes" / "painter-12.1.5_js-api.1.1.20"
 REQUEST_DIR = ENVELOPE / "requests" / "tier0" / "api-probes"
+MANIFEST_DIR = ENVELOPE / "manifests" / "tier0" / "api-probes"
 INVENTORY = REPO_ROOT / "tools" / "capabilities" / "painter-api-inventory.json"
 STEMS = [
     "p22b-export-error-status",
@@ -50,6 +51,9 @@ ROUTED = {
     "substance_painter.source.SourceMode.Material": "phase3.2_proc-material-families",
     "substance_painter.export.ExportStatus.Cancelled": "G5 open item",
     "substance_painter.export.ExportStatus.Warning": "observed only",
+    "substance_painter.export.get_default_export_path": (
+        "phase1.24_python-api-facade item 4.1: host-path difference, decision 320"
+    ),
 }
 # Decision 188's requests exercise these (decision 189 §2).
 REQUESTED_BY_188 = {
@@ -66,10 +70,14 @@ PR = "substance_painter.project."
 PROBE_FAKE = "uzp_recorder_fake_probe_painter"
 
 
+def probe_path(stem: str) -> Path:
+    """Resolve the authored job without recreating an already admitted request."""
+    request = REQUEST_DIR / f"{stem}.json"
+    return request if request.is_file() else MANIFEST_DIR / f"{stem}.json"
+
+
 def steps_of(stem: str) -> list[dict[str, Any]]:
-    steps: list[dict[str, Any]] = load_json(REQUEST_DIR / f"{stem}.json")["instruction_sequence"][
-        "steps"
-    ]
+    steps: list[dict[str, Any]] = load_json(probe_path(stem))["instruction_sequence"]["steps"]
     return steps
 
 
@@ -125,14 +133,16 @@ def pending_of_the_group() -> set[str]:
 # --- requests --------------------------------------------------------------------------------
 
 
-def test_the_requests_are_staged_unrecorded_probe_jobs() -> None:
-    assert {p.stem for p in REQUEST_DIR.glob("p22b-*.json")} >= set(STEMS)
+def test_the_authored_jobs_keep_their_admission_state() -> None:
+    assert {
+        p.stem for root in (REQUEST_DIR, MANIFEST_DIR) for p in root.glob("p22b-*.json")
+    } >= set(STEMS)
     for stem in STEMS:
-        path = REQUEST_DIR / f"{stem}.json"
+        path = probe_path(stem)
         manifest = load_json(path)
         job = load_probe_job(path)  # validates against golden-public.json first
         assert job.golden_id == f"tier0/api-probes/{stem}"
-        assert manifest["private_records"] == []
+        assert bool(manifest["private_records"]) == (path.parent == MANIFEST_DIR)
         assert manifest["software"]["painter"] == SOFTWARE
         assert manifest_symbol_problems(manifest) == []
         assert not job.lifecycle and not job.exports
@@ -151,7 +161,7 @@ def test_every_pending_symbol_of_the_group_is_requested_or_routed() -> None:
 def test_the_requests_name_the_symbols_they_exercise() -> None:
     found = exercised()
     for stem in STEMS:
-        description = load_json(REQUEST_DIR / f"{stem}.json")["description"]
+        description = load_json(probe_path(stem))["description"]
         for symbol, stems in found.items():
             if stem in stems and symbol in pending_of_the_group():
                 short = symbol.rsplit(".", 1)[1]
@@ -159,7 +169,7 @@ def test_the_requests_name_the_symbols_they_exercise() -> None:
 
 
 def test_a_blocked_export_path_is_only_an_export_probe_argument() -> None:
-    manifest = load_json(REQUEST_DIR / "p22b-export-error-status.json")
+    manifest = load_json(probe_path("p22b-export-error-status"))
     job = probe_job_from_manifest(manifest)
     (export,) = (s for s in job.probe_steps if s.call == EXPORT)
     assert export.args["export_path_blocked"] is True and export.probe
@@ -203,7 +213,7 @@ def record(
     probe_fake: types.ModuleType, fake: types.ModuleType, stem: str, tmp_path: Path
 ) -> tuple[dict[str, Any], dict[str, Any], Path]:
     session = session_on(probe_fake, fake)
-    job = load_probe_job(REQUEST_DIR / f"{stem}.json")
+    job = load_probe_job(probe_path(stem))
     run = record_probe_golden(session, job, tmp_path / "work", tmp_path / "inbox")
     data = json.loads((run / "record.json").read_text(encoding="utf-8"))
     assert record_problems(data) == []

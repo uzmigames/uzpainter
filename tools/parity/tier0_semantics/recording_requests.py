@@ -2127,6 +2127,15 @@ ADMITTED = frozenset(
         # Decision 278's concave seam-gate probes (Painter sessions of 2026-10-19, 12:41 and
         # 12:51, Legacy).
         *(f"export-padding-concave-{probe}" for probe in CONCAVE_FOLD_PROBES),
+        # Cleanup-proven recordings of 2026-10-20; plugin failure is a separate API request.
+        "export-padding-hinge-far",
+        "export-padding-hinge-vary",
+        "export-padding-hinge-single",
+        "export-padding-window-side",
+        "export-padding-corner-reach",
+        "export-padding-normal-combine",
+        "blend-subnormal-f32",
+        "ao-mixed-grid",
     }
 )
 

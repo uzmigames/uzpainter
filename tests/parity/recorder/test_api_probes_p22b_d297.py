@@ -1,8 +1,8 @@
 """P22-B API probes of decision 297 (phase1.24 item 3.4): the host modules (application, logging,
 js, ui, event, resource, exception, async_utils, display and substance_painter_plugins). The
-requests are staged, unrecorded, under the envelope's `requests/` root; each must validate, load
-as an observed probe job, name the pending Painter symbols it exercises, and record `r1` and `r2`
-end to end against the fake Painter (`fake_probe_painter.py`).
+jobs live under the envelope's `requests/` or admitted `manifests/` root; each must validate,
+load as an observed probe job, name the pending Painter symbols it exercises, and record both
+`r1` and `r2` end to end against the fake Painter (`fake_probe_painter.py`).
 """
 
 from __future__ import annotations
@@ -32,6 +32,7 @@ from tools.parity.schemas import REPO_ROOT, load_json, record_problems
 
 ENVELOPE = REPO_ROOT / "parity" / "envelopes" / "painter-12.1.5_js-api.1.1.20"
 REQUEST_DIR = ENVELOPE / "requests" / "tier0" / "api-probes"
+MANIFEST_DIR = ENVELOPE / "manifests" / "tier0" / "api-probes"
 INVENTORY = REPO_ROOT / "tools" / "capabilities" / "painter-api-inventory.json"
 STEMS = [
     "p22b-host-application",
@@ -116,8 +117,16 @@ REACHED = {
 PROBE_FAKE = "uzp_recorder_fake_probe_painter"
 
 
+def probe_path(stem: str) -> Path:
+    """Resolve the request or admitted manifest; never recreate an admitted request."""
+    paths = [root / f"{stem}.json" for root in (REQUEST_DIR, MANIFEST_DIR)]
+    existing = [path for path in paths if path.is_file()]
+    assert len(existing) == 1, (stem, existing)
+    return existing[0]
+
+
 def steps_of(stem: str) -> list[dict[str, Any]]:
-    steps: list[dict[str, Any]] = load_json(REQUEST_DIR / f"{stem}.json")["instruction_sequence"][
+    steps: list[dict[str, Any]] = load_json(probe_path(stem))["instruction_sequence"][
         "steps"
     ]
     return steps
@@ -167,14 +176,16 @@ def pending_of_the_group() -> set[str]:
 # --- requests --------------------------------------------------------------------------------
 
 
-def test_the_requests_are_staged_unrecorded_observed_probe_jobs() -> None:
-    assert {p.stem for p in REQUEST_DIR.glob("p22b-host-*.json")} == set(STEMS)
+def test_the_requests_or_manifests_are_observed_probe_jobs() -> None:
+    assert {
+        p.stem for root in (REQUEST_DIR, MANIFEST_DIR) for p in root.glob("p22b-host-*.json")
+    } == set(STEMS)
     for stem in STEMS:
-        path = REQUEST_DIR / f"{stem}.json"
+        path = probe_path(stem)
         manifest = load_json(path)
         job = load_probe_job(path)  # validates against golden-public.json first
         assert job.golden_id == f"tier0/api-probes/{stem}"
-        assert manifest["private_records"] == []
+        assert bool(manifest["private_records"]) == (path.parent == MANIFEST_DIR)
         assert manifest["software"]["painter"] == SOFTWARE
         assert manifest_symbol_problems(manifest) == []
         assert job.observed and not job.lifecycle and not job.exports
@@ -183,7 +194,6 @@ def test_the_requests_are_staged_unrecorded_observed_probe_jobs() -> None:
 
 def test_every_pending_symbol_of_the_group_is_requested_or_routed() -> None:
     pending = pending_of_the_group()
-    assert len(pending) == 83
     covered = set(exercised())
     assert pending - covered - set(ROUTED) == set()
     assert set(ROUTED) <= pending and not set(ROUTED) & covered
@@ -203,12 +213,12 @@ def test_the_requests_name_the_symbols_they_exercise() -> None:
         if symbol not in pending:
             continue
         for stem in stems:
-            description = load_json(REQUEST_DIR / f"{stem}.json")["description"]
+            description = load_json(probe_path(stem))["description"]
             assert symbol.rsplit(".", 1)[-1] in description, (stem, symbol)
 
 
 def edited(stem: str, call: str, **changes: Any) -> dict[str, Any]:
-    manifest: dict[str, Any] = load_json(REQUEST_DIR / f"{stem}.json")
+    manifest: dict[str, Any] = load_json(probe_path(stem))
     step = next(s for s in manifest["instruction_sequence"]["steps"] if s["call"] == call)
     step["args"].update(changes)
     return manifest
@@ -255,7 +265,7 @@ def record(
     probe_fake: types.ModuleType, fake: types.ModuleType, stem: str, tmp_path: Path
 ) -> tuple[Any, dict[str, Any], dict[str, Any]]:
     world, session = fake_session(probe_fake, fake)
-    job = load_probe_job(REQUEST_DIR / f"{stem}.json")
+    job = load_probe_job(probe_path(stem))
     run = record_probe_golden(session, job, tmp_path / "work", tmp_path / "inbox")
     data = json.loads((run / "record.json").read_text(encoding="utf-8"))
     assert record_problems(data) == []
@@ -403,7 +413,9 @@ def test_plugins_run_their_hooks_and_leave_no_trace(
         assert recording["s8/startup_module_names"]["value"] == ["uzp_probe_startup"]
         started = recording["s9/start_plugin"]["value"]
         hooks = ["uzp_probe_plugin.start_plugin"]
-        imported = ["uzp_probe_plugin.import"] if recording is first else []
+        imported = (
+            ["uzp_probe_plugin.import", "uzp_probe_startup.import"] if recording is first else []
+        )
         assert started["hooks"] == [*imported, *hooks]
         assert recording["s10/is_plugin_started"]["value"] is True
         assert recording["s11/plugins"]["value"]["uzp_probe_plugin"] == {
@@ -438,7 +450,7 @@ EVENT = "substance_painter.event"
 
 def with_steps(stem: str, **changes: dict[str, Any]) -> dict[str, Any]:
     """The request with the arguments of the numbered steps (`s<n>=`) changed."""
-    manifest: dict[str, Any] = load_json(REQUEST_DIR / f"{stem}.json")
+    manifest: dict[str, Any] = load_json(probe_path(stem))
     for step in manifest["instruction_sequence"]["steps"]:
         step["args"].update(changes.get(f"s{step['step']}", {}))
     return manifest
@@ -467,7 +479,7 @@ def test_an_existing_shelf_of_the_probe_name_refuses_the_run_untouched(
     owner = (tmp_path / "owner-shelf").as_posix()
     world.shelves[SHELF] = owner
     with pytest.raises(RecorderError, match=f"shelf named '{SHELF}' exists already"):
-        attempt_recording(session, load_json(REQUEST_DIR / "p22b-host-resources.json"), tmp_path)
+        attempt_recording(session, load_json(probe_path("p22b-host-resources")), tmp_path)
     assert world.shelves == {SHELF: owner} and world.crawling == set()
     assert not world.reloading
     unchanged_host(world, tmp_path)
@@ -526,7 +538,7 @@ def test_a_shelf_replaced_under_the_run_name_is_kept_and_nothing_is_published(
 
     monkeypatch.setattr(shelves, "add", staticmethod(add))
     with pytest.raises(CleanupFailed) as refused:
-        attempt_recording(session, load_json(REQUEST_DIR / "p22b-host-resources.json"), tmp_path)
+        attempt_recording(session, load_json(probe_path("p22b-host-resources")), tmp_path)
     message = str(refused.value)
     assert f"shelf '{SHELF}' is not the one this probe run added" in message
     assert f"probe_cleanup shelf/{SHELF}: ProbeGuardError" in message
@@ -572,7 +584,7 @@ def test_an_imported_module_of_the_probe_name_refuses_the_run_untouched(
     owner = owner_module(calls)
     monkeypatch.setitem(sys.modules, "uzp_probe_plugin", owner)
     with pytest.raises(RecorderError, match="'uzp_probe_plugin' is imported already"):
-        attempt_recording(session, load_json(REQUEST_DIR / "p22b-host-plugins.json"), tmp_path)
+        attempt_recording(session, load_json(probe_path("p22b-host-plugins")), tmp_path)
     assert calls == [] and sys.modules["uzp_probe_plugin"] is owner
     plugins_untouched(world)
     unchanged_host(world, tmp_path)
@@ -588,7 +600,7 @@ def test_a_shadowing_module_on_the_path_refuses_the_run_untouched(
     folder, marker = shadow_folder(tmp_path)
     monkeypatch.syspath_prepend(str(folder))
     with pytest.raises(RecorderError, match="'uzp_probe_plugin' is importable from"):
-        attempt_recording(session, load_json(REQUEST_DIR / "p22b-host-plugins.json"), tmp_path)
+        attempt_recording(session, load_json(probe_path("p22b-host-plugins")), tmp_path)
     assert not marker.exists() and "uzp_probe_plugin" not in sys.modules
     assert str(folder) in sys.path and (folder / "uzp_probe_plugin.py").is_file()
     plugins_untouched(world)
@@ -615,7 +627,7 @@ def test_a_module_shadowed_during_the_run_is_never_imported_and_the_run_cleans_u
 
     monkeypatch.setattr(plugins, "update_sys_path", update_sys_path)
     with pytest.raises(RecorderError, match="'uzp_probe_plugin' would import from"):
-        attempt_recording(session, load_json(REQUEST_DIR / "p22b-host-plugins.json"), tmp_path)
+        attempt_recording(session, load_json(probe_path("p22b-host-plugins")), tmp_path)
     assert not marker.exists() and "uzp_probe_plugin" not in sys.modules
     assert sys.path[0] == str(folder)  # not the run's entry: it stays
     plugins_untouched(world)
@@ -650,17 +662,57 @@ def test_a_module_shadowed_between_start_and_reload_is_never_imported(
     monkeypatch.setattr(plugins, "start_plugin", start_plugin)
     monkeypatch.setattr(plugins, "reload_plugin", reload_plugin)
     with pytest.raises(RecorderError, match="'uzp_probe_plugin' would import from"):
-        attempt_recording(session, load_json(REQUEST_DIR / "p22b-host-plugins.json"), tmp_path)
+        attempt_recording(session, load_json(probe_path("p22b-host-plugins")), tmp_path)
     assert reloads == [] and not marker.exists()  # no foreign import and no foreign hook
     assert "uzp_probe_plugin" not in sys.modules and plugins.plugins == {}
     plugins_untouched(world)
     assert published(tmp_path) == []
 
 
+@pytest.mark.parametrize("wrong_field", ["__file__", "__spec__"])
+def test_discovery_never_claims_a_foreign_homonym(
+    probe_fake: types.ModuleType,
+    fake: types.ModuleType,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    wrong_field: str,
+) -> None:
+    world, session = fake_session(probe_fake, fake)
+    plugins = world.modules[PLUGINS]
+    discover_before = plugins.plugin_module_names
+    foreign = types.ModuleType("uzp_probe_plugin")
+    foreign_path = str(tmp_path / "foreign.py")
+
+    def discover() -> Any:
+        names = discover_before()
+        staged = sys.modules["uzp_probe_plugin"]
+        foreign.__file__ = staged.__file__
+        foreign.__spec__ = staged.__spec__
+        if wrong_field == "__file__":
+            foreign.__file__ = foreign_path
+        else:
+            foreign.__spec__ = importlib.util.spec_from_file_location(
+                "uzp_probe_plugin", foreign_path
+            )
+        sys.modules["uzp_probe_plugin"] = foreign
+        return names
+
+    monkeypatch.setattr(plugins, "plugin_module_names", discover)
+    try:
+        with pytest.raises(RecorderError, match="the discovered module 'uzp_probe_plugin'"):
+            attempt_recording(session, load_json(probe_path("p22b-host-plugins")), tmp_path)
+        assert sys.modules["uzp_probe_plugin"] is foreign
+    finally:
+        if sys.modules.get("uzp_probe_plugin") is foreign:
+            del sys.modules["uzp_probe_plugin"]
+    assert plugins.plugins == {} and plugins.path == []
+    assert published(tmp_path) == []
+
+
 def without_closes(stem: str) -> dict[str, Any]:
     """The plugin request with its two `close_plugin` steps read `is_plugin_started` instead, so
     both modules are still started when the golden ends."""
-    manifest: dict[str, Any] = load_json(REQUEST_DIR / f"{stem}.json")
+    manifest: dict[str, Any] = load_json(probe_path(stem))
     for step in manifest["instruction_sequence"]["steps"]:
         if step["call"] == f"{PLUGINS}.close_plugin":
             step["call"], step["args"] = (
@@ -743,7 +795,7 @@ def test_a_throttling_getter_that_raises_changes_nothing(
     state = world.modules[EVENT].TextureStateEvent
     monkeypatch.setattr(state, "cache_key_invalidation_throttling_period", unreadable)
     with pytest.raises(RecorderError, match="could not be read before setting it"):
-        attempt_recording(session, load_json(REQUEST_DIR / "p22b-host-events.json"), tmp_path)
+        attempt_recording(session, load_json(probe_path("p22b-host-events")), tmp_path)
     assert periods == [] and world.throttling == datetime.timedelta(seconds=1)
     assert published(tmp_path) == []
 
@@ -773,7 +825,7 @@ def test_a_failed_disconnect_still_restores_the_throttling_period(
     monkeypatch.setattr(session, "call", call)
     monkeypatch.setattr(dispatcher, "disconnect", disconnect)
     with pytest.raises(CleanupFailed, match="disconnect_strong/Event: RuntimeError"):
-        attempt_recording(session, load_json(REQUEST_DIR / "p22b-host-events.json"), tmp_path)
+        attempt_recording(session, load_json(probe_path("p22b-host-events")), tmp_path)
     assert world.throttling == datetime.timedelta(seconds=1)  # restored after the failures
     assert published(tmp_path) == []
 
@@ -821,7 +873,7 @@ def test_a_transport_failure_at_the_first_cleanup_stage_still_runs_the_others(
         monkeypatch.setattr(project, "save_as", save_as)
     monkeypatch.setattr(session, "call", call)
     with pytest.raises(CleanupFailed, match="probe_finish: ") as refused:
-        attempt_recording(session, load_json(REQUEST_DIR / "p22b-host-events.json"), tmp_path)
+        attempt_recording(session, load_json(probe_path("p22b-host-events")), tmp_path)
     finish = calls.index("probe_finish")
     assert calls[finish:] == ["probe_finish", "close_project", "probe_cleanup"]
     assert ("disk full" in str(refused.value.__cause__)) is recording_fails
@@ -854,7 +906,7 @@ def test_a_failed_restore_keeps_the_snapshot_and_publishes_nothing(
 
         monkeypatch.setattr(project, "save_as", save_as)
     with pytest.raises(CleanupFailed) as refused:
-        attempt_recording(session, load_json(REQUEST_DIR / "p22b-host-events.json"), tmp_path)
+        attempt_recording(session, load_json(probe_path("p22b-host-events")), tmp_path)
     message = str(refused.value)
     assert "probe_finish throttling: RuntimeError: the period could not be set" in message
     assert ("disk full" in message) is recording_fails

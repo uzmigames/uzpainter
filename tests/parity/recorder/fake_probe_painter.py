@@ -1833,7 +1833,10 @@ def extend_host_modules(world: ProbeWorld, events: dict[str, type]) -> None:
                     sys.path.append(folder)
 
     def names(sub: str) -> list[str]:
-        return sorted(f.stem for entry in roots for f in (Path(entry) / sub).glob("*.py"))
+        found = sorted(f.stem for entry in roots for f in (Path(entry) / sub).glob("*.py"))
+        for name in found:
+            importlib.import_module(name)
+        return found
 
     def start_plugin(mod: types.ModuleType) -> None:
         if mod.__name__ not in started:

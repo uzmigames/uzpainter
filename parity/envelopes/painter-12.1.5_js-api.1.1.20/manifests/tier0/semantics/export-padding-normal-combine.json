@@ -446,5 +446,210 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "f71daca10d417f123dc542fb9e470cdf57d2591938a427057dc73ab2920ca867",
+      "size_bytes": 33504
+    },
+    {
+      "record_id": "r1-uzp_nc_free-normal_opengl-step33",
+      "kind": "exported_map",
+      "sha256": "16c0be08fe242d3fbdcde74a81f2a6fb9c9b8eaf7276f6e1d1874826c36fcf13",
+      "size_bytes": 126479
+    },
+    {
+      "record_id": "r1-uzp_nc_free-height-step33",
+      "kind": "exported_map",
+      "sha256": "3c465cc2a46cd4c7d3e116aec00593f1ef6871efea01c4322696d7ac42843d7e",
+      "size_bytes": 53214
+    },
+    {
+      "record_id": "r1-uzp_nc_free-normal-step33",
+      "kind": "exported_map",
+      "sha256": "b97446769ede80aa8c5db6b3e8e645754632a396a941bbe182c3919d3dc25f5b",
+      "size_bytes": 57840
+    },
+    {
+      "record_id": "r1-uzp_nc_mesh-normal_opengl-step33",
+      "kind": "exported_map",
+      "sha256": "1b4b03b0de49872483e2756251b0582c1c269ef3c229d1282328614a270488ee",
+      "size_bytes": 629507
+    },
+    {
+      "record_id": "r1-uzp_nc_mesh-height-step33",
+      "kind": "exported_map",
+      "sha256": "70e2dfe55cfc88b983bae726dc613d357c9b58126198a3f9c3e26f61558b39cb",
+      "size_bytes": 52231
+    },
+    {
+      "record_id": "r1-uzp_nc_mesh-normal-step33",
+      "kind": "exported_map",
+      "sha256": "b97446769ede80aa8c5db6b3e8e645754632a396a941bbe182c3919d3dc25f5b",
+      "size_bytes": 57840
+    },
+    {
+      "record_id": "r1-uzp_nc_free-normal_opengl-step34",
+      "kind": "exported_map",
+      "sha256": "16c0be08fe242d3fbdcde74a81f2a6fb9c9b8eaf7276f6e1d1874826c36fcf13",
+      "size_bytes": 126479
+    },
+    {
+      "record_id": "r1-uzp_nc_free-height-step34",
+      "kind": "exported_map",
+      "sha256": "3c465cc2a46cd4c7d3e116aec00593f1ef6871efea01c4322696d7ac42843d7e",
+      "size_bytes": 53214
+    },
+    {
+      "record_id": "r1-uzp_nc_free-normal-step34",
+      "kind": "exported_map",
+      "sha256": "b97446769ede80aa8c5db6b3e8e645754632a396a941bbe182c3919d3dc25f5b",
+      "size_bytes": 57840
+    },
+    {
+      "record_id": "r1-uzp_nc_mesh-normal_opengl-step34",
+      "kind": "exported_map",
+      "sha256": "1b4b03b0de49872483e2756251b0582c1c269ef3c229d1282328614a270488ee",
+      "size_bytes": 629507
+    },
+    {
+      "record_id": "r1-uzp_nc_mesh-height-step34",
+      "kind": "exported_map",
+      "sha256": "70e2dfe55cfc88b983bae726dc613d357c9b58126198a3f9c3e26f61558b39cb",
+      "size_bytes": 52231
+    },
+    {
+      "record_id": "r1-uzp_nc_mesh-normal-step34",
+      "kind": "exported_map",
+      "sha256": "b97446769ede80aa8c5db6b3e8e645754632a396a941bbe182c3919d3dc25f5b",
+      "size_bytes": 57840
+    },
+    {
+      "record_id": "r1-uzp_nc_free-normal_opengl-step35",
+      "kind": "exported_map",
+      "sha256": "15a5a907014d4a103813e9681d0c71ca207aa579e99bcfa8a138635ba01430ea",
+      "size_bytes": 17208
+    },
+    {
+      "record_id": "r1-uzp_nc_mesh-normal_opengl-step35",
+      "kind": "exported_map",
+      "sha256": "ecfc56d6aebc2cf65c7b700838d7c834789d5dc47a5121aa6c5f9209577d97a1",
+      "size_bytes": 189052
+    },
+    {
+      "record_id": "r1-uzp_nc_free-normal_opengl-step36",
+      "kind": "exported_map",
+      "sha256": "15a5a907014d4a103813e9681d0c71ca207aa579e99bcfa8a138635ba01430ea",
+      "size_bytes": 17208
+    },
+    {
+      "record_id": "r1-uzp_nc_mesh-normal_opengl-step36",
+      "kind": "exported_map",
+      "sha256": "ecfc56d6aebc2cf65c7b700838d7c834789d5dc47a5121aa6c5f9209577d97a1",
+      "size_bytes": 189052
+    },
+    {
+      "record_id": "r2-uzp_nc_free-normal_opengl-step33",
+      "kind": "exported_map",
+      "sha256": "16c0be08fe242d3fbdcde74a81f2a6fb9c9b8eaf7276f6e1d1874826c36fcf13",
+      "size_bytes": 126479
+    },
+    {
+      "record_id": "r2-uzp_nc_free-height-step33",
+      "kind": "exported_map",
+      "sha256": "3c465cc2a46cd4c7d3e116aec00593f1ef6871efea01c4322696d7ac42843d7e",
+      "size_bytes": 53214
+    },
+    {
+      "record_id": "r2-uzp_nc_free-normal-step33",
+      "kind": "exported_map",
+      "sha256": "b97446769ede80aa8c5db6b3e8e645754632a396a941bbe182c3919d3dc25f5b",
+      "size_bytes": 57840
+    },
+    {
+      "record_id": "r2-uzp_nc_mesh-normal_opengl-step33",
+      "kind": "exported_map",
+      "sha256": "1b4b03b0de49872483e2756251b0582c1c269ef3c229d1282328614a270488ee",
+      "size_bytes": 629507
+    },
+    {
+      "record_id": "r2-uzp_nc_mesh-height-step33",
+      "kind": "exported_map",
+      "sha256": "70e2dfe55cfc88b983bae726dc613d357c9b58126198a3f9c3e26f61558b39cb",
+      "size_bytes": 52231
+    },
+    {
+      "record_id": "r2-uzp_nc_mesh-normal-step33",
+      "kind": "exported_map",
+      "sha256": "b97446769ede80aa8c5db6b3e8e645754632a396a941bbe182c3919d3dc25f5b",
+      "size_bytes": 57840
+    },
+    {
+      "record_id": "r2-uzp_nc_free-normal_opengl-step34",
+      "kind": "exported_map",
+      "sha256": "16c0be08fe242d3fbdcde74a81f2a6fb9c9b8eaf7276f6e1d1874826c36fcf13",
+      "size_bytes": 126479
+    },
+    {
+      "record_id": "r2-uzp_nc_free-height-step34",
+      "kind": "exported_map",
+      "sha256": "3c465cc2a46cd4c7d3e116aec00593f1ef6871efea01c4322696d7ac42843d7e",
+      "size_bytes": 53214
+    },
+    {
+      "record_id": "r2-uzp_nc_free-normal-step34",
+      "kind": "exported_map",
+      "sha256": "b97446769ede80aa8c5db6b3e8e645754632a396a941bbe182c3919d3dc25f5b",
+      "size_bytes": 57840
+    },
+    {
+      "record_id": "r2-uzp_nc_mesh-normal_opengl-step34",
+      "kind": "exported_map",
+      "sha256": "1b4b03b0de49872483e2756251b0582c1c269ef3c229d1282328614a270488ee",
+      "size_bytes": 629507
+    },
+    {
+      "record_id": "r2-uzp_nc_mesh-height-step34",
+      "kind": "exported_map",
+      "sha256": "70e2dfe55cfc88b983bae726dc613d357c9b58126198a3f9c3e26f61558b39cb",
+      "size_bytes": 52231
+    },
+    {
+      "record_id": "r2-uzp_nc_mesh-normal-step34",
+      "kind": "exported_map",
+      "sha256": "b97446769ede80aa8c5db6b3e8e645754632a396a941bbe182c3919d3dc25f5b",
+      "size_bytes": 57840
+    },
+    {
+      "record_id": "r2-uzp_nc_free-normal_opengl-step35",
+      "kind": "exported_map",
+      "sha256": "15a5a907014d4a103813e9681d0c71ca207aa579e99bcfa8a138635ba01430ea",
+      "size_bytes": 17208
+    },
+    {
+      "record_id": "r2-uzp_nc_mesh-normal_opengl-step35",
+      "kind": "exported_map",
+      "sha256": "ecfc56d6aebc2cf65c7b700838d7c834789d5dc47a5121aa6c5f9209577d97a1",
+      "size_bytes": 189052
+    },
+    {
+      "record_id": "r2-uzp_nc_free-normal_opengl-step36",
+      "kind": "exported_map",
+      "sha256": "15a5a907014d4a103813e9681d0c71ca207aa579e99bcfa8a138635ba01430ea",
+      "size_bytes": 17208
+    },
+    {
+      "record_id": "r2-uzp_nc_mesh-normal_opengl-step36",
+      "kind": "exported_map",
+      "sha256": "ecfc56d6aebc2cf65c7b700838d7c834789d5dc47a5121aa6c5f9209577d97a1",
+      "size_bytes": 189052
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "555283f4be0cfdab7b58738f3980ca117005894cdfb5797ae2a8360b21278730",
+      "size_bytes": 402
+    }
+  ]
 }

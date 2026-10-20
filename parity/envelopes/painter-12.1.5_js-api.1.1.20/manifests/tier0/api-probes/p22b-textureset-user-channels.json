@@ -1,10 +1,10 @@
 {
   "schema": "uzpainter/parity/golden-public/1",
   "record_class": "public_manifest",
-  "golden_id": "tier0/api-probes/p22b-textureset-channels",
+  "golden_id": "tier0/api-probes/p22b-textureset-user-channels",
   "tier": "0",
-  "domain": "tier0/api-probes/p22b-textureset-channels",
-  "description": "API probe P22-B (decision 295; decision 112 section 3): on the plane with no template (default channels BaseColor, BaseMetalness, Height, Normal, SpecularRoughness), Stack.add_channel of every pending standard ChannelType member - the canonical members AO, BaseDiffuseRoughness, BaseWeight, BlendingMask, CoatRoughnessAnisotropy, CoatSpecularLevel, CoatTangent, Displacement, Ior, Reflection, SpecularColor, SpecularWeight, ThinFilmWeight, TransmissionColor, TransmissionWeight first, then the legacy alias members AbsorptionColor, Anisotropylevel, CoatOpacity, Emissive, Metallic, Roughness, Scattering, ScatteringColor, SheenColor, SheenOpacity, SheenRoughness, SpecularEdgeColor, Translucency (an add that raises, for a channel that exists or an alias, is the observation) - with ChannelFormat members including L32F and RGB32F; Stack.edit_channel and Channel.edit to L32F and RGB32F, a label on a standard channel through both, and Stack.remove_channel (once of an absent channel); then Stack.has_channel and Stack.get_channel (Channel.type, format and label) of every member, in the first session and after save and reopen.",
+  "domain": "tier0/api-probes/p22b-textureset-user-channels",
+  "description": "API probe P22-B (decision 295): on the plane with no template, Stack.add_channel of the pending user ChannelType members User8, User9, User10, User11, User12, User13, User14, User15, User16, User17, User18, User19, User20, User21, User22, User23, User24, User25, User26, User27, User28, User29, User30, User31 (User8 to User11 without a label, the others with one), in ChannelFormat members including L32F and RGB32F; Stack.edit_channel and Channel.edit changing the format and label (one keeping the label, one labelling an unlabelled channel), Stack.remove_channel of User31; then Stack.has_channel and Stack.get_channel (Channel.type, format and label) of every member, in the first session and after save and reopen.",
   "inputs": [
     {
       "input_id": "plane",
@@ -34,7 +34,7 @@
         "step": 2,
         "call": "substance_painter.textureset.Stack.add_channel",
         "args": {
-          "channel": "AO",
+          "channel": "User8",
           "format": "L8"
         }
       },
@@ -42,7 +42,7 @@
         "step": 3,
         "call": "substance_painter.textureset.Stack.add_channel",
         "args": {
-          "channel": "BaseDiffuseRoughness",
+          "channel": "User9",
           "format": "L16"
         }
       },
@@ -50,7 +50,7 @@
         "step": 4,
         "call": "substance_painter.textureset.Stack.add_channel",
         "args": {
-          "channel": "BaseWeight",
+          "channel": "User10",
           "format": "L16F"
         }
       },
@@ -58,663 +58,566 @@
         "step": 5,
         "call": "substance_painter.textureset.Stack.add_channel",
         "args": {
-          "channel": "BlendingMask",
-          "format": "L8"
+          "channel": "User11",
+          "format": "L32F"
         }
       },
       {
         "step": 6,
         "call": "substance_painter.textureset.Stack.add_channel",
         "args": {
-          "channel": "CoatRoughnessAnisotropy",
-          "format": "L32F"
+          "channel": "User12",
+          "format": "RGB8",
+          "label": "uzp user 12"
         }
       },
       {
         "step": 7,
         "call": "substance_painter.textureset.Stack.add_channel",
         "args": {
-          "channel": "CoatSpecularLevel",
-          "format": "L8"
+          "channel": "User13",
+          "format": "RGB16",
+          "label": "uzp user 13"
         }
       },
       {
         "step": 8,
         "call": "substance_painter.textureset.Stack.add_channel",
         "args": {
-          "channel": "CoatTangent",
-          "format": "RGB16F"
+          "channel": "User14",
+          "format": "RGB16F",
+          "label": "uzp user 14"
         }
       },
       {
         "step": 9,
         "call": "substance_painter.textureset.Stack.add_channel",
         "args": {
-          "channel": "Displacement",
-          "format": "L32F"
+          "channel": "User15",
+          "format": "RGB32F",
+          "label": "uzp user 15"
         }
       },
       {
         "step": 10,
         "call": "substance_painter.textureset.Stack.add_channel",
         "args": {
-          "channel": "Ior",
-          "format": "L16F"
+          "channel": "User16",
+          "format": "L8",
+          "label": "uzp user 16"
         }
       },
       {
         "step": 11,
         "call": "substance_painter.textureset.Stack.add_channel",
         "args": {
-          "channel": "Reflection",
-          "format": "RGB8"
+          "channel": "User17",
+          "format": "L16",
+          "label": "uzp user 17"
         }
       },
       {
         "step": 12,
         "call": "substance_painter.textureset.Stack.add_channel",
         "args": {
-          "channel": "SpecularColor",
-          "format": "sRGB8"
+          "channel": "User18",
+          "format": "L16F",
+          "label": "uzp user 18"
         }
       },
       {
         "step": 13,
         "call": "substance_painter.textureset.Stack.add_channel",
         "args": {
-          "channel": "SpecularWeight",
-          "format": "L16"
+          "channel": "User19",
+          "format": "L32F",
+          "label": "uzp user 19"
         }
       },
       {
         "step": 14,
         "call": "substance_painter.textureset.Stack.add_channel",
         "args": {
-          "channel": "ThinFilmWeight",
-          "format": "L8"
+          "channel": "User20",
+          "format": "RGB8",
+          "label": "uzp user 20"
         }
       },
       {
         "step": 15,
         "call": "substance_painter.textureset.Stack.add_channel",
         "args": {
-          "channel": "TransmissionColor",
-          "format": "RGB32F"
+          "channel": "User21",
+          "format": "RGB16",
+          "label": "uzp user 21"
         }
       },
       {
         "step": 16,
         "call": "substance_painter.textureset.Stack.add_channel",
         "args": {
-          "channel": "TransmissionWeight",
-          "format": "L16"
+          "channel": "User22",
+          "format": "RGB16F",
+          "label": "uzp user 22"
         }
       },
       {
         "step": 17,
         "call": "substance_painter.textureset.Stack.add_channel",
         "args": {
-          "channel": "AbsorptionColor",
-          "format": "RGB16"
+          "channel": "User23",
+          "format": "RGB32F",
+          "label": "uzp user 23"
         }
       },
       {
         "step": 18,
         "call": "substance_painter.textureset.Stack.add_channel",
         "args": {
-          "channel": "Anisotropylevel",
-          "format": "L8"
+          "channel": "User24",
+          "format": "L8",
+          "label": "uzp user 24"
         }
       },
       {
         "step": 19,
         "call": "substance_painter.textureset.Stack.add_channel",
         "args": {
-          "channel": "CoatOpacity",
-          "format": "L16"
+          "channel": "User25",
+          "format": "L16",
+          "label": "uzp user 25"
         }
       },
       {
         "step": 20,
         "call": "substance_painter.textureset.Stack.add_channel",
         "args": {
-          "channel": "Emissive",
-          "format": "sRGB8"
+          "channel": "User26",
+          "format": "L16F",
+          "label": "uzp user 26"
         }
       },
       {
         "step": 21,
         "call": "substance_painter.textureset.Stack.add_channel",
         "args": {
-          "channel": "Metallic",
-          "format": "L8"
+          "channel": "User27",
+          "format": "L32F",
+          "label": "uzp user 27"
         }
       },
       {
         "step": 22,
         "call": "substance_painter.textureset.Stack.add_channel",
         "args": {
-          "channel": "Roughness",
-          "format": "L8"
+          "channel": "User28",
+          "format": "RGB8",
+          "label": "uzp user 28"
         }
       },
       {
         "step": 23,
         "call": "substance_painter.textureset.Stack.add_channel",
         "args": {
-          "channel": "Scattering",
-          "format": "L16F"
+          "channel": "User29",
+          "format": "RGB16",
+          "label": "uzp user 29"
         }
       },
       {
         "step": 24,
         "call": "substance_painter.textureset.Stack.add_channel",
         "args": {
-          "channel": "ScatteringColor",
-          "format": "RGB16F"
+          "channel": "User30",
+          "format": "RGB16F",
+          "label": "uzp user 30"
         }
       },
       {
         "step": 25,
         "call": "substance_painter.textureset.Stack.add_channel",
         "args": {
-          "channel": "SheenColor",
-          "format": "RGB32F"
+          "channel": "User31",
+          "format": "RGB32F",
+          "label": "uzp user 31"
         }
       },
       {
         "step": 26,
-        "call": "substance_painter.textureset.Stack.add_channel",
+        "call": "substance_painter.textureset.Stack.edit_channel",
         "args": {
-          "channel": "SheenOpacity",
-          "format": "L32F"
+          "channel": "User12",
+          "format": "L32F",
+          "label": "uzp user 12b"
         }
       },
       {
         "step": 27,
-        "call": "substance_painter.textureset.Stack.add_channel",
+        "call": "substance_painter.textureset.Channel.edit",
         "args": {
-          "channel": "SheenRoughness",
-          "format": "L8"
+          "channel": "User13",
+          "format": "RGB32F",
+          "label": "uzp user 13b"
         }
       },
       {
         "step": 28,
-        "call": "substance_painter.textureset.Stack.add_channel",
+        "call": "substance_painter.textureset.Channel.edit",
         "args": {
-          "channel": "SpecularEdgeColor",
-          "format": "RGB8"
-        }
-      },
-      {
-        "step": 29,
-        "call": "substance_painter.textureset.Stack.add_channel",
-        "args": {
-          "channel": "Translucency",
+          "channel": "User14",
           "format": "L16"
         }
       },
       {
-        "step": 30,
+        "step": 29,
         "call": "substance_painter.textureset.Stack.edit_channel",
         "args": {
-          "channel": "AO",
-          "format": "L32F"
+          "channel": "User8",
+          "format": "RGB32F",
+          "label": "uzp user 8"
+        }
+      },
+      {
+        "step": 30,
+        "call": "substance_painter.textureset.Stack.remove_channel",
+        "args": {
+          "channel": "User31"
         }
       },
       {
         "step": 31,
-        "call": "substance_painter.textureset.Stack.edit_channel",
+        "call": "substance_painter.textureset.Stack.has_channel",
         "args": {
-          "channel": "SpecularColor",
-          "format": "RGB32F"
+          "channel": "User8"
         }
       },
       {
         "step": 32,
-        "call": "substance_painter.textureset.Channel.edit",
+        "call": "substance_painter.textureset.Stack.get_channel",
         "args": {
-          "channel": "BaseWeight",
-          "format": "L32F"
+          "channel": "User8"
         }
       },
       {
         "step": 33,
-        "call": "substance_painter.textureset.Channel.edit",
+        "call": "substance_painter.textureset.Stack.has_channel",
         "args": {
-          "channel": "Reflection",
-          "format": "RGB32F"
+          "channel": "User9"
         }
       },
       {
         "step": 34,
-        "call": "substance_painter.textureset.Stack.edit_channel",
+        "call": "substance_painter.textureset.Stack.get_channel",
         "args": {
-          "channel": "ThinFilmWeight",
-          "format": "L8",
-          "label": "uzp"
+          "channel": "User9"
         }
       },
       {
         "step": 35,
-        "call": "substance_painter.textureset.Channel.edit",
+        "call": "substance_painter.textureset.Stack.has_channel",
         "args": {
-          "channel": "CoatTangent",
-          "format": "RGB16",
-          "label": "uzp"
+          "channel": "User10"
         }
       },
       {
         "step": 36,
-        "call": "substance_painter.textureset.Stack.remove_channel",
+        "call": "substance_painter.textureset.Stack.get_channel",
         "args": {
-          "channel": "Displacement"
+          "channel": "User10"
         }
       },
       {
         "step": 37,
-        "call": "substance_painter.textureset.Stack.remove_channel",
+        "call": "substance_painter.textureset.Stack.has_channel",
         "args": {
-          "channel": "BlendingMask"
+          "channel": "User11"
         }
       },
       {
         "step": 38,
-        "call": "substance_painter.textureset.Stack.remove_channel",
+        "call": "substance_painter.textureset.Stack.get_channel",
         "args": {
-          "channel": "Displacement"
+          "channel": "User11"
         }
       },
       {
         "step": 39,
         "call": "substance_painter.textureset.Stack.has_channel",
         "args": {
-          "channel": "AO"
+          "channel": "User12"
         }
       },
       {
         "step": 40,
         "call": "substance_painter.textureset.Stack.get_channel",
         "args": {
-          "channel": "AO"
+          "channel": "User12"
         }
       },
       {
         "step": 41,
         "call": "substance_painter.textureset.Stack.has_channel",
         "args": {
-          "channel": "BaseDiffuseRoughness"
+          "channel": "User13"
         }
       },
       {
         "step": 42,
         "call": "substance_painter.textureset.Stack.get_channel",
         "args": {
-          "channel": "BaseDiffuseRoughness"
+          "channel": "User13"
         }
       },
       {
         "step": 43,
         "call": "substance_painter.textureset.Stack.has_channel",
         "args": {
-          "channel": "BaseWeight"
+          "channel": "User14"
         }
       },
       {
         "step": 44,
         "call": "substance_painter.textureset.Stack.get_channel",
         "args": {
-          "channel": "BaseWeight"
+          "channel": "User14"
         }
       },
       {
         "step": 45,
         "call": "substance_painter.textureset.Stack.has_channel",
         "args": {
-          "channel": "BlendingMask"
+          "channel": "User15"
         }
       },
       {
         "step": 46,
         "call": "substance_painter.textureset.Stack.get_channel",
         "args": {
-          "channel": "BlendingMask"
+          "channel": "User15"
         }
       },
       {
         "step": 47,
         "call": "substance_painter.textureset.Stack.has_channel",
         "args": {
-          "channel": "CoatRoughnessAnisotropy"
+          "channel": "User16"
         }
       },
       {
         "step": 48,
         "call": "substance_painter.textureset.Stack.get_channel",
         "args": {
-          "channel": "CoatRoughnessAnisotropy"
+          "channel": "User16"
         }
       },
       {
         "step": 49,
         "call": "substance_painter.textureset.Stack.has_channel",
         "args": {
-          "channel": "CoatSpecularLevel"
+          "channel": "User17"
         }
       },
       {
         "step": 50,
         "call": "substance_painter.textureset.Stack.get_channel",
         "args": {
-          "channel": "CoatSpecularLevel"
+          "channel": "User17"
         }
       },
       {
         "step": 51,
         "call": "substance_painter.textureset.Stack.has_channel",
         "args": {
-          "channel": "CoatTangent"
+          "channel": "User18"
         }
       },
       {
         "step": 52,
         "call": "substance_painter.textureset.Stack.get_channel",
         "args": {
-          "channel": "CoatTangent"
+          "channel": "User18"
         }
       },
       {
         "step": 53,
         "call": "substance_painter.textureset.Stack.has_channel",
         "args": {
-          "channel": "Displacement"
+          "channel": "User19"
         }
       },
       {
         "step": 54,
         "call": "substance_painter.textureset.Stack.get_channel",
         "args": {
-          "channel": "Displacement"
+          "channel": "User19"
         }
       },
       {
         "step": 55,
         "call": "substance_painter.textureset.Stack.has_channel",
         "args": {
-          "channel": "Ior"
+          "channel": "User20"
         }
       },
       {
         "step": 56,
         "call": "substance_painter.textureset.Stack.get_channel",
         "args": {
-          "channel": "Ior"
+          "channel": "User20"
         }
       },
       {
         "step": 57,
         "call": "substance_painter.textureset.Stack.has_channel",
         "args": {
-          "channel": "Reflection"
+          "channel": "User21"
         }
       },
       {
         "step": 58,
         "call": "substance_painter.textureset.Stack.get_channel",
         "args": {
-          "channel": "Reflection"
+          "channel": "User21"
         }
       },
       {
         "step": 59,
         "call": "substance_painter.textureset.Stack.has_channel",
         "args": {
-          "channel": "SpecularColor"
+          "channel": "User22"
         }
       },
       {
         "step": 60,
         "call": "substance_painter.textureset.Stack.get_channel",
         "args": {
-          "channel": "SpecularColor"
+          "channel": "User22"
         }
       },
       {
         "step": 61,
         "call": "substance_painter.textureset.Stack.has_channel",
         "args": {
-          "channel": "SpecularWeight"
+          "channel": "User23"
         }
       },
       {
         "step": 62,
         "call": "substance_painter.textureset.Stack.get_channel",
         "args": {
-          "channel": "SpecularWeight"
+          "channel": "User23"
         }
       },
       {
         "step": 63,
         "call": "substance_painter.textureset.Stack.has_channel",
         "args": {
-          "channel": "ThinFilmWeight"
+          "channel": "User24"
         }
       },
       {
         "step": 64,
         "call": "substance_painter.textureset.Stack.get_channel",
         "args": {
-          "channel": "ThinFilmWeight"
+          "channel": "User24"
         }
       },
       {
         "step": 65,
         "call": "substance_painter.textureset.Stack.has_channel",
         "args": {
-          "channel": "TransmissionColor"
+          "channel": "User25"
         }
       },
       {
         "step": 66,
         "call": "substance_painter.textureset.Stack.get_channel",
         "args": {
-          "channel": "TransmissionColor"
+          "channel": "User25"
         }
       },
       {
         "step": 67,
         "call": "substance_painter.textureset.Stack.has_channel",
         "args": {
-          "channel": "TransmissionWeight"
+          "channel": "User26"
         }
       },
       {
         "step": 68,
         "call": "substance_painter.textureset.Stack.get_channel",
         "args": {
-          "channel": "TransmissionWeight"
+          "channel": "User26"
         }
       },
       {
         "step": 69,
         "call": "substance_painter.textureset.Stack.has_channel",
         "args": {
-          "channel": "AbsorptionColor"
+          "channel": "User27"
         }
       },
       {
         "step": 70,
         "call": "substance_painter.textureset.Stack.get_channel",
         "args": {
-          "channel": "AbsorptionColor"
+          "channel": "User27"
         }
       },
       {
         "step": 71,
         "call": "substance_painter.textureset.Stack.has_channel",
         "args": {
-          "channel": "Anisotropylevel"
+          "channel": "User28"
         }
       },
       {
         "step": 72,
         "call": "substance_painter.textureset.Stack.get_channel",
         "args": {
-          "channel": "Anisotropylevel"
+          "channel": "User28"
         }
       },
       {
         "step": 73,
         "call": "substance_painter.textureset.Stack.has_channel",
         "args": {
-          "channel": "CoatOpacity"
+          "channel": "User29"
         }
       },
       {
         "step": 74,
         "call": "substance_painter.textureset.Stack.get_channel",
         "args": {
-          "channel": "CoatOpacity"
+          "channel": "User29"
         }
       },
       {
         "step": 75,
         "call": "substance_painter.textureset.Stack.has_channel",
         "args": {
-          "channel": "Emissive"
+          "channel": "User30"
         }
       },
       {
         "step": 76,
         "call": "substance_painter.textureset.Stack.get_channel",
         "args": {
-          "channel": "Emissive"
+          "channel": "User30"
         }
       },
       {
         "step": 77,
         "call": "substance_painter.textureset.Stack.has_channel",
         "args": {
-          "channel": "Metallic"
+          "channel": "User31"
         }
       },
       {
         "step": 78,
         "call": "substance_painter.textureset.Stack.get_channel",
         "args": {
-          "channel": "Metallic"
-        }
-      },
-      {
-        "step": 79,
-        "call": "substance_painter.textureset.Stack.has_channel",
-        "args": {
-          "channel": "Roughness"
-        }
-      },
-      {
-        "step": 80,
-        "call": "substance_painter.textureset.Stack.get_channel",
-        "args": {
-          "channel": "Roughness"
-        }
-      },
-      {
-        "step": 81,
-        "call": "substance_painter.textureset.Stack.has_channel",
-        "args": {
-          "channel": "Scattering"
-        }
-      },
-      {
-        "step": 82,
-        "call": "substance_painter.textureset.Stack.get_channel",
-        "args": {
-          "channel": "Scattering"
-        }
-      },
-      {
-        "step": 83,
-        "call": "substance_painter.textureset.Stack.has_channel",
-        "args": {
-          "channel": "ScatteringColor"
-        }
-      },
-      {
-        "step": 84,
-        "call": "substance_painter.textureset.Stack.get_channel",
-        "args": {
-          "channel": "ScatteringColor"
-        }
-      },
-      {
-        "step": 85,
-        "call": "substance_painter.textureset.Stack.has_channel",
-        "args": {
-          "channel": "SheenColor"
-        }
-      },
-      {
-        "step": 86,
-        "call": "substance_painter.textureset.Stack.get_channel",
-        "args": {
-          "channel": "SheenColor"
-        }
-      },
-      {
-        "step": 87,
-        "call": "substance_painter.textureset.Stack.has_channel",
-        "args": {
-          "channel": "SheenOpacity"
-        }
-      },
-      {
-        "step": 88,
-        "call": "substance_painter.textureset.Stack.get_channel",
-        "args": {
-          "channel": "SheenOpacity"
-        }
-      },
-      {
-        "step": 89,
-        "call": "substance_painter.textureset.Stack.has_channel",
-        "args": {
-          "channel": "SheenRoughness"
-        }
-      },
-      {
-        "step": 90,
-        "call": "substance_painter.textureset.Stack.get_channel",
-        "args": {
-          "channel": "SheenRoughness"
-        }
-      },
-      {
-        "step": 91,
-        "call": "substance_painter.textureset.Stack.has_channel",
-        "args": {
-          "channel": "SpecularEdgeColor"
-        }
-      },
-      {
-        "step": 92,
-        "call": "substance_painter.textureset.Stack.get_channel",
-        "args": {
-          "channel": "SpecularEdgeColor"
-        }
-      },
-      {
-        "step": 93,
-        "call": "substance_painter.textureset.Stack.has_channel",
-        "args": {
-          "channel": "Translucency"
-        }
-      },
-      {
-        "step": 94,
-        "call": "substance_painter.textureset.Stack.get_channel",
-        "args": {
-          "channel": "Translucency"
+          "channel": "User31"
         }
       }
     ]
@@ -741,5 +644,18 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "1901f92cd8badc6c50e19a653241a03768b8f1d992ee5653fd9ea33280ac9ebf",
+      "size_bytes": 31605
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "555283f4be0cfdab7b58738f3980ca117005894cdfb5797ae2a8360b21278730",
+      "size_bytes": 402
+    }
+  ]
 }
