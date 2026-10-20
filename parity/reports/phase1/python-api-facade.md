@@ -242,3 +242,89 @@ trace/capability reconciliation. Successful comparisons do not by themselves pro
 entries. The BoundingBox radius evidence is the recorded plane; no separate arbitrary-3D-radius
 qualification is claimed. Wand export parity remains owned by `phase1.25_pilot-wand`.
 
+## 10. Trace and capability reconciliation of the exact P22-B replays, 2026-10-20
+
+Thirteen exact P22-B and P21-B replays now carry Tier 0 trace evidence:
+
+- the seven Project/TextureSet replays;
+- `p22b-export-error-status`;
+- P21-B `phase1-create-default-paths`;
+- the four host replays (application, events, plugins and resources, commit `96ba2261`).
+
+### 10.1 Runs (separate identities)
+
+| Run | Runner `uzp-pyapi-tests.exe` SHA-256 | Result |
+|---|---|---|
+| Codex, `p22b-final-junit.xml` (seven replays) | `d6f2b025…74be6` | 31 passed (section 9) |
+| Codex, `api-integrated-junit.xml` (P21-B, export error) | `b881b10a…c77c9fd` | 10 passed (section 9) |
+| Codex, host validation (`tmp/scratch/p22b-host/validate.json`) | `8cd17d90…caf98`, with a source overlay | four host replays exact |
+| First regeneration, on `4f95a1b3` (`tmp/scratch/trace-p22b/replays.log`) | `993b42a4…f9324d34` | exit 0, 9 passed in 18.7 s |
+| Final regeneration, on `96ba2261` (`tmp/scratch/trace-p22b/replays2.log`) | `be0e2fa2…ca19054c` | exit 0, 16 passed in 60.4 s |
+
+- **Final run.** It covers the 13 replays and three older entries that had drifted:
+  `facade/phase1-resource-update`, `facade-events/phase1-resource-update` and
+  `facade-events/phase1-reload-resources`, with `UZP_UPDATE_TIER0_TRACE=1`.
+- **Build.** The final run's build is `zig build pyapi-tests -j4` from the branch rebased on
+  `96ba2261`, exit 0, on CPU. Its installed Python sources are those of the tree
+  (`replay2-build-identity.json`). For the nine replays both regenerations traced, the symbol
+  sets are identical.
+- **Codex's builds differ from the commits.** The P22-B builds installed `baking.py` and
+  `properties.py` from before `8fa4f517`. The `b881b10a` build also installed an intermediate
+  facade `project.py` (`67be7e8f…`), and that binary no longer exists.
+- **Codex's Project/TextureSet trace records were not merged.** They were written by a
+  `capability_trace.py` older than `4c931156`. That version did not see the facade's
+  `ChannelType` as an enum, so it took the members for data fields. Every scan of one member
+  then credited all 85: 78 extra members in seven records, 43 in the channels record and 54 in
+  the user-channels record. Apart from those members, their symbols and per-output keys equal
+  the regenerated records.
+- **The host records match Codex's.** On their Painter symbols, the four regenerated host records
+  equal `symbols-validate.json`. They also list the native `uzpainter` symbols.
+
+### 10.2 Trace and manifest
+
+- **Trace.** `tools/capabilities/tier0-trace.json` now holds 59 replays: 12 are new and 4 were
+  regenerated.
+  - P21-B adds `get_default_export_path` and the facade aliases `ChannelType.Metallic` and
+    `Roughness`.
+  - The three regenerated older entries add the same two aliases and lose
+    `project.Metadata`, `.get` and `.set`, which other replays still exercise.
+- **Promotions.** 204 exercised symbols become `supported`. `tier_evidence` follows the trace on
+  every other supported entry. Nothing is demoted.
+  - Project, TextureSet and export: 142 symbols, 84 Painter and 58 `uzpainter`. Five of them
+    come from `release-gap`: `get_scene_bounding_box` and `BoundingBox` with its `center`,
+    `dimensions` and `radius`, which the mesh-unit-scale replay now compares.
+  - Host: 62 symbols, among them `logging`, `ui`, `js.evaluate` (s21 to s25),
+    `substance_painter_plugins`, `display.set_environment_resource` and the resource filters and
+    reloads.
+- **Nothing excluded is credited.** Excluded outputs, refusals and host differences credit
+  nothing:
+  - the version outputs s3, s4 and s20 (decision 330);
+  - the excluded `texture_states` outputs and `TextureStateEventAction` (decision 332);
+  - `event.Event` (decision 297 §3.4);
+  - `ReloadedResourceError` and `Usage.COLOR_LUT`.
+- **`get_default_export_path`.** Under decision 320's amendment, s3 is compared literally, with no
+  exclusion, so it is no longer a host difference.
+- **Notes.** 22 entries stay `pending-evidence` with corrected notes, because these replays reach
+  them without a credit:
+  - `Resolution.width` and `height`, and five native `uzpainter.project.Settings` fields: they
+    are pybind11 properties, which the trace does not credit;
+  - the 13 native `uzpainter.textureset.ChannelType` legacy aliases: the facade passes only the
+    canonical member.
+
+### 10.3 Open in item 4.1 (not ticked)
+
+- **Layer side.** The five layer probes of agent p22b-layer pass, but they are not on main yet.
+  After that merge, every `check_trace` replay is regenerated: the layer changes shift the
+  create/open replays and the group inserts.
+- **Seams (decisions 330 and 332).**
+  - `TextureStateEvent` emission.
+  - The application version, which UzPainter reports as its own.
+- **Trace drift in the older entries.** The facade `ChannelType` of `4f95a1b3` puts each legacy
+  alias on its canonical member. 38 older entries still credit `BaseMetalness` or
+  `SpecularRoughness` without `Metallic` or `Roughness`. Their next trace check will report the
+  aliases as added. They are regenerated in the pass after the layer merge. No name is added by
+  hand.
+- **Conformance.** `test_release_gaps_raise_not_yet_supported_before_mutation` fails on
+  `export_project_textures @ l8-material-channel-png-unrecorded`. Since `4f95a1b3`, the facade
+  re-raises the native `NotYetSupported` as `ValueError("Error during the export (see logs).")`,
+  so the refusal is no longer visible as one. The fault is in the facade, not in this change.
