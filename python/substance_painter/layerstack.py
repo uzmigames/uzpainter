@@ -3,7 +3,6 @@
 Documented symbols only; the implementation is `uzpainter_facade` (`python/FACADE.md`)."""
 
 from uzpainter.layerstack import (
-    BlendingMode,
     FilteringMode,
     MaskBackground,
     NodeStack,
@@ -14,6 +13,7 @@ from uzpainter.layerstack import (
 )
 from uzpainter_facade.nodes import (
     AnchorPointEffectNode,
+    BlendingMode,
     ColorSelectionEffectNode,
     CompareMaskEffectNode,
     EffectNode,

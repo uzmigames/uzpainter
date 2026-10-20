@@ -16,6 +16,9 @@ Painter's quirks reproduced here, each from a Tier 0 api-probe golden:
 - Insertion positions raise ValueError with Painter's messages (`insert-positions`).
 - Default names: "Fill", "Folder", "Levels" ("Levels - Base color" in a content stack, whose
   levels affect BaseColor) and "Compare mask" (`insert-positions`).
+- `BlendingMode` has no PassThrough member, a new group is collapsed, a UV fill reads no symmetry,
+  `reset_source` gives a mask fill uniform white, and selection refusals name their scope
+  (`phase1-blending-modes-layer`, `-mask`, `phase1-layer-navigation`).
 
 Each facade call commits one revision (`state.one_transaction`); `ScopedModification` groups calls
 without rolling back. Nothing evaluates until an export asks for it, so there is no per-call
@@ -64,6 +67,56 @@ SOURCE = "substance_painter.source"
 _ls = uzpainter.layerstack
 ChannelType = uzpainter.textureset.ChannelType
 
+# The module Painter's binding names in its missing-attribute errors on a layerstack enum
+# (`phase1-blending-modes-layer` s9, s79 and `-mask` s11, both recordings).
+PAINTER_BINDING = "_substance_painter.layerstack"
+
+
+class _PainterEnumType(enum.EnumType):
+    """Painter's enum classes: a missing member raises its binding's AttributeError."""
+
+    def __getattr__(cls, name: str) -> Any:
+        raise AttributeError(
+            f"type object '{PAINTER_BINDING}.{cls.__name__}' has no attribute '{name}'"
+        )
+
+
+class _PainterEnum(enum.Enum, metaclass=_PainterEnumType):
+    pass
+
+
+# Painter 12.1.5's BlendingMode: the native members but PassThrough, which Painter's API does not
+# have although its documentation lists it (`phase1-blending-modes-layer` s9-s10, s79-s80 and
+# `-mask` s11-s12, both recordings: setting it raises AttributeError and the mode stays Normal).
+# The native API keeps PassThrough (a group's pass-through blending).
+NATIVE_ONLY_BLENDING = frozenset({"PassThrough"})
+BlendingMode: type[_PainterEnum] = _PainterEnum(  # type: ignore[call-arg, assignment]
+    "BlendingMode",
+    [
+        (name, int(member))
+        for name, member in _ls.BlendingMode.__members__.items()
+        if name not in NATIVE_ONLY_BLENDING
+    ],
+    module=LAYERSTACK,
+)
+
+
+def blending_to_native(mode: Any) -> Any:
+    """The native member of a facade BlendingMode (a native member passes as it is)."""
+    if isinstance(mode, BlendingMode):
+        return _ls.BlendingMode.__members__[mode.name]
+    return mode
+
+
+def blending_from_native(native: Any) -> Any:
+    if native.name in NATIVE_ONLY_BLENDING:
+        raise uzpainter.NotYetSupported(
+            f"BlendingMode.{native.name} is not a member of Painter's API: reading it through "
+            "substance_painter is unrecorded (phase1.24_python-api-facade item 4.1)"
+        )
+    return BlendingMode[native.name]
+
+
 # The default source of a channel after a reset, in the working space (P20-A,
 # `phase1-fill-channel-defaults`, the default template's five channels, and `active-channel-reset`,
 # `active-channel-reset-superset`; both recordings; decision 214). Every other channel's default is
@@ -76,6 +129,10 @@ DEFAULT_SOURCES: dict[str, tuple[float, float, float]] = {
     "Normal": (0.5, 0.5, 1.0),
     "SpecularRoughness": (0.3, 0.3, 0.3),
 }
+# The source `reset_source` gives a mask-stack fill: uniform white in the working space (Legacy,
+# `phase1-layer-navigation` s78-s79, both recordings). A new mask fill has no source (`mask-stack`
+# defaults of step 6).
+MASK_RESET_SOURCE = (1.0, 1.0, 1.0)
 # Painter's channel numbers in its context errors ("Channel 0 isn't valid in this context" for
 # BaseColor, `mask-stack` s15, s17, s26); other channels are named.
 PAINTER_CHANNEL_NUMBERS = {"BaseColor": 0}
@@ -85,6 +142,7 @@ MULTI_CONTEXT = "Only valid in multi channel context"
 MASK_BLENDING = "This node is part of a mask stack and does not support Channel Types for blending"
 CONTENT_BLENDING = "This node is not part of a mask stack, a Channel Type must be specified"
 NO_BLENDING = "This node does not support channel blending information"
+SYMMETRY_3D = "Symmetry is only available when using 3D projection modes"
 
 
 def channel_error(channel: Any) -> Exception:
@@ -202,7 +260,8 @@ class SourceUniformColor:
         return source
 
     def get_color(self) -> colour.Color:
-        return colour.read_color(self._native().get_color())
+        managed = decodes_colour(_ls.get_node_by_uid(self._node), self._channel)
+        return colour.read_color(self._native().get_color(), managed)
 
     @edits
     def set_color(self, color: Any) -> None:
@@ -373,12 +432,12 @@ class Node:
         return native
 
     def get_blending_mode(self, channel: Any = None) -> Any:
-        return self._blending(channel).get_blending_mode(channel)
+        return blending_from_native(self._blending(channel).get_blending_mode(channel))
 
     @edits
     @structural
     def set_blending_mode(self, blending_mode: Any, channel: Any = None) -> None:
-        self._blending(channel).set_blending_mode(blending_mode, channel)
+        self._blending(channel).set_blending_mode(blending_to_native(blending_mode), channel)
 
     def get_opacity(self, channel: Any = None) -> float:
         return float(self._blending(channel).get_opacity(channel))
@@ -568,7 +627,12 @@ class _Fill(Node):
         self._native().set_projection_parameters(projection_to_native(parameters))
 
     def is_symmetry_enabled(self) -> bool:
-        return bool(self._native().is_symmetry_enabled())
+        native = self._native()
+        if native.get_projection_mode() == _ls.ProjectionMode.UV:
+            # Painter reads no symmetry of a UV fill, layer or effect (`phase1-layer-navigation`
+            # s60 and s71, both recordings).
+            raise ValueError(SYMMETRY_3D)
+        return bool(native.is_symmetry_enabled())
 
     @edits
     def set_symmetry_enabled(self, enabled: bool) -> None:
@@ -576,11 +640,18 @@ class _Fill(Node):
         if enabled and native.get_projection_mode() == _ls.ProjectionMode.UV:
             # Painter's refusal on a UV fill, both P21-E recordings (s28, decision 319); the 3D
             # projection modes stay a release gap (phase3.4_smart-projections).
-            raise ValueError("Symmetry is only available when using 3D projection modes")
+            raise ValueError(SYMMETRY_3D)
         native.set_symmetry_enabled(enabled)
 
     def get_material_source(self) -> Any:
-        return self._native().get_material_source()
+        # Painter's refusals, both `phase1-layer-navigation` recordings: a mask-stack fill has no
+        # material (s75), a fill in split mode is not in material edition (s72-s73).
+        native = self._native()
+        if native.is_in_mask_stack():
+            raise uzpainter.EditionContextException(MULTI_CONTEXT)
+        if native.source_mode() != SourceMode.Material:
+            raise RuntimeError("Fill is not in material edition mode")
+        return native.get_material_source()
 
     @edits
     def set_material_source(self, source: Any) -> Any:
@@ -590,8 +661,11 @@ class _Fill(Node):
 def reset_to_default(native: Any, channel: Any) -> None:
     """Painter's default source on `channel` (None: the mono source) of a native fill. Under OCIO
     every default is unrecorded (DEFAULT_SOURCES are Legacy recordings; decision 202)."""
-    recorded = channel is not None and colour.active_profile() != colour.OCIO_PROFILE
-    default = DEFAULT_SOURCES.get(channel.name) if recorded else None
+    legacy = colour.active_profile() != colour.OCIO_PROFILE
+    if channel is None:
+        default = MASK_RESET_SOURCE if legacy else None
+    else:
+        default = DEFAULT_SOURCES.get(channel.name) if legacy else None
     if default is not None:
         native.set_source(channel, uzpainter.colormanagement.Color(*default, "Working"))
     elif native.get_source(channel) is not None:
@@ -868,7 +942,10 @@ def insert_paint(position: Any) -> Any:
 @edits
 @structural
 def insert_group(position: Any) -> Any:
-    node, _ = insert("insert_group", position, Kind.LAYER)
+    with one_transaction("layerstack.insert_group"):
+        node, _ = insert("insert_group", position, Kind.LAYER)
+        # Painter's new group is collapsed (`phase1-layer-navigation` s55, first recording).
+        node._native().set_collapsed(True)
     return node
 
 
@@ -993,9 +1070,13 @@ def _in_current_texture_set(native: Any) -> None:
         raise ValueError("The node doesn't belong to the currently selected texture set")
 
 
-def _not_scoped(call: str) -> None:
-    if SESSION.scoped:
-        raise RuntimeError(f"{call} cannot be called from a ScopedModification section")
+def _not_scoped() -> None:
+    # Painter's refusal names the innermost scope (`phase1-layer-navigation` s103, both
+    # recordings).
+    if SESSION.scopes:
+        raise RuntimeError(
+            f'This method can\'t be called from a ScopedModification ("{SESSION.scopes[-1]}")'
+        )
 
 
 def get_selected_nodes(stack: Any) -> list[Any]:
@@ -1005,7 +1086,7 @@ def get_selected_nodes(stack: Any) -> list[Any]:
 
 
 def set_selected_nodes(nodes: Any) -> None:
-    _not_scoped("set_selected_nodes")
+    _not_scoped()
     natives = [native_node(node) for node in nodes]
     for native in natives:
         _in_current_texture_set(native)
@@ -1023,15 +1104,20 @@ def get_selection_type(layer: Any) -> SelectionType:
 
 
 def set_selection_type(layer: Any, layer_selection_type: Any) -> None:
-    _not_scoped("set_selection_type")
+    _not_scoped()
     native = native_node(layer)
     _in_current_texture_set(native)
     if not isinstance(layer_selection_type, SelectionType):
         raise TypeError("layer_selection_type must be a layerstack.SelectionType")
-    if layer_selection_type is SelectionType.Properties and not isinstance(
-        native, _ls.InstanceLayerNode
+    if layer_selection_type is SelectionType.Properties and not (
+        isinstance(native, _ls.InstanceLayerNode)
+        or (isinstance(native, _ls.LayerNode) and native.instances())
     ):
-        raise ValueError("SelectionType.Properties is only available for instances")
+        # `phase1-layer-navigation` s101 (a fill without instances); `phase1-layer-node-kinds`
+        # s21 and s23 accept an instance and its source.
+        raise ValueError(
+            "Properties selection type is only valid for instance layers or instance source"
+        )
     SESSION.selection_type[native.uid()] = layer_selection_type
 
 
@@ -1042,14 +1128,16 @@ class ScopedModification:
     __slots__ = ("_name",)
 
     def __init__(self, name: str) -> None:
-        self._name = name  # the history entry's name in Painter; UzPainter keeps no undo history
+        # The history entry's name in Painter (UzPainter keeps no undo history), and the scope its
+        # refusals name.
+        self._name = name
 
     def __enter__(self) -> ScopedModification:
-        SESSION.scoped += 1
+        SESSION.scopes.append(self._name)
         return self
 
     def __exit__(self, *exc: object) -> None:
-        SESSION.scoped -= 1
+        SESSION.scopes.pop()
 
 
 ScopedModification.__module__ = LAYERSTACK

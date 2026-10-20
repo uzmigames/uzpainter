@@ -3,7 +3,8 @@
 Painter keeps some script-visible state outside the project: the session counter behind resource
 contexts (`project<N>`), the layer selection, the selection type of each layer and the UI mode.
 They are inert: nothing in evaluation or export reads them. They live here, per open project, and
-are cleared whenever a project is created, opened or closed; none is saved.
+are cleared whenever a project is created, opened or closed (a created or opened project then
+selects its top root layer, `Session.project_started`); none is saved.
 """
 
 from __future__ import annotations
@@ -38,7 +39,7 @@ class Session:
 
     def __init__(self) -> None:
         self.projects = -1  # index of the current project among those created or opened
-        self.scoped = 0  # depth of open `layerstack.ScopedModification` blocks
+        self.scopes: list[str] = []  # names of the open `layerstack.ScopedModification` blocks
         self.dirty = False
         self.reset()
 
@@ -60,8 +61,15 @@ class Session:
         self.bound_context: dict[tuple[Any, ...], str] = {}
 
     def project_started(self) -> None:
+        """A project was created or opened: Painter then selects the top root layer of the active
+        stack (`phase1-layer-navigation` s88 after save and reopen; after creation, Painter's
+        default paint layer, which UzPainter does not create yet: phase4.1_nodes-paint-layers)."""
         self.projects += 1
         self.reset()
+        stack = uzpainter.textureset.get_active_stack()
+        roots = uzpainter.layerstack.get_root_layer_nodes(stack)
+        if roots:
+            self.selection = {(int(stack.material().uid()), int(stack.uid())): [roots[0].uid()]}
 
     def saved(self) -> None:
         """The project was saved: nothing is left to save."""
