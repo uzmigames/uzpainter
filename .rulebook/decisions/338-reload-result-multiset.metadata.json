@@ -1,0 +1,11 @@
+{
+  "id": 338,
+  "slug": "338-reload-result-multiset",
+  "title": "ReloadResourcesEnded's result list is compared as a multiset with multiplicity; the order of its entries is unclaimed, because Painter varies it across processes for the same request",
+  "status": "accepted",
+  "date": "2026-10-20",
+  "relatedTasks": [
+    "phase1.24_python-api-facade"
+  ],
+  "supersededBy": null
+}
