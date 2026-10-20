@@ -4,7 +4,7 @@
 
 Under decision 028, this report is the local-run evidence for the G1 gate record. The run was on 2026-10-12, branch `wt/phase1.24-api-parent` from main `8dc3c96`, envelope `painter-12.1.5_js-api.1.1.20`. The decisions are 115, 116 and 117.
 
-**Result.** The evidence is recorded below. The P1-PYAPI gate is **open** (§5). Item 1.1 is closed: its three prerequisites are archived. Item 3.1 waits for one run of the current 36 traced replays on one build; the Dota 2 user-channel labels no longer hold it (question q1, decision 299, §3). Decision 117 gave every other output outside the supported scope an owning checklist item. The code changes of this task are ready for merge review apart from task acceptance.
+**Result.** The evidence is recorded below. The P1-PYAPI gate is **open** (§5). Item 1.1 is closed: its three prerequisites are archived. Item 3.1 is closed: all 36 current traced replays passed on one build (section 4.2). The Dota 2 user-channel label policy remains question q1, decision 299, section 3. Decision 117 gave every other output outside the supported scope an owning checklist item. The code changes of this task are ready for merge review apart from task acceptance.
 
 ## 1. Integration added by this task
 
@@ -33,8 +33,8 @@ Under decision 028, this report is the local-run evidence for the G1 gate record
 |---|---|---|
 | Content-stack fill effects and their steps (`set-source-none-multichannel` s5…, `insert-positions` s5, s9, s12, s18, s23…) | Refused: `NotYetSupported` before any change (decision 081) | phase3.2_proc-filter-families |
 | Mask-stack levels effects (`mask-stack` s13…, `insert-positions` s7, s26) | Refused (decision 081) | phase4.2_remaining-nodes |
-| Compare masks (`insert-positions` s8, s21, s29) | Refused (decision 081) | phase4.1_nodes-mask-effects items 2.1, 3.1 |
-| BaseColor PNG 16 exports (`active-channel-*`, `fill-layer-readback`, `mask-stack`, the R10 probes) | Refused before writing any map file (decision 103) | phase1.25_pilot-wand item 2.6 |
+| Compare masks (`insert-positions` s8, s29) | Refused (decision 081) | phase4.1_nodes-mask-effects items 2.1, 3.1 |
+| `mask-stack` exported `uzp_plane/basecolor` | Not compared: Painter's mask includes the refused levels effect s13/s14, so the masked BaseColor differs (decision 081). Other BaseColor exports formerly listed here are now compared by these replays. | phase4.2_remaining-nodes |
 | A uid's value (`phase1-delete-node` s17, `phase1-resource-update` s14-s15) | Normalisation: Painter's own allocation. The identity outputs compare what a uid resolves to. | — |
 | Resource contexts `project<N>` | Normalisation up to the session offset (decision 107 §4) | — |
 | `phase1-execute-when-not-busy` s9-s10 | Painter's two recordings differ from each other | the recording (decision 109) |
@@ -44,6 +44,8 @@ Under decision 028, this report is the local-run evidence for the G1 gate record
 | The channel labels of Dota 2's User0-User3 (`project-templates`) | Deliberate non-pixel metadata difference: they read "", Painter's text is not shipped (decision 116 §4). No texture changes: texture sets, resolution, channels and formats of all 26 templates are exact. | Question q1 in the task's `.metadata.json`, answered 2026-10-19 with option (a), **decision 299**: UzPainter keeps its generic or empty labels and never copies Painter's label text. Codex and Claude chose it under the owner's delegation of that day. It is not a licence review, and not an owner approval to copy Adobe text. The test still requires the labels to differ: `python -m pytest -q tests/python/test_pyapi_facade_tier0.py -k project_templates`, exit 0, 1 passed (main ed4627c, 2026-10-19). |
 | BaseColor exports of `phase1-srgb-uniform-decode-ocio-part1..4` (`uzp_plane/basecolor`) | Not compared in this replay: the native project is Legacy, since no creation path yields an OCIO project (decision 202, Consequences) | The OCIO evaluation and export are compared by decision 190's `test_ocio_encode_equals_painter_files` (`tests/export/test_export_encoders.py`) |
 | P20-A's Normal map (`phase1-fill-channel-defaults` `uzp_plane/normal`) | Refused: the grey bitmap on Normal (`evaluator:unsupported_source`, decision 249) | phase1.15_compositor-colour-fits (item 2.9's open note): the recording decision 249 lists settles it |
+
+The refused-node exclusions also cover dependent identity/default readbacks: `set-source-none-multichannel` identity/defaults s5 and `identity/reopen`; `mask-stack` identity/defaults s13 and `identity/reopen`; `insert-positions` identity/defaults s5, s9, s12 (content fill), s7 (mask levels), s8 (compare mask), plus s24/root-list and `identity/reopen`. The content-fill dependent steps also include `insert-positions` s21, s25 and s28. Each follows the same owner as its refused node. Lifecycle event comparisons remove asynchronous `during_step` markers from both sides; `phase1-execute-when-not-busy` compares only through s8 because s9/s10 race in Painter itself. This validation changed no comparison rule or capability status.
 
 Closed by phase1.15_compositor-colour-fits item 2.1 (decision 214, 2026-10-13): `phase1-reload-resources` recording 1 s9 and s12 (a grey bitmap on BaseColor now binds in sRGB, P20-A) and the 70/255 decode of `export-ocio-encode-legacy` (the Legacy decode fitted from P20-B) are compared exactly; their rows are removed.
 
@@ -91,10 +93,18 @@ The adapter regressions export a project, then each of the following, and requir
 - reload identical mesh bytes from another folder;
 - that reload followed by a revert to the revision before it.
 
+### 4.2 Full current Tier 0 run, 2026-10-19 local time
+
+One CPU build, commit `3b7c70afe9dc1ce39f4311a0888293896fee79f4`, isolated worktree `.claude/worktrees/a36`; runner SHA-256 `226b9a3ad73488a7179897a13ca5150cb60c475605c087694c399d1b7927fc33`. Run `tmp/scratch/api36/20261019T234301Z` started 2026-10-19 23:43:01 UTC and finished 2026-10-20 00:02:37.496119 UTC (2026-10-19 locally).
+
+`F:\Python313\python.exe -m pytest -q tests/python/test_pyapi_tier0.py tests/python/test_pyapi_lifecycle_tier0.py tests/python/test_pyapi_facade_tier0.py` with isolated basetemp and JUnit paths recorded in `run.json`: **exit 0, 36 passed in 1173.02 s**, no skips, failures or errors. JUnit suite time is 1172.934 s. No test deselected. The three modules cover every current `tier0-trace.json` ID exactly once: 2 native, 8 lifecycle/events, 26 facade. The trace and all three test files match the run worktree byte-for-byte. `tmp/scratch/closure/api36-evidence.json` records all 36 replay-to-test mappings and source/JUnit SHA-256 hashes; `pytest.log`, `junit.xml` and `run.json` preserve the raw evidence.
+
+The result closes item 3.1 only within section 3's named comparison scope. It does not accept P22-B recordings, admission or compared replays, change capability statuses, or close the P1-PYAPI gate. Section 4's older 26-replay results remain historical evidence.
+
 ## 5. Open
 
 - **Item 1.1: closed.** `phase1.3_document-model`, `phase1.18_export-engine` and `phase1.8_project-store` are archived (`.rulebook/archive/2026-10-10-phase1.3_document-model`, `2026-10-12-phase1.18_export-engine`, `2026-10-13-phase1.8_project-store`).
-- **Item 3.1.** Question q1 is answered (decision 299, §3). Still open: §4 records 26 traced replays, and `tools/capabilities/tier0-trace.json` now holds 36. The 10 added since by phase1.15 (`facade/phase1-srgb-uniform-decode-part1..4` and `-ocio-part1..4`, `facade/phase1-fill-channel-defaults`, `facade/export-ocio-encode`; decisions 202, 214, 218, 224, 226 and 249) have not been run with the others on one build and recorded here. That run is the coordinator's batch: the colour ramps alone take about 16 minutes.
+- **Item 3.1: closed.** Full current 36-replay run passed on one build; section 4.2 records execution identity, results and coverage. Question q1 remains answered by decision 299; section 3 records the comparison exclusions.
 - **Item 3.4: authoring closed.** Decisions 295-297 supply 18 requests: 8/80 requested symbols plus 4 routed (295), 6/76 plus 10 routed (296), and 4/64 plus 19 routed (297). Total: 220 requested and 33 routed, 253 symbols. Decision 189's 257 reconciles as +1 ExportStatus.Error, -3 colormanagement symbols already supported, -2 display symbols covered by decision 188. The three `test_api_probes_p22b_*` modules check the symbol-to-request/route coverage, explicit vocabulary and fake recordings. Existing execution evidence: decision 295 module 17 passed; decision 296 module included in the 55-passed recorder batch; decision 297 had 33 passed and one fake-wrapper failure, then that node passed after correction (`e609803`). Source records and exact results are preserved in `tmp/scratch/closure/p22b-authoring-evidence.json` and `p22b-host-validation.json`. These are authoring checks, not Painter evidence. Item 4.1 stays open for P22-B recordings, admission and compared replays; routed symbols retain their named owners and all pending-evidence statuses remain unchanged.
 - **Recordings named** (owner action): P23-A, `save_as` onto an existing `.spp` (decision 113); P24-A, a template path that is missing or is not a template (decision 116); P22-B, one api-probe calling every Painter symbol marked `pending-evidence` (decision 112).
 - **The adapter's session carry: fixed (decision 118; commits 1c09894, fbfbf97, 254d96e).** The runner stored `project.file_path()`, as given, as the next call's project. A script that changed directory and then saved under a relative path carried a path that the next process resolved in the client's directory. The call failed, or another project of the same name was reopened (Codex audit, P2).
