@@ -268,28 +268,36 @@ class TextureSet:
             return None
         key = ("mesh_map", self._native.uid(), usage.name)
         found = resource.from_native(native, SESSION.bound_context.get(key))
+        return resource.ResourceID(found.context, self._bound_name(usage, native), found.version)
+
+    def _bound_name(self, usage: Any, native: Any) -> str:
+        """The name of the resource the mesh map `usage` binds (`native`): the name it was given,
+        while its content is the one bound."""
         given = mesh_map_names().get(f"{self._native.name()}/{usage.name}")
-        if given is not None and given[1] == native.version:
-            return resource.ResourceID(found.context, given[0], found.version)
-        return found
+        return given[0] if given is not None and given[1] == native.version else str(native.name)
 
     @edits
     def set_mesh_map_resource(self, usage: Any, new_mesh_map: Any) -> None:
+        with one_transaction("textureset.TextureSet.set_mesh_map_resource"):
+            self._bind_mesh_map(usage, new_mesh_map)
+
+    def _bind_mesh_map(self, usage: Any, new_mesh_map: Any) -> None:
+        """Binds the mesh map `usage` to `new_mesh_map` (or unbinds it) with the name it is given,
+        inside the caller's transaction."""
         key = ("mesh_map", self._native.uid(), usage.name)
         name = f"{self._native.name()}/{usage.name}"
         names = mesh_map_names()
-        with one_transaction("textureset.TextureSet.set_mesh_map_resource"):
-            if new_mesh_map is None:
-                self._native.set_mesh_map_resource(usage, None)
-                SESSION.bound_context.pop(key, None)
-                names.pop(name, None)
-            else:
-                native = resource.to_native(new_mesh_map)
-                self._native.set_mesh_map_resource(usage, native)
-                SESSION.bound_context[key] = new_mesh_map.context
-                names[name] = [str(native.name), str(native.version)]
-            if names != mesh_map_names():
-                uzpainter.project.Metadata(RESOURCE_METADATA).set(MESH_MAP_NAMES, names)
+        if new_mesh_map is None:
+            self._native.set_mesh_map_resource(usage, None)
+            SESSION.bound_context.pop(key, None)
+            names.pop(name, None)
+        else:
+            native = resource.to_native(new_mesh_map)
+            self._native.set_mesh_map_resource(usage, native)
+            SESSION.bound_context[key] = new_mesh_map.context
+            names[name] = [str(native.name), str(native.version)]
+        if names != mesh_map_names():
+            uzpainter.project.Metadata(RESOURCE_METADATA).set(MESH_MAP_NAMES, names)
 
     def __eq__(self, other: object) -> bool:
         return isinstance(other, TextureSet) and self._native == other._native
@@ -307,6 +315,25 @@ for _cls in (Channel, Stack, TextureSet):
 
 def all_texture_sets() -> list[TextureSet]:
     return [TextureSet(native) for native in _ts.all_texture_sets()]
+
+
+def replace_mesh_map_resource(old: Any, new_mesh_map: Any) -> bool:
+    """Binds every mesh map that binds the native resource `old` (its name and content) to the
+    resource `new_mesh_map`, under that resource's name, inside the caller's transaction, as
+    `resource.update_layer_stack_resource` does (`phase1-mesh-map-update` s9-s10, both
+    recordings); whether one was bound to `old`."""
+    if isinstance(new_mesh_map, resource.Resource):
+        new_mesh_map = new_mesh_map.identifier()
+    replaced = False
+    for texture_set in all_texture_sets():
+        for usage in MeshMapUsage.__members__.values():
+            bound = texture_set._native.get_mesh_map_resource(usage)
+            if bound is None or bound.version != old.version:
+                continue
+            if texture_set._bound_name(usage, bound) == old.name:
+                texture_set._bind_mesh_map(usage, new_mesh_map)
+                replaced = True
+    return replaced
 
 
 def get_active_stack() -> Stack:

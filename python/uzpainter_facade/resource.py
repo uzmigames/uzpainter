@@ -262,11 +262,16 @@ def list_project_resources() -> list[ResourceID]:
 def update_layer_stack_resource(old_resource_id: Any, new_resource: Any) -> list[Any]:
     """Replace a resource in the layer stacks and mesh maps; returns the identifiers of the
     resources replaced, as Painter documents and returns them (`phase1-resource-update` s12: the
-    identifier given, once, when a binding used it)."""
-    changed = uzpainter.resource.update_layer_stack_resource(
-        to_native(old_resource_id), to_native(new_resource)
-    )
-    return [old_resource_id] if changed else []
+    identifier given, once, when a binding used it). A mesh map bound to it then binds the new
+    resource under its name (`phase1-mesh-map-update` s9-s11, both recordings), in the same
+    transaction as the layer stacks."""
+    from uzpainter_facade import textureset  # it imports this module
+
+    old, new = to_native(old_resource_id), to_native(new_resource)
+    with one_transaction("resource.update_layer_stack_resource"):
+        mesh_maps = textureset.replace_mesh_map_resource(old, new_resource)
+        changed = uzpainter.resource.update_layer_stack_resource(old, new)
+    return [old_resource_id] if changed or mesh_maps else []
 
 
 def show_resources_in_ui(resources: Any) -> None:

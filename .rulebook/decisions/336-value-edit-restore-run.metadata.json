@@ -1,0 +1,11 @@
+{
+  "id": 336,
+  "slug": "336-value-edit-restore-run",
+  "title": "A run of value edits that restores every value it changed leaves the project as saved; replacing a mesh map's resource rebinds every mesh map bound to it",
+  "status": "accepted",
+  "date": "2026-10-20",
+  "relatedTasks": [
+    "phase1.24_python-api-facade"
+  ],
+  "supersededBy": null
+}

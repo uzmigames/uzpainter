@@ -46,7 +46,7 @@ from typing import Any
 import uzpainter
 
 from uzpainter_facade import colour, event, levels, resource
-from uzpainter_facade.state import SESSION, RenameRun, edits, one_transaction, unsaved
+from uzpainter_facade.state import SESSION, edits, one_transaction, value_edit
 from uzpainter_facade.textureset import Stack, TextureSet, native_of
 
 
@@ -385,11 +385,10 @@ class Node:
     def is_visible(self) -> bool:
         return bool(self._native().is_visible())
 
-    @edits
     def set_visible(self, visible: bool) -> None:
         native = self._native()
         changed = bool(native.is_visible()) != bool(visible)
-        native.set_visible(visible)
+        value_edit((self._uid, "visible"), native.is_visible, lambda: native.set_visible(visible))
         if changed:  # P21-E s19: a change emits, the same visibility again does not
             event.emit_sync(event.LayerStacksModelDataChanged())
 
@@ -398,21 +397,10 @@ class Node:
 
     @structural
     def set_name(self, name: str) -> None:
-        # Painter merges consecutive renames of one node into one edit: a run that ends on the
-        # name it started from leaves the project as saved as it was before the run
-        # (`phase1-save-modes` s15-s17 after save and reopen, decision 111).
+        # A rename back to the saved name leaves the project as saved (`state.value_edit`;
+        # `phase1-save-modes` s15-s17 after save and reopen, `phase1-restored-values` s21-s28).
         native = self._native()
-        run = SESSION.rename_run
-        if run is None or run.uid != self._uid or run.revision != uzpainter.project.revision():
-            run = RenameRun(self._uid, str(native.get_name()), unsaved(), 0)
-        native.set_name(name)
-        run.revision = int(uzpainter.project.revision())
-        SESSION.rename_run = run
-        if name == run.start_name and not run.unsaved_before:
-            SESSION.dirty = False
-            SESSION.clean_revision = run.revision
-        else:
-            SESSION.dirty = True
+        value_edit((self._uid, "name"), native.get_name, lambda: native.set_name(name))
 
     def is_in_mask_stack(self) -> bool:
         return bool(self._native().is_in_mask_stack())
@@ -434,18 +422,26 @@ class Node:
     def get_blending_mode(self, channel: Any = None) -> Any:
         return blending_from_native(self._blending(channel).get_blending_mode(channel))
 
-    @edits
     @structural
     def set_blending_mode(self, blending_mode: Any, channel: Any = None) -> None:
-        self._blending(channel).set_blending_mode(blending_to_native(blending_mode), channel)
+        native = self._blending(channel)
+        value_edit(
+            (self._uid, "blending_mode", str(channel)),
+            lambda: native.get_blending_mode(channel),
+            lambda: native.set_blending_mode(blending_to_native(blending_mode), channel),
+        )
 
     def get_opacity(self, channel: Any = None) -> float:
         return float(self._blending(channel).get_opacity(channel))
 
-    @edits
     @structural
     def set_opacity(self, opacity: float, channel: Any = None) -> None:
-        self._blending(channel).set_opacity(opacity, channel)
+        native = self._blending(channel)
+        value_edit(
+            (self._uid, "opacity", str(channel)),
+            lambda: native.get_opacity(channel),
+            lambda: native.set_opacity(opacity, channel),
+        )
 
     def get_parent(self) -> Any:
         return wrap(self._native().get_parent())

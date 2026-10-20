@@ -24,14 +24,14 @@ RESOURCE_KEY = "resource_sha1"
 
 
 @dataclasses.dataclass
-class RenameRun:
-    """Consecutive `set_name` calls on one node with no other edit between them: Painter merges
-    them into one edit, which is none once the name is back to where the run started."""
+class RestoreRun:
+    """Value edits made while the project was as saved, with no other edit between them
+    (`value_edit`): Painter reports the project as saved again once every value they changed is
+    back to its saved value (`phase1-restored-values` s8-s28, both recordings; renames,
+    `phase1-save-modes` s15-s17 after save and reopen, decision 111 §6)."""
 
-    uid: int
-    start_name: str
-    unsaved_before: bool  # needs_saving() before the run's first rename
-    revision: int  # the native revision after the run's last rename
+    saved: dict[tuple[Any, ...], Any]  # the saved value of each value the run left changed
+    revision: int  # the native revision after the run's last edit
 
 
 class Session:
@@ -50,9 +50,9 @@ class Session:
         # reopen: re-binding the same mesh map), where the native store sees no new revision.
         self.dirty = False
         # The native revision at which the project is as saved although the store counts
-        # revisions since the save: a rename run that ended on its start name (`set_name`).
+        # revisions since the save: a run of value edits that restored every value it changed.
         self.clean_revision: int | None = None
-        self.rename_run: RenameRun | None = None
+        self.rename_run: RestoreRun | None = None  # the run of value edits (`value_edit`)
         self.selection: dict[tuple[int, int], list[int]] = {}
         self.selection_type: dict[int, Any] = {}
         self.ui_mode: Any = None
@@ -92,6 +92,32 @@ def unsaved() -> bool:
         return True
     project = uzpainter.project
     return bool(project.needs_saving()) and project.revision() != SESSION.clean_revision
+
+
+def value_edit(key: tuple[Any, ...], read: Callable[[], Any], write: Callable[[], None]) -> None:
+    """One value edit (`set_name`, `set_opacity`, `set_visible`, `set_blending_mode`): `write()`
+    sets the value `key` names, which `read()` reads back. Made while the project is as saved, it
+    starts a run (`RestoreRun`); the run goes on through the next value edits, with no other edit
+    or native revision between them, and leaves the project as saved whenever each value it
+    changed reads back its saved value. Otherwise it marks the project unsaved, as every edit
+    call does (decision 107 §7)."""
+    run = SESSION.rename_run
+    if run is None or run.revision != uzpainter.project.revision():
+        run = None if unsaved() else RestoreRun({}, 0)
+    before = read()
+    write()
+    if run is None:
+        SESSION.dirty = True
+        SESSION.rename_run = None
+        return
+    saved = run.saved.setdefault(key, before)
+    if read() == saved:
+        del run.saved[key]
+    run.revision = int(uzpainter.project.revision())
+    SESSION.rename_run = run
+    SESSION.dirty = bool(run.saved)
+    if not run.saved:
+        SESSION.clean_revision = run.revision
 
 
 def edits[F: Callable[..., Any]](function: F) -> F:
