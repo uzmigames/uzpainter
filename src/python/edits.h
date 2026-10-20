@@ -175,8 +175,8 @@ std::string ImportResourceFile(core::Edit& edit, store::ProjectStore& store, con
                                const std::optional<std::string>& group);
 
 /// `resource.update_layer_stack_resource`: rebinds every bitmap source of the layer stacks that
-/// binds `from` to `to`; the uids of the rebound nodes. A mesh map bound to `from` is a release gap
-/// (recording P22-A, decision 112), refused before any change.
+/// binds `from` to `to`; the uids of the rebound nodes, none when both hold the same content.
+/// Mesh maps keep their bindings (`TextureSet.set_mesh_map_resource` rebinds one).
 std::vector<core::Id> ReplaceLayerStackResource(core::Edit& edit, const ResourceIdHandle& from, const ResourceIdHandle& to);
 
 // ── Project ─────────────────────────────────────────────────────────────────────────────────────

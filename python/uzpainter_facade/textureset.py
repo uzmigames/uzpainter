@@ -321,7 +321,8 @@ def replace_mesh_map_resource(old: Any, new_mesh_map: Any) -> bool:
     """Binds every mesh map that binds the native resource `old` (its name and content) to the
     resource `new_mesh_map`, under that resource's name, inside the caller's transaction, as
     `resource.update_layer_stack_resource` does (`phase1-mesh-map-update` s9-s10, both
-    recordings); whether one was bound to `old`."""
+    recordings); whether one was bound to `old`. A mesh map bound to another name of the same
+    bytes keeps its binding (`p22b-mesh-map-alias-update` s9-s11, both recordings)."""
     if isinstance(new_mesh_map, resource.Resource):
         new_mesh_map = new_mesh_map.identifier()
     replaced = False

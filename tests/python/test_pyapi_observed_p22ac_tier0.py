@@ -1,15 +1,17 @@
-"""Compared replays of the admitted P22-A and P22-C API-probe goldens (task
+"""Compared replays of the admitted P22-A, P22-C and P22-B mesh-map alias API-probe goldens (task
 phase1.24_python-api-facade item 4.1; decisions 111 and 180; local run on the owner's machine,
 decision 028).
 
 P22-A `phase1-mesh-map-update` replaces a resource bound as the AO mesh map and as a fill's
 BaseColor source (`resource.update_layer_stack_resource`). P22-C `phase1-restored-values` reads
-`project.needs_saving()` after edits that leave a saved value and restore it. Both run through the
-facade with the recorder's own Painter-side code (`observed_replay.replay_observed`). Every output,
-event list and state list of both recordings is compared field by field with the golden read from
-the private store at run time (`compare_observed`). The outputs that cannot equal Painter's are in
-`EXCLUDED`, each with its reason and owner; an excluded output must be recorded and must still
-differ. Where no private store exists the test skips, naming why.
+`project.needs_saving()` after edits that leave a saved value and restore it. P22-B
+`p22b-mesh-map-alias-update` binds AO and Thickness to two names of the same bytes, then replaces
+the AO name by itself and by another resource: only the AO mesh map is rebound. All three run
+through the facade with the recorder's own Painter-side code (`observed_replay.replay_observed`).
+Every output, event list and state list of both recordings is compared field by field with the
+golden read from the private store at run time (`compare_observed`). The outputs that cannot
+equal Painter's are in `EXCLUDED`, each with its reason and owner; an excluded output must be
+recorded and must still differ. Where no private store exists the test skips, naming why.
 
 One comparison rule applies to a copy of the golden (`comparable`), checked to still have a reason
 to exist: in a `s<n>/files` output only the suffix of the project's lock, Painter's
@@ -40,6 +42,7 @@ from tests.python.test_pyapi_observed_host_tier0 import PAINTER_LOCK, map_lock
 # `<condition> <output id>` for one) -> reason and owner.
 EXCLUDED: dict[str, dict[str, str]] = {
     "phase1-mesh-map-update": {"s12/uid": UID_VALUE},
+    "p22b-mesh-map-alias-update": {},
     "phase1-restored-values": {},
 }
 # The probes whose saves leave a project lock in a `files` output (decision 319 §9a).

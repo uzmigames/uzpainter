@@ -23,3 +23,9 @@ Related: phase1.24_python-api-facade item 4.1; goldens `tier0/api-probes/phase1-
 
 - Both P22-A and P22-C replay exactly in both recordings, under the named rules.
 - The facade context `substance_painter.resource.update_layer_stack_resource @ mesh-map` leaves the release-gap list. Its conformance refusal recipe goes with it.
+
+## Amendment (2026-10-20, golden p22b-mesh-map-alias-update)
+
+- **The recording.** Codex recorded the alias case. The same bytes are imported as `old` and `alias`, and distinct bytes as `new`. AO binds `old` and Thickness binds `alias`. Painter returns `[]` for `update(old, old)` and `[old]` for `update(old, new)`. AO then binds `new` and Thickness keeps `alias`, in the session and after save and reopen.
+- **The refusal it replaces.** The native refusal of §2 matched mesh maps by content. A native mesh-map binding holds only the content hash, so after the facade had rebound AO, the refusal still found Thickness and refused the whole call.
+- **The rule.** The native `uzpainter.resource.update_layer_stack_resource` rebinds layer stacks only, and mesh maps keep their bindings. When both resources hold the same content, it changes nothing and returns no nodes. Mesh-map identity, the given name plus the content, is the facade's (§2). Replacing a resource by itself returns `[]` before any edit. Both `@ mesh-map` contexts are supported, with this golden and P22-A as evidence.

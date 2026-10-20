@@ -264,10 +264,14 @@ def update_layer_stack_resource(old_resource_id: Any, new_resource: Any) -> list
     resources replaced, as Painter documents and returns them (`phase1-resource-update` s12: the
     identifier given, once, when a binding used it). A mesh map bound to it then binds the new
     resource under its name (`phase1-mesh-map-update` s9-s11, both recordings), in the same
-    transaction as the layer stacks."""
+    transaction as the layer stacks; a mesh map bound to another name of the same bytes keeps it,
+    and replacing a resource by itself replaces nothing (`p22b-mesh-map-alias-update` s8-s11,
+    both recordings)."""
     from uzpainter_facade import textureset  # it imports this module
 
     old, new = to_native(old_resource_id), to_native(new_resource)
+    if (old.name, old.version) == (new.name, new.version):
+        return []
     with one_transaction("resource.update_layer_stack_resource"):
         mesh_maps = textureset.replace_mesh_map_resource(old, new_resource)
         changed = uzpainter.resource.update_layer_stack_resource(old, new)

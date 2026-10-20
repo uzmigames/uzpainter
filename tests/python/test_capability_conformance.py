@@ -51,22 +51,6 @@ UV = "fill.set_projection_mode(ls.ProjectionMode.UV)"
 NATIVE_UV = "nfill.set_projection_mode(nls.ProjectionMode.UV)"
 SHELF = "shelf = resource.Shelves.add('p22-' + str(len(resource.Shelves.all())), WORK)"
 TEXTURE = "resource.Usage.TEXTURE"
-# The facade replaces a mesh map bound by name (P22-A, decision 336); the one it refuses is the
-# alias: the same bytes imported under two names, AO bound to one and Thickness to the other.
-MESH_MAP = (
-    f"r = resource.import_project_resource(IMAGES + '/checker-16.png', {TEXTURE}, 'a')\n"
-    f"alias = resource.import_project_resource(IMAGES + '/checker-16.png', {TEXTURE}, 'alias')\n"
-    f"r2 = resource.import_project_resource(IMAGES + '/ao-white.png', {TEXTURE}, 'b')\n"
-    "ts.all_texture_sets()[0].set_mesh_map_resource(ts.MeshMapUsage.AO, r.identifier())\n"
-    "ts.all_texture_sets()[0].set_mesh_map_resource(ts.MeshMapUsage.Thickness, alias.identifier())"
-)
-NATIVE_MESH_MAP = (
-    "nres = uzpainter.resource\n"
-    "r = nres.import_project_resource(IMAGES + '/checker-16.png', nres.Usage.TEXTURE, 'a')\n"
-    "r2 = nres.import_project_resource(IMAGES + '/ao-white.png', nres.Usage.TEXTURE, 'b')\n"
-    "uzpainter.textureset.all_texture_sets()[0].set_mesh_map_resource("
-    "uzpainter.textureset.MeshMapUsage.AO, r.identifier())"
-)
 CLOSED = "project.close()"
 
 
@@ -264,14 +248,6 @@ def recipes() -> dict[Any, tuple[str, str]]:
             f"{CLOSED}\n{create}",
             export_call("png", "specular", "16", module, "RGB", "basecolor"),
         )
-    r[("substance_painter.resource.update_layer_stack_resource", "mesh-map")] = (
-        MESH_MAP,
-        "resource.update_layer_stack_resource(r.identifier(), r2)",
-    )
-    r[("uzpainter.resource.update_layer_stack_resource", "mesh-map")] = (
-        NATIVE_MESH_MAP,
-        "nres.update_layer_stack_resource(r.identifier(), r2.identifier())",
-    )
     # The bake parameters' refusals (decision 323): the texture set's baking state setters, the
     # UV-tile members and the meta properties, through either package; a value refused by context.
     for root, sets in (("substance_painter", "ts"), ("uzpainter", "uzpainter.textureset")):

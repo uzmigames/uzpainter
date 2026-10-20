@@ -471,16 +471,13 @@ std::vector<core::Id> ReplaceLayerStackResource(core::Edit& edit, const Resource
     const std::string from = ResolveResource(edit.project(), old_resource);
     const std::string to = ResolveResource(edit.project(), new_resource);
     std::vector<core::Id> nodes;
+    // The same content: no binding changes.
+    if (from == to) return nodes;
+    // Mesh maps are not rebound here. A mesh-map binding holds the content hash only, so it
+    // cannot tell the named resource from another name of the same bytes, which Painter keeps
+    // bound (`p22b-mesh-map-alias-update` s9-s11). The facade rebinds the mesh maps bound to the
+    // named resource in the same transaction (decision 336).
     for (core::TextureSet& set : edit.project().texture_sets) {
-        // Painter also replaces a mesh map's resource; how is unrecorded (recording P22-A,
-        // decision 112): refused before any change.
-        for (const auto& [usage, binding] : set.mesh_maps) {
-            if (binding.resource == from) {
-                throw core::NotYetSupported(
-                    "resource.update_layer_stack_resource: replacing the resource of a mesh map "
-                    "is a release gap until recording P22-A (phase1.24_python-api-facade)");
-            }
-        }
         for (core::Stack& stack : set.stacks) Rebind(stack.root_layers, from, to, nodes);
     }
     return nodes;
