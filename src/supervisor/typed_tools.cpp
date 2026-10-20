@@ -1639,7 +1639,7 @@ void BakingFamily(const ToolContext& context, std::vector<ToolDefinition>& tools
     tools.push_back(Define(
         {"bake_configure",
          "Sets a texture set's baking parameters in one transaction: `common` takes keys of common() (common and "
-         "detail), `per_baker` keys of a baker (only AO's are stored). Values are typed as bake_inspect's "
+         "detail), `per_baker` keys of a baker (only AO, Position, ID, Thickness and Height values are stored). Values are typed as bake_inspect's "
          "properties say; an enum takes its label or its integer. A wrong type or an unknown key or label is "
          "invalid_arguments; a value outside a key's range, another baker's value and the texture set's baking "
          "state (enabled, bakers, uv_tiles, curvature_method) are capability gaps. Linked texture sets share the "
