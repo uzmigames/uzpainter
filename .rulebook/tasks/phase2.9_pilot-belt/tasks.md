@@ -7,7 +7,7 @@
 - [ ] 2.3 Sash v5 rebuilt in UzPainter from the same stack JSON and resources, including the `base_tex` swatch fills
 - [ ] 2.4 Tier 1 comparison and report `parity/reports/phase2/tier1-sash-v5.json`
 - [ ] 2.5 MCP-only round script driving typed tools against a supervisor started without `--allow-python`; call log and receipts in `parity/reports/phase2/sash-v5-mcp-round.json`
-- [ ] 2.6 Before input-dependent rebuild or recording work, complete one bounded inventory of the round folder, swatches and identified recovery sources: name the sources checked, inputs present or missing, known historical hashes or resource versions, and unresolved identity checks; publish numbers, hashes and missing-path metadata only. Reuse the documented searches of decisions 192 and 260; do not repeat a sweep without a newly identified source
+- [x] 2.6 Before input-dependent rebuild or recording work, complete one bounded inventory of the round folder, swatches and identified recovery sources: name the sources checked, inputs present or missing, known historical hashes or resource versions, and unresolved identity checks; publish numbers, hashes and missing-path metadata only. Reuse the documented searches of decisions 192 and 260; do not repeat a sweep without a newly identified source
 - [ ] 2.7 Preserve every available or recovered input, the fixture request and its oracle envelope in the private content-addressed store, and verify the stored hashes before use; public manifests contain hashes and provenance metadata, not private input bytes
 - [ ] 2.8 At the inventory checkpoint, verify restored originals against known reference hashes/resource versions and provenance. Original restoration needs no new scope decision. If originals remain unavailable, prepare one owner decision package for recovery versus a new reference, replacement or exclusion; link any existing pending question instead of duplicating it. A changed baseline requires an explicit recorded owner scope decision before recording or claiming Sash v5 parity; unresolved inputs keep this task open while independent work continues
 
@@ -66,3 +66,25 @@
 - Recovery step (SUP-008): Painter's Export resource is qualified first on 13 disposable PROJECT bitmaps (`resource-export-qual`, run pending in the `rec-batch` window). Nothing is taken from the sash's `.spp` before that.
 - If the verdict is `EXACT`, or `PARTIAL` with the pilot forms qualified, a separate request exports the 19 masks, `T_sash`, Normal and AO from a hash-checked private copy of the stored `.spp`. A file is accepted only if its SHA-1 equals the version a sash migration readback records for its binding.
 - The low OBJ, MTL and both arguments files are not resources and stay lost on every outcome. What item 6 cannot recover goes to the pinned current round, `phase2/tier1/sash-v5-current`: the unchanged scripts, every input stored first, compared with a sash migration golden. Using it as the changed baseline (2.8, 4.1) waits on the owner's own yes.
+
+## 9. Notes (2026-10-20, branch `wt/belt-pilot`)
+- 2.6 (done): one bounded inventory, `parity/reports/phase2/sash-v5-input-inventory.md`, taken at Assets3D `a6eaf6a5`.
+  - Sources checked: nine, listed there. Among them are the round folder (empty), the piece folder and its swatches, Assets3D git history, the Assets3D tree with its 20 agent worktrees (by name), the external archive (absent), the store's inputs and corpora, and the qualification's work folder (no run). The searches of decisions 192 and 260 are reused, not repeated.
+  - The generator still refuses with the same 22 missing paths. The mesh, MTL, Normal and AO remain unresolved bindings.
+  - Historic identities now on record: the two swatch originals by SHA-256, the round's gate `.blend` and its base assembly. The masks and `T_sash` have recorded mean coverages but no hashes.
+  - Unresolved identity checks, five: the `.blend` changed after the round; the round's script copies are unproven; the stored layer-stack and `run.py` copies match no commit, and HEAD has moved; `report.json` was rewritten; the Normal, AO, mask and `T_sash` resource versions need a Painter readback.
+- 2.7 (open, partial): nine more available inputs are now stored through the store's `input` command, under their Assets3D paths. That makes 29 sash entries and 90 input entries in all.
+  - The files are the sash's git-ignored reference `Equipment/Skeletal-Mage-25-Vestivel-Faixa-Cintura.png` (`29e0b7e1…`) and eight committed waist-v5 files: `waist_masks.py`, `waist_gen.py`, `low_gen.py`, `history/waist_gen_v4b.py`, `swatch-prompts.txt`, `README.md`, `round.sh` and `sashchain.sh`.
+  - Each is hashed against v5.json where v5.json pins it. These are the files that decision 300 item 7's pinned current round would run.
+  - `python -m tools.parity.store verify` reports ok, exit 0 (log `tmp/scratch/belt-pilot/store-verify.log`).
+  - Still open: the fixture request and its oracle envelope cannot be preserved until the request exists, and no lost input has been recovered.
+- 2.8 (open): the owner decision package is the last section of the inventory. It links the pending question of decision 300 item 8 instead of asking it again, and it adds what the inventory found to each route. No route is chosen.
+- 2.1 (open, blocked): the generator refuses with 22 missing paths (log `tmp/scratch/belt-pilot/manifest-sash.log`, exit 2). Writing a manifest without them would mean substitutes, so none is written.
+- 2.3 (open, blocked): there is no rebuild without the masks, `T_sash`, mesh, Normal and AO. The runner `tests/parity/tier1/sash_v5/runner.py` is unchanged and still skips with the reason. Pilot exports also stay refused until `infinite` padding lands (phase1.25 item 2.7). No GPU job was run.
+- 2.5 (open, blocked): `tests/parity/tier1/mcp_round.py` is unchanged. A round report needs the request's inputs, and `parity/reports/phase2/sash-v5-mcp-round.json` is not written.
+- 2.4 (open): the store has no `phase2/tier1/sash-v5*` record. Its only phase2 golden is `tunic-v10`. Nothing was compared.
+- Painter work needed (Codex), in order:
+  1. Decision 300's `resource-export-qual` run, which is authored and still pending.
+  2. A Sash migration readback of a hash-checked private copy of the `.spp` (`0691cc12…`), giving each resource's URL and SHA-1 version. No sash request generator for it exists yet: `tools/parity/recorder/migration.py` and `tunic.py` hold the Tunic's. Using the recording as a golden is the owner's choice.
+  3. After `EXACT` or `PARTIAL`, the resource export request of decision 300 item 6.
+  4. `phase2/tier1/sash-v5` (r1, r1-repeat, r2) cannot be requested on any of these outcomes without the arguments files and the low mesh. Only the owner's restore or his yes to `sash-v5-current` unblocks 2.2.
