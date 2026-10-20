@@ -182,3 +182,15 @@ Every run used the same runner, `uzp-pyapi-tests.exe` SHA-256 `f8c5a64b5b255aef6
 Item 4.1 stays open for:
 - the 18 P22-B recordings (decisions 295-297), with their admission and compared replays;
 - the `get_default_export_path` host-path difference (P21-B s3, decision 320): implemented as a UzPainter host policy, symbol `pending-evidence`, owned by phase1.24_python-api-facade item 4.1.
+
+## 8. `get_default_export_path` as a UzPainter host policy (decision 320), 2026-10-20
+
+Section 7's runner (`f8c5a64b…`) predates this change; this section's evidence is separate.
+
+- **Code:** commit f819cc0f, on parent 75bf5c34. The private `uzpainter.export._default_export_path` returns `<Documents>/UzPainter/export` from `SHGetKnownFolderPath(FOLDERID_Documents, KF_FLAG_DONT_VERIFY)`. It does no existence check, never creates the folder and has no fallback.
+- **Run:** `tests/python/test_default_export_path.py` plus `test_observed_probe_equals_painter[phase1-create-default-paths]`, one pytest session, exit 0, 2 passed, 0 skipped.
+  - Runner SHA-256: `226a77fd57d70e00b7f7e6088df2eaee42e97b66f5efd1937dd4b25987806119`.
+  - Evidence: `tmp/scratch/default-export/validation-run3/{evidence.json,junit.xml,pytest.log}`, including the source hashes of the five changed files.
+  - Earlier attempts (run1 with 2 skips, run2 with no collection) are not evidence.
+- **Verdict:** P21-B s3 returns a valid absolute path and is recorded as an explicit host difference from Painter's path. It is not literal parity. The symbol is `pending-evidence` and is not `supported`.
+
