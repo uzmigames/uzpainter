@@ -1147,3 +1147,59 @@ def test_seam_strip_last_draw_owns_uncovered_samples(tmp_path: Path) -> None:
     assert ring.strip_winners(chart, x, y) == {last}
     ring.seams[chart] = [last, first]
     assert ring.strip_winners(chart, x, y) == {first}
+
+
+def test_own_comparator_keeps_tau_and_far_roles_separate(
+    export_tests: Path, tmp_path: Path
+) -> None:
+    """Own-order correction must not leak its fused determinant into tau or far ordering."""
+    mesh = (
+        Path(__file__).resolve().parents[2]
+        / "parity/fixtures/tier0-semantics/meshes/corner-reach.obj"
+    )
+    expected = {
+        (34, 38): [(33, 38), (34, 37), (33, 39), (33, 37)],
+        (185, 37): [(173, 36), (172, 37), (186, 37), (185, 38)],
+        (266, 104): [(260, 103), (259, 104), (266, 105), (267, 104)],
+    }
+    values = np.random.default_rng(303).random((512, 512, 3)).astype(F32)
+    raw, result = tmp_path / "values.f32", tmp_path / "result.f32"
+    raw.write_bytes(values.tobytes())
+    cases = tmp_path / "cases.json"
+    cases.write_text(
+        json.dumps(
+            [
+                dict(
+                    mesh=str(mesh),
+                    material="uzp_corner",
+                    width=512,
+                    height=512,
+                    channels=3,
+                    values=str(raw),
+                    out=str(result),
+                )
+            ]
+        )
+    )
+    process = subprocess.run(
+        [str(export_tests), "ring", str(cases)],
+        capture_output=True,
+        text=True,
+        timeout=600,
+        check=False,
+    )
+    assert process.returncode == 0, process.stdout + process.stderr
+    native = {(r["x"], r["y"]): r for r in json.loads(process.stdout)["ring"]}
+    reference = Ring(mesh, "uzp_corner", 512, 512)
+    for (x, y), taps in expected.items():
+        own = [
+            ((x + dx) % 512, y + dy)
+            for dy, dx in NEIGHBOURS
+            if 0 <= y + dy < 512 and reference.owner[y + dy, (x + dx) % 512] >= 0
+        ]
+        tau = reference.tau(x, y, own)
+        if (x, y) == (185, 37):
+            assert tau == 148
+        candidates, _ = reference.candidates(x, y, own, tau)
+        assert [c[2] for c in candidates[:4]] == taps
+        assert [tuple(c[:2]) for c in native[(x, y)]["candidates"][:4]] == taps

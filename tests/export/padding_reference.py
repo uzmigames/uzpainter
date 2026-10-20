@@ -266,7 +266,14 @@ def box_normalised(positions: np.ndarray, lo: np.ndarray, hi: np.ndarray) -> np.
 
 
 def position32(
-    uv: np.ndarray, normalised: np.ndarray, width: int, height: int, x: int, y: int
+    uv: np.ndarray,
+    normalised: np.ndarray,
+    width: int,
+    height: int,
+    x: int,
+    y: int,
+    *,
+    fused_determinant: bool = False,
 ) -> list[np.float32]:
     """Decision 273's float32 position of texel (x, y)'s centre through the triangle of float32 UVs
     `uv` (v up) and box-normalised corners `normalised`: the texel-centre UV, barycentrics from the
@@ -275,7 +282,11 @@ def position32(
     u = [(f32(a), f32(b)) for a, b in uv]
     e0u, e0v = f32(u[0][0] - u[2][0]), f32(u[0][1] - u[2][1])
     e1u, e1v = f32(u[1][0] - u[2][0]), f32(u[1][1] - u[2][1])
-    det = f32(f32(e0u * e1v) - f32(e0v * e1u))
+    det = (
+        fma(e0u, e1v, -f32(e0v * e1u))
+        if fused_determinant
+        else f32(f32(e0u * e1v) - f32(e0v * e1u))
+    )
     r = F32(hwmath.rcp(np.array([det], F32))[0])
     m00, m01, m10, m11 = f32(e1v * r), f32(-e1u * r), f32(-e0v * r), f32(e0u * r)
     n = normalised.astype(F32)
@@ -302,13 +313,15 @@ def compare_distance(
     height: int,
     ring: tuple[int, int],
     tap: tuple[int, int],
+    *,
+    fused_determinant: bool = True,
 ) -> np.float32:
-    """Decision 273's comparator distance from ring texel `ring` to `tap` = (x, y), both through the
-    triangle of float32 UVs `uv` (v up) and box-normalised corners `normalised`."""
-    return distance32(
-        position32(uv, normalised, width, height, *ring),
-        position32(uv, normalised, width, height, *tap),
-    )
+    """Own-order comparator; tau explicitly keeps the split UV determinant."""
+    q = position32(uv, normalised, width, height, *ring, fused_determinant=fused_determinant)
+    p = position32(uv, normalised, width, height, *tap, fused_determinant=fused_determinant)
+    d = [f32(q[c] - p[c]) for c in range(3)]
+    squared = fma(d[2], d[2], fma(d[0], d[0], f32(d[1] * d[1])))
+    return F32(hwmath.sqrt(np.array([squared], F32))[0])
 
 
 def _dot32(a: Sequence[np.float32], b: Sequence[np.float32]) -> np.float32:
@@ -1066,7 +1079,9 @@ class Ring:
 
         def key(t: tuple[int, int]) -> tuple[float, int, int]:
             k = self.tris[int(self.owner[t[1], t[0]])]
-            d = compare_distance(k.uv, k.normalised, self.width, self.height, (x, y), t)
+            d = compare_distance(
+                k.uv, k.normalised, self.width, self.height, (x, y), t, fused_determinant=False
+            )
             return (float(d), -t[0], t[1])
 
         nearest = min(own, key=key)

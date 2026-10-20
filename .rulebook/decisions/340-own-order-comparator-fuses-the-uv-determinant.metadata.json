@@ -1,0 +1,11 @@
+{
+  "id": 340,
+  "slug": "own-order-comparator-fuses-the-uv-determinant",
+  "title": "The own-order comparator fuses the UV determinant; tau keeps it split",
+  "status": "accepted",
+  "date": "2026-10-20",
+  "relatedTasks": [
+    "phase1.25_pilot-wand"
+  ],
+  "supersededBy": null
+}

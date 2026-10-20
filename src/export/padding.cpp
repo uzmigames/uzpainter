@@ -566,7 +566,8 @@ using Float3 = std::array<float, 3>;
 /// `k`'s UV inverse matrix based at its third corner, through the GPU's reciprocal of the
 /// determinant, and interpolates the mesh-box-normalised positions as fma(l2, P2, fma(l0, P0,
 /// l1 P1)). Every other operation is one correctly rounded float32 operation.
-Float3 Position32(const KernelTriangle& k, uint32_t width, uint32_t height, uint32_t x, uint32_t y) {
+Float3 Position32(const KernelTriangle& k, uint32_t width, uint32_t height, uint32_t x, uint32_t y,
+                  bool fusedDeterminant = false) {
     const auto& U = k.uv;
     const float e0u = U[0][0] - U[2][0];
     const float e0v = U[0][1] - U[2][1];
@@ -574,7 +575,8 @@ Float3 Position32(const KernelTriangle& k, uint32_t width, uint32_t height, uint
     const float e1v = U[1][1] - U[2][1];
     const float a = e0u * e1v;
     const float b = e0v * e1u;
-    const float r = evaluator::hw::Rcp(a - b);
+    const float determinant = fusedDeterminant ? std::fma(e0u, e1v, -b) : a - b;
+    const float r = evaluator::hw::Rcp(determinant);
     const float m00 = e1v * r;
     const float m01 = -e1u * r;
     const float m10 = -e0v * r;
@@ -608,8 +610,14 @@ float Distance32(const Float3& q, const Float3& p) {
 /// Decision 273's comparator distance from the ring texel (rx, ry) to the tap (tx, ty), both
 /// through triangle `k`.
 float CompareDistance(const KernelTriangle& k, uint32_t width, uint32_t height, uint32_t rx, uint32_t ry, uint32_t tx,
-                      uint32_t ty) {
-    return Distance32(Position32(k, width, height, rx, ry), Position32(k, width, height, tx, ty));
+                      uint32_t ty, bool fusedDeterminant = true) {
+    const Float3 q = Position32(k, width, height, rx, ry, fusedDeterminant);
+    const Float3 p = Position32(k, width, height, tx, ty, fusedDeterminant);
+    const float dx = q[0] - p[0];
+    const float dy = q[1] - p[1];
+    const float dz = q[2] - p[2];
+    // This comparator evaluates y first; weight and far-comparator arithmetic stays separate.
+    return evaluator::hw::Sqrt(std::fma(dz, dz, std::fma(dx, dx, dy * dy)));
 }
 
 // Float32 vector operations without contraction, each one correctly rounded operation.
@@ -1231,7 +1239,8 @@ std::vector<RingTexel> RingOf(const Coverage& coverage) {
                     const auto tx = static_cast<uint32_t>(texel % coverage.width);
                     const auto ty = static_cast<uint32_t>(texel / coverage.width);
                     const auto k = static_cast<size_t>(g.owner[texel]);
-                    const float d = CompareDistance(g.triangles[k], g.width, g.height, rx, ry, tx, ty);
+                    // Tau keeps the split determinant; only final own ordering fuses it.
+                    const float d = CompareDistance(g.triangles[k], g.width, g.height, rx, ry, tx, ty, false);
                     const auto bx = static_cast<uint32_t>(best % coverage.width);
                     const auto by = static_cast<uint32_t>(best / coverage.width);
                     if (d < nearest || (d == nearest && (tx > bx || (tx == bx && ty < by)))) {
