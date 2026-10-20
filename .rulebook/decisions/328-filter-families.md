@@ -12,7 +12,7 @@
 - The evaluator refuses filter effects (`unsupported_node`, owner this task). The procedural seam is not wired into the evaluator.
 - The native levels effect is exact against Tier 0 (`parity/semantics/masks-levels.json` `levels`, `levels-clamp`). It uses the recording GPU's reciprocal, log2 and exp2 from measured tables (`src/evaluator/hwmath.h`), which the evaluator binds to its own kernels. The HLSL host has no table buffers.
 - The certification harness reads the domain as JSON (`tools/parity/proc_cert/batch.py` `Domain`). It has no rule between an input and the output.
-- The python-doc says of `SourceSubstance.resolution`: "Raises: ValueError – if the source is used in a substance_painter.layerstack.FilterEffectNode" (A-PYDOC). In the document model the source of a filter effect is its `ProceduralRef`.
+- Per the python-doc, `SourceSubstance.resolution` throws `ValueError` for a source that a `substance_painter.layerstack.FilterEffectNode` holds (A-PYDOC). In the document model the source of a filter effect is its `ProceduralRef`.
 
 The coordinator's brief fixed the frame: the math comes from published sources only (decision 006), nothing is certified and no alias names a filter (decision 324). No model panel ran. The forks below follow from those rules.
 
