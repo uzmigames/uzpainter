@@ -55,6 +55,12 @@ for _cls in (ExportStatus, TextureExportResult):
     _cls.__module__ = MODULE
 
 
+def get_default_export_path() -> str:
+    """Return this host's Documents/UzPainter/export path without creating it (decision 320)."""
+    path: str = uzpainter.export._default_export_path()
+    return path
+
+
 def list_project_textures(json_config: dict[str, Any]) -> dict[tuple[str, str], list[str]]:
     """The textures an export of `json_config` would write."""
     listed: dict[tuple[str, str], list[str]] = uzpainter.export.list_project_textures(json_config)

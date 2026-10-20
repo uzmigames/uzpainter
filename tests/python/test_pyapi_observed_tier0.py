@@ -50,9 +50,9 @@ EXCLUDED: dict[str, dict[str, str]] = {
     "phase1-create-mesh-maps": {},
     "phase1-create-default-paths": {
         "s3/get_default_export_path": (
-            "release gap, a remaining 4.1 seam (phase1.24_python-api-facade item 4.1): the "
-            "facade has no get_default_export_path (AttributeError); Painter returns its user's "
-            "Painter export folder"
+            "host path, pending evidence (decision 320; phase1.24_python-api-facade item 4.1): "
+            "UzPainter returns this host's Documents/UzPainter/export; Painter returns its "
+            "user's Painter export folder. The excluded path gives no parity credit"
         ),
     },
     "phase1-texture-throttling": {},
@@ -91,6 +91,14 @@ def test_observed_probe_equals_painter(facade: Run, tmp_path: Path, probe: str) 
     """Item 4.1: the API-probe golden is exact apart from the named exclusions, both
     recordings."""
     replayed, golden, job = replay_observed(facade, probe, tmp_path)
+    if probe == "phase1-create-default-paths":
+        for condition in ("same_session", "after_save_reopen"):
+            output = replayed[condition]["outputs"]["s3/get_default_export_path"]
+            assert "raised" not in output, output
+            assert isinstance(output["value"], dict), output
+            assert isinstance(output["value"].get("path"), str), output
+            path = Path(output["value"]["path"])
+            assert path.is_absolute() and path.parts[-2:] == ("UzPainter", "export"), output
     differences = compare_observed(replayed, golden, job, tmp_path, EXCLUDED[probe])
     save_trace(f"facade-observed/{probe}", golden, replayed, EXCLUDED[probe], differences)
     assert replayed["cleanup_failures"] == [], replayed["cleanup_failures"]

@@ -6,6 +6,7 @@ from uzpainter_facade.export import (
     ExportStatus,
     TextureExportResult,
     export_project_textures,
+    get_default_export_path,
     list_project_textures,
 )
 
@@ -13,5 +14,6 @@ __all__ = [
     "ExportStatus",
     "TextureExportResult",
     "export_project_textures",
+    "get_default_export_path",
     "list_project_textures",
 ]

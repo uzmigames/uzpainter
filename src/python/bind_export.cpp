@@ -23,6 +23,11 @@
 // point is the publication of the generation (`JobContext::Commit {generation, revision}`), so a
 // cancel during the fixed-name copies reports `stopped: after_commit` (jobs.h, decision 140).
 
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#include <shlobj.h>
+
 #include <memory>
 
 #include "evaluator/error.h"
@@ -45,6 +50,19 @@
 namespace uzp::python {
 
 namespace {
+
+std::string DefaultExportPath() {
+    // Resolve redirected Documents without creating it or consulting another application's settings.
+    static const GUID kDocuments = {0xFDD39AD0, 0x238F, 0x46AF, {0xAD, 0xB4, 0x6C, 0x85, 0x48, 0x03, 0x69, 0xC7}};
+    PWSTR folder = nullptr;
+    const HRESULT status = SHGetKnownFolderPath(kDocuments, KF_FLAG_DONT_VERIFY, nullptr, &folder);
+    const std::unique_ptr<wchar_t, decltype(&CoTaskMemFree)> owned(folder, &CoTaskMemFree);
+    if (FAILED(status) || folder == nullptr || *folder == L'\0') {
+        throw ApiError("RuntimeError", "Cannot resolve the Windows Documents folder (HRESULT " +
+                                          std::to_string(static_cast<long>(status)) + ")");
+    }
+    return exporter::Utf8String(std::filesystem::path(folder) / L"UzPainter" / L"export");
+}
 
 std::string ConfigText(const py::object& config) {
     if (py::isinstance<py::str>(config)) return config.cast<std::string>();
@@ -252,6 +270,8 @@ void BindExport(py::module_& m, py::module_& jobs) {
         return handles;
     });
 
+    m.def("_default_export_path", &DefaultExportPath,
+          "The host's Documents/UzPainter/export path; does not create a directory or require a project.");
     m.def(
         "plan",
         [](const py::object& config) {
