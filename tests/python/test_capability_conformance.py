@@ -280,7 +280,7 @@ def recipes() -> dict[Any, tuple[str, str]]:
     )
     r[("substance_painter.baking.BakingParameters.set", "baker-other-than-ao")] = (
         facade_params,
-        "sp.baking.BakingParameters.set({b.baker(ts.MeshMapUsage.ID)['ColorSource']: 0})",
+        "sp.baking.BakingParameters.set({b.baker(ts.MeshMapUsage.Curvature)['AutoMinMax']: False})",
     )
     r["substance_painter.resource.Resource.show_in_ui"] = (
         f"r = resource.import_project_resource(IMAGES + '/checker-16.png', {TEXTURE}, 'a')",
