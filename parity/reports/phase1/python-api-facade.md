@@ -328,3 +328,133 @@ Thirteen exact P22-B and P21-B replays now carry Tier 0 trace evidence:
   `export_project_textures @ l8-material-channel-png-unrecorded`. Since `4f95a1b3`, the facade
   re-raises the native `NotYetSupported` as `ValueError("Error during the export (see logs).")`,
   so the refusal is no longer visible as one. The fault is in the facade, not in this change.
+
+## 11. Final trace reconciliation on one build, 2026-10-20
+
+Every `check_trace` and `check_observed_trace` replay was regenerated in one pytest session on one build, using the method of `68a4137b` and `abd94980`. 64 of the 65 replays passed and their traces are consolidated. One replay fails on behaviour, so **item 4.1 stays open** (§11.6).
+
+### 11.1 Run identities
+
+| Run | Identity | Result |
+|---|---|---|
+| Build | `zig build pyapi-tests -j2` from commit `6518f49eaaf8108d0f30c4ba55941e7d0276647a` (worktree `wt/trace-final`), with a fresh `ZIG_GLOBAL_CACHE_DIR` under `tmp/scratch/trace-final/`; CPU only | exit 0, 1 min 56 s (`build.log`) |
+| Runner | `uzp-pyapi-tests.exe` SHA-256 `6f63d36ea1266f9bded4f2f39e4c58625de8a32efc3153694862184985fec55f`. All 51 installed Python files equal the commit's `python/` sources (`replay-build-identity.json`) | — |
+| Replays | One session on that binary (`run_existing.py`, no fixture rebuild), `UZP_UPDATE_TIER0_TRACE=1` and `UZP_OBSERVED_TRACE_DIR=traces/`, from 15:46:54Z to 16:08:31Z | 65 tests: 64 passed, 1 failed, exit 1, 1295.65 s (`replays.log`, `replays-junit.xml`) |
+| Conformance | `tests/python/test_capability_conformance.py`, run once on the same binary | exit 1: 4 passed, 1 failed (§11.5; `conformance.log`) |
+| Manifest | `tests/capabilities`, run once | exit 0, 44 passed (`capabilities-tests.log`) |
+
+The logs are in `tmp/scratch/trace-final/`. The session covered:
+- 2 native replays;
+- `facade/baking-defaults`;
+- 26 facade replays;
+- 8 lifecycle replays;
+- 10 observed replays (P21-A to P21-G, R-095 P7, R10 and P23-A);
+- `p22b-export-error-status`;
+- 7 P22-B Project/TextureSet replays;
+- 4 host replays, with decision 332's texture comparison mandatory;
+- 5 layer replays;
+- the colour replay.
+
+`mask-stack`, `insert-positions`, `fill-layer-readback`, `phase1-resource-update` and `phase1-reload-resources` are among the facade and lifecycle replays.
+
+### 11.2 P22-B verdicts (18 probes)
+
+"Exact" means exact in both recordings apart from the named exclusions.
+
+| Golden | Verdict | Exclusions, with owners |
+|---|---|---|
+| `p22b-project-mesh-unit-scale` | exact | none |
+| `p22b-project-tangent-per-fragment` | exact | none |
+| `p22b-project-tangent-per-vertex` | exact | none |
+| `p22b-project-workflow-default` | exact | none |
+| `p22b-textureset-channels` | **fails on behaviour** (§11.6) | none |
+| `p22b-textureset-texture-set` | exact | none |
+| `p22b-textureset-user-channels` | exact | none |
+| `p22b-export-error-status` | exact | none |
+| `p22b-host-application` | exact apart from the host difference | s3 `version`, s4 `version_info`, s20 `evaluate`: decision 330, host difference, no credit |
+| `p22b-host-events` | exact, including the texture comparison | none. ADD and REMOVE are exact per step; UPDATE matches as decision 332's s7-s8 (action, channel type) pairs. Cache keys and texture ids are not claimed. |
+| `p22b-host-plugins` | exact | none |
+| `p22b-host-resources` | exact apart from four outputs | • s5 `import_project_resource`: refused, the COLOR_LUT is pinned to none (decision 038)<br>• s15 `get_environment_resource`: host content, permanent (decisions 006 and 038)<br>• s23 `reload_modified_resources_async`: release gap, shelf resources (phase3.3_procedural-families)<br>• r2 s20 `events`: reload order unproven; **owner phase1.24 item 4.1 itself** |
+| `phase1-blending-modes-layer` | exact | none |
+| `phase1-blending-modes-mask` | exact | none |
+| `phase1-layer-navigation` | exact apart from refusals | Fill effect in a content stack, step 19 and its node's outputs (phase3.2_proc-filter-families, decision 081). Triplanar projection, s60-s63 (phase3.4_smart-projections). Painter's default "Layer 1", s30 and r1 s88 (phase4.1_nodes-paint-layers item 2.8). |
+| `phase1-layer-node-kinds` | exact apart from refusals | Paint effect s5 (phase4.1_nodes-paint-layers). Filter and generator effects s6 and s8 (phase3.3_procedural-families, decisions 113 and 324). Instance layer s17 (phase4.1_nodes-instances-anchors). r2 `identity/reopen`, which lists their nodes. |
+| `phase1-levels-params` | exact apart from refusals | Levels effect in a mask stack, step 9 and its node's outputs (phase4.2_remaining-nodes, decision 081) |
+| `phase1-color-srgb-value` | exact | none |
+
+### 11.3 Observed verdicts (10 probes)
+
+All 10 are exact. Their exclusions and comparison rules are unchanged from §7.2:
+
+| Golden | Exclusions or rule |
+|---|---|
+| P21-A `phase1-create-mesh-maps` | none |
+| P21-B `phase1-create-default-paths` | none (decision 320 amendment) |
+| P21-C `phase1-texture-throttling` | none |
+| P21-D `phase1-shelves` | s4, s5 and s6: host environment (decision 006) |
+| P21-E `phase1-layer-stack-events` | Refusals s14 and s16-s18, each with its events (phase4.1_nodes-paint-layers, nodes-mask-effects and nodes-instances-anchors). r2 `identity/reopen`. s30 `set_parameters`, unstable in Painter (decision 205). |
+| P21-F `phase1-create-open-timing` | the raw `thread_polls` (decision 198) |
+| P21-G `phase1-close-without-saving` | the lock-file suffix rule (decision 319 §9a) |
+| R-095 P7 `phase1-export-preset-search` | s3 and s4 `search`: known divergence (phase3.3_procedural-families, decisions 113, 164 and 324) |
+| R10 `phase1-engine-computations` | the export-publication metadata rule (decision 319 §9b) |
+| P23-A `phase1-save-as-existing` | the lock-file suffix rule (decision 319 §9a) |
+
+### 11.4 Seams
+
+- **Version, a host difference (decision 330).** UzPainter reports its own version. s3, s4 and s20 of `p22b-host-application` stay excluded and credit nothing.
+- **Texture window (decision 332).**
+  - UzPainter's observer (`06b182fe`) now emits the pairs Painter emits within s7-s8, and `p22b-host-events` passes with the texture comparison mandatory, so decision 332 §5's condition holds for that golden.
+  - Cache keys and texture ids are not claimed.
+  - The same observer causes the failure in §11.6.
+
+### 11.5 Trace and manifest
+
+- **Trace.** `tools/capabilities/tier0-trace.json` holds 65 replays.
+  - 6 are new: the 5 layer replays and the colour replay.
+  - 58 were regenerated, 2 of them (the native replays) with an identical symbol set.
+  - `facade/p22b-textureset-channels` is left exactly as `abd94980` recorded it, because it fails here (§11.6). No symbol is promoted from it: every promotion has another exact replay behind it.
+- **Promoted (77).** These are exercised only by exact compared outputs, after excluded outputs and refusals are removed (`observed_symbols`, `exercised`):
+  - 65 Painter symbols: 50 `layerstack` (BlendingMode members, selection, navigation, collapsed, symmetry, material source, ScopedModification), 13 `levels` and `colormanagement.Color.sRGB` and `.value`;
+  - 12 `uzpainter` symbols.
+  - The list is in `tmp/scratch/trace-final/promoted.txt`.
+- **`tier_evidence`.** It follows the trace on 321 supported entries.
+- **Demoted (7), with reasons in their notes.**
+  - `uzpainter.layerstack.BlendingMode` and its members `LinearDodge`, `Multiply`, `Normal`, `NormalMapDetail` and `Screen`: since `d83195de` the facade passes its own BlendingMode, and no compared replay exercises the native members.
+  - `substance_painter.resource.ShelvesListFilter`: its earlier credit came from s23/states while the excluded s23 reload was still running. The reload now ends before the call returns, so no compared output exercises it.
+- **Unchanged.** 1,428 entries keep their status: 784 supported, 305 pending-evidence, 324 release-gap and 15 desktop-only.
+- **Held pending (4).** `substance_painter.event.TextureStateEventAction` and its `ADD`, `REMOVE` and `UPDATE`.
+  - The trace credits them in 34 replays, but only through the facade's own TextureStateEvent construction (`texture_state.py`).
+  - 33 of those probes connect no TextureStateEvent handler, so their dispatches are filtered out and never compared. Only `p22b-host-events` compares them.
+  - Because the conformance test requires `tier_evidence` to equal the trace, they cannot be promoted on that one golden alone. Their notes say so and name item 4.1.
+  - This is the one conformance failure: `test_supported_entries_equal_the_tier0_trace`, "exercised but not supported", these 4 symbols. Its other two checks hold: nothing is supported without a replay, and no evidence is wrong.
+  - It is settled by a trace rule that credits only compared dispatches, or by a decision to accept the facade-internal credit.
+- **No credit from excluded material.** Nothing is credited from:
+  - excluded outputs or refusals;
+  - the version outputs (decision 330);
+  - cache keys or texture ids (decision 332);
+  - `event.Event`, `ReloadedResourceError` or `Usage.COLOR_LUT`.
+- **Credits that only widened `tier_evidence`.** The observer's internal calls widen the `tier_evidence` of entries that were already supported:
+  - `uzpainter.textureset.Stack.uid`, `TextureSet.uid` and `Stack.material`;
+  - `TextureStateEvent.cache_key_invalidation_throttling_period`.
+
+  None of them is a promotion.
+- **`test_release_gaps_raise_not_yet_supported_before_mutation`.** The §10.3 failure no longer occurs: it passes on this build.
+
+### 11.6 Item 4.1: not ticked
+
+Clause by clause:
+
+- **Three pipeline scripts through the adapter.** Holds, on item 3.2's evidence (§2, §4.1).
+- **API-probe goldens exact apart from named exclusions with owners.** Does **not** hold:
+  1. `tests/python/test_pyapi_p22b_project_textureset_tier0.py::test_p22b_project_textureset_replay[p22b-textureset-channels]` fails on behaviour. Its `close_project` step raises `RuntimeError: texture notification worker failed`, caused by `incomplete native texture snapshot: unsupported texture DAG: 4/BaseDiffuseRoughness`. The source is `src/python/session.cpp`: the observer's snapshot calls `evaluator::BuildDag` on every channel and fails on the BaseDiffuseRoughness channel this probe adds. The log is `tmp/scratch/trace-final/replays.log`. The replay passed exactly at `abd94980`, before the observer existed; Codex owns the fix.
+  2. The `p22b-host-resources` r2 s20 `events` exclusion names phase1.24 item 4.1 as its owner. It needs an owner that outlives this task, or a recording that settles the order.
+  3. The admitted goldens P22-A `phase1-mesh-map-update` and P22-C `phase1-restored-values` (decision 180) have no compared replay. Both were named by decision 111, and the mesh-map release gap of `update_layer_stack_resource` names phase1.24.
+- **Results recorded in `parity/reports/phase1/`.** Holds: this section.
+
+### 11.7 Before archive
+
+The task is not archived, because 4.1 is open. Besides §11.6, the manifest still names this task as the owner of open evidence:
+- 126 pending entries still read "Recording P22-B settles it (phase1.24_python-api-facade)", although every P22-B recording is now admitted and replayed;
+- 32 entries name item 4.1 itself: the 4 held entries, the 6 demoted BlendingMode entries and the 22 notes of §10.2.
+
+Each needs a reason and an owner that outlives the task.
