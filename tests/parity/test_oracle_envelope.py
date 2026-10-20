@@ -872,13 +872,21 @@ def test_launcher_times_out_and_ends_its_process() -> None:
 
 # --- canary subset and corpus dispatch --------------------------------------------------------
 
+GOLDEN_PUBLIC = "uzpainter/parity/golden-public/1"
+
+
+def corpus_golden_manifests() -> list[Path]:
+    """The golden manifests under `parity/manifests`. The tree also holds public manifests of
+    other schemas (the glTF consumer fixture `consumers/gltf/wand-v1.json`), which the guard
+    validates against their own schema (`tools/parity/guard/guard.py` PATH_RULES)."""
+    paths = sorted((REPO_ROOT / "parity" / "manifests").rglob("*.json"))
+    return [p for p in paths if load_json(p).get("schema") == GOLDEN_PUBLIC]
+
 
 def test_canary_subset_is_fixed_and_covers_the_required_areas() -> None:
     ids = [g for g, _ in CANARY]
     assert len(ids) == len(set(ids)) == 10
-    index = {
-        load_json(p)["golden_id"]: p for p in (REPO_ROOT / "parity" / "manifests").rglob("*.json")
-    }
+    index = {load_json(p)["golden_id"]: p for p in corpus_golden_manifests()}
     assert set(ids) <= set(index)
     calls = {
         g: {s["call"] for s in load_json(index[g])["instruction_sequence"]["steps"]} for g in ids
@@ -892,7 +900,7 @@ def test_canary_subset_is_fixed_and_covers_the_required_areas() -> None:
 
 def test_every_texture_golden_has_a_recorder_command() -> None:
     kinds = {}
-    for path in sorted((REPO_ROOT / "parity" / "manifests").rglob("*.json")):
+    for path in corpus_golden_manifests():
         manifest = load_json(path)
         if manifest["tier"] != "3":
             kinds[manifest["golden_id"]] = recorder_kind(manifest)
