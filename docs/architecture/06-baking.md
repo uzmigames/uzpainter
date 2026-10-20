@@ -117,7 +117,7 @@ does not satisfy the Tier 2b equality gate.
 
 ### 3.3 Native geometry maps
 
-Decision 337 adds geometry maps to the CPU request, on the same primary hits as AO and Normal.
+Decisions 337 and 341 add geometry maps to the CPU request, on the same primary hits as AO and Normal.
 Each map has its own file in `src/bake/` and its own owner task. The rules they share:
 - A parameter value whose label names one computation on the bake mesh's data is implemented.
   Any other value is refused before a job starts, with `NotYetSupported` naming the owner task.
@@ -152,6 +152,11 @@ mesh carries no such input, or nothing recorded describes it. Every `ColorGenera
 because the colour Painter gives a label is not recorded. So no colour map exists yet: a request
 without a generator bakes the labels only, and a request made from parameters always names one. ID's
 values are stored per texture set in `bake_settings.per_baker.ID`, with no link group.
+
+**Opacity** (`opacity_baker.*`, phase3.4_baker-opacity, decision 341). The map holds the opacity of
+the high surface at the hit. A bake mesh carries no transparency input, so a hit is 1 and every
+other texel 0 with its class. `opacity` is float32 in [0, 1], unencoded: Painter's channel format
+waits on the Tier 2b goldens. Opacity has no parameters. Block tag: `OPA1`.
 
 Parity is `pending-evidence` for every map. Python and MCP expose no bake.
 

@@ -171,6 +171,11 @@ std::string SerializeResult(const BakeResult& result) {
             out += name;
         }
     }
+    if (!result.opacity.empty()) {
+        out += "OPA1";
+        PutLe(out, result.opacity.size(), 8);
+        for (float v : result.opacity) PutLe(out, std::bit_cast<std::uint32_t>(v), 4);
+    }
     return out;
 }
 

@@ -44,7 +44,8 @@ struct BakeMesh {
     bool normal_frame_supported = true;
 };
 
-/// Painter's ten `MeshMapUsage` bakers (`06-baking.md` §2). CPU: AO, Normal, WorldSpaceNormal, Position and ID.
+/// Painter's ten `MeshMapUsage` bakers (`06-baking.md` §2). CPU: AO, Normal, WorldSpaceNormal, Position, ID
+/// and Opacity.
 enum class MeshMapUsage {
     Normal,
     WorldSpaceNormal,
@@ -317,6 +318,10 @@ struct BakeResult {
     /// request plus one (0 on non-hit texels), and the mesh names in label order.
     std::vector<std::uint16_t> id_labels;
     std::vector<std::string> id_label_meshes;
+    /// Opacity (decision 341): per texel the opacity of the high surface at the hit, float32 in
+    /// [0, 1] and unencoded; a bake mesh carries no transparency input, so a hit is 1. Zero on
+    /// non-hit texels.
+    std::vector<float> opacity;
     core::TangentSpace tangent_space = core::TangentSpace::PerVertex;
     core::NormalMapFormat normal_format = core::NormalMapFormat::OpenGL;
     std::vector<std::uint8_t> texel_class;
@@ -337,7 +342,8 @@ struct BakeResult {
 /// The canonical bytes of a result (little-endian; AO-only keeps `UZPBAKE3`; Normal uses
 /// `UZPBAKE4` with usage flags, mode, format and RGB maps before the existing sizes/maps/counts,
 /// then the distance record; each geometry map present, and only then, follows as a tagged block:
-/// `WSN1` for WorldSpaceNormal, `POS1` for Position, `IDM1` for ID): what the determinism proof compares across thread counts.
+/// `WSN1` for WorldSpaceNormal, `POS1` for Position, `IDM1` for ID, `OPA1` for Opacity): what the
+/// determinism proof compares across thread counts.
 /// `threads_used` is not part of it.
 std::string SerializeResult(const BakeResult& result);
 

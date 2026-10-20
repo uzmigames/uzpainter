@@ -16,6 +16,7 @@
 #include "bake/sampling.h"
 #include "bake/mesh_inputs.h"
 #include "bake/id_baker.h"
+#include "bake/opacity_baker.h"
 #include "bake/position_baker.h"
 #include "bake/world_normal_baker.h"
 #include "mesh/tangents.h"
@@ -93,7 +94,7 @@ std::string VersionText(long version) {
 
 EmbreeBaker::EmbreeBaker(BakerConfig config) : config_(std::move(config)), core_(std::make_shared<Core>()) {
     caps_.usages = {MeshMapUsage::AO, MeshMapUsage::Normal, MeshMapUsage::WorldSpaceNormal, MeshMapUsage::Position,
-                    MeshMapUsage::ID};
+                    MeshMapUsage::ID, MeshMapUsage::Opacity};
     caps_.max_output_size_log2 = kMaxOutputSizeLog2;
     caps_.determinism_class = "repeatable-on-one-build-and-cpu-isa";
     caps_.isa = kQualifiedIsa;
@@ -101,7 +102,8 @@ EmbreeBaker::EmbreeBaker(BakerConfig config) : config_(std::move(config)), core_
     caps_.parity_owner_task = "phase3.4_baker-ao";
     caps_.parity_owner_tasks = {{MeshMapUsage::AO, "phase3.4_baker-ao"},
                                 {MeshMapUsage::Normal, "phase3.2_baker-normal"}};
-    for (MeshMapUsage usage : {MeshMapUsage::WorldSpaceNormal, MeshMapUsage::Position, MeshMapUsage::ID}) {
+    for (MeshMapUsage usage : {MeshMapUsage::WorldSpaceNormal, MeshMapUsage::Position, MeshMapUsage::ID,
+                               MeshMapUsage::Opacity}) {
         caps_.parity_owner_tasks[usage] = UsageOwnerTask(usage);
     }
 
@@ -250,6 +252,7 @@ DistanceRecord ValidateRequest(const Capabilities& caps, const BakeRequest& requ
     if (HasUsage(request, MeshMapUsage::WorldSpaceNormal)) ValidateWorldSpaceNormal(request);
     if (HasUsage(request, MeshMapUsage::Position)) ValidatePosition(request);
     if (HasUsage(request, MeshMapUsage::ID)) ValidateId(request);
+    if (HasUsage(request, MeshMapUsage::Opacity)) ValidateOpacity(request);
     for (std::uint32_t log2 : request.output_size_log2) {
         if (log2 > caps.max_output_size_log2) {
             throw CapabilityError("OutputSize 2^" + std::to_string(log2) + " exceeds 2^" +
@@ -882,6 +885,7 @@ void BakeTexel(const Context& ctx, std::uint32_t x, std::uint32_t y, TileCounts&
             if (!out.world_normal.empty()) WriteWorldSpaceNormal(out, index, nh);
             if (!out.position.empty()) WritePosition(out, index, ph);
             if (!out.id_labels.empty()) WriteId(out, index, origin_geom);
+            if (!out.opacity.empty()) WriteOpacity(out, index);
             if (!has_ao) continue;
             // AO secondary rays, in sample order; one Hammersley set over the texel's sub-samples.
             const std::uint32_t texel_rays = ao.secondary_rays * k * k;
@@ -1058,6 +1062,7 @@ BakeResult RunBake(EmbreeBaker::Core& core, const BakerConfig& config, const Job
     }
     if (HasUsage(request, MeshMapUsage::WorldSpaceNormal)) PrepareWorldSpaceNormal(result);
     if (HasUsage(request, MeshMapUsage::Position)) PreparePosition(request, result);
+    if (HasUsage(request, MeshMapUsage::Opacity)) PrepareOpacity(result);
     result.texel_class.assign(texels, 0);
     result.coverage.assign(texels, 0);
     result.subsample_hits.assign(texels, 0);

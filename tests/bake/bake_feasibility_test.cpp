@@ -346,9 +346,9 @@ void CaseCapabilityErrors() {
     CHECK(baker.caps().parity_owner_task == "phase3.4_baker-ao");
     CHECK(baker.caps().embree_version == "4.4.1");
     const Capabilities capabilities = baker.caps();
-    CHECK(capabilities.usages.size() == 5);
+    CHECK(capabilities.usages.size() == 6);
     for (MeshMapUsage usage : {MeshMapUsage::AO, MeshMapUsage::Normal, MeshMapUsage::WorldSpaceNormal,
-                               MeshMapUsage::Position, MeshMapUsage::ID}) {
+                               MeshMapUsage::Position, MeshMapUsage::ID, MeshMapUsage::Opacity}) {
         CHECK(std::find(capabilities.usages.begin(), capabilities.usages.end(), usage) != capabilities.usages.end());
     }
     CHECK(capabilities.parity_owner_tasks.at(MeshMapUsage::AO) == "phase3.4_baker-ao");
@@ -1657,6 +1657,7 @@ void CaseCageFileThreadsInProcess() {
 #include "world_normal_bake_cases.h"
 #include "position_bake_cases.h"
 #include "id_bake_cases.h"
+#include "opacity_bake_cases.h"
 
 const std::vector<std::pair<std::string, std::function<void()>>>& Cases() {
     static const std::vector<std::pair<std::string, std::function<void()>>> cases = {
@@ -1725,6 +1726,12 @@ const std::vector<std::pair<std::string, std::function<void()>>>& Cases() {
         {"id_isolation", CaseIdIsolation},
         {"id_refusals", CaseIdRefusals},
         {"id_parameters", CaseIdParameters},
+        {"opacity_plane", CaseOpacityPlane},
+        {"opacity_sphere", CaseOpacitySphere},
+        {"opacity_bevel", CaseOpacityBevel},
+        {"opacity_threads_in_process", CaseOpacityThreadsInProcess},
+        {"opacity_isolation", CaseOpacityIsolation},
+        {"opacity_refusals", CaseOpacityRefusals},
     };
     return cases;
 }
@@ -1774,7 +1781,7 @@ std::string Json(const BakeResult& r, const Capabilities& caps, const std::strin
 /// bevelled cube with highs and every path of decision 306 on) and `cage_file` (the cube, its
 /// high and its cage from OBJ files with relative AO distances and a unit scale, decision 311),
 /// `normal`, `world_normal`, `position` and `id` (the bevelled cube's WorldSpaceNormal, Position and
-/// ID labels, decision 337).
+/// ID labels, decision 337) and `opacity` (its Opacity, decision 341).
 int BakeCommand(int argc, char** argv) {
     if (argc < 4) throw ValueError("bake needs <fixture> <threads>");
     const std::string fixture = argv[2];
@@ -1822,6 +1829,8 @@ int BakeCommand(int argc, char** argv) {
         request = PositionBevelRequest(bevel);
     } else if (fixture == "id") {
         request = IdLabelsRequest(bevel.Request(0.07f));
+    } else if (fixture == "opacity") {
+        request = OpacityRequest(bevel.Request(0.07f));
     } else if (fixture == "cage_file") {
         request = cage_file.emplace().Request();
     } else {

@@ -88,6 +88,12 @@ NATIVE_CASES = (
     "id_isolation",  # ID: shares AO's primary hits without changing AO
     "id_refusals",  # ID: other sources, every generator, SubSampling, DilationWidth refused
     "id_parameters",  # ID: stored, saved, loaded and mapped through the model
+    "opacity_plane",  # Opacity 2.1: 1 on hits, 0 on misses (a half-covering high plane)
+    "opacity_sphere",  # Opacity 2.1: low as high, back-face contact texels stay 0
+    "opacity_bevel",  # Opacity 2.1: the bevelled cube's analytic hits at two rear distances
+    "opacity_threads_in_process",  # Opacity (one ISA): identical bytes at 1, 4 and N threads
+    "opacity_isolation",  # Opacity: shares AO's primary hits without changing AO
+    "opacity_refusals",  # Opacity: SubSampling and DilationWidth refused, owner named
 )
 
 
@@ -145,6 +151,7 @@ def test_native_case(bake_tests: Path, case: str) -> None:
         ("world_normal", 32),
         ("position", 32),
         ("id", 32),
+        ("opacity", 32),
     ],
 )
 def test_bytes_equal_across_thread_counts(
