@@ -540,3 +540,113 @@ Clause by clause:
 
 - **Not archived.** Item 4.1 is open, and archiving also needs the coordinated full suite.
 - **Native refusal message.** `src/python/edits.cpp` still reads "release gap until recording P22-A (phase1.24_python-api-facade)" for the mesh-map case. That case is now the alias case, owned by phase5.3. This is product code, left for its owner.
+
+## 13. Final affected trace pass on the receiver-aware trace, 2026-10-20
+
+Every `check_trace` and `check_observed_trace` replay was regenerated in one pytest session on one runner, using the method of §11. The session also ran the P22-A and P22-C replays, the mesh-map alias replay, the four decision 338 reload-order replays and the multiset unit tests. The source was main `e0106d9b` (receiver-aware `capability_trace.py`) plus Codex's uncommitted decision 338 patch.
+
+All 108 tests passed, and the traces are consolidated. One conformance check fails, on one held symbol (§13.5), so **item 4.1 is not ticked yet** (§13.6).
+
+### 13.1 Run identities
+
+| Run | Identity | Result |
+|---|---|---|
+| Source | Worktree `wt/trace-final2` at `e0106d9bbfac76bcc650c242001ac17974c95803`, plus 8 uncommitted Codex files copied from the main checkout and never edited. Their SHA-256 values are in `source-overlay.json`: `python/FACADE.md`, `python/uzpainter_facade/resource.py`, `python/uzpainter_facade/state.py`, `tests/python/observed_replay.py`, `tests/python/test_pyapi_observed_host_tier0.py`, `tests/python/reload_result_multiset.py`, `tests/python/test_pyapi_reload_order_tier0.py` and `tests/python/test_reload_result_multiset.py`. Codex's padding files are not part of it. | — |
+| Runner | No rebuild. `uzp-pyapi-tests.exe` SHA-256 `a15306f2b6b31cacd36bca2b8e244760878d25e08b9eec1550988bfb7d2917c2`, the install prefix of `tmp/scratch/closure/alias-padding-build`, built from `0e01fb36` plus the mesh-alias delta (`alias-padding-build-identity.json`). Its native sources equal `e0106d9b`'s, line endings aside, apart from `src/export/padding.cpp`, which the build took from Codex's padding work. The prefix was copied to `prefix/`, and the worktree's `python/` sources were laid over `prefix/bin/python`. All 51 installed Python files equal the worktree's sources (`replay-build-identity.json`). | — |
+| Replays | One session (`run_existing.py`, no fixture rebuild), `UZP_UPDATE_TIER0_TRACE=1` and `UZP_OBSERVED_TRACE_DIR=traces/`, from 17:48:34Z to 18:12:19Z | 108 passed, exit 0, 1424.69 s (`replays.log`, `replays-junit.xml`) |
+| Conformance | `tests/python/test_capability_conformance.py`, run once on the same prefix | exit 1: 4 passed, 1 failed (§13.5; `conformance.log`) |
+| Manifest | `tests/capabilities`, run once | exit 0, 44 passed (`capabilities-tests.log`) |
+
+The logs are in `tmp/scratch/trace-final2/`. The session covered:
+- the 65 replays of §11;
+- the 2 other tests of `test_pyapi_baking.py`;
+- P22-A `phase1-mesh-map-update`, P22-C `phase1-restored-values` and the alias golden `p22b-mesh-map-alias-update`;
+- the 4 reload-order replays of `test_pyapi_reload_order_tier0.py`. Each is compared with all 6 recordings of its golden, from 3 Painter sessions;
+- the 34 tests of `test_reload_result_multiset.py`.
+
+While the session ran, Codex's `tests/export` run on the source prefix of the runner (`uzp-export-tests.exe`) was also running. No `tests/evaluator`, `tests/preview` or `union_run` process was running.
+
+### 13.2 Verdicts
+
+"Exact" means exact in both recordings apart from the named exclusions. §11.3's ten observed goldens are exact, with their exclusions and comparison rules unchanged. The table below lists the goldens whose verdict or exclusions differ from §11.2, and the goldens §11 did not replay.
+
+| Golden | Verdict | Exclusions, with owners |
+|---|---|---|
+| `p22b-textureset-channels` | exact (§11.6's failure is fixed, as §12 found) | none |
+| `p22b-host-resources` | passes. The decision 338 scope is compared as a multiset (`comparison_passed: true`), so `exact_apart_from_exclusions` is false. | • s5 `import_project_resource`: refused, the COLOR_LUT is pinned to none (decision 038)<br>• s15 `get_environment_resource`: host content, permanent (decisions 006 and 038)<br>• s23 `reload_modified_resources_async`: release gap, shelf resources (phase3.3_procedural-families)<br>The §11 exclusion `after_save_reopen s20/events`, owned by item 4.1, is gone. Under decision 338 that output is now compared: the `ReloadResourcesEnded` results as a multiset of complete objects, with duplicates kept, and the outer events and errors exactly. |
+| P22-A `phase1-mesh-map-update` | exact | s12 `uid`: Painter's uid allocation (decision 336) |
+| P22-C `phase1-restored-values` | exact | none (lock-file suffix rule, decision 319 §9a) |
+| `p22b-mesh-map-alias-update` | exact | none |
+| `p22b-reload-order-zam` | exact, raw, against all 6 recordings | none |
+| `p22b-reload-order-mza` | exact, raw, against all 6 recordings | none |
+| `p22b-reload-order-zam-all-origins` | passes against all 6 recordings under decision 338 (`comparison_passed: true`, `exact_apart_from_exclusions: false`). The multiset scopes are s8 and s11 `events` in both conditions. | none |
+| `p22b-reload-order-mza-all-origins` | as `zam-all-origins` | none |
+
+**Decision 338.** The three decision 338 traces record `comparison_passed` and their comparison contract. Raw result order is unclaimed there: `raw_reload_result_order` reads `{parity: unclaimed, oracle_stability: fresh-process-unstable}`. This report does not claim that every replay is raw exact.
+
+The four reload-order replays write `traces/*.trace.json` but no `check_observed_trace` record. So they add no entry to `tier0-trace.json` and credit no symbol.
+
+**Outside the corpus claim.** Painter evidence has not observed two behaviours, and nothing here claims them:
+- **(a)** A new alias with the same content, created after a save and reopen. The facade gives it the saved canonical origin (`state.Session.opened_resource_origins`). No recording creates such an alias.
+- **(b)** Explicit outdated-ID behaviour: reloading or binding through a `ResourceID` whose version a later import has superseded.
+
+The admitted reload controls (`p22b-reload-order-*` and `p22b-host-resources`) remain the closure evidence.
+
+### 13.3 Trace
+
+`tools/capabilities/tier0-trace.json` holds 68 replays, with none added or removed. 61 were regenerated with a changed symbol set. 7 are unchanged:
+- `native/fill-layer-readback` and `native/textureset-project-readback`;
+- `facade/textureset-project-readback`, `facade/phase1-fill-channel-defaults` and `facade/p22b-project-tangent-per-vertex`;
+- `facade-observed/phase1-create-mesh-maps` and `facade-observed/p22b-mesh-map-alias-update`.
+
+The diffs are in `trace-diff.txt`.
+
+- **Receiver-aware attribution (`e0106d9b`).** An inherited call is now credited only to its receiver's class.
+  - The false FillEffectNode credits disappear from 39 traces, among them the 8 of `facade/fill-layer-readback` and the 6 of `facade-events/phase1-reload-resources`, which Codex predicted.
+  - In the other direction, the false FillLayerNode credits disappear from 5 traces: `mask-stack`, both `phase1-resource-update` traces, `phase1-blending-modes-mask` and `phase1-layer-navigation`. In `phase1-layer-navigation`, the receiver is a fill effect.
+- **`uzpainter.project.Metadata` and `.get`.** They are added to 51 traces. This is facade-internal: since Codex's patch, `Session.project_started` reads the saved resource origins at every create and open. Both entries were already supported, so the credit only widens their `tier_evidence`.
+- **`p22b-host-resources`.** It gains:
+  - `uzpainter.resource.resource_origin` and `uzpainter.resource.ResourceID`, from s20 (the decision 338 scope), s22 `states` and the s24 reload. s22 and s24 are compared exactly;
+  - `substance_painter.resource.ShelvesListFilter`, from s23 `states` (§13.5).
+
+### 13.4 Manifest
+
+The manifest was consolidated with §11's `consolidate2.py`, copied into `trace-final2/`. Nothing was deleted from the trace by hand.
+
+- **Promoted (1).** `uzpainter.resource.resource_origin`, from pending-evidence. Its evidence is `p22b-host-resources`, through the exact s22 `states` and s24 reload outputs. Since Codex's patch, the reload worker calls it for every candidate without a saved origin.
+- **Demoted (2), to pending-evidence, with reasons in their notes.** Both are now owned by `phase5.3_parity-report-capability-gaps`.
+  - `substance_painter.layerstack.FillEffectNode.set_projection_parameters`. All 5 of its goldens (`fill-layer-readback`, `phase1-layer-navigation`, `phase1-layer-stack-events`, `export-ocio-encode` and `export-ocio-encode-legacy`) called it on fill layers. `FillLayerNode.set_projection_parameters` keeps that evidence.
+  - `substance_painter.layerstack.FillLayerNode.is_symmetry_enabled`. Its one golden, `phase1-layer-navigation`, calls it on a fill effect. `FillEffectNode.is_symmetry_enabled` keeps that evidence.
+- **`tier_evidence` narrowed (15).** These stay supported on their remaining goldens (`evidence-changes.txt`):
+  - FillEffectNode: the class itself, `active_channels`, `get_projection_mode`, `get_projection_parameters`, `get_source`, `reset_source`, `set_projection_mode`, `set_source`, `set_symmetry_enabled` and `source_mode`;
+  - FillLayerNode: `get_source`, `reset_source`, `set_projection_mode`, `set_source` and `set_symmetry_enabled`.
+- **`tier_evidence` widened (3).** `uzpainter.project.Metadata`, `Metadata.get` and `uzpainter.resource.ResourceID`.
+- **Status counts.**
+  - Painter inventory: 528 supported, 72 pending-evidence, 267 release-gap and 15 desktop-only.
+  - UzPainter additions: 338 supported, 237 pending-evidence and 55 release-gap.
+- **No manifest entry and no exclusion names phase1.24 any more.**
+
+### 13.5 Held: `ShelvesListFilter`, the one conformance failure
+
+`test_supported_entries_equal_the_tier0_trace` fails with "exercised but not supported": `substance_painter.resource.ShelvesListFilter`. The other 4 conformance tests pass.
+
+- **The credit comes from excluded material.** It comes from `p22b-host-resources` s23 `states`.
+  - The s23 reload, a ShelvesListFilter reload, is an excluded output (release gap, shelf resources).
+  - Its worker thread posts `ReloadResourcesEnded` after the call returns. Thread timing decides whether that work is traced under s23 or under s23 `states`.
+  - It landed under s23 in the runs of §11 and §12, and under s23 `states` in this one.
+  - §11 demoted the symbol for exactly this reason. Under the rule "no credit from excluded material", it is held at pending-evidence and not promoted.
+- **The note is updated.** It now gives this reason instead of "the reload now ends before the call returns". The note was edited after the manifest test ran, and that test was not run again.
+- **How it settles.** Either a trace rule attributes a reload worker's calls to the output that started the reload, or the coordinator decides to accept the credit. Either way, the owner is the trace tool. The facade's behaviour is not the cause.
+
+### 13.6 Item 4.1
+
+Clause by clause:
+- **Three pipeline scripts through the adapter.** Holds, on item 3.2's evidence (§2, §4.1).
+- **API-probe goldens exact apart from named exclusions with owners.** Holds on this run.
+  - Every admitted API-probe golden replays, and every exclusion names an owner other than this task.
+  - The last item 4.1 exclusion, `p22b-host-resources after_save_reopen s20/events`, is settled by the reload-order recordings under decision 338.
+  - Raw result order inside a `ReloadResourcesEnded` stays unclaimed (§13.2), and behaviours (a) and (b) are outside the claim.
+- **Results recorded in `parity/reports/phase1/`.** Holds: this section.
+- **Capability evidence equal to the trace.** One symbol is short of it, the held `ShelvesListFilter` (§13.5), so the conformance check is red.
+
+4.1 can be ticked once §13.5 is settled and Codex's patch is committed with these 8 file hashes. The full gate is still needed before archive.
