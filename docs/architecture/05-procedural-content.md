@@ -48,7 +48,7 @@ The library ships beside the executable as `assets/procedural/`: one provenance 
 - The eight domains are declared in `assets/procedural/` before calibration. None is certified, and no alias names them.
 
 **As built, grunges and noises (`phase3.2_proc-grunge-families`, decision 331, `src/procedural/grunges.h`).**
-- Seventeen assets `uzasset://grunge/<id>@1`, inventoried from the recipes with their recorded parameter sets (`docs/analysis/proc-grunge-families/01-asset-inventory.md`).
+- Seventeen assets `uzasset://grunge/<id>@1`, inventoried from the recipes (`docs/analysis/proc-grunge-families/01-asset-inventory.md`; its recorded parameter tables are private oracle pointers, outside the cleared scope).
 - Each asset is a fixed configuration of six periodic pattern kinds over the primitive library: fBm, ridged fBm, spots, scratches, cracks (Worley F2 - F1) and a plain weave. Each takes a seed and UzPainter's own parameters. Every texture wraps seamlessly, and `tiling` repeats it a whole number of times.
 - One kernel pass per asset, from a parameter block computed on the host. DX12 equals the CPU reference bit for bit.
 - A recipe's projection scale belongs to the fill, not to the asset.
