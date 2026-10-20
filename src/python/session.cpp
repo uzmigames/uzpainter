@@ -26,6 +26,7 @@
 #include "python/errors.h"
 #include "python/evaluation.h"
 #include "python/recipe.h"
+#include "uzp_core/document/nodes.h"
 #include "uzp_core/manifest/sha256.h"
 #include "uzp_core/types/errors.h"
 #include "uzp_core/types/validation.h"
@@ -76,6 +77,34 @@ void TextureDependencies(const evaluator::DagList& list, std::vector<core::Id>& 
         }
         if (layer.group) TextureDependencies(*layer.group, out);
     }
+}
+
+// Channel metadata need not have an evaluator base until visible content uses it.
+// Unknown or malformed content stays eligible so BuildDag reports its real error.
+bool MayHaveTextureContent(const core::Stack& stack, const core::Layer& layer,
+                           core::ChannelType channel, std::vector<core::Id> path = {}) {
+    if (!layer.visible || evaluator::EffectiveBlending(layer, channel).mode == core::BlendingMode::Disable) {
+        return false;
+    }
+    if (std::find(path.begin(), path.end(), layer.uid) != path.end()) return true;
+    path.push_back(layer.uid);
+    switch (layer.kind) {
+        case core::LayerKind::fill:
+            return !layer.fill || layer.fill->source_mode == core::SourceMode::Material ||
+                   (layer.fill->active_channels.contains(channel) && layer.fill->sources.contains(channel));
+        case core::LayerKind::group:
+            return !layer.content_effects.empty() ||
+                   std::any_of(layer.children.begin(), layer.children.end(), [&](const core::Layer& child) {
+                       return MayHaveTextureContent(stack, child, channel, path);
+                   });
+        case core::LayerKind::instance: {
+            const core::Layer* source = core::FindLayer(stack, layer.instance_source);
+            return source == nullptr || MayHaveTextureContent(stack, *source, channel, path);
+        }
+        case core::LayerKind::paint:
+            return true;
+    }
+    return true;
 }
 
 /// The support check's reader of PNG headers (evaluator/support.h `BitmapShapes`, decision 240):
@@ -598,6 +627,10 @@ std::shared_ptr<const TextureStateSnapshot> Session::TextureSnapshot() const {
             for (const core::Stack& stack : set.stacks) {
                 for (const auto& [channel, unused] : stack.channels) {
                     (void)unused;
+                    if (std::none_of(stack.root_layers.begin(), stack.root_layers.end(),
+                                     [&](const core::Layer& layer) {
+                                         return MayHaveTextureContent(stack, layer, channel);
+                                     })) continue;
                     const auto dag = evaluator::BuildDag(project, set.id, stack.id, channel, templates,
                                                          project.settings.template_id);
                     if (!dag) {

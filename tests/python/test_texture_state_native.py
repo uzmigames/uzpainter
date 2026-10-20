@@ -3,6 +3,44 @@
 from tests.python.conftest import Run
 
 
+def test_unmaterialized_channels_do_not_require_an_evaluator_base(run: Run) -> None:
+    report = run(
+        r"""
+from uzpainter import event
+stack = create()
+group = ls.insert_group(top(stack))
+stack.add_channel(CT.BaseDiffuseRoughness, ts.ChannelFormat.L32F)
+empty = event._texture_state_snapshot()
+assert empty["textures"] == () and not empty["errors"], empty
+stack.remove_channel(CT.BaseDiffuseRoughness)
+fill = ls.insert_fill(ls.InsertPosition.inside_node(group, ls.NodeStack.Substack))
+fill.active_channels = {CT.BaseColor}
+before = event._texture_state_snapshot()
+assert len(before["textures"]) == 1 and not before["errors"], before
+token = event._texture_state_subscribe()
+stack.add_channel(CT.BaseDiffuseRoughness, ts.ChannelFormat.L32F)
+notice, = event._texture_state_drain(token)
+assert not notice["errors"] and notice["textures"] == before["textures"], notice
+group.set_visible(False)
+notice, = event._texture_state_drain(token)
+assert not notice["errors"] and notice["textures"] == (), notice
+group.set_visible(True)
+notice, = event._texture_state_drain(token)
+assert not notice["errors"] and notice["textures"] == before["textures"], notice
+event._texture_state_unsubscribe(token)
+fill.active_channels = {CT.BaseColor, CT.BaseDiffuseRoughness}
+fill.set_source(CT.BaseDiffuseRoughness, cm.Color(0.2, 0.2, 0.2, "Working"))
+unsupported = event._texture_state_snapshot()
+assert any("BaseDiffuseRoughness" in error for error in unsupported["errors"]), unsupported
+fill.active_channels = {CT.BaseColor}
+assert not event._texture_state_snapshot()["errors"]
+project.close()
+result = {"unmaterialized": "passed"}
+"""
+    )
+    assert report["status"] == "ok", report.get("error", report)
+
+
 def test_texture_snapshot_content_and_restart(run: Run) -> None:
     first = run(
         r"""
