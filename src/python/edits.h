@@ -81,8 +81,12 @@ bool RgbChannel(const core::Project& project, const NodeInfo& info, const core::
 /// A levels component stored as Painter stores it (float32 values).
 core::LevelsComponent Component(double in_min, double in_max, double gamma, double out_min, double out_max, bool clamp);
 
-/// `LevelsEffectNode.affected_channel = channel`: an identity levels gets the channel's arity;
-/// mono parameters spread to RGB, RGB keeps its first.
+/// The mono component Painter keeps for RGB parameters set on a mono channel or a mask: each field
+/// the mean of the three float32 values, in double (`phase1-levels-params` s21, s27).
+core::LevelsComponent MonoOf(const std::vector<core::LevelsComponent>& rgb);
+
+/// `LevelsEffectNode.affected_channel = channel`: another channel resets the parameters to the
+/// identity levels of its arity; the same channel keeps them.
 void SetAffectedChannel(core::Edit& edit, core::Id uid, core::ChannelType channel);
 
 /// The reader of `sync_stack`'s images: `<dir>/<name>.png`, nothing when it cannot be read.

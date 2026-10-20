@@ -558,20 +558,22 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
                  const NodeInfo info = Resolve(*project, n.uid);
                  return info.root ? py::none() : MakeNode(*project, info.owner);
              })
+        // Painter's next sibling is the node below, its previous sibling the node above
+        // (`phase1-layer-navigation` s30-s43, both recordings); the lists are top first.
         .def("get_next_sibling",
-             [](const Node& n) -> py::object {
-                 const auto project = Read();
-                 const NodeInfo info = Resolve(*project, n.uid);
-                 if (info.index == 0) return py::none();
-                 return MakeNode(*project, Siblings(*project, info)[info.index - 1]);
-             })
-        .def("get_previous_sibling",
              [](const Node& n) -> py::object {
                  const auto project = Read();
                  const NodeInfo info = Resolve(*project, n.uid);
                  const std::vector<Id> siblings = Siblings(*project, info);
                  if (info.index + 1 >= siblings.size()) return py::none();
                  return MakeNode(*project, siblings[info.index + 1]);
+             })
+        .def("get_previous_sibling",
+             [](const Node& n) -> py::object {
+                 const auto project = Read();
+                 const NodeInfo info = Resolve(*project, n.uid);
+                 if (info.index == 0) return py::none();
+                 return MakeNode(*project, Siblings(*project, info)[info.index - 1]);
              })
         .def("__eq__", [](const Node& a, const py::object& b) { return py::isinstance<Node>(b) && a.uid == b.cast<const Node&>().uid; })
         .def("__hash__", [](const Node& n) { return py::hash(py::int_(n.uid)); })
@@ -712,8 +714,10 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
                  const auto project = Read();
                  const NodeInfo info = Resolve(*project, n.uid);
                  const core::LevelsParams* params = info.effect->levels ? &*info.effect->levels : nullptr;
+                 // One component on an RGB channel holds for all three, as the evaluator reads it.
                  const auto component = [&](std::size_t i) {
-                     return params && i < params->components.size() ? params->components[i] : core::LevelsComponent{};
+                     if (params == nullptr || params->components.empty()) return core::LevelsComponent{};
+                     return params->components[params->components.size() == 3 ? i : 0];
                  };
                  if (RgbChannel(*project, info, params)) {
                      LevelsParamsRGB out;
@@ -756,7 +760,11 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
             return Mutate("layerstack.LevelsEffectNode.set_parameters", args, [&](core::Edit& edit) {
                 core::Effect& e = EditEffect(edit, n.uid);
                 if (!e.levels) e.levels = core::LevelsParams{};
-                e.levels->components = components;
+                // RGB parameters on a mono channel or a mask keep their mean (`phase1-levels-params`).
+                const bool rgb = RgbChannel(edit.project(), Resolve(edit.project(), n.uid), &*e.levels);
+                e.levels->components = components.size() == 3 && !rgb
+                                           ? std::vector<core::LevelsComponent>{MonoOf(components)}
+                                           : components;
             });
         });
     SealClass(levels_node);

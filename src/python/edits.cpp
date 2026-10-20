@@ -168,7 +168,8 @@ Inserted InsertNode(core::Edit& edit, const core::InsertPosition& position, core
 }
 
 bool RgbChannel(const core::Project& project, const NodeInfo& info, const core::LevelsParams* params) {
-    if (info.in_mask() || params == nullptr || !params->affected_channel) return params && params->components.size() == 3;
+    if (info.in_mask()) return false;  // a mask is mono (`phase1-levels-params` s27, s28)
+    if (params == nullptr || !params->affected_channel) return params && params->components.size() == 3;
     const core::Stack& stack = ResolveStack(project, {info.texture_set, info.stack});
     const auto it = stack.channels.find(*params->affected_channel);
     if (it == stack.channels.end()) return params->components.size() == 3;
@@ -179,6 +180,15 @@ bool RgbChannel(const core::Project& project, const NodeInfo& info, const core::
 
 core::LevelsComponent Component(double in_min, double in_max, double gamma, double out_min, double out_max, bool clamp) {
     return {F32(in_min), F32(in_max), F32(gamma), F32(out_min), F32(out_max), clamp, {}};
+}
+
+core::LevelsComponent MonoOf(const std::vector<core::LevelsComponent>& rgb) {
+    const auto mean = [&](double core::LevelsComponent::*field) {
+        return (rgb[0].*field + rgb[1].*field + rgb[2].*field) / 3.0;
+    };
+    return {mean(&core::LevelsComponent::input_min), mean(&core::LevelsComponent::input_max),
+            mean(&core::LevelsComponent::gamma),     mean(&core::LevelsComponent::output_min),
+            mean(&core::LevelsComponent::output_max), rgb[0].clamp, {}};
 }
 
 void InsertDefaults(core::Edit& edit, core::Id uid, bool named) {
@@ -220,11 +230,14 @@ void SetAffectedChannel(core::Edit& edit, core::Id uid, core::ChannelType channe
     core::Effect& e = EditEffect(edit, uid);
     if (e.mono_blending) throw core::ValueError("a mask-stack levels effect has no affected channel");
     if (!e.levels) e.levels = core::LevelsParams{};
+    const bool changed = e.levels->affected_channel != channel;
     e.levels->affected_channel = channel;
-    // One component for a mono channel, three for an RGB one: an identity levels gets the
-    // channel's arity; mono parameters spread to RGB, RGB keeps its first.
+    // One component for a mono channel, three for an RGB one. Another channel starts from the
+    // identity levels (`phase1-levels-params` s18, and s14 after reopen); the same channel keeps
+    // its parameters.
     const std::size_t arity = RgbChannel(edit.project(), info, &*e.levels) ? 3 : 1;
     std::vector<core::LevelsComponent>& components = e.levels->components;
+    if (changed) components.clear();
     if (components.empty()) components.push_back(core::LevelsComponent{});
     components.resize(arity, components.front());
 }
