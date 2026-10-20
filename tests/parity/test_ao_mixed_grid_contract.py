@@ -5,14 +5,14 @@ from __future__ import annotations
 import hashlib
 import json
 
-from tools.parity.envelope.registry import current_envelope
+from tools.parity.envelope.registry import current_envelope, manifest_root
 from tools.parity.recorder.capture import decode_png
 from tools.parity.recorder.job import EXPORT
 from tools.parity.schemas import REPO_ROOT
 from tools.parity.tier0_semantics.corpus import FIXTURE_DIR, FIXTURES
 from tools.parity.tier0_semantics.recording_requests import (
+    ADMITTED,
     ao_mixed_grid_probe,
-    request_dir,
     request_manifest,
 )
 
@@ -23,10 +23,15 @@ def test_r131_committed_request_matches_generator_and_input_bytes() -> None:
         name: hashlib.sha256((REPO_ROOT / FIXTURES[name][1]).read_bytes()).hexdigest()
         for name in golden.inputs
     }
-    path = request_dir(REPO_ROOT) / "ao-mixed-grid.json"
-    assert json.loads(path.read_text(encoding="utf-8")) == request_manifest(
-        golden, hashes, current_envelope(REPO_ROOT)
-    )
+    # Admitted on 2026-10-20: the manifest moved from `requests/` to `manifests/` and gained its
+    # private records; its authored part must still be the generator's.
+    assert golden.name in ADMITTED
+    entry = current_envelope(REPO_ROOT)
+    path = manifest_root(entry, REPO_ROOT) / "tier0" / "semantics" / "ao-mixed-grid.json"
+    committed = json.loads(path.read_text(encoding="utf-8"))
+    assert committed["private_records"]
+    expected = request_manifest(golden, hashes, entry)
+    assert {**committed, "private_records": []} == expected
 
 
 def test_r131_inputs_cover_every_operand_pair_exactly_once() -> None:
