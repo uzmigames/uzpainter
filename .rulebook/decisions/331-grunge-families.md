@@ -63,3 +63,10 @@ Code: `src/procedural/grunges.{h,cpp}`. Records: `assets/procedural/records/grun
 - Items 2.2, 2.4, 2.5 and 3.1, the held-out half of 2.6 and the oracle half of 3.3 remain. 4.1 waits on them.
 - An asset whose calibration needs another kind or structure changes it before calibration starts.
 - The domain-refusal test 3.4 needs no Painter, but is not part of this slice.
+
+## Amendment (2026-10-20, test 3.4)
+
+- **The edit path.** A grunge is a fill's source, not a generator or filter effect, so `SetEffectProcedural` cannot set one. `SetGrungeSource` (`grunges.h`) sets a `ProceduralSource` on a fill layer or fill effect: the source of one channel in a content stack, or the mono source of a fill in a mask stack. It runs `RequestFor` and `Admit` first, as `SetMaterialSource` does (decision 334), so a refusal returns before any transaction opens. An admitted reference is committed exactly as given.
+- **The test.** The `domain` case of `uzp-proc-grunge-tests` refuses, for each of the seventeen assets, sixteen requests just outside its domain plus one for each of its own parameters: `balance` one ulp above and `contrast` one ulp below their ranges, `invert` 2, `tiling` 9, 0 and 2.5, the recorded `brush_pattern`, which has no counterpart, seed 2^32, another mesh class, two UV tiles, an `AO` mesh-map input, which no grunge reads, output resolutions 512 and 8192, half floats, sRGB and three channels. Each refusal is `outside certified domain` and names its field. The revision and the project stay unchanged, and the CPU lane evaluates nothing.
+- **Still refused inside the domain.** Inside the domain, the uncertified asset is refused as `family not certified`.
+- Nothing is wired into the evaluator (§8).

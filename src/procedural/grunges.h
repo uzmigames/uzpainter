@@ -45,12 +45,17 @@
 // None of these assets is certified: the records say `unavailable`, the seam refuses them, and no
 // alias of the library names them (decision 324). The domains are those of the records.
 
+#include "procedural/admission.h"
 #include "procedural/asset_library.h"
 #include "procedural/hlsl_backend.h"
 #include "procedural/seam.h"
 
+#include "uzp_core/types/enums.h"
+#include "uzp_core/types/project.h"
+
 #include <cstdint>
 #include <expected>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -78,5 +83,14 @@ std::expected<void, std::string> RegisterGrungeFamilies(HlslBackend& hlsl, const
 /// request seed `seed`. Any integer position is valid: a position outside [0, R) gives the
 /// texture continued periodically, so (x + R, y) and (x, y + R) give the texel of (x, y).
 [[nodiscard]] float GrungeTexel(std::span<const uint32_t> words, int32_t x, int32_t y, uint32_t seed);
+
+/// Sets `ref` as a grunge source of the fill layer or fill effect `node`, in one transaction of
+/// `submit`, after `RequestFor` and `Admit`: the source of `channel` in a content stack, or the
+/// mono source of a fill in a mask stack (`channel` empty). A refusal returns before `submit` is
+/// called: the revision does not advance, nothing is clamped or substituted. An admitted
+/// reference is committed exactly as given.
+std::expected<core::RequestOutcome, UnsupportedProcedural> SetGrungeSource(
+    core::Id node, std::optional<core::ChannelType> channel, const core::ProceduralRef& ref, const UseContext& context,
+    const AssetLibrary& library, const ProceduralSeam& seam, const SubmitEdit& submit);
 
 }  // namespace uzp::procedural

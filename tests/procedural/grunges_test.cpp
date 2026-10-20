@@ -9,6 +9,10 @@
 //   tiling    the texture continued past its border is the texture itself, bit for bit, for
 //             every asset at several tilings, flips and resolutions (CPU; test 3.2)
 //   seeds     two seeds give two different textures on the CPU lane (CPU; test 3.3, our half)
+//   domain    a parameter, a seed, a mesh-map input, a resolution and an output format just
+//             outside each asset's domain are refused before mutation, naming the field, with
+//             nothing clamped; inside it the uncertified asset is refused as such; an admitted
+//             grunge source commits the reference as given (CPU; test 3.4)
 //   kernels   every asset's kernel compiled to DXIL and SPIR-V (CPU, needs dxcompiler.dll)
 //   gpu       every asset on DX12 equal to its CPU reference bit for bit, whole and by tile; the
 //             same seed twice gives the same bytes, and two seeds differ (GPU; items 2.3, 3.3)
@@ -28,11 +32,19 @@
 #include "render/engine_thread.h"
 #include "render/kernel_cache.h"
 
+#include "uzp_core/document/document.h"
+#include "uzp_core/document/nodes.h"
+#include "uzp_core/manifest/json.h"
+#include "uzp_core/transaction/transaction.h"
+#include "uzp_core/types/project.h"
+
 #include <bit>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <functional>
 #include <future>
 #include <optional>
 #include <string>
@@ -544,12 +556,218 @@ int RunGpu(const fs::path& dir, const fs::path& shipped) {
     return Finish();
 }
 
+// ── domain (test 3.4) ────────────────────────────────────────────────────────
+
+namespace core = uzp::core;
+
+/// A project with one fill layer in a stack holding a Roughness channel, and in the layer's mask
+/// one fill effect; `layer` and `maskFill` receive their uids.
+core::Project GrungeProject(core::Id& layer, core::Id& maskFill) {
+    core::Project project;
+    project.versions.app_version = "0.0.0";
+    project.versions.evaluator_profile = "painter-12.1-isolated-linear";
+    core::TextureSet set;
+    set.id = project.AllocateId();
+    set.name = set.original_name = set.material_id = "set";
+    set.uv_tiles = {core::UVTile{project.AllocateId(), 1001, {}}};
+    core::Stack stack;
+    stack.id = project.AllocateId();
+    stack.channels[core::ChannelType::Roughness] = core::Channel{core::ChannelFormat::L16, "", {}};
+    core::Layer fill;
+    fill.uid = project.AllocateId();
+    fill.kind = core::LayerKind::fill;
+    fill.name = "fill";
+    fill.fill = core::FillContent{};
+    layer = fill.uid;
+    core::Effect effect;
+    effect.uid = project.AllocateId();
+    effect.kind = core::EffectKind::fill;
+    effect.name = "grunge";
+    effect.mono_blending = core::Blending{};
+    effect.fill = core::FillContent{};
+    maskFill = effect.uid;
+    fill.mask = core::Mask{};
+    fill.mask->effects.push_back(effect);
+    stack.root_layers.push_back(fill);
+    set.stacks.push_back(stack);
+    project.texture_sets.push_back(set);
+    return project;
+}
+
+/// A snapshot backend that admits every request: a stand-in for a project snapshot with the
+/// request's exact signature, so that an admitted edit reaches its transaction.
+class AdmitAll final : public IProceduralBackend {
+public:
+    std::string_view Name() const override { return "snapshot"; }
+    ParityStatus Status(const core::AssetUrl&) const override { return ParityStatus::Unavailable("test"); }
+    bool CanEvaluate(const ProceduralRequest&) const override { return true; }
+    std::optional<UnsupportedProcedural> Refusal(const ProceduralRequest&) const override { return std::nullopt; }
+    RasterFuture Evaluate(const ProceduralRequest&, const InputImages&) override {
+        std::promise<render::Result<Raster>> promise;
+        promise.set_value(render::Fail(render::ErrorCode::RequestFailed, std::nullopt, "not evaluated"));
+        return promise.get_future();
+    }
+};
+
+int RunDomain(const fs::path& shipped) {
+    namespace json = core::json;
+    std::optional<Fixture> fixture = LoadFixture(shipped);
+    if (!fixture) return Finish();
+    HlslBackend hlsl(nullptr);
+    if (!RegisterGrungeFamilies(hlsl, fixture->library)) return Finish();
+    ProceduralSeam seam(nullptr, &hlsl);
+
+    core::Id layer = core::kNoId;
+    core::Id maskFill = core::kNoId;
+    core::DocumentState initial;
+    initial.project_uuid = "6f1c2a3e-0000-4000-8000-00000000a331";
+    initial.project = GrungeProject(layer, maskFill);
+    core::Document document(initial);
+    const core::Project before = *document.snapshot().project;
+    int keys = 0;
+    int submits = 0;
+    const SubmitEdit submit = [&](const std::function<void(core::Edit&)>& call) {
+        ++submits;
+        const std::string key = "grunge-" + std::to_string(++keys);
+        return core::Execute(document,
+                             core::MutationRequest{"procedural_set", json::Object{{"key", key}}, key, document.revision()},
+                             call);
+    };
+
+    struct Case {
+        std::string what;
+        std::string field;
+        std::string value;
+        std::function<void(core::ProceduralRef&, UseContext&)> change;
+    };
+    const auto param = [](std::string name, json::Value value) {
+        return [name, value](core::ProceduralRef& ref, UseContext&) { ref.params[name] = value; };
+    };
+    const double aboveOne = std::nextafter(1.0, 2.0);
+    const double belowZero = std::nextafter(0.0, -1.0);
+    const std::string hash(64, 'a');
+    for (const AssetRecord* record : fixture->records) {
+        const std::string name = core::FormatAssetUrl(record->asset);
+        std::vector<Case> cases = {
+            {"a parameter one ulp above its range", "params.balance", "", param("balance", aboveOne)},
+            {"a parameter one ulp below its range", "params.contrast", "", param("contrast", belowZero)},
+            {"an invert outside its set", "params.invert", "2", param("invert", int64_t{2})},
+            {"a tiling of 9 repeats", "params.tiling", "9", param("tiling", int64_t{9})},
+            {"a tiling of 0 repeats", "params.tiling", "0", param("tiling", int64_t{0})},
+            {"a fractional tiling", "params.tiling", "2.5", param("tiling", 2.5)},
+            {"a recorded parameter with no counterpart", "params.brush_pattern", "", param("brush_pattern", int64_t{1})},
+            {"a seed outside 32 bits", "seed", "4294967296",
+             [](core::ProceduralRef&, UseContext& context) { context.seed = 0x100000000ull; }},
+            {"a mesh class the domain does not declare", "mesh.class", "\"vehicle\"",
+             [](core::ProceduralRef&, UseContext& context) { context.meshClass = "vehicle"; }},
+            {"two UV tiles", "mesh.uv_tiles", "2", [](core::ProceduralRef&, UseContext& context) { context.uvTiles = 2; }},
+            {"a mesh-map input, which no grunge reads", "inputs.AO", "present",
+             [hash](core::ProceduralRef& ref, UseContext& context) {
+                 ref.image_inputs["AO"] = core::ResourceBinding{hash, std::nullopt, {}};
+                 context.inputs["AO"] = RasterSpec{1024, ChannelFormat::U16, "raw", 1};
+             }},
+            {"an output resolution of 512", "output.resolution", "512",
+             [](core::ProceduralRef&, UseContext& context) { context.output.resolution = 512; }},
+            {"an output resolution of 8192", "output.resolution", "8192",
+             [](core::ProceduralRef&, UseContext& context) { context.output.resolution = 8192; }},
+            {"an output in half floats", "output.format", "\"f16\"",
+             [](core::ProceduralRef&, UseContext& context) { context.output.format = ChannelFormat::F16; }},
+            {"an sRGB output", "output.colour_space", "\"srgb\"",
+             [](core::ProceduralRef&, UseContext& context) { context.output.colourSpace = "srgb"; }},
+            {"a three-channel output", "output.channels", "3",
+             [](core::ProceduralRef&, UseContext& context) { context.output.channels = 3; }},
+        };
+        // The asset's own parameters: a ranged one one ulp past its top, an enumerated one outside
+        // its set.
+        for (const auto& [p, rule] : record->domain.parameters) {
+            if (p == "balance" || p == "contrast" || p == "invert" || p == "tiling") continue;
+            if (rule.range) {
+                cases.push_back({"its own parameter " + p + " one ulp above its range", "params." + p, "",
+                                 param(p, std::nextafter(rule.range->second, rule.range->second + 1.0))});
+            } else {
+                cases.push_back({"its own parameter " + p + " outside its set", "params." + p, "2", param(p, int64_t{2})});
+            }
+        }
+        const auto baseline = [&]() {
+            core::ProceduralRef ref;
+            ref.asset = name;
+            UseContext context;
+            context.meshClass = "sphere";
+            context.output = RasterSpec{1024, ChannelFormat::F32, "linear", 1};
+            context.seed = 42;
+            return std::pair{ref, context};
+        };
+        for (const Case& c : cases) {
+            auto [ref, context] = baseline();
+            c.change(ref, context);
+            const int submitted = submits;
+            const auto refused = SetGrungeSource(maskFill, std::nullopt, ref, context, fixture->library, seam, submit);
+            const bool named = !refused && refused.error().reason == kOutsideDomain &&
+                               refused.error().field == c.field && (c.value.empty() || refused.error().value == c.value);
+            Check(named && submits == submitted && document.revision() == 0 && *document.snapshot().project == before,
+                  "outside the domain, refused before mutation with nothing clamped: " + name + ", " + c.what,
+                  refused ? "admitted" : refused.error().Describe());
+            // The candidate lane refuses the same request: nothing is evaluated in its place.
+            const auto request = RequestFor(ref, context, fixture->library);
+            Check(request && !hlsl.EvaluateReference(*request, {}).has_value(),
+                  "the candidate lane evaluates nothing: " + name + ", " + c.what);
+        }
+        // Inside the domain the uncertified asset is still refused before mutation.
+        {
+            auto [ref, context] = baseline();
+            const auto refused = SetGrungeSource(maskFill, std::nullopt, ref, context, fixture->library, seam, submit);
+            Check(!refused && refused.error().reason == kNotCertified && submits == 0 && document.revision() == 0,
+                  "inside the domain the uncertified grunge is refused before mutation (family not certified): " + name,
+                  refused ? "admitted" : refused.error().Describe());
+        }
+    }
+    // An admitted edit (a snapshot with the exact signature) commits the reference as given: the
+    // mono source of the mask's fill effect, then the Roughness source of the fill layer.
+    {
+        AdmitAll snapshots;
+        ProceduralSeam admitting(&snapshots, &hlsl);
+        core::ProceduralRef ref;
+        ref.asset = core::FormatAssetUrl(fixture->records.front()->asset);
+        ref.params["tiling"] = json::Value(int64_t{3});
+        UseContext context;
+        context.meshClass = "sphere";
+        context.output = RasterSpec{1024, ChannelFormat::F32, "linear", 1};
+        const auto mono = SetGrungeSource(maskFill, std::nullopt, ref, context, fixture->library, admitting, submit);
+        const auto channel =
+            SetGrungeSource(layer, core::ChannelType::Roughness, ref, context, fixture->library, admitting, submit);
+        const core::Project now = *document.snapshot().project;
+        const core::Layer* fill = core::FindLayer(now, layer);
+        const auto stored = [&](const std::optional<core::Source>& source) {
+            return source && std::get_if<core::ProceduralSource>(&source->value) != nullptr &&
+                   std::get<core::ProceduralSource>(source->value).ref == ref;
+        };
+        const bool monoStored = fill != nullptr && fill->mask && fill->mask->effects.size() == 1 &&
+                                fill->mask->effects.front().fill && stored(fill->mask->effects.front().fill->mono_source);
+        const bool channelStored = fill != nullptr && fill->fill && fill->fill->sources.size() == 1 &&
+                                   fill->fill->sources.contains(core::ChannelType::Roughness) &&
+                                   stored(fill->fill->sources.at(core::ChannelType::Roughness));
+        const auto committed = [](const auto& outcome) {
+            return outcome && outcome->result && outcome->result->status == core::ResultStatus::committed;
+        };
+        Check(committed(mono) && committed(channel) && submits == 2 && document.revision() == 2 && monoStored &&
+                  channelStored,
+              "an admitted grunge source commits the reference as given, as a mask fill's source and a channel's",
+              !mono      ? mono.error().Describe()
+              : !channel ? channel.error().Describe()
+              : !committed(mono) || !committed(channel)
+                  ? std::string("not committed: ") + (mono->result ? mono->result->error : "") + " / " +
+                        (channel->result ? channel->result->error : "")
+                  : "not stored as given");
+    }
+    return Finish();
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
     if (argc < 4) {
         std::fprintf(stderr,
-                     "usage: uzp-proc-grunge-tests families | tiling | seeds | kernels | gpu <work-dir> "
+                     "usage: uzp-proc-grunge-tests families | tiling | seeds | domain | kernels | gpu <work-dir> "
                      "<shipped-library>\n");
         return 2;
     }
@@ -559,6 +777,7 @@ int main(int argc, char** argv) {
     if (mode == "families") return RunFamilies(shipped);
     if (mode == "tiling") return RunTiling(shipped);
     if (mode == "seeds") return RunSeeds(shipped);
+    if (mode == "domain") return RunDomain(shipped);
     if (mode == "kernels") return RunKernels(dir, shipped);
     if (mode == "gpu") return RunGpu(dir, shipped);
     std::fprintf(stderr, "unknown case %.*s\n", static_cast<int>(mode.size()), mode.data());

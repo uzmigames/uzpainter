@@ -52,6 +52,7 @@ The library ships beside the executable as `assets/procedural/`: one provenance 
 - Each asset is a fixed configuration of six periodic pattern kinds over the primitive library: fBm, ridged fBm, spots, scratches, cracks (Worley F2 - F1) and a plain weave. Each takes a seed and UzPainter's own parameters. Every texture wraps seamlessly, and `tiling` repeats it a whole number of times.
 - One kernel pass per asset, from a parameter block computed on the host. DX12 equals the CPU reference bit for bit.
 - A recipe's projection scale belongs to the fill, not to the asset.
+- A grunge is set as a fill's source, on a content channel or a mask fill, only after the seam admits it (`SetGrungeSource`). A request outside the domain is refused before any transaction.
 - The domains are declared before calibration. None is certified, and no alias names them.
 
 **As built, materials (`phase3.2_proc-material-families`, decision 334, `src/procedural/materials.h`).**

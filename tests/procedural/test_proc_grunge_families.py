@@ -1,12 +1,14 @@
 """Tests of phase3.2_proc-grunge-families (`src/procedural/grunges.h`, decision 331): the grunge
 assets' certified editable domains, declared in the shipped asset library before any calibration
-(item 2.6), their evaluation with seed and parameters (item 2.3), seamless tiling (test 3.2) and
-seed behaviour (test 3.3, the half that needs no Painter golden).
+(item 2.6), their evaluation with seed and parameters (item 2.3), seamless tiling (test 3.2),
+seed behaviour (test 3.3, the half that needs no Painter golden) and the domain refusals before
+mutation (test 3.4).
 
 The native cases run `uzp-proc-grunge-tests.exe` (`tests/procedural/grunges_test.cpp`).
-`families`, `tiling` and `seeds` run on the CPU, `kernels` needs `dxcompiler.dll` (installed
-beside the executable), and `gpu` needs a DX12 hardware adapter: it skips under `UZP_NO_GPU=1` or
-when the executable reports none (exit code 77). Only one GPU run may be on the machine at a time.
+`families`, `tiling`, `seeds` and `domain` run on the CPU, `kernels` needs `dxcompiler.dll`
+(installed beside the executable), and `gpu` needs a DX12 hardware adapter: it skips under
+`UZP_NO_GPU=1` or when the executable reports none (exit code 77). Only one GPU run may be on the
+machine at a time.
 
 None of these assets is certified: each record's parity status is `unavailable`, no alias of the
 library names it (decision 324), and no case here compares against a Painter output.
@@ -186,6 +188,47 @@ def test_two_seeds_differ_on_the_cpu_lane(grunge_tests: Path, tmp_path: Path) ->
     passed = run_case(grunge_tests, "seeds", tmp_path)
     assert "two seeds give two different textures for every grunge asset (CPU lane)" in passed
     assert "the same seed repeats bit for bit on the CPU lane for every grunge asset" in passed
+
+
+COMMON_REFUSALS = (
+    "a parameter one ulp above its range",
+    "a parameter one ulp below its range",
+    "a tiling of 9 repeats",
+    "a fractional tiling",
+    "a recorded parameter with no counterpart",
+    "a seed outside 32 bits",
+    "a mesh-map input, which no grunge reads",
+    "an output resolution of 512",
+    "an output resolution of 8192",
+    "an output in half floats",
+)
+
+
+def test_domain_refusals_come_before_mutation(grunge_tests: Path, tmp_path: Path) -> None:
+    """3.4: a parameter, a seed, a mesh-map input, a resolution and an output format just outside
+    each asset's domain raise `UnsupportedProcedural{reason: "outside certified domain"}` before
+    mutation, naming the field, with nothing clamped or substituted."""
+    passed = run_case(grunge_tests, "domain", tmp_path)
+    prefix = "outside the domain, refused before mutation with nothing clamped"
+    refused = [c for c in passed if c.startswith(prefix)]
+    assert len(refused) == sum(16 + len(own) for own in GRUNGES.values()), refused
+    for asset_id, own in GRUNGES.items():
+        name = f"uzasset://grunge/{asset_id}@1"
+        for what in (
+            *COMMON_REFUSALS,
+            *(f"its own parameter {p} " for p in own),
+        ):
+            assert any(c.startswith(f"{prefix}: {name}, {what}") for c in refused), (name, what)
+            lane = f"the candidate lane evaluates nothing: {name}, {what}"
+            assert any(c.startswith(lane) for c in passed), (name, what)
+        assert (
+            "inside the domain the uncertified grunge is refused before mutation (family not "
+            f"certified): {name}" in passed
+        )
+    assert (
+        "an admitted grunge source commits the reference as given, as a mask fill's source and a "
+        "channel's" in passed
+    )
 
 
 def test_grunge_kernels_compile(grunge_tests: Path, tmp_path: Path) -> None:
