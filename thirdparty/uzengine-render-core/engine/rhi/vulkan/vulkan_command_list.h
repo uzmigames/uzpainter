@@ -1,4 +1,4 @@
-// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-011. Original: UzEngine runtime/engine/rhi/vulkan/vulkan_command_list.h at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-011, UZP-MOD-013. Original: UzEngine runtime/engine/rhi/vulkan/vulkan_command_list.h at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
 
 #pragma once
 
@@ -39,6 +39,11 @@ class VulkanDevice;
 
 /// Number of in-flight frames for command pool rotation.
 static constexpr uint32_t kVulkanFrameCount = 3;
+
+/// UZP-MOD-013: the 16 storage-buffer bindings of the descriptor set layout start here
+/// (`[[vk::binding(64 + n, 0)]]` in the shaders; no DXC register shift maps to them).
+static constexpr uint32_t kStorageBufferBindingOffset = 64;
+static constexpr uint32_t kMaxStorageBufferBindings = 16;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // VulkanCommandList
@@ -117,6 +122,19 @@ public:
 
     /// Writes a combined image sampler descriptor for a texture at the given slot.
     void SetFragmentTexture(uint32_t slot, RHITextureHandle texture) override;
+
+    /// UZP-MOD-013: writes `texture` as the sampled image of binding `slot` (t0..t15) in
+    /// `SHADER_READ_ONLY_OPTIMAL`, without a sampler (compute kernels load texels).
+    void SetComputeSampledImage(uint32_t slot, RHITextureHandle texture);
+
+    /// UZP-MOD-013: writes the whole of `buffer` as the storage buffer of binding
+    /// `kStorageBufferBindingOffset + slot` (slot 0..15).
+    void SetComputeStorageBuffer(uint32_t slot, RHIBufferHandle buffer);
+
+    /// UZP-MOD-013: the draws and dispatches recorded since `Begin` whose descriptor snapshot
+    /// could not be allocated (they would see the shared working set), so a caller can refuse
+    /// to submit the list.
+    uint32_t DescriptorSetFailures() const { return m_descriptorSetFailures; }
 
     /// Submits an indexed draw call via `vkCmdDrawIndexed`.
     void DrawIndexed(uint32_t indexCount, uint32_t instanceCount,
@@ -200,8 +218,12 @@ private:
     /// Bitmask of bindings that have been written to the current frame's working
     /// descriptor set. Only written bindings are copied in AllocateAndCopyDescriptorSet —
     /// copying unwritten (uninitialized) bindings is undefined behaviour in Vulkan.
-    static constexpr uint32_t kTotalBindings = 64; // 16 textures + 16 samplers + 16 CBVs + 16 UAVs
+    static constexpr uint32_t kTotalBindings = 80; // 16 textures + 16 samplers + 16 CBVs + 16 UAVs + 16 storage buffers (UZP-MOD-013)
     uint64_t             m_writtenBindingsMask = 0; // bit i = binding i was written
+    /// UZP-MOD-013: bit i = storage-buffer binding `kStorageBufferBindingOffset + i` was written.
+    uint32_t             m_writtenStorageBuffersMask = 0;
+    /// UZP-MOD-013: snapshots that could not be allocated since `Begin`.
+    uint32_t             m_descriptorSetFailures = 0;
 
     /// Temporary per-slice/mip image views created in BeginRenderPass for
     /// non-zero arraySlice or mipLevel. Destroyed in EndRenderPass.

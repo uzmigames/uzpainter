@@ -1,4 +1,4 @@
-// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-012. Original: UzEngine runtime/engine/rhi/vulkan/vulkan_device.cpp at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-012, UZP-MOD-013. Original: UzEngine runtime/engine/rhi/vulkan/vulkan_device.cpp at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
 
 /// Vulkan Device Implementation
 ///
@@ -507,6 +507,10 @@ bool VulkanDevice::CreateLogicalDevice() {
         VkPhysicalDeviceFeatures supported = {};
         vkGetPhysicalDeviceFeatures(m_physicalDevice, &supported);
         deviceFeatures.shaderStorageImageExtendedFormats = supported.shaderStorageImageExtendedFormats;
+        // UZP-MOD-013: 64-bit floats and integers in compute kernels (SPIR-V capabilities
+        // Float64 and Int64) when supported.
+        deviceFeatures.shaderFloat64 = supported.shaderFloat64;
+        deviceFeatures.shaderInt64 = supported.shaderInt64;
     }
 
     VkDeviceCreateInfo createInfo = {};
@@ -754,6 +758,7 @@ bool VulkanDevice::CreateDescriptorSetLayout() {
     //   binding 16..31 = SAMPLER        (s0..s15, via -fvk-s-shift 16 0)
     //   binding 32..47 = UNIFORM_BUFFER (b0..b15, via -fvk-b-shift 32 0)
     //   binding 48..63 = STORAGE_IMAGE  (u0..u15, via -fvk-u-shift 48 0)
+    //   binding 64..79 = STORAGE_BUFFER (UZP-MOD-013: [[vk::binding(64 + n, 0)]], compute)
     constexpr uint32_t kMaxTextureBindings = 16;
     constexpr uint32_t kSamplerBindingOffset = 16;
     constexpr uint32_t kMaxSamplerBindings = 16;
@@ -762,7 +767,8 @@ bool VulkanDevice::CreateDescriptorSetLayout() {
     constexpr uint32_t kUAVBindingOffset = 48;
     constexpr uint32_t kMaxUAVBindings = 16;
 
-    constexpr uint32_t kTotalBindings = kMaxTextureBindings + kMaxSamplerBindings + kMaxCBBindings + kMaxUAVBindings;
+    constexpr uint32_t kTotalBindings = kMaxTextureBindings + kMaxSamplerBindings + kMaxCBBindings + kMaxUAVBindings
+                                      + kMaxStorageBufferBindings;  // UZP-MOD-013
     VkDescriptorSetLayoutBinding bindings[kTotalBindings] = {};
 
     for (uint32_t i = 0; i < kMaxTextureBindings; ++i) {
@@ -808,6 +814,15 @@ bool VulkanDevice::CreateDescriptorSetLayout() {
         b.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
     }
 
+    // UZP-MOD-013: structured buffers of compute kernels → bindings 64-79 as storage buffers
+    for (uint32_t i = 0; i < kMaxStorageBufferBindings; ++i) {
+        auto& b = bindings[kMaxTextureBindings + kMaxSamplerBindings + kMaxCBBindings + kMaxUAVBindings + i];
+        b.binding = kStorageBufferBindingOffset + i;
+        b.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        b.descriptorCount = 1;
+        b.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    }
+
     // Mark all bindings as PARTIALLY_BOUND so unwritten bindings in a new
     // descriptor set snapshot are not accessed by the GPU (we only copy
     // bindings that were actually written via m_writtenBindingsMask).
@@ -815,6 +830,11 @@ bool VulkanDevice::CreateDescriptorSetLayout() {
     for (uint32_t i = 0; i < kTotalBindings; ++i) {
         bindingFlags[i] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
                         | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+    }
+    // UZP-MOD-013: the storage buffers are not update-after-bind (that needs
+    // descriptorBindingStorageBufferUpdateAfterBind); a snapshot is written before it is bound.
+    for (uint32_t i = kTotalBindings - kMaxStorageBufferBindings; i < kTotalBindings; ++i) {
+        bindingFlags[i] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
     }
     VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsCI = {};
     bindingFlagsCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
@@ -834,7 +854,7 @@ bool VulkanDevice::CreateDescriptorSetLayout() {
         return false;
     }
 
-    UZ_LOG(RHI, Info, "Vulkan descriptor set layout created (16 textures + 16 samplers [s0=linear, s1=shadow] + 16 CBVs + 16 UAVs)");
+    UZ_LOG(RHI, Info, "Vulkan descriptor set layout created (16 textures + 16 samplers [s0=linear, s1=shadow] + 16 CBVs + 16 UAVs + 16 storage buffers)");
     return true;
 }
 

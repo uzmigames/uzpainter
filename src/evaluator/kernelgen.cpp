@@ -37,6 +37,23 @@ void AppendUintTable(std::string& text, const char* name, const uint32_t* values
     text += "};\n";
 }
 
+/// `UZP_DST_FORMAT=<n>`: the GPU format of the destination tile (`DST_*` of image_common.hlsli),
+/// which a kernel's SPIR-V declares on its one storage image (fixed slots, decision 313).
+std::string DstFormatDefine(const TileFormat& dst) {
+    int code = 0;
+    switch (RhiFormatOf(dst)) {
+        case uz::RHIFormat::R8Unorm: code = 0; break;
+        case uz::RHIFormat::R16Unorm: code = 1; break;
+        case uz::RHIFormat::R16Float: code = 2; break;
+        case uz::RHIFormat::R32Float: code = 3; break;
+        case uz::RHIFormat::RGBA8Unorm: code = 4; break;
+        case uz::RHIFormat::RGBA16Unorm: code = 5; break;
+        case uz::RHIFormat::RGBA16Float: code = 6; break;
+        default: code = 7; break;  // RGBA32Float, the last of RhiFormatOf's formats
+    }
+    return "UZP_DST_FORMAT=" + std::to_string(code);
+}
+
 }  // namespace
 
 render::KernelInclude TablesInclude() {
@@ -111,6 +128,10 @@ render::KernelSource BlendKernelSource(const BlendKernelVariant& variant) {
         std::string("UZP_ALPHA=") + (variant.format.alpha ? "1" : "0"),
         std::string("UZP_HALF_COVERAGE=") + (halfCoverage ? (fromHalf ? "2" : "1") : "0"),
         std::string("UZP_RAW_OUTPUT=") + (variant.rawOutput ? "1" : "0"),
+        // A raw blend writes a 32-bit float tile of the operands' channel count.
+        DstFormatDefine(variant.rawOutput
+                            ? TileFormat{render::TexelEncoding::Float32, variant.format.channels, false, false}
+                            : variant.format),
     };
     source.includes = {render::image_pass_detail::CommonInclude(), TablesInclude()};
     return source;
@@ -161,6 +182,7 @@ render::KernelSource VirtualNormalKernelSource(render::TexelEncoding normalEncod
         "UZP_SRGB=0",
         "UZP_ALPHA=0",
         "UZP_RAW_OUTPUT=1",
+        DstFormatDefine(TileFormat{render::TexelEncoding::Float32, 3, false, false}),
     };
     source.includes = {render::image_pass_detail::CommonInclude(), TablesInclude()};
     return source;
@@ -206,6 +228,7 @@ render::KernelSource LevelsKernelSource(const TileFormat& format) {
         "UZP_CHANNELS=" + std::to_string(format.channels),
         std::string("UZP_SRGB=") + (format.srgb ? "1" : "0"),
         std::string("UZP_ALPHA=") + (format.alpha ? "1" : "0"),
+        DstFormatDefine(format),
     };
     source.includes = {render::image_pass_detail::CommonInclude(), TablesInclude()};
     return source;
@@ -246,6 +269,7 @@ render::KernelSource ProjectKernelSource(const TileFormat& format) {
         "UZP_CHANNELS=" + std::to_string(format.channels),
         std::string("UZP_SRGB=") + (format.srgb ? "1" : "0"),
         std::string("UZP_ALPHA=") + (format.alpha ? "1" : "0"),
+        DstFormatDefine(format),
     };
     source.includes = {render::image_pass_detail::CommonInclude(), TablesInclude()};
     return source;

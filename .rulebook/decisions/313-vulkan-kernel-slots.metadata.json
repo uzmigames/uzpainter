@@ -1,0 +1,13 @@
+{
+  "id": 313,
+  "slug": "313-vulkan-kernel-slots",
+  "title": "The compositor kernels compile to SPIR-V in the fixed-slot model of the vendored Vulkan layout: slots instead of heap indices, storage-buffer bindings added (UZP-MOD-013), push constants for the root constants, bounded dispatches per submission; product paths still refuse Vulkan",
+  "status": "accepted",
+  "date": "2026-10-20",
+  "relatedTasks": [
+    "phase3.1_vulkan-compute-parity",
+    "phase1.4_render-core-layer",
+    "phase1.14_compositor-core"
+  ],
+  "supersededBy": null
+}

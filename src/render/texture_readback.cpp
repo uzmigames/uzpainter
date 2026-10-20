@@ -34,6 +34,15 @@ std::optional<TexelLayout> ReadbackLayout(uz::RHIFormat format) {
     }
 }
 
+std::optional<std::string> ReadbackRefusal(Backend backend, uz::RHIFormat format) {
+    if (backend == Backend::Vulkan && format == uz::RHIFormat::RGB32Float) {
+        return std::string(
+            "RGB32Float (VK_FORMAT_R32G32B32_SFLOAT) is not read back on Vulkan: the qualified RTX 4090 "
+            "has no optimal-tiling support for it (decision 310 §8)");
+    }
+    return std::nullopt;
+}
+
 TextureReadback::TextureReadback(EngineContext& context)
     : m_context(context), m_device(context.Device()) {}
 
@@ -55,6 +64,9 @@ Result<ReadbackId> TextureReadback::Request(const ReadbackDesc& desc) {
     if (!layout) {
         return fail("texture" + name + " has format " + std::string(FormatName(texture->format)) +
                     ", which is not read back (block-compressed and depth formats are not)");
+    }
+    if (const std::optional<std::string> refused = ReadbackRefusal(backend, texture->format)) {
+        return fail("texture" + name + ": " + *refused);
     }
     if (!uz::HasFlag(texture->usage, uz::RHITextureUsage::CopySrc)) {
         return fail("texture" + name + " was not created with CopySrc usage");
@@ -167,7 +179,7 @@ Result<ReadbackImage> TextureReadback::Finish(const Pending& pending) {
     }
 
     uz::IRHIDevice& rhi = m_device.Rhi();
-    const auto* mapped = static_cast<const std::byte*>(rhi.MapBuffer(pending.staging));
+    const auto* mapped = static_cast<const std::byte*>(m_device.MapReadback(pending.staging));
     if (!mapped) {
         m_device.DestroyBuffer(pending.staging);
         return Fail(ErrorCode::RequestFailed, m_device.GetBackend(),

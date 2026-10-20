@@ -260,6 +260,7 @@ const render_sources = [_][]const u8{
     "render/disk_cache.cpp",
     "render/engine_thread.cpp",
     "render/image_pass.cpp",
+    "render/kernel_bindings.cpp",
     "render/kernel_cache.cpp",
     "render/mips.cpp",
     "render/resample.cpp",

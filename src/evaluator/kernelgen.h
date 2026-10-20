@@ -35,7 +35,9 @@ struct BlendKernelVariant {
 /// The HLSL of the variant: `evaluator_blend.hlsl` with the defines `UZP_MODE_<Mode>`,
 /// `UZP_ENC`, `UZP_CHANNELS`, `UZP_SRGB`, `UZP_ALPHA`, `UZP_HALF_COVERAGE` (the coverage plane
 /// written through binary16, `TileFormat::halfCoverage`: 1 always, 2 from 1/2 up,
-/// `TileFormat::halfCoverageFromHalf`) and `UZP_RAW_OUTPUT`, including the render layer's
+/// `TileFormat::halfCoverageFromHalf`), `UZP_RAW_OUTPUT` and `UZP_DST_FORMAT` (the destination
+/// tile's GPU format, which the SPIR-V declares; every kernel here defines it, decision 313),
+/// including the render layer's
 /// `image_common.hlsli` and the generated `evaluator_tables.hlsli`.
 [[nodiscard]] render::KernelSource BlendKernelSource(const BlendKernelVariant& variant);
 

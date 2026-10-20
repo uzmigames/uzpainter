@@ -46,3 +46,10 @@
   - In part: 3.1, readback pitch in whole texels.
   - In part: 3.4, in-process fault cases (`vulkan-faults`). The supervisor device-loss and stall cases and the §7 settling re-run stay `pending`.
   - Vendored modifications: UZP-MOD-011 and UZP-MOD-012.
+- Decision 313 (2026-10-20): the compositor kernels compile to SPIR-V in the fixed-slot model (item 2.3, not checked).
+  - In part: 2.3. Every generated compositor kernel (blend, Levels, virtual normal, UV projection) compiles to SPIR-V through the shared kernel cache, whose key includes the target. It names its resources by slot (`src/render/kernel_bindings.h`; storage buffers through UZP-MOD-013) and takes its root constants as push constants. `GpuTileStore` splits a flush into submissions of at most `MaxDispatchesPerSubmission` dispatches. `uzp-evaluator-tests vulkan-kernel-spirv` (no GPU) checks the SPIR-V of every kernel.
+  - Evidence on the RTX 4090 (2026-10-20). The DX12 `kernel-sweep`, `masks-gpu-vs-cpu`, `height-normal-gpu-vs-cpu` and `projection-gpu-vs-cpu` cases still give GPU = CPU over the changed DXIL source. `vulkan-kernel-sweep` covers every blend mode x channel format, with and without coverage, at two opacities. On Vulkan it equals the CPU and DX12 bit for bit, and it equals DX12 bit for bit on 240 combinations with subnormal float32 operands. On 172 of those 240, both GPU backends flush subnormals where the CPU reference keeps them. That is a DX12 finding too, reported and not waived.
+  - Open for 2.3: the Levels, virtual normal, UV projection and raw-blend kernels are refused on Vulkan by name (`vulkan-refusals`) until their sweeps run. Those cases evaluate through the engine's capability query, which is item 2.6's wiring. The blend sweep does not cover mask tiles or the effect, coverage-weight and fused-read-out flags.
+  - In part: 2.4. Readback maps through `IDevice::MapReadback`, and Vulkan refuses `RGB32Float` by name.
+  - In part: 2.6. The criteria now cover the kernels' features, limits and tile formats.
+  - `render::CreateDevice(Vulkan)` still refuses every product path. `EngineOptions::createDevice` is a native-test seam only.

@@ -705,11 +705,12 @@
       "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
       "upstream_blob_sha1": "2bd554ff735da731e9560b1242a9ae894989e869",
       "upstream_sha256": "bf664eb3c4c7fd84d8a656da8737e59ac80ca786abbab2a69cad5fb076376b84",
-      "vendored_sha256": "d42c5cec1881e22e0ef1d3de5e37d81658c3afd0e3cd9517a35c0218e1593514",
+      "vendored_sha256": "37ae4336dc29e9550cdbca71dcb1d1b40adec5b07b79033e74167c0ca555f04d",
       "status": "modified",
       "modifications": [
         "UZP-MOD-011",
-        "UZP-MOD-012"
+        "UZP-MOD-012",
+        "UZP-MOD-013"
       ]
     },
     {
@@ -718,10 +719,11 @@
       "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
       "upstream_blob_sha1": "6164f102e85162a118d3f6a727887a6504bb051b",
       "upstream_sha256": "ed950e1d7477b1e9f4e659df24ba930ee95cb622992e9d4c28eddcd913f850a6",
-      "vendored_sha256": "2588e4b4c31a3b99f0f16515c10cf2e68d683aab169788da347f017cd603a308",
+      "vendored_sha256": "f715a01dd0b44f44abdbcdf7b33e6b7c67cc63fbe4b36458169682b95cb00287",
       "status": "modified",
       "modifications": [
-        "UZP-MOD-011"
+        "UZP-MOD-011",
+        "UZP-MOD-013"
       ]
     },
     {
@@ -730,10 +732,11 @@
       "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
       "upstream_blob_sha1": "63f512fe6c9f806757e074e5293314e3a44ac885",
       "upstream_sha256": "b899c6f3079035d800d5ed1ad67231ff6adbae4f300b5cabfe3d84ff37fa362c",
-      "vendored_sha256": "ec1b2f578afe5d5b63af779e871a601e0d2880783467ff143bfa3652b924f64d",
+      "vendored_sha256": "64c9e8b8adf0f1e87b8e16bd86f15527c1d66b2872adc82d738e149890834941",
       "status": "modified",
       "modifications": [
-        "UZP-MOD-012"
+        "UZP-MOD-012",
+        "UZP-MOD-013"
       ]
     },
     {
@@ -810,9 +813,11 @@
       "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
       "upstream_blob_sha1": "0673a8971ab7021d7b32b8311ca98d8d1e90efe5",
       "upstream_sha256": "1e167ec20734f9fa0514205dfee4bf5ab68956b6a982138f021eab878ca0e411",
-      "vendored_sha256": "1e167ec20734f9fa0514205dfee4bf5ab68956b6a982138f021eab878ca0e411",
-      "status": "verbatim",
-      "modifications": []
+      "vendored_sha256": "91395e9d7159bb370916aa46647040e42826d78ab1652b029261d94175d372ab",
+      "status": "modified",
+      "modifications": [
+        "UZP-MOD-013"
+      ]
     },
     {
       "upstream_path": "runtime/engine/rhi/vulkan/vulkan_resources.h",

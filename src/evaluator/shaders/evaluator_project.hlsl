@@ -23,10 +23,21 @@
 #include "image_common.hlsli"
 #include "evaluator_tables.hlsli"
 
+#ifdef UZP_FIXED_SLOTS
+// Push constants on Vulkan (image_common.hlsli): each dispatch records its own.
+struct RootConstants {
+    uint paramsSrv;
+    uint block;
+};
+[[vk::push_constant]] RootConstants g_root;
+#define g_paramsSrv g_root.paramsSrv
+#define g_block g_root.block
+#else
 cbuffer Root : register(b0) {
     uint g_paramsSrv;
     uint g_block;
 };
+#endif
 
 #define P_WIDTH 0
 #define P_HEIGHT 1
@@ -64,8 +75,7 @@ cbuffer Root : register(b0) {
 static uint g_base;
 
 uint Param(uint offset) {
-    StructuredBuffer<uint> params = ResourceDescriptorHeap[g_paramsSrv];
-    return params[g_base + offset];
+    return BufferWord(g_paramsSrv, g_base + offset);
 }
 double ParamDouble(uint offset) { return asdouble(Param(offset), Param(offset + 1u)); }
 
@@ -91,15 +101,14 @@ int64_t Address(int64_t index, uint extent, bool repeat) {
 #define IMAGE_UNORM16_TARGET 4u
 
 uint Code(uint srv, uint sixteen, uint width, uint channels, int64_t x, int64_t y, uint c) {
-    StructuredBuffer<uint> image = ResourceDescriptorHeap[srv];
     const uint channel = channels == 1u ? 0u : c;
     const uint k = ((uint)y * width + (uint)x) * channels + channel;
-    if (sixteen == IMAGE_FLOAT32 || sixteen == IMAGE_FLOAT16) return image[k];
+    if (sixteen == IMAGE_FLOAT32 || sixteen == IMAGE_FLOAT16) return BufferWord(srv, k);
     if (sixteen != 0u) {
-        const uint word = image[k >> 1];
+        const uint word = BufferWord(srv, k >> 1);
         return (k & 1u) != 0u ? word >> 16 : word & 0xFFFFu;
     }
-    const uint word = image[k >> 2];
+    const uint word = BufferWord(srv, k >> 2);
     return (word >> ((k & 3u) * 8u)) & 0xFFu;
 }
 
@@ -221,19 +230,16 @@ static uint g_tuChain;
 static uint g_tuSrgb8;
 
 uint TuLod(uint index) {
-    StructuredBuffer<uint> tables = ResourceDescriptorHeap[g_tuTables];
-    const uint word = tables[index >> 1];
+    const uint word = BufferWord(g_tuTables, index >> 1);
     return (index & 1u) != 0u ? word >> 16 : word & 0xFFFFu;
 }
 
 uint TuGeometry(uint word) {
-    StructuredBuffer<uint> tables = ResourceDescriptorHeap[g_tuTables];
-    return tables[TU_LOD_WORDS + word];
+    return BufferWord(g_tuTables, TU_LOD_WORDS + word);
 }
 
 float3 TuTexel(uint index) {
-    StructuredBuffer<float> chain = ResourceDescriptorHeap[g_tuChain];
-    return float3(chain[index * 3u], chain[index * 3u + 1u], chain[index * 3u + 2u]);
+    return float3(BufferFloat(g_tuChain, index * 3u), BufferFloat(g_tuChain, index * 3u + 1u), BufferFloat(g_tuChain, index * 3u + 2u));
 }
 
 int TuCoarse(int e) { return e - ((((e + 126) % 4) + 4) % 4); }
@@ -360,8 +366,7 @@ static bool g_probeLocal = false;
 static uint g_probeCodes[4];
 uint TuSrgb8Code(uint index, uint c) {
     if (g_probeLocal) return g_probeCodes[index];
-    StructuredBuffer<uint> chain = ResourceDescriptorHeap[g_tuChain];
-    return chain[index * 3u + c];
+    return BufferWord(g_tuChain, index * 3u + c);
 }
 int TuSegmentExponent(uint code) { return (int)((kSrgb8Operand[code | 7u] >> 23) & 255u) - 126; }
 

@@ -26,6 +26,7 @@
 #include <cstdint>
 #include <deque>
 #include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -74,6 +75,11 @@ struct TexelLayout {
 /// has); it is held in the four-channel format of its depth and read back with
 /// `ReadbackDesc::channels = 3`.
 [[nodiscard]] std::optional<TexelLayout> ReadbackLayout(uz::RHIFormat format);
+
+/// Why `format` is not read back on `backend`, by name; empty when it is. Vulkan refuses
+/// `RGB32Float`: the owner's RTX 4090 has no optimal-tiling features for `R32G32B32_SFLOAT`
+/// (decision 310 §8).
+[[nodiscard]] std::optional<std::string> ReadbackRefusal(Backend backend, uz::RHIFormat format);
 
 /// One readback: one subresource (mip level, array slice or volume slice) of one texture.
 struct ReadbackDesc {

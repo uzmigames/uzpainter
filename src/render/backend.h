@@ -146,6 +146,14 @@ public:
     /// The vendored RHI device, for recording commands and descriptor queries.
     virtual uz::IRHIDevice& Rhi() = 0;
 
+    /// The host view of a `Readback` buffer whose copy has completed (its fence waited on); null
+    /// when it cannot be mapped. Vulkan invalidates the allocation first (decision 310 §5).
+    [[nodiscard]] virtual const void* MapReadback(uz::RHIBufferHandle buffer) { return Rhi().MapBuffer(buffer); }
+
+    /// The most compute dispatches one submission may record. Unbounded on DX12; on Vulkan each
+    /// dispatch takes a descriptor snapshot from a fixed pool (decision 313).
+    [[nodiscard]] virtual uint32_t MaxDispatchesPerSubmission() const { return UINT32_MAX; }
+
     /// Empty while the device is alive; `device_removed {backend, reason}` once it is removed
     /// or lost.
     [[nodiscard]] virtual std::optional<Error> CheckRemoved() const = 0;

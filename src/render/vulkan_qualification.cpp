@@ -51,7 +51,7 @@ struct PoolType {
 constexpr PoolType kVendoredPool[] = {
     {"sampled_image", 16384, 16},
     {"storage_image", 4096, 16},
-    {"storage_buffer", 4096, 0},
+    {"storage_buffer", 4096, 16},  // UZP-MOD-013: bindings 64..79
     {"uniform_buffer", 4096, 16},
     {"sampler", 2048, 16},
     {"combined_image_sampler", 8192, 0},
@@ -215,6 +215,10 @@ const std::vector<std::string>& VulkanRequiredFeatures() {
         "samplerAnisotropy",
         // Enabled when supported (UZP-MOD-012); the R16_SFLOAT kernel's storage image needs it.
         "shaderStorageImageExtendedFormats",
+        // Enabled when supported (UZP-MOD-013); the compositor kernels compute in double and
+        // 64-bit integers (SPIR-V Float64, Int64; decision 313).
+        "shaderFloat64",
+        "shaderInt64",
     };
     return names;
 }
@@ -248,27 +252,40 @@ const std::vector<VulkanLimitRequirement>& VulkanRequiredLimits() {
          "16 update-after-bind uniform-buffer bindings in one stage"},
         {"maxPerStageDescriptorUpdateAfterBindStorageImages", 16,
          "16 update-after-bind storage-image bindings in one stage"},
-        {"maxPerStageUpdateAfterBindResources", 48,
-         "48 resources (sampled images, uniform buffers, storage images) visible to the compute stage"},
+        {"maxPerStageDescriptorUpdateAfterBindStorageBuffers", 16,
+         "16 storage-buffer bindings in one stage (UZP-MOD-013)"},
+        {"maxPerStageUpdateAfterBindResources", 64,
+         "64 resources (sampled images, uniform buffers, storage images, storage buffers) visible to the compute stage"},
         {"maxDescriptorSetUpdateAfterBindSampledImages", 16, "16 sampled images in the set"},
         {"maxDescriptorSetUpdateAfterBindSamplers", 16, "16 samplers in the set"},
         {"maxDescriptorSetUpdateAfterBindUniformBuffers", 16, "16 uniform buffers in the set"},
         {"maxDescriptorSetUpdateAfterBindStorageImages", 16, "16 storage images in the set"},
+        {"maxDescriptorSetUpdateAfterBindStorageBuffers", 16, "16 storage buffers in the set (UZP-MOD-013)"},
+        {"maxStorageBufferRange", 0xFFFFFFFFull,
+         "a compositor kernel reads a structured buffer of up to 4 GiB through one binding (decision 313)"},
         {"maxUpdateAfterBindDescriptorsInAllPools", kVendoredPoolDescriptors,
          "the vendored update-after-bind descriptor pool holds 38912 descriptors"},
         {"maxComputeWorkGroupSize.x", 8, "the qualification kernels run 8x8x1 work groups"},
         {"maxComputeWorkGroupSize.y", 8, "the qualification kernels run 8x8x1 work groups"},
-        {"maxComputeWorkGroupInvocations", 64, "the qualification kernels run 64 invocations a group"},
+        {"maxComputeWorkGroupInvocations", 64, "the qualification and compositor kernels run 64 invocations a group"},
     };
     return limits;
 }
 
 const std::vector<VulkanFormatRequirement>& VulkanRequiredFormats() {
     constexpr uint32_t kStorageCopy = VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT;
+    // A compositor tile is sampled, written as a storage image, uploaded and read back (decision 313).
+    constexpr uint32_t kTile = kStorageCopy | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
     static const std::vector<VulkanFormatRequirement> formats = {
-        {"R16_SFLOAT", VK_FORMAT_R16_SFLOAT, kStorageCopy, "the 16-bit pattern kernel writes it"},
+        {"R16_SFLOAT", VK_FORMAT_R16_SFLOAT, kTile, "the 16-bit pattern kernel writes it; L16F compositor tiles"},
         {"R32_UINT", VK_FORMAT_R32_UINT, kStorageCopy, "the 32-bit integer kernel writes it"},
-        {"R32_SFLOAT", VK_FORMAT_R32_SFLOAT, kStorageCopy, "the IEEE-strict float kernel writes it"},
+        {"R32_SFLOAT", VK_FORMAT_R32_SFLOAT, kTile, "the IEEE-strict float kernel writes it; L32F compositor tiles"},
+        {"R8_UNORM", VK_FORMAT_R8_UNORM, kTile, "L8 compositor tiles"},
+        {"R16_UNORM", VK_FORMAT_R16_UNORM, kTile, "L16 compositor tiles"},
+        {"R8G8B8A8_UNORM", VK_FORMAT_R8G8B8A8_UNORM, kTile, "RGB8 and sRGB8 compositor tiles"},
+        {"R16G16B16A16_UNORM", VK_FORMAT_R16G16B16A16_UNORM, kTile, "RGB16 compositor tiles"},
+        {"R16G16B16A16_SFLOAT", VK_FORMAT_R16G16B16A16_SFLOAT, kTile, "RGB16F compositor tiles"},
+        {"R32G32B32A32_SFLOAT", VK_FORMAT_R32G32B32A32_SFLOAT, kTile, "RGB32F compositor tiles"},
     };
     return formats;
 }
@@ -278,6 +295,8 @@ const std::vector<std::pair<uint32_t, const char*>>& VulkanRecordedFormats() {
         {VK_FORMAT_R16_SFLOAT, "R16_SFLOAT"},
         {VK_FORMAT_R32_UINT, "R32_UINT"},
         {VK_FORMAT_R32_SFLOAT, "R32_SFLOAT"},
+        {VK_FORMAT_R8_UNORM, "R8_UNORM"},
+        {VK_FORMAT_R16_UNORM, "R16_UNORM"},
         {VK_FORMAT_R8G8B8A8_UNORM, "R8G8B8A8_UNORM"},
         {VK_FORMAT_R16G16B16A16_UNORM, "R16G16B16A16_UNORM"},
         {VK_FORMAT_R16G16B16A16_SFLOAT, "R16G16B16A16_SFLOAT"},
@@ -412,7 +431,7 @@ VulkanQualification QualifyVulkan(const VulkanSurvey& survey, uint32_t adapterIn
         const VulkanFormatRecord* record = device.Format(format.vkFormat);
         const uint32_t found = record ? record->optimalTilingFeatures : 0;
         check(std::string("format ") + format.name + " (" + format.why + ")",
-              "optimal tiling STORAGE_IMAGE|TRANSFER_SRC (" + Hex(format.optimalTilingFeatures, 8) + ")",
+              "optimal tiling features " + Hex(format.optimalTilingFeatures, 8),
               record ? Hex(found, 8) : "not queried",
               (found & format.optimalTilingFeatures) == format.optimalTilingFeatures);
     }

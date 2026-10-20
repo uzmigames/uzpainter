@@ -169,12 +169,16 @@ SpirvFacts InspectSpirv(const std::vector<uint8_t>& spirv) {
     constexpr uint32_t kOpDecorate = 71;
     constexpr uint32_t kOpTypeImage = 25;
     constexpr uint32_t kNoContraction = 42;
+    constexpr uint32_t kBinding = 33;
+    constexpr uint32_t kDescriptorSet = 34;
     for (size_t i = 5; i < words.size();) {
         const uint32_t length = words[i] >> 16;
         const uint32_t opcode = words[i] & 0xFFFF;
         if (length == 0 || i + length > words.size()) break;
         if (opcode == kOpCapability && length >= 2) facts.capabilities.push_back(words[i + 1]);
         if (opcode == kOpDecorate && length >= 3 && words[i + 2] == kNoContraction) ++facts.noContraction;
+        if (opcode == kOpDecorate && length >= 4 && words[i + 2] == kDescriptorSet) facts.descriptorSets.push_back(words[i + 3]);
+        if (opcode == kOpDecorate && length >= 4 && words[i + 2] == kBinding) facts.bindings.push_back(words[i + 3]);
         // OpTypeImage: result, sampled type, dim, depth, arrayed, MS, sampled, format.
         if (opcode == kOpTypeImage && length >= 9) facts.imageFormats.push_back(words[i + 8]);
         i += length;

@@ -155,6 +155,19 @@ below against the selected commit, and runs the covering tests.
 | Author | UzmiGames (rulebook task `phase3.1_vulkan-compute-parity`, decision 310, branch `wt/vk-qual`) |
 | Covering test | `tests/vendoring/test_modifications.py::test_vulkan_entry_points_match_the_enabled_extensions` |
 
+## UZP-MOD-013 — Vulkan compute bindings in the fixed-slot layout
+
+| Field | Value |
+|---|---|
+| Id | UZP-MOD-013 |
+| Files | `engine/rhi/vulkan/vulkan_command_list.h`, `engine/rhi/vulkan/vulkan_command_list.cpp`, `engine/rhi/vulkan/vulkan_device.cpp`, `engine/rhi/vulkan/vulkan_resources.cpp` |
+| Reason | capability |
+| Description | The descriptor set layout gains 16 `STORAGE_BUFFER` bindings (64..79, compute stage, partially bound, not update-after-bind), which shaders name with `[[vk::binding(64 + n, 0)]]`; descriptor snapshots copy them like the other written bindings. `VulkanCommandList::SetComputeSampledImage(slot, texture)` writes a sampled image alone (without the sampler `SetFragmentTexture` also writes at `16 + slot`, an immutable-sampler binding for slots 0..3) and `SetComputeStorageBuffer(slot, buffer)` writes a whole buffer at `64 + slot`. A draw or dispatch whose descriptor snapshot cannot be allocated (or tracked) still falls back to the shared working set, but is counted in the new `DescriptorSetFailures()`, reset by `Begin`, so a caller can refuse to submit the list. `vkCreateDevice` enables `shaderFloat64` and `shaderInt64` when supported (SPIR-V `Float64`, `Int64`). `UnmapBuffer` flushes the allocation of an `Upload` or `Readback` buffer, so host writes reach the GPU on memory that is not `HOST_COHERENT` (a no-op on coherent memory). UzPainter's compositor kernels run on Vulkan through these slots (`src/render/kernel_bindings.h`, decision 313); its Vulkan queue refuses a list with a failed snapshot before submitting it (`src/render/vulkan_backend.cpp`). |
+| Upstream behaviour | `engine/rhi/vulkan/vulkan_device.cpp:744-747` lays out sampled images, samplers, uniform buffers and storage images only; `engine/rhi/vulkan/vulkan_command_list.cpp:688` binds the shared working set when a snapshot is not allocated, silently; `engine/rhi/vulkan/vulkan_command_list.cpp:657` writes a sampler at `16 + slot` with every texture; `engine/rhi/vulkan/vulkan_device.cpp:499-501` enables only `fillModeNonSolid` and `samplerAnisotropy`; `engine/rhi/vulkan/vulkan_resources.cpp:177-179` does nothing on unmap |
+| Date | 2026-10-20 |
+| Author | UzmiGames (rulebook task `phase3.1_vulkan-compute-parity`, decision 313, branch `wt/vk-kernels`) |
+| Covering test | `tests/vendoring/test_modifications.py::test_vulkan_compute_bindings_in_the_fixed_slot_layout` |
+
 ## Behaviours kept on purpose
 
 - `DX12CommandList::FatalErrorLoop` still aborts the process after repeated RHI errors

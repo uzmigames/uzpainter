@@ -161,10 +161,13 @@ VulkanDeviceRecord Describe(VkPhysicalDevice physical, uint32_t index) {
              p12.maxPerStageDescriptorUpdateAfterBindSampledImages},
             {"maxPerStageDescriptorUpdateAfterBindStorageImages",
              p12.maxPerStageDescriptorUpdateAfterBindStorageImages},
+            {"maxPerStageDescriptorUpdateAfterBindStorageBuffers",
+             p12.maxPerStageDescriptorUpdateAfterBindStorageBuffers},
             {"maxPerStageUpdateAfterBindResources", p12.maxPerStageUpdateAfterBindResources},
             {"maxDescriptorSetUpdateAfterBindSamplers", p12.maxDescriptorSetUpdateAfterBindSamplers},
             {"maxDescriptorSetUpdateAfterBindUniformBuffers", p12.maxDescriptorSetUpdateAfterBindUniformBuffers},
             {"maxDescriptorSetUpdateAfterBindSampledImages", p12.maxDescriptorSetUpdateAfterBindSampledImages},
+            {"maxDescriptorSetUpdateAfterBindStorageBuffers", p12.maxDescriptorSetUpdateAfterBindStorageBuffers},
             {"maxDescriptorSetUpdateAfterBindStorageImages", p12.maxDescriptorSetUpdateAfterBindStorageImages},
         };
         for (const auto& [name, value] : v12Limits) record.limits.emplace_back(name, value);
@@ -441,6 +444,15 @@ public:
         list->Begin();
         record(*list);
         list->End();
+        // UZP-MOD-013: a draw or dispatch whose descriptor snapshot was not allocated would read
+        // the list's shared working set, so the list is not submitted at all.
+        if (const uint32_t missing = static_cast<uz::VulkanCommandList*>(list)->DescriptorSetFailures()) {
+            m_free.push_back(list);
+            return Fail(ErrorCode::ResourceCreationFailed, Backend::Vulkan,
+                        std::to_string(missing) +
+                            " dispatch(es) of the command list got no descriptor snapshot from the vendored "
+                            "pool (decision 313); nothing was submitted");
+        }
         list->Execute();
         // UZP-MOD-011: a refused command buffer never runs, so the list is free again at once.
         const VkResult executed = static_cast<uz::VulkanCommandList*>(list)->LastSubmitResult();
@@ -770,6 +782,11 @@ Error VulkanDevice::WaitFailure(const WaitResult& wait) const {
     }
     return Error{ErrorCode::RequestFailed, Backend::Vulkan,
                  "the fence wait failed: " + VkResultText(wait.backendReason)};
+}
+
+uint32_t VulkanDevice::MaxDispatchesPerSubmission() const {
+    const uint32_t sets = DeriveVulkanDescriptorModel(m_record).setsInPool / 2;
+    return sets > uz::kVulkanFrameCount ? sets - uz::kVulkanFrameCount : 1;
 }
 
 const void* VulkanDevice::MapReadback(uz::RHIBufferHandle buffer) {

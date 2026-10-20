@@ -110,7 +110,13 @@ public:
     /// The host view of a readback buffer whose copy has completed (its fence value waited on):
     /// the allocation is invalidated for host reads first. Null for a buffer that is not
     /// host-visible, or once the device failed.
-    [[nodiscard]] const void* MapReadback(uz::RHIBufferHandle buffer);
+    [[nodiscard]] const void* MapReadback(uz::RHIBufferHandle buffer) override;
+
+    /// Half the descriptor snapshots the vendored pool holds, less the command list's own
+    /// working sets (`VulkanDescriptorModel::setsInPool / 2 - kVulkanFrameCount`), so this
+    /// submission and one more in flight fit the pool. A list whose snapshot could not be
+    /// allocated anyway is refused before it is submitted (UZP-MOD-013).
+    [[nodiscard]] uint32_t MaxDispatchesPerSubmission() const override;
 
     /// Waits for the last submission until `deadline`; destroys the device when that wait
     /// signalled and nothing failed before, abandons it otherwise. Idempotent: later calls return

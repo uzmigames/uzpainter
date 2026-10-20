@@ -113,6 +113,8 @@
 #include "render/engine_thread.h"
 #include "render/image_pass.h"
 #include "render/texture_readback.h"
+#include "render/vulkan_backend.h"
+#include "render/vulkan_kernels.h"
 #include "render/uv_raster.h"
 #include "mesh/import_error.h"
 #include "mesh/mesh_import.h"
@@ -142,6 +144,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <random>
 #include <string>
 #include <string_view>
@@ -2294,15 +2297,31 @@ int WriteResults(const fs::path& out, const std::vector<std::pair<ChannelType, r
     return ok ? Finish() : 1;
 }
 
+/// `vulkan-kernel-sweep`: the engine runs on the qualified Vulkan device of adapter index 0
+/// (decision 313; product paths still refuse Vulkan, decision 310).
+bool g_vulkan = false;
+
 render::EngineOptions TestOptions(const fs::path& dir) {
     render::EngineOptions options;
     options.kernelCacheRoot = dir / "kernel-cache";
+    if (g_vulkan) {
+        options.device.backend = render::Backend::Vulkan;
+        options.createDevice = []() -> render::Result<std::unique_ptr<render::IDevice>> {
+            const render::VulkanSurvey survey = render::SurveyVulkan();
+            const render::VulkanQualification qualification = render::QualifyVulkan(survey, 0);
+            render::Result<std::unique_ptr<render::VulkanDevice>> device =
+                render::CreateQualifiedVulkanDevice(survey, qualification);
+            if (!device) return render::Unexpected(device.error());
+            return std::unique_ptr<render::IDevice>(std::move(*device));
+        };
+    }
     return options;
 }
 
 bool NoAdapter(const render::Engine& engine) {
     if (!engine.DeviceError()) return false;
-    std::printf("SKIP no DX12 device: %s\n", engine.DeviceError()->Describe().c_str());
+    std::printf("SKIP no %s device: %s\n", g_vulkan ? "qualified Vulkan" : "DX12",
+                engine.DeviceError()->Describe().c_str());
     return true;
 }
 
@@ -2586,17 +2605,258 @@ render::Result<std::vector<uint32_t>> SweepBlend(ITileStore& store, const TileFo
     return output;
 }
 
+// ── vulkan-kernel-spirv (no GPU) ────────────────────────────────────────────
+
+/// Every generated compositor kernel compiles to SPIR-V in the fixed-slot model of the vendored
+/// Vulkan layout (decision 313): no descriptor heap (no `RuntimeDescriptorArray`), descriptor set 0
+/// only, bindings among the sampled images 0..15, the storage image 48 and the storage buffers
+/// 64..79, one storage image declaring the destination tile's format, and only the capabilities a
+/// qualified device enables. DXC only; no device is created.
+int RunVulkanKernelSpirv(const fs::path& dir) {
+    render::Result<std::unique_ptr<render::DxcKernelCompiler>> compiler =
+        render::DxcKernelCompiler::Load(render::DefaultDxcompilerPath());
+    Check(compiler.has_value(), "DXC loads", compiler ? "" : compiler.error().Describe());
+    if (!compiler) return Finish();
+    render::KernelCache cache(**compiler, dir / "kernel-cache");
+    // SPIR-V ImageFormat of each uz::RHIFormat of evaluator/formats.h RhiFormatOf.
+    const auto spirvFormat = [](uz::RHIFormat format) -> uint32_t {
+        switch (format) {
+            case uz::RHIFormat::R8Unorm: return 15;
+            case uz::RHIFormat::R16Unorm: return 14;
+            case uz::RHIFormat::R16Float: return 9;
+            case uz::RHIFormat::R32Float: return 3;
+            case uz::RHIFormat::RGBA8Unorm: return 4;
+            case uz::RHIFormat::RGBA16Unorm: return 10;
+            case uz::RHIFormat::RGBA16Float: return 2;
+            default: return 1;  // Rgba32f
+        }
+    };
+    const std::vector<uint32_t> allowed = {render::kSpirvCapabilityShader, render::kSpirvCapabilityStorageImageExtendedFormats,
+                                           render::kSpirvCapabilitySignedZeroInfNanPreserve, 10 /* Float64 */, 11 /* Int64 */};
+    size_t kernels = 0;
+    std::vector<std::string> failures;
+    const auto check = [&](const render::KernelSource& source, const TileFormat& dst) {
+        ++kernels;
+        render::Result<render::CompiledKernel> spirv = cache.Get(source, render::KernelTarget::Spirv);
+        if (!spirv) {
+            failures.push_back(source.name + ": " + spirv.error().Describe());
+            return;
+        }
+        const render::SpirvFacts facts = render::InspectSpirv(spirv->bytecode);
+        for (const uint32_t capability : facts.capabilities) {
+            if (std::find(allowed.begin(), allowed.end(), capability) == allowed.end()) {
+                failures.push_back(source.name + ": capability " + std::to_string(capability));
+            }
+        }
+        for (const uint32_t set : facts.descriptorSets) {
+            if (set != 0) failures.push_back(source.name + ": descriptor set " + std::to_string(set));
+        }
+        for (const uint32_t binding : facts.bindings) {
+            if (!(binding < 16 || binding == 48 || (binding >= 64 && binding < 80))) {
+                failures.push_back(source.name + ": binding " + std::to_string(binding));
+            }
+        }
+        size_t storageImages = 0;
+        for (const uint32_t format : facts.imageFormats) {
+            if (format == 0) continue;  // Unknown: a sampled image
+            ++storageImages;
+            if (format != spirvFormat(RhiFormatOf(dst))) {
+                failures.push_back(source.name + ": storage image format " + std::to_string(format));
+            }
+        }
+        if (storageImages != 1) failures.push_back(source.name + ": " + std::to_string(storageImages) + " storage images");
+        if (facts.HasCapability(render::kSpirvCapabilitySignedZeroInfNanPreserve) == false) {
+            failures.push_back(source.name + ": not IEEE-strict (no SignedZeroInfNanPreserve)");
+        }
+    };
+    for (const ChannelFormat channelFormat : kAllFormats) {
+        for (const bool alpha : {false, true}) {
+            const TileFormat format = TileFormatOf(channelFormat, alpha);
+            for (const BlendingMode mode : KernelModes()) check(BlendKernelSource({mode, format, false}), format);
+            check(LevelsKernelSource(format), format);
+            check(ProjectKernelSource(format), format);
+            if (!alpha) {
+                check(BlendKernelSource({BlendingMode::Normal, format, true}),
+                      TileFormat{render::TexelEncoding::Float32, format.channels, false, false});
+            }
+        }
+    }
+    for (const render::TexelEncoding encoding : {render::TexelEncoding::Unorm8, render::TexelEncoding::Unorm16,
+                                                 render::TexelEncoding::Float16, render::TexelEncoding::Float32}) {
+        check(VirtualNormalKernelSource(encoding), TileFormat{render::TexelEncoding::Float32, 3, false, false});
+    }
+    for (const std::string& failure : failures) Check(false, "vulkan kernel spirv", failure);
+    Check(failures.empty(), "every compositor kernel compiles to SPIR-V in the fixed-slot model (" +
+                                std::to_string(kernels) + " kernels)");
+    return Finish();
+}
+
+/// Float32 sweep operands with subnormal values (decision 313: the RTX 4090 reports
+/// `shaderDenormPreserveFloat32 = false`): every third texel a subnormal, every third a small
+/// normal near FLT_MIN (whose products and differences are subnormal), the rest the regular sweep.
+std::shared_ptr<DecodedImage> SubnormalImage(const TileFormat& format, bool rows, uint32_t size) {
+    std::shared_ptr<DecodedImage> image = SweepImage(format, rows, size);
+    for (size_t i = 0; i < image->values.size(); ++i) {
+        const uint32_t k = static_cast<uint32_t>(i * 2654435761u);
+        const uint32_t sign = (k >> 7) & 0x80000000u;
+        if (i % 3 == 0) {
+            image->values[i] = sign | ((k & 0x007FFFFFu) | 1u);  // exponent 0: subnormal
+        } else if (i % 3 == 1) {
+            image->values[i] = sign | (0x00800000u + (k & 0x007FFFFFu));  // [FLT_MIN, 2 FLT_MIN)
+        }
+    }
+    return image;
+}
+
+/// Every blend mode x channel format, with and without coverage, against the CPU reference, then
+/// on Vulkan (`vulkan-kernel-sweep`) the 32-bit float formats again with subnormal operands, and
+/// every result compared with a DX12 engine's result for the same inputs.
+/// The kernels not yet compared bit for bit on Vulkan are refused there by name before anything
+/// is queued (decision 313): Levels, virtual normal, UV projection and raw blend.
+int RunVulkanRefusals(const fs::path& dir) {
+    g_vulkan = true;
+    render::Engine engine(TestOptions(dir));
+    if (NoAdapter(engine)) return kExitSkip;
+    auto token = std::make_shared<const int>(0);
+    std::future<render::Result<std::vector<std::string>>> future = engine.Submit(
+        token, [&](render::EngineContext& context, const int&) -> render::Result<std::vector<std::string>> {
+            GpuTileStore gpu(context.Device());
+            gpu.BeginRequest(context);
+            std::vector<std::string> reasons;
+            const auto reason = [&](const render::Result<void>& result) {
+                reasons.push_back(result ? std::string("accepted") : result.error().Describe());
+            };
+            const TileFormat grey = TileFormatOf(ChannelFormat::L16);
+            const TileFormat float3 = TileFormatOf(ChannelFormat::RGB32F);
+            render::Result<TileHandle> a = gpu.Allocate(grey, 8, 8);
+            render::Result<TileHandle> b = gpu.Allocate(grey, 8, 8);
+            render::Result<TileHandle> f = gpu.Allocate(float3, 8, 8);
+            render::Result<TileHandle> g = gpu.Allocate(float3, 8, 8);
+            if (!a || !b || !f || !g) return render::Unexpected((!a ? a : !b ? b : !f ? f : g).error());
+            LevelsOp levels;
+            levels.dst = *a;
+            levels.src = *b;
+            reason(gpu.Levels(levels));
+            VirtualNormalOp normal;
+            normal.dst = *f;
+            reason(gpu.VirtualNormal(normal));
+            ProjectOp project;
+            project.dst = *a;
+            project.image = PatternImage(8, 8, 1, render::TexelEncoding::Unorm16, 1);
+            reason(gpu.Project(project));
+            BlendOp raw;
+            raw.dst = *f;
+            raw.acc = Operand::Constant({0.0f, 0.0f, 0.0f}, 1.0f);
+            raw.source = Operand::Of(*g);
+            raw.rawOutput = true;
+            reason(gpu.Blend(raw));
+            BlendOp blend;
+            blend.dst = *a;
+            blend.acc = Operand::Constant({0.0f, 0.0f, 0.0f}, 1.0f);
+            blend.source = Operand::Of(*b);
+            reason(gpu.Blend(blend));
+            render::Result<void> flushed = gpu.Flush();
+            gpu.EndRequest();
+            if (!flushed) return render::Unexpected(flushed.error());
+            return reasons;
+        });
+    render::Result<std::vector<std::string>> reasons = Get(future);
+    Check(reasons.has_value(), "the Vulkan request runs", reasons ? "" : reasons.error().Describe());
+    if (!reasons) return Finish();
+    const char* kernels[4] = {"the Levels kernel", "the virtual normal kernel", "the UV projection kernel",
+                              "the raw blend kernel"};
+    for (size_t i = 0; i < 4; ++i) {
+        const std::string& got = (*reasons)[i];
+        Check(got.find(kernels[i]) != std::string::npos &&
+                  got.find("not yet verified bit for bit on Vulkan") != std::string::npos &&
+                  got.find("unsupported_node") != std::string::npos,
+              std::string(kernels[i]) + " is refused on Vulkan by name", got);
+    }
+    Check((*reasons)[4] == "accepted", "a blend is accepted on Vulkan", (*reasons)[4]);
+    return Finish();
+}
+
 int RunKernelSweep(const fs::path& assets, const fs::path& dir) {
     (void)assets;
     render::Engine engine(TestOptions(dir));
     if (NoAdapter(engine)) return kExitSkip;
     Info("adapter " + engine.Capabilities().value_or(render::CapabilityReport{}).adapter);
+    std::optional<render::Engine> dx12;
+    if (g_vulkan) {
+        render::EngineOptions options;
+        options.kernelCacheRoot = dir / "kernel-cache";
+        dx12.emplace(options);
+        if (dx12->DeviceError()) {
+            Check(false, "the DX12 engine of the Vulkan sweep starts", dx12->DeviceError()->Describe());
+            return Finish();
+        }
+    }
     const std::vector<BlendingMode> modes = KernelModes();
     constexpr uint32_t kSize = 256;
     auto token = std::make_shared<const int>(0);
     size_t compared = 0;
     size_t combinations = 0;
     std::vector<std::string> failures;
+    std::vector<std::string> dx12Failures;
+    std::set<std::string> subnormalKernels;
+    size_t subnormalCpuMismatches = 0;
+    const auto onGpu = [&](render::Engine& on, const TileFormat& format, const DecodedImage& accImage,
+                           const DecodedImage& srcImage, bool alpha, BlendingMode mode, float opacity) {
+        // Each combination is its own engine request (the deadline is per request).
+        std::future<render::Result<std::vector<uint32_t>>> future = on.Submit(
+            token, [&](render::EngineContext& context, const int&) -> render::Result<std::vector<uint32_t>> {
+                GpuTileStore gpu(context.Device());
+                gpu.BeginRequest(context);
+                render::Result<std::vector<uint32_t>> result =
+                    SweepBlend(gpu, format, accImage, srcImage, alpha, mode, opacity);
+                render::Result<void> flushed = gpu.Flush();
+                gpu.EndRequest();
+                if (result && !flushed) return render::Unexpected(flushed.error());
+                return result;
+            });
+        return Get(future);
+    };
+    const auto combination = [&](const TileFormat& format, const DecodedImage& accImage, const DecodedImage& srcImage,
+                                 bool alpha, BlendingMode mode, float opacity, const std::string& label,
+                                 bool subnormal) {
+        ++combinations;
+        CpuTileStore cpu;
+        render::Result<std::vector<uint32_t>> expected =
+            SweepBlend(cpu, format, accImage, srcImage, alpha, mode, opacity);
+        if (!expected) {
+            failures.push_back(label + " (cpu): " + expected.error().Describe());
+            return;
+        }
+        render::Result<std::vector<uint32_t>> actual = onGpu(engine, format, accImage, srcImage, alpha, mode, opacity);
+        if (!actual) {
+            failures.push_back(label + " (gpu): " + actual.error().Describe());
+            return;
+        }
+        std::string first;
+        const size_t mismatches = Mismatches(*expected, *actual, first, format.encoding);
+        compared += expected->size();
+        if (mismatches != 0 && subnormal) {
+            // Known and reported, not hidden: DX12 flushes these too (the comparison with DX12
+            // below stays strict), decision 313.
+            ++subnormalCpuMismatches;
+            subnormalKernels.insert(std::string(core::ToString(mode)));
+        } else if (mismatches != 0) {
+            failures.push_back(label + ": " + std::to_string(mismatches) + " mismatches; " + first);
+        }
+        if (!dx12) return;
+        render::Result<std::vector<uint32_t>> reference = onGpu(*dx12, format, accImage, srcImage, alpha, mode, opacity);
+        if (!reference) {
+            dx12Failures.push_back(label + " (dx12): " + reference.error().Describe());
+            return;
+        }
+        std::string firstDx12;
+        const size_t differing = Mismatches(*reference, *actual, firstDx12, format.encoding);
+        if (differing != 0) dx12Failures.push_back(label + ": " + std::to_string(differing) + " differ from DX12; " + firstDx12);
+    };
+    const auto name = [](BlendingMode mode, ChannelFormat channelFormat, bool alpha, float opacity) {
+        return std::string(core::ToString(mode)) + " on " + std::string(core::ToString(channelFormat)) +
+               (alpha ? " (coverage)" : "") + " opacity " + std::to_string(opacity);
+    };
     for (const ChannelFormat channelFormat : kAllFormats) {
         for (const bool alpha : {false, true}) {
             const TileFormat format = TileFormatOf(channelFormat, alpha);
@@ -2606,50 +2866,49 @@ int RunKernelSweep(const fs::path& assets, const fs::path& dir) {
             std::shared_ptr<DecodedImage> srcImage = SweepImage(imageFormat, false, kSize);
             for (const BlendingMode mode : modes) {
                 for (const float opacity : {1.0f, 0.7f}) {
-                    ++combinations;
-                    const std::string label = std::string(core::ToString(mode)) + " on " +
-                                              std::string(core::ToString(channelFormat)) +
-                                              (alpha ? " (coverage)" : "") + " opacity " +
-                                              std::to_string(opacity);
-                    CpuTileStore cpu;
-                    render::Result<std::vector<uint32_t>> expected =
-                        SweepBlend(cpu, format, *accImage, *srcImage, alpha, mode, opacity);
-                    if (!expected) {
-                        failures.push_back(label + " (cpu): " + expected.error().Describe());
-                        continue;
-                    }
-                    // Each combination is its own engine request (the deadline is per request).
-                    std::future<render::Result<std::vector<uint32_t>>> future = engine.Submit(
-                        token, [&](render::EngineContext& context, const int&)
-                                   -> render::Result<std::vector<uint32_t>> {
-                            GpuTileStore gpu(context.Device());
-                            gpu.BeginRequest(context);
-                            render::Result<std::vector<uint32_t>> result =
-                                SweepBlend(gpu, format, *accImage, *srcImage, alpha, mode, opacity);
-                            render::Result<void> flushed = gpu.Flush();
-                            gpu.EndRequest();
-                            if (result && !flushed) return render::Unexpected(flushed.error());
-                            return result;
-                        });
-                    render::Result<std::vector<uint32_t>> actual = Get(future);
-                    if (!actual) {
-                        failures.push_back(label + " (gpu): " + actual.error().Describe());
-                        continue;
-                    }
-                    std::string first;
-                    const size_t mismatches = Mismatches(*expected, *actual, first, format.encoding);
-                    compared += expected->size();
-                    if (mismatches != 0) {
-                        failures.push_back(label + ": " + std::to_string(mismatches) + " mismatches; " + first);
-                    }
+                    combination(format, *accImage, *srcImage, alpha, mode, opacity,
+                                name(mode, channelFormat, alpha, opacity), false);
+                }
+            }
+        }
+    }
+    // Subnormal float32 operands, on Vulkan only (decision 313: the RTX 4090 reports
+    // `shaderDenormPreserveFloat32 = false`): Vulkan must equal DX12 bit for bit on them.
+    size_t subnormalCombinations = 0;
+    for (const ChannelFormat channelFormat : {ChannelFormat::L32F, ChannelFormat::RGB32F}) {
+        if (!g_vulkan) break;
+        for (const bool alpha : {false, true}) {
+            const TileFormat format = TileFormatOf(channelFormat, alpha);
+            TileFormat imageFormat = format;
+            imageFormat.alpha = false;
+            std::shared_ptr<DecodedImage> accImage = SubnormalImage(imageFormat, true, kSize);
+            std::shared_ptr<DecodedImage> srcImage = SubnormalImage(imageFormat, false, kSize);
+            for (const BlendingMode mode : modes) {
+                for (const float opacity : {1.0f, 0.7f}) {
+                    ++subnormalCombinations;
+                    combination(format, *accImage, *srcImage, alpha, mode, opacity,
+                                name(mode, channelFormat, alpha, opacity) + " (subnormal operands)", true);
                 }
             }
         }
     }
     for (const std::string& failure : failures) Check(false, "kernel sweep", failure);
+    std::string kernels;
+    for (const std::string& kernel : subnormalKernels) kernels += (kernels.empty() ? "" : ", ") + kernel;
+    if (!kernels.empty()) {
+        Info("KNOWN: " + std::to_string(subnormalCpuMismatches) + " of " + std::to_string(subnormalCombinations) +
+             " combinations with subnormal float32 operands differ from the CPU reference on this GPU, which "
+             "flushes them on DX12 and Vulkan alike (decision 313); blend modes: " + kernels);
+    }
     Check(failures.empty(),
           "every blend mode x channel format (with and without coverage) equals the CPU reference bit for bit (" +
-              std::to_string(compared) + " samples, " + std::to_string(combinations) + " combinations)");
+              std::to_string(compared) + " samples, " + std::to_string(combinations - subnormalCombinations) +
+              " combinations; the subnormal-operand combinations are compared with DX12)");
+    if (dx12) {
+        for (const std::string& failure : dx12Failures) Check(false, "kernel sweep vs DX12", failure);
+        Check(dx12Failures.empty(), "every Vulkan result equals the DX12 result bit for bit (" +
+                                        std::to_string(combinations) + " combinations)");
+    }
     return Finish();
 }
 
@@ -8479,12 +8738,17 @@ int RunPersistent(const fs::path& assets, const fs::path& dir) {
 }  // namespace
 
 int main(int argc, char** argv) {
-    const std::string_view mode = argc > 1 ? argv[1] : "";
+    std::string_view mode = argc > 1 ? argv[1] : "";
+    // `vulkan-<case>`: a GPU case on the qualified Vulkan device (decision 313).
+    if (mode == "vulkan-kernel-sweep") {
+        g_vulkan = true;
+        mode = "kernel-sweep";
+    }
     if (argc < 3) {
         std::fprintf(stderr,
                      "usage: uzp-evaluator-tests arith|templates|order|cache|admission|sources|masks|height-normal|"
                      "not-yet-supported <assets-dir> | "
-                     "evaluate <assets-dir> <spec.json> <out-dir> cpu|gpu | gpu-vs-cpu|kernel-sweep|"
+                     "evaluate <assets-dir> <spec.json> <out-dir> cpu|gpu | gpu-vs-cpu|kernel-sweep|vulkan-kernel-spirv|vulkan-kernel-sweep|vulkan-refusals|"
                      "projection-gpu-vs-cpu|srgb8-hardware|fp-hardware|pow-hardware|trig-hardware|bilinear-hardware|texture-unit|masks-gpu-vs-cpu|"
                      "height-normal-gpu-vs-cpu|diagnostics|diagnostics-gpu-vs-cpu|persistent|tables <assets-dir> <work-dir> | "
                      "uv-coverage <assets-dir> <work-dir> <mesh> <size>\n");
@@ -8529,6 +8793,8 @@ int main(int argc, char** argv) {
         uz::LogSuppressConsole();
         if (mode == "gpu-vs-cpu") code = RunGpuVsCpu(assets, dir);
         else if (mode == "kernel-sweep") code = RunKernelSweep(assets, dir);
+        else if (mode == "vulkan-kernel-spirv") code = RunVulkanKernelSpirv(dir);
+        else if (mode == "vulkan-refusals") code = RunVulkanRefusals(dir);
         else if (mode == "projection-gpu-vs-cpu") code = RunProjectionGpuVsCpu(assets, dir);
         else if (mode == "srgb8-hardware") code = RunSrgb8Hardware(dir);
         else if (mode == "tables") code = RunTables(dir);

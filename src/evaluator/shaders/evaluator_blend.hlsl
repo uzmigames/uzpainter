@@ -45,10 +45,21 @@
 #include "image_common.hlsli"
 #include "evaluator_tables.hlsli"
 
+#ifdef UZP_FIXED_SLOTS
+// Push constants on Vulkan (image_common.hlsli): each dispatch records its own.
+struct RootConstants {
+    uint paramsSrv;
+    uint block;
+};
+[[vk::push_constant]] RootConstants g_root;
+#define g_paramsSrv g_root.paramsSrv
+#define g_block g_root.block
+#else
 cbuffer Root : register(b0) {
     uint g_paramsSrv;
     uint g_block;
 };
+#endif
 
 #define P_WIDTH 0
 #define P_HEIGHT 1
@@ -86,8 +97,7 @@ static bool g_coverageWeights;
 static bool g_fusedReadout;
 
 uint TableWord(uint index) {
-    StructuredBuffer<uint> tables = ResourceDescriptorHeap[g_tables];
-    return tables[index];
+    return BufferWord(g_tables, index);
 }
 
 /// The SRV of the function tables (hwmath.h Values: log2, exp2, sin, cos at the offsets
@@ -95,8 +105,7 @@ uint TableWord(uint index) {
 static uint g_pow;
 
 uint PowWord(uint index) {
-    StructuredBuffer<uint> tables = ResourceDescriptorHeap[g_pow];
-    return tables[index];
+    return BufferWord(g_pow, index);
 }
 
 // v (exact in double) rounded toward zero to float32.
@@ -718,14 +727,13 @@ float StoreCoverage(float alpha) {
 #if !defined(UZP_LEVELS) && !defined(UZP_VNORMAL)
 [numthreads(8, 8, 1)]
 void main(uint3 id : SV_DispatchThreadID) {
-    StructuredBuffer<uint> params = ResourceDescriptorHeap[g_paramsSrv];
     const uint base = g_block * 32u;
-    const uint width = params[base + P_WIDTH];
-    const uint height = params[base + P_HEIGHT];
+    const uint width = BufferWord(g_paramsSrv, base + P_WIDTH);
+    const uint height = BufferWord(g_paramsSrv, base + P_HEIGHT);
     if (id.x >= width || id.y >= height) return;
-    const uint flags = params[base + P_FLAGS];
-    g_tables = params[base + P_TABLE16_SRV];
-    g_pow = params[base + P_POW_SRV];
+    const uint flags = BufferWord(g_paramsSrv, base + P_FLAGS);
+    g_tables = BufferWord(g_paramsSrv, base + P_TABLE16_SRV);
+    g_pow = BufferWord(g_paramsSrv, base + P_POW_SRV);
     g_effectMix = (flags & FLAG_EFFECT_MIX) != 0u;
     g_coverageWeights = (flags & FLAG_COVERAGE_WEIGHTS) != 0u && (flags & FLAG_EMPTY_BACKDROP) == 0u;
     g_fusedReadout = (flags & FLAG_FUSED_READOUT) != 0u;
@@ -733,25 +741,25 @@ void main(uint3 id : SV_DispatchThreadID) {
 
     float4 acc;
     if (flags & FLAG_ACC_TILE) {
-        acc = LoadOperand(params[base + P_ACC_INDEX], p, (flags & FLAG_ACC_ALPHA) != 0u);
+        acc = LoadOperand(BufferWord(g_paramsSrv, base + P_ACC_INDEX), p, (flags & FLAG_ACC_ALPHA) != 0u);
     } else {
-        acc = float4(asfloat(params[base + P_ACC_CONST]), asfloat(params[base + P_ACC_CONST + 1]),
-                     asfloat(params[base + P_ACC_CONST + 2]), asfloat(params[base + P_ACC_CONST + 3]));
+        acc = float4(asfloat(BufferWord(g_paramsSrv, base + P_ACC_CONST)), asfloat(BufferWord(g_paramsSrv, base + P_ACC_CONST + 1)),
+                     asfloat(BufferWord(g_paramsSrv, base + P_ACC_CONST + 2)), asfloat(BufferWord(g_paramsSrv, base + P_ACC_CONST + 3)));
     }
     float4 src;
     if (flags & FLAG_SRC_TILE) {
-        src = LoadOperand(params[base + P_SRC_INDEX], p, (flags & FLAG_SRC_ALPHA) != 0u);
+        src = LoadOperand(BufferWord(g_paramsSrv, base + P_SRC_INDEX), p, (flags & FLAG_SRC_ALPHA) != 0u);
     } else {
-        src = float4(asfloat(params[base + P_SRC_CONST]), asfloat(params[base + P_SRC_CONST + 1]),
-                     asfloat(params[base + P_SRC_CONST + 2]), asfloat(params[base + P_SRC_CONST + 3]));
+        src = float4(asfloat(BufferWord(g_paramsSrv, base + P_SRC_CONST)), asfloat(BufferWord(g_paramsSrv, base + P_SRC_CONST + 1)),
+                     asfloat(BufferWord(g_paramsSrv, base + P_SRC_CONST + 2)), asfloat(BufferWord(g_paramsSrv, base + P_SRC_CONST + 3)));
     }
     float mask;
     if (flags & FLAG_MASK_TILE) {
-        mask = LoadMask(params[base + P_MASK_INDEX], p, params[base + P_MASK_ENC]);
+        mask = LoadMask(BufferWord(g_paramsSrv, base + P_MASK_INDEX), p, BufferWord(g_paramsSrv, base + P_MASK_ENC));
     } else {
-        mask = asfloat(params[base + P_MASK_CONST]);
+        mask = asfloat(BufferWord(g_paramsSrv, base + P_MASK_CONST));
     }
-    const float opacity = asfloat(params[base + P_OPACITY]);
+    const float opacity = asfloat(BufferWord(g_paramsSrv, base + P_OPACITY));
     const float opacityMask = opacity * mask;
     const float alphaS = opacityMask * src.w;
     const float alphaB = acc.w;
@@ -791,7 +799,7 @@ void main(uint3 id : SV_DispatchThreadID) {
 #else
     result.w = StoreCoverage(1.0f);
 #endif
-    StoreTexel(params[base + P_DST_UAV], p, result);
+    StoreTexel(BufferWord(g_paramsSrv, base + P_DST_UAV), p, result);
 }
 #endif
 
@@ -841,16 +849,15 @@ float HwExp2(float y) {
 }
 
 float Levels(float v, uint at) {
-    StructuredBuffer<uint> params = ResourceDescriptorHeap[g_paramsSrv];
-    const float inMin = asfloat(params[at]);
-    const float inMax = asfloat(params[at + 1u]);
-    const float gamma = asfloat(params[at + 2u]);
-    const float outMin = asfloat(params[at + 3u]);
-    const float outMax = asfloat(params[at + 4u]);
+    const float inMin = asfloat(BufferWord(g_paramsSrv, at));
+    const float inMax = asfloat(BufferWord(g_paramsSrv, at + 1u));
+    const float gamma = asfloat(BufferWord(g_paramsSrv, at + 2u));
+    const float outMin = asfloat(BufferWord(g_paramsSrv, at + 3u));
+    const float outMax = asfloat(BufferWord(g_paramsSrv, at + 4u));
     const float range = inMax - inMin;
     const float d = v - inMin;
     float t = d * HwRcp(range);
-    if (params[at + 5u] != 0u) t = Clamp01(t);
+    if (BufferWord(g_paramsSrv, at + 5u) != 0u) t = Clamp01(t);
     if (gamma != 1.0f) {
         const float l = HwLog2(abs(t));
         const float product = gamma * l;
@@ -863,16 +870,15 @@ float Levels(float v, uint at) {
 
 [numthreads(8, 8, 1)]
 void main(uint3 id : SV_DispatchThreadID) {
-    StructuredBuffer<uint> params = ResourceDescriptorHeap[g_paramsSrv];
     const uint base = g_block * 32u;
-    const uint width = params[base + L_WIDTH];
-    const uint height = params[base + L_HEIGHT];
+    const uint width = BufferWord(g_paramsSrv, base + L_WIDTH);
+    const uint height = BufferWord(g_paramsSrv, base + L_HEIGHT);
     if (id.x >= width || id.y >= height) return;
-    g_tables = params[base + L_TABLE16_SRV];
-    g_pow = params[base + L_POW_SRV];
+    g_tables = BufferWord(g_paramsSrv, base + L_TABLE16_SRV);
+    g_pow = BufferWord(g_paramsSrv, base + L_POW_SRV);
     const int2 p = int2(id.xy);
-    const bool hasAlpha = params[base + L_SRC_ALPHA] != 0u;
-    const float4 v = LoadOperand(params[base + L_SRC], p, hasAlpha);
+    const bool hasAlpha = BufferWord(g_paramsSrv, base + L_SRC_ALPHA) != 0u;
+    const float4 v = LoadOperand(BufferWord(g_paramsSrv, base + L_SRC), p, hasAlpha);
     float4 result = float4(0.0f, 0.0f, 0.0f, 1.0f);
     result.x = StoreChannel(Levels(v.x, base + L_COMPONENTS));
 #if UZP_CHANNELS == 3
@@ -884,7 +890,7 @@ void main(uint3 id : SV_DispatchThreadID) {
 #else
     result.w = StoreCoverage(1.0f);
 #endif
-    StoreTexel(params[base + L_DST_UAV], p, result);
+    StoreTexel(BufferWord(g_paramsSrv, base + L_DST_UAV), p, result);
 }
 #endif
 
@@ -955,11 +961,10 @@ float3 ChannelNormal(float3 x, float a) {
 
 // The height at (x, y) of the tile's frame, read from the neighbouring tile across an edge.
 float HeightAt(uint base, uint flags, int x, int y, int width, int height) {
-    StructuredBuffer<uint> params = ResourceDescriptorHeap[g_paramsSrv];
-    if ((flags & V_FLAG_HEIGHT_TILES) == 0u) return asfloat(params[base + V_HEIGHT_CONST]);
+    if ((flags & V_FLAG_HEIGHT_TILES) == 0u) return asfloat(BufferWord(g_paramsSrv, base + V_HEIGHT_CONST));
     const int ox = x < 0 ? -1 : (x >= width ? 1 : 0);
     const int oy = y < 0 ? -1 : (y >= height ? 1 : 0);
-    const uint srv = params[base + V_HEIGHT_SRV + uint((oy + 1) * 3 + ox + 1)];
+    const uint srv = BufferWord(g_paramsSrv, base + V_HEIGHT_SRV + uint((oy + 1) * 3 + ox + 1));
     return LoadTexel(srv, int2(x - ox * width, y - oy * height)).x;
 }
 
@@ -968,13 +973,12 @@ float Smooth(float a, float b, float c) { return (a + 2.0f * b) + c; }
 
 [numthreads(8, 8, 1)]
 void main(uint3 id : SV_DispatchThreadID) {
-    StructuredBuffer<uint> params = ResourceDescriptorHeap[g_paramsSrv];
     const uint base = g_block * 32u;
-    const int width = int(params[base + V_WIDTH]);
-    const int height = int(params[base + V_HEIGHT]);
+    const int width = int(BufferWord(g_paramsSrv, base + V_WIDTH));
+    const int height = int(BufferWord(g_paramsSrv, base + V_HEIGHT));
     if (int(id.x) >= width || int(id.y) >= height) return;
-    const uint flags = params[base + V_FLAGS];
-    g_tables = params[base + V_TABLE16_SRV];
+    const uint flags = BufferWord(g_paramsSrv, base + V_FLAGS);
+    g_tables = BufferWord(g_paramsSrv, base + V_TABLE16_SRV);
     const int x = int(id.x);
     const int y = int(id.y);
     float h[9];
@@ -989,21 +993,21 @@ void main(uint3 id : SV_DispatchThreadID) {
         const float right = Smooth(h[2], h[5], h[8]);
         const float top = Smooth(h[0], h[1], h[2]);
         const float bottom = Smooth(h[6], h[7], h[8]);
-        v = float3(left - right, bottom - top, asfloat(params[base + V_Z]));
+        v = float3(left - right, bottom - top, asfloat(BufferWord(g_paramsSrv, base + V_Z)));
     } else {
-        v = float3(h[3] - h[4], h[4] - h[1], asfloat(params[base + V_Z]));
+        v = float3(h[3] - h[4], h[4] - h[1], asfloat(BufferWord(g_paramsSrv, base + V_Z)));
     }
-    g_pow = params[base + V_POW_SRV];
+    g_pow = BufferWord(g_paramsSrv, base + V_POW_SRV);
     float4 channel;
     if ((flags & V_FLAG_NORMAL_TILE) != 0u) {
-        channel = LoadOperand(params[base + V_NORMAL_SRV], int2(x, y), true);
+        channel = LoadOperand(BufferWord(g_paramsSrv, base + V_NORMAL_SRV), int2(x, y), true);
     } else {
-        channel = float4(asfloat(params[base + V_NORMAL_CONST]), asfloat(params[base + V_NORMAL_CONST + 1]),
-                         asfloat(params[base + V_NORMAL_CONST + 2]), asfloat(params[base + V_NORMAL_COVERAGE]));
+        channel = float4(asfloat(BufferWord(g_paramsSrv, base + V_NORMAL_CONST)), asfloat(BufferWord(g_paramsSrv, base + V_NORMAL_CONST + 1)),
+                         asfloat(BufferWord(g_paramsSrv, base + V_NORMAL_CONST + 2)), asfloat(BufferWord(g_paramsSrv, base + V_NORMAL_COVERAGE)));
     }
     float3 mesh = float3(0.0f, 0.0f, 1.0f);
     if ((flags & V_FLAG_MESH_TILE) != 0u) {
-        mesh = DecodeNormal(LoadTexel(params[base + V_MESH_SRV], int2(x, y)).xyz);
+        mesh = DecodeNormal(LoadTexel(BufferWord(g_paramsSrv, base + V_MESH_SRV), int2(x, y)).xyz);
         if ((flags & V_FLAG_MESH_DIRECTX) != 0u) mesh.y = -mesh.y;
     }
     const float3 heightNormal = Normalise(v);
@@ -1014,6 +1018,6 @@ void main(uint3 id : SV_DispatchThreadID) {
     result.x = StoreChannel(result.x);
     result.y = StoreChannel(result.y);
     result.z = StoreChannel(result.z);
-    StoreTexel(params[base + V_DST_UAV], int2(x, y), result);
+    StoreTexel(BufferWord(g_paramsSrv, base + V_DST_UAV), int2(x, y), result);
 }
 #endif

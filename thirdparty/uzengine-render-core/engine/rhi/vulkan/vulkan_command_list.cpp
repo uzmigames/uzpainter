@@ -1,4 +1,4 @@
-// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-011, UZP-MOD-012. Original: UzEngine runtime/engine/rhi/vulkan/vulkan_command_list.cpp at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-011, UZP-MOD-012, UZP-MOD-013. Original: UzEngine runtime/engine/rhi/vulkan/vulkan_command_list.cpp at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
 
 /// Vulkan Command List Implementation
 ///
@@ -228,6 +228,8 @@ void VulkanCommandList::Begin() {
 
     m_descriptorsDirty = false;
     m_writtenBindingsMask = 0;
+    m_writtenStorageBuffersMask = 0;  // UZP-MOD-013
+    m_descriptorSetFailures = 0;      // UZP-MOD-013
     m_computePipelineBound = false;
 }
 
@@ -674,6 +676,63 @@ void VulkanCommandList::SetFragmentTexture(uint32_t slot, RHITextureHandle textu
     m_descriptorsDirty = true;
 }
 
+void VulkanCommandList::SetComputeSampledImage(uint32_t slot, RHITextureHandle texture) {
+    // UZP-MOD-013: a sampled image alone; SetFragmentTexture also writes a sampler at 16+slot,
+    // which is an immutable-sampler binding for slots 0..3.
+    if (slot >= 16) {
+        UZ_LOG(RHI, Warning, "SetComputeSampledImage: slot {} exceeds the 16 sampled-image bindings", slot);
+        return;
+    }
+    auto* tex = texture.IsValid() ? m_device->GetTexturePool().Get(texture.index, texture.generation) : nullptr;
+    if (!tex || tex->imageView == VK_NULL_HANDLE) {
+        UZ_LOG(RHI, Warning, "SetComputeSampledImage: invalid texture at slot {}", slot);
+        return;
+    }
+    VkDescriptorImageInfo imageInfo = {};
+    imageInfo.imageView = tex->imageView;
+    imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    VkWriteDescriptorSet write = {};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = m_descriptorSets[m_frameIndex];
+    write.dstBinding = slot;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    write.pImageInfo = &imageInfo;
+    vkUpdateDescriptorSets(m_device->GetVkDevice(), 1, &write, 0, nullptr);
+    UZ_STAT_INCREMENT(RHI, VkDescriptorWrites);
+    m_writtenBindingsMask |= (uint64_t(1) << slot);
+    m_descriptorsDirty = true;
+}
+
+void VulkanCommandList::SetComputeStorageBuffer(uint32_t slot, RHIBufferHandle buffer) {
+    // UZP-MOD-013: the whole buffer at binding kStorageBufferBindingOffset + slot.
+    if (slot >= kMaxStorageBufferBindings) {
+        UZ_LOG(RHI, Warning, "SetComputeStorageBuffer: slot {} exceeds the {} storage-buffer bindings", slot,
+               kMaxStorageBufferBindings);
+        return;
+    }
+    auto* buf = buffer.IsValid() ? m_device->GetBufferPool().Get(buffer.index, buffer.generation) : nullptr;
+    if (!buf || buf->buffer == VK_NULL_HANDLE) {
+        UZ_LOG(RHI, Warning, "SetComputeStorageBuffer: invalid buffer at slot {}", slot);
+        return;
+    }
+    VkDescriptorBufferInfo bufferInfo = {};
+    bufferInfo.buffer = buf->buffer;
+    bufferInfo.offset = 0;
+    bufferInfo.range = VK_WHOLE_SIZE;
+    VkWriteDescriptorSet write = {};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = m_descriptorSets[m_frameIndex];
+    write.dstBinding = kStorageBufferBindingOffset + slot;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    write.pBufferInfo = &bufferInfo;
+    vkUpdateDescriptorSets(m_device->GetVkDevice(), 1, &write, 0, nullptr);
+    UZ_STAT_INCREMENT(RHI, VkDescriptorWrites);
+    m_writtenStorageBuffersMask |= (uint32_t(1) << slot);
+    m_descriptorsDirty = true;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Descriptor Set Flush
 // ─────────────────────────────────────────────────────────────────────────────
@@ -692,12 +751,15 @@ VkDescriptorSet VulkanCommandList::AllocateAndCopyDescriptorSet() {
     if (result != VK_SUCCESS) {
         UZ_LOG(RHI, Error, "AllocateAndCopyDescriptorSet: allocation failed, result={}",
                static_cast<int>(result));
+        ++m_descriptorSetFailures;  // UZP-MOD-013: read back through DescriptorSetFailures()
         return m_descriptorSets[m_frameIndex]; // fallback to shared set
     }
 
     // Track for bulk-free at frame start
     if (m_allocatedSetCount < kMaxDescriptorSetsPerFrame) {
         m_allocatedSets[m_allocatedSetCount++] = newSet;
+    } else {
+        ++m_descriptorSetFailures;  // UZP-MOD-013: an untracked set is never freed
     }
 
     // Copy only bindings that were actually written to the working set this frame.
@@ -715,6 +777,19 @@ VkDescriptorSet VulkanCommandList::AllocateAndCopyDescriptorSet() {
         const uint32_t i = static_cast<uint32_t>(__builtin_ctzll(mask));
         mask &= mask - 1; // clear lowest set bit
         if (i == kImmutableS0 || i == kImmutableS1) continue;
+        copies[copyCount].sType           = VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET;
+        copies[copyCount].srcSet          = m_descriptorSets[m_frameIndex];
+        copies[copyCount].srcBinding      = i;
+        copies[copyCount].dstSet          = newSet;
+        copies[copyCount].dstBinding      = i;
+        copies[copyCount].descriptorCount = 1;
+        ++copyCount;
+    }
+    // UZP-MOD-013: the storage-buffer bindings written since Begin.
+    uint32_t storageMask = m_writtenStorageBuffersMask;
+    while (storageMask) {
+        const uint32_t i = kStorageBufferBindingOffset + static_cast<uint32_t>(__builtin_ctz(storageMask));
+        storageMask &= storageMask - 1;
         copies[copyCount].sType           = VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET;
         copies[copyCount].srcSet          = m_descriptorSets[m_frameIndex];
         copies[copyCount].srcBinding      = i;

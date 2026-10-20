@@ -58,12 +58,14 @@ inline constexpr uint32_t kSpirvCapabilityStorageImageWriteWithoutFormat = 56;
 inline constexpr uint32_t kSpirvCapabilitySignedZeroInfNanPreserve = 4466;
 inline constexpr uint32_t kSpirvCapabilityShader = 1;
 
-/// What a SPIR-V module declares: its capabilities, storage-image formats and `NoContraction`
-/// decorations.
+/// What a SPIR-V module declares: its capabilities, storage-image formats, `NoContraction`
+/// decorations and descriptor bindings.
 struct SpirvFacts {
     std::vector<uint32_t> capabilities;  ///< `OpCapability` operands, in module order.
     std::vector<uint32_t> imageFormats;  ///< `OpTypeImage` formats, in module order.
     uint32_t noContraction = 0;
+    std::vector<uint32_t> descriptorSets;  ///< `DescriptorSet` decoration operands, in module order.
+    std::vector<uint32_t> bindings;        ///< `Binding` decoration operands, in module order.
 
     [[nodiscard]] bool HasCapability(uint32_t capability) const;
     /// The capabilities outside `Shader`, `StorageImageExtendedFormats` and

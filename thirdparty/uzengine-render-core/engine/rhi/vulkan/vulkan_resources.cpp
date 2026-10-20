@@ -1,3 +1,5 @@
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-013. Original: UzEngine runtime/engine/rhi/vulkan/vulkan_resources.cpp at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+
 /// Vulkan Resource Operations — Buffer, Texture, Shader, Pipeline, Sampler
 ///
 /// Split from vulkan_device.cpp to keep file sizes under ~1000 lines.
@@ -174,9 +176,15 @@ void* VulkanDevice::MapBuffer(RHIBufferHandle handle) {
     return data;
 }
 
-void VulkanDevice::UnmapBuffer(RHIBufferHandle /*handle*/) {
+void VulkanDevice::UnmapBuffer(RHIBufferHandle handle) {
     // All mappable Vulkan buffers use VMA_ALLOCATION_CREATE_MAPPED_BIT (persistent mapping).
     // Explicit unmap is not needed — VMA manages the mapping lifetime.
+    // UZP-MOD-013: the host writes are flushed, so the GPU sees them on memory that is not
+    // HOST_COHERENT too (a no-op on coherent memory).
+    VulkanBuffer* buf = m_bufferPool.Get(handle.index, handle.generation);
+    if (buf && buf->allocation && buf->desc.memory != RHIMemoryType::Default) {
+        vmaFlushAllocation(m_allocator, buf->allocation, 0, VK_WHOLE_SIZE);
+    }
 }
 
 uint32_t VulkanDevice::GetBufferSRVIndex(RHIBufferHandle handle) const {

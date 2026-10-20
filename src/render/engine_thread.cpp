@@ -65,7 +65,8 @@ void Engine::Stop() {
 }
 
 void Engine::ThreadMain(std::promise<void> started) {
-    Result<std::unique_ptr<IDevice>> device = CreateDevice(m_options.device);
+    Result<std::unique_ptr<IDevice>> device =
+        m_options.createDevice ? m_options.createDevice() : CreateDevice(m_options.device);
     if (device) {
         m_device = std::move(*device);
     } else {

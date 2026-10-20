@@ -4,7 +4,9 @@
 // are the generated kernels (kernelgen.h) dispatched in batches, uploads are buffer-to-texture
 // copies and reads go through `TextureReadback`. Operations are queued and run by `Flush` as one
 // submission, in queue order: the parameter blocks of the queued dispatches are written to one
-// arena buffer, copied to the GPU and read by the kernels through the descriptor heap. Bitmaps
+// arena buffer, copied to the GPU and read by the kernels through the descriptor heap (DX12) or
+// a fixed slot (Vulkan, render/kernel_bindings.h); a device that bounds the dispatches of one
+// submission (`IDevice::MaxDispatchesPerSubmission`) gets several submissions in order. Bitmaps
 // sampled by projections are kept in VRAM as packed code buffers keyed by (resource hash,
 // encoding), uploaded once and reused across tiles and requests up to `kBitmapCacheBytes`; a
 // minified bitmap adds its float32 mip chain and the texture unit's tables (texture_unit.h) to
@@ -16,6 +18,7 @@
 #include "evaluator/kernelgen.h"
 #include "evaluator/tile_store.h"
 #include "render/engine_thread.h"
+#include "render/kernel_bindings.h"
 
 #include <cstdint>
 #include <string>
@@ -68,10 +71,13 @@ private:
         uint32_t rowPitch = 0;
         uz::RHITextureHandle texture = uz::RHITextureHandle::Invalid();
     };
-    /// A queued kernel dispatch (a blend or a projection): its parameter block, the tile it
-    /// writes and the tiles it reads.
+    /// A queued kernel dispatch (a blend or a projection): its parameter block, the names of the
+    /// resources it binds (heap indices on DX12, slots on Vulkan), the tile it writes and the
+    /// tiles it reads.
     struct PendingDispatch {
+        explicit PendingDispatch(render::IDevice& device) : bindings(device) {}
         render::ComputeKernel kernel;
+        render::KernelBindings bindings;
         std::array<uint32_t, kBlendParamsStride> params{};
         uint32_t groupsX = 0;
         uint32_t groupsY = 0;

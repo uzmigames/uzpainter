@@ -149,7 +149,8 @@ struct VulkanFormatRequirement {
     uint32_t optimalTilingFeatures;   ///< `VkFormatFeatureFlags` every one of which is needed.
     const char* why;
 };
-/// The formats the qualification kernels write as storage images and copy to a buffer.
+/// The formats the qualification kernels write as storage images and copy to a buffer, and the
+/// compositor's tile formats (sampled, stored, uploaded and read back; decision 313).
 [[nodiscard]] const std::vector<VulkanFormatRequirement>& VulkanRequiredFormats();
 
 /// The formats the capability record lists (the required ones, then the compositor's channel

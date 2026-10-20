@@ -333,6 +333,34 @@ def test_vulkan_entry_points_match_the_enabled_extensions(build: Build, tmp_path
     } <= passed
 
 
+# ── UZP-MOD-013 ───────────────────────────────────────────────────────────────────────────
+
+
+def test_vulkan_compute_bindings_in_the_fixed_slot_layout() -> None:
+    """UZP-MOD-013: the Vulkan descriptor set layout has 16 compute storage-buffer bindings at
+    64..79 (not update-after-bind) that snapshots copy; compute sampled images and storage buffers
+    are written alone; a snapshot that is not allocated is counted for the caller; 64-bit floats
+    and integers are enabled when supported; unmapping flushes host writes. The kernels that use
+    them run in `uzp-evaluator-tests vulkan-kernel-spirv` and the Vulkan sweeps (decision 313)."""
+    vulkan = VENDORED / "engine" / "rhi" / "vulkan"
+    device = (vulkan / "vulkan_device.cpp").read_text(encoding="utf-8")
+    header = (vulkan / "vulkan_command_list.h").read_text(encoding="utf-8")
+    commands = (vulkan / "vulkan_command_list.cpp").read_text(encoding="utf-8")
+    resources = (vulkan / "vulkan_resources.cpp").read_text(encoding="utf-8")
+    assert "static constexpr uint32_t kStorageBufferBindingOffset = 64;" in header
+    assert "static constexpr uint32_t kTotalBindings = 80;" in header
+    assert "b.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;" in device
+    assert "+ kMaxStorageBufferBindings;  // UZP-MOD-013" in device
+    assert "deviceFeatures.shaderFloat64 = supported.shaderFloat64;" in device
+    assert "deviceFeatures.shaderInt64 = supported.shaderInt64;" in device
+    assert "void VulkanCommandList::SetComputeStorageBuffer(" in commands
+    assert "void VulkanCommandList::SetComputeSampledImage(" in commands
+    assert commands.count("++m_descriptorSetFailures;") == 2
+    assert "m_descriptorSetFailures = 0;" in commands
+    assert "uint32_t storageMask = m_writtenStorageBuffersMask;" in commands
+    assert "vmaFlushAllocation(m_allocator, buf->allocation, 0, VK_WHOLE_SIZE);" in resources
+
+
 # ── UZP-MOD-004 (3.4) ─────────────────────────────────────────────────────────────────────
 
 
@@ -467,7 +495,9 @@ def test_notices_log_and_manifest_agree() -> None:
     that exists, and its manifest entry carries the logged ids and its current hash."""
     log = load_log(REPO_ROOT)
     # UZP-MOD-007 (Vulkan acceleration structures) is planned for phase3.3 and not applied yet.
-    assert [m.id for m in log] == [f"UZP-MOD-{n:03d}" for n in (1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12)]
+    assert [m.id for m in log] == [
+        f"UZP-MOD-{n:03d}" for n in (1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13)
+    ]
     manifest = load(VENDORED / "MANIFEST.json")
     assert problems(REPO_ROOT, manifest, log) == []
     modified = {e.vendored_path for e in manifest.files if e.status == "modified"}

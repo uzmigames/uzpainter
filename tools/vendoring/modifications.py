@@ -541,6 +541,36 @@ UPSTREAM_CITATIONS: tuple[Citation, ...] = (
         r"VkPhysicalDeviceFeatures deviceFeatures = \{\};[\s\S]*samplerAnisotropy = VK_TRUE;",
         "only fillModeNonSolid and samplerAnisotropy are enabled",
     ),
+    # UZP-MOD-013
+    _cite(
+        "engine/rhi/vulkan/vulkan_device.cpp",
+        744,
+        747,
+        r"binding 0\.\.15  = SAMPLED_IMAGE[\s\S]*binding 48\.\.63 = STORAGE_IMAGE",
+        "the layout has no storage-buffer binding",
+    ),
+    _cite(
+        "engine/rhi/vulkan/vulkan_command_list.cpp",
+        688,
+        688,
+        r"return m_descriptorSets\[m_frameIndex\]; // fallback to shared set",
+        "a failed snapshot allocation silently binds the shared working set",
+    ),
+    _cite(
+        "engine/rhi/vulkan/vulkan_command_list.cpp",
+        657,
+        657,
+        r"writes\[1\]\.dstBinding = 16 \+ slot;",
+        "every texture binding also writes a sampler at 16 + slot",
+    ),
+    _cite(
+        "engine/rhi/vulkan/vulkan_resources.cpp",
+        177,
+        179,
+        r"void VulkanDevice::UnmapBuffer\(RHIBufferHandle /\*handle\*/\) \{[\s\S]*"
+        r"Explicit unmap is not needed",
+        "unmapping flushes nothing",
+    ),
     # Kept on purpose
     _cite(
         "engine/rhi/dx12/dx12_command_list.cpp",
