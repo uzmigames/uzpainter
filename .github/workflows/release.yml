@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  draft-release:
+    name: Build, package and draft the release
+    runs-on: windows-latest
+    timeout-minutes: 120
+    # Only this job may write: it creates the draft release and uploads its files.
+    permissions:
+      contents: write
+    env:
+      UZP_NO_GPU: "1"
+      TAG: ${{ github.ref_name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      # No cache: the release is built from an empty Zig cache.
+      - name: Zig 0.15.2
+        uses: mlugg/setup-zig@v2.2.1
+        with:
+          version: 0.15.2
+          use-cache: false
+
+      # The default build mode, the one the test suite verifies; the frozen release build mode
+      # belongs to phase5.2_packaging.
+      - name: zig build painter --prefix
+        shell: pwsh
+        run: zig build -j4 painter --prefix "$env:RUNNER_TEMP\UzPainter" --summary failures
+
+      - name: UzPainter.exe selftest --no-gpu (installed prefix)
+        shell: pwsh
+        run: '& "$env:RUNNER_TEMP\UzPainter\bin\UzPainter.exe" selftest --no-gpu --out-dir "$env:RUNNER_TEMP\selftest"'
+
+      - name: Package the prefix as a zip with its SHA-256
+        shell: pwsh
+        run: |
+          $zip = "UzPainter-$env:TAG-windows-x64.zip"
+          # ZipFile streams each file (Compress-Archive runs out of memory on large prefixes).
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [IO.Compression.ZipFile]::CreateFromDirectory("$env:RUNNER_TEMP\UzPainter", "$PWD\$zip", [IO.Compression.CompressionLevel]::Optimal, $false)
+          $hash = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
+          # sha256sum format with an LF line end, so `sha256sum -c` checks it on any system.
+          [IO.File]::WriteAllText("$PWD\$zip.sha256", "$hash  $zip`n")
+          Get-Content "$zip.sha256"
+          "ZIP=$zip" >> $env:GITHUB_ENV
+
+      # Draft only: nothing is published until the owner publishes it by hand.
+      - name: Create the draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $notes = @"
+          Draft built by .github/workflows/release.yml from $env:TAG ($env:GITHUB_SHA): ``zig build painter`` (Zig 0.15.2, Windows x64), CPU selftest passed.
+
+          Not for publication while the release blockers of docs/licensing-and-clean-room.md are open: RB-VCRT-TERMS, RB-AGILITY-TERMS, RB-DXC-DXIL, RB-WHEEL-NATIVE-NOTICES.
+
+          SHA-256: see $env:ZIP.sha256.
+          "@
+          gh release create $env:TAG $env:ZIP "$env:ZIP.sha256" --draft --verify-tag --title "UzPainter $env:TAG" --notes $notes
