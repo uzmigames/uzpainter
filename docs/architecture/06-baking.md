@@ -213,21 +213,21 @@ Publication is atomic per `(texture set, input revision)`: either all enabled us
 Three files implement this section on the CPU baker (phase3.3_baker-evidence-publication). They are native only: Python and MCP do not reach them yet, and every usage stays `pending-evidence`.
 
 **Accounting** (`bake_accounting.*`).
-- *The used surface.* A texel is used when its open square overlaps the interior of a low UV triangle with nonzero UV area. The baker records it in `BakeResult::used_surface`. Every sampled texel is in it; the other used texels are the ring.
-- *The seven classes,* counted per usage:
+- **The used surface.** A texel is used when its open square overlaps the interior of a low UV triangle with nonzero UV area. The baker records it in `BakeResult::used_surface`. Every sampled texel is in it; the other used texels are the ring.
+- **The seven classes,** counted per usage:
   - `hit_straight`, `hit_cage`;
   - `miss`: centre misses and back-face hits;
   - `hidden`: the `Hidden` class;
   - `ring_extended`: ring texels that AO's dilation wrote (`BakeResult::extension`);
   - `ring_no_hit_neighbour`: ring texels the map holds no value for, whatever the mask says;
   - `repaired`: always 0.
-- *The other counts.*
+- **The other counts.**
   - `padding_texels`: texels outside the used surface.
   - `changed_used_texels`: used texels whose map differs from RAW. A ring extension counts here, but it is not a modification: `surface_modified` means a fallback or a repair.
   - `parts[]`: counts per low part, by the part of each texel's first covered sub-sample. `z_negative_texels` (Normal only) counts hit texels whose RAW blue code is below 32768.
-- *The neutral fallback.* `BakeRequest::neutral_fallback` is off by default and Normal-only: it is refused with any other usage. It sets the used Normal texels without a hit to the flat normal (32768, 32768 or DirectX 32767, 65535). RAW is kept, and `fallback_texels` counts the texels it set.
-- *`fidelity_evidence`.* `diagnostic_only` for a diagnostic bake or a repair; `contains_fallback` when a fallback texel exists; otherwise `used_surface_as_baked`.
-- *Evidence files.* `EvidenceFiles` gives, per usage, `map`, `raw` (none for Thickness), `hit`, `coverage`, `miss` and `extension`, under `cache/bake/<key>/<Usage>/`. Integer maps are PNG files; float32 maps use the `UZPF32` evidence container. `WriteEvidence` writes them under a root. They are a pure function of the request and the result, so they regenerate byte for byte.
+- **The neutral fallback.** `BakeRequest::neutral_fallback` is off by default and Normal-only: it is refused with any other usage. It sets the used Normal texels without a hit to the flat normal (32768, 32768 or DirectX 32767, 65535). RAW is kept, and `fallback_texels` counts the texels it set.
+- **`fidelity_evidence`.** `diagnostic_only` for a diagnostic bake or a repair; `contains_fallback` when a fallback texel exists; otherwise `used_surface_as_baked`.
+- **Evidence files.** `EvidenceFiles` gives, per usage, `map`, `raw` (none for Thickness), `hit`, `coverage`, `miss` and `extension`, under `cache/bake/<key>/<Usage>/`. Integer maps are PNG files; float32 maps use the `UZPF32` evidence container. `WriteEvidence` writes them under a root. They are a pure function of the request and the result, so they regenerate byte for byte.
 
 **Receipt** (`bake_receipt.*`).
 - `BuildReceipt` fills every field above, the result-record header and `parity_status`.

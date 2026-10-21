@@ -39,6 +39,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
+        with:
+          # The revision check reads the commits and blobs approved-sources.md pins.
+          fetch-depth: 0
 
       - name: Python
         uses: actions/setup-python@v7.0.0
