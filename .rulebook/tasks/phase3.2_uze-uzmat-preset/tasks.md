@@ -1,5 +1,5 @@
 ## 1. Prerequisites
-- [ ] 1.1 Prerequisites accepted: `phase2.10_pilot-tunic-recovery` (parent input), `phase3.1_uze-uztexture-writer`
+- [x] 1.1 Prerequisites accepted: `phase2.10_pilot-tunic-recovery` (parent input), `phase3.1_uze-uztexture-writer` — recorded scope split, decision 344: phase3.1 is archived (decision 343); phase2.10 is NOT accepted, and its open items (Tunic fixture manifest, input inventory and preservation, MCP rebuild, dump-and-rebuild, Tier 1) are the Tunic's own inputs and parity, which this preset does not read
 
 ## 2. Implementation
 - [x] 2.1 `.uzmat` writer: `TextureSample → PBROutput` pins 0..6 and the inline scene-material block — `src/export/uzmat_writer.{h,cpp}`, independent byte writer; publication/preset integration remains open below

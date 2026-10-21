@@ -1,0 +1,14 @@
+{
+  "id": 344,
+  "slug": "344-uzmat-preset-prereq-split",
+  "title": "phase3.2_uze-uzmat-preset checks its prerequisite item 1.1 on a recorded scope split: phase2.10's open work is the Tunic's own inputs and parity, and phase3.1_uze-uztexture-writer is archived",
+  "status": "accepted",
+  "date": "2026-10-21",
+  "relatedTasks": [
+    "phase3.2_uze-uzmat-preset",
+    "phase2.10_pilot-tunic-recovery",
+    "phase3.1_uze-uztexture-writer",
+    "phase3.4_uzengine-preset"
+  ],
+  "supersededBy": null
+}
