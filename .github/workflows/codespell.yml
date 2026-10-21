@@ -2,30 +2,40 @@ name: Codespell
 
 on:
   push:
-    branches: [ master, main, develop ]
+    branches: [main]
   pull_request:
-    branches: [ master, main, develop ]
+    branches: [main]
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   codespell:
     name: Check for spelling errors
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7.0.1
+
+      - name: Python
+        uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.13"
 
       - name: Install Codespell
-        run: python -m pip install --upgrade 'codespell[toml]'
+        run: python -m pip install -c .github/ci-constraints.txt codespell
 
+      # Ignored words are code identifiers, domain terms and Portuguese words, not typos:
+      # fale and trama are Portuguese (a quoted owner answer, an asset layer name), nd is n·d in
+      # tests/bake, and trough is the English word (a groove profile in tests/preview).
       - name: Run Codespell
         run: |
           codespell \
             --skip="*.lock,*.json,*.map,*.yaml,*.yml,*.csv,*.bib,target,node_modules,.git,dist,venv,build,benchmarks,coverage,thirdparty,.zig-cache,zig-out,*.obj,*.exr,*.png,*.zlib" \
-            --ignore-words-list="crate,ser,deser,upToDate,optIn,shouldBe,Bloc,thirdparty,ue,lod,seh,mis,sav,dota,momento,variante,controle,comandos,atual,erros,kinf,unknwn,caf,paeth,datas,hastable,reenabled,reencode,fo,inout,plantext"
-          # MONOREPO NOTE: Add multilingual stopwords to ignore-words-list if needed
-          # Example: --ignore-words-list="crate,ser,deser,meu,oder,ist,alle" (Portuguese,German,etc)
-
+            --ignore-words-list="crate,ser,deser,upToDate,optIn,shouldBe,Bloc,thirdparty,ue,lod,seh,mis,sav,dota,momento,variante,controle,comandos,atual,erros,kinf,unknwn,caf,paeth,datas,hastable,reenabled,reencode,fo,inout,plantext,fale,trama,nd,trough"
