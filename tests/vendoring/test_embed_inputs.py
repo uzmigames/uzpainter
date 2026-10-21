@@ -134,7 +134,7 @@ def test_an_embed_outside_the_tracked_sources_fails_the_build(tmp_path: Path) ->
     if ZIG is None:
         pytest.skip("zig is not on PATH")
     root = tmp_path / "uzpainter"
-    _copy(root, ["build.zig", "build.zig.zon", "src"])
+    _copy(root, _package_paths())
     listed = _zig_build(root, tmp_path / "cache", "-l")
     assert listed.returncode == 0, listed.stderr[-4000:]
     (root / "src" / "untracked_embed.cpp").write_text(

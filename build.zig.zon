@@ -11,6 +11,7 @@
         "src",
         "tests/native",
         "tests/no_error_dialogs.h",
+        "assets/defaults/baking.json",
     },
     .dependencies = .{},
 }
