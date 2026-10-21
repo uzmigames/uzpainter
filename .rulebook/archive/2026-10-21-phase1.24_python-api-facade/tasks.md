@@ -21,3 +21,16 @@
 - [x] 5.1 Update or create documentation covering the implementation — decisions 115 and 116, `docs/architecture/03-project-model.md`, `10-python-api.md`, `src/python/PYAPI.md`, `python/FACADE.md`, the report
 - [x] 5.2 Write tests covering the new behavior
 - [x] 5.3 Run tests and confirm they pass — the affected tests (report §4, §4.1); the full suite is the coordinator's batch
+
+## Archive (2026-10-21)
+
+Accepted on the coordinated full suite at commit `1103f00c`. The run used the clean, stamped worktree `.claude/worktrees/fullsuite-b`, fresh prefixes under `tmp/scratch/fullsuite/prefix-1103f00c` and 28 pre-builds. Result: 3781 passed, 4 skipped, 1 xfailed in 13482 s, wrapper exit 0. `evidence.json` shows no source or prefix drift, and every override was served.
+
+Addendum `3bca5229` applies `ruff format` only, to five test files. Each file's AST is identical, type comments included (`tmp/scratch/format-only/format-only-identity.json`), and no test reads their text. The tested checkout is `1103f00c`, not that later commit. Global mypy (435 files) and ruff check were green on `1103f00c`.
+
+The skips and the xfail are outside this task and not validated by this run:
+- the Wand recipe skip and the wand_v1 five-map xfail: infinite padding is refused (decisions 245 and 259; phase1.25_pilot-wand item 2.7);
+- sash-v5 (2 skips): waiting on the owner's waist-v5 folder (decision 260; phase2);
+- the preview window screen test, run by hand by the owner (decision 252; phase2.3).
+
+The previous failed run at `7c7b8221` is kept in `tmp/scratch/fullsuite/run-7c7b8221/`.
