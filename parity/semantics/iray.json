@@ -1831,7 +1831,11 @@
     },
     {
      "source_id": "P-BURLEY2020",
-     "locator": "hash-based Owen scrambling"
+     "locator": "improved Laine-Karras permutation and nested uniform scrambling; shuffled scrambled 4D Sobol padded by one seed per set"
+    },
+    {
+     "source_id": "P-PBRT",
+     "locator": "4th ed. \u00a78.7 Sobol samplers; \u00a712.5 piecewise-constant 2D environment sampling; \u00a79.2 diffuse reflection, cosine-weighted hemisphere sampling"
     }
    ],
    "parameters": [

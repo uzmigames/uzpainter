@@ -2000,6 +2000,37 @@ pub fn build(b: *std.Build) void {
     preview_tests_step.dependOn(&b.addInstallArtifact(preview_tests_exe, .{}).step);
     for (dx_runtime) |step| preview_tests_step.dependOn(step);
     b.getInstallStep().dependOn(preview_tests_step);
+
+    // ── The path tracer's sampling foundations (phase3.4_path-tracer-transport) ───────────────
+    // `zig build pathtracer-tests` `uzp-pathtracer-tests.exe`: the CPU tests of the Owen-scrambled
+    // Sobol sampler, the piecewise-constant 2D environment distribution and the Lambert lobe
+    // (`src/render/pathtracer/`, `tests/render/pathtracer_test.cpp`). No GPU and no render core.
+    // No fast-math and no contraction, so every float operation is one IEEE operation.
+    const pathtracer_flags = uzp_core_flags ++ [_][]const u8{ "-fno-fast-math", "-ffp-contract=off" };
+    const pathtracer_tests_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    pathtracer_tests_mod.addIncludePath(b.path("src"));
+    pathtracer_tests_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &.{ "render/pathtracer/sobol.cpp", "render/pathtracer/environment_distribution.cpp", "render/pathtracer/bsdf.cpp" },
+        .flags = &pathtracer_flags,
+    });
+    pathtracer_tests_mod.addCSourceFiles(.{
+        .root = b.path("tests/render"),
+        .files = &.{"pathtracer_test.cpp"},
+        .flags = &pathtracer_flags,
+    });
+    const pathtracer_tests_exe = b.addExecutable(.{
+        .name = "uzp-pathtracer-tests",
+        .root_module = pathtracer_tests_mod,
+    });
+    const pathtracer_tests_step = b.step("pathtracer-tests", "Build the CPU tests of the path tracer's sampler, environment distribution and Lambert lobe");
+    pathtracer_tests_step.dependOn(&b.addInstallArtifact(pathtracer_tests_exe, .{}).step);
+    b.getInstallStep().dependOn(pathtracer_tests_step);
 }
 
 /// The project store's sources (`store_sources`, compiled with `flags`) with SQLite and zstd.

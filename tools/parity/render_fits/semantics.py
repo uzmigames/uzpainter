@@ -355,7 +355,16 @@ def entries(results: dict[str, Any]) -> list[dict[str, Any]]:
                 src("P-KAJIYA", "rendering equation"),
                 src("P-VEACH", "§9.2 power heuristic"),
                 src("P-PBRT", "4th ed. §13.1, §13.4 path tracing"),
-                src("P-BURLEY2020", "hash-based Owen scrambling"),
+                src(
+                    "P-BURLEY2020",
+                    "improved Laine-Karras permutation and nested uniform scrambling; "
+                    "shuffled scrambled 4D Sobol padded by one seed per set",
+                ),
+                src(
+                    "P-PBRT",
+                    "4th ed. §8.7 Sobol samplers; §12.5 piecewise-constant 2D environment "
+                    "sampling; §9.2 diffuse reflection, cosine-weighted hemisphere sampling",
+                ),
             ],
             "parameters": [
                 {"name": "max_depth", "value": 8, "origin": "authored"},
