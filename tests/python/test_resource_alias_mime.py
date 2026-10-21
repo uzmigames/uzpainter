@@ -5,7 +5,7 @@ from tests.python.conftest import Run
 
 def test_texture_alias_of_mesh_bytes_preserves_blob_and_metadata(run: Run) -> None:
     report = run(
-        r'''
+        r"""
 import hashlib
 import sqlite3
 from pathlib import Path
@@ -54,6 +54,6 @@ project.save()
 project.close()
 assert stored() == (after, aliases)
 result = {"shared_hash": digest, "alias_count": len(aliases)}
-'''
+"""
     )
     assert report["status"] == "ok", report.get("error", report)

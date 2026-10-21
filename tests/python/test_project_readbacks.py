@@ -55,7 +55,7 @@ result = {"bounds": expected, "closed_error": error}
 
 def test_metadata_set_returns_none_and_preserves_native_receipt(facade: Run) -> None:
     report = facade(
-        r'''
+        r"""
 import uzpainter
 
 project.create(PLANE, settings=project.Settings(default_texture_resolution=256))
@@ -73,6 +73,6 @@ project.open(WORK + "/metadata.spp")
 assert project.Metadata("readback-test").get("value") == value
 project.close()
 result = {"facade_return": None, "native_status": native.status}
-'''
+"""
     )
     assert report["status"] == "ok", report.get("error", report)

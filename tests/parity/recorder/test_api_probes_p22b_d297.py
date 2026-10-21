@@ -127,9 +127,7 @@ def probe_path(stem: str) -> Path:
 
 
 def steps_of(stem: str) -> list[dict[str, Any]]:
-    steps: list[dict[str, Any]] = load_json(probe_path(stem))["instruction_sequence"][
-        "steps"
-    ]
+    steps: list[dict[str, Any]] = load_json(probe_path(stem))["instruction_sequence"]["steps"]
     return steps
 
 

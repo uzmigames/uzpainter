@@ -5,7 +5,7 @@ from tests.python.conftest import Run
 
 def test_color_properties_and_srgb_assignment(facade: Run) -> None:
     report = facade(
-        r'''
+        r"""
 create()
 rgb = (1.0, 0.54902, 0.0)
 expected = (1.0, 0.549019992351532, 0.0)
@@ -28,6 +28,6 @@ for space in (None, cm.GenericColorSpace.Working, cm.GenericColorSpace.Raw,
     assert color.working == (0.21404114365577698,) * 3
 project.close()
 result = {"properties": "passed"}
-'''
+"""
     )
     assert report["status"] == "ok", report.get("error", report)

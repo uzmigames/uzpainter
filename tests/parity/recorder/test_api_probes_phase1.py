@@ -304,26 +304,34 @@ def test_reload_order_requests_copy_distinct_bytes_after_reopen(
     assert [r["condition"] for r in data["recordings"]] == ["same_session", "after_save_reopen"]
     repetitions = 3 if all_origins else 1
     assert copied == [
-        (f"reload-order-v{i}", variants[i - 1])
-        for i in range(1, 5) for _ in range(repetitions)
+        (f"reload-order-v{i}", variants[i - 1]) for i in range(1, 5) for _ in range(repetitions)
     ]
     assert [s.args.get("with_input") for s in job.probe_steps] == [
         *(["reload-order-v1"] * repetitions),
-        *(["reload-order-v2"] * repetitions), None,
+        *(["reload-order-v2"] * repetitions),
+        None,
     ]
     if all_origins:
         assert [s.args["filter"] for s in job.probe_steps] == [
-            "SessionFilter", "SessionFilter", "ProjectFilter",
-            "SessionFilter", "SessionFilter", "ProjectFilter", "ProjectFilter",
+            "SessionFilter",
+            "SessionFilter",
+            "ProjectFilter",
+            "SessionFilter",
+            "SessionFilter",
+            "ProjectFilter",
+            "ProjectFilter",
         ]
         assert [s.args.get("rewrite_input") for s in job.probe_steps] == [
-            *names, *names, None,
+            *names,
+            *names,
+            None,
         ]
     for recording in data["recordings"]:
         outputs = {o["output_id"]: o for o in recording["outputs"]}
         for step in range(6, 13 if all_origins else 9):
             assert event_names(outputs[f"s{step}/events"]) == [
-                "ReloadResourcesStarted", "ReloadResourcesEnded"
+                "ReloadResourcesStarted",
+                "ReloadResourcesEnded",
             ]
 
 
@@ -341,10 +349,13 @@ def test_mesh_map_alias_request_distinguishes_names_from_shared_content() -> Non
     assert inputs["mesh-map-old"]["sha256"] != inputs["mesh-map-new"]["sha256"]
     steps = {s.step: s for s in (*job.state_steps, *job.probe_steps)}
     assert [steps[s].args["image"] for s in (3, 4, 5)] == [
-        "mesh-map-old", "mesh-map-alias", "mesh-map-new"
+        "mesh-map-old",
+        "mesh-map-alias",
+        "mesh-map-new",
     ]
     assert [(steps[s].args["usage"], steps[s].args["resource_step"]) for s in (6, 7)] == [
-        ("AO", 3), ("Thickness", 4)
+        ("AO", 3),
+        ("Thickness", 4),
     ]
     assert steps[8].args == {"resource_step": 3, "new_resource_step": 3}
     assert steps[9].args == {"resource_step": 3, "new_resource_step": 5}
