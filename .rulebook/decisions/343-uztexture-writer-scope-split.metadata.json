@@ -1,0 +1,13 @@
+{
+  "id": 343,
+  "slug": "343-uztexture-writer-scope-split",
+  "title": "phase3.1_uze-uztexture-writer closes on a recorded scope split: its only open items are a prerequisite and a parent report, and phase2.10's open work is the Tunic's own input recovery and parity",
+  "status": "accepted",
+  "date": "2026-10-21",
+  "relatedTasks": [
+    "phase3.1_uze-uztexture-writer",
+    "phase2.10_pilot-tunic-recovery",
+    "phase3.4_uzengine-preset"
+  ],
+  "supersededBy": null
+}

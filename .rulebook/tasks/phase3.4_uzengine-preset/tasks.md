@@ -2,7 +2,7 @@
 - [ ] 1.1 Prerequisites accepted: `phase2.10_pilot-tunic-recovery`
 
 ## 2. Children (mandatory, in dependency order)
-- [ ] 2.1 Child accepted: `phase3.1_uze-uztexture-writer`
+- [x] 2.1 Child accepted: `phase3.1_uze-uztexture-writer`. Accepted and archived 2026-10-21 (decision 343). Its deterministic BC encoders and mips, layout-correct `.uztexture` (read back through the test reader), negative-Z normal guard and lossy-derivative report are evidenced by its items 3.1 to 3.7, and the green full suite at `1103f00c`. The equality items of this task, such as 4.2, stay open here.
 - [ ] 2.2 Child accepted: `phase3.2_uze-uzmat-preset`
 - [ ] 2.3 Child accepted: `phase3.3_uze-consumer-fixture`
 

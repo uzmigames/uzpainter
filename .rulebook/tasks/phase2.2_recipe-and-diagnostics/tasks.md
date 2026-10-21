@@ -1,7 +1,7 @@
 ## 1. Prerequisites
 - [ ] 1.1 Prerequisites accepted: phase1.25_pilot-wand
-- [ ] 1.2 Child accepted: phase2.1_recipe-dump-manifest-blocks
-- [ ] 1.3 Child accepted: phase2.1_recipe-diagnostic-views
+- [x] 1.2 Child accepted: phase2.1_recipe-dump-manifest-blocks (archived 2026-10-20, decision 326)
+- [x] 1.3 Child accepted: phase2.1_recipe-diagnostic-views (archived 2026-10-20, decision 326)
 
 ## 2. Implementation
 - [x] 2.1 Wand v1 rebuild-from-dump scenario: dump, rebuild into a new project from the dump and its resources, export both with the wand's export configuration — `tests/parity/recipe/wand_v1/runner.py` (decision 142): the adapter-built wand, `dump_recipe()`, the stored resources from `export-bundle`, `rebuild_from_recipe` into a saved project, the pinned `painter_export.py` on both; measured 2026-10-12 up to the export, which UzPainter refuses before writing on both sides (3.1)

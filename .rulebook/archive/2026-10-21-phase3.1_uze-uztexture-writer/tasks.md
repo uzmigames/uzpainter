@@ -1,5 +1,5 @@
 ## 1. Prerequisites
-- [ ] 1.1 Prerequisites accepted: `phase2.10_pilot-tunic-recovery` (parent input); `phase1.18_export-engine` and `phase0.5_vendor-render-core` delivered
+- [x] 1.1 Prerequisites accepted: `phase2.10_pilot-tunic-recovery` (parent input); `phase1.18_export-engine` and `phase0.5_vendor-render-core` delivered Checked 2026-10-21 as a recorded scope split (decision 343). phase2.10 is NOT accepted: it is open on the Tunic v10 input inventory and preservation, the MCP rebuild, Tier 1 equality and dump-and-rebuild, none of which this writer reads. phase1.18 and phase0.5 are delivered.
 
 ## 2. Implementation
 - [x] 2.1 Vendor etcpak (with bundled bc7enc) from upstream under `thirdparty/etcpak/` with `ORIGIN.md`, licence files, `NOTICE` and dependency-inventory entries (LIC-02)
@@ -21,7 +21,7 @@
 - [x] 3.7 Lossy-derivative report: decoded BC data vs canonical map gives max/mean/p99 error per map, reported separately from authoring equality (`14-parity-testing.md` §4)
 
 ## 4. Acceptance
-- [ ] 4.1 Child acceptance met and reported to `phase3.4_uzengine-preset`: deterministic encoder and mips, layout-correct `.uztexture`, guarded normals, lossy-derivative numbers published
+- [x] 4.1 Child acceptance met and reported to `phase3.4_uzengine-preset`: deterministic encoder and mips, layout-correct `.uztexture`, guarded normals, lossy-derivative numbers published Met 2026-10-21: items 3.1 to 3.7 are evidenced, and the tests passed in the green full suite at `1103f00c`. Reported in phase3.4_uzengine-preset item 2.1 (decision 343).
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [x] 5.1 Update or create documentation covering the implementation
