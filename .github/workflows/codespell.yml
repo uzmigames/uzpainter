@@ -38,4 +38,4 @@ jobs:
         run: |
           codespell \
             --skip="*.lock,*.json,*.map,*.yaml,*.yml,*.csv,*.bib,target,node_modules,.git,dist,venv,build,benchmarks,coverage,thirdparty,.zig-cache,zig-out,*.obj,*.exr,*.png,*.zlib" \
-            --ignore-words-list="crate,ser,deser,upToDate,optIn,shouldBe,Bloc,thirdparty,ue,lod,seh,mis,sav,dota,momento,variante,controle,comandos,atual,erros,kinf,unknwn,caf,paeth,datas,hastable,reenabled,reencode,fo,inout,plantext,fale,trama,nd,trough"
+            --ignore-words-list="bu,crate,ser,deser,upToDate,optIn,shouldBe,Bloc,thirdparty,ue,lod,seh,mis,sav,dota,momento,variante,controle,comandos,atual,erros,kinf,unknwn,caf,paeth,datas,hastable,reenabled,reencode,fo,inout,plantext,fale,trama,nd,trough"
