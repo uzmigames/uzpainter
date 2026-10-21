@@ -26,7 +26,7 @@
 | ⬚ | phase3.2_proc-material-families | 0/15 | phase3.2_proc material families |
 | ⬚ | phase3.2_proc-snapshot-backend | 0/14 | phase3.2_proc snapshot backend |
 | 🔄 | phase3.2_unreal-ue56-packed-preset | 0/21 | phase3.2_unreal ue56 packed preset |
-| ⬚ | phase3.2_uze-uzmat-preset | 6/20 | phase3.2_uze uzmat preset |
+| ⬚ | phase3.2_uze-uzmat-preset | 10/20 | phase3.2_uze uzmat preset |
 | ⬚ | phase3.2_vulkan-ray-tracing | 0/23 | phase3.2_vulkan ray tracing |
 | ⬚ | phase3.3_baker-evidence-publication | 0/18 | phase3.3_baker evidence publication |
 | ⬚ | phase3.3_procedural-families | 0/14 | phase3.3_procedural families |
