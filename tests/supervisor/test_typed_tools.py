@@ -581,6 +581,8 @@ def test_sync_stack_rebuilds_only_the_named_group(
     other = tmp_path / "ao-white.png"
     shutil.copy(PROBE_IMAGES / "ao-white.png", other)
     session.call("resource_import", {"path": str(other), "usage": "TEXTURE", "name": "C_tex"})
+    # Painter's "Layer 1" (decision 348) is another root layer: sync hides it like C.
+    (layer1,) = (uid for uid, node in nodes(session).items() if node["name"] == "Layer 1")
     keep = inserted(session.call("layer_insert", {"kind": "group", "name": "A keep"}))
     old_b = inserted(session.call("layer_insert", {"kind": "group", "name": "B"}))
     inserted(session.call("layer_insert", {"kind": "fill", "name": "old", "inside": old_b}))
@@ -619,7 +621,7 @@ def test_sync_stack_rebuilds_only_the_named_group(
     assert reply["result"]["status"] == "committed", reply
     sync = reply["result"]["returned"]["sync"]
     assert sync["deleted"] == [old_b] and sorted(sync["imported"]) == ["M_left", "T_checker"]
-    assert [entry["uid"] for entry in sync["hidden"]] == [c]
+    assert [entry["uid"] for entry in sync["hidden"]] == [c, layer1]
     after = nodes(session)
     assert old_b not in after and after[sync["root_uid"]]["name"] == "B"
     assert after[keep]["visible"] is True and after[c]["visible"] is False
@@ -666,7 +668,7 @@ def test_batch_stops_on_error_with_per_call_results(
     assert second["status"] == "failed" and second["body"]["error"]["code"] == "invalid_arguments"
     assert third == {"index": 2, "tool": "layer_insert", "status": "not_executed"}
     assert revision_of(session) == revision + 1
-    assert {n["name"] for n in nodes(session).values()} == {"one"}
+    assert {n["name"] for n in nodes(session).values()} == {"Layer 1", "one"}
 
     keyed = {"calls": [calls[0], calls[2]], "idempotency_key": "batch-1"}
     done = session.call("batch", keyed)["result"]
