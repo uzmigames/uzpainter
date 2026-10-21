@@ -140,7 +140,7 @@ Each command ran once from the root of a clean checkout of `8709033adf6f644337df
 | `python -m pytest tests/python/test_capability_conformance.py::test_supported_entries_equal_the_tier0_trace tests/capabilities/test_capabilities.py -k "<§4 selection>"` | 0 | 8 passed, 21 deselected | `pytest-capabilities.log` |
 | `python tmp/scratch/g1-offline/cap_evidence.py tmp/scratch/g1-offline/verify-current.log` | 0 | §6.1: 0 problems | `cap-evidence.log` |
 
-Every hash the golden manifests name resolves in the store. The directory-wide `verify parity/manifests` of §4 is refused on this tree, so on the gate commit either the consumer fixture lives outside the golden manifest root or the check is run per golden subdirectory as above. That is an open point of item 3.1, independent of the Wand.
+Every hash the golden manifests name resolves in the store. The directory-wide `verify parity/manifests` of §4 is refused on this tree, so on the gate commit either the consumer fixture lives outside the golden manifest root or the check is run per golden subdirectory as above. That is an open point of item 3.1, independent of the Wand. Fixed the same day: a directory `verify` now leaves out the glTF consumer fixture, which names no store blob and which the guard validates under its own schema. Any other non-golden JSON is still refused (`tests/parity/test_store.py::test_verify_of_a_directory_leaves_out_the_gltf_consumer_fixture_only`). After the fix, `verify parity/manifests` exits 0 (`tmp/scratch/g1-offline/verify-manifests-after.log`).
 
 ## 5. Phase 1 tasks not archived (roadmap rule 3)
 

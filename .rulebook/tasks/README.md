@@ -8,8 +8,8 @@
 
 | Status | Task | Progress | Description |
 |--------|------|----------|-------------|
-| 🔄 | phase1.25_pilot-wand | 8/18 | phase1.25_pilot wand |
-| ⬚ | phase1.26_gate-g1 | 3/14 | phase1.26_gate g1 |
+| 🔄 | phase1.25_pilot-wand | 9/18 | phase1.25_pilot wand |
+| ⬚ | phase1.26_gate-g1 | 4/14 | phase1.26_gate g1 |
 | ⬚ | phase2.10_pilot-tunic-recovery | 1/18 | phase2.10_pilot tunic recovery |
 | ⬚ | phase2.11_gate-g2 | 0/15 | phase2.11_gate g2 |
 | ⬚ | phase2.2_recipe-and-diagnostics | 8/11 | phase2.2_recipe and diagnostics |

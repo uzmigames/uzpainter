@@ -1,5 +1,5 @@
 ## 1. Prerequisites
-- [ ] 1.1 Prerequisites accepted: phase1.24_python-api-facade (accepted without the wand's exported maps: the 16-bit export of the sRGB8 material channels is this task's item 2.6, and the five-map export and its parity are items 3.1 and 4.1; decision 116)
+- [x] 1.1 Prerequisites accepted: phase1.24_python-api-facade (accepted without the wand's exported maps: the 16-bit export of the sRGB8 material channels is this task's item 2.6, and the five-map export and its parity are items 3.1 and 4.1; decision 116) Met 2026-10-21: phase1.24 archived at `.rulebook/archive/2026-10-21-phase1.24_python-api-facade/` on the green full suite at `1103f00c`.
 
 ## 2. Implementation
 - [x] 2.1 Author `parity/manifests/phase1/wand-v1.json` with the independently authored inputs, instruction sequence, settings and software identities (decision 124: the decision-099 request `parity/envelopes/painter-12.1.5_js-api.1.1.20/requests/phase1/tier1/wand-v1.json` under the current 12.1.5 envelope, decision 037; admitted to that envelope's `manifests/` by recording R9, item 2.2; the UzPainter build hash is named per run in the report)

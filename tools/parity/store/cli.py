@@ -12,7 +12,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from tools.parity.schemas import Schema, load_schema
+from tools.parity.schemas import Schema, is_valid, load_json, load_schema
 from tools.parity.store.manifest import fetch, load_manifest, record_file, record_run, verify
 from tools.parity.store.store import (
     OracleStore,
@@ -62,10 +62,17 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _manifests(paths: Sequence[Path]) -> list[Path]:
+    """The manifests named, a directory standing for every JSON file under it. A directory's glTF
+    consumer fixture (`parity/manifests/consumers/gltf/`) names no store blob and is validated by
+    the guard under its own schema, so it is left out; any other file is verified as a manifest."""
     found: list[Path] = []
     for path in paths:
         if path.is_dir():
-            found.extend(sorted(path.rglob("*.json")))
+            found.extend(
+                p
+                for p in sorted(path.rglob("*.json"))
+                if not is_valid(load_json(p), Schema.GLTF_CONSUMER_FIXTURE)
+            )
         elif path.is_file():
             found.append(path)
         else:

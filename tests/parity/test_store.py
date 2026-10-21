@@ -200,6 +200,22 @@ def test_round_trip_record_remove_fetch_verify(
     assert cli(store, "verify") == 0
 
 
+def test_verify_of_a_directory_leaves_out_the_gltf_consumer_fixture_only(
+    store: OracleStore, manifest_path: Path, authored: Path, tmp_path: Path
+) -> None:
+    # `parity/manifests` also holds the glTF consumer fixture, which names no store blob.
+    assert record_authored(store, manifest_path, authored, "basecolor-same-session") == 0
+    tree = tmp_path / "manifests"
+    (tree / "consumers" / "gltf").mkdir(parents=True)
+    (tree / manifest_path.name).write_bytes(manifest_path.read_bytes())
+    fixture = REPO_ROOT / "parity" / "manifests" / "consumers" / "gltf" / "wand-v1.json"
+    (tree / "consumers" / "gltf" / "wand-v1.json").write_bytes(fixture.read_bytes())
+    assert cli(store, "verify", tree) == 0
+    # Any other JSON that is not a golden manifest is still refused.
+    (tree / "stray.json").write_text('{"schema": "uzpainter/unknown/1"}', encoding="utf-8")
+    assert cli(store, "verify", tree) == 1
+
+
 def _inbox_run(tmp_path: Path, manifest_sample: dict[str, Any]) -> Path:
     """A recorder run as the oracle inbox holds it (`parity/STORE.md` §4)."""
     run = tmp_path / "inbox" / "samples__tier0__blend-multiply-plane" / "20261010T120000Z"
