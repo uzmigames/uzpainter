@@ -1,0 +1,75 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: zig build (Windows x64, Zig 0.15.2)
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      UZP_NO_GPU: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      # setup-zig verifies the download's minisign signature and points ZIG_GLOBAL_CACHE_DIR and
+      # ZIG_LOCAL_CACHE_DIR at .zig-cache in the workspace. Its own cache is off: the steps below
+      # key the cache on the build inputs instead of the job name.
+      - name: Zig 0.15.2
+        uses: mlugg/setup-zig@v2.2.1
+        with:
+          version: 0.15.2
+          use-cache: false
+
+      # Zig's cache is content-addressed, so an older cache (restore-keys) is safe and saves most
+      # of the compile time. Only pushes to main save one; pull requests read main's.
+      - name: Restore the Zig cache
+        id: zig-cache
+        uses: actions/cache/restore@v6.1.0
+        with:
+          path: .zig-cache
+          key: zig-${{ runner.os }}-0.15.2-${{ hashFiles('build.zig', 'build.zig.zon', 'src/**') }}
+          restore-keys: zig-${{ runner.os }}-0.15.2-
+
+      - name: zig build painter
+        run: zig build -j4 painter --summary failures
+
+      # The default install step: every native test executable the pytest suite runs, plus painter.
+      - name: zig build (all native test executables)
+        run: zig build -j4 --summary failures
+
+      # CPU stages only (no GPU on hosted runners, decision 028): PNG16, Embree, CPython, MCP SDK.
+      - name: UzPainter.exe selftest --no-gpu
+        run: ./zig-out/bin/UzPainter.exe selftest --no-gpu --out-dir "${{ runner.temp }}/selftest"
+
+      # Restored older caches accumulate entries; one past 8 GiB is not saved, so later runs restore
+      # an older, smaller one instead of a growing one.
+      - name: Check the Zig cache size
+        id: zig-cache-size
+        if: github.event_name == 'push' && steps.zig-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $bytes = (Get-ChildItem .zig-cache -Recurse -File -Force | Measure-Object Length -Sum).Sum
+          $mib = [math]::Round($bytes / 1MB)
+          "Zig cache: $mib MiB"
+          "save=$($mib -le 8192)".ToLower() >> $env:GITHUB_OUTPUT
+
+      - name: Save the Zig cache
+        if: steps.zig-cache-size.outputs.save == 'true'
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: .zig-cache
+          key: ${{ steps.zig-cache.outputs.cache-primary-key }}
