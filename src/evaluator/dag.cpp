@@ -352,6 +352,11 @@ render::Result<std::vector<DagEffect>> ContentEffectsOf(const Context& ctx, cons
                 node.levels[c] = LevelsOf(components[components.size() == 3 ? c : 0]);
             }
         } else if (effect.kind == core::EffectKind::filter) {
+            // Any filter but the recorded Blur stays outside the profile whatever its channels.
+            if (!effect.procedural || effect.procedural->asset != kRecordedBlurAsset) {
+                return EvalFail(EvalErrorKind::UnsupportedNode,
+                                "filter effects in content stacks are outside this profile (P3-PROC)", effect.uid);
+            }
             if (!effect.active_channels.contains(ctx.channel)) continue;
             if (std::optional<std::string> refusal = RecordedBlurRefusal(ctx, effect)) {
                 return EvalFail(EvalErrorKind::UnsupportedNode, *refusal, effect.uid);
