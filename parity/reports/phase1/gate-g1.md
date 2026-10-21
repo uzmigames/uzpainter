@@ -4,7 +4,9 @@ Task `phase1.26_gate-g1` (`docs/dag.md` G1, D14; `docs/roadmap.md` Phase 1 gate,
 
 Task-status reconciliation, 2026-10-20: sections 3.6 and 5 reflect completed checklist items and the compositor-colour-fits archive. Historical check results and hashes remain unchanged; this reconciliation records no new acceptance run.
 
-**Result: G1 open.** The independent checks completed for this draft are evidenced below. Pending: the Wand clauses (§2, `phase1.25_pilot-wand`, item 2.2 of the gate), `phase1.24_python-api-facade` (§3.6), the other open Phase 1 tasks (§5), the gate-commit re-run of the checks (§4) and the Phase 2 duration Hypothesis (§7). The record is final only when it is re-run on the gate commit.
+Pre-gate re-run, 2026-10-21, on a clean checkout of `main` `8709033adf6f644337df3842dd361a91595dd923` (same machine, Zig 0.15.2, Python 3.13.9; CPU only, no GPU run): §3.6, §4.1, §5 and §6.1. `8709033a` is not the gate commit. Logs: `tmp/scratch/g1-offline/` (untracked).
+
+**Result: G1 open.** The independent checks completed for this draft are evidenced below. Pending: the Wand clauses (§2, `phase1.25_pilot-wand`, item 2.2 of the gate), the other open Phase 1 tasks (§5), the gate-commit re-run of the checks (§4) and the Phase 2 duration Hypothesis (§7). The record is final only when it is re-run on the gate commit.
 
 ## 1. Oracle envelope used by this gate (decision 037)
 
@@ -24,7 +26,7 @@ The one manifest of `parity/manifests` without blobs is still `tier3/render-proc
 | Requires G0 | `phase0.10_gate-g0` | §3.1 | met |
 | Wand v1 maps equal to the private Painter goldens (Tier 1) | `phase1.25_pilot-wand` | §3.5 | **pending** (item 2.7, then 3.1) |
 | Wand v1 maps byte-stable across two runs | `phase1.25_pilot-wand` | §3.5 | **pending** (item 3.2) |
-| The three pipeline scripts run unchanged through the adapter | `phase1.24_python-api-facade` | §3.6 | evidenced by item 3.2; the task is not accepted |
+| The three pipeline scripts run unchanged through the adapter | `phase1.24_python-api-facade` | §3.6 | met (task archived 2026-10-21 on the coordinated full suite at `1103f00c`) |
 | Project save/reopen/revert verified with fault injection, including commit-then-die retry | `phase1.8_project-store` | §3.2 | met (re-run at this draft) |
 | Certificate and reload fixtures pass | `phase1.7_mesh-loader` | §3.3 | met (re-run at this draft) |
 
@@ -77,8 +79,9 @@ Re-run at this draft: `python -m pytest -p no:cacheprovider -rA tests/mesh` exit
 | `phase1.3_document-model` | `.rulebook/archive/2026-10-10-phase1.3_document-model/` | `parity/reports/phase1/document-model.md` | `904da403a4d2a032ca37061d5d5f6b4f9abb1edf2825fc4567d814709aa93486` |
 | `phase1.14_compositor-core` | `.rulebook/archive/2026-10-12-phase1.14_compositor-core/` | `parity/reports/phase1/compositor-core.md` | `5af3af916afdee7207fc6681cf13a790cb2ef0e2d09b6432ec988fa62d121a44` |
 | `phase1.18_export-engine` | `.rulebook/archive/2026-10-12-phase1.18_export-engine/` | `parity/reports/phase1/export-engine.md` | `69875eea8e5d9379d7549b726528f42c910b222fcd1c128ceb435b7785df4815` |
+| `phase1.24_python-api-facade` | `.rulebook/archive/2026-10-21-phase1.24_python-api-facade/` | `parity/reports/phase1/python-api-facade.md` | `972b0c706add74c825364e325b0eab7519a9c56610d70223e98f0b56c135d3f3` (at `8709033a`) |
 
-All their children are archived (§5).
+All their children are archived (§5). Checked 2026-10-21 on `8709033a`: the `tasks.md` of each of the five archives has no unchecked item.
 
 ### 3.5 P1-WAND — `phase1.25_pilot-wand` (pending)
 
@@ -89,22 +92,23 @@ Open. Done: items 2.1-2.6, 3.4 and 3.5. Open: 1.1 (needs `phase1.24_python-api-f
 | `parity/envelopes/painter-12.1.5_js-api.1.1.20/manifests/phase1/tier1/wand-v1.json` | `6e54e7f6c05071d26e631ed29163b94e1f3433d6958f12566d61a1a1b7b96478` |
 | `parity/reports/phase1/tier1-wand-v1.json` | `d2f89e107cd9479c866ca2740fa609fdef295350e013572d88d25ff0c9500722` |
 
-### 3.6 P1-PYAPI — `phase1.24_python-api-facade` (not accepted)
+### 3.6 P1-PYAPI — `phase1.24_python-api-facade` (accepted)
 
-Children `phase1.19_pyapi-native-module` to `phase1.23_pyapi-pipeline-adapter` archived 2026-10-12. The pipeline-script clause is evidenced by item 3.2 (`tests/adapters`: 44 passed, report §4.1). This draft did not re-run it: the adapter's export runs on DX12. Item 1.1 is ticked: `phase1.3_document-model`, `phase1.18_export-engine` and `phase1.8_project-store` are archived (2026-10-10, 2026-10-12, 2026-10-13). Recorded task status:
+Archived `.rulebook/archive/2026-10-21-phase1.24_python-api-facade/` with its children `phase1.19_pyapi-native-module` to `phase1.23_pyapi-pipeline-adapter` (2026-10-12); every item of its `tasks.md` checked, 4.1 included. Accepted on the coordinated full suite at `1103f00c`: 3781 passed, 4 skipped, 1 xfailed, wrapper exit 0 (`tmp/scratch/fullsuite/`, untracked). The skips and the xfail are outside that task; the xfail is the Wand five-map export, refused on `infinite` padding (`phase1.25_pilot-wand` item 2.7).
 
-- item 3.1 is complete: all 36 then-current traced replays passed on one build at `3b7c70afe9dc1ce39f4311a0888293896fee79f4`, with no skips (task report §4.2). Question q1 was answered with option (a), decision 299: keep generic or empty Dota 2 User0-User3 labels. Codex and Claude chose it under the owner's delegation; it is not a licence review. The label difference stays listed in the task report §3.
-- item 3.4 is complete for authoring: decisions 295-297 provide the vocabulary, fake support, tests and 18 requests for the reconciled 253-symbol scope (task report §5). Authoring completion does not itself establish compared-replay evidence.
-- item 4.1 remains open for final compared-replay and capability-evidence reconciliation and its report. The coordinated full suite is also required before archive; no run still in progress is credited here.
+The pipeline-script clause is the task's item 3.2 and acceptance 4.1: `painter_create.py`, `painter_layer_stack.py sync` and `painter_export.py`, pinned by SHA-256, run unchanged through the adapter. In that full suite all 55 `tests/adapters` cases passed with none skipped (`tests/adapters/assets3d/test_pipeline_adapter.py` 20, `test_adapter_units.py` 35), `test_wand_create_sync_and_export_run_unchanged` among them. The parity of the Wand's exported maps is not part of this clause (§3.5).
 
-| Evidence | SHA-256 |
+| Evidence | SHA-256 (at `8709033a`) |
 |---|---|
-| `parity/reports/phase1/python-api-facade.md` | `ca279fb9a8d70bd3b70a85fd0c9f7c75f8aeda7279f56ace670fb59308310e84` |
+| `.rulebook/archive/2026-10-21-phase1.24_python-api-facade/tasks.md` | `4386dd6c4f034ed1a0cceb24991e7ea512b669f72dc17151b7510d636b3e793d` |
+| `parity/reports/phase1/python-api-facade.md` | `972b0c706add74c825364e325b0eab7519a9c56610d70223e98f0b56c135d3f3` |
 | `parity/reports/phase1/pyapi-pipeline-adapter.md` | `02f0fccb38464071a128bba128e7c426884e83983a3f0c9cbc106e56346cf730` |
 
 ### 3.7 Exceptions relied on
 
 `parity/exceptions.json` (SHA-256 `f4ef87337725330216ffd0c676eca96987592984ab45f3abb54a1f3b874c6633`) holds EXC-001 to EXC-006 (Tier 0, basis `oracle_instability`) and EXC-007 (Tier 1, `tier1/pilot/wand-v1`), which is withdrawn in version 2 (decision 259). The Wand's own list of exceptions relied on is pending (§3.5, item 4.1).
+
+At `8709033a` the file's SHA-256 is `cbb999ae888dbdd7a9bb2843f6adc7fb0b92c53796966001c1d0d818869ea722`: EXC-001 to EXC-006 each have a version 2 (decision 307) that narrows version 1 to the outputs whose r2 differs from r1, EXC-007 stays withdrawn (decision 259), and EXC-008 and EXC-009 are new Tier 0 entries under decision 032 (decision 307).
 
 ## 4. Checks on the draft tree (`39d8d7b`)
 
@@ -121,15 +125,31 @@ Children `phase1.19_pyapi-native-module` to `phase1.23_pyapi-pipeline-adapter` a
 
 These checks must run again on the gate commit.
 
+### 4.1 Pre-gate checks on `8709033a` (2026-10-21, not the gate commit)
+
+Each command ran once from the root of a clean checkout of `8709033adf6f644337df3842dd361a91595dd923`. Store: `%LOCALAPPDATA%\UzPainter\parity-store`, read only. Logs under `tmp/scratch/g1-offline/`.
+
+| Check | Exit | Result | Log |
+|---|---|---|---|
+| `python -m tools.parity.guard` | 0 | store-hash rule against the store (4061 hashes); 4186 files checked, 0 blocked | `guard.log` |
+| `python -m tools.parity.store verify parity/envelopes/painter-12.1.5_js-api.1.1.20/manifests` | 0 | 333 manifests, 22578 blobs, all `available` | `verify-current.log` |
+| `python -m tools.parity.store verify parity/manifests` | **1** | refused before any hash: `parity/manifests/consumers/gltf/wand-v1.json` is not a golden public manifest (schema `uzpainter/parity/golden-public/1` expected). The file is the glTF consumer fixture added by `a34143c8` (`phase3.1_unreal-gltf-pbr-preset`) | `verify-superseded.log` |
+| `python -m tools.parity.store verify parity/manifests/phase0 parity/manifests/phase1 parity/manifests/tier0 parity/manifests/tier3` | 0 | the golden subdirectories of that root: 82 manifests, 2686 blobs, all `available` (the same counts as §1) | `verify-superseded-golden-dirs.log` |
+| `python -m tools.parity.store verify` | 0 | whole store: `parity-store: ok` | `verify-store.log` |
+| `zig build painter -j2` | 0 | §6.1 | `build-painter.log` |
+| `python -m pytest tests/python/test_capability_conformance.py::test_supported_entries_equal_the_tier0_trace tests/capabilities/test_capabilities.py -k "<§4 selection>"` | 0 | 8 passed, 21 deselected | `pytest-capabilities.log` |
+| `python tmp/scratch/g1-offline/cap_evidence.py tmp/scratch/g1-offline/verify-current.log` | 0 | §6.1: 0 problems | `cap-evidence.log` |
+
+Every hash the golden manifests name resolves in the store. The directory-wide `verify parity/manifests` of §4 is refused on this tree, so on the gate commit either the consumer fixture lives outside the golden manifest root or the check is run per golden subdirectory as above. That is an open point of item 3.1, independent of the Wand.
+
 ## 5. Phase 1 tasks not archived (roadmap rule 3)
 
-43 Phase 1 tasks are in `docs/task-index.md`. As of 2026-10-20, 40 of them are archived under `.rulebook/archive/`, together with 5 Phase 1 analysis and docs tasks outside the index. `phase1.15_compositor-colour-fits` is archived at `.rulebook/archive/2026-10-19-phase1.15_compositor-colour-fits/`, with its acceptance and tail checked. Open:
+43 Phase 1 tasks are in `docs/task-index.md`. As of 2026-10-21 (`8709033a`), 41 of them are archived under `.rulebook/archive/`; `phase1.24_python-api-facade` is archived at `.rulebook/archive/2026-10-21-phase1.24_python-api-facade/`. `.rulebook/tasks/` holds no other `phase1.*` task. Open:
 
-| Task | Open items | Blocked by |
+| Task | Open items | Waits on |
 |---|---|---|
-| `phase1.24_python-api-facade` | 4.1 | §3.6; coordinated full suite before archive |
-| `phase1.25_pilot-wand` | 1.1, 2.7, 3.1-3.3, 4.1, 4.2, 5.1-5.3 | §3.5 |
-| `phase1.26_gate-g1` | this gate | every row above |
+| `phase1.25_pilot-wand` | 1.1, 2.7, 3.1-3.3, 4.1, 4.2, 5.1-5.3 | itself: 2.7 (`infinite` padding, decisions 339, 340, 342), then the DX12 runs 3.1-3.3. Its 1.1 names only `phase1.24_python-api-facade`, now archived, so 1.1 no longer waits on anything |
+| `phase1.26_gate-g1` | 1.1, 2.2, 3.1-3.4, 4.1, 5.1-5.3 | `phase1.25_pilot-wand` (1.1, 2.2, 3.3, 3.4, 4.1, and §7 through its item 4.2); the gate-commit re-runs of 3.1 and 3.2, which follow it; 3.1 also needs the `parity/manifests` point of §4.1 |
 
 ## 6. Capability manifest (roadmap rule 3)
 
@@ -152,6 +172,32 @@ Every `supported` entry has `since` and a non-empty `tier_evidence`. Every golde
 | `tools/capabilities/tier0-trace.json` | `ba5d4e30686622005773f748d26975059e4e09e6e6ba4722cdf1f5a5412db761` |
 
 The manifest hash recorded at the gate is the one from the Phase 1 build of the gate commit. The Wand's padding work and phase1.24 item 4.1 can still change it.
+
+### 6.1 Pre-gate regeneration on `8709033a` (2026-10-21, not the gate commit)
+
+`zig build painter -j2` exit 0 on a clean checkout of `8709033a`: `zig-out/bin/capabilities.json`, SHA-256 `4b0a7c47d58d7cf52b43e3c034d920e3fc336f0fad2757606b0561752be8f40a` (1 441 105 bytes). Profile `painter-12.1-api-0.3.7`, current envelope `painter-12.1.5+js-api.1.1.20`.
+
+| Status | Entries |
+|---|---|
+| `supported` | 926 (864 `any`, 60 `compositor`, 2 `mesh-map`) |
+| `pending-evidence` | 309 |
+| `release-gap` | 365 |
+| `desktop-only-omitted` | 15 |
+
+Every `supported` entry has `since` and a non-empty `tier_evidence`. Every golden it names is a Tier 0 manifest of the current envelope: 99 distinct goldens out of 274, and every blob of each is `available` in `verify-current.log` (§4.1). None is missing (`cap-evidence.log`). The `any` entries cite exactly the goldens of `tools/capabilities/tier0-trace.json` (`test_supported_entries_equal_the_tier0_trace`, §4.1).
+
+| Input | SHA-256 (at `8709033a`) |
+|---|---|
+| `tools/capabilities/generate_capabilities.py` | `0bf8f2e8a307947d7d27c845bab6502b7ac7c646a1137dd85a9fb6a517db5791` |
+| `tools/capabilities/painter-api-inventory.json` | `65ede9fa0177200cf7dcb2006ec66cb45ed1390c3797ef6f8a2688c2f73c44ea` |
+| `tools/capabilities/uzpainter-additions.json` | `e9c5d640227d7a4402ba649f580cf8528c2f4e73e2154279cdb367f8ca5000ef` |
+| `tools/capabilities/compositor-capabilities.json` | `f25e670c28c15f9aa173984d98623e9c9d8558465a3fcbee5e36675ef98aea56` |
+| `tools/capabilities/tier0-trace.json` | `069a302020616218f339c15dad1b88a04ed0015aacea257456b0ab19d5574130` |
+| `tools/capabilities/mcp-tools.json` | `a12b5178004e4e857baaac6a35032e4d0d0396ee300aec69f553f93431f718a5` |
+| `tools/capabilities/operation-matrix.json` | `d41203bfff77523f87747c35b1cce34d45017970b3cf2b7037933f60644eaa5c` |
+| `parity/envelopes/registry.json` | `361bd5262722c43fd4aaa274726e1ec4cfeb6f05ed88afc296f287e01f342762` |
+
+The Wand's padding work (item 2.7) can still change this manifest, so the gate records the hash from the gate commit's build.
 
 ## 7. Phase 2 duration Hypothesis (owner Q14, roadmap rule 6)
 
