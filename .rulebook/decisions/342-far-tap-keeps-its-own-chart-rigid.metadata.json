@@ -1,0 +1,11 @@
+{
+  "id": 342,
+  "slug": "far-tap-keeps-its-own-chart-rigid",
+  "title": "A far tap keeps its own chart rigid",
+  "status": "accepted",
+  "date": "2026-10-21",
+  "relatedTasks": [
+    "phase1.25_pilot-wand"
+  ],
+  "supersededBy": null
+}

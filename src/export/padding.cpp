@@ -270,7 +270,8 @@ public:
     /// fewest-hinge face paths (at most kMaxHinges) into tau's plane, the development nearest `q`
     /// (decision 281), else as it is. A hinge is rotated about only when it is folded past the gate
     /// (decision 282, `FoldedPast`: of k and tau across a shared edge, of the path's two triangles
-    /// at each hinge of a development).
+    /// at each hinge of a development). A far tap (k in another chart than tau) keeps its own chart
+    /// rigid: a hinge whose two triangles are both in k's chart is not rotated about (decision 342).
     Vec3 Frame(const Vec3& p, uint32_t k, uint32_t tau, const Vec3& q) const;
     /// Whether triangle `k`'s planar face is tau's or shares a 3D edge with it.
     bool Hinged(uint32_t k, uint32_t tau) const;
@@ -543,6 +544,10 @@ Vec3 RingGeometry::Frame(const Vec3& p, uint32_t k, uint32_t tau, const Vec3& q)
     const uint32_t to = triangles[tau].face;
     if (from == to) return p;
     if (const auto& h = HingeOf(to, from)) return FoldedPast(triangles[k], triangles[tau]) ? Unfold(h->hinge, p) : p;
+    // A far tap (k in another chart than tau) keeps its own chart rigid: a hinge whose two
+    // triangles are both in k's chart is not rotated about (decision 342).
+    const uint32_t chart = triangles[k].chart;
+    const bool farTap = chart != triangles[tau].chart;
     std::optional<Vec3> nearest;
     for (const std::vector<uint32_t>& path : Paths(from, to)) {
         Vec3 r = p;
@@ -551,6 +556,7 @@ Vec3 RingGeometry::Frame(const Vec3& p, uint32_t k, uint32_t tau, const Vec3& q)
             const auto& links = m_links[path[i + 1]];
             const FaceEdge& edge =
                 std::find_if(links.begin(), links.end(), [&](const auto& l) { return l.first == path[i]; })->second;
+            if (farTap && triangles[edge.own].chart == chart && triangles[edge.other].chart == chart) continue;
             if (!FoldedPast(triangles[edge.own], triangles[edge.other])) continue;
             r = Unfold(MakeHinge(triangles[edge.own], triangles[edge.other], edge.va, edge.vb), r);
         }

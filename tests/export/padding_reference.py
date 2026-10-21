@@ -660,18 +660,24 @@ class Ring:
         rotated about an edge shared by the two faces, else hinge by hinge along the fewest-hinge
         face paths, the development nearest `q` (decision 281), else as is. A hinge is rotated
         about only when folded past the gate (decision 282: `folded`, of k and tau across a shared
-        edge, of the path's two triangles at each hinge)."""
+        edge, of the path's two triangles at each hinge). A far tap (k in another chart than tau)
+        keeps its own chart rigid: a hinge whose two triangles are both in k's chart is not
+        rotated about (decision 342)."""
         src, dst = self.tris[k].face, self.tris[tau].face
         if src == dst:
             return p
         h = self._hinge(dst, src)
         if h is not None:
             return unfold(h[1], p) if self.folded(k, tau) else p
+        chart = self.tris[k].chart
+        far_tap = chart != self.tris[tau].chart
         best: Vec | None = None
         for path in self._paths(src, dst):
             r = p
             for a, b in itertools.pairwise(path):
                 i, j, va, vb = self.links[b][a]
+                if far_tap and self.tris[i].chart == chart == self.tris[j].chart:
+                    continue
                 if self.folded(i, j):
                     r = unfold(hinge(self.tris[i], self.tris[j], va, vb), r)
             if best is None or norm(sub(q, r)) < norm(sub(q, best)):

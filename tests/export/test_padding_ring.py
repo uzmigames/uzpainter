@@ -18,6 +18,7 @@ read.
 
 from __future__ import annotations
 
+import itertools
 import json
 import math
 import re
@@ -39,7 +40,9 @@ from tests.export.padding_reference import (
     chain,
     compare_distance,
     fractions,
+    hinge,
     segment_distance,
+    tap_count,
     unfold,
 )
 from tools.parity.feasibility import png
@@ -1214,3 +1217,89 @@ def test_own_comparator_keeps_tau_and_far_roles_separate(
         candidates, _ = reference.candidates(x, y, own, tau)
         assert [c[2] for c in candidates[:4]] == taps
         assert [tuple(c[:2]) for c in native[(x, y)]["candidates"][:4]] == taps
+
+
+def test_far_tap_keeps_its_own_chart_rigid(export_tests: Path, tmp_path: Path) -> None:
+    """Decision 342: a far tap reached along a face path is not rotated about the hinges inside
+    its own chart; the seam hinge and the hinges in tau's chart keep decision 282's gate. On the
+    hinge-far fixture (512 x 512), ring texels (20, 27) and (20, 60) take two far taps each from a
+    far chart folded past the gate one and two hinges beyond its flat seam hinge. Each far tap's
+    distance is |q - P| with P as is (all of the path's hinges are in the far chart or ungated),
+    and differs from the development that unfolds every gated hinge (decision 282 alone).
+    UzPainter's taps, their distances and the ring values equal `padding_reference`'s."""
+    mesh = (
+        Path(__file__).resolve().parents[2] / "parity/fixtures/tier0-semantics/meshes/hinge-far.obj"
+    )
+    size = 512
+    values = np.random.default_rng(342).random((size, size, 3)).astype(F32)
+    raw, result = tmp_path / "values.f32", tmp_path / "result.f32"
+    raw.write_bytes(values.tobytes())
+    cases = tmp_path / "cases.json"
+    cases.write_text(
+        json.dumps(
+            [
+                dict(
+                    mesh=str(mesh),
+                    material="uzp_hinge",
+                    width=size,
+                    height=size,
+                    channels=3,
+                    values=str(raw),
+                    out=str(result),
+                )
+            ]
+        )
+    )
+    process = subprocess.run(
+        [str(export_tests), "ring", str(cases)],
+        capture_output=True,
+        text=True,
+        timeout=600,
+        check=False,
+    )
+    assert process.returncode == 0, process.stdout + process.stderr
+    native = {(r["x"], r["y"]): r for r in json.loads(process.stdout)["ring"]}
+    out = np.frombuffer(result.read_bytes(), F32).reshape(size, size, 3)
+    reference = Ring(mesh, "uzp_hinge", size, size)
+    tris = reference.tris
+    for x, y, depth in ((20, 27, 1), (20, 60, 2)):
+        own = [
+            ((x + dx) % size, y + dy)
+            for dy, dx in NEIGHBOURS
+            if 0 <= y + dy < size and reference.owner[y + dy, (x + dx) % size] >= 0
+        ]
+        tau = reference.tau(x, y, own)
+        cands, _ = reference.candidates(x, y, own, tau)
+        n = tap_count(cands)
+        r = native[(x, y)]
+        assert r["taps"] == n == 4, (x, y)
+        assert [tuple(c[:2]) for c in r["candidates"][:n]] == [c[2] for c in cands[:n]], (x, y)
+        T = tris[tau]
+        q = T.point(T.bary(x + 0.5, y + 0.5))
+        far = 0
+        for (tx, ty, d, is_far), c in zip(r["candidates"][:n], cands[:n], strict=True):
+            assert math.isclose(d, c[0], rel_tol=1e-12), (x, y, tx, ty)
+            if not is_far:
+                continue
+            k = int(reference.owner[ty, tx])
+            K = tris[k]
+            assert K.chart != T.chart and reference._hinge(T.face, K.face) is None
+            (path,) = reference._paths(K.face, T.face)
+            links = [reference.links[b][a] for a, b in itertools.pairwise(path)]
+            inside = [(i, j) for i, j, _, _ in links if tris[i].chart == K.chart == tris[j].chart]
+            assert len(inside) == depth and all(reference.folded(i, j) for i, j in inside)
+            p = K.point(K.bary(tx + 0.5, ty + 0.5))
+            developed = p
+            for i, j, va, vb in links:
+                if reference.folded(i, j):
+                    developed = unfold(hinge(tris[i], tris[j], va, vb), developed)
+            rigid = float(np.linalg.norm(np.subtract(q, p)))
+            unfolded = float(np.linalg.norm(np.subtract(q, developed)))
+            assert math.isclose(d, rigid, rel_tol=1e-12), (x, y, tx, ty)
+            assert abs(rigid - unfolded) > 1e-4 * rigid, (x, y, tx, ty)
+            far += 1
+        assert far == 2, (x, y)
+        t = fractions([c[0] for c in cands[:n]])
+        chosen = [values[ty, tx] for _, _, (tx, ty) in cands[:n]]
+        value = [chain([v[c] for v in chosen], t) for c in range(3)]
+        assert out[y, x].view(np.uint32).tolist() == np.array(value, F32).view(np.uint32).tolist()
