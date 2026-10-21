@@ -52,3 +52,18 @@ The coordinator directed this split. Under speed rule 3, the owner choice is not
 - phase1.15 can archive once its prerequisite 1.1 is accepted. phase1.18 item 2.1 then follows.
 - `phase3.2_unreal-ue56-packed-preset` item 2.10 is a non-waivable item. Its ORM output cannot ship before it.
 - A configuration naming AO_Mixed still fails before writing.
+
+## Amendment (2026-10-21, fit attempt on the admitted R-131 grid)
+
+CPU analysis of the admitted `ao-mixed-grid` (R-131), R-086a and R-092, read-only from the store. Logs are in `tmp/scratch/ao-mixed-fit/`.
+
+- **Channel.** It is reproduced exactly: opacity stored as an L16 code with ties down, and c = fma(C − 1, cov, 1) written as L16. The AO-channel export has 0 misses on every grid set.
+- **Best model:** AO_Mixed = WriteUnorm8(float32(a · c)), a = mesh-map code / 255, the decision 092 model.
+  - At opacity 1 it is exact on all 65,536 pairs.
+  - Below opacity 1, r1 misses on the same 11 (mesh code, channel code, opacity) pairs in every admitted golden, whatever the filter, the format or the operand roles. So AO_Mixed reads a channel operand a few float32 ulps away from the value the channel export writes. No correctly rounded evaluation, conversion, GPU transcendental or expression of size 6 or less gives it.
+- **r2 cannot match r1.** r1 and r2 have bit-identical inputs and channel and mesh-map exports, yet their AO_Mixed differs at 27 to 39 values. r2 is the recording made after save and reopen. No fixed operator can be exact on both.
+- **The refusal stays.** No item is ticked.
+- **Settling recording:**
+  - the grid with an L32F AO channel at opacity 0.5 and 0.75, exporting the channel and AO_Mixed as OpenEXR 32f; this exposes the operand;
+  - a second and a third reopen (r2, r3) of the L16 grid, to show whether the post-reopen operator is itself reproducible.
+- **Open question for the acceptance rule.** This decision compares r1 only. The phase3.2_unreal-ue56-packed-preset item 2.10 acceptance requires both recordings. That conflict is settled when the r3 recording shows whether r2 is reproducible.
