@@ -25,7 +25,7 @@ the bundle import and the size census (§10, §11) implement 09 §3 and §6.
 | `planes.h` | Raster planes: plane rows, immutable versions, chunk codec, `chunk_root`, manifest bindings, staging, the commit extension and the read path (§8) |
 | `plane_integrity.h` | `CheckPlaneIntegrity`: the plane rules, run by `CheckIntegrity` (§8) |
 | `snapshots.h` | Frozen procedural snapshots: the manifest's `procedural_snapshots` entries, `StageSnapshot`, `CheckSnapshots` (§8, decision 327) |
-| `project_store.h` | `ProjectStore`: `Create`, `Open`, `Close`, `Attach`, `Submit`, `StageResource`, `StageLocator`, `ReadResource`, `CreatePlane`, `WritePlane`, `ReadPlane`, `ReadPlaneChunk`, `RecordSnapshot`, `Save`, `NeedsSaving`, `Compact`, `SaveAs`, `SaveAsCopy`, `Revert` |
+| `project_store.h` | `ProjectStore`: `Create`, `Open`, `Close`, `Attach`, `Submit`, `StageResource`, `StageLocator`, `ReadResource`, `CreatePlane`, `WritePlane`, `WriteBitmap`, `ReadPlane`, `ReadPlaneChunk`, `RecordSnapshot`, `Save`, `NeedsSaving`, `Compact`, `SaveAs`, `SaveAsCopy`, `Revert` |
 | `save.h` | Checkpoint rows, `save()`'s rows (`WriteSaveCheckpoint`), the dirty flag, the revert project (§9) |
 | `compact.h` | Retention (`ComputeRetention`), reachability, `CollapseAndCollect`, `VacuumInto`, `RenameFile` (§9) |
 | `lock.h` | The lock sidecar `<file>.uzp.lock` (`ProjectLock`, §9) |
@@ -259,6 +259,14 @@ from inside a transaction's call:
 - `WritePlane(edit, plane_id, image)` stages a whole-plane image (`width × height` texels,
   row-major, `TexelBytes(format)` bytes each in the format's native little-endian components:
   1, 2, 3, 4, 6 or 12) as a new version and rebinds the node. Identical content changes nothing.
+- `WriteBitmap(edit, node, channels, sha256)` is the whole-bitmap operation
+  (phase4.1_nodes-paint-layers item 2.2, decision 348): the project resource `sha256` becomes the
+  content of the plane of each addressed channel of a paint layer or content paint effect (a plane
+  on UV tile 1001 is created where the node holds none), at the texture set's resolution and the
+  channel's format, as new versions of the one transaction. The bitmap is stored as the plane's
+  texels as they are: a PNG or OpenEXR whose size or layout differs from the plane's, a mask-stack
+  paint effect and a project outside the Default workflow raise `NotYetSupported` before anything
+  is staged (no resampling, conversion or mask plane format is recorded).
 - `ReadPlane(project, plane_id)` (a working copy's staged content included), `ReadPlane(revision,
   plane_id)` and `ReadPlaneChunk(revision, plane_id, x, y)` read through the binding of that
   project or revision's manifest; no query ever selects chunks by revision number.

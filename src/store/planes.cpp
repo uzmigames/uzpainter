@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "store/blobs.h"
+#include "store/bundle_codec.h"
 #include "store/integrity.h"
 #include "store/snapshots.h"
 #include "uzp_core/document/nodes.h"
@@ -561,6 +562,73 @@ VersionRef StagePlaneContent(Container& container, PendingPlanes& pending, core:
     pending.versions[vid] = std::move(version);
     SetBinding(*node->paint, plane_id, ref);
     return ref;
+}
+
+std::vector<Id> StageBitmap(Container& container, PendingPlanes& pending, core::Edit& edit, Id node_id,
+                            const std::vector<core::ChannelType>& channels, std::string_view bitmap) {
+    core::Project& project = edit.project();
+    const std::optional<PaintNode> node =
+        FindPaintNode(project, [&](Id uid, const core::PaintContent*) { return uid == node_id; });
+    if (!node || node->paint == nullptr) {
+        throw core::ValueError("bitmap: node " + std::to_string(node_id) + " is not a paint layer or paint effect");
+    }
+    if (node->mask) {
+        throw core::NotYetSupported("bitmap: node " + std::to_string(node_id) +
+                                    " is a mask-stack paint effect, whose plane format is not recorded "
+                                    "(phase4.1_nodes-paint-layers item 2.5)");
+    }
+    if (channels.empty()) throw core::ValueError("bitmap: name at least one channel of the paint node");
+    if (project.settings.workflow != core::ProjectWorkflow::Default) {
+        throw core::NotYetSupported("bitmap: a paint plane outside the Default workflow (phase4.5_uv-tiles)");
+    }
+    const core::TextureSet* set = nullptr;
+    for (const core::TextureSet& candidate : project.texture_sets) {
+        if (candidate.id == node->set) set = &candidate;
+    }
+    const core::Stack* stack = core::FindStack(project, node->set, node->stack);
+    if (set == nullptr || stack == nullptr) {
+        throw core::ValueError("bitmap: node " + std::to_string(node_id) + " is in no stack");
+    }
+    // Every channel is checked and the bitmap decoded for it before anything is staged.
+    std::map<core::ChannelType, PlaneImage> images;
+    for (const core::ChannelType channel : channels) {
+        const auto found = stack->channels.find(channel);
+        if (found == stack->channels.end()) {
+            throw core::ValueError("bitmap: the stack of node " + std::to_string(node_id) + " has no channel " +
+                                   std::string(core::ToString(channel)));
+        }
+        const core::ChannelFormat format = found->second.format;
+        PlaneImage image;
+        try {
+            image = codec::IsExrFormat(format) ? codec::DecodeExr(bitmap, format) : codec::DecodePng(bitmap, format);
+        } catch (const StoreError& error) {
+            throw core::NotYetSupported("bitmap: the bitmap does not hold " + std::string(core::ToString(format)) +
+                                        " texels as they are (" + error.what() +
+                                        "); converting a bitmap into the format of a plane is not recorded "
+                                        "(phase4.1_nodes-paint-layers item 2.5)");
+        }
+        if (image.width != set->resolution.width || image.height != set->resolution.height) {
+            throw core::NotYetSupported("bitmap: a " + std::to_string(image.width) + "x" + std::to_string(image.height) +
+                                        " bitmap into a " + std::to_string(set->resolution.width) + "x" +
+                                        std::to_string(set->resolution.height) +
+                                        " plane; resampling into a plane is not recorded "
+                                        "(phase4.1_nodes-paint-layers item 2.5)");
+        }
+        images[channel] = std::move(image);
+    }
+    std::vector<Id> planes;
+    for (auto& [channel, image] : images) {
+        Id plane_id = core::kNoId;
+        if (const auto held = node->paint->planes.find(channel); held != node->paint->planes.end()) {
+            plane_id = held->second;
+        } else {
+            plane_id = StageNewPlane(container, pending, edit,
+                                     PlaneSpec{node_id, channel, 1001, image.format, image.width, image.height});
+        }
+        StagePlaneContent(container, pending, edit, plane_id, image);
+        planes.push_back(plane_id);
+    }
+    return planes;
 }
 
 VersionRef StageVersion(Container& container, PendingPlanes& pending, const PlaneRow& row, const PlaneImage& image) {

@@ -190,6 +190,20 @@ core::Id StageNewPlane(Container& container, PendingPlanes& pending, core::Edit&
 VersionRef StagePlaneContent(Container& container, PendingPlanes& pending, core::Edit& edit, core::Id plane_id,
                              const PlaneImage& image);
 
+/// The whole-bitmap operation: stages `bitmap` (PNG or OpenEXR bytes) as the content of the plane
+/// of each channel in `channels` of the paint layer or content paint effect `node` (a new plane on
+/// UV tile 1001 where the node holds none on that channel, then a new version, `StagePlaneContent`),
+/// at the plane's resolution (the texture set's) and native format (the channel's). Returns the
+/// plane of each channel, in channel order. Everything is checked before anything is staged:
+/// `core::ValueError` when the node is not a paint node, no channel is named or its stack lacks
+/// one; `core::NotYetSupported` for a mask-stack paint effect (its plane format is not recorded), a
+/// project outside the Default workflow, a bitmap whose size differs from the plane's (resampling
+/// is not recorded) or whose layout does not hold the plane's texels as they are (an 8- or 16-bit
+/// grey or RGB PNG for L8, L16, sRGB8, RGB8 and RGB16, the matching OpenEXR for the float formats:
+/// no conversion is recorded).
+std::vector<core::Id> StageBitmap(Container& container, PendingPlanes& pending, core::Edit& edit, core::Id node,
+                                  const std::vector<core::ChannelType>& channels, std::string_view bitmap);
+
 /// Stages `image` as a new version of the plane `row` (a plane of the transaction, or a stored
 /// one): every non-empty chunk listed, bytes kept only for chunks the store does not hold. The
 /// caller binds the returned version in the working copy (a procedural snapshot entry,

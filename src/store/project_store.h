@@ -165,6 +165,13 @@ public:
     /// (`StagePlaneContent`): a new immutable version written by the transaction's commit, with
     /// blobs only for the chunks the file does not hold. Call it from the transaction's call.
     VersionRef WritePlane(core::Edit& edit, core::Id plane_id, const PlaneImage& image);
+    /// The whole-bitmap operation (`StageBitmap`): writes the resource `sha256` of the working copy
+    /// (its bytes as `ReadResource` gives them) into the plane of each channel in `channels` of the
+    /// paint node `node`, as new versions the transaction's commit writes. Call it from the
+    /// transaction's call; returns the planes. Throws `core::ValueError` for a hash the working copy
+    /// does not reference.
+    std::vector<core::Id> WriteBitmap(core::Edit& edit, core::Id node, const std::vector<core::ChannelType>& channels,
+                                      std::string_view sha256);
     /// The pixels `project` binds to `plane_id` (a working copy's staged content included).
     PlaneImage ReadPlane(const core::Project& project, core::Id plane_id);
     /// The pixels the manifest of `revision` binds to `plane_id`. Throws

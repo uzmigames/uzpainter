@@ -29,6 +29,7 @@ NATIVE_CASES = (
     "interrupted_rewrite",  # 3.8
     "portability",  # 3.9
     "lock_sidecar",  # 3.10
+    "paint_layers_keep_planes",  # phase4.1_nodes-paint-layers 3.5
 )
 
 

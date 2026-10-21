@@ -216,6 +216,16 @@ VersionRef ProjectStore::WritePlane(core::Edit& edit, core::Id plane_id, const P
     return StagePlaneContent(container_, planes_, edit, plane_id, image);
 }
 
+std::vector<core::Id> ProjectStore::WriteBitmap(core::Edit& edit, core::Id node,
+                                                const std::vector<core::ChannelType>& channels, std::string_view sha256) {
+    if (!edit.project().resources.contains(std::string(sha256))) {
+        throw core::ValueError("bitmap: the project holds no resource " + std::string(sha256));
+    }
+    const std::string bytes = ReadResource(sha256);
+    std::lock_guard lock(mutex_);
+    return StageBitmap(container_, planes_, edit, node, channels, bytes);
+}
+
 PlaneImage ProjectStore::ReadPlane(const core::Project& project, core::Id plane_id) {
     std::lock_guard lock(mutex_);
     return ReadPlaneIn(container_, planes_, project, plane_id);

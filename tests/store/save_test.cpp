@@ -31,6 +31,7 @@
 #include <utility>
 #include <vector>
 
+#include "store/bundle_codec.h"
 #include "store/compact.h"
 #include "store/container.h"
 #include "store/fault.h"
@@ -1068,6 +1069,110 @@ int Child(const std::string& action, const fs::path& path, const fs::path& targe
     return 1;
 }
 
+// ── phase4.1_nodes-paint-layers 3.5: two paint layers on one channel and tile ───────────────
+
+/// An sRGB8 image of the texture set's size (1024 x 1024) holding noise.
+PlaneImage Rgb(std::uint64_t seed) {
+    return PlaneImage{1024, 1024, ChannelFormat::sRGB8, Noise(std::size_t{1024} * 1024 * 3, seed * 0x9E3779B97F4A7C15ull + 7)};
+}
+
+/// Stages `image` as a PNG resource of the working copy; returns its hash.
+std::string ImportPng(Session& s, Edit& e, const std::string& name, const PlaneImage& image) {
+    std::string png = codec::EncodePng(image);
+    const std::size_t size = png.size();
+    const std::string sha = s.store->StageResource(std::move(png), "image/png");
+    e.project().resources[sha] = {Meta(e.AllocateId(), name, size)};
+    return sha;
+}
+
+/// The plane `node` holds on BaseColor in `project`.
+Id BaseColorPlane(const Project& project, Id node) {
+    const Layer* layer = FindLayer(project, node);
+    CHECK(layer != nullptr && layer->paint && layer->paint->planes.size() == 1);
+    return layer->paint->planes.at(ChannelType::BaseColor);
+}
+
+/// The version `project` binds to `plane`.
+VersionRef Bound(const Project& project, Id plane) {
+    for (const ManifestBinding& binding : ManifestPlaneBindings(ProjectToJson(project))) {
+        if (binding.plane_id == plane && binding.version) return *binding.version;
+    }
+    throw Failure{"plane " + std::to_string(plane) + " is not bound"};
+}
+
+/// Two paint layers on BaseColor in tile 1001, each written with its own bitmap by the
+/// whole-bitmap operation, keep separate planes through save, reopen, revert and compaction.
+void PaintLayersKeepPlanes() {
+    const fs::path dir = WorkDir("paint-layers-planes");
+    const fs::path path = CreateProject(dir);
+    const PlaneImage a0 = Rgb(1), b0 = Rgb(2), a1 = Rgb(3);
+    Id a = kNoId, b = kNoId, plane_a = kNoId, plane_b = kNoId;
+    std::int64_t painted = 0;
+    {
+        Session s = OpenSession(path);
+        CHECK(Committed(Mutate(s, "paint", [&](Edit& e) {
+            a = e.Insert(kTop, NodeType::PaintLayer, "paint A");
+            b = e.Insert(kTop, NodeType::PaintLayer, "paint B");
+            const std::string sha_a = ImportPng(s, e, "a.png", a0), sha_b = ImportPng(s, e, "b.png", b0);
+            const std::vector<Id> written_a = s.store->WriteBitmap(e, a, {ChannelType::BaseColor}, sha_a);
+            const std::vector<Id> written_b = s.store->WriteBitmap(e, b, {ChannelType::BaseColor}, sha_b);
+            CHECK(written_a.size() == 1 && written_b.size() == 1);
+            plane_a = written_a[0];
+            plane_b = written_b[0];
+            CHECK(s.store->ReadPlane(e.project(), plane_a) == a0 && s.store->ReadPlane(e.project(), plane_b) == b0);
+        })));
+        painted = s.doc->revision();
+        CHECK(plane_a != plane_b);
+        s.store->Save(*s.doc, SaveOptions{"painted", "", false});
+        // Refusals before anything is staged: a bitmap of another size (resampling is not
+        // recorded) and a hash the project does not reference.
+        const RequestOutcome resized = Mutate(s, "resized", [&](Edit& e) {
+            const std::string sha = ImportPng(s, e, "small.png", PlaneImage{512, 512, ChannelFormat::sRGB8,
+                                                                            Noise(std::size_t{512} * 512 * 3, 9)});
+            s.store->WriteBitmap(e, a, {ChannelType::BaseColor}, sha);
+        });
+        CHECK(resized.result && resized.result->status == ResultStatus::failed &&
+              Contains(resized.result->error, "resampling into a plane is not recorded"));
+        const RequestOutcome unknown = Mutate(s, "unknown", [&](Edit& e) {
+            s.store->WriteBitmap(e, a, {ChannelType::BaseColor}, std::string(64, 'a'));
+        });
+        CHECK(unknown.result && unknown.result->status == ResultStatus::failed &&
+              Contains(unknown.result->error, "holds no resource"));
+        CHECK(s.doc->revision() == painted);
+        // A second write of A: a new version of its own plane; B keeps its binding.
+        CHECK(Committed(Mutate(s, "repaint A", [&](Edit& e) {
+            const std::string sha = ImportPng(s, e, "a1.png", a1);
+            CHECK(s.store->WriteBitmap(e, a, {ChannelType::BaseColor}, sha) == std::vector<Id>{plane_a});
+        })));
+        const Project& now = *s.doc->snapshot().project;
+        CHECK(BaseColorPlane(now, a) == plane_a && BaseColorPlane(now, b) == plane_b);
+        CHECK(s.store->ReadPlane(s.doc->revision(), plane_a) == a1 && s.store->ReadPlane(s.doc->revision(), plane_b) == b0);
+        CHECK(Bound(now, plane_b) == Bound(LoadManifest(StoredManifest(s.store->container(), painted)), plane_b));
+    }
+    {
+        Session s = OpenSession(path, VerifyLevel::full);  // reopen
+        CHECK(s.report.ok() && s.report.collectable.empty());
+        CHECK(s.store->ReadPlane(s.doc->revision(), plane_a) == a1 && s.store->ReadPlane(s.doc->revision(), plane_b) == b0);
+        CHECK(Committed(RevertRequest(s, "revert", painted)));
+        const std::int64_t reverted = s.doc->revision();
+        CHECK(s.store->ReadPlane(reverted, plane_a) == a0 && s.store->ReadPlane(reverted, plane_b) == b0);
+        s.store->Compact(*s.doc);
+        CheckReachability(s.store->container());
+        CHECK(s.store->ReadPlane(reverted, plane_a) == a0 && s.store->ReadPlane(reverted, plane_b) == b0);
+    }
+    Session s = OpenSession(path, VerifyLevel::full);
+    CHECK(s.report.ok() && s.report.collectable.empty());
+    const Project& now = *s.doc->snapshot().project;
+    CHECK(BaseColorPlane(now, a) == plane_a && BaseColorPlane(now, b) == plane_b);
+    CHECK(s.store->ReadPlane(now, plane_a) == a0 && s.store->ReadPlane(now, plane_b) == b0);
+    // Never aliased: two plane rows on the same set, stack, channel and tile, distinct versions.
+    Container& c = s.store->container();
+    Statement q(c, "SELECT COUNT(*), COUNT(DISTINCT set_id || '/' || stack_id || '/' || channel || '/' || tile_u || '/' || tile_v) FROM plane");
+    CHECK(q.Step() && q.Int(0) == 2 && q.Int(1) == 1);
+    const VersionRef va = Bound(now, plane_a), vb = Bound(now, plane_b);
+    CHECK(va.version_id != vb.version_id && va.chunk_root != vb.chunk_root);
+}
+
 int Run(const std::string& only) {
     const std::vector<std::pair<const char*, std::function<void()>>> cases = {
         {"checkpoints", Checkpoints},                          // 3.1
@@ -1081,6 +1186,7 @@ int Run(const std::string& only) {
         {"interrupted_rewrite", InterruptedRewrite},           // 3.8
         {"portability", Portability},                          // 3.9
         {"lock_sidecar", LockSidecar},                         // 3.10
+        {"paint_layers_keep_planes", PaintLayersKeepPlanes},   // phase4.1_nodes-paint-layers 3.5
     };
     int failed = 0;
     int ran = 0;
