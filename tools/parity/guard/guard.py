@@ -29,15 +29,34 @@ Checks the content of files, never only their names or signatures:
   procedural certification reports (`parity/reports/<phase>/proc-cert/<asset>@<version>/<pin>.json`)
   and batches (`parity/manifests/phase3/proc-cert/**`) have rules of their own
   (`tools/parity/proc_cert/report.py`): hashes, integer statistics and case outcomes, no path.
+- `procedural-snapshot`: a frozen procedural snapshot anywhere (decision 327): a JSON document
+  holding a `procedural_snapshots` member at any depth (a project manifest, an export bundle's
+  manifest, `inspect` output), a `.uzp` project (an SQLite database, by its header) whose `plane`
+  table holds a project-level plane (no texture set, stack or channel: a snapshot's raster), and
+  a ZIP archive (an export bundle) whose JSON members hold such an entry.
+- `observed-structure`: an observed Painter preset tree, parameter collection or serialised
+  readback anywhere, in JSON or in a ZIP archive's JSON members: an object at any depth that is
+  a layer-stack node (a `name` with a `node_type` or `type` of the documented
+  `layerstack.NodeType`: preset trees and the `get_root_layer_nodes`, `content_effects` and
+  `mask_effects` readbacks), a property read (`value` with `widget_type`: `get_properties`), a
+  substance source read (`substance_properties`, or `resource_url` with `properties`, `presets`,
+  `image_inputs` or `image_outputs`: `get_source`), or levels parameters (a `class` of the
+  documented `substance_painter.levels`: `get_parameters`). These are the shapes the recorder's
+  serialisers give (Painter is observed only through them, CONTRACT.md §6.1); UzPainter's own
+  recipes name node kinds in lower case (`kind`) and its default tables hold `default`, never a
+  read `value`.
 """
 
 from __future__ import annotations
 
 import functools
 import hashlib
+import io
 import json
 import re
+import sqlite3
 import subprocess
+import zipfile
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -221,6 +240,132 @@ def _private_markers(node: Any, where: str = "") -> Iterator[str]:
     elif isinstance(node, list):
         for index, value in enumerate(node):
             yield from _private_markers(value, f"{where}/{index}" if where else str(index))
+
+
+# --- snapshots and observed structures -------------------------------------------------------
+
+SNAPSHOT_RULE = "procedural-snapshot"
+OBSERVED_RULE = "observed-structure"
+SNAPSHOT_KEY = "procedural_snapshots"
+SQLITE_HEADER = b"SQLite format 3\x00"
+ZIP_HEADER = b"PK\x03\x04"
+# A snapshot's plane row: no texture set, stack, channel or UV tile (decision 327 §3).
+SNAPSHOT_PLANES = "SELECT count(*) FROM plane WHERE set_id = 0 AND stack_id = 0 AND channel IS NULL"
+DOCUMENTED_SYMBOLS = Path(__file__).resolve().parents[1] / "recorder" / "documented_symbols.json"
+NODE_TYPE_PREFIX = "substance_painter.layerstack.NodeType."
+LEVELS_PREFIX = "substance_painter.levels."
+SOURCE_READ_KEYS = frozenset({"properties", "presets", "image_inputs", "image_outputs"})
+
+
+@functools.cache
+def documented_names(prefix: str) -> frozenset[str]:
+    """The names directly under `prefix` among the documented `substance_painter` symbols."""
+    symbols = json.loads(DOCUMENTED_SYMBOLS.read_text(encoding="utf-8"))["symbols"]
+    return frozenset(
+        name
+        for name in (symbol.removeprefix(prefix) for symbol in symbols if symbol.startswith(prefix))
+        if name and "." not in name
+    )
+
+
+def _content_markers(node: Any, where: str = "") -> Iterator[tuple[str, str]]:
+    """(rule, marker) for each snapshot entry and observed Painter structure in a document."""
+    if isinstance(node, dict):
+        at = where or "<root>"
+        if SNAPSHOT_KEY in node:
+            yield SNAPSHOT_RULE, f"{at}: {SNAPSHOT_KEY} (a project's frozen snapshot entries)"
+        kind = node.get("node_type", node.get("type"))
+        if isinstance(kind, str) and "name" in node and kind in documented_names(NODE_TYPE_PREFIX):
+            yield OBSERVED_RULE, f"{at}: a Painter layer-stack node ({kind}) read back"
+        if "value" in node and "widget_type" in node:
+            yield OBSERVED_RULE, f"{at}: a Painter property read back (value and widget type)"
+        if "substance_properties" in node or (
+            "resource_url" in node and SOURCE_READ_KEYS & node.keys()
+        ):
+            yield OBSERVED_RULE, f"{at}: a Painter substance source read back"
+        kind = node.get("class")
+        if isinstance(kind, str) and kind in documented_names(LEVELS_PREFIX):
+            yield OBSERVED_RULE, f"{at}: Painter levels parameters ({kind}) read back"
+        for key, value in node.items():
+            yield from _content_markers(value, f"{where}/{key}" if where else str(key))
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            yield from _content_markers(value, f"{where}/{index}" if where else str(index))
+
+
+def snapshot_planes(data: bytes) -> int | None:
+    """The project-level (snapshot) planes of a `.uzp` SQLite database; None for other bytes."""
+    if not data.startswith(SQLITE_HEADER):
+        return None
+    connection = sqlite3.connect(":memory:")
+    try:
+        connection.deserialize(data)
+        (count,) = connection.execute(SNAPSHOT_PLANES).fetchone()
+    except sqlite3.DatabaseError:
+        return None  # not a project database (no `plane` table) or unreadable
+    finally:
+        connection.close()
+    return int(count)
+
+
+def archive_documents(data: bytes) -> Iterator[tuple[str, Any]]:
+    """(member name, document) for each member of a ZIP archive that holds JSON (judged as
+    `parse_json` judges a file); nothing for other bytes or an unreadable archive."""
+    if not data.startswith(ZIP_HEADER):
+        return
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(data))
+    except (zipfile.BadZipFile, ValueError):
+        return
+    with archive:
+        for info in archive.infolist():
+            if info.is_dir():
+                continue
+            try:
+                with archive.open(info) as member:
+                    head = member.read(64)
+                    named_json = info.filename.lower().endswith(".json")
+                    if not named_json and head.lstrip(b" \t\r\n\xef\xbb\xbf")[:1] not in (
+                        b"{",
+                        b"[",
+                    ):
+                        continue
+                    body = head + member.read()
+            except (zipfile.BadZipFile, NotImplementedError, RuntimeError, OSError):
+                continue  # an encrypted, unsupported or damaged member
+            try:
+                document = parse_json(info.filename, body)
+            except ValueError:
+                continue
+            if document is not NOT_JSON:
+                yield info.filename, document
+
+
+_HOLDS = {
+    SNAPSHOT_RULE: "a frozen procedural snapshot",
+    OBSERVED_RULE: "an observed Painter structure",
+}
+
+
+def _content_findings(path: str, document: Any, member: str = "") -> list[Finding]:
+    prefix = f"member {member}: " if member else ""
+    return [
+        Finding(path, rule, f"{prefix}holds {_HOLDS[rule]} ({marker})")
+        for rule, marker in _content_markers(document)
+    ]
+
+
+def _binary_findings(path: str, data: bytes) -> list[Finding]:
+    """The snapshot planes of a project database and the content of an archive's JSON."""
+    planes = snapshot_planes(data)
+    if planes:
+        return [
+            Finding(path, SNAPSHOT_RULE, f"a project database holding {planes} snapshot plane(s)")
+        ]
+    findings: list[Finding] = []
+    for member, document in archive_documents(data):
+        findings.extend(_content_findings(path, document, member))
+    return findings
 
 
 # --- public-schema rules by path -------------------------------------------------------------
@@ -540,6 +685,7 @@ def check_file(
         findings.append(
             Finding(path, "store-hash", f"SHA-256 {min(matched)} is in the private store index")
         )
+    findings.extend(_binary_findings(path, data))
     try:
         document = parse_json(path, data)
     except ValueError as error:
@@ -553,6 +699,7 @@ def check_file(
             Finding(path, "private-record", f"holds a private oracle record ({marker})")
             for marker in _private_markers(document)
         )
+    findings.extend(_content_findings(path, document))
     if not path.startswith("parity/"):
         return findings
     for pattern, schema, rule in PATH_RULES:

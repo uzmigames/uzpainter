@@ -10,11 +10,14 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import io
 import json
 import os
+import sqlite3
 import struct
 import subprocess
 import sys
+import zipfile
 import zlib
 from pathlib import Path
 from typing import Any
@@ -288,6 +291,140 @@ def test_readback_relabelled_as_synthetic_sample_is_blocked(repo: Path, change: 
 def test_invalid_json_under_parity_is_blocked(repo: Path) -> None:
     put(repo, "parity/manifests/broken.json", b'{"schema": ')
     assert blocked(repo, None) == {"parity/manifests/broken.json": {"public-schema"}}
+
+
+# --- snapshots (phase3.2_proc-snapshot-backend 3.4) and observed structures ------------------
+# (phase3.4_smart-mask-recipes 2.4 and 3.4). Every structure below is a stand-in written here in
+# the shapes the recorder's serialisers give; nothing comes from Painter.
+
+SNAPSHOT_ENTRY = {
+    "signature": {"asset": "uzasset://generator/stand-in", "seed": 7},
+    "project_uuid": "00000000-0000-4000-8000-000000000000",
+    "plane": 12,
+    "plane_versions": {"12": 1},
+}
+PLANE_TABLE = (
+    "CREATE TABLE plane (plane_id INTEGER PRIMARY KEY, set_id INTEGER, stack_id INTEGER, "
+    "channel TEXT, tile_u INTEGER, tile_v INTEGER, format TEXT, width INTEGER, height INTEGER, "
+    "chunk_size INTEGER, created_revision INTEGER)"
+)
+OBSERVED = {
+    "preset tree": [
+        {
+            "node_type": "FillLayer",
+            "name": "Stand-in smart mask",
+            "visible": True,
+            "Content": [],
+            "Mask": [{"node_type": "GeneratorEffect", "name": "Stand-in generator"}],
+        }
+    ],
+    "node structure": {"name": "Stand-in", "type": "FilterEffect", "source": {"source": None}},
+    "parameter collection": {
+        "Scale": {"value": 1.0, "name": "Scale", "label": "Scale", "widget_type": "Slider"}
+    },
+    "substance source": {
+        "resource_url": "resource://stand-in/generator",
+        "properties": {},
+        "presets": [],
+    },
+    "fill source": {"substance_properties": {"seed": {"value": 3, "label": "Seed"}}},
+    "levels parameters": {"class": "LevelsParamsMono", "gamma": 1.0, "clamp": True},
+}
+# A UzPainter recipe layer (src/uzp_core/schema/recipe.schema.json): node kinds in lower case.
+AUTHORED_RECIPE = {
+    "schema": "uzpainter/smart-mask-recipe-stand-in/1",
+    "provenance": {"author": "UzmiGames", "licence": "Apache-2.0"},
+    "layer": {
+        "kind": "fill",
+        "name": "Edge wear",
+        "visible": True,
+        "content_effects": [],
+        "mask": {"effects": [{"kind": "generator", "name": "Edges", "parameters": {"width": 2}}]},
+    },
+}
+
+
+def _project_database(tmp: Path, rows: list[tuple[int, int, int, str | None]]) -> bytes:
+    """A stand-in `.uzp`: an SQLite database with the `plane` table of 09 §1 and `rows` of
+    (plane_id, set_id, stack_id, channel)."""
+    tmp.mkdir(parents=True, exist_ok=True)
+    path = tmp / "stand-in.uzp"
+    with sqlite3.connect(path) as connection:
+        connection.execute(PLANE_TABLE)
+        connection.executemany(
+            "INSERT INTO plane VALUES (?, ?, ?, ?, 0, 0, 'L16', 4, 4, 256, 1)", rows
+        )
+    connection.close()
+    return path.read_bytes()
+
+
+def _zip(members: dict[str, bytes]) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for name, data in members.items():
+            archive.writestr(name, data)
+    return buffer.getvalue()
+
+
+@pytest.mark.parametrize(
+    ("path", "rules"),
+    [
+        ("tests/data/bundle/manifest.json", {"procedural-snapshot"}),
+        ("notes/inspect.txt", {"procedural-snapshot"}),
+        ("parity/manifests/tier2a/stand-in.json", {"procedural-snapshot", "public-schema"}),
+    ],
+)
+def test_a_snapshot_entry_is_blocked_by_its_content(repo: Path, path: str, rules: set[str]) -> None:
+    manifest = {"schema": "stand-in", "procedural_snapshots": {"a" * 64: SNAPSHOT_ENTRY}}
+    put(repo, path, json.dumps({"project": manifest}).encode())
+    assert blocked(repo, None) == {path: rules}
+
+
+def test_a_project_database_with_a_snapshot_plane_is_blocked(repo: Path, tmp_path: Path) -> None:
+    """A snapshot's plane has no texture set, stack or channel (decision 327); a paint or mask
+    plane belongs to a set and a stack and passes."""
+    paint = _project_database(tmp_path / "paint", [(3, 1, 2, "BaseColor"), (4, 1, 2, None)])
+    snapshot = _project_database(tmp_path / "snapshot", [(3, 1, 2, "BaseColor"), (12, 0, 0, None)])
+    put(repo, "fixtures/paint.uzp", paint)
+    put(repo, "fixtures/renamed.bin", snapshot)
+    assert blocked(repo, None) == {"fixtures/renamed.bin": {"procedural-snapshot"}}
+
+
+def test_an_export_bundle_archive_is_judged_by_its_json_members(repo: Path) -> None:
+    manifest = json.dumps({"procedural_snapshots": {"a" * 64: SNAPSHOT_ENTRY}}).encode()
+    readback = json.dumps(OBSERVED["preset tree"]).encode()
+    put(repo, "a/bundle.zip", _zip({"bundle.json": b"{}", "manifest.json": manifest}))
+    put(repo, "b/capture.zip", _zip({"dump.txt": readback, "planes/1.png": b"\x89PNG"}))
+    put(repo, "c/plain.zip", _zip({"manifest.json": b'{"layers": []}', "x.bin": b"[\0"}))
+    assert blocked(repo, None) == {
+        "a/bundle.zip": {"procedural-snapshot"},
+        "b/capture.zip": {"observed-structure"},
+    }
+
+
+@pytest.mark.parametrize("kind", sorted(OBSERVED))
+@pytest.mark.parametrize("path", ["assets/smart-masks/edges.json", "notes/readback.txt"])
+def test_an_observed_preset_structure_is_blocked_by_its_content(
+    repo: Path, kind: str, path: str
+) -> None:
+    put(repo, path, json.dumps({"recorded": OBSERVED[kind]}).encode())
+    assert blocked(repo, None) == {path: {"observed-structure"}}
+
+
+def test_a_recorded_preset_readback_is_blocked_and_an_authored_recipe_passes(
+    repo: Path, tmp_path: Path
+) -> None:
+    """3.4 (smart masks): a serialised smart-mask readback recorded into the store is rejected
+    by its hash in the store index and by its content; the authored recipe JSON passes."""
+    readback = tmp_path / "smart-mask-readback.json"
+    readback.write_text(json.dumps(OBSERVED["preset tree"], indent=2), encoding="utf-8")
+    oracle = OracleStore.init(tmp_path / "preset-store")
+    oracle.put_blob(readback, sha256_file(readback)[0])
+    put(repo, "assets/smart-masks/edge-dirty.json", readback.read_bytes())
+    put(repo, "assets/smart-masks/edge-wear.json", json.dumps(AUTHORED_RECIPE).encode())
+    assert blocked(repo, index_of(oracle)) == {
+        "assets/smart-masks/edge-dirty.json": {"store-hash", "observed-structure"}
+    }
 
 
 # --- 3.3 authored data passes ----------------------------------------------------------------
