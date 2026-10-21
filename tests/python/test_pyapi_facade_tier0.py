@@ -15,9 +15,9 @@ compared exactly with the private golden of the current envelope, both recording
 
 Two normalisations, both Painter-internal and outside the instruction sequence (decision 107):
 resource contexts are compared up to one constant session offset (`project<N>` counts the
-projects a Painter session created or opened before the recording), and Painter's empty default
-paint layer "Layer 1" is removed from the structure readbacks after asserting it is exactly that
-layer (decision 105, phase4.1_nodes-paint-layers item 2.8).
+projects a Painter session created or opened before the recording). Painter's empty default
+paint layer "Layer 1" is compared like every other layer: `project.create` makes it too (decision
+348).
 
 Outputs that cannot be equal yet are listed in `EXCLUDED` with their reason and owner; a listed
 output must exist in the golden, and nothing else may differ. Where no private store exists the
@@ -61,15 +61,6 @@ API_PROBES = (
 )
 PAINTER_SIDE = REPO_ROOT / "tools" / "parity" / "recorder" / "painter_side.py"
 CONDITIONS = ("same_session", "after_save_reopen")
-PAINTER_DEFAULT_LAYER = {
-    "Content": [],
-    "Mask": [],
-    "has_mask": False,
-    "name": "Layer 1",
-    "node_type": "PaintLayer",
-    "visible": True,
-}
-
 CONTENT_FILL = (
     "the native support check refuses a fill effect in a content stack before any change "
     "(release gap phase3.2_proc-filter-families, decision 081): this step and the steps on its node"
@@ -407,13 +398,6 @@ def normalised(outputs: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return shift_contexts(outputs, min(found)) if found else outputs
 
 
-def without_default_layer(value: Any) -> Any:
-    """A structure readback without Painter's empty default paint layer (asserted to be it)."""
-    if isinstance(value, list) and value and value[-1] == PAINTER_DEFAULT_LAYER:
-        return value[:-1]
-    return value
-
-
 def golden_outputs(golden: dict[str, Any]) -> dict[str, dict[str, dict[str, Any]]]:
     out: dict[str, dict[str, dict[str, Any]]] = {}
     for recording in golden["recordings"]:
@@ -424,8 +408,6 @@ def golden_outputs(golden: dict[str, Any]) -> dict[str, dict[str, dict[str, Any]
             entry = {"value": o.get("value", o.get("values"))}
             if "raised" in o:
                 entry["raised"] = o["raised"]
-            if o["output_id"].endswith("/get_root_layer_nodes"):
-                entry["value"] = without_default_layer(entry["value"])
             outputs[o["output_id"]] = entry
         out[recording["condition"]] = normalised(outputs)
     return out
@@ -480,8 +462,6 @@ def compare(probe: str, facade: Run, work: Path) -> list[str]:
             or not k.endswith(("/events", "/states"))
         }
         for output_id, value in ours.items():
-            if output_id.endswith("/get_root_layer_nodes"):
-                value = {**value, "value": without_default_layer(value["value"])}
             if output_id in excluded:
                 continue
             painter = theirs.get(output_id)

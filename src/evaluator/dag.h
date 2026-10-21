@@ -34,8 +34,11 @@
 // Blur (`kRecordedBlurAsset`) rounds the content toward zero to binary16; the content is stored
 // in the channel format after every effect.
 //
+// Paint layers (phase4.1_nodes-paint-layers, decision 348): an empty one, with no plane and no
+// content effect, is transparent and contributes nothing.
+//
 // Outside this profile (explicit `evaluator:unsupported_*` failures, the capability manifest's
-// release gaps): paint layers and effects, generator and filter effects other than the recorded
+// release gaps): paint plane content, content effects on a paint layer, paint effects, generator and filter effects other than the recorded
 // Blur (P3-PROC), compare-mask,
 // colour-selection and anchor effects (P4-NODES), `UVTile` geometry masks, content effects on a
 // group, `Material` source mode, procedural, vector,

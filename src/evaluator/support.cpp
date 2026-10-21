@@ -243,9 +243,25 @@ Gap DirectXNormalGap(const core::Project& project, const core::Layer& layer) {
                 "phase1.12_compositor-height-normal");
 }
 
+/// A paint layer is evaluated while it is empty only: no plane bound and no content effect. Its
+/// content then reads as transparent and the layer changes no channel, as Painter's empty default
+/// "Layer 1" in every Tier 0 golden (decision 348). Plane content and content effects over paint
+/// are not recorded yet.
+Gap PaintLayerGap(const core::Layer& layer) {
+    if (!layer.paint || !layer.paint->planes.empty() || layer.paint->mono_plane) {
+        return Make(layer.uid, "a paint layer holding plane content", "phase4.1_nodes-paint-layers item 2.4");
+    }
+    if (!layer.content_effects.empty()) {
+        return Make(layer.uid, "a content effect on a paint layer", "phase4.1_nodes-paint-layers item 3.4");
+    }
+    return std::nullopt;
+}
+
 Gap LayerGap(const core::Project& project, const core::Stack* stack, const core::Layer& layer) {
     switch (layer.kind) {
-        case LayerKind::paint: return Make(layer.uid, "a paint layer", "phase4.1_nodes-paint-layers");
+        case LayerKind::paint:
+            if (Gap gap = PaintLayerGap(layer)) return gap;
+            break;
         case LayerKind::instance:
             return Make(layer.uid, "an instance layer", "phase4.1_nodes-instances-anchors");
         case LayerKind::fill:
@@ -304,8 +320,13 @@ std::optional<SupportGap> NodeGap(const core::Project& project, core::Id uid, co
             found = LayerGap(project, core::FindStack(project, visit.texture_set, visit.stack), *visit.layer);
         } else if (visit.effect != nullptr && visit.effect->uid == uid) {
             seen = true;
-            found = EffectGap(project, core::FindStack(project, visit.texture_set, visit.stack), *visit.effect,
-                              visit.owner_stack);
+            const core::Layer* owner = core::FindLayer(project, visit.owner);
+            if (owner != nullptr && owner->kind == LayerKind::paint && visit.owner_stack == core::NodeStack::Content) {
+                found = PaintLayerGap(*owner);
+            } else {
+                found = EffectGap(project, core::FindStack(project, visit.texture_set, visit.stack), *visit.effect,
+                                  visit.owner_stack);
+            }
         }
         if (seen && !found) found = OcioImageGap(project, visit, shapes);
     });

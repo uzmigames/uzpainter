@@ -50,7 +50,6 @@ from tests.python.test_pyapi_facade_tier0 import (
     map_differences,
     normalised,
     stage,
-    without_default_layer,
 )
 from tools.parity.recorder.job import EXPORT, Step, export_step
 from tools.parity.recorder.probes import (
@@ -558,8 +557,6 @@ def compare_observed(
         theirs = expected[condition]
         for output_id in sorted(set(ours) | set(theirs)):
             mine, painter = ours.get(output_id), theirs.get(output_id)
-            if mine is not None and output_id.endswith("/get_root_layer_nodes"):
-                mine = {**mine, "value": without_default_layer(mine["value"])}
             reason = exclusion(excluded, condition, output_id)
             if reason is not None:
                 if mine == painter:

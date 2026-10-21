@@ -26,13 +26,14 @@ invalidation to batch.
 
 `LayerStacksModelDataChanged` is delivered before the call returns by the calls the Tier 0 R10
 probes and P21-E (`phase1-layer-stack-events`, decision 319) record emitting it: `insert_fill`
-(layer or effect), `insert_group`, `insert_levels_effect`, `set_name`, `delete_node`, `add_mask`,
-`remove_mask`, `set_blending_mode` and `set_opacity`, even when the value is unchanged
-(`structural`), and `set_visible` when the visibility changes. The recorded silent ones stay
-silent: `active_channels`, `set_source`, `set_mask_background`, `enable_mask`,
-`set_projection_mode`, `set_projection_parameters`, `LevelsEffectNode.affected_channel`,
-`SourceUniformColor.set_color`, `reset_source`, `SourceBitmap.set_color_space` and
-`reset_color_space`. Every other edit call is unrecorded and emits nothing.
+(layer or effect), `insert_paint` (a layer, s14), `insert_group`, `insert_levels_effect`,
+`set_name`, `delete_node`, `add_mask`, `remove_mask`, `set_blending_mode` and `set_opacity`, even
+when the value is unchanged (`structural`), and `set_visible` when the visibility changes. The
+recorded silent ones stay silent: `active_channels`, `set_source`, `set_mask_background`,
+`enable_mask`, `set_projection_mode`, `set_projection_parameters`,
+`LevelsEffectNode.affected_channel`, `SourceUniformColor.set_color`, `reset_source`,
+`SourceBitmap.set_color_space` and `reset_color_space`. Every other edit call is unrecorded and
+emits nothing.
 """
 
 from __future__ import annotations
@@ -930,6 +931,7 @@ def insert_fill(position: Any) -> Any:
 
 
 @edits
+@structural
 def insert_paint(position: Any) -> Any:
     node, _ = insert("insert_paint", position, Kind.EITHER)
     return node

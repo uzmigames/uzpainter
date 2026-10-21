@@ -1121,7 +1121,8 @@ void StackFamily(const ToolContext& context, std::vector<ToolDefinition>& tools)
                  // (decision 182), not the facade's, whose statuses can differ.
                  {"kind", CapabilityByValue(EnumProperty<core::EffectKind>("The effect kind."),
                                             {{"fill", "uzpainter.layerstack.insert_fill"},
-                                             {"paint", "uzpainter.layerstack.insert_paint"},
+                                             // A paint effect is a release gap (decision 348).
+                                             {"paint", "uzpainter.layerstack.PaintEffectNode"},
                                              {"generator", "uzpainter.layerstack.insert_generator_effect"},
                                              {"filter", "uzpainter.layerstack.insert_filter_effect"},
                                              {"levels", "uzpainter.layerstack.insert_levels_effect"},

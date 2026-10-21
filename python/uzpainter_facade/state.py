@@ -65,8 +65,8 @@ class Session:
 
     def project_started(self) -> None:
         """A project was created or opened: Painter then selects the top root layer of the active
-        stack (`phase1-layer-navigation` s88 after save and reopen; after creation, Painter's
-        default paint layer, which UzPainter does not create yet: phase4.1_nodes-paint-layers)."""
+        stack (`phase1-layer-navigation` s88 after save and reopen; after creation, its only
+        layer: the default paint layer "Layer 1", s88 in the first recording)."""
         self.projects += 1
         self.reset()
         origins = uzpainter.project.Metadata(RESOURCE_METADATA).get(RESOURCE_ORIGIN_KEY)

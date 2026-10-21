@@ -185,7 +185,12 @@ def test_every_family_is_listed_with_its_capability_status(
         for v in tools["layer_insert"]["_meta"]["uzpainter/capability"]["values"]
     }
     assert values[("/kind", "fill")] == values[("/kind", "group")] == "available"
-    assert values[("/kind", "paint")] == "release-gap"
+    assert values[("/kind", "paint")] == "available"  # an empty paint layer (decision 348)
+    effect_values = {
+        (v["argument"], v["value"]): v["status"]
+        for v in tools["effect_insert"]["_meta"]["uzpainter/capability"]["values"]
+    }
+    assert effect_values[("/kind", "paint")] == "release-gap"  # a paint effect
     for name in ("project_create", "project_save_as", "mesh_reload", "export", "capture"):
         assert "wait" in tools[name]["inputSchema"]["properties"] or name == "capture", name
     assert tools["layer_set"]["inputSchema"]["required"] == ["uid"]
@@ -1003,7 +1008,8 @@ def test_every_release_gap_is_one_capability_gap(
     family = session.call("resource_search", {"query": "rust"})["error"]
     assert family["code"] == "capability_gap" and set(family["details"]) == GAP_FIELDS, family
     assert family["details"]["type"] == "NotYetSupported" and family["details"]["operations"]
-    painted = session.call("layer_insert", {"kind": "paint"})["error"]
+    paint_effect = {"uid": fill, "stack": "mask", "kind": "paint"}
+    painted = session.call("effect_insert", paint_effect)["error"]
     assert painted["code"] == "capability_gap" and set(painted["details"]) == GAP_FIELDS, painted
     assert not any(out.rglob("*.png")) and not any(out.rglob("*.exr"))
 
@@ -1176,7 +1182,7 @@ def test_unavailable_families_fail_before_mutation(
         assert reply["error"]["code"] == "capability_gap", (name, reply)
         assert reply["job_id"] is None and reply["error"]["details"]["operations"], name
     for name, arguments in (
-        ("layer_insert", {"kind": "paint"}),
+        ("effect_insert", {"uid": 1, "stack": "content", "kind": "paint"}),
         ("effect_insert", {"uid": 1, "stack": "content", "kind": "anchor"}),
         ("layer_set", {"uid": 1, "geometry_mask": {"type": "Mesh", "items": []}}),
         ("fill_set", {"uid": 1, "source_mode": "Material"}),
@@ -1206,18 +1212,37 @@ def test_unavailable_families_fail_before_mutation(
     assert set(summary["gaps"]) == set(GAP_CALLS) and summary["entries"]["release-gap"] > 0
 
 
+def test_paint_layer_insert_through_mcp(painter: Path, tmp_path: Path, sessions: list[Mcp]) -> None:
+    """phase4.1_nodes-paint-layers items 2.1 and 2.8 (decision 348): a new project's stack holds
+    Painter's empty paint layer "Layer 1"; `layer_insert` of kind `paint` commits an empty paint
+    layer named "Paint" on top of it; a paint effect stays a release gap."""
+    session, revision = opened(painter, tmp_path, sessions)
+    [layer1] = nodes(session).values()
+    assert layer1["name"] == "Layer 1", layer1
+    uid = inserted(session.call("layer_insert", {"kind": "paint"}))
+    assert revision_of(session) == revision + 1
+    listed = nodes(session)
+    assert listed[uid]["name"] == "Paint" and set(listed) == {uid, layer1["uid"]}
+    effect = session.call("effect_insert", {"uid": uid, "stack": "content", "kind": "paint"})
+    assert effect["error"]["code"] == "capability_gap", effect
+    assert revision_of(session) == revision + 1
+
+
 def test_a_direct_pipe_client_gets_the_same_gaps(
     painter: Path, tmp_path: Path, pipes: list[Pipe]
 ) -> None:
     """3.5, 2.10 (decision 164): without the supervisor's gate, the worker itself refuses a gap
-    family and a release gap its native code meets (a paint layer) with `capability_gap`, and
-    nothing is committed."""
+    family and a release gap its native code meets (a paint effect, here in Painter's default
+    paint layer "Layer 1", decision 348) with `capability_gap`, and nothing is committed."""
     project = make_project(painter, tmp_path)
     pipe = Pipe(painter, tmp_path, *BASE)
     pipes.append(pipe)
     revision = pipe.call("project_open", {"path": str(project)})["result"]["revision"]
+    [layer1] = pipe.call("layer_list")["result"]["nodes"]
+    assert layer1["name"] == "Layer 1", layer1
     key = {"idempotency_key": "pipe-1", "expected_revision": revision}
-    paint = pipe.call("layer_insert", {"kind": "paint"}, **key)
+    arguments = {"uid": layer1["uid"], "stack": "content", "kind": "paint"}
+    paint = pipe.call("effect_insert", arguments, **key)
     assert paint["error"]["code"] == "capability_gap", paint
     assert paint["error"]["details"]["type"] == "NotYetSupported"
     bake = pipe.call("bake_start", {}, idempotency_key="pipe-2", expected_revision=revision)

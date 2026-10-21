@@ -463,6 +463,18 @@ render::Result<void> AppendLayer(Context& ctx, const Layer& layer, DagList& list
     }
     const core::Blending blending = EffectiveBlending(layer, ctx.channel);
     if (blending.mode == BlendingMode::Disable) return {};
+    if (layer.kind == LayerKind::paint) {
+        // An empty paint layer (no plane, no content effect) is transparent and contributes
+        // nothing, whatever its mode, opacity and mask: Painter's empty "Layer 1" sits under every
+        // Tier 0 golden (decision 348). Plane content is outside this profile.
+        if (!core::IsEmptyPaintLayer(layer)) {
+            return EvalFail(EvalErrorKind::UnsupportedNode,
+                            "paint plane content and content effects on a paint layer are outside this profile "
+                            "(phase4.1_nodes-paint-layers)",
+                            layer.uid);
+        }
+        return {};
+    }
     float constantMask = 1.0f;
     render::Result<std::optional<DagMask>> mask = MaskOf(ctx, layer, constantMask);
     if (!mask) return render::Unexpected(mask.error());
@@ -544,9 +556,7 @@ render::Result<void> AppendLayer(Context& ctx, const Layer& layer, DagList& list
             node.group = std::move(group);
             break;
         }
-        case LayerKind::paint:
-            return EvalFail(EvalErrorKind::UnsupportedNode,
-                            "paint layers are outside this profile (P4-NODES)", layer.uid);
+        case LayerKind::paint:  // handled above
         case LayerKind::instance:
             break;  // handled above
     }

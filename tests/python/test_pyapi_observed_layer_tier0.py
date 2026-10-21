@@ -39,10 +39,6 @@ CONTENT_FILL = (
     "refused: a fill effect in a content stack is a release gap, NotYetSupported before any change "
     "(phase3.2_proc-filter-families, decision 081); step 19 and every output on its node"
 )
-DEFAULT_LAYER = (
-    "Painter's default paint layer 'Layer 1', which UzPainter does not create yet "
-    "(phase4.1_nodes-paint-layers item 2.8, decision 106): this output names it"
-)
 TRIPLANAR = (
     "refused: the Triplanar projection is a release gap, NotYetSupported before any change "
     "(phase3.4_smart-projections); the symmetry of a 3D projection follows it"
@@ -98,7 +94,6 @@ EXCLUDED: dict[str, dict[str, str]] = {
             "after_save_reopen identity/reopen",
             "defaults/s19",
         ),
-        **excluded(DEFAULT_LAYER, "s30/get_next_sibling", "same_session s88/get_selected_nodes"),
         **excluded(
             TRIPLANAR,
             "s61/set_projection_mode",

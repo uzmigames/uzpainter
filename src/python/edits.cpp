@@ -111,7 +111,7 @@ bool HasBlending(core::NodeType type) {
 std::string DefaultName(core::NodeType type) {
     switch (type) {
         case core::NodeType::FillLayer: return "Fill";
-        case core::NodeType::PaintLayer: return "Layer";
+        case core::NodeType::PaintLayer: return "Paint";  // phase1-layer-stack-events s14, both recordings
         case core::NodeType::GroupLayer: return "Folder";
         case core::NodeType::InstanceLayer: return "Instance";
         case core::NodeType::FillEffect: return "Fill";

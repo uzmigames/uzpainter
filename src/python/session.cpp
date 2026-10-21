@@ -101,8 +101,8 @@ bool MayHaveTextureContent(const core::Stack& stack, const core::Layer& layer,
             const core::Layer* source = core::FindLayer(stack, layer.instance_source);
             return source == nullptr || MayHaveTextureContent(stack, *source, channel, path);
         }
-        case core::LayerKind::paint:
-            return true;
+        case core::LayerKind::paint:  // an empty paint layer is transparent (decision 348)
+            return !core::IsEmptyPaintLayer(layer);
     }
     return true;
 }
@@ -337,6 +337,13 @@ core::TransactionResult Session::Create(const std::filesystem::path& mesh_path, 
                 store.StageResource(file.bytes, std::string(mesh::kExternalFileMime));
             }
             mesh::CreateTextureSets(edit, imported, mesh::MeshSource{mesh_source, NowUtc()}, channels);
+            // Painter's new stack holds one empty paint layer, "Layer 1", at its bottom (every
+            // structure readback of the Tier 0 api-probes, both recordings; decisions 105, 348).
+            std::vector<core::InsertPosition> stacks;
+            for (const core::TextureSet& set : edit.project().texture_sets) {
+                for (const core::Stack& stack : set.stacks) stacks.push_back(core::InsertPosition::FromStack(set.id, stack.id));
+            }
+            for (const core::InsertPosition& position : stacks) edit.Insert(position, core::NodeType::PaintLayer, "Layer 1");
             if (call.extra) call.extra(edit, store);
         } catch (...) {
             error = std::current_exception();

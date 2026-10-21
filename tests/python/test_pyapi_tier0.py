@@ -13,9 +13,9 @@ Outputs that need a facade rule are compared by phase1.20_pyapi-facade: uniform 
 reads them back converted to the working space), the available colour spaces, and Painter's own
 resource ids (context and version are Painter's internal identifiers; the native readback is
 compared by resource name). The project file's extension is `.uzp`, not `.spp` (only the stem is
-compared). Painter's new stack holds an empty paint layer, "Layer 1", which the native project does
-not create (decision 105); the structure readback is compared without it. Where no private oracle
-store exists the test skips, naming why.
+compared). Painter's new stack holds an empty paint layer, "Layer 1", which the native project
+creates too (decisions 105, 348): the structure readback is compared with it. Where no private
+oracle store exists the test skips, naming why.
 
 The `fill-layer-readback` replay reaches Painter's outputs through UzPainter's own operations
 (phase1.24, decision 115): its state steps are one native `Transaction` whose result's created ids
@@ -329,25 +329,8 @@ def map_differences(probe: str, native: dict[str, dict[str, Any]]) -> list[str]:
     return differences
 
 
-# The empty paint layer Painter's project.create puts at the bottom of every new stack. The native
-# project has no such layer: paint layers are outside the Phase 1 subset
-# (phase4.1_nodes-paint-layers, decision 105), and an empty one changes no channel.
-PAINTER_DEFAULT_LAYER = {
-    "Content": [],
-    "Mask": [],
-    "has_mask": False,
-    "name": "Layer 1",
-    "node_type": "PaintLayer",
-    "visible": True,
-}
-
-
 def test_fill_layer_readback_equals_painter(run: Run, tmp_path: Path) -> None:
     golden = golden_outputs("fill-layer-readback")
-    for condition in golden.values():
-        roots = condition["s46/get_root_layer_nodes"]
-        assert roots[-1] == PAINTER_DEFAULT_LAYER
-        condition["s46/get_root_layer_nodes"] = roots[:-1]
     configs = export_configs("fill-layer-readback", tmp_path)
     script = traced(FILL_LAYER_READBACK).replace(
         "stack = create()", f"EXPORTS = json.loads({json.dumps(configs)!r})\nstack = create()", 1

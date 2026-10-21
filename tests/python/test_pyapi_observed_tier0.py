@@ -26,10 +26,6 @@ from tests.python.observed_replay import (
     save_trace,
 )
 
-PAINT_LAYER = (
-    "refused: a paint layer is a release gap, NotYetSupported before any change "
-    "(phase4.1_nodes-paint-layers); this step and its LayerStacksModelDataChanged"
-)
 MASK_EFFECT = (
     "refused: {} effect is a release gap, NotYetSupported before any change "
     "(phase4.1_nodes-mask-effects); this step and its LayerStacksModelDataChanged"
@@ -58,7 +54,6 @@ EXCLUDED: dict[str, dict[str, str]] = {
         "s6/user_shelf",
     ),
     "phase1-layer-stack-events": {
-        **excluded(PAINT_LAYER, "s14/insert_paint", "s14/events"),
         **excluded(
             MASK_EFFECT.format("a compare-mask"), "s16/insert_compare_mask_effect", "s16/events"
         ),

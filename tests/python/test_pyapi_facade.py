@@ -731,7 +731,7 @@ result = {"roots": roots, "revisions": uzpainter.project.revision() - revision}
 
 def test_scoped_modification_keeps_the_calls_committed_before_an_exception(facade: Run) -> None:
     result = ok(facade(SCOPED))
-    assert result["roots"] == ["kept"]
+    assert result["roots"] == ["kept", "Layer 1"]  # over Painter's default layer (decision 348)
     assert result["revisions"] == 2  # insert (one transaction with its defaults), set_name
 
 

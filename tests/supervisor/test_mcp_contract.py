@@ -43,7 +43,7 @@ LONG_JOB = {"name": "Job", "steps": 30, "step_ms": 100, "commit_at": 1}
 LATER_FAMILIES = (
     "bake.start",
     "stack.procedural",
-    "layer.insert_paint",
+    "effect.insert_paint",
     "layer.instantiate",
     "effect.insert_anchor",
     "anchor.list",
@@ -280,7 +280,8 @@ def test_a_second_writer_receives_lease_held(
     assert held["error"]["details"]["holder"] == "agent-a"
     assert held["error"]["details"]["active_job"] is None
     assert isinstance(held["error"]["details"]["since"], str)
-    assert len(second.call("layer_list")["result"]["nodes"]) == 1  # a read needs no lease
+    # A read needs no lease: "A" and Painter's default "Layer 1" (decision 348).
+    assert len(second.call("layer_list")["result"]["nodes"]) == 2
 
     job_id = first.call("test_job", LONG_JOB)["result"]["job_id"]
     during = insert(second, "B", None, None)
@@ -597,7 +598,7 @@ def test_unavailable_families_and_python_needs_are_gaps(
         reply = client.call(name, arguments)
         assert reply["error"]["code"] == "capability_gap", (name, reply)
         assert reply["receipt"]["job_id"] is None, name
-    painted = client.call("layer_insert", {"kind": "paint"})
+    painted = client.call("effect_insert", {"uid": 1, "stack": "content", "kind": "paint"})
     assert painted["error"]["code"] == "capability_gap", painted
     assert set(client.call("capabilities")["result"]["gaps"]) == set(GAP_CALLS)
     assert revision_of(client) == revision

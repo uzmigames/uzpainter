@@ -202,7 +202,7 @@ def test_close_discards_what_was_not_saved(facade: Run) -> None:
     """Painter's discard-on-close (handed over by phase1.20): reopening shows the last save and
     nothing to save."""
     result = ok(facade(DISCARD))
-    assert result["names"] == ["saved"]
+    assert result["names"] == ["saved", "Layer 1"]  # over Painter's default layer (decision 348)
     assert result["needs_saving"] is False
 
 
@@ -303,7 +303,7 @@ def test_a_handler_calling_back_into_the_api_observes_the_committed_state(facade
     Transaction without deadlocking; flush waits for its delivery before checking the edit."""
     result = ok(facade(LOG + LOCK))
     assert result["seen"] == {"name": "before", "sets": ["uzp_plane"], "thread": True}
-    assert result["after"] == ["set by the handler"]
+    assert result["after"] == ["set by the handler", "Layer 1"]  # decision 348
 
 
 # ── 2.5 execute_when_not_busy ───────────────────────────────────────────────────────────────────

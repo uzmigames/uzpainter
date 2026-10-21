@@ -156,7 +156,8 @@ def test_wand_create_sync_and_export_run_unchanged(wand: Wand) -> None:
     assert synced["layers"] == 13
     masks = sorted(PurePosixPath(name).stem for name in wand.job.sync.args["mask_files"])
     assert len(masks) == 14 and sorted(synced["imported"]) == masks
-    assert synced["hidden"] == []
+    # The sync hides Painter's default paint layer, as the wand-v1 golden records (decision 348).
+    assert synced["hidden"] == ["Layer 1"]
     state = json.loads(wand.state.read_text(encoding="utf-8"))
     assert sorted(state) == sorted(synced["imported"])
 
@@ -480,7 +481,7 @@ def test_sync_rebuilds_only_its_group_and_keeps_unrelated_content(created: Wand)
     created.probe("show", SHOW)
     kept = created.sync("--keep-visible", "met")
     assert kept.status == 0, kept.stdout + kept.stderr
-    assert kept.document("SYNC_DONE")["hidden"] == ["extra"]
+    assert sorted(kept.document("SYNC_DONE")["hidden"]) == ["Layer 1", "extra"]
     shown = {n["name"]: n["visible"] for n in roots(created)["roots"]}
     assert shown["metal"] is True and shown["extra"] is False
 

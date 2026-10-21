@@ -1,0 +1,13 @@
+{
+  "id": 348,
+  "slug": "348-empty-paint-layer",
+  "title": "An empty paint layer is transparent; project.create makes Painter's Layer 1; the whole-bitmap operation stores a bitmap only as the plane's texels",
+  "status": "accepted",
+  "date": "2026-10-21",
+  "relatedTasks": [
+    "phase4.1_nodes-paint-layers",
+    "phase1.19_pyapi-native-module",
+    "phase1.20_pyapi-facade"
+  ],
+  "supersededBy": null
+}

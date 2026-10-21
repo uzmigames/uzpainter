@@ -11,10 +11,10 @@
 - `release-gap`: an absent symbol raises `AttributeError` (decision 107 §1); a present one raises
   `NotYetSupported` (or its subclasses `UnsupportedProcedural`, `ReleaseGap`) with the project's
   revision unchanged, called with placeholder arguments or through the call that uses it
-  (`RECIPES`). Two kinds of gap are refused elsewhere and listed in `ELSEWHERE`: the compositor
-  contexts (the evaluator's support check, `tests/evaluator/evaluator_test.cpp`
-  `not-yet-supported`, decisions 081 and 082) and material layering, which no documented call
-  requests.
+  (`RECIPES`). Three kinds of gap are refused elsewhere and listed in `ELSEWHERE`: the
+  compositor contexts (the evaluator's support check, `tests/evaluator/evaluator_test.cpp`
+  `not-yet-supported`, decisions 081 and 082), material layering, which no documented call
+  requests, and paint-node content, which no documented call writes (decision 348).
 
 CPU only: every lane runs these.
 """
@@ -34,6 +34,8 @@ from tools.capabilities.generate_capabilities import generate
 
 # Gaps whose refusal is not a Python API call (see the module docstring), by context.
 ELSEWHERE = {
+    "bitmap-or-projection-content": "no documented call writes a bitmap or a projection into a "
+    "paint node; the native paint-content operations are phase4.1_nodes-paint-layers item 2.7",
     "material-layering": "no documented call creates a second stack in a texture set; a project "
     "or template holding one is refused when opened",
 }
@@ -121,7 +123,6 @@ def recipes() -> dict[Any, tuple[str, str]]:
             if root == "substance_painter"
             else f"{lsname}.insert_anchor_point_effect({inside_content})"
         )
-        paint = f"{lsname}.insert_paint({top_})"
         paint_effect = PAINT_EFFECT if root == "substance_painter" else NATIVE_PAINT_EFFECT
         selection = f"{lsname}.insert_color_selection_effect({inside_mask})"
         compare = f"{lsname}.insert_compare_mask_effect({inside_mask})"
@@ -134,17 +135,11 @@ def recipes() -> dict[Any, tuple[str, str]]:
             "GeneratorEffectNode": f"{lsname}.insert_generator_effect({top_}, None)",
             "InstanceLayerNode": f"{lsname}.instantiate({top_}, {fill_})",
             "instantiate": f"{lsname}.instantiate({top_}, {fill_})",
-            "PaintLayerNode": paint,
-            "insert_paint": paint,
             "PaintEffectNode": paint_effect,
         }
         if root == "uzpainter":  # the facade's two inserts are supported (insertion rules)
             calls["insert_color_selection_effect"] = selection
             calls["insert_compare_mask_effect"] = compare
-        else:  # the Painter contexts of paint nodes
-            content = "bitmap-or-projection-content"
-            r[(f"{layerstack}.PaintLayerNode", content)] = ("", paint)
-            r[(f"{layerstack}.PaintEffectNode", content)] = ("", paint_effect)
         for name, call in calls.items():
             r[f"{layerstack}.{name}"] = ("", call)
         uv = UV if root == "substance_painter" else NATIVE_UV

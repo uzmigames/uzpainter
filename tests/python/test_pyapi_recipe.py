@@ -110,7 +110,8 @@ def test_dump_recipe_is_deterministic_and_moves_only_with_the_output(run: Run, f
     assert set(a["resource_hashes"]) == set(a["recipe"]["resources"])
     assert len(a["resource_hashes"]) == 2  # the mesh and the mask image
     layers = a["recipe"]["texture_sets"][0]["stacks"][0]["root_layers"]
-    assert [layer["name"] for layer in layers] == ["group", "base"]
+    # Painter's default "Layer 1" is part of the recipe (decision 348).
+    assert [layer["name"] for layer in layers] == ["group", "base", "Layer 1"]
     assert all(
         len(channel["base"]) == 3
         for channel in a["recipe"]["texture_sets"][0]["stacks"][0]["channels"].values()
@@ -174,7 +175,7 @@ def test_rebuild_from_recipe_exports_byte_identical_files(run: Run, tmp_path: Pa
     dump, rebuilt = result["dump"], result["rebuilt"]
     assert rebuilt["digest"] == dump["digest"]
     assert rebuilt["recipe"] == dump["recipe"] and rebuilt["rebuild"] == dump["rebuild"]
-    assert result["names"] == ["group", "base"]
+    assert result["names"] == ["group", "base", "Layer 1"]
     assert result["original"] and set(result["original"]) == set(result["rebuilt_files"])
     for relative, path in result["original"].items():
         assert Path(result["rebuilt_files"][relative]).read_bytes() == Path(path).read_bytes(), (

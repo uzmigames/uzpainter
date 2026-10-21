@@ -280,4 +280,11 @@ struct Layer {
     bool operator==(const Layer&) const = default;
 };
 
+/// A paint layer whose content is empty: no plane bound and no content effect. Its content reads
+/// as transparent, so it changes no channel (decision 348).
+inline bool IsEmptyPaintLayer(const Layer& layer) {
+    return layer.kind == LayerKind::paint && layer.paint && layer.paint->planes.empty() && !layer.paint->mono_plane &&
+           layer.content_effects.empty();
+}
+
 }  // namespace uzp::core

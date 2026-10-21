@@ -246,7 +246,7 @@ def test_families_not_in_the_build_are_capability_gaps(matrix: list[dict[str, An
             assert row["status"] == "capability gap" and row["gaps"], row
         if row["status"] != "available":
             assert row["notes"] and "phase" in row["notes"], row
-    for operation in ("layer.insert_paint", "projection.triplanar", "export.format.tiff"):
+    for operation in ("effect.insert_paint", "projection.triplanar", "export.format.tiff"):
         assert rows[operation]["status"] == "capability gap", operation
     assert rows["export.format.dds"]["gaps"] == [
         {
@@ -256,6 +256,7 @@ def test_families_not_in_the_build_are_capability_gaps(matrix: list[dict[str, An
         }
     ]
     assert rows["layer.insert_fill"]["status"] == rows["export.format.png"]["status"] == "available"
+    assert rows["layer.insert_paint"]["status"] == "available"  # empty paint layers (decision 348)
 
 
 def test_a_python_only_operation_needs_python(tmp_path: Path) -> None:
@@ -268,14 +269,14 @@ def test_a_python_only_operation_needs_python(tmp_path: Path) -> None:
 
 
 def test_the_status_follows_the_manifest(tmp_path: Path) -> None:
-    """3.3: the status is derived. Once the paint insert leaves the release gaps, the paint rows
-    are available, and the build then requires a conformance fixture for each of them."""
-    # The typed inserts perform the native insert (`uzpainter.layerstack.insert_paint`).
+    """3.3: the status is derived. Once the paint effect leaves the release gaps, its row is
+    available, and the build then requires a conformance fixture for it."""
+    # `effect_insert` of kind `paint` creates a `uzpainter.layerstack.PaintEffectNode`.
     additions = load(ADDITIONS_PATH)
     [entry] = [
         e
         for e in additions["entries"]
-        if (e["symbol"], e["context"]) == ("uzpainter.layerstack.insert_paint", "any")
+        if (e["symbol"], e["context"]) == ("uzpainter.layerstack.PaintEffectNode", "any")
     ]
     entry.update(
         status="pending-evidence",
@@ -292,4 +293,4 @@ def test_the_status_follows_the_manifest(tmp_path: Path) -> None:
         if r["operation"] in ("layer.insert_paint", "effect.insert_paint")
     }
     assert [r["status"] for r in paint.values()] == ["available", "available"]
-    assert paint["layer.insert_paint"]["gaps"] == []
+    assert paint["effect.insert_paint"]["gaps"] == []

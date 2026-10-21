@@ -479,6 +479,53 @@ def test_unknown_attribute_and_stale_handle(run: Run) -> None:
     assert result["uid_type"] == "int"
 
 
+def test_empty_paint_layers(run: Run) -> None:
+    """phase4.1_nodes-paint-layers items 2.1, 2.4 and 2.8 (decision 348): `project.create` puts
+    Painter's empty "Layer 1" at the bottom of the stack; `insert_paint` gives a layer named
+    "Paint" (`phase1-layer-stack-events` s14) and, in a content stack, a paint effect, which stays
+    refused; an empty paint layer is edited and evaluated, a content effect on one is refused before
+    any change."""
+    result = ok(
+        run("""
+        stack = create()
+        roots = ls.get_root_layer_nodes(stack)
+        default = [[n.get_name(), n.get_type().name, type(n).__name__, n.is_visible()]
+                   for n in roots]
+        fill = ls.insert_fill(top(stack))
+        fill.active_channels = {CT.BaseColor}
+        fill.set_source(CT.BaseColor, cm.Color(0.5, 0.25, 0.75, "Raw"))
+        paint = ls.insert_paint(top(stack))
+        paint.set_name("uzp paint")
+        paint.set_opacity(0.5, CT.BaseColor)
+        paint.set_visible(False)
+        paint.set_visible(True)
+        before = project.revision()
+        refused = [
+            raises(ls.insert_levels_effect,
+                   ls.InsertPosition.inside_node(paint, ls.NodeStack.Content)),
+            raises(ls.insert_paint, ls.InsertPosition.inside_node(fill, ls.NodeStack.Content)),
+        ]
+        after = project.revision()
+        layer1 = roots[0]
+        ls.delete_node(layer1)
+        result = {
+            "default": default,
+            "paint": [paint.get_name(), paint.get_type().name, type(paint).__name__],
+            "order": [n.get_name() for n in ls.get_root_layer_nodes(stack)],
+            "refused": refused,
+            "revisions": [before, after],
+        }
+        """)
+    )
+    assert result["default"] == [["Layer 1", "PaintLayer", "PaintLayerNode", True]]
+    assert result["paint"] == ["uzp paint", "PaintLayer", "PaintLayerNode"]
+    assert result["order"] == ["uzp paint", "Fill"]
+    assert "a content effect on a paint layer" in result["refused"][0], result["refused"]
+    assert "a paint effect" in result["refused"][1], result["refused"]
+    assert all(r.startswith("NotYetSupported") for r in result["refused"])
+    assert result["revisions"][0] == result["revisions"][1]
+
+
 LATER_PHASE = [
     ("uzpainter.baking", "bake_async", "phase3.5_embree-bakers"),
     ("uzpainter.baking", "bake_selected_textures_async", "phase3.5_embree-bakers"),
@@ -506,7 +553,8 @@ def test_later_phase_calls_raise_not_yet_supported_before_mutation(run: Run) -> 
         ]
         gaps = [
             raises(fill.set_projection_mode, ls.ProjectionMode.Triplanar),
-            raises(ls.insert_paint, top(stack)),
+            # An empty paint layer is evaluated (decision 348); a paint effect is not.
+            raises(ls.insert_paint, ls.InsertPosition.inside_node(fill, ls.NodeStack.Content)),
             raises(
                 ls.insert_compare_mask_effect,
                 ls.InsertPosition.inside_node(fill, ls.NodeStack.Content),
@@ -535,7 +583,7 @@ def test_later_phase_calls_raise_not_yet_supported_before_mutation(run: Run) -> 
         )
     assert all(e.startswith("UnsupportedProcedural") for e in result["procedural"])
     assert result["gaps"][0].startswith("NotYetSupported") and "Triplanar" in result["gaps"][0]
-    assert result["gaps"][1].startswith("NotYetSupported")
+    assert result["gaps"][1].startswith("NotYetSupported") and "a paint effect" in result["gaps"][1]
     assert result["gaps"][2].startswith("ValueError")  # compare masks are mask-stack only
     iray, iray_written = result["iray"]
     assert iray.startswith("PathTracerUnavailable") and not iray_written, iray
@@ -630,14 +678,15 @@ def test_raising_transaction_commits_nothing_and_a_clean_one_commits_once(run: R
         """)
     )
     rev = result["rev"]
-    assert result["inside"] == [rev, 2, "pending"]
-    assert result["aborted"][:2] == [rev, 0]
+    # Painter's default "Layer 1" is the bottom root of every new stack (decision 348).
+    assert result["inside"] == [rev, 3, "pending"]
+    assert result["aborted"][:2] == [rev, 1]
     assert result["aborted"][2].startswith("ValueError")
     status, revision, created, _modified, hidden = result["committed"]
     assert (status, revision) == ("committed", rev + 1)
     assert created == sorted(result["uids"])
     assert hidden == []  # created hidden is created, not visible -> hidden
-    assert result["roots"] == ["Folder", "first"]
+    assert result["roots"] == ["Folder", "first", "Layer 1"]
 
 
 def test_results_list_created_modified_hidden_and_resources(run: Run) -> None:
@@ -897,10 +946,11 @@ def test_sync_stack_rebuilds_only_the_named_group_and_hides_others(
     assert (tmp_path / "stack.json").read_bytes() == original  # the JSON is read, never edited
     assert result["status"] == "committed"
     roots = result["roots"]
-    assert [r[0] for r in roots] == ["B", "C", "A keep"]
-    assert [r[1] for r in roots] == [True, False, True]  # C hidden (not deleted), A kept visible
+    # Painter's default "Layer 1" is hidden like C, as the wand-v1 golden records (decision 348).
+    assert [r[0] for r in roots] == ["B", "C", "A keep", "Layer 1"]
+    assert [r[1] for r in roots] == [True, False, True, False]  # C hidden (not deleted), A kept
     assert roots[1][2] == result["c"] and roots[2][2] == result["a"]
-    assert result["hidden_ids"] == [result["c"]]
+    assert sorted(result["hidden_ids"]) == sorted([result["c"], roots[3][2]])
     assert result["b_old_stale"].startswith("ValueError")
     assert result["c_fill_source"] == result["c_res"]  # C's resources survive
     tree = result["tree"]
