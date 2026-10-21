@@ -41,6 +41,11 @@
 // - `border_px`: the shortest distance in px from a boundary edge end to the tile's border,
 //   negative outside it; null for an empty set.
 //
+// `uv.secondary_sets` (only for a mesh with more than one UV set) records each UV set after the
+// first (`TexturingMesh::uv_sets`), in order: its name, the corners it leaves (0, 0) and the UV
+// tiles its triangles lie in (a triangle inside the closed 0-1 square in tile 1001, any other in
+// the tile of its UV centroid, as the import places uv0). They are recorded, not judged.
+//
 // `status`: `fail` when any of non_finite_normals, zero_normals, zero_tangents, zero_bitangents,
 // degenerate_tbn, coincident_opposite, outside_0_1 is non-zero (frames that cannot shade or
 // bake, faces baked from the wrong side, UVs outside the Default workflow's tile); else `warn` when
@@ -51,8 +56,11 @@
 #include <cstdint>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 #include "mesh/texturing_mesh.h"
 #include "uzp_core/manifest/json.h"
@@ -108,11 +116,20 @@ struct FaceCounts {
     bool operator==(const FaceCounts&) const = default;
 };
 
+/// A UV set after the first, as the certificate records it.
+struct SecondaryUvSet {
+    std::string name;
+    std::uint64_t corners_without_uv = 0;
+    std::set<std::pair<double, double>> cells;  ///< (floor u, floor v) of each tile it lies in
+    bool operator==(const SecondaryUvSet&) const = default;
+};
+
 struct Certificate {
     CornerCounts corners;
     FaceCounts faces;
     std::uint64_t outside_0_1 = 0;
     std::map<std::string, UvSetMetrics> per_set;  ///< by material name, in name order
+    std::vector<SecondaryUvSet> secondary_sets;   ///< in `TexturingMesh::uv_sets` order
     CertificateOptions grid;
     CertificateStatus status = CertificateStatus::pass;
 };
@@ -120,8 +137,8 @@ struct Certificate {
 /// Certifies `mesh` (whose tangents `ComputeTangents` filled) on the texel grid of `options`.
 Certificate Certify(const TexturingMesh& mesh, const CertificateOptions& options = {});
 
-/// The §4 JSON: `{corners, faces, uv {outside_0_1, resolution, per_set}, mesh {objects,
-/// triangles, materials, units}, hashes, status}`.
+/// The §4 JSON: `{corners, faces, uv {outside_0_1, resolution, per_set[, secondary_sets]}, mesh
+/// {objects, triangles, materials, units}, hashes, status}`.
 core::json::Object CertificateToJson(const Certificate& certificate, const TexturingMesh& mesh);
 
 }  // namespace uzp::mesh

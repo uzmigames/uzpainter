@@ -18,10 +18,37 @@ std::uint32_t MeshBuilder::Material(std::uint64_t key, std::uint64_t file_order,
     return it->second;
 }
 
-void MeshBuilder::AddPolygon(std::span<const Corner> corners) {
+std::uint32_t MeshBuilder::UvSet(std::uint64_t key, std::uint64_t file_order, const std::string& name) {
+    const auto [it, inserted] = uv_ids_.try_emplace(key, static_cast<std::uint32_t>(mesh_.uv_sets.size()));
+    if (inserted) {
+        const std::size_t before = mesh_.corners.size();
+        mesh_.uv_sets.push_back(mesh::UvSet{name, std::vector<Float2>(before), before});
+        uv_orders_.push_back(file_order);
+    }
+    return it->second;
+}
+
+void MeshBuilder::AddPolygon(std::span<const Corner> corners, std::span<const FaceUvs> uvs) {
     if (!has_object_) throw std::invalid_argument("a face before any object");
     if (corners.size() < 3) {
         throw std::invalid_argument("a face of " + std::to_string(corners.size()) + " corners");
+    }
+    std::vector<const FaceUvs*> of_set(mesh_.uv_sets.size(), nullptr);
+    for (const FaceUvs& face : uvs) {
+        if (face.set >= of_set.size() || of_set[face.set] != nullptr || face.uvs.size() != corners.size()) {
+            throw std::invalid_argument("a face's UVs in a set after the first do not match its corners");
+        }
+        of_set[face.set] = &face;
+    }
+    for (std::size_t s = 0; s < of_set.size(); ++s) {
+        mesh::UvSet& set = mesh_.uv_sets[s];
+        if (of_set[s] != nullptr) {
+            set.uvs.insert(set.uvs.end(), of_set[s]->uvs.begin(), of_set[s]->uvs.end());
+            set.corners_without_uv += of_set[s]->missing;
+        } else {
+            set.uvs.resize(set.uvs.size() + corners.size());
+            set.corners_without_uv += corners.size();
+        }
     }
     const auto first = static_cast<std::uint32_t>(mesh_.corners.size());
     mesh_.corners.insert(mesh_.corners.end(), corners.begin(), corners.end());
@@ -51,6 +78,13 @@ void MeshBuilder::Finish() {
         mesh_.materials.push_back(mesh::Material{sources_[provisional].name, index});
     }
     for (Corner& c : mesh_.corners) c.material = final_id[c.material];
+    std::vector<std::uint32_t> uv_order(mesh_.uv_sets.size());
+    std::iota(uv_order.begin(), uv_order.end(), 0u);
+    std::stable_sort(uv_order.begin(), uv_order.end(),
+                     [&](std::uint32_t a, std::uint32_t b) { return uv_orders_[a] < uv_orders_[b]; });
+    std::vector<mesh::UvSet> sets;
+    for (std::uint32_t provisional : uv_order) sets.push_back(std::move(mesh_.uv_sets[provisional]));
+    mesh_.uv_sets = std::move(sets);
 }
 
 }  // namespace uzp::mesh

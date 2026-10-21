@@ -109,6 +109,15 @@ def obj_reference_hashes(text: str) -> dict[str, str]:
     }
 
 
+def secondary_uvs_hash(sets: list[tuple[str, list[Vec2]]]) -> str:
+    """`hashes.secondary_uvs`: per UV set after the first, its UTF-8 name and a 0 byte, then
+    every corner's UV in it as 2 x float32."""
+    stream = b"".join(
+        name.encode() + b"\0" + b"".join(_f32(c) for uv in uvs for c in uv) for name, uvs in sets
+    )
+    return hashlib.sha256(stream).hexdigest()
+
+
 # ---------------------------------------------------------------------------------------------
 # glTF / GLB
 
@@ -120,8 +129,8 @@ class Primitive:
     normals: list[Vec3] | None = None
     uvs: list[Vec2] | None = None  # glTF convention: v grows downwards
     material: int | None = None
-    extra_texcoords: int = 0
     tangents: list[tuple[float, float, float, float]] | None = None
+    texcoords: dict[int, list[Vec2]] = field(default_factory=dict)  # TEXCOORD_n by n >= 1
 
 
 @dataclass
@@ -169,8 +178,8 @@ def gltf_document(
                 attributes["NORMAL"] = add(p.normals, "VEC3", 5126, "<3f")
             if p.uvs is not None:
                 attributes["TEXCOORD_0"] = add(p.uvs, "VEC2", 5126, "<2f")
-                for n in range(1, p.extra_texcoords + 1):
-                    attributes[f"TEXCOORD_{n}"] = add(p.uvs, "VEC2", 5126, "<2f")
+            for n, values in p.texcoords.items():
+                attributes[f"TEXCOORD_{n}"] = add(values, "VEC2", 5126, "<2f")
             if p.tangents is not None:
                 attributes["TANGENT"] = add(p.tangents, "VEC4", 5126, "<4f")
             prim: dict[str, Any] = {
@@ -244,6 +253,7 @@ class FbxGeometry:
     normals: list[Vec3] | None = None  # one per polygon vertex
     uvs: list[Vec2] | None = None  # one per polygon vertex
     polygon_materials: list[int] | None = None  # material slot per polygon
+    extra_uvs: list[tuple[str, list[Vec2]]] = field(default_factory=list)  # later UV layers
 
 
 @dataclass
@@ -323,6 +333,18 @@ def fbx_ascii(
                 "\t\t}",
             ]
             layer.append("LayerElementUV")
+        for n, (uv_name, values) in enumerate(g.extra_uvs, start=1):
+            flat_uvs = [float(c) for uv in values for c in uv]
+            out += [
+                f"\t\tLayerElementUV: {n} {{",
+                "\t\t\tVersion: 101",
+                f'\t\t\tName: "{uv_name}"',
+                '\t\t\tMappingInformationType: "ByPolygonVertex"',
+                '\t\t\tReferenceInformationType: "IndexToDirect"',
+                f"\t\t\tUV: *{len(flat_uvs)} {{ a: {_numbers(flat_uvs)} }}",
+                f"\t\t\tUVIndex: *{len(values)} {{ a: {_numbers(list(range(len(values))))} }}",
+                "\t\t}",
+            ]
         if g.polygon_materials is not None:
             slots = g.polygon_materials
             out += [
@@ -343,7 +365,18 @@ def fbx_ascii(
                 "\t\t\t\tTypedIndex: 0",
                 "\t\t\t}",
             ]
-        out += ["\t\t}", "\t}"]
+        out += ["\t\t}"]
+        for n in range(1, len(g.extra_uvs) + 1):
+            out += [
+                f"\t\tLayer: {n} {{",
+                "\t\t\tVersion: 100",
+                "\t\t\tLayerElement:  {",
+                '\t\t\t\tType: "LayerElementUV"',
+                f"\t\t\t\tTypedIndex: {n}",
+                "\t\t\t}",
+                "\t\t}",
+            ]
+        out += ["\t}"]
     for m in models:
         t = m.translation
         out += [

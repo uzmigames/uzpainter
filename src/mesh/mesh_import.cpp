@@ -119,15 +119,6 @@ json::Array ApplyDuplicateRule(TexturingMesh& mesh, bool allow) {
     return merges;
 }
 
-/// The tile of a UV square cell: its UDIM number when it has one, else "u<i>_v<j>".
-json::Value TileOf(double fu, double fv) {
-    if (fu >= 0 && fu <= 9 && fv >= 0 && fv <= 99) {
-        return json::Value(static_cast<std::int64_t>(1001 + fu + 10 * fv));
-    }
-    return json::Value("u" + std::to_string(static_cast<std::int64_t>(fu)) + "_v" +
-                       std::to_string(static_cast<std::int64_t>(fv)));
-}
-
 bool Inside01(const Float2& uv) { return uv.u >= 0.0f && uv.u <= 1.0f && uv.v >= 0.0f && uv.v <= 1.0f; }
 
 /// Default workflow: every triangle lies in the 0-1 square (12 §6). A triangle with a corner
@@ -192,8 +183,6 @@ json::Object Report(const ImportResult& r, const ImportSettings& settings, json:
     for (const Material& mat : m.materials) {
         materials.push_back(json::Object{{"index", static_cast<std::int64_t>(mat.index)}, {"name", mat.name}});
     }
-    json::Array ignored;
-    for (const std::string& name : m.flags.ignored_uv_sets) ignored.push_back(name);
     json::Value requested = nullptr;
     if (settings.mesh_unit_scale) requested = json::Value(*settings.mesh_unit_scale);
     json::Value meters = nullptr;
@@ -217,7 +206,9 @@ json::Object Report(const ImportResult& r, const ImportSettings& settings, json:
                                        {"rule", "fan_from_last_corner"}}},
         {"flags", json::Object{{"corners_without_normal", Count(m.flags.corners_without_normal)},
                                {"corners_without_uv", Count(m.flags.corners_without_uv)},
-                               {"ignored_uv_sets", std::move(ignored)},
+                               // nothing is ignored: every UV set is kept (`uv_sets`, the
+                               // certificate's `uv.secondary_sets`); the key keeps the report's shape
+                               {"ignored_uv_sets", json::Array{}},
                                {"skipped_non_surface_elements", Count(m.flags.skipped_non_surface_elements)},
                                {"stored_tangents", Count(m.flags.stored_tangents)},
                                {"uv_set", m.flags.uv_set},

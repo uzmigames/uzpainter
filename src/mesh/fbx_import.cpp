@@ -66,9 +66,12 @@ void ImportFbx(std::string_view bytes, TexturingMesh& mesh) {
 
     MeshBuilder builder(mesh);
     std::map<const ufbx_mesh*, std::uint32_t> position_offsets;
-    std::vector<std::string> ignored_uv_sets;
+    // The UV sets after the first, by name and occurrence of the name in its mesh (a mesh may
+    // repeat a name), in the order they are first met.
+    std::map<std::pair<std::string, std::size_t>, std::uint32_t> uv_keys;
     std::string uv_set;
     std::vector<Corner> corners;
+    std::vector<FaceUvs> face_uvs;
     for (const ufbx_node* node : scene->nodes) {
         const ufbx_mesh* fbx = node->mesh;
         if (fbx == nullptr) continue;
@@ -76,16 +79,18 @@ void ImportFbx(std::string_view bytes, TexturingMesh& mesh) {
             position_offsets.try_emplace(fbx, static_cast<std::uint32_t>(mesh.positions.size()));
         if (first_use) {
             for (const ufbx_vec3& p : fbx->vertices) mesh.positions.push_back(ToFloat3(p));
-            for (std::size_t s = 1; s < fbx->uv_sets.count; ++s) {
-                const std::string name = Text(fbx->uv_sets.data[s].name);
-                if (std::find(ignored_uv_sets.begin(), ignored_uv_sets.end(), name) == ignored_uv_sets.end()) {
-                    ignored_uv_sets.push_back(name);
-                }
-            }
             if (fbx->uv_sets.count > 0 && uv_set.empty()) uv_set = Text(fbx->uv_sets.data[0].name);
         }
         const std::uint32_t offset = offset_it->second;
         builder.BeginObject(Text(node->name), ToMatrix4(node->geometry_to_world));
+        std::vector<std::uint32_t> sets;  // by the mesh's UV set index - 1
+        std::map<std::string, std::size_t> seen;
+        for (std::size_t s = 1; s < fbx->uv_sets.count; ++s) {
+            const std::string name = Text(fbx->uv_sets.data[s].name);
+            const auto key = std::make_pair(name, seen[name]++);
+            const auto [it, added] = uv_keys.try_emplace(key, static_cast<std::uint32_t>(uv_keys.size()));
+            sets.push_back(builder.UvSet(it->second, it->second, name));
+        }
         for (std::size_t f = 0; f < fbx->faces.count; ++f) {
             const ufbx_face face = fbx->faces.data[f];
             if (face.num_indices < 3) {
@@ -110,8 +115,15 @@ void ImportFbx(std::string_view bytes, TexturingMesh& mesh) {
                 material_id = builder.Material(material->element_id, material->typed_id, name);
             }
             corners.clear();
+            face_uvs.clear();
+            for (std::size_t s = 0; s < sets.size(); ++s) face_uvs.push_back(FaceUvs{sets[s], {}, 0});
             for (std::uint32_t k = 0; k < face.num_indices; ++k) {
                 const std::uint32_t index = face.index_begin + k;
+                for (std::size_t s = 0; s < sets.size(); ++s) {
+                    const ufbx_vertex_vec2& set_uv = fbx->uv_sets.data[s + 1].vertex_uv;
+                    const ufbx_vec2 uv = set_uv.values.data[set_uv.indices.data[index]];
+                    face_uvs[s].uvs.push_back(Float2{static_cast<float>(uv.x), static_cast<float>(uv.y)});
+                }
                 Corner corner;
                 corner.position = offset + fbx->vertex_indices.data[index];
                 corner.material = material_id;
@@ -129,7 +141,7 @@ void ImportFbx(std::string_view bytes, TexturingMesh& mesh) {
                 if (fbx->vertex_tangent.exists) ++mesh.flags.stored_tangents;
                 corners.push_back(corner);
             }
-            builder.AddPolygon(corners);
+            builder.AddPolygon(corners, face_uvs);
         }
     }
     builder.Finish();
@@ -137,7 +149,6 @@ void ImportFbx(std::string_view bytes, TexturingMesh& mesh) {
     const double meters = scene->settings.unit_meters;
     mesh.units = Units{UnitName(meters), meters, meters * 100.0, "file"};
     mesh.flags.uv_set = uv_set;
-    mesh.flags.ignored_uv_sets = std::move(ignored_uv_sets);
     mesh.flags.v_flip = false;  // FBX stores v growing upwards, as UzPainter does
     const ufbx_coordinate_axes& axes = scene->settings.axes;
     mesh.flags.format_details = core::json::Object{

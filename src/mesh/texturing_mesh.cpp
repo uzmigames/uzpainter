@@ -2,6 +2,7 @@
 
 #include <bit>
 #include <cstring>
+#include <string>
 #include <string_view>
 
 #include "uzp_core/manifest/sha256.h"
@@ -98,17 +99,38 @@ Hashes ComputeHashes(const TexturingMesh& mesh) {
         for (const Corner& c : mesh.corners) s.Put(c.material);
         hashes.materials = s.Hex();
     }
+    if (!mesh.uv_sets.empty()) {
+        Stream s;
+        for (const UvSet& set : mesh.uv_sets) {
+            s.PutText(set.name);
+            for (const Float2& uv : set.uvs) {
+                s.Put(uv.u);
+                s.Put(uv.v);
+            }
+        }
+        hashes.secondary_uvs = s.Hex();
+    }
     return hashes;
 }
 
 core::json::Object HashesToJson(const Hashes& hashes) {
-    return {
+    core::json::Object json{
         {"corner_normals", hashes.corner_normals},
         {"materials", hashes.materials},
         {"positions", hashes.positions},
         {"triangulation", hashes.triangulation},
         {"uvs", hashes.uvs},
     };
+    if (!hashes.secondary_uvs.empty()) json["secondary_uvs"] = hashes.secondary_uvs;
+    return json;
+}
+
+core::json::Value TileOf(double fu, double fv) {
+    if (fu >= 0 && fu <= 9 && fv >= 0 && fv <= 99) {
+        return core::json::Value(static_cast<std::int64_t>(1001 + fu + 10 * fv));
+    }
+    return core::json::Value("u" + std::to_string(static_cast<std::int64_t>(fu)) + "_v" +
+                             std::to_string(static_cast<std::int64_t>(fv)));
 }
 
 }  // namespace uzp::mesh

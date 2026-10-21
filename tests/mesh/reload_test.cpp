@@ -710,6 +710,86 @@ void GltfExternalBuffer() {
     CHECK(legacy->revision() == revision);
 }
 
+/// A glTF quad (material `skin`) with a second UV set `TEXCOORD_1`, shifted by `shift` in u, in
+/// the external file `quad.bin` beside it.
+std::filesystem::path WriteTwoUvSetGltf(const std::filesystem::path& dir, float shift) {
+    std::string bin;
+    const auto put = [&bin](const void* data, std::size_t size) { bin.append(static_cast<const char*>(data), size); };
+    const float positions[12] = {0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0};
+    const float uvs[8] = {0, 1, 1, 1, 1, 0, 0, 0};
+    const float uvs1[8] = {0.1f + shift, 0.9f, 0.4f + shift, 0.9f, 0.4f + shift, 0.6f, 0.1f + shift, 0.6f};
+    const std::uint32_t indices[6] = {0, 1, 2, 0, 2, 3};
+    put(positions, sizeof(positions));
+    put(uvs, sizeof(uvs));
+    put(uvs1, sizeof(uvs1));
+    put(indices, sizeof(indices));
+    WriteFile(dir / "quad.bin", bin);
+    const std::string gltf = R"({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],)"
+                             R"("nodes":[{"name":"head","mesh":0}],"materials":[{"name":"skin"}],)"
+                             R"("meshes":[{"primitives":[{"attributes":{"POSITION":0,"TEXCOORD_0":1,"TEXCOORD_1":2},"indices":3,"material":0}]}],)"
+                             R"("accessors":[{"bufferView":0,"componentType":5126,"count":4,"type":"VEC3","min":[0,0,0],"max":[1,1,0]},)"
+                             R"({"bufferView":1,"componentType":5126,"count":4,"type":"VEC2"},)"
+                             R"({"bufferView":2,"componentType":5126,"count":4,"type":"VEC2"},)"
+                             R"({"bufferView":3,"componentType":5125,"count":6,"type":"SCALAR"}],)"
+                             R"("bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":48},{"buffer":0,"byteOffset":48,"byteLength":32},)"
+                             R"({"buffer":0,"byteOffset":80,"byteLength":32},{"buffer":0,"byteOffset":112,"byteLength":24}],)"
+                             R"("buffers":[{"uri":"quad.bin","byteLength":136}]})";
+    return WriteFile(dir / "quad.gltf", gltf);
+}
+
+/// A mesh with a second UV set (phase4.1_nodes-projections item 2.1): its hashes include
+/// `secondary_uvs` and re-derive; a project whose report predates them (no `secondary_uvs`)
+/// still re-derives; a wrong recorded `secondary_uvs` does not; a reload that moves only the
+/// second set reports it changed and nothing else.
+void SecondaryUvSetsReload() {
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "uzp-mesh-reload-tests" / "secondary_uvs";
+    std::filesystem::remove_all(dir);
+    const std::filesystem::path path = WriteTwoUvSetGltf(dir / "source", 0.0f);
+    std::ifstream in(path, std::ios::binary);
+    const std::string gltf{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+    in.close();
+    const ImportResult imported = ImportMeshFile(path, {});
+    CHECK(imported.mesh.uv_sets.size() == 1 && imported.mesh.uv_sets[0].name == "TEXCOORD_1");
+    CHECK(!imported.mesh.hashes.secondary_uvs.empty());
+    const json::Object& recorded = std::get<json::Object>(imported.report.at("hashes").data);
+    CHECK((recorded.at("secondary_uvs") == json::Value(imported.mesh.hashes.secondary_uvs)));
+
+    std::map<std::string, std::string> blobs;
+    const auto current = GltfDocument(imported, path, blobs, gltf);
+    const ResourceReader read = [&](const std::string& sha) { return blobs.at(sha); };
+    CHECK(RederiveMesh(*current->snapshot().project, read, false).mesh.hashes == imported.mesh.hashes);
+
+    // A report written before the UV sets after the first were kept.
+    ImportResult legacy_import = imported;
+    std::get<json::Object>(legacy_import.report.at("hashes").data).erase("secondary_uvs");
+    std::map<std::string, std::string> legacy_blobs;
+    const auto legacy = GltfDocument(legacy_import, path, legacy_blobs, gltf);
+    const ResourceReader legacy_read = [&](const std::string& sha) { return legacy_blobs.at(sha); };
+    CHECK(RederiveMesh(*legacy->snapshot().project, legacy_read, false).mesh.hashes == imported.mesh.hashes);
+
+    // A recorded `secondary_uvs` the file does not give is corruption.
+    ImportResult wrong_import = imported;
+    std::get<json::Object>(wrong_import.report.at("hashes").data)["secondary_uvs"] = imported.mesh.hashes.uvs;
+    std::map<std::string, std::string> wrong_blobs;
+    const auto wrong = GltfDocument(wrong_import, path, wrong_blobs, gltf);
+    try {
+        RederiveMesh(*wrong->snapshot().project, [&](const std::string& sha) { return wrong_blobs.at(sha); }, false);
+        throw Failure{"expected a ValueError for a wrong secondary_uvs hash"};
+    } catch (const MeshFileMissing&) {
+        throw Failure{"a wrong stored hash is not MeshFileMissing"};
+    } catch (const core::ValueError& error) {
+        CHECK(std::string(error.what()).find("no longer re-derives") != std::string::npos);
+    }
+
+    // A reload that moves only TEXCOORD_1.
+    const std::filesystem::path moved = WriteTwoUvSetGltf(dir / "moved", 0.5f);
+    const ReloadOutcome out = ReloadMesh(*current, core::MutationRequest{"reload_mesh", json::Object{}, "uv1", current->revision()},
+                                         moved, Settings(), read, MeshSource{moved.string(), std::string(kTime)});
+    CHECK(out.outcome.result && out.outcome.result->status == core::ResultStatus::committed && out.report);
+    CHECK(out.report->changed == std::vector<std::string>{"secondary_uvs"});
+    CHECK(out.report->invalid_mesh_maps.empty() && out.report->added.empty() && out.report->removed.empty());
+}
+
 const std::vector<std::pair<std::string, std::function<void()>>>& Cases() {
     static const std::vector<std::pair<std::string, std::function<void()>>> cases = {
         {"identical_reload", IdenticalReload},
@@ -721,6 +801,7 @@ const std::vector<std::pair<std::string, std::function<void()>>>& Cases() {
         {"added_and_removed_sets", AddedAndRemovedSets},
         {"failure_mid_reload", FailureMidReload},
         {"gltf_external_buffer", GltfExternalBuffer},
+        {"secondary_uv_sets_reload", SecondaryUvSetsReload},
     };
     return cases;
 }

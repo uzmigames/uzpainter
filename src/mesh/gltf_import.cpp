@@ -79,7 +79,6 @@ public:
         mesh_.units = Units{"meter", 1.0, 100.0, "file"};
         mesh_.flags.v_flip = true;
         mesh_.flags.uv_set = uv_set_;
-        for (const auto& [index, name] : ignored_uv_sets_) mesh_.flags.ignored_uv_sets.push_back(name);
     }
 
 private:
@@ -153,11 +152,19 @@ private:
                                                                      uvs.push_back(Float2{v[0], 1.0f - v[1]});
                                                                  });
             }
+            // The UV sets after the first: `TEXCOORD_n`, n >= 1, ordered by n, v flipped as uv0.
+            std::vector<std::pair<std::uint32_t, std::vector<Float2>>> secondary;
             for (const fastgltf::Attribute& attribute : primitive.attributes) {
                 const std::string_view name = attribute.name;
-                if (name.starts_with("TEXCOORD_") && name != "TEXCOORD_0") {
-                    ignored_uv_sets_.emplace(std::stoi(std::string(name.substr(9))), std::string(name));
-                }
+                if (!name.starts_with("TEXCOORD_") || name == "TEXCOORD_0") continue;
+                const std::uint64_t n = std::stoull(std::string(name.substr(9)));
+                const auto [key, added] = uv_keys_.try_emplace(std::string(name), uv_keys_.size());
+                auto& [set, values] =
+                    secondary.emplace_back(builder_.UvSet(key->second, n, std::string(name)), std::vector<Float2>{});
+                fastgltf::iterateAccessor<fastgltf::math::fvec2>(asset_, asset_.accessors.at(attribute.accessorIndex),
+                                                                 [&](fastgltf::math::fvec2 v) {
+                                                                     values.push_back(Float2{v[0], 1.0f - v[1]});
+                                                                 });
             }
             const bool tangents = Has(primitive, "TANGENT");
             std::vector<std::uint32_t> indices;
@@ -173,6 +180,8 @@ private:
             }
             const std::uint32_t material = MaterialOf(primitive);
             std::vector<Corner> corners(3);
+            std::vector<FaceUvs> face_uvs;
+            for (const auto& [set, values] : secondary) face_uvs.push_back(FaceUvs{set, std::vector<Float2>(3), 0});
             for (std::size_t t = 0; t < indices.size(); t += 3) {
                 for (std::size_t k = 0; k < 3; ++k) {
                     const std::uint32_t v = indices[t + k];
@@ -192,8 +201,18 @@ private:
                         ++mesh_.flags.corners_without_uv;
                     }
                     if (tangents) ++mesh_.flags.stored_tangents;
+                    for (std::size_t s = 0; s < secondary.size(); ++s) {
+                        const std::vector<Float2>& values = secondary[s].second;
+                        if (v < values.size()) {
+                            face_uvs[s].uvs[k] = values[v];
+                        } else {
+                            face_uvs[s].uvs[k] = Float2{};
+                            ++face_uvs[s].missing;
+                        }
+                    }
                 }
-                builder_.AddPolygon(corners);
+                builder_.AddPolygon(corners, face_uvs);
+                for (FaceUvs& face : face_uvs) face.missing = 0;
             }
         }
     }
@@ -202,7 +221,7 @@ private:
     TexturingMesh& mesh_;
     MeshBuilder builder_;
     std::map<std::pair<std::size_t, std::size_t>, std::uint32_t> offsets_;
-    std::map<int, std::string> ignored_uv_sets_;
+    std::map<std::string, std::uint64_t> uv_keys_;  // the UV sets after the first, by name
     std::string uv_set_;
 };
 

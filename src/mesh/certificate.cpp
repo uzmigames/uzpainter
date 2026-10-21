@@ -494,6 +494,23 @@ UvSetMetrics MeasureSet(const std::vector<const Tri*>& tris, double scale, int w
 
 json::Value Optional(const std::optional<double>& v) { return v ? json::Value(*v) : json::Value(nullptr); }
 
+SecondaryUvSet RecordSet(const TexturingMesh& mesh, const UvSet& set) {
+    SecondaryUvSet record{set.name, set.corners_without_uv, {}};
+    for (const Object& object : mesh.objects) {
+        for (const Triangle& t : object.triangles) {
+            std::array<D2, 3> uv{};
+            for (std::size_t i = 0; i < 3; ++i) uv[i] = {set.uvs[t.corners[i]].u, set.uvs[t.corners[i]].v};
+            if (Inside01(uv[0]) && Inside01(uv[1]) && Inside01(uv[2])) {
+                record.cells.emplace(0.0, 0.0);
+            } else {
+                record.cells.emplace(std::floor((uv[0][0] + uv[1][0] + uv[2][0]) / 3.0),
+                                     std::floor((uv[0][1] + uv[1][1] + uv[2][1]) / 3.0));
+            }
+        }
+    }
+    return record;
+}
+
 }  // namespace
 
 Certificate Certify(const TexturingMesh& mesh, const CertificateOptions& options) {
@@ -520,6 +537,7 @@ Certificate Certify(const TexturingMesh& mesh, const CertificateOptions& options
         cert.per_set[mesh.materials[s].name] =
             MeasureSet(sets[s], mesh.units.scale_to_internal, options.width, options.height);
     }
+    for (const UvSet& set : mesh.uv_sets) cert.secondary_sets.push_back(RecordSet(mesh, set));
     const CornerCounts& c = cert.corners;
     const FaceCounts& f = cert.faces;
     if (c.non_finite_normals || c.zero_normals || c.zero_tangents || c.zero_bitangents || c.degenerate_tbn ||
@@ -553,6 +571,20 @@ json::Object CertificateToJson(const Certificate& cert, const TexturingMesh& mes
                                      {"islands", json::Value(m.islands)},
                                      {"overlap_px", json::Value(m.overlap_px)}};
     }
+    json::Object uv{{"grid", json::Object{{"height", cert.grid.height}, {"width", cert.grid.width}}},
+                    {"outside_0_1", json::Value(cert.outside_0_1)},
+                    {"per_set", std::move(per_set)}};
+    if (!cert.secondary_sets.empty()) {
+        json::Array secondary;
+        for (const SecondaryUvSet& set : cert.secondary_sets) {
+            json::Array tiles;
+            for (const auto& [fu, fv] : set.cells) tiles.push_back(TileOf(fu, fv));
+            secondary.push_back(json::Object{{"corners_without_uv", json::Value(set.corners_without_uv)},
+                                             {"name", set.name},
+                                             {"tiles", std::move(tiles)}});
+        }
+        uv["secondary_sets"] = std::move(secondary);
+    }
     json::Array materials;
     for (const Material& material : mesh.materials) materials.push_back(material.name);
     json::Value meters = nullptr;
@@ -568,9 +600,7 @@ json::Object CertificateToJson(const Certificate& cert, const TexturingMesh& mes
                                {"flipped_uv", json::Value(f.flipped_uv)},
                                {"ngons_triangulated", json::Value(f.ngons_triangulated)},
                                {"zero_area_uv", json::Value(f.zero_area_uv)}}},
-        {"uv", json::Object{{"grid", json::Object{{"height", cert.grid.height}, {"width", cert.grid.width}}},
-                            {"outside_0_1", json::Value(cert.outside_0_1)},
-                            {"per_set", std::move(per_set)}}},
+        {"uv", std::move(uv)},
         {"mesh", json::Object{{"materials", std::move(materials)},
                               {"objects", json::Value(static_cast<std::uint64_t>(mesh.objects.size()))},
                               {"triangles", json::Value(static_cast<std::uint64_t>(mesh.TriangleCount()))},

@@ -6,6 +6,7 @@
 // Usage:
 //   uzp-mesh-tests run [case]               run every native case (or one); exit 0 when all pass
 //   uzp-mesh-tests import <file> [options]  import a mesh, print {"report": ..., "mesh": ...}
+//                                           (`mesh.uv_sets` only for more than one UV set)
 //   uzp-mesh-tests project <file> [options] import into a new document in one transaction, print
 //                                           the result, texture sets, resources and mesh reference
 //   uzp-mesh-tests texel <png> <u> <v>      the texel of a PNG that contains (u, v) and its RGBA16
@@ -561,6 +562,83 @@ void CertificateInReport() {
     CHECK(Near(*wide.certificate.per_set.at("default").border_px, 0.25 * 512, 1e-9));
 }
 
+// ── UV sets after the first (phase4.1_nodes-projections item 2.1) ─────────────────────────────
+
+/// The UV sets after the first are kept per corner beside uv0: a set first met after some faces
+/// gives their corners (0, 0) and counts them; sets are ordered by file order; only
+/// `secondary_uvs` (absent for one UV set) hashes them; the certificate records their tiles.
+void SecondaryUvSets() {
+    const auto corners = [](float u) {
+        std::vector<Corner> c(3);
+        for (std::uint32_t i = 0; i < 3; ++i) c[i] = Corner{i, {0, 0, 1}, {0.1f * (i + 1), 0.2f}, {}, 0};
+        c[0].uv0.u = u;
+        return c;
+    };
+    const auto build = [&](bool second_set, const std::string& name, float shift) {
+        TexturingMesh mesh;
+        mesh.positions = {{0, 0, 0}, {1, 0, 0}, {0, 1, 0}};
+        MeshBuilder builder(mesh);
+        builder.BeginObject("o");
+        const std::uint32_t m = builder.Material(0, 0, "M");
+        auto face = corners(0.05f);
+        for (Corner& c : face) c.material = m;
+        builder.AddPolygon(face);
+        if (second_set) {
+            const std::uint32_t late = builder.UvSet(7, 2, "late");
+            const std::uint32_t early = builder.UvSet(3, 1, name);
+            const std::vector<FaceUvs> uvs{{late, {{0.5f, 0.5f}, {0.6f, 0.5f}, {0.5f, 0.6f}}, 0},
+                                           {early, {{1.5f + shift, 0.5f}, {1.6f, 0.5f}, {1.5f, 0.6f}}, 0}};
+            builder.AddPolygon(face, uvs);
+            bool refused = false;
+            try {
+                const std::vector<FaceUvs> bad{{late, {{0.5f, 0.5f}}, 0}};
+                builder.AddPolygon(face, bad);
+            } catch (const std::invalid_argument&) {
+                refused = true;
+            }
+            CHECK(refused);
+        } else {
+            builder.AddPolygon(face);
+        }
+        builder.Finish();
+        mesh.hashes = ComputeHashes(mesh);
+        ComputeTangents(mesh);
+        return mesh;
+    };
+    const TexturingMesh single = build(false, "", 0.0f);
+    CHECK(single.uv_sets.empty() && single.hashes.secondary_uvs.empty());
+    CHECK(HashesToJson(single.hashes).size() == 5);
+    const json::Object single_json = CertificateToJson(Certify(single), single);
+    CHECK(!std::get<json::Object>(At(single_json, {"uv"}).data).contains("secondary_sets"));
+
+    const TexturingMesh multi = build(true, "early", 0.0f);
+    CHECK(multi.uv_sets.size() == 2);
+    CHECK(multi.uv_sets[0].name == "early" && multi.uv_sets[1].name == "late");  // by file order
+    CHECK(multi.uv_sets[0].uvs.size() == multi.corners.size());
+    CHECK(multi.uv_sets[0].corners_without_uv == 3 && multi.uv_sets[1].corners_without_uv == 3);
+    CHECK((multi.uv_sets[0].uvs[0] == Float2{0, 0}) && (multi.uv_sets[0].uvs[3] == Float2{1.5f, 0.5f}));
+    CHECK((multi.uv_sets[1].uvs[5] == Float2{0.5f, 0.6f}));
+    // uv0 and every other hash are those of the single-UV mesh; secondary_uvs is added.
+    CHECK(multi.hashes.positions == single.hashes.positions && multi.hashes.uvs == single.hashes.uvs &&
+          multi.hashes.corner_normals == single.hashes.corner_normals &&
+          multi.hashes.triangulation == single.hashes.triangulation &&
+          multi.hashes.materials == single.hashes.materials && !multi.hashes.secondary_uvs.empty());
+    CHECK((HashesToJson(multi.hashes).at("secondary_uvs") == json::Value(multi.hashes.secondary_uvs)));
+    CHECK(build(true, "renamed", 0.0f).hashes.secondary_uvs != multi.hashes.secondary_uvs);
+    CHECK(build(true, "early", 0.25f).hashes.secondary_uvs != multi.hashes.secondary_uvs);
+
+    const Certificate cert = Certify(multi);
+    const json::Object json = CertificateToJson(cert, multi);
+    CHECK((At(json, {"hashes"}) == json::Value(HashesToJson(multi.hashes))));
+    CHECK((At(json, {"uv", "secondary_sets"}) ==
+           json::Value(json::Array{
+               json::Object{{"corners_without_uv", std::int64_t{3}}, {"name", "early"}, {"tiles", json::Array{1001, 1002}}},
+               json::Object{{"corners_without_uv", std::int64_t{3}}, {"name", "late"}, {"tiles", json::Array{1001}}}})));
+    // Recorded, not judged: the certificate of uv0 is the single-UV mesh's.
+    CHECK((At(json, {"status"}) == At(single_json, {"status"})));
+    CHECK((At(json, {"uv", "per_set"}) == At(single_json, {"uv", "per_set"})));
+}
+
 const std::map<std::string, std::function<void()>, std::less<>>& Cases() {
     static const std::map<std::string, std::function<void()>, std::less<>> cases = {
         {"fan_triangulation", FanTriangulation},
@@ -581,6 +659,7 @@ const std::map<std::string, std::function<void()>, std::less<>>& Cases() {
         {"certificate_defects", CertificateDefects},
         {"uv_metrics_two_islands", UvMetricsTwoIslands},
         {"certificate_in_report", CertificateInReport},
+        {"secondary_uv_sets", SecondaryUvSets},
     };
     return cases;
 }
@@ -650,7 +729,19 @@ json::Object MeshJson(const TexturingMesh& m) {
         }
         objects.push_back(json::Object{{"name", o.name}, {"triangles", std::move(triangles)}});
     }
-    return {{"corners", std::move(corners)}, {"objects", std::move(objects)}, {"positions", std::move(positions)}};
+    json::Object out{{"corners", std::move(corners)}, {"objects", std::move(objects)}, {"positions", std::move(positions)}};
+    if (!m.uv_sets.empty()) {
+        json::Array sets;
+        for (const UvSet& set : m.uv_sets) {
+            json::Array uvs;
+            for (const Float2& uv : set.uvs) uvs.push_back(json::Array{json::Value(double(uv.u)), json::Value(double(uv.v))});
+            sets.push_back(json::Object{{"corners_without_uv", static_cast<std::int64_t>(set.corners_without_uv)},
+                                        {"name", set.name},
+                                        {"uvs", std::move(uvs)}});
+        }
+        out["uv_sets"] = std::move(sets);
+    }
+    return out;
 }
 
 void PrintRefusal(const ImportError& error) {

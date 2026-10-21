@@ -26,6 +26,7 @@ CASES = (
     "added_and_removed_sets",
     "failure_mid_reload",  # 3.5
     "gltf_external_buffer",  # phase2.1_recipe-dump-manifest-blocks: stored buffers, old projects
+    "secondary_uv_sets_reload",  # phase4.1_nodes-projections 2.1: UV sets after the first
 )
 
 

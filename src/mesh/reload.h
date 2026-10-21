@@ -112,8 +112,9 @@ struct ReloadReport {
     std::vector<std::pair<std::string, std::string>> renamed;  ///< (from, to), by `material_mapping`
     std::vector<SetRegions> regions;   ///< every set before or after, in material order
     std::string mesh_from, mesh_to;    ///< SHA-256 of the old and new mesh files
-    /// The texturing-mesh hashes that differ ("positions", "uvs", "corner_normals",
-    /// "triangulation", "materials") and "units" when the effective scale changed.
+    /// The texturing-mesh hashes that differ ("positions", "uvs", "secondary_uvs",
+    /// "corner_normals", "triangulation", "materials") and "units" when the effective scale
+    /// changed. Only "materials" and "secondary_uvs" leave the mesh maps valid.
     std::vector<std::string> changed;
     std::vector<MeshMapRef> invalid_mesh_maps;
     std::vector<core::Id> invalid_geometry_masks;  ///< layer uids
@@ -161,7 +162,8 @@ public:
 /// written before they were stored lists none: its files are read beside the resource's `origin`,
 /// as that version did, when `beside_origin` (`MeshFileMissing` when one is gone, or always
 /// without `beside_origin`, or when such a file no longer gives the recorded hashes); the
-/// re-derived hashes are checked either way. Throws
+/// re-derived hashes are checked either way (all but `secondary_uvs` for a report written before
+/// the UV sets after the first were kept, which does not record it). Throws
 /// `core::ValueError` when the project has no mesh, a listed file is not stored, or the bytes do
 /// not give the stored hashes.
 ImportResult RederiveMesh(const core::Project& project, const ResourceReader& read, bool beside_origin = true);

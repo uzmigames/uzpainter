@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+import struct
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,7 @@ from tests.mesh.mesh_fixtures import (
     gltf_document,
     obj_reference_hashes,
     png_rgba8,
+    secondary_uvs_hash,
     write_glb,
     write_gltf,
 )
@@ -62,6 +64,7 @@ NATIVE_CASES = (
     "units",
     "uv_metrics_two_islands",
     "uv_tiles",
+    "secondary_uv_sets",
 )
 
 QUAD_POSITIONS = [(-1.0, 0.0, -1.0), (1.0, 0.0, -1.0), (1.0, 0.0, 1.0), (-1.0, 0.0, 1.0)]
@@ -566,17 +569,102 @@ def test_release_gaps_and_auto_unwrap(mesh_tests: Path, tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------------------------
-# Recorded, not used: extra UV sets and stored tangents (12 §2)
+# Every UV set kept (phase4.1_nodes-projections items 2.1, 3.4; 12 §2): the sets after the first
+# are data beside uv0, hashed in `secondary_uvs` and recorded in the certificate; a mesh with one
+# UV set has neither, so its hashes and certificate are unchanged.
+
+SECOND_UVS = [(0.2, 0.3), (0.7, 0.3), (0.2, 0.8)]  # glTF convention: v grows downwards
+THIRD_UVS = [(1.25, 0.5), (1.75, 0.5), (1.25, 0.25)]
 
 
-def test_gltf_extra_uv_sets_and_stored_tangents_recorded(mesh_tests: Path, tmp_path: Path) -> None:
+def _f32(value: float) -> float:
+    return float(struct.unpack("<f", struct.pack("<f", value))[0])
+
+
+def _flip(uvs: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """The importer's float32 UVs of glTF UVs: (u, 1 - v), computed in float32."""
+    return [(_f32(u), _f32(1.0 - _f32(v))) for u, v in uvs]
+
+
+def test_gltf_every_uv_set_kept(mesh_tests: Path, tmp_path: Path) -> None:
+    single = _triangle_primitive(0, 0.0)
+    single.tangents = [(1.0, 0.0, 0.0, 1.0)] * 3
+    document, blob = gltf_document([[single]], [GltfNode("T", mesh=0)], ["M"], [0])
+    one = imported(mesh_tests, write_gltf(tmp_path / "one.gltf", document, blob))
+
     primitive = _triangle_primitive(0, 0.0)
-    primitive.extra_texcoords = 2
     primitive.tangents = [(1.0, 0.0, 0.0, 1.0)] * 3
+    primitive.texcoords = {2: THIRD_UVS, 1: SECOND_UVS}
     document, blob = gltf_document([[primitive]], [GltfNode("T", mesh=0)], ["M"], [0])
-    flags = imported(mesh_tests, write_gltf(tmp_path / "t.gltf", document, blob))["report"]["flags"]
-    assert flags["ignored_uv_sets"] == ["TEXCOORD_1", "TEXCOORD_2"]
+    result = imported(mesh_tests, write_gltf(tmp_path / "t.gltf", document, blob))
+    report = result["report"]
+    flags = report["flags"]
+    assert flags["ignored_uv_sets"] == []
     assert flags["stored_tangents"] == 3 and flags["uv_set"] == "TEXCOORD_0"
+    second = _flip(SECOND_UVS)
+    third = _flip(THIRD_UVS)
+    assert result["mesh"]["uv_sets"] == [
+        {"corners_without_uv": 0, "name": "TEXCOORD_1", "uvs": [list(uv) for uv in second]},
+        {"corners_without_uv": 0, "name": "TEXCOORD_2", "uvs": [list(uv) for uv in third]},
+    ]
+    hashes = dict(report["hashes"])
+    assert hashes.pop("secondary_uvs") == secondary_uvs_hash(
+        [("TEXCOORD_1", second), ("TEXCOORD_2", third)]
+    )
+    assert hashes == one["report"]["hashes"]  # uv0 and the rest are the single-UV mesh's
+    assert report["certificate"]["hashes"] == report["hashes"]
+    assert report["certificate"]["uv"]["secondary_sets"] == [
+        {"corners_without_uv": 0, "name": "TEXCOORD_1", "tiles": [1001]},
+        {"corners_without_uv": 0, "name": "TEXCOORD_2", "tiles": [1002]},
+    ]
+    certificate = dict(report["certificate"])
+    certificate["uv"] = {k: v for k, v in certificate["uv"].items() if k != "secondary_sets"}
+    certificate["hashes"] = one["report"]["certificate"]["hashes"]
+    assert certificate == one["report"]["certificate"]  # recorded, not judged
+
+    assert "uv_sets" not in one["mesh"] and "secondary_uvs" not in one["report"]["hashes"]
+    assert "secondary_sets" not in one["report"]["certificate"]["uv"]
+
+
+def test_gltf_uv_set_missing_from_a_primitive(mesh_tests: Path, tmp_path: Path) -> None:
+    first = _triangle_primitive(0, 0.0)
+    second = _triangle_primitive(0, 2.0)
+    second.texcoords = {1: SECOND_UVS}
+    document, blob = gltf_document([[first, second]], [GltfNode("T", mesh=0)], ["M"], [0])
+    result = imported(mesh_tests, write_gltf(tmp_path / "t.gltf", document, blob))
+    flipped = [list(uv) for uv in _flip(SECOND_UVS)]
+    assert result["mesh"]["uv_sets"] == [
+        {"corners_without_uv": 3, "name": "TEXCOORD_1", "uvs": [[0.0, 0.0]] * 3 + flipped},
+    ]
+    assert result["report"]["certificate"]["uv"]["secondary_sets"][0]["corners_without_uv"] == 3
+
+
+def test_fbx_every_uv_set_kept(mesh_tests: Path, tmp_path: Path) -> None:
+    second = [(0.5, 0.5), (0.75, 0.5), (0.75, 0.75), (0.5, 0.75)]
+    two = FbxGeometry(
+        100, "Two", QUAD_POSITIONS, [[0, 1, 2, 3]], uvs=QUAD_UVS, extra_uvs=[("Detail", second)]
+    )
+    one = FbxGeometry(101, "One", QUAD_POSITIONS, [[0, 1, 2, 3]], uvs=QUAD_UVS)
+    models = [FbxModel(200, "Two", 100), FbxModel(201, "One", 101, translation=(3.0, 0.0, 0.0))]
+    path = tmp_path / "two.fbx"
+    path.write_text(fbx_ascii([two, one], models, {}), encoding="utf-8")
+    result = imported(mesh_tests, path)
+    report = result["report"]
+    assert report["flags"]["ignored_uv_sets"] == [] and report["flags"]["uv_set"] == "UVMap"
+    kept = [[_f32(u), _f32(v)] for u, v in second] + [[0.0, 0.0]] * 4
+    assert result["mesh"]["uv_sets"] == [{"corners_without_uv": 4, "name": "Detail", "uvs": kept}]
+    assert report["hashes"]["secondary_uvs"] == secondary_uvs_hash(
+        [("Detail", [(uv[0], uv[1]) for uv in kept])]
+    )
+    assert report["certificate"]["uv"]["secondary_sets"] == [
+        {"corners_without_uv": 4, "name": "Detail", "tiles": [1001]}
+    ]
+
+    single = tmp_path / "one.fbx"
+    single.write_text(fbx_ascii([one], [FbxModel(201, "One", 101)], {}), encoding="utf-8")
+    plain = imported(mesh_tests, single)
+    assert "uv_sets" not in plain["mesh"] and "secondary_uvs" not in plain["report"]["hashes"]
+    assert "secondary_sets" not in plain["report"]["certificate"]["uv"]
 
 
 # ---------------------------------------------------------------------------------------------

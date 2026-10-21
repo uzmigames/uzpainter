@@ -19,9 +19,12 @@
 //   `parity/semantics/polygon-triangulation.json`).
 // - `materials[]` are the materials faces use, in file order: one texture set each (PRJ-02).
 //   Material identity (name + index) is separate from object identity.
+// - `uv_sets[]` are the file's UV sets after the first (FBX layers after the first, glTF
+//   `TEXCOORD_n` for n >= 1; an OBJ has one), one UV per corner each, beside `uv0` and never used
+//   for texturing; a mesh with one UV set has none.
 // - UVs follow the OpenGL/OBJ convention: v grows upwards, the 0-1 square is UDIM tile 1001.
 //
-// The five content hashes are SHA-256 (lower-case hex) of little-endian byte streams defined in
+// The content hashes are SHA-256 (lower-case hex) of little-endian byte streams defined in
 // `ComputeHashes`; a reload compares them (PRJ-08).
 
 #include <array>
@@ -92,12 +95,22 @@ struct Units {
     bool operator==(const Units&) const = default;
 };
 
+/// A UV set after the first: its name and one UV per corner (`uvs[i]` belongs to `corners[i]`),
+/// in tile-indexed UV space like `uv0`; (0, 0) for a corner whose face does not carry the set.
+struct UvSet {
+    std::string name;
+    std::vector<Float2> uvs;
+    std::uint64_t corners_without_uv = 0;  ///< corners left (0, 0)
+    bool operator==(const UvSet&) const = default;
+};
+
 struct Hashes {
     std::string positions;
     std::string uvs;
     std::string corner_normals;
     std::string triangulation;
     std::string materials;
+    std::string secondary_uvs;  ///< of `uv_sets`; empty for a mesh with one UV set
     bool operator==(const Hashes&) const = default;
 };
 
@@ -107,7 +120,6 @@ struct ImportFlags {
     std::uint64_t corners_without_normal = 0;      ///< corner normal left (0, 0, 0)
     std::uint64_t corners_without_uv = 0;          ///< corner uv0 left (0, 0)
     std::uint64_t skipped_non_surface_elements = 0; ///< points and lines (no surface to paint)
-    std::vector<std::string> ignored_uv_sets;      ///< UV sets after the first, by name
     std::string uv_set;                            ///< the UV set used, by name ("" if unnamed)
     bool v_flip = false;                           ///< true when the format's v was flipped
     std::uint64_t stored_tangents = 0;             ///< corners with a file tangent (recorded only)
@@ -120,6 +132,7 @@ struct TexturingMesh {
     std::vector<Corner> corners;
     std::vector<Float3> positions;
     std::vector<Material> materials;
+    std::vector<UvSet> uv_sets;  ///< the UV sets after the first, in file order
     Units units;
     Hashes hashes;
     ImportFlags flags;
@@ -134,10 +147,17 @@ struct TexturingMesh {
 /// - triangulation: per object, its triangle count as uint32 and its triangles' corner ids as
 ///   3 x uint32; then every corner's position id as uint32;
 /// - materials: per material, its index as uint32, its UTF-8 name and a 0 byte; then every
-///   corner's material id as uint32.
+///   corner's material id as uint32;
+/// - secondary_uvs, only when `uv_sets` is not empty (else ""): per set, its UTF-8 name and a 0
+///   byte, then every corner's UV in it as 2 x float32.
 Hashes ComputeHashes(const TexturingMesh& mesh);
 
-/// `{corner_normals, materials, positions, triangulation, uvs}`.
+/// `{corner_normals, materials, positions, triangulation, uvs}`, and `secondary_uvs` when the
+/// mesh has more than one UV set.
 core::json::Object HashesToJson(const Hashes& hashes);
+
+/// The tile of the UV square cell (`fu`, `fv`) (the floor of u and v): its UDIM number when it
+/// has one (1001 + fu + 10 fv for fu in 0-9, fv in 0-99), else "u<fu>_v<fv>".
+core::json::Value TileOf(double fu, double fv);
 
 }  // namespace uzp::mesh

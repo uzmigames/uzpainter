@@ -439,6 +439,7 @@ std::vector<std::string> ChangedHashes(const TexturingMesh& a, const TexturingMe
     std::vector<std::string> changed;
     if (a.hashes.positions != b.hashes.positions) changed.push_back("positions");
     if (a.hashes.uvs != b.hashes.uvs) changed.push_back("uvs");
+    if (a.hashes.secondary_uvs != b.hashes.secondary_uvs) changed.push_back("secondary_uvs");
     if (a.hashes.corner_normals != b.hashes.corner_normals) changed.push_back("corner_normals");
     if (a.hashes.triangulation != b.hashes.triangulation) changed.push_back("triangulation");
     if (a.hashes.materials != b.hashes.materials) changed.push_back("materials");
@@ -538,7 +539,12 @@ ImportResult RederiveMesh(const core::Project& project, const ResourceReader& re
         throw;
     }
     const json::Value* hashes = Member(report, "hashes");
-    if (hashes == nullptr || !(*hashes == json::Value(HashesToJson(current->mesh.hashes)))) {
+    json::Object derived = HashesToJson(current->mesh.hashes);
+    // A report written before the UV sets after the first were kept records the other hashes only.
+    if (hashes != nullptr && hashes->IsObject() && !std::get<json::Object>(hashes->data).contains("secondary_uvs")) {
+        derived.erase("secondary_uvs");
+    }
+    if (hashes == nullptr || !(*hashes == json::Value(std::move(derived)))) {
         if (read_beside) throw MeshFileMissing(altered + " (reload the mesh to store it)");
         throw core::ValueError("the mesh '" + file_name + "' no longer re-derives to the hashes its import report records");
     }
@@ -591,8 +597,10 @@ ReloadReport ApplyReload(core::Edit& edit, const ImportResult& current, const Im
     report.mesh_from = project.mesh->resource;
     report.mesh_to = next.sha256;
     report.changed = ChangedHashes(current.mesh, next.mesh);
-    const bool geometry_changed = std::any_of(report.changed.begin(), report.changed.end(),
-                                              [](const std::string& h) { return h != "materials"; });
+    // Mesh maps and the texturing UVs do not read the UV sets after the first.
+    const bool geometry_changed = std::any_of(report.changed.begin(), report.changed.end(), [](const std::string& h) {
+        return h != "materials" && h != "secondary_uvs";
+    });
 
     // The current sets by material; a set without a material of the current mesh is kept as is.
     std::map<std::string, std::size_t> set_of;
@@ -701,6 +709,7 @@ ReloadReport ApplyReloadWithoutCurrent(core::Edit& edit, const ImportResult& nex
     report.mesh_from = project.mesh->resource;
     report.mesh_to = next.sha256;
     report.changed = {"corner_normals", "materials", "positions", "triangulation", "uvs"};
+    if (!next.mesh.uv_sets.empty()) report.changed.insert(report.changed.begin() + 3, "secondary_uvs");
     const json::Object invalid{{"changed", json::Array(report.changed.begin(), report.changed.end())},
                                {"mesh", json::Object{{"from", report.mesh_from}, {"to", report.mesh_to}}},
                                {"previous_mesh", reason},
