@@ -40,7 +40,16 @@ counts. Finite candidate vectors with Z < 0 are counted separately as `negative_
 an inspection signal only, never a repair or an exception metric. A texel is unnormalised when
 its length differs from 1 by more than rounding a unit vector
 to the stored values can produce: sqrt(3)/max for integer codes (n = 2c/max - 1), sqrt(3)·eps of
-the stored type for float maps. A differing integer map's |Δ| image (a PNG at its stored depth)
+the stored type for float maps. For the maps the caller names as ID maps or opacity maps, the
+exact checks (`exact_checks`, CONTRACT.md §8.1): label equality, a texel's label being every
+channel of it, or alpha equality, its alpha being the last channel of a grey-alpha or RGBA map and
+the only channel of a grey one; each with the count of differing texels and the edge-coverage
+count, the differing texels that lie on an edge of the oracle's map (a texel whose label or alpha
+differs from that of one of its four neighbours inside the map, so both sides of a boundary; no
+wrapping): a coverage or boundary difference, where the other differing texels assign a label or
+alpha inside a region. Values compare as in the whole-map numbers: a NaN equals only a NaN. The
+counts reach the register as `id_label_differing_count` or `alpha_differing_count` and
+`edge_coverage_differing_count`. A differing integer map's |Δ| image (a PNG at its stored depth)
 goes into the private store only, so the guard's store-hash rule blocks it, and the report names
 its SHA-256. Mean FLIP (NVIDIA's `flip-evaluator`, pinned at 1.7 by the dependency inventory,
 `docs/licensing-and-clean-room.md` §3) is reported for each compared integer map of the equality
@@ -106,6 +115,10 @@ FLIP_PACKAGE, FLIP_VERSION = "flip-evaluator", "1.7"
 FLIP_WHEEL_SHA256 = "2081f715ea8190a5f58bc578b0cccd36a9a3f3cf78ad13fe6f86e5a75615bda7"
 # What must be the same for a recorded golden to be the job the runs executed.
 SAME_JOB = ("golden_id", "tier", "domain", "inputs", "instruction_sequence", "applied_settings")
+# The exact checks of ID and opacity maps and the register metrics they give (CONTRACT.md §8.2).
+ID_LABELS, ALPHA = "id_labels", "alpha"
+EXACT_METRIC = {ID_LABELS: "id_label_differing_count", ALPHA: "alpha_differing_count"}
+EDGE_METRIC = "edge_coverage_differing_count"
 
 MapKey = tuple[str, str]  # (texture set, map name)
 Mask = npt.NDArray[np.bool_]
@@ -135,14 +148,21 @@ class RunIdentity:
 @dataclass(frozen=True)
 class Subject:
     """The job the runs executed (its public manifest, request or admitted), its material regions,
-    the names of its maps that are tangent-space normals, and the UV triangles of its texture sets
-    by name (the mesh material of each set; decision 223)."""
+    the names of its maps that are tangent-space normals, the UV triangles of its texture sets
+    by name (the mesh material of each set; decision 223), and the names of its ID maps and
+    opacity maps (each gets its exact check; no map is both)."""
 
     manifest: Mapping[str, Any]
     manifest_sha256: str
     regions: Mapping[str, Mask] = field(default_factory=dict)
     normal_maps: frozenset[str] = frozenset()
     uv_triangles: Mapping[str, Triangles] = field(default_factory=dict)
+    id_maps: frozenset[str] = frozenset()
+    opacity_maps: frozenset[str] = frozenset()
+
+    def __post_init__(self) -> None:
+        if both := sorted(self.id_maps & self.opacity_maps):
+            raise ValueError(f"a map is an ID map or an opacity map, not both: {both}")
 
 
 def material_regions(stack: Mapping[str, Any], masks: Path) -> dict[str, Mask]:
@@ -262,6 +282,57 @@ def normal_diagnostics(oracle: Decoded, candidate: Decoded) -> dict[str, float]:
     }
 
 
+def _equal(a: npt.NDArray[Any], b: npt.NDArray[Any]) -> Mask:
+    """Value by value: equal, a NaN only to a NaN (CONTRACT.md §3.1)."""
+    same: Mask = a == b
+    if np.issubdtype(a.dtype, np.floating) and np.issubdtype(b.dtype, np.floating):
+        same |= np.isnan(a) & np.isnan(b)
+    return same
+
+
+def edge_texels(values: npt.NDArray[Any]) -> Mask:
+    """The texels of a (height, width, channels) map whose value differs from that of one of
+    their four neighbours inside the map (no wrapping)."""
+    edges = np.zeros(values.shape[:2], np.bool_)
+    rows = ~_equal(values[1:], values[:-1]).all(axis=-1)
+    edges[1:] |= rows
+    edges[:-1] |= rows
+    columns = ~_equal(values[:, 1:], values[:, :-1]).all(axis=-1)
+    edges[:, 1:] |= columns
+    edges[:, :-1] |= columns
+    return edges
+
+
+def _alpha(decoded: Decoded) -> npt.NDArray[Any]:
+    values = decoded.values
+    if values.ndim != 3 or values.shape[2] not in (1, 2, 4):
+        raise ValueError(f"an opacity map is grey, grey-alpha or RGBA, not shape {values.shape}")
+    alpha: npt.NDArray[Any] = values[..., -1:]
+    return alpha
+
+
+def exact_check(check: str, oracle: Decoded, candidate: Decoded) -> dict[str, Any]:
+    """Label equality (`id_labels`: a texel's label is all its channels) or alpha equality
+    (`alpha`) per texel: the differing texels, and those of them on an edge of the oracle's map."""
+    if check == ALPHA:
+        a, b = _alpha(oracle), _alpha(candidate)
+    elif check == ID_LABELS:
+        a, b = oracle.values, candidate.values
+    else:
+        raise ValueError(f"no exact check {check!r}")
+    if a.ndim != 3 or a.shape != b.shape:
+        raise ValueError(f"exact check of shapes {a.shape} and {b.shape}")
+    differing = ~_equal(a, b).all(axis=-1)
+    on_edge = differing & edge_texels(a)
+    count = int(np.count_nonzero(differing))
+    return {
+        "check": check,
+        "equal": count == 0,
+        "differing_count": count,
+        EDGE_METRIC: int(np.count_nonzero(on_edge)),
+    }
+
+
 def flip_available() -> bool:
     """The pinned FLIP package is installed (the owner's machine; decision 050)."""
     try:
@@ -314,6 +385,7 @@ def map_entry(
     difference_map: str | None = None,
     flip: float | None = None,
     padding: Mapping[str, Any] | None = None,
+    exact: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     entry: dict[str, Any] = {
         "output_id": output_id,
@@ -335,6 +407,8 @@ def map_entry(
         entry["flip_mean"] = flip
     if padding is not None:
         entry["padding"] = dict(padding)
+    if exact is not None:
+        entry["exact_checks"] = [dict(exact)]
     return entry
 
 
@@ -484,6 +558,22 @@ def equality(
             continue
         regions = region_diagnostics(oracle.values, candidate.values, subject.regions)
         normal = normal_diagnostics(oracle, candidate) if key[1] in subject.normal_maps else None
+        check = (
+            ID_LABELS
+            if key[1] in subject.id_maps
+            else ALPHA
+            if key[1] in subject.opacity_maps
+            else None
+        )
+        exact = exact_check(check, oracle, candidate) if check is not None else None
+        exact_metrics = (
+            {
+                EXACT_METRIC[exact["check"]]: float(exact["differing_count"]),
+                EDGE_METRIC: float(exact[EDGE_METRIC]),
+            }
+            if exact is not None
+            else {}
+        )
         covered: Mask | None = None
         if key[0] in subject.uv_triangles:
             height, width = oracle.values.shape[:2]
@@ -502,9 +592,12 @@ def equality(
                 oracle.values,
                 candidate.values,
                 extra_metrics={
-                    f"normal_{name}": value
-                    for name, value in (normal or {}).items()
-                    if name != "negative_z_count"
+                    **{
+                        f"normal_{name}": value
+                        for name, value in (normal or {}).items()
+                        if name != "negative_z_count"
+                    },
+                    **exact_metrics,
                 },
                 region_metrics={name: d.metrics() for name, d in regions.items()},
                 oracle_stable=stable[key],
@@ -521,7 +614,9 @@ def equality(
         )
         flip = flip_mean(oracle, candidate)
         entries.append(
-            map_entry(_name(key), recorded, whole, regions, normal, difference_map, flip, padding)
+            map_entry(
+                _name(key), recorded, whole, regions, normal, difference_map, flip, padding, exact
+            )
         )
     outcome = _outcome(verdicts, structural, resolved.stale, oracle_unpaired)
     relied = sorted({pair for v in verdicts for pair in v.exceptions_relied_on})

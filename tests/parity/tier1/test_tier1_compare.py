@@ -32,6 +32,8 @@ from tools.parity.tier1.compare import (
     RunIdentity,
     Subject,
     compare,
+    edge_texels,
+    exact_check,
     file_storage_format,
     flip_available,
     material_regions,
@@ -449,6 +451,140 @@ def test_a_register_bound_on_the_normal_angle_judges_a_normal_map(
     assert equality["outcome"] == outcome
     relied = [{"exception_id": entry["exception_id"], "version": entry["version"]}]
     assert equality["exceptions_relied_on"] == (relied if outcome == "pass" else [])
+
+
+# --- ID and opacity exact checks (phase3.4_baker-id 2.3, phase3.4_baker-opacity 2.3) ----------
+
+ID_MAP, OPACITY = "W_ID", "W_Opacity"
+RED, BLUE, GREEN = (65535, 0, 0), (0, 0, 65535), (0, 65535, 0)
+
+
+def labelled_maps() -> dict[str, np.ndarray]:
+    """An ID map of two labels (red on the left two columns, blue on the right two) and an RGBA
+    map whose alpha is an opaque 2 x 2 island at the centre, 16-bit codes."""
+    labels = np.empty((4, 4, 3), np.uint16)
+    labels[:, :2], labels[:, 2:] = RED, BLUE
+    opacity = np.zeros((4, 4, 4), np.uint16)
+    opacity[..., :3] = 30000
+    opacity[1:3, 1:3, 3] = 65535
+    return {ID_MAP: labels, OPACITY: opacity}
+
+
+def labelled_subject() -> Subject:
+    return Subject(
+        MANIFEST,
+        "2" * 64,
+        REGIONS,
+        id_maps=frozenset({ID_MAP}),
+        opacity_maps=frozenset({OPACITY}),
+    )
+
+
+def labelled_report(
+    tmp: Path, changed: dict[str, np.ndarray], entries: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
+    recorded = labelled_maps()
+    resolved, store = golden(tmp, {"r1": recorded, "r1-repeat": recorded, "r2": recorded})
+    runs = (candidate(tmp / "a", changed), candidate(tmp / "b", changed))
+    report = compare(labelled_subject(), resolved, store, runs, IDENTITY, entries or [])
+    assert validation_errors(report, Schema.COMPARISON_REPORT) == []
+    return report
+
+
+def checks_of(report: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    return {e["output_id"]: e.get("exact_checks") for e in report["equality_to_painter"]["maps"]}
+
+
+def test_equal_id_and_opacity_maps_pass_with_their_exact_checks(tmp_path: Path) -> None:
+    report = labelled_report(tmp_path, labelled_maps())
+    assert report["equality_to_painter"]["outcome"] == "pass"
+    zero = {"equal": True, "differing_count": 0, "edge_coverage_differing_count": 0}
+    assert checks_of(report) == {
+        f"{SET}/{ID_MAP}": [{"check": "id_labels", **zero}],
+        f"{SET}/{OPACITY}": [{"check": "alpha", **zero}],
+    }
+
+
+def test_a_label_off_on_one_edge_texel_fails_with_its_edge_coverage_count(tmp_path: Path) -> None:
+    """The spec scenario: the labels match except on one texel of the red/blue boundary; then an
+    interior texel too. Alpha: one texel outside the island is opaque (an edge of the oracle's
+    alpha), and a colour change leaves the alpha check equal."""
+    changed = labelled_maps()
+    changed[ID_MAP][0, 2] = RED  # the blue side of the boundary: an oracle edge texel
+    changed[OPACITY][0, 1, 3] = 65535  # above the island: an oracle edge texel
+    report = labelled_report(tmp_path / "edge", changed)
+    assert report["equality_to_painter"]["outcome"] == "fail"
+    checks = checks_of(report)
+    one = {"equal": False, "differing_count": 1, "edge_coverage_differing_count": 1}
+    assert checks[f"{SET}/{ID_MAP}"] == [{"check": "id_labels", **one}]
+    assert checks[f"{SET}/{OPACITY}"] == [{"check": "alpha", **one}]
+    changed[ID_MAP][3, 0] = GREEN  # inside the red region, away from every boundary
+    changed[OPACITY][0, 1, 3] = 0
+    changed[OPACITY][3, 3, :3] = 0  # colour only: the alpha stays equal
+    report = labelled_report(tmp_path / "interior", changed)
+    assert report["equality_to_painter"]["outcome"] == "fail"
+    checks = checks_of(report)
+    assert checks[f"{SET}/{ID_MAP}"] == [
+        {
+            "check": "id_labels",
+            "equal": False,
+            "differing_count": 2,
+            "edge_coverage_differing_count": 1,
+        }
+    ]
+    alpha = {"check": "alpha", "equal": True, "differing_count": 0}
+    assert checks[f"{SET}/{OPACITY}"] == [{**alpha, "edge_coverage_differing_count": 0}]
+    entry = by_id(report["equality_to_painter"]["maps"])[f"{SET}/{OPACITY}"]
+    assert entry["differing"]["count"] == 3  # the whole-map numbers count the colour values
+
+
+@pytest.mark.parametrize(("interior", "outcome"), [(False, "pass"), (True, "fail")])
+def test_register_bounds_on_label_and_edge_counts_judge_an_id_map(
+    tmp_path: Path, interior: bool, outcome: str
+) -> None:
+    """The exact-check counts reach the register under their metric names (CONTRACT.md §8.2): an
+    entry bounding `id_label_differing_count` and `edge_coverage_differing_count` by 1 covers one
+    edge texel, not an added interior one."""
+    changed = labelled_maps()
+    changed[ID_MAP][0, 2] = RED
+    if interior:
+        changed[ID_MAP][3, 0] = GREEN
+    entry = load_json(REPO_ROOT / "parity/schema/samples/exceptions/tier2b-bake-entry.json")
+    entry = {
+        **entry,
+        "tier": "1",
+        "domain": {**entry["domain"], "selector": MANIFEST["domain"]},
+        "evidence": {**entry["evidence"], "basis": "irreducible_difference"},
+        "bounds": [
+            {"metric": "id_label_differing_count", "scope": "whole", "max": 1},
+            {"metric": "edge_coverage_differing_count", "scope": "whole", "max": 1},
+        ],
+    }
+    report = labelled_report(tmp_path, changed, [entry])
+    equality = report["equality_to_painter"]
+    assert equality["outcome"] == outcome
+    relied = [{"exception_id": entry["exception_id"], "version": entry["version"]}]
+    assert equality["exceptions_relied_on"] == (relied if outcome == "pass" else [])
+
+
+def test_exact_checks_compare_nans_as_equal_and_refuse_a_map_without_alpha() -> None:
+    values = np.zeros((2, 3, 2))
+    values[0, 0] = (np.nan, np.nan)
+    other = values.copy()
+    other[1, 2, 1] = np.inf
+    oracle, candidate = Decoded(values, False, 32), Decoded(other, False, 32)
+    assert exact_check("id_labels", oracle, oracle)["equal"] is True
+    labels = exact_check("id_labels", oracle, candidate)
+    assert (labels["differing_count"], labels["edge_coverage_differing_count"]) == (1, 0)
+    alpha = exact_check("alpha", oracle, candidate)
+    assert (alpha["differing_count"], alpha["edge_coverage_differing_count"]) == (1, 0)
+    edges = edge_texels(values)
+    assert edges.tolist() == [[True, True, False], [True, False, False]]
+    rgb = Decoded(np.zeros((2, 2, 3)), False, 32)
+    with pytest.raises(ValueError, match="grey, grey-alpha or RGBA"):
+        exact_check("alpha", rgb, rgb)
+    with pytest.raises(ValueError, match="not both"):
+        Subject(MANIFEST, "2" * 64, id_maps=frozenset({ID_MAP}), opacity_maps=frozenset({ID_MAP}))
 
 
 # --- oracle_unavailable (3.4) -------------------------------------------------------------------

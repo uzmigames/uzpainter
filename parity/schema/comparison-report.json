@@ -360,6 +360,7 @@
           }
         },
         "exact_checks": {
+          "description": "CONTRACT.md §8.1, IDs and opacity (tools/parity/tier1/compare.py, exact_check): id_labels compares each texel's label (all its channels), alpha its alpha (the last channel of a grey-alpha or RGBA map, the only channel of a grey one); a NaN equals only a NaN. Counts are texels.",
           "type": "array",
           "items": {
             "type": "object",
@@ -367,10 +368,22 @@
             "required": ["check", "equal", "differing_count", "edge_coverage_differing_count"],
             "properties": {
               "check": { "enum": ["id_labels", "alpha"] },
-              "equal": { "type": "boolean" },
+              "equal": { "type": "boolean", "description": "True exactly when differing_count is 0." },
               "differing_count": { "type": "integer", "minimum": 0 },
-              "edge_coverage_differing_count": { "type": "integer", "minimum": 0 }
-            }
+              "edge_coverage_differing_count": {
+                "description": "The differing texels on an edge of the oracle's map: a texel whose label or alpha differs from that of one of its four neighbours inside the map, so both sides of a boundary (no wrapping).",
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "if": { "properties": { "equal": { "const": true } } },
+            "then": {
+              "properties": {
+                "differing_count": { "const": 0 },
+                "edge_coverage_differing_count": { "const": 0 }
+              }
+            },
+            "else": { "properties": { "differing_count": { "minimum": 1 } } }
           }
         },
         "render": { "$ref": "#/$defs/render" },
