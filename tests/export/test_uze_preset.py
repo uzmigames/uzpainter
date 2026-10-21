@@ -398,7 +398,12 @@ def test_receipt_lists_formats_bindings_and_gaps(filtered: tuple[Path, Any]) -> 
     assert files["s0_normal.uztexture"]["normal"]["role"] == "combined"
     for name in ("s0_albedo.png", "s0_emissive.png"):
         assert files[name]["bit_depth"] == "8"
+    # 2.5: opacity rides in the albedo alpha (RGBA canonical and derivative above), and the SM5
+    # route is reported unsupported for it on the albedo derivative and in the manifest block.
     assert gaps(files["s0_albedo.uztexture"]) == {"Opacity"}
+    [opacity] = files["s0_albedo.uztexture"]["consumer_gaps"]
+    assert "albedo alpha" in opacity["gap"] and "SM5" in opacity["gap"]
+    assert "unsupported" in opacity["gap"]
     assert gaps(files["s0_height.uztexture"]) == {"Height"}
     # The authored set has no SpecularWeight channel (no template gives its base): the map is
     # absent, and its gap is checked by test_specularweight_is_a_consumer_gap.
@@ -500,6 +505,52 @@ def test_canonical_maps_equal_the_png_route(
         b = (reference / "files" / route).read_bytes()
         assert np.array_equal(png.decode(a), png.decode(b)), canonical
         assert a == b, canonical
+
+
+def test_normal_is_directx_with_its_relief_round(
+    export_tests: Path, tmp_path: Path, filtered: tuple[Path, Any]
+) -> None:
+    """2.4: the shipped preset's normal is in the convention phase0.9 settled for UzEngine (green
+    = -v, `parity/reports/phase0/normal-convention.md` §8): against the same set's Normal_OpenGL
+    through the PNG route, red and blue are equal and green is mirrored (the two codes sum to
+    65535 within one code of rounding, over a green that varies). Both the PNG and its derivative
+    are tagged `combined` with the relief round they read."""
+    _, (generation, receipt) = filtered
+    gl = [
+        {
+            "destChannel": c,
+            "srcChannel": c,
+            "srcMapType": "virtualMap",
+            "srcMapName": "Normal_OpenGL",
+        }
+        for c in "RGB"
+    ]
+    out = tmp_path / "opengl"
+    config = {
+        "exportShaderParams": False,
+        "exportPath": out.as_posix(),
+        "defaultExportPreset": "gl",
+        "exportPresets": [{"name": "gl", "maps": [{"fileName": "$textureSet_gl", "channels": gl}]}],
+        "exportList": [{"rootPath": "s0"}],
+        "exportParameters": [{"parameters": PARAMETERS | {"fileFormat": "png", "bitDepth": "16"}}],
+    }
+    code, lines, err = publish(export_tests, authored_spec(tmp_path / "spec"), config, tmp_path)
+    assert code == 0 and "error" not in lines[0], (code, lines, err)
+    reference, _ = published(export_tests, out)
+    directx = png.decode((generation / "files" / "s0_normal.png").read_bytes()).astype(np.int64)
+    opengl = png.decode((reference / "files" / "s0_gl.png").read_bytes()).astype(np.int64)
+    assert directx.shape == opengl.shape == (SIZE, SIZE, 3)
+    assert np.array_equal(directx[..., 0], opengl[..., 0])
+    assert np.array_equal(directx[..., 2], opengl[..., 2])
+    assert opengl[..., 1].min() < opengl[..., 1].max()
+    mirrored = directx[..., 1] + opengl[..., 1] - 65535
+    assert int(mirrored.min()) >= -1 and int(mirrored.max()) <= 0
+    files = {f["path"]: f for f in receipt["files"]}
+    tags = [files[name]["normal"] for name in ("s0_normal.png", "s0_normal.uztexture")]
+    assert tags[0] == tags[1]
+    assert tags[0]["role"] == "combined"
+    relief = tags[0]["relief"]
+    assert relief["revision"] >= 1 and len(relief["height_hash"]) == 64 and relief["method"]
 
 
 # ── The .uzmat and interruption (variant preset) ─────────────────────────────
