@@ -1,0 +1,71 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# CPU-only subset: only the paths that passed in a local CI-like run (UZP_NO_GPU=1, no private
+# store, no Assets3D, no UzEngine checkout, no Painter, clean venv with the packages below).
+# Not run here, one reason each:
+#   tests/evaluator     not verified CPU-only: agents may not run it beside the owner's GPU runs
+#   tests/preview       not verified CPU-only: counted as a GPU suite, never run in the simulation
+#   tests/render        test_core_device_kernels.py::test_kernel_compiles_to_dxil_and_spirv failed
+#   tests/procedural    not yet run in the CI-like simulation (stopped for time)
+#   tests/adapters      not yet run in the CI-like simulation (stopped for time)
+#   tests/python        not yet run in the CI-like simulation (stopped for time)
+#   tests/export        not yet run in the CI-like simulation (stopped for time)
+#   tests/supervisor    not yet run in the CI-like simulation (stopped for time)
+#   tests/toolchain     not yet run in the CI-like simulation (stopped for time)
+#   tests/vendoring     not yet run in the CI-like simulation (stopped for time)
+#   tests/parity        not yet run in the CI-like simulation (stopped for time)
+#   tests/store         run started but not finished in the CI-like simulation (stopped for time)
+jobs:
+  cpu-tests:
+    name: pytest (CPU only, no GPU, no store, no Assets3D)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      UZP_NO_GPU: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Python
+        uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Install the test packages
+        run: python -m pip install -c .github/ci-constraints.txt pytest jsonschema numpy packaging
+
+      - name: Zig 0.15.2
+        uses: mlugg/setup-zig@v2.2.1
+        with:
+          version: 0.15.2
+          use-cache: false
+
+      # Read-only: build.yml saves the cache on pushes to main.
+      - name: Restore the Zig cache
+        uses: actions/cache/restore@v6.1.0
+        with:
+          path: .zig-cache
+          key: zig-${{ runner.os }}-0.15.2-${{ hashFiles('build.zig', 'build.zig.zon', 'src/**') }}
+          restore-keys: zig-${{ runner.os }}-0.15.2-
+
+      # Local CI-like counts: sources 48 passed/9 skipped, planning 6, capabilities 43/1,
+      # uzp_core 54, mesh 28/2, bake 112/1. Skips need Painter's API docs, Assets3D or the store.
+      - name: pytest
+        run: >-
+          python -m pytest
+          tests/sources tests/planning tests/capabilities tests/uzp_core tests/mesh tests/bake
+          -p no:cacheprovider -rfEs --durations=20

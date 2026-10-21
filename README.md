@@ -347,10 +347,26 @@ The repository is set up so AI agents can work on it end to end:
 | **Type-check** | C++23 compiler | mypy `--strict` |
 | **Test** | Native test executables driven by pytest | pytest |
 | **Guard** | Pre-commit repository guard (`tools.parity.guard --staged`) | |
-| **CI** | Codespell (`.github/workflows/codespell.yml`) | |
+| **CI** | Build, CPU tests, release draft ([CI](#ci)) | Lint, type-check, CPU tests, audit ([CI](#ci)) |
 
 - **Local evidence** — GPU and oracle checks run on the owner's machine; the full local gate, rather than hosted parity CI, supplies acceptance evidence
 - **Repository guard** — blocks any commit that would record a private oracle output
+
+### CI
+
+GitHub-hosted runners have no GPU, no Painter, no private oracle store and no Assets3D checkout,
+so the workflows in `.github/workflows/` run only what is valid without them (`UZP_NO_GPU=1`).
+Python tool versions are pinned in `.github/ci-constraints.txt`.
+
+| Workflow | Runner | Runs |
+|----------|--------|------|
+| `codespell.yml` | Ubuntu | Codespell on the tree |
+| `lint.yml` | Ubuntu | `ruff check`, `ruff format --check` |
+| `typecheck.yml` | Windows | `mypy` (files from `pyproject.toml`) |
+| `build.yml` | Windows | `zig build painter`, every native test executable, `UzPainter.exe selftest --no-gpu` |
+| `tests.yml` | Windows | The CPU-only pytest subset seen passing in a CI-like run; excluded paths and reasons are listed in the file |
+| `audit.yml` | Ubuntu, Windows | `pip-audit` (CI packages, shipped wheels), the repository guard, vendoring and source checks; weekly as well |
+| `release.yml` | Windows | On a `v*` tag: a **draft** release with the zipped install prefix and its SHA-256 |
 
 ## Thirdparty Dependencies
 
