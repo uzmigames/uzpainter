@@ -67,6 +67,34 @@ namespace image_pass_detail {
 [[nodiscard]] KernelSource Kernel(std::string name, std::string_view hlsl, std::string entryPoint,
                                   std::vector<KernelInclude> extra = {});
 
+/// `source` as `device` runs it: unchanged on DX12 (the descriptor heap); on Vulkan in the
+/// fixed-slot model of image_common.hlsli (kernel_bindings.h, decision 313): `UZP_DST_FORMAT` of
+/// `output` (the image-pass format of the one storage image it writes) or `UZP_NO_STORAGE_IMAGE`,
+/// and `UZP_RW_BUFFERS` when it writes structured buffers, with its entry point named `main`
+/// (`VulkanEntryPoint`).
+[[nodiscard]] KernelSource ForDevice(const IDevice& device, KernelSource source,
+                                     std::optional<uz::RHIFormat> output, bool rwBuffers);
+
+/// `source` with its entry point compiled as `main` (the define `<entry>=main`): the vendored
+/// Vulkan backend creates every compute pipeline with the entry point `main`
+/// (`vulkan_resources.cpp`), and SPIR-V keeps the HLSL function's name.
+[[nodiscard]] KernelSource VulkanEntryPoint(KernelSource source);
+
+/// The bytes of the staging buffer `CopyMip` needs to copy a `width` x `height` image of
+/// `format` into a mip other than 0 on `device`: 0 on DX12.
+[[nodiscard]] uint64_t CopyStagingBytes(const IDevice& device, ImagePassFormat format,
+                                        uint32_t width, uint32_t height);
+
+/// Records the copy of mip 0 of `src` (`width` texels wide, one array slice) into mip `dstMip`
+/// of `dst`, which has that size; `src` in `CopySrc`, `dst` in `CopyDst`. DX12:
+/// `CopyTextureRegion`. The vendored Vulkan command list does not implement `CopyTextureRegion`
+/// (the RHI's default is a no-op): mip 0 is copied with `CopyTexture` (mip 0 to mip 0), another
+/// mip through `staging` (`CopyStagingBytes`, copy-source and copy-destination usage, in
+/// `Common` before and after).
+void CopyMip(const IDevice& device, uz::IRHICommandList& cmd, uz::RHITextureHandle src,
+             uz::RHITextureHandle dst, uint32_t dstMip, ImagePassFormat format, uint32_t width,
+             uz::RHIBufferHandle staging);
+
 /// `request_failed {backend, reason}` for an invalid pass input.
 [[nodiscard]] Unexpected Invalid(const IDevice& device, std::string reason);
 

@@ -1,9 +1,12 @@
 #include "render/mips.h"
 
+#include "render/kernel_bindings.h"
 #include "render/resample.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -42,14 +45,20 @@ struct Params {
     uint32_t count = 0;
 };
 
-void Dispatch(uz::IRHICommandList& cmd, const ComputeKernel& kernel, const Params& params,
-              uint32_t groupsX, uint32_t groupsY) {
+/// Records one coverage dispatch binding the state buffer, `source` (sampled) when valid and
+/// `destination` (written) when valid. One of each class never runs out of slots.
+void Dispatch(uz::IRHICommandList& cmd, IDevice& device, const ComputeKernel& kernel,
+              Params params, uz::RHIBufferHandle state, uz::RHITextureHandle source,
+              uz::RHITextureHandle destination, uint32_t groupsX, uint32_t groupsY) {
+    KernelBindings bindings(device);
+    params.stateUav = bindings.RwBuffer(state);
+    if (source.IsValid()) params.srcSrv = bindings.Texture(source);
+    if (destination.IsValid()) params.dstUav = bindings.Output(destination);
     const std::array<uint32_t, 10> constants = {
         params.width,    params.height, params.enc,          params.srcSrv, params.dstUav,
         params.stateUav, params.cutoff, params.level0Texels, params.offset, params.count};
     cmd.SetPipeline(kernel.pipeline);
-    cmd.SetRootConstants(kRootConstantsParam, constants.data(),
-                         static_cast<uint32_t>(constants.size()));
+    bindings.Record(cmd, constants);
     cmd.Dispatch(groupsX, groupsY, 1);
 }
 
@@ -63,7 +72,13 @@ struct CoverageKernels {
     ComputeKernel apply;
 };
 
-Result<CoverageKernels> LoadCoverageKernels(EngineContext& context) {
+/// The dispatches of one level: its filter, and with alpha coverage clear, histogram, select,
+/// row count, prefix and apply.
+constexpr uint32_t kCoverageDispatchesPerLevel = 7;
+/// The coverage dispatches before the first level: clear and count.
+constexpr uint32_t kCoveragePrologueDispatches = 2;
+
+Result<CoverageKernels> LoadCoverageKernels(EngineContext& context, uz::RHIFormat format) {
     CoverageKernels kernels;
     const std::array<std::pair<const char*, ComputeKernel*>, 7> entries = {{
         {"ClearMain", &kernels.clear},
@@ -75,8 +90,11 @@ Result<CoverageKernels> LoadCoverageKernels(EngineContext& context) {
         {"ApplyMain", &kernels.apply},
     }};
     for (const auto& [entry, kernel] : entries) {
-        Result<ComputeKernel> created =
-            context.Kernel(Kernel(std::string("mips_") + entry, Hlsl(), entry));
+        // Only ApplyMain writes a texture (the adjusted level).
+        const std::optional<uz::RHIFormat> output =
+            kernel == &kernels.apply ? std::optional<uz::RHIFormat>(format) : std::nullopt;
+        Result<ComputeKernel> created = context.Kernel(ForDevice(
+            context.Device(), Kernel(std::string("mips_") + entry, Hlsl(), entry), output, true));
         if (!created) return Unexpected(created.error());
         *kernel = *created;
     }
@@ -137,13 +155,12 @@ Result<void> GenerateMips(EngineContext& context, uz::RHITextureHandle texture,
         uint32_t height = 0;
         uz::RHITextureHandle filtered = uz::RHITextureHandle::Invalid();
         uz::RHITextureHandle adjusted = uz::RHITextureHandle::Invalid();
-        resample_detail::ResampleDispatch dispatch;
+        std::optional<resample_detail::ResampleDispatch> dispatch;
     };
     std::vector<Level> chain(levels);
     chain[0].width = desc->width;
     chain[0].height = desc->height;
     chain[0].filtered = *base;
-    uz::IRHIDevice& rhi = device.Rhi();
     const ResampleOptions filter{ResampleFilter::Box, ResampleWrap::Clamp, options.colour};
     for (uint32_t k = 1; k < levels; ++k) {
         Level& level = chain[k];
@@ -163,17 +180,31 @@ Result<void> GenerateMips(EngineContext& context, uz::RHITextureHandle texture,
         const uz::RHITextureHandle source = coverage && k > 1 ? previous.adjusted
                                                               : previous.filtered;
         Result<resample_detail::ResampleDispatch> dispatch = resample_detail::Prepare(
-            context, format, previous.width, previous.height, rhi.GetTextureSRVIndex(source),
-            level.width, level.height, rhi.GetTextureUAVIndex(level.filtered), filter);
+            context, desc->format, source, previous.width, previous.height, level.filtered,
+            level.width, level.height, filter);
         if (!dispatch) return Unexpected(dispatch.error());
-        level.dispatch = *dispatch;
+        level.dispatch = std::move(*dispatch);
+    }
+
+    // Vulkan copies a level into its mip through a staging buffer (image_pass.h `CopyMip`), sized
+    // for the largest, level 1.
+    uz::RHIBufferHandle staging = uz::RHIBufferHandle::Invalid();
+    if (const uint64_t bytes = CopyStagingBytes(device, format, chain[1].width, chain[1].height);
+        bytes > 0) {
+        uz::RHIBufferDesc stagingDesc;
+        stagingDesc.sizeBytes = bytes;
+        stagingDesc.usage = uz::RHIBufferUsage::CopySrc | uz::RHIBufferUsage::CopyDst;
+        stagingDesc.debugName = "mip_copy_staging";
+        Result<uz::RHIBufferHandle> created = scratch.Buffer(stagingDesc);
+        if (!created) return Unexpected(created.error());
+        staging = *created;
     }
 
     CoverageKernels kernels;
     uz::RHIBufferHandle state = uz::RHIBufferHandle::Invalid();
     Params params;
     if (coverage) {
-        Result<CoverageKernels> loaded = LoadCoverageKernels(context);
+        Result<CoverageKernels> loaded = LoadCoverageKernels(context, desc->format);
         if (!loaded) return Unexpected(loaded.error());
         kernels = *loaded;
         uz::RHIBufferDesc stateDesc;
@@ -186,80 +217,111 @@ Result<void> GenerateMips(EngineContext& context, uz::RHITextureHandle texture,
         if (!created) return Unexpected(created.error());
         state = *created;
         params.enc = EncodingConstant(format.encoding);
-        params.stateUav = rhi.GetBufferUAVIndex(state);
         params.cutoff = AlphaCutoffCode(options.alphaCutoff, format.encoding);
         params.level0Texels = desc->width * desc->height;
     }
+    const uz::RHITextureHandle none = uz::RHITextureHandle::Invalid();
+    const uz::RHIBarrierDesc flush = Transition(state, State::UnorderedAccess,
+                                                State::UnorderedAccess);
 
-    Result<void> done = context.SubmitAndWait([&](uz::IRHICommandList& cmd) {
+    // Level 0 copied into the first scratch level; with alpha coverage the state cleared and
+    // level 0's covered texels counted.
+    const auto prologue = [&](uz::IRHICommandList& cmd) {
         const uz::RHIBarrierDesc toCopy[2] = {
             Transition(texture, State::Common, State::CopySrc),
             Transition(chain[0].filtered, State::Common, State::CopyDst)};
         cmd.ResourceBarrier(toCopy, 2);
-        cmd.CopyTextureRegion(texture, 0, 0, chain[0].filtered, 0, 0);
+        CopyMip(device, cmd, texture, chain[0].filtered, 0, format, desc->width, uz::RHIBufferHandle::Invalid());
         const uz::RHIBarrierDesc toFilter[2] = {
             Transition(texture, State::CopySrc, State::CopyDst),
             Transition(chain[0].filtered, State::CopyDst, State::ShaderResource)};
         cmd.ResourceBarrier(toFilter, 2);
-        const uz::RHIBarrierDesc flush = Transition(state, State::UnorderedAccess,
+        if (!coverage) return;
+        const uz::RHIBarrierDesc toUav = Transition(state, State::Common, State::UnorderedAccess);
+        cmd.ResourceBarrier(&toUav, 1);
+        Params clear = params;
+        clear.offset = kStateCount0;
+        clear.count = kStateRows - kStateCount0;
+        Dispatch(cmd, device, kernels.clear, clear, state, none, none, Groups(clear.count, 64), 1);
+        cmd.ResourceBarrier(&flush, 1);
+        Params count = params;
+        count.width = chain[0].width;
+        count.height = chain[0].height;
+        Dispatch(cmd, device, kernels.count, count, state, chain[0].filtered, none,
+                 Groups(count.width, 8), Groups(count.height, 8));
+        cmd.ResourceBarrier(&flush, 1);
+    };
+    // Level k filtered from the stored level k - 1, adjusted for alpha coverage, copied into
+    // mip k of the texture and left readable for level k + 1.
+    const auto recordLevel = [&](uz::IRHICommandList& cmd, uint32_t k) {
+        const Level& level = chain[k];
+        const uz::RHIBarrierDesc toUav = Transition(level.filtered, State::Common,
                                                     State::UnorderedAccess);
+        cmd.ResourceBarrier(&toUav, 1);
+        resample_detail::Record(cmd, *level.dispatch);
+        uz::RHITextureHandle stored = level.filtered;
         if (coverage) {
-            const uz::RHIBarrierDesc toUav = Transition(state, State::Common,
-                                                        State::UnorderedAccess);
-            cmd.ResourceBarrier(&toUav, 1);
-            params.offset = kStateCount0;
-            params.count = kStateRows - kStateCount0;
-            Dispatch(cmd, kernels.clear, params, Groups(params.count, 64), 1);
+            const uz::RHIBarrierDesc toRead[2] = {
+                Transition(level.filtered, State::UnorderedAccess, State::ShaderResource),
+                Transition(level.adjusted, State::Common, State::UnorderedAccess)};
+            cmd.ResourceBarrier(toRead, 2);
+            Params p = params;
+            p.width = level.width;
+            p.height = level.height;
+            p.offset = 0;
+            p.count = UnormMax(format.encoding) + 1;
+            Dispatch(cmd, device, kernels.clear, p, state, none, none, Groups(p.count, 64), 1);
             cmd.ResourceBarrier(&flush, 1);
-            params.width = chain[0].width;
-            params.height = chain[0].height;
-            params.srcSrv = rhi.GetTextureSRVIndex(chain[0].filtered);
-            Dispatch(cmd, kernels.count, params, Groups(params.width, 8), Groups(params.height, 8));
+            Dispatch(cmd, device, kernels.histogram, p, state, level.filtered, none,
+                     Groups(level.width, 8), Groups(level.height, 8));
             cmd.ResourceBarrier(&flush, 1);
+            Dispatch(cmd, device, kernels.select, p, state, none, none, 1, 1);
+            cmd.ResourceBarrier(&flush, 1);
+            Dispatch(cmd, device, kernels.rowCount, p, state, level.filtered, none,
+                     Groups(level.height, 64), 1);
+            cmd.ResourceBarrier(&flush, 1);
+            Dispatch(cmd, device, kernels.prefix, p, state, none, none, 1, 1);
+            cmd.ResourceBarrier(&flush, 1);
+            Dispatch(cmd, device, kernels.apply, p, state, level.filtered, level.adjusted,
+                     Groups(level.height, 64), 1);
+            stored = level.adjusted;
         }
-        for (uint32_t k = 1; k < levels; ++k) {
-            const Level& level = chain[k];
-            const uz::RHIBarrierDesc toUav = Transition(level.filtered, State::Common,
-                                                        State::UnorderedAccess);
-            cmd.ResourceBarrier(&toUav, 1);
-            resample_detail::Record(cmd, level.dispatch);
-            uz::RHITextureHandle stored = level.filtered;
-            if (coverage) {
-                const uz::RHIBarrierDesc toRead[2] = {
-                    Transition(level.filtered, State::UnorderedAccess, State::ShaderResource),
-                    Transition(level.adjusted, State::Common, State::UnorderedAccess)};
-                cmd.ResourceBarrier(toRead, 2);
-                params.width = level.width;
-                params.height = level.height;
-                params.srcSrv = rhi.GetTextureSRVIndex(level.filtered);
-                params.dstUav = rhi.GetTextureUAVIndex(level.adjusted);
-                params.offset = 0;
-                params.count = UnormMax(format.encoding) + 1;
-                Dispatch(cmd, kernels.clear, params, Groups(params.count, 64), 1);
-                cmd.ResourceBarrier(&flush, 1);
-                Dispatch(cmd, kernels.histogram, params, Groups(level.width, 8),
-                         Groups(level.height, 8));
-                cmd.ResourceBarrier(&flush, 1);
-                Dispatch(cmd, kernels.select, params, 1, 1);
-                cmd.ResourceBarrier(&flush, 1);
-                Dispatch(cmd, kernels.rowCount, params, Groups(level.height, 64), 1);
-                cmd.ResourceBarrier(&flush, 1);
-                Dispatch(cmd, kernels.prefix, params, 1, 1);
-                cmd.ResourceBarrier(&flush, 1);
-                Dispatch(cmd, kernels.apply, params, Groups(level.height, 64), 1);
-                stored = level.adjusted;
+        const uz::RHIBarrierDesc toCopySrc = Transition(stored, State::UnorderedAccess,
+                                                        State::CopySrc);
+        cmd.ResourceBarrier(&toCopySrc, 1);
+        CopyMip(device, cmd, stored, texture, k, format, level.width, staging);
+        const uz::RHIBarrierDesc toNext = Transition(stored, State::CopySrc,
+                                                     State::ShaderResource);
+        cmd.ResourceBarrier(&toNext, 1);
+    };
+
+    // One submission on DX12. A device that bounds the dispatches of a submission (Vulkan's
+    // descriptor snapshots, backend.h `MaxDispatchesPerSubmission`) gets consecutive levels in
+    // later submissions, in queue order; every resource keeps its state between them.
+    const uint64_t limit = device.MaxDispatchesPerSubmission();
+    const uint32_t perLevel = coverage ? kCoverageDispatchesPerLevel : 1;
+    Result<void> done;
+    for (uint32_t next = 1; next < levels;) {
+        const bool first = next == 1;
+        uint64_t used = first && coverage ? kCoveragePrologueDispatches : 0;
+        uint32_t end = next;
+        do {
+            used += perLevel;
+            ++end;
+        } while (end < levels && used + perLevel <= limit);
+        const bool last = end == levels;
+        done = context.SubmitAndWait([&](uz::IRHICommandList& cmd) {
+            if (first) prologue(cmd);
+            for (uint32_t k = next; k < end; ++k) recordLevel(cmd, k);
+            if (last) {
+                const uz::RHIBarrierDesc after = Transition(texture, State::CopyDst,
+                                                            State::Common);
+                cmd.ResourceBarrier(&after, 1);
             }
-            const uz::RHIBarrierDesc toCopySrc = Transition(stored, State::UnorderedAccess,
-                                                            State::CopySrc);
-            cmd.ResourceBarrier(&toCopySrc, 1);
-            cmd.CopyTextureRegion(stored, 0, 0, texture, k, 0);
-            const uz::RHIBarrierDesc toNext = Transition(stored, State::CopySrc,
-                                                         State::ShaderResource);
-            cmd.ResourceBarrier(&toNext, 1);
-        }
-        const uz::RHIBarrierDesc after = Transition(texture, State::CopyDst, State::Common);
-        cmd.ResourceBarrier(&after, 1);
-    });
+        });
+        if (!done) break;
+        next = end;
+    }
     scratch.Settle(done);
     return done;
 }

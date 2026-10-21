@@ -38,6 +38,11 @@ uint32_t KernelBindings::Buffer(uz::RHIBufferHandle buffer) {
     return Slot(m_buffers, buffer, kVulkanBufferSlots, "structured buffers", m_overflow);
 }
 
+uint32_t KernelBindings::RwBuffer(uz::RHIBufferHandle buffer) {
+    if (m_backend == Backend::Dx12) return m_device->Rhi().GetBufferUAVIndex(buffer);
+    return Slot(m_buffers, buffer, kVulkanBufferSlots, "structured buffers", m_overflow);
+}
+
 uint32_t KernelBindings::Output(uz::RHITextureHandle texture) {
     if (m_output.IsValid() && !(m_output == texture) && m_overflow.empty()) {
         m_overflow = "a dispatch writes more than one texture";

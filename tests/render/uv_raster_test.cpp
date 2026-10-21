@@ -15,14 +15,20 @@
 //                       that the Python test compares across processes
 //   uv-raster-tier0     the plane, sphere and bevelled cube OBJs of the Tier 0 corpus (copied into
 //                       <work-dir>/tier0-meshes/ by tests/render/test_render_core_layer.py)
+//   vulkan-uv-raster    the plane, sphere and bevelled cube on DX12 and on the qualified Vulkan
+//                       device: every buffer byte for byte equal (phase3.1_vulkan-compute-parity
+//                       items 2.5, 3.2; tests/render/test_vulkan_image_passes.py)
 //
 // The reference is computed on the CPU in double precision. Texels within `kEps` texels of a
 // triangle boundary are ambiguous at single precision and are checked only for consistency.
+
+#include "uv_raster_fixtures.h"
 
 #include "render/backend.h"
 #include "render/engine_thread.h"
 #include "render/texture_readback.h"
 #include "render/uv_raster.h"
+#include "render/vulkan_backend.h"
 #include "render/xxhash64.h"
 
 #include <algorithm>
@@ -968,7 +974,121 @@ int RunTier0Meshes(const fs::path& dir) {
     return Finish();
 }
 
+// ── Vulkan (phase3.1_vulkan-compute-parity items 2.5, 3.2) ───────────────────
+
+/// The fixtures of the cross-backend cases: the plane, the sphere and the bevelled cube.
+std::vector<std::pair<std::string, Mesh>> ParityMeshes() {
+    std::vector<std::pair<std::string, Mesh>> meshes;
+    meshes.emplace_back("plane", PlaneMesh(5));
+    meshes.emplace_back("sphere", SphereMesh(24, 12));
+    meshes.emplace_back("bevelled cube", BevelledCubeMesh());
+    return meshes;
+}
+
+/// The first differing byte of two buffers, or empty.
+std::string FirstDifference(const std::vector<std::byte>& a, const std::vector<std::byte>& b) {
+    if (a.size() != b.size()) {
+        return std::to_string(a.size()) + " bytes vs " + std::to_string(b.size());
+    }
+    size_t count = 0;
+    size_t first = 0;
+    for (size_t i = 0; i < a.size(); ++i) {
+        if (a[i] == b[i]) continue;
+        if (count++ == 0) first = i;
+    }
+    if (count == 0) return {};
+    return std::to_string(count) + " bytes differ, the first at byte " + std::to_string(first);
+}
+
+/// Each fixture rasterised at 512 x 512 and 300 x 200 on a DX12 engine and on an engine over the
+/// qualified Vulkan device: every buffer byte for byte equal, and the Vulkan coverage checked
+/// against the double-precision reference as the DX12 cases check theirs.
+int RunVulkanRaster(const fs::path& dir) {
+    if (VulkanDeviceMissing()) return kExitSkip;
+    const std::unique_ptr<Engine> dx12 = MakeEngine(dir / "dx12");
+    if (!dx12) return kExitSkip;
+    Engine vulkan(VulkanTestEngineOptions(dir / "vulkan"));
+    Check(!vulkan.DeviceError(), "the Vulkan engine runs on the qualified device",
+          vulkan.DeviceError() ? vulkan.DeviceError()->Describe() : "");
+    if (vulkan.DeviceError()) return Finish();
+    for (const auto& [name, mesh] : ParityMeshes()) {
+        const Layout layout = Interleaved(mesh);
+        for (const auto [w, h] : {std::pair<uint32_t, uint32_t>{512, 512}, {300, 200}}) {
+            const std::string label = name + " " + std::to_string(w) + "x" + std::to_string(h);
+            Result<Raster> a = Run(*dx12, layout.corners, Request(w, h));
+            Result<Raster> b = Run(vulkan, layout.corners, Request(w, h));
+            Check(a.has_value() && b.has_value(), label + ": rasterises on DX12 and on Vulkan",
+                  Describe(a) + "; " + Describe(b));
+            if (!a || !b) continue;
+            uint64_t bytes = 0;
+            for (size_t i = 0; i < a->images.size(); ++i) {
+                const std::string difference =
+                    FirstDifference(a->images[i].texels, b->images[i].texels);
+                Check(difference.empty(),
+                      label + ": " + kBufferNames[i] + " on Vulkan equals DX12 byte for byte",
+                      difference);
+                bytes += a->images[i].texels.size();
+            }
+            CheckCoverage(label + " (Vulkan)", mesh, *b);
+            size_t covered = 0;
+            for (uint32_t y = 0; y < h; ++y) {
+                for (uint32_t x = 0; x < w; ++x) {
+                    covered += b->Uint(b->Triangle(), x, y) != kUvRasterNoId ? 1 : 0;
+                }
+            }
+            char hash[24];
+            std::snprintf(hash, sizeof(hash), "%016llx",
+                          static_cast<unsigned long long>(Xxh64(b->Position().texels)));
+            Info(label + ": " + std::to_string(bytes) + " bytes compared over 8 buffers, " +
+                 std::to_string(covered) + " texel centres covered, position XXH64 " + hash);
+        }
+    }
+    return Finish();
+}
+
 }  // namespace
+
+std::vector<std::unique_ptr<UvRasterFixture>> SyntheticUvRasterFixtures() {
+    std::vector<std::unique_ptr<UvRasterFixture>> fixtures;
+    for (auto& [name, mesh] : ParityMeshes()) {
+        auto fixture = std::make_unique<UvRasterFixture>();
+        fixture->name = name;
+        Layout layout = Interleaved(mesh);
+        fixture->storage = std::move(layout.storage);
+        fixture->triangles = mesh.triangles;
+        fixture->corners = layout.corners;
+        fixture->corners.buffers.clear();
+        for (const std::vector<std::byte>& bytes : fixture->storage) {
+            fixture->corners.buffers.emplace_back(bytes);
+        }
+        fixture->corners.triangles = fixture->triangles;
+        fixtures.push_back(std::move(fixture));
+    }
+    return fixtures;
+}
+
+EngineOptions VulkanTestEngineOptions(const fs::path& dir) {
+    EngineOptions options;
+    options.kernelCacheRoot = dir / "kernel-cache";
+    options.device.backend = Backend::Vulkan;
+    options.createDevice = []() -> Result<std::unique_ptr<IDevice>> {
+        const VulkanSurvey survey = SurveyVulkan();
+        const VulkanQualification qualification = QualifyVulkan(survey, 0);
+        Result<std::unique_ptr<VulkanDevice>> device =
+            CreateQualifiedVulkanDevice(survey, qualification, {});
+        if (!device) return Unexpected(device.error());
+        return std::unique_ptr<IDevice>(std::move(*device));
+    };
+    return options;
+}
+
+bool VulkanDeviceMissing() {
+    const VulkanSurvey survey = SurveyVulkan();
+    if (!survey.devices.empty()) return false;
+    std::printf("SKIP no Vulkan physical device: %s%s\n", survey.instance.loaderError.c_str(),
+                survey.instance.instanceError.c_str());
+    return true;
+}
 
 /// Runs a `uv-raster-*` case; -1 when `mode` is not one.
 int RunUvRasterCase(std::string_view mode, const std::filesystem::path& dir) {
@@ -979,5 +1099,6 @@ int RunUvRasterCase(std::string_view mode, const std::filesystem::path& dir) {
     if (mode == "uv-raster-ids") return RunIds(dir);
     if (mode == "uv-raster-repeat") return RunRepeat(dir);
     if (mode == "uv-raster-tier0") return RunTier0Meshes(dir);
+    if (mode == "vulkan-uv-raster") return RunVulkanRaster(dir);
     return -1;
 }

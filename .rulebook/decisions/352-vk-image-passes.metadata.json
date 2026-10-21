@@ -1,0 +1,11 @@
+{
+  "id": 352,
+  "slug": "352-vk-image-passes",
+  "title": "The image passes run on Vulkan in the fixed-slot model: one storage image per dispatch, main entry points, copies and remainders that do not depend on vendored or driver gaps",
+  "status": "accepted",
+  "date": "2026-10-21",
+  "relatedTasks": [
+    "phase3.1_vulkan-compute-parity"
+  ],
+  "supersededBy": null
+}

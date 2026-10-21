@@ -54,11 +54,12 @@ KernelInclude SrgbTables() {
     return KernelInclude{"srgb_tables.hlsli", std::move(text)};
 }
 
-const KernelSource& ResampleKernel() {
+/// The resample kernel as `device` runs it, writing `format` (image_pass.h `ForDevice`).
+KernelSource ResampleKernel(const IDevice& device, uz::RHIFormat format) {
     static const KernelSource source =
         Kernel("image_resample", std::string_view(kResampleHlsl, sizeof(kResampleHlsl)), "main",
                {SrgbTables()});
-    return source;
+    return ForDevice(device, source, format, false);
 }
 
 }  // namespace
@@ -75,11 +76,14 @@ Result<void> CheckColourMode(const IDevice& device, ImagePassFormat format, Colo
     return {};
 }
 
-Result<ResampleDispatch> Prepare(EngineContext& context, ImagePassFormat format,
-                                 uint32_t srcWidth, uint32_t srcHeight, uint32_t srcSrv,
-                                 uint32_t dstWidth, uint32_t dstHeight, uint32_t dstUav,
+Result<ResampleDispatch> Prepare(EngineContext& context, uz::RHIFormat rhiFormat,
+                                 uz::RHITextureHandle source, uint32_t srcWidth,
+                                 uint32_t srcHeight, uz::RHITextureHandle destination,
+                                 uint32_t dstWidth, uint32_t dstHeight,
                                  const ResampleOptions& options) {
-    Result<ComputeKernel> kernel = context.Kernel(ResampleKernel());
+    IDevice& device = context.Device();
+    const ImagePassFormat format = *ImagePassFormatOf(rhiFormat);
+    Result<ComputeKernel> kernel = context.Kernel(ResampleKernel(device, rhiFormat));
     if (!kernel) return Unexpected(kernel.error());
     const uint32_t gx = std::gcd(srcWidth, dstWidth);
     const uint32_t gy = std::gcd(srcHeight, dstHeight);
@@ -93,9 +97,14 @@ Result<ResampleDispatch> Prepare(EngineContext& context, ImagePassFormat format,
                           static_cast<uint32_t>(options.wrap) << 4 |
                           static_cast<uint32_t>(options.colour) << 8 |
                           EncodingConstant(format.encoding) << 12 | format.channels << 16;
-    ResampleDispatch dispatch;
+    ResampleDispatch dispatch(device);
     dispatch.kernel = *kernel;
-    dispatch.constants = {srcWidth, srcHeight, dstWidth, dstHeight, mode, srcSrv, dstUav,
+    const uint32_t srcName = dispatch.bindings.Texture(source);
+    const uint32_t dstName = dispatch.bindings.Output(destination);
+    if (Result<void> named = dispatch.bindings.Validate(); !named) {
+        return Unexpected(named.error());
+    }
+    dispatch.constants = {srcWidth, srcHeight, dstWidth, dstHeight, mode, srcName, dstName,
                           ax,       bx,        ay,       by,        std::bit_cast<uint32_t>(invTotal)};
     dispatch.groupsX = Groups(dstWidth, 8);
     dispatch.groupsY = Groups(dstHeight, 8);
@@ -104,8 +113,7 @@ Result<ResampleDispatch> Prepare(EngineContext& context, ImagePassFormat format,
 
 void Record(uz::IRHICommandList& cmd, const ResampleDispatch& dispatch) {
     cmd.SetPipeline(dispatch.kernel.pipeline);
-    cmd.SetRootConstants(kRootConstantsParam, dispatch.constants.data(),
-                         static_cast<uint32_t>(dispatch.constants.size()));
+    dispatch.bindings.Record(cmd, dispatch.constants);
     cmd.Dispatch(dispatch.groupsX, dispatch.groupsY, 1);
 }
 
@@ -142,7 +150,7 @@ Result<void> Resample(EngineContext& context, uz::RHITextureHandle source,
                 Transition(source, State::Common, State::CopySrc),
                 Transition(destination, State::Common, State::CopyDst)};
             cmd.ResourceBarrier(before, 2);
-            cmd.CopyTextureRegion(source, 0, 0, destination, 0, 0);
+            CopyMip(device, cmd, source, destination, 0, format, src->width, uz::RHIBufferHandle::Invalid());
             const uz::RHIBarrierDesc after[2] = {
                 Transition(source, State::CopySrc, State::Common),
                 Transition(destination, State::CopyDst, State::Common)};
@@ -156,9 +164,9 @@ Result<void> Resample(EngineContext& context, uz::RHITextureHandle source,
     Result<uz::RHITextureDesc> writable =
         RequireTexture(device, destination, uz::RHITextureUsage::UnorderedAccess, "destination");
     if (!writable) return Unexpected(writable.error());
-    Result<resample_detail::ResampleDispatch> dispatch = resample_detail::Prepare(
-        context, format, src->width, src->height, device.Rhi().GetTextureSRVIndex(source),
-        dst->width, dst->height, device.Rhi().GetTextureUAVIndex(destination), options);
+    Result<resample_detail::ResampleDispatch> dispatch =
+        resample_detail::Prepare(context, src->format, source, src->width, src->height,
+                                 destination, dst->width, dst->height, options);
     if (!dispatch) return Unexpected(dispatch.error());
     return context.SubmitAndWait([&](uz::IRHICommandList& cmd) {
         const uz::RHIBarrierDesc before[2] = {

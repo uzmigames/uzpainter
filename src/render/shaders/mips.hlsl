@@ -13,6 +13,10 @@
 // ApplyMain      one thread per row, texels left to right: scaled alpha, and for a split t the
 //                first r texels of t in linear order covered (K), the others not (K - 1; 0 for
 //                t = 0)
+//
+// Resources are named as image_common.hlsli says: heap indices on DX12, slots in the fixed-slot
+// SPIR-V of Vulkan (UZP_RW_BUFFERS; ApplyMain with the level's UZP_DST_FORMAT, the others with
+// UZP_NO_STORAGE_IMAGE).
 
 #include "image_common.hlsli"
 
@@ -24,6 +28,32 @@
 #define STATE_ROWS 65544u
 #define NO_TIE 0xFFFFFFFFu
 
+#ifdef UZP_FIXED_SLOTS
+// Push constants on Vulkan (image_common.hlsli): each dispatch records its own.
+struct Params {
+    uint width;
+    uint height;
+    uint enc;
+    uint srcSrv;
+    uint dstUav;
+    uint stateUav;
+    uint cutoff;
+    uint level0Texels;
+    uint offset;
+    uint count;
+};
+[[vk::push_constant]] Params g_root;
+#define g_width g_root.width
+#define g_height g_root.height
+#define g_enc g_root.enc
+#define g_srcSrv g_root.srcSrv
+#define g_dstUav g_root.dstUav
+#define g_stateUav g_root.stateUav
+#define g_cutoff g_root.cutoff
+#define g_level0Texels g_root.level0Texels
+#define g_offset g_root.offset
+#define g_count g_root.count
+#else
 cbuffer Params : register(b0) {
     uint g_width;
     uint g_height;
@@ -36,6 +66,9 @@ cbuffer Params : register(b0) {
     uint g_offset;      // ClearMain
     uint g_count;       // ClearMain
 };
+#endif
+
+uint State(uint index) { return RwWord(g_stateUav, index); }
 
 uint AlphaCode(int2 p) {
     const float4 texel = LoadTexel(g_srcSrv, p);
@@ -45,32 +78,28 @@ uint AlphaCode(int2 p) {
 [numthreads(64, 1, 1)]
 void ClearMain(uint3 id : SV_DispatchThreadID) {
     if (id.x >= g_count) return;
-    RWStructuredBuffer<uint> state = ResourceDescriptorHeap[g_stateUav];
-    state[g_offset + id.x] = 0u;
+    RwStore(g_stateUav, g_offset + id.x, 0u);
 }
 
 [numthreads(8, 8, 1)]
 void CountMain(uint3 id : SV_DispatchThreadID) {
     if (id.x >= g_width || id.y >= g_height) return;
-    RWStructuredBuffer<uint> state = ResourceDescriptorHeap[g_stateUav];
-    if (AlphaCode(int2(id.xy)) >= g_cutoff) InterlockedAdd(state[STATE_COUNT0], 1u);
+    if (AlphaCode(int2(id.xy)) >= g_cutoff) RwAdd(g_stateUav, STATE_COUNT0, 1u);
 }
 
 [numthreads(8, 8, 1)]
 void HistogramMain(uint3 id : SV_DispatchThreadID) {
     if (id.x >= g_width || id.y >= g_height) return;
-    RWStructuredBuffer<uint> state = ResourceDescriptorHeap[g_stateUav];
-    InterlockedAdd(state[AlphaCode(int2(id.xy))], 1u);
+    RwAdd(g_stateUav, AlphaCode(int2(id.xy)), 1u);
 }
 
 [numthreads(1, 1, 1)]
 void SelectMain(uint3 id : SV_DispatchThreadID) {
-    RWStructuredBuffer<uint> state = ResourceDescriptorHeap[g_stateUav];
     const uint m = UnormMax(g_enc);
     const uint64_t texels = uint64_t(g_width) * uint64_t(g_height);
     const uint64_t n0 = g_level0Texels;
     // Nearest of count0 N_k / N_0, ties down.
-    const uint64_t target = (2 * uint64_t(state[STATE_COUNT0]) * texels + n0 - 1) / (2 * n0);
+    const uint64_t target = (2 * uint64_t(State(STATE_COUNT0)) * texels + n0 - 1) / (2 * n0);
     uint divisor = m + 1u;
     uint tie = NO_TIE;
     uint covered = 0u;
@@ -78,11 +107,11 @@ void SelectMain(uint3 id : SV_DispatchThreadID) {
         uint64_t above = 0;  // count(alpha > t)
         uint t = m;
         for (;; --t) {
-            const uint64_t bin = state[t];
+            const uint64_t bin = State(t);
             if (above + bin >= target || t == 0u) break;
             above += bin;
         }
-        const uint64_t bin = state[t];
+        const uint64_t bin = State(t);
         covered = uint(target - above);
         if (t == 0u || covered < bin) {
             tie = t;
@@ -92,7 +121,7 @@ void SelectMain(uint3 id : SV_DispatchThreadID) {
             // covered texels; the one closest to K (K itself leaves alpha unchanged).
             uint lower = 1u;
             for (uint s = t; s > 0u; --s) {
-                if (state[s - 1u] != 0u) {
+                if (State(s - 1u) != 0u) {
                     lower = s;
                     break;
                 }
@@ -100,44 +129,42 @@ void SelectMain(uint3 id : SV_DispatchThreadID) {
             divisor = clamp(g_cutoff, lower, t);
         }
     }
-    state[STATE_DIVISOR] = divisor;
-    state[STATE_TIE] = tie;
-    state[STATE_TIE_COVERED] = covered;
-    state[STATE_TARGET] = uint(target);
+    RwStore(g_stateUav, STATE_DIVISOR, divisor);
+    RwStore(g_stateUav, STATE_TIE, tie);
+    RwStore(g_stateUav, STATE_TIE_COVERED, covered);
+    RwStore(g_stateUav, STATE_TARGET, uint(target));
 }
 
 [numthreads(64, 1, 1)]
 void RowCountMain(uint3 id : SV_DispatchThreadID) {
     if (id.x >= g_height) return;
-    RWStructuredBuffer<uint> state = ResourceDescriptorHeap[g_stateUav];
-    const uint tie = state[STATE_TIE];
+    const uint tie = State(STATE_TIE);
     uint count = 0u;
     if (tie != NO_TIE) {
         for (uint x = 0; x < g_width; ++x) count += AlphaCode(int2(x, id.x)) == tie ? 1u : 0u;
     }
-    state[STATE_ROWS + id.x] = count;
+    RwStore(g_stateUav, STATE_ROWS + id.x, count);
 }
 
 [numthreads(1, 1, 1)]
 void PrefixMain(uint3 id : SV_DispatchThreadID) {
-    RWStructuredBuffer<uint> state = ResourceDescriptorHeap[g_stateUav];
     uint running = 0u;
     for (uint y = 0; y < g_height; ++y) {
-        const uint count = state[STATE_ROWS + y];
-        state[STATE_ROWS + y] = running;
+        const uint count = State(STATE_ROWS + y);
+        RwStore(g_stateUav, STATE_ROWS + y, running);
         running += count;
     }
 }
 
+#ifndef UZP_NO_STORAGE_IMAGE
 [numthreads(64, 1, 1)]
 void ApplyMain(uint3 id : SV_DispatchThreadID) {
     if (id.x >= g_height) return;
-    RWStructuredBuffer<uint> state = ResourceDescriptorHeap[g_stateUav];
     const uint m = UnormMax(g_enc);
-    const uint divisor = state[STATE_DIVISOR];
-    const uint tie = state[STATE_TIE];
-    const uint covered = state[STATE_TIE_COVERED];
-    uint rank = state[STATE_ROWS + id.x];
+    const uint divisor = State(STATE_DIVISOR);
+    const uint tie = State(STATE_TIE);
+    const uint covered = State(STATE_TIE_COVERED);
+    uint rank = State(STATE_ROWS + id.x);
     for (uint x = 0; x < g_width; ++x) {
         const int2 p = int2(x, id.x);
         float4 texel = LoadTexel(g_srcSrv, p);
@@ -153,3 +180,4 @@ void ApplyMain(uint3 id : SV_DispatchThreadID) {
         StoreTexel(g_dstUav, p, texel);
     }
 }
+#endif

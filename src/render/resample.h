@@ -28,6 +28,7 @@
 #include "render/backend.h"
 #include "render/engine_thread.h"
 #include "render/image_pass.h"
+#include "render/kernel_bindings.h"
 
 #include <array>
 #include <cstdint>
@@ -56,7 +57,10 @@ namespace resample_detail {
 
 /// One recorded dispatch of the resample kernel (mip generation chains them).
 struct ResampleDispatch {
+    explicit ResampleDispatch(IDevice& device) : bindings(device) {}
     ComputeKernel kernel;
+    /// The source (sampled) and the destination (written), named for the device.
+    KernelBindings bindings;
     std::array<uint32_t, 12> constants{};
     uint32_t groupsX = 0;
     uint32_t groupsY = 0;
@@ -65,11 +69,12 @@ struct ResampleDispatch {
 /// `request_failed` when `colour` does not apply to `format`.
 Result<void> CheckColourMode(const IDevice& device, ImagePassFormat format, ColourMode colour);
 
-/// The dispatch filtering the image behind SRV `srcSrv` (srcWidth x srcHeight) into the image
-/// behind UAV `dstUav` (dstWidth x dstHeight), both of `format`.
-Result<ResampleDispatch> Prepare(EngineContext& context, ImagePassFormat format,
-                                 uint32_t srcWidth, uint32_t srcHeight, uint32_t srcSrv,
-                                 uint32_t dstWidth, uint32_t dstHeight, uint32_t dstUav,
+/// The dispatch filtering mip 0 of `source` (srcWidth x srcHeight) into mip 0 of `destination`
+/// (dstWidth x dstHeight), both of the image-pass format `format`.
+Result<ResampleDispatch> Prepare(EngineContext& context, uz::RHIFormat format,
+                                 uz::RHITextureHandle source, uint32_t srcWidth,
+                                 uint32_t srcHeight, uz::RHITextureHandle destination,
+                                 uint32_t dstWidth, uint32_t dstHeight,
                                  const ResampleOptions& options);
 
 /// Records `dispatch`; the source must be in `ShaderResource`, the destination in

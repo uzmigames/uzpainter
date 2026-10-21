@@ -6,7 +6,7 @@
 - [ ] 2.2 Qualify the deadline wait on Vulkan (UZP-MOD-003): `signaled`, `timeout`, `device_lost`; map `VK_ERROR_DEVICE_LOST` to `device_removed {backend, reason}`
 - [x] 2.3 Run generated compositor kernels as SPIR-V through the shared kernel cache (cache key includes the target), within the fixed-slot descriptor subset
 - [x] 2.4 Implement `TextureReadback` on Vulkan: per-request ownership, aligned row pitch, fence-linked map, drain on shutdown and on failure
-- [ ] 2.5 Port the UV raster pass, dilation (jump-flood), resampling and mip generation to Vulkan with the same HLSL sources
+- [x] 2.5 Port the UV raster pass, dilation (jump-flood), resampling and mip generation to Vulkan with the same HLSL sources
 - [ ] 2.6 Implement the Vulkan capability query: format/usage support, descriptor capacities, VRAM budget from `VK_EXT_memory_budget` or conservatively from heap sizes; derive the tile admission budget from it
 - [ ] 2.7 Run the export engine and the `painter_viewport` forward pass and capture on Vulkan; record `backend`, adapter and driver in every export and capture receipt; settle the Vulkan entries of `parity/reports/phase2/preview-settling.json` (`viewport_capture_headless`, `preview_stall`, `preview_window_lifecycle`, `wand_integration`, `wand_export_preview`; phase2.3_realtime-preview, decision 221)
 - [x] 2.8 Add the Vulkan hardware slice to `selftest` (device, compute kernel from SPIR-V, readback, PNG16 write) reported separately from the availability probe
@@ -15,7 +15,7 @@
 
 ## 3. Tests
 - [x] 3.1 Readback drain tests on Vulkan (`tests/render/`): in-flight requests drained on shutdown, failed request releases its staging memory, pitch alignment for every supported format
-- [ ] 3.2 Unit tests on synthetic meshes (plane, sphere, bevelled cube) for UV raster, dilation, resampling and mips on Vulkan, byte-equal to the DX12 results
+- [x] 3.2 Unit tests on synthetic meshes (plane, sphere, bevelled cube) for UV raster, dilation, resampling and mips on Vulkan, byte-equal to the DX12 results
 - [x] 3.3 Compositor kernel tests on both backends with identical outputs for every implemented node kind, blend mode and channel format
 - [ ] 3.4 Device-loss and stall injection on Vulkan: `device_removed` or `timeout` reported, job fails, no partial result published; includes the worker's Vulkan device-loss hook (`src/supervisor/fault_hooks.h`, Debug-only) and the phase2.1 item 3.3 Vulkan variant through the supervisor: worker exits, relaunched on Vulkan at the last committed revision (decision 121); settles the Vulkan `gpu_stall` and `device_lost` cases of `parity/reports/phase2/supervisor-settling.json` (phase2.4 item 3.4) and re-runs the `02-…` §7 settling suite with a Vulkan device (`UZP_SUPERVISOR_BACKEND=vulkan`: recovery, commit-then-die retry, lost-ledger replay, no duplicate commit) (decision 221)
 - [ ] 3.5 Tier 0 subset (compositor and export goldens implemented through `phase1.14_compositor-core` and `phase1.18_export-engine`) on Vulkan: equal to the private goldens and byte-equal to DX12
@@ -88,3 +88,7 @@
   - 3.5: needs export on Vulkan (2.7) and the private goldens.
   - 3.6: needs `phase2.10_pilot-tunic-recovery` and 2.7.
   - 4.1 and the tail (5.1-5.3) are not met.
+- 2.5 and 3.2 checked (decision 352; branch `wt/vk-image-passes`; RTX 4090, driver 617.14; logs in `tmp/scratch/vk-image-passes/`, untracked). The UV raster, dilation, resampling and mip kernels run on Vulkan from the same HLSL in the fixed-slot model, one storage image per dispatch. The vendored backend's `main` entry point and its missing `CopyTextureRegion` are handled in the passes. A signed remainder of a negative dividend and the `cross` intrinsic gave different results on Vulkan, and both are rewritten as identities.
+  - Run 2: `test_vulkan_image_passes.py::test_image_passes_vulkan_equal_dx12` and `test_core_image_passes.py::test_resampling` passed (`run2-gpu.log`). Dilation (six formats, two limits), resampling (14 cases, down and up) and mip chains (sRGB, linear, normal, alpha coverage) on the plane, sphere and bevelled-cube rasters match DX12 byte for byte, and DX12 matches the CPU reference.
+  - Run 3, after the `Cross` fix: `test_vulkan_image_passes.py::test_uv_raster_vulkan_equals_dx12` and `test_core_uv_raster.py`, 7 passed, exit 0 (`run3-gpu.log`). All eight raster buffers of the three fixtures at 512 x 512 and 300 x 200 match DX12 byte for byte.
+  - `uzp-evaluator-tests vulkan-kernel-spirv` (no GPU): all 589 compositor kernels still compile to fixed-slot SPIR-V over the changed `image_common.hlsli` (`run-spirv.log`).

@@ -1,6 +1,7 @@
 #include "render/image_pass.h"
 
 #include "render/capabilities.h"
+#include "render/texture_readback.h"
 
 #include <utility>
 
@@ -53,6 +54,84 @@ KernelSource Kernel(std::string name, std::string_view hlsl, std::string entryPo
     source.includes.push_back(CommonInclude());
     for (KernelInclude& include : extra) source.includes.push_back(std::move(include));
     return source;
+}
+
+KernelSource ForDevice(const IDevice& device, KernelSource source,
+                       std::optional<uz::RHIFormat> output, bool rwBuffers) {
+    if (device.GetBackend() != Backend::Vulkan) return source;
+    if (!output) {
+        source.defines.emplace_back("UZP_NO_STORAGE_IMAGE");
+    } else {
+        // DST_* of image_common.hlsli.
+        using F = uz::RHIFormat;
+        int code = 7;  // RGBA32Float
+        switch (*output) {
+            case F::R8Unorm: code = 0; break;
+            case F::R16Unorm: code = 1; break;
+            case F::R16Float: code = 2; break;
+            case F::R32Float: code = 3; break;
+            case F::RGBA8Unorm: code = 4; break;
+            case F::RGBA16Unorm: code = 5; break;
+            case F::RGBA16Float: code = 6; break;
+            case F::RG8Unorm: code = 8; break;
+            case F::RG16Unorm: code = 9; break;
+            case F::RG16Float: code = 10; break;
+            case F::RG32Float: code = 11; break;
+            default: break;
+        }
+        source.defines.push_back("UZP_DST_FORMAT=" + std::to_string(code));
+    }
+    if (rwBuffers) source.defines.emplace_back("UZP_RW_BUFFERS");
+    return VulkanEntryPoint(std::move(source));
+}
+
+KernelSource VulkanEntryPoint(KernelSource source) {
+    if (source.entryPoint == "main") return source;
+    source.defines.push_back(source.entryPoint + "=main");
+    source.entryPoint = "main";
+    return source;
+}
+
+namespace {
+
+/// The row pitch of a `CopyMip` staging buffer: the copy footprint's 256-byte rows, a whole
+/// number of texels for every image-pass format.
+uint64_t StagingPitch(ImagePassFormat format, uint32_t width) {
+    const uint32_t channelBytes = format.encoding == TexelEncoding::Unorm8    ? 1
+                                  : format.encoding == TexelEncoding::Float32 ? 4
+                                                                              : 2;
+    return ReadbackRowPitch(uint64_t{width} * format.channels * channelBytes);
+}
+
+}  // namespace
+
+uint64_t CopyStagingBytes(const IDevice& device, ImagePassFormat format, uint32_t width,
+                          uint32_t height) {
+    if (device.GetBackend() != Backend::Vulkan) return 0;
+    return StagingPitch(format, width) * height;
+}
+
+void CopyMip(const IDevice& device, uz::IRHICommandList& cmd, uz::RHITextureHandle src,
+             uz::RHITextureHandle dst, uint32_t dstMip, ImagePassFormat format, uint32_t width,
+             uz::RHIBufferHandle staging) {
+    if (device.GetBackend() != Backend::Vulkan) {
+        cmd.CopyTextureRegion(src, 0, 0, dst, dstMip, 0);
+        return;
+    }
+    if (dstMip == 0) {
+        cmd.CopyTexture(src, dst);
+        return;
+    }
+    using State = uz::RHIResourceState;
+    const uint32_t pitch = static_cast<uint32_t>(StagingPitch(format, width));
+    const uz::RHIBarrierDesc toCopyDst = Transition(staging, State::Common, State::CopyDst);
+    cmd.ResourceBarrier(&toCopyDst, 1);
+    cmd.CopyTextureToBuffer(src, 0, staging, 0, pitch);
+    const uz::RHIBarrierDesc toCopySrc = Transition(staging, State::CopyDst, State::CopySrc);
+    cmd.ResourceBarrier(&toCopySrc, 1);
+    cmd.CopyBufferToTexture(staging, 0, pitch, dst, dstMip, 0);
+    const uz::RHIBarrierDesc back = Transition(staging, State::CopySrc, State::Common);
+    cmd.ResourceBarrier(&back, 1);
 }
 
 Unexpected Invalid(const IDevice& device, std::string reason) {

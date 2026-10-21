@@ -7,14 +7,16 @@
 // Resources are reached through the SM 6.6 descriptor heap (`ResourceDescriptorHeap[index]`);
 // the indices arrive in the root constants (b0).
 //
-// Fixed slots (UZP_FIXED_SLOTS: SPIR-V of a kernel that defines UZP_DST_FORMAT, decision 313):
-// the vendored Vulkan backend has no descriptor heap, only one descriptor set of fixed bindings
-// (src/render/kernel_bindings.h). A resource "index" is then its slot: sampled images t0..t15
-// (bindings 0..15), structured buffers at bindings 64..79, and one storage image u0 (binding 48)
-// of the format UZP_DST_FORMAT names (DST_* below; declared, so no `...WithoutFormat` capability
-// is needed). Such a kernel takes its root constants as push constants (recorded per dispatch;
-// the vendored backend's b0 emulation is one buffer per command list). Every other kernel keeps
-// the descriptor heap on both targets.
+// Fixed slots (UZP_FIXED_SLOTS: SPIR-V of a kernel that defines UZP_DST_FORMAT or
+// UZP_NO_STORAGE_IMAGE, decision 313): the vendored Vulkan backend has no descriptor heap, only
+// one descriptor set of fixed bindings (src/render/kernel_bindings.h). A resource "index" is then
+// its slot: sampled images t0..t15 (bindings 0..15), structured buffers at bindings 64..79, and
+// one storage image u0 (binding 48) of the format UZP_DST_FORMAT names (DST_* below; declared, so
+// no `...WithoutFormat` capability is needed; UZP_NO_STORAGE_IMAGE: the kernel writes none).
+// With UZP_RW_BUFFERS the structured buffers are read-write (the image passes' seed and state
+// buffers: `RwWord`, `RwStore`, `RwAdd`). Such a kernel takes its root constants as push
+// constants (recorded per dispatch; the vendored backend's b0 emulation is one buffer per command
+// list). Every other kernel keeps the descriptor heap on both targets.
 
 #define ENC_UNORM8 0u
 #define ENC_UNORM16 1u
@@ -30,12 +32,17 @@
 #define DST_RGBA16 5
 #define DST_RGBA16F 6
 #define DST_RGBA32F 7
+// The two-channel image-pass formats (src/render/image_pass.h ImagePassFormatOf).
+#define DST_RG8 8
+#define DST_RG16 9
+#define DST_RG16F 10
+#define DST_RG32F 11
 
 bool IsUnorm(uint enc) { return enc <= ENC_UNORM16; }
 uint UnormBits(uint enc) { return enc == ENC_UNORM8 ? 8u : 16u; }
 uint UnormMax(uint enc) { return enc == ENC_UNORM8 ? 255u : 65535u; }
 
-#if defined(__spirv__) && defined(UZP_DST_FORMAT)
+#if defined(__spirv__) && (defined(UZP_DST_FORMAT) || defined(UZP_NO_STORAGE_IMAGE))
 #define UZP_FIXED_SLOTS 1
 
 Texture2D<float4> g_slotTexture0 : register(t0);
@@ -55,23 +62,29 @@ Texture2D<float4> g_slotTexture13 : register(t13);
 Texture2D<float4> g_slotTexture14 : register(t14);
 Texture2D<float4> g_slotTexture15 : register(t15);
 
-[[vk::binding(64, 0)]] StructuredBuffer<uint> g_slotBuffer0;
-[[vk::binding(65, 0)]] StructuredBuffer<uint> g_slotBuffer1;
-[[vk::binding(66, 0)]] StructuredBuffer<uint> g_slotBuffer2;
-[[vk::binding(67, 0)]] StructuredBuffer<uint> g_slotBuffer3;
-[[vk::binding(68, 0)]] StructuredBuffer<uint> g_slotBuffer4;
-[[vk::binding(69, 0)]] StructuredBuffer<uint> g_slotBuffer5;
-[[vk::binding(70, 0)]] StructuredBuffer<uint> g_slotBuffer6;
-[[vk::binding(71, 0)]] StructuredBuffer<uint> g_slotBuffer7;
-[[vk::binding(72, 0)]] StructuredBuffer<uint> g_slotBuffer8;
-[[vk::binding(73, 0)]] StructuredBuffer<uint> g_slotBuffer9;
-[[vk::binding(74, 0)]] StructuredBuffer<uint> g_slotBuffer10;
-[[vk::binding(75, 0)]] StructuredBuffer<uint> g_slotBuffer11;
-[[vk::binding(76, 0)]] StructuredBuffer<uint> g_slotBuffer12;
-[[vk::binding(77, 0)]] StructuredBuffer<uint> g_slotBuffer13;
-[[vk::binding(78, 0)]] StructuredBuffer<uint> g_slotBuffer14;
-[[vk::binding(79, 0)]] StructuredBuffer<uint> g_slotBuffer15;
+#ifdef UZP_RW_BUFFERS
+#define UZP_SLOT_BUFFER RWStructuredBuffer<uint>
+#else
+#define UZP_SLOT_BUFFER StructuredBuffer<uint>
+#endif
+[[vk::binding(64, 0)]] UZP_SLOT_BUFFER g_slotBuffer0;
+[[vk::binding(65, 0)]] UZP_SLOT_BUFFER g_slotBuffer1;
+[[vk::binding(66, 0)]] UZP_SLOT_BUFFER g_slotBuffer2;
+[[vk::binding(67, 0)]] UZP_SLOT_BUFFER g_slotBuffer3;
+[[vk::binding(68, 0)]] UZP_SLOT_BUFFER g_slotBuffer4;
+[[vk::binding(69, 0)]] UZP_SLOT_BUFFER g_slotBuffer5;
+[[vk::binding(70, 0)]] UZP_SLOT_BUFFER g_slotBuffer6;
+[[vk::binding(71, 0)]] UZP_SLOT_BUFFER g_slotBuffer7;
+[[vk::binding(72, 0)]] UZP_SLOT_BUFFER g_slotBuffer8;
+[[vk::binding(73, 0)]] UZP_SLOT_BUFFER g_slotBuffer9;
+[[vk::binding(74, 0)]] UZP_SLOT_BUFFER g_slotBuffer10;
+[[vk::binding(75, 0)]] UZP_SLOT_BUFFER g_slotBuffer11;
+[[vk::binding(76, 0)]] UZP_SLOT_BUFFER g_slotBuffer12;
+[[vk::binding(77, 0)]] UZP_SLOT_BUFFER g_slotBuffer13;
+[[vk::binding(78, 0)]] UZP_SLOT_BUFFER g_slotBuffer14;
+[[vk::binding(79, 0)]] UZP_SLOT_BUFFER g_slotBuffer15;
 
+#ifdef UZP_DST_FORMAT
 #if UZP_DST_FORMAT == DST_R8
 [[vk::image_format("r8")]]
 #elif UZP_DST_FORMAT == DST_R16
@@ -88,10 +101,19 @@ Texture2D<float4> g_slotTexture15 : register(t15);
 [[vk::image_format("rgba16f")]]
 #elif UZP_DST_FORMAT == DST_RGBA32F
 [[vk::image_format("rgba32f")]]
+#elif UZP_DST_FORMAT == DST_RG8
+[[vk::image_format("rg8")]]
+#elif UZP_DST_FORMAT == DST_RG16
+[[vk::image_format("rg16")]]
+#elif UZP_DST_FORMAT == DST_RG16F
+[[vk::image_format("rg16f")]]
+#elif UZP_DST_FORMAT == DST_RG32F
+[[vk::image_format("rg32f")]]
 #else
 #error "UZP_DST_FORMAT names no destination format"
 #endif
 RWTexture2D<float4> g_slotOutput : register(u0);
+#endif
 
 float4 LoadTexel(uint slot, int2 p) {
     const int3 q = int3(p, 0);
@@ -115,8 +137,10 @@ float4 LoadTexel(uint slot, int2 p) {
     }
 }
 
+#ifdef UZP_DST_FORMAT
 // The slot is u0 (the only storage image a kernel writes).
 void StoreTexel(uint slot, int2 p, float4 value) { g_slotOutput[p] = value; }
+#endif
 
 uint BufferWord(uint slot, uint index) {
     switch (slot) {
@@ -140,6 +164,29 @@ uint BufferWord(uint slot, uint index) {
 }
 
 float BufferFloat(uint slot, uint index) { return asfloat(BufferWord(slot, index)); }
+
+#ifdef UZP_RW_BUFFERS
+uint RwWord(uint slot, uint index) { return BufferWord(slot, index); }
+
+#define UZP_RW_CASES(OP) OP(0) OP(1) OP(2) OP(3) OP(4) OP(5) OP(6) OP(7) OP(8) OP(9) OP(10) \
+    OP(11) OP(12) OP(13) OP(14)
+#define UZP_STORE_CASE(n) case n##u: g_slotBuffer##n[index] = value; return;
+#define UZP_ADD_CASE(n) case n##u: InterlockedAdd(g_slotBuffer##n[index], value); return;
+
+void RwStore(uint slot, uint index, uint value) {
+    switch (slot) {
+        UZP_RW_CASES(UZP_STORE_CASE)
+        default: g_slotBuffer15[index] = value; return;
+    }
+}
+
+void RwAdd(uint slot, uint index, uint value) {
+    switch (slot) {
+        UZP_RW_CASES(UZP_ADD_CASE)
+        default: InterlockedAdd(g_slotBuffer15[index], value); return;
+    }
+}
+#endif
 #else
 float4 LoadTexel(uint srv, int2 p) {
     Texture2D<float4> image = ResourceDescriptorHeap[srv];
@@ -159,6 +206,22 @@ uint BufferWord(uint srv, uint index) {
 float BufferFloat(uint srv, uint index) {
     StructuredBuffer<float> buffer = ResourceDescriptorHeap[srv];
     return buffer[index];
+}
+
+// Read-write structured buffers of uints, by UAV index.
+uint RwWord(uint uav, uint index) {
+    RWStructuredBuffer<uint> buffer = ResourceDescriptorHeap[uav];
+    return buffer[index];
+}
+
+void RwStore(uint uav, uint index, uint value) {
+    RWStructuredBuffer<uint> buffer = ResourceDescriptorHeap[uav];
+    buffer[index] = value;
+}
+
+void RwAdd(uint uav, uint index, uint value) {
+    RWStructuredBuffer<uint> buffer = ResourceDescriptorHeap[uav];
+    InterlockedAdd(buffer[index], value);
 }
 #endif
 

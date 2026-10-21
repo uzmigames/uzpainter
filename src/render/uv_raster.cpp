@@ -1,13 +1,18 @@
 #include "render/uv_raster.h"
 
+#include "render/image_pass.h"
+#include "render/kernel_bindings.h"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstring>
 #include <deque>
 #include <limits>
+#include <optional>
 #include <string>
 #include <unordered_set>
+#include <utility>
 
 namespace uzp::render {
 
@@ -40,12 +45,30 @@ enum ParamWord : uint32_t {
     kParamWords = 21,
 };
 
-KernelSource Source(const char* entryPoint, const char* name) {
+/// The buffers of the raster (`UV_*` in uv_raster.hlsl): on Vulkan each dispatch writes one.
+enum UvOutput : uint32_t {
+    kOutTriangle = 0,
+    kOutMask = 1,
+    kOutPosition = 2,
+    kOutNormal = 3,
+    kOutTangent = 4,
+    kOutBitangent = 5,
+    kOutMaterial = 6,
+    kOutIsland = 7,
+};
+
+/// `entryPoint` of uv_raster.hlsl; with `output` (Vulkan's fixed slots) the variant writing that
+/// buffer only (`UZP_UV_OUTPUT`), its entry point named `main` (image_pass.h
+/// `VulkanEntryPoint`).
+KernelSource Source(const char* entryPoint, const char* name,
+                    std::optional<UvOutput> output = std::nullopt) {
     KernelSource source;
     source.name = name;
     source.hlsl.assign(kUvRasterHlsl, sizeof(kUvRasterHlsl));
     source.entryPoint = entryPoint;
-    return source;
+    if (!output) return source;
+    source.defines.push_back("UZP_UV_OUTPUT=" + std::to_string(*output));
+    return image_pass_detail::VulkanEntryPoint(std::move(source));
 }
 
 struct NamedAttribute {
@@ -140,10 +163,6 @@ public:
         if (!bytes.empty()) std::memcpy(mapped, bytes.data(), bytes.size());
         m_device.Rhi().UnmapBuffer(buffer.upload);
         return &m_buffers.back();
-    }
-
-    [[nodiscard]] uint32_t Srv(const RawBuffer& buffer) const {
-        return m_device.Rhi().GetBufferSRVIndex(buffer.gpu);
     }
 
     /// Records the copies into the default-heap buffers, leaving them readable by shaders.
@@ -312,13 +331,16 @@ Result<UvRasterBuffers> RasterizeUv(EngineContext& context, const CornerBuffers&
                         " work items exceed one dispatch");
     }
 
-    // Inputs: the corner buffers, the corner ids, the params and the work items.
+    // Inputs: the corner buffers, the corner ids, the params and the work items. Every dispatch
+    // binds them under the same names (heap indices on DX12, slots 0..8 in this order on Vulkan),
+    // which the params buffer and the root constants hold.
     Resources resources(device);
+    KernelBindings inputs(device);
     std::vector<uint32_t> cornerSrv;
     for (const std::span<const std::byte> buffer : corners.buffers) {
         Result<const RawBuffer*> raw = resources.Raw(buffer, "uv_raster_corners");
         if (!raw) return Unexpected(raw.error());
-        cornerSrv.push_back(resources.Srv(**raw));
+        cornerSrv.push_back(inputs.Buffer((*raw)->gpu));
     }
     Result<const RawBuffer*> triangles =
         resources.Raw(std::as_bytes(corners.triangles), "uv_raster_triangles");
@@ -326,7 +348,7 @@ Result<UvRasterBuffers> RasterizeUv(EngineContext& context, const CornerBuffers&
     std::array<uint32_t, kParamWords> params{};
     params[kTileColumn] = tileColumn;
     params[kTileRow] = tileRow;
-    params[kTriangles] = resources.Srv(**triangles);
+    params[kTriangles] = inputs.Buffer((*triangles)->gpu);
     for (const NamedAttribute& named : Attributes(corners)) {
         params[named.word] = cornerSrv[named.attribute->buffer];
         params[named.word + 1] = named.attribute->offset;
@@ -338,13 +360,40 @@ Result<UvRasterBuffers> RasterizeUv(EngineContext& context, const CornerBuffers&
     Result<const RawBuffer*> itemBuffer =
         resources.Raw(std::as_bytes(std::span(items)), "uv_raster_items");
     if (!itemBuffer) return Unexpected(itemBuffer.error());
+    const uint32_t paramName = inputs.Buffer((*paramBuffer)->gpu);
+    const uint32_t itemName = inputs.Buffer((*itemBuffer)->gpu);
+    if (Result<void> named = inputs.Validate(); !named) return Unexpected(named.error());
 
-    Result<ComputeKernel> clear = context.Kernel(Source("ClearMain", "uv_raster_clear"));
-    if (!clear) return Unexpected(clear.error());
-    Result<ComputeKernel> cover = context.Kernel(Source("CoverMain", "uv_raster_cover"));
-    if (!cover) return Unexpected(cover.error());
-    Result<ComputeKernel> resolve = context.Kernel(Source("ResolveMain", "uv_raster_resolve"));
-    if (!resolve) return Unexpected(resolve.error());
+    // DX12: one dispatch of each entry point writes every buffer. Vulkan binds one storage image
+    // per dispatch (kernel_bindings.h): each entry point once per buffer it writes.
+    const bool fixedSlots = backend == Backend::Vulkan;
+    struct Stage {
+        ComputeKernel kernel;
+        std::optional<UvOutput> output;
+    };
+    std::vector<Stage> clears, covers, resolves;
+    const auto load = [&](std::vector<Stage>& stages, const char* entry, const char* name,
+                          std::initializer_list<UvOutput> outputs) -> Result<void> {
+        if (!fixedSlots) {
+            Result<ComputeKernel> kernel = context.Kernel(Source(entry, name));
+            if (!kernel) return Unexpected(kernel.error());
+            stages.push_back({*kernel, std::nullopt});
+            return {};
+        }
+        for (const UvOutput output : outputs) {
+            Result<ComputeKernel> kernel = context.Kernel(Source(entry, name, output));
+            if (!kernel) return Unexpected(kernel.error());
+            stages.push_back({*kernel, output});
+        }
+        return {};
+    };
+    for (Result<void> loaded :
+         {load(clears, "ClearMain", "uv_raster_clear", {kOutTriangle, kOutMask}),
+          load(covers, "CoverMain", "uv_raster_cover", {kOutTriangle, kOutMask}),
+          load(resolves, "ResolveMain", "uv_raster_resolve",
+               {kOutPosition, kOutNormal, kOutTangent, kOutBitangent, kOutMaterial, kOutIsland})}) {
+        if (!loaded) return Unexpected(loaded.error());
+    }
 
     // Outputs.
     UvRasterBuffers out;
@@ -385,8 +434,8 @@ Result<UvRasterBuffers> RasterizeUv(EngineContext& context, const CornerBuffers&
     const uint32_t groupsX = std::clamp<uint32_t>(itemCount, 1, kMaxGroupsPerDimension);
     const uint32_t groupsY = (itemCount + groupsX - 1) / groupsX;
     const std::array<uint32_t, 14> root = {
-        resources.Srv(**paramBuffer),
-        resources.Srv(**itemBuffer),
+        paramName,
+        itemName,
         itemCount,
         groupsX,
         rhi.GetTextureUAVIndex(out.triangle),
@@ -419,26 +468,45 @@ Result<UvRasterBuffers> RasterizeUv(EngineContext& context, const CornerBuffers&
         }
         cmd.ResourceBarrier(barriers.data(), static_cast<uint32_t>(barriers.size()));
     };
+    const std::array<uz::RHITextureHandle, 8> byOutput = {
+        out.triangle, out.conservative, out.position, out.normal,
+        out.tangent,  out.bitangent,    out.materialId, out.islandId};
+    const auto dispatch = [&](uz::IRHICommandList& cmd, const Stage& stage, uint32_t x,
+                              uint32_t y) {
+        KernelBindings bindings = inputs;
+        if (stage.output) {
+            // The resolve reads the triangle ids as a sampled image (t0); the variant writes one
+            // buffer (u0).
+            if (*stage.output >= kOutPosition) bindings.Texture(out.triangle);
+            bindings.Output(byOutput[*stage.output]);
+        }
+        cmd.SetPipeline(stage.kernel.pipeline);
+        bindings.Record(cmd, root);
+        cmd.Dispatch(x, y, 1);
+    };
+    const auto barrier = [](uz::IRHICommandList& cmd, uz::RHITextureHandle texture,
+                            uz::RHIResourceState before, uz::RHIResourceState after) {
+        const uz::RHIBarrierDesc desc{texture, uz::RHIBufferHandle::Invalid(), before, after};
+        cmd.ResourceBarrier(&desc, 1);
+    };
     const uint32_t texelGroupsX = (request.width + 7) / 8;
     const uint32_t texelGroupsY = (request.height + 7) / 8;
     Result<void> done = context.SubmitAndWait([&](uz::IRHICommandList& cmd) {
+        using State = uz::RHIResourceState;
         resources.RecordUploads(cmd);
-        transition(cmd, uz::RHIResourceState::Common, uz::RHIResourceState::UnorderedAccess);
-        cmd.SetPipeline(clear->pipeline);
-        cmd.SetRootConstants(kRootConstantsParam, root.data(), static_cast<uint32_t>(root.size()));
-        cmd.Dispatch(texelGroupsX, texelGroupsY, 1);
+        transition(cmd, State::Common, State::UnorderedAccess);
+        for (const Stage& stage : clears) dispatch(cmd, stage, texelGroupsX, texelGroupsY);
         uavBarrier(cmd, {out.triangle, out.conservative});
         if (itemCount > 0) {
-            cmd.SetPipeline(cover->pipeline);
-            cmd.SetRootConstants(kRootConstantsParam, root.data(),
-                                 static_cast<uint32_t>(root.size()));
-            cmd.Dispatch(groupsX, groupsY, 1);
+            for (const Stage& stage : covers) dispatch(cmd, stage, groupsX, groupsY);
             uavBarrier(cmd, {out.triangle, out.conservative});
         }
-        cmd.SetPipeline(resolve->pipeline);
-        cmd.SetRootConstants(kRootConstantsParam, root.data(), static_cast<uint32_t>(root.size()));
-        cmd.Dispatch(texelGroupsX, texelGroupsY, 1);
-        transition(cmd, uz::RHIResourceState::UnorderedAccess, uz::RHIResourceState::Common);
+        if (fixedSlots) barrier(cmd, out.triangle, State::UnorderedAccess, State::ShaderResource);
+        for (const Stage& stage : resolves) dispatch(cmd, stage, texelGroupsX, texelGroupsY);
+        if (fixedSlots) {
+            barrier(cmd, out.triangle, State::ShaderResource, State::UnorderedAccess);
+        }
+        transition(cmd, State::UnorderedAccess, State::Common);
     });
     if (!done) {
         if (done.error().code == ErrorCode::Timeout) {

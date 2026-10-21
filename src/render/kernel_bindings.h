@@ -39,6 +39,10 @@ public:
     uint32_t Texture(uz::RHITextureHandle texture);
     /// The name of `buffer` read as a structured buffer of uints (`BufferWord`).
     uint32_t Buffer(uz::RHIBufferHandle buffer);
+    /// The name of `buffer` read and written as a structured buffer of uints (`RwWord`,
+    /// `RwStore`, `RwAdd`): its UAV index on DX12; on Vulkan a slot of the same class as
+    /// `Buffer`'s (the kernel declares its slot buffers read-write, `UZP_RW_BUFFERS`).
+    uint32_t RwBuffer(uz::RHIBufferHandle buffer);
     /// The name of the texture the dispatch writes (`StoreTexel`); one per dispatch.
     uint32_t Output(uz::RHITextureHandle texture);
 

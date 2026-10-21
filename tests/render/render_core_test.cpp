@@ -1694,6 +1694,7 @@ int main(int argc, char** argv) {
                      "dispatch | deadline | device-removed | unavailable | capabilities | "
                      "readback-pitch | readback-exact | readback-drain | readback-failure | "
                      "readback-kernel | uv-raster-* | vulkan-qualify | vulkan-device | vulkan-faults | vulkan-readback | "
+                     "vulkan-uv-raster | vulkan-image-passes | "
                      "image-* "
                      "<work-dir>\n");
         return 2;

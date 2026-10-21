@@ -1,6 +1,7 @@
 #include "render/dilation.h"
 
 #include "render/image_pass.h"
+#include "render/kernel_bindings.h"
 
 #include <algorithm>
 #include <array>
@@ -36,13 +37,20 @@ struct Params {
     uint32_t maxDistanceSq = 0;
 };
 
-void Dispatch(uz::IRHICommandList& cmd, const ComputeKernel& kernel, const Params& params) {
-    std::array<uint32_t, 9> constants = {params.width,     params.height,      params.step,
-                                         params.srcSeeds,  params.dstSeeds,    params.coverageSrv,
-                                         params.colourSrv, params.outputUav,   params.maxDistanceSq};
-    cmd.SetPipeline(kernel.pipeline);
-    cmd.SetRootConstants(kRootConstantsParam, constants.data(),
-                         static_cast<uint32_t>(constants.size()));
+/// One dispatch: its kernel, root constants and the names of what it binds (kernel_bindings.h).
+struct Pass {
+    const ComputeKernel* kernel = nullptr;
+    Params params;
+    KernelBindings bindings;
+};
+
+void Dispatch(uz::IRHICommandList& cmd, const Pass& pass) {
+    const Params& params = pass.params;
+    const std::array<uint32_t, 9> constants = {
+        params.width,       params.height,    params.step,      params.srcSeeds,     params.dstSeeds,
+        params.coverageSrv, params.colourSrv, params.outputUav, params.maxDistanceSq};
+    cmd.SetPipeline(pass.kernel->pipeline);
+    pass.bindings.Record(cmd, constants);
     cmd.Dispatch(Groups(params.width, 8), Groups(params.height, 8), 1);
 }
 
@@ -84,6 +92,7 @@ Result<void> Dilate(EngineContext& context, const DilationDesc& desc) {
         return Invalid(device, "the output format differs from the colour format");
     }
 
+    const ImagePassFormat format = *ImagePassFormatOf(colour->format);
     const uint32_t width = colour->width;
     const uint32_t height = colour->height;
     const std::vector<uint32_t> steps = JumpFloodSteps(width, height, desc.maxDistance);
@@ -93,7 +102,7 @@ Result<void> Dilate(EngineContext& context, const DilationDesc& desc) {
                 Transition(desc.colour, State::Common, State::CopySrc),
                 Transition(desc.output, State::Common, State::CopyDst)};
             cmd.ResourceBarrier(before, 2);
-            cmd.CopyTextureRegion(desc.colour, 0, 0, desc.output, 0, 0);
+            CopyMip(device, cmd, desc.colour, desc.output, 0, format, colour->width, uz::RHIBufferHandle::Invalid());
             const uz::RHIBarrierDesc after[2] = {
                 Transition(desc.colour, State::CopySrc, State::Common),
                 Transition(desc.output, State::CopyDst, State::Common)};
@@ -101,12 +110,14 @@ Result<void> Dilate(EngineContext& context, const DilationDesc& desc) {
         });
     }
 
-    Result<ComputeKernel> seedKernel = context.Kernel(Kernel("dilation_seed", Hlsl(), "SeedMain"));
+    Result<ComputeKernel> seedKernel = context.Kernel(
+        ForDevice(device, Kernel("dilation_seed", Hlsl(), "SeedMain"), std::nullopt, true));
     if (!seedKernel) return Unexpected(seedKernel.error());
-    Result<ComputeKernel> stepKernel = context.Kernel(Kernel("dilation_step", Hlsl(), "StepMain"));
+    Result<ComputeKernel> stepKernel = context.Kernel(
+        ForDevice(device, Kernel("dilation_step", Hlsl(), "StepMain"), std::nullopt, true));
     if (!stepKernel) return Unexpected(stepKernel.error());
-    Result<ComputeKernel> resolveKernel =
-        context.Kernel(Kernel("dilation_resolve", Hlsl(), "ResolveMain"));
+    Result<ComputeKernel> resolveKernel = context.Kernel(ForDevice(
+        device, Kernel("dilation_resolve", Hlsl(), "ResolveMain"), output->format, true));
     if (!resolveKernel) return Unexpected(resolveKernel.error());
 
     Scratch scratch(device);
@@ -121,18 +132,41 @@ Result<void> Dilate(EngineContext& context, const DilationDesc& desc) {
         if (!created) return Unexpected(created.error());
         buffer = *created;
     }
-    uz::IRHIDevice& rhi = device.Rhi();
-    const std::array<uint32_t, 2> seedUav = {rhi.GetBufferUAVIndex(seeds[0]),
-                                             rhi.GetBufferUAVIndex(seeds[1])};
     const uint64_t limitSq = uint64_t{desc.maxDistance} * desc.maxDistance;
 
-    Params params;
-    params.width = width;
-    params.height = height;
-    params.coverageSrv = rhi.GetTextureSRVIndex(desc.coverage);
-    params.colourSrv = rhi.GetTextureSRVIndex(desc.colour);
-    params.outputUav = rhi.GetTextureUAVIndex(desc.output);
-    params.maxDistanceSq = static_cast<uint32_t>(std::min<uint64_t>(limitSq, 0xFFFFFFFFull));
+    // The dispatches in order: the seeds into buffer 0, one step per jump length alternating the
+    // buffers, the resolve from the last one written.
+    std::vector<Pass> passes;
+    const auto add = [&](const ComputeKernel& kernel) -> Pass& {
+        Pass& pass = passes.emplace_back(Pass{&kernel, Params{}, KernelBindings(device)});
+        pass.params.width = width;
+        pass.params.height = height;
+        pass.params.maxDistanceSq =
+            static_cast<uint32_t>(std::min<uint64_t>(limitSq, 0xFFFFFFFFull));
+        return pass;
+    };
+    uint32_t current = 0;
+    {
+        Pass& seed = add(*seedKernel);
+        seed.params.dstSeeds = seed.bindings.RwBuffer(seeds[current]);
+        seed.params.coverageSrv = seed.bindings.Texture(desc.coverage);
+    }
+    for (const uint32_t step : steps) {
+        Pass& pass = add(*stepKernel);
+        pass.params.step = step;
+        pass.params.srcSeeds = pass.bindings.RwBuffer(seeds[current]);
+        pass.params.dstSeeds = pass.bindings.RwBuffer(seeds[1 - current]);
+        current = 1 - current;
+    }
+    {
+        Pass& resolve = add(*resolveKernel);
+        resolve.params.srcSeeds = resolve.bindings.RwBuffer(seeds[current]);
+        resolve.params.colourSrv = resolve.bindings.Texture(desc.colour);
+        resolve.params.outputUav = resolve.bindings.Output(desc.output);
+    }
+    for (const Pass& pass : passes) {
+        if (Result<void> named = pass.bindings.Validate(); !named) return named;
+    }
 
     Result<void> done = context.SubmitAndWait([&](uz::IRHICommandList& cmd) {
         // The output starts as a copy of the colour: covered and out-of-reach texels keep it.
@@ -140,7 +174,7 @@ Result<void> Dilate(EngineContext& context, const DilationDesc& desc) {
             Transition(desc.colour, State::Common, State::CopySrc),
             Transition(desc.output, State::Common, State::CopyDst)};
         cmd.ResourceBarrier(toCopy, 2);
-        cmd.CopyTextureRegion(desc.colour, 0, 0, desc.output, 0, 0);
+        CopyMip(device, cmd, desc.colour, desc.output, 0, format, width, uz::RHIBufferHandle::Invalid());
         const uz::RHIBarrierDesc toCompute[5] = {
             Transition(desc.colour, State::CopySrc, State::ShaderResource),
             Transition(desc.coverage, State::Common, State::ShaderResource),
@@ -152,20 +186,10 @@ Result<void> Dilate(EngineContext& context, const DilationDesc& desc) {
             Transition(seeds[0], State::UnorderedAccess, State::UnorderedAccess),
             Transition(seeds[1], State::UnorderedAccess, State::UnorderedAccess)};
 
-        uint32_t current = 0;
-        params.dstSeeds = seedUav[current];
-        Dispatch(cmd, *seedKernel, params);
-        cmd.ResourceBarrier(flush, 2);
-        for (const uint32_t step : steps) {
-            params.step = step;
-            params.srcSeeds = seedUav[current];
-            params.dstSeeds = seedUav[1 - current];
-            Dispatch(cmd, *stepKernel, params);
-            cmd.ResourceBarrier(flush, 2);
-            current = 1 - current;
+        for (size_t i = 0; i < passes.size(); ++i) {
+            if (i > 0) cmd.ResourceBarrier(flush, 2);
+            Dispatch(cmd, passes[i]);
         }
-        params.srcSeeds = seedUav[current];
-        Dispatch(cmd, *resolveKernel, params);
 
         const uz::RHIBarrierDesc after[5] = {
             Transition(desc.colour, State::ShaderResource, State::Common),

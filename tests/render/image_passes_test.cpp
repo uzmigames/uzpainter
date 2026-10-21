@@ -9,8 +9,13 @@
 //   image-resample   identity copies, up- and down-sampling of every filter and colour mode
 //   image-mips       sRGB-aware, linear, normal and alpha-coverage mip chains
 //   image-repeat     every pass twice on the same input: byte-identical outputs
+//   vulkan-image-passes  every pass on the plane, sphere and bevelled-cube rasters on DX12 and on
+//                    the qualified Vulkan device: byte for byte equal, and equal to the CPU
+//                    reference (phase3.1_vulkan-compute-parity items 2.5, 3.2;
+//                    tests/render/test_vulkan_image_passes.py)
 
 #include "image_passes_test.h"
+#include "uv_raster_fixtures.h"
 
 #include "reference/image_reference.h"
 #include "render/capabilities.h"
@@ -20,6 +25,7 @@
 #include "render/mips.h"
 #include "render/resample.h"
 #include "render/texture_readback.h"
+#include "render/uv_raster.h"
 
 #include <algorithm>
 #include <bit>
@@ -29,6 +35,7 @@
 #include <cstring>
 #include <functional>
 #include <future>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <random>
@@ -869,6 +876,239 @@ int RunRepeat(const fs::path& dir) {
     return Finish();
 }
 
+// ── vulkan-image-passes (phase3.1_vulkan-compute-parity items 2.5, 3.2) ─────
+
+/// A fixture's raster read back from DX12: the conservative mask and the position and normal
+/// buffers.
+struct FixtureImages {
+    std::string name;
+    ref::Image mask;
+    ref::Image position;
+    ref::Image normal;
+};
+
+Result<FixtureImages> RasterImages(Engine& engine, const UvRasterFixture& fixture, uint32_t w,
+                                   uint32_t h) {
+    return Run<FixtureImages>(engine, [&](EngineContext& context) -> Result<FixtureImages> {
+        UvRasterRequest request;
+        request.width = w;
+        request.height = h;
+        Result<UvRasterBuffers> buffers = RasterizeUv(context, fixture.corners, request);
+        if (!buffers) return Unexpected(buffers.error());
+        Result<ref::Image> mask = Download(context, buffers->conservative, uz::RHIFormat::R8Unorm);
+        Result<ref::Image> position =
+            Download(context, buffers->position, uz::RHIFormat::RGBA32Float);
+        Result<ref::Image> normal = Download(context, buffers->normal, uz::RHIFormat::RGBA32Float);
+        buffers->Destroy(context.Device());
+        if (!mask) return Unexpected(mask.error());
+        if (!position) return Unexpected(position.error());
+        if (!normal) return Unexpected(normal.error());
+        return FixtureImages{fixture.name, std::move(*mask), std::move(*position),
+                             std::move(*normal)};
+    });
+}
+
+/// A float32 of the raster, a denormal flushed to zero (the GPUs flush float32 denormals, the
+/// CPU reference keeps them; image_pass.h).
+float RasterFloat(const ref::Image& image, uint32_t x, uint32_t y, uint32_t c) {
+    const float v = std::bit_cast<float>(image.At(x, y, c));
+    return std::fabs(v) < std::numeric_limits<float>::min() ? 0.0f : v;
+}
+
+/// An image of `format` made from a fixture's raster: unorm channels hold the normal mapped to
+/// [0, 1] and, in channel 3, a position ramp on covered texels (0 elsewhere, so alpha coverage
+/// sees many codes); float formats hold the normal (four channels, alpha 1 on covered texels),
+/// its x and y (two channels) or the position's x (one channel).
+ref::Image RasterColour(uz::RHIFormat format, const FixtureImages& in) {
+    ref::Image image = Blank(format, in.mask.width, in.mask.height);
+    const bool unorm = ref::IsUnorm(image.encoding);
+    const double m = unorm ? ref::UnormMax(image.encoding) : 1.0;
+    for (uint32_t y = 0; y < image.height; ++y) {
+        for (uint32_t x = 0; x < image.width; ++x) {
+            const bool covered = in.mask.At(x, y, 0) != 0;
+            for (uint32_t c = 0; c < image.channels; ++c) {
+                if (unorm) {
+                    double v = 0.0;
+                    if (c < 3) {
+                        v = std::clamp(RasterFloat(in.normal, x, y, c) * 0.5 + 0.5, 0.0, 1.0);
+                    } else if (covered) {
+                        const double ramp = (RasterFloat(in.position, x, y, 0) +
+                                             RasterFloat(in.position, x, y, 1) +
+                                             RasterFloat(in.position, x, y, 2)) / 6.0 + 0.5;
+                        v = std::clamp(ramp, 0.0, 1.0);
+                    }
+                    image.At(x, y, c) = static_cast<uint32_t>(std::lround(v * m));
+                    continue;
+                }
+                float v = 0.0f;
+                if (image.channels == 1) {
+                    v = RasterFloat(in.position, x, y, 0);
+                } else if (c < 3) {
+                    v = RasterFloat(in.normal, x, y, c);
+                } else {
+                    v = covered ? 1.0f : 0.0f;
+                }
+                image.At(x, y, c) = FloatValue(v, image.encoding);
+            }
+        }
+    }
+    return image;
+}
+
+/// `RasterColour` dilated without limit on the CPU: the resampled and mipped images have no
+/// empty background.
+ref::Image FilledColour(uz::RHIFormat format, const FixtureImages& in) {
+    return ref::DilateJumpFlood(RasterColour(format, in), CoveredMask(in.mask),
+                                kUnlimitedDistance);
+}
+
+/// The first differing value of two images, or empty; the images' bytes are equal exactly when
+/// it is empty (`ref::ToBytes` is a function of the values).
+std::string Mismatch(const Result<ref::Image>& got, const Result<ref::Image>& want) {
+    if (!got || !want) return Describe(got) + " / " + Describe(want);
+    return Diff(*got, *want);
+}
+
+std::string Distance(uint32_t limit) {
+    return limit == kUnlimitedDistance ? std::string("unlimited") : std::to_string(limit);
+}
+
+/// Every pass on each fixture's raster, on DX12 and on the qualified Vulkan device: dilation of
+/// six formats at two limits, resampling of every filter and colour mode up and down, mip chains
+/// in every mode (a 512 x 512 alpha-coverage chain takes 65 dispatches, more than one Vulkan
+/// submission holds). Each Vulkan result equals DX12's byte for byte, and DX12's equals the CPU
+/// reference.
+int RunVulkanPasses(const fs::path& dir) {
+    if (VulkanDeviceMissing()) return kExitSkip;
+    Engine dx12(Options(dir / "dx12"));
+    if (NoAdapter(dx12)) return kExitSkip;
+    Engine vulkan(VulkanTestEngineOptions(dir / "vulkan"));
+    Check(!vulkan.DeviceError(), "the Vulkan engine runs on the qualified device",
+          vulkan.DeviceError() ? vulkan.DeviceError()->Describe() : "");
+    if (vulkan.DeviceError()) return Finish();
+    const auto both = [](const std::string& label, const Result<ref::Image>& dx,
+                         const Result<ref::Image>& vk, const ref::Image& cpu) {
+        Check(dx.has_value() && vk.has_value(), label + ": runs on DX12 and on Vulkan",
+              Describe(dx) + " / " + Describe(vk));
+        if (!dx || !vk) return;
+        Check(Mismatch(vk, dx).empty(), label + ": Vulkan equals DX12 byte for byte",
+              Mismatch(vk, dx));
+        Check(Diff(*dx, cpu).empty(), label + ": equals the CPU reference", Diff(*dx, cpu));
+    };
+
+    using F = uz::RHIFormat;
+    for (const std::unique_ptr<UvRasterFixture>& fixture : SyntheticUvRasterFixtures()) {
+        // Dilation and resampling on the 300 x 200 raster.
+        Result<FixtureImages> small = RasterImages(dx12, *fixture, 300, 200);
+        Check(small.has_value(), fixture->name + ": the 300x200 raster reads back",
+              Describe(small));
+        if (!small) continue;
+        const std::vector<uint8_t> covered = CoveredMask(small->mask);
+        for (const F format : {F::RGBA8Unorm, F::RGBA16Unorm, F::RGBA16Float, F::R32Float,
+                               F::RGBA32Float, F::RG16Float}) {
+            const ref::Image colour = RasterColour(format, *small);
+            for (const uint32_t limit : {8u, kUnlimitedDistance}) {
+                const std::string label = fixture->name + ": dilation " +
+                                          std::string(FormatName(format)) + " distance " +
+                                          Distance(limit);
+                both(label, GpuDilate(dx12, format, colour, small->mask, limit),
+                     GpuDilate(vulkan, format, colour, small->mask, limit),
+                     ref::DilateJumpFlood(colour, covered, limit));
+            }
+        }
+
+        struct ResampleCase {
+            F format;
+            ColourMode colour;
+            ResampleFilter filter;
+            ResampleWrap wrap;
+        };
+        const ResampleCase resamples[] = {
+            {F::RGBA8Unorm, ColourMode::Srgb, ResampleFilter::Nearest, ResampleWrap::Clamp},
+            {F::RGBA8Unorm, ColourMode::Srgb, ResampleFilter::Bilinear, ResampleWrap::Clamp},
+            {F::RGBA8Unorm, ColourMode::Srgb, ResampleFilter::Box, ResampleWrap::Clamp},
+            {F::RGBA8Unorm, ColourMode::Normal, ResampleFilter::Box, ResampleWrap::Clamp},
+            {F::RGBA16Unorm, ColourMode::Linear, ResampleFilter::Nearest, ResampleWrap::Clamp},
+            {F::RGBA16Unorm, ColourMode::Linear, ResampleFilter::Bilinear, ResampleWrap::Clamp},
+            {F::RGBA16Unorm, ColourMode::Linear, ResampleFilter::Bilinear, ResampleWrap::Repeat},
+            {F::RGBA16Unorm, ColourMode::Linear, ResampleFilter::Box, ResampleWrap::Clamp},
+            {F::RGBA16Float, ColourMode::Normal, ResampleFilter::Bilinear, ResampleWrap::Clamp},
+            {F::RGBA16Float, ColourMode::Normal, ResampleFilter::Box, ResampleWrap::Clamp},
+            {F::R32Float, ColourMode::Linear, ResampleFilter::Bilinear, ResampleWrap::Repeat},
+            {F::R32Float, ColourMode::Linear, ResampleFilter::Box, ResampleWrap::Clamp},
+            {F::RGBA32Float, ColourMode::Linear, ResampleFilter::Box, ResampleWrap::Clamp},
+            {F::RG16Float, ColourMode::Linear, ResampleFilter::Bilinear, ResampleWrap::Clamp},
+        };
+        for (const ResampleCase& rc : resamples) {
+            const ref::Image source = FilledColour(rc.format, *small);
+            for (const auto [w, h] : {std::pair<uint32_t, uint32_t>{143, 105}, {451, 299}}) {
+                const std::string label =
+                    fixture->name + ": resample " + std::string(FormatName(rc.format)) + " " +
+                    ColourName(rc.colour) + " " + FilterName(rc.filter) +
+                    (rc.wrap == ResampleWrap::Repeat ? " repeat " : " clamp ") + Size(w, h);
+                const ResampleOptions options{rc.filter, rc.wrap, rc.colour};
+                both(label, GpuResample(dx12, rc.format, source, w, h, options),
+                     GpuResample(vulkan, rc.format, source, w, h, options),
+                     ref::Resample(source, w, h, static_cast<ref::Filter>(rc.filter),
+                                   static_cast<ref::Wrap>(rc.wrap), RefColour(rc.colour)));
+            }
+        }
+
+        // Mip chains on the 512 x 512 raster and, with alpha coverage, on the 300 x 200 one.
+        Result<FixtureImages> large = RasterImages(dx12, *fixture, 512, 512);
+        Check(large.has_value(), fixture->name + ": the 512x512 raster reads back",
+              Describe(large));
+        if (!large) continue;
+        struct MipCase {
+            F format;
+            ColourMode colour;
+            bool coverage;
+            float cutoff;
+            const FixtureImages* in;
+        };
+        const MipCase mips[] = {
+            {F::RGBA8Unorm, ColourMode::Srgb, false, 0.5f, &*large},
+            {F::RGBA8Unorm, ColourMode::Srgb, true, 0.5f, &*large},
+            {F::RGBA8Unorm, ColourMode::Srgb, true, 0.5f, &*small},
+            {F::RGBA16Unorm, ColourMode::Linear, true, 0.3f, &*large},
+            {F::RGBA8Unorm, ColourMode::Normal, false, 0.5f, &*large},
+            {F::RGBA16Float, ColourMode::Normal, false, 0.5f, &*large},
+            {F::R16Float, ColourMode::Linear, false, 0.5f, &*large},
+            {F::R32Float, ColourMode::Linear, false, 0.5f, &*small},
+        };
+        for (const MipCase& mc : mips) {
+            const ref::Image base = FilledColour(mc.format, *mc.in);
+            const uint16_t levels = FullChain(base.width, base.height);
+            const MipOptions options{mc.colour, mc.coverage, mc.cutoff};
+            const std::string label =
+                fixture->name + ": mips " + std::string(FormatName(mc.format)) + " " +
+                ColourName(mc.colour) + (mc.coverage ? " alpha coverage " : " ") +
+                Size(base.width, base.height);
+            Result<std::vector<ref::Image>> dx = GpuMips(dx12, mc.format, base, levels, options);
+            Result<std::vector<ref::Image>> vk = GpuMips(vulkan, mc.format, base, levels, options);
+            Check(dx.has_value() && vk.has_value(), label + ": runs on DX12 and on Vulkan",
+                  Describe(dx) + " / " + Describe(vk));
+            if (!dx || !vk) continue;
+            const std::vector<ref::Image> cpu = ref::MipChain(
+                base, levels, RefColour(mc.colour),
+                mc.coverage ? AlphaCutoffCode(mc.cutoff, ImagePassFormatOf(mc.format)->encoding) : 0);
+            std::string vsDx12;
+            std::string vsCpu;
+            for (uint32_t k = 0; k < levels; ++k) {
+                const std::string a = Diff((*vk)[k], (*dx)[k]);
+                const std::string b = Diff((*dx)[k], cpu[k]);
+                if (!a.empty() && vsDx12.empty()) vsDx12 = "level " + std::to_string(k) + ": " + a;
+                if (!b.empty() && vsCpu.empty()) vsCpu = "level " + std::to_string(k) + ": " + b;
+            }
+            Check(vsDx12.empty(),
+                  label + ": every level on Vulkan equals DX12 byte for byte", vsDx12);
+            Check(vsCpu.empty(), label + ": every level equals the CPU reference", vsCpu);
+            Info(label + ": " + std::to_string(levels) + " levels");
+        }
+    }
+    return Finish();
+}
+
 }  // namespace
 
 int RunImagePassCase(std::string_view mode, const fs::path& dir) {
@@ -877,5 +1117,6 @@ int RunImagePassCase(std::string_view mode, const fs::path& dir) {
     if (mode == "image-resample") return RunResample(dir);
     if (mode == "image-mips") return RunMips(dir);
     if (mode == "image-repeat") return RunRepeat(dir);
+    if (mode == "vulkan-image-passes") return RunVulkanPasses(dir);
     return -1;
 }

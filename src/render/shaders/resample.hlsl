@@ -7,6 +7,9 @@
 // stored), Srgb (8-bit unorm channels 0-2 decoded through the IEC 61966-2-1 table, filtered in
 // linear float and encoded through the threshold table; channel 3 linear) and Normal (channels
 // 0-2 a vector, filtered then renormalised; channel 3 linear).
+//
+// Resources are named as image_common.hlsli says: heap indices on DX12, slots in the fixed-slot
+// SPIR-V of Vulkan (compiled with the destination's UZP_DST_FORMAT).
 
 #include "image_common.hlsli"
 #include "srgb_tables.hlsli"
@@ -20,6 +23,36 @@
 #define COLOUR_SRGB 1u
 #define COLOUR_NORMAL 2u
 
+#ifdef UZP_FIXED_SLOTS
+// Push constants on Vulkan (image_common.hlsli): each dispatch records its own.
+struct Params {
+    uint srcWidth;
+    uint srcHeight;
+    uint dstWidth;
+    uint dstHeight;
+    uint mode;
+    uint srcSrv;
+    uint dstUav;
+    uint boxAx;
+    uint boxBx;
+    uint boxAy;
+    uint boxBy;
+    uint invTotal;
+};
+[[vk::push_constant]] Params g_root;
+#define g_srcWidth g_root.srcWidth
+#define g_srcHeight g_root.srcHeight
+#define g_dstWidth g_root.dstWidth
+#define g_dstHeight g_root.dstHeight
+#define g_mode g_root.mode
+#define g_srcSrv g_root.srcSrv
+#define g_dstUav g_root.dstUav
+#define g_boxAx g_root.boxAx
+#define g_boxBx g_root.boxBx
+#define g_boxAy g_root.boxAy
+#define g_boxBy g_root.boxBy
+#define g_invTotal g_root.invTotal
+#else
 cbuffer Params : register(b0) {
     uint g_srcWidth;
     uint g_srcHeight;
@@ -34,6 +67,7 @@ cbuffer Params : register(b0) {
     uint g_boxBy;
     uint g_invTotal;   // Box: float32 bits of 1 / (bx * by), rounded on the CPU
 };
+#endif
 
 static uint s_filter;
 static uint s_wrap;
@@ -92,8 +126,11 @@ void AddTap(int2 p, uint weight, float weightF) {
 
 int Wrap(int i, uint size) {
     if (s_wrap == WRAP_REPEAT) {
+        // The floored remainder from non-negative operands only. On Vulkan (RTX 4090, driver
+        // 617.14) the SPIR-V OpSRem of a negative dividend gave the unsigned remainder, where
+        // DX12 gives the signed one (decision 352).
         const int n = int(size);
-        return ((i % n) + n) % n;
+        return i >= 0 ? i % n : (n - 1) - ((-1 - i) % n);
     }
     return clamp(i, 0, int(size) - 1);
 }
