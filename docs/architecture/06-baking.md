@@ -208,6 +208,43 @@ The used surface is the conservative coverage. Its seven classes are disjoint an
 
 Publication is atomic per `(texture set, input revision)`: either all enabled usages are bound with provenance (`03-project-model.md` §4) and the receipt is stored with them, or the job fails/cancels with no partial authoritative bake; evidence maps are stored under `cache/` and are regenerable.
 
+### 4.1 Native evidence, receipt and publication (decision 347)
+
+Three files implement this section on the CPU baker (phase3.3_baker-evidence-publication). They are native only: Python and MCP do not reach them yet, and every usage stays `pending-evidence`.
+
+**Accounting** (`bake_accounting.*`).
+- *The used surface.* A texel is used when its open square overlaps the interior of a low UV triangle with nonzero UV area. The baker records it in `BakeResult::used_surface`. Every sampled texel is in it; the other used texels are the ring.
+- *The seven classes,* counted per usage:
+  - `hit_straight`, `hit_cage`;
+  - `miss`: centre misses and back-face hits;
+  - `hidden`: the `Hidden` class;
+  - `ring_extended`: ring texels that AO's dilation wrote (`BakeResult::extension`);
+  - `ring_no_hit_neighbour`: ring texels the map holds no value for, whatever the mask says;
+  - `repaired`: always 0.
+- *The other counts.*
+  - `padding_texels`: texels outside the used surface.
+  - `changed_used_texels`: used texels whose map differs from RAW. A ring extension counts here, but it is not a modification: `surface_modified` means a fallback or a repair.
+  - `parts[]`: counts per low part, by the part of each texel's first covered sub-sample. `z_negative_texels` (Normal only) counts hit texels whose RAW blue code is below 32768.
+- *The neutral fallback.* `BakeRequest::neutral_fallback` is off by default and Normal-only: it is refused with any other usage. It sets the used Normal texels without a hit to the flat normal (32768, 32768 or DirectX 32767, 65535). RAW is kept, and `fallback_texels` counts the texels it set.
+- *`fidelity_evidence`.* `diagnostic_only` for a diagnostic bake or a repair; `contains_fallback` when a fallback texel exists; otherwise `used_surface_as_baked`.
+- *Evidence files.* `EvidenceFiles` gives, per usage, `map`, `raw` (none for Thickness), `hit`, `coverage`, `miss` and `extension`, under `cache/bake/<key>/<Usage>/`. Integer maps are PNG files; float32 maps use the `UZPF32` evidence container. `WriteEvidence` writes them under a root. They are a pure function of the request and the result, so they regenerate byte for byte.
+
+**Receipt** (`bake_receipt.*`).
+- `BuildReceipt` fills every field above, the result-record header and `parity_status`.
+- The mesh hashes are content hashes of the bake meshes. The caller's header `resource_hashes` names the files the meshes came from.
+- `settings_hash` is the SHA-256 of `SettingsJson`: every output-determining setting, not the meshes, the mask or the thread count.
+
+**Publication** (`bake_publication.*`). `PublishBake` runs one document transaction, and everything below is checked before any change:
+- `input_revision` is the document's current revision in decimal: a stale bake is refused;
+- the set's resolution is the output size: resampling is not established;
+- Normal's format and tangent space are the project's;
+- the result is not diagnostic;
+- every usage has a bindable map. Only AO (L16 PNG) and Normal (RGB16 PNG) do. The float maps have no established channel format (decisions 337 and 341), ID has no colour map and Thickness no per-texel value, so each is refused (`NotYetSupported`, naming its owner task).
+
+Then the transaction stages the maps and the receipt and adds their resource entries. It binds each usage with `baked {...}` provenance, whose `extra` holds `receipt`, `job_id`, `fidelity_evidence` and `parity_status`. A refusal, a failure or a commit-sink error commits nothing.
+
+**Tests.** `tests/bake/receipt_bake_cases.h` holds seven native cases. They check exact per-class counts and the conservation identity on an off-boundary plane, a cube-sphere, the bevelled cube with highs and a part with a buried face. They also check the receipt's fields and hashes, regeneration of the evidence, and all-or-nothing publication.
+
 ## 5. External mesh maps
 
 `project.create(mesh, mesh_map_file_paths=[…])` and `TextureSet.set_mesh_map_resource(usage, resource)` accept 16-bit PNG/EXR maps (geometry-only OpenGL normal, AO, curvature, WSN, position, thickness as produced by `A3D\Pipeline\painting\bake_normal_pair.py` and `garment_blender_io.py`); original bytes and declared role/convention/units are kept (BAK-01). Generators bind by usage regardless of origin. External maps are the migration reference for the Assets3D corpus; they never certify native bake parity.

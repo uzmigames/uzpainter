@@ -1,0 +1,12 @@
+{
+  "id": 347,
+  "slug": "347-bake-receipt",
+  "title": "Bake evidence, receipt and publication: the used surface is the conservative UV coverage (open texel square meets a UV triangle), its seven classes are counted per usage, the neutral fallback is Normal-only and opt-in, and publication binds AO and Normal only, atomically on the revision the bake read",
+  "status": "accepted",
+  "date": "2026-10-21",
+  "relatedTasks": [
+    "phase3.3_baker-evidence-publication",
+    "phase3.5_embree-bakers"
+  ],
+  "supersededBy": null
+}
