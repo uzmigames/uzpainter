@@ -19,6 +19,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "bake/bake_request.h"
 #include "bake/baker.h"
@@ -80,6 +81,10 @@ inline constexpr const char* kQualifiedIsa = UZP_EMBREE_PINNED_ISA;
 inline constexpr long kPinnedEmbreeVersion = UZP_EMBREE_PINNED_VERSION;
 /// Embree's RTC_DEVICE_PROPERTY_TASKING_SYSTEM of the pinned package (1 = TBB).
 inline constexpr long kPinnedEmbreeTasking = UZP_EMBREE_PINNED_TASKING;
+
+/// Per low part of `request`, the indices of the high meshes (the low parts under `LowAsHigh`) its
+/// primary rays may hit under `FilterMethod` (decision 306): what a receipt lists per part.
+std::vector<std::vector<std::size_t>> MatchedHighMeshes(const BakeRequest& request);
 
 class EmbreeBaker final : public IBaker {
 public:

@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "bake/sampling.h"
+#include "bake/bake_accounting.h"
 #include "bake/mesh_inputs.h"
 #include "bake/height_baker.h"
 #include "bake/id_baker.h"
@@ -257,6 +258,7 @@ DistanceRecord ValidateRequest(const Capabilities& caps, const BakeRequest& requ
     if (HasUsage(request, MeshMapUsage::Thickness)) ValidateThickness(request);
     if (HasUsage(request, MeshMapUsage::Height)) ValidateHeight(request);
     if (HasUsage(request, MeshMapUsage::Opacity)) ValidateOpacity(request);
+    ValidateFallback(request);
     for (std::uint32_t log2 : request.output_size_log2) {
         if (log2 > caps.max_output_size_log2) {
             throw CapabilityError("OutputSize 2^" + std::to_string(log2) + " exceeds 2^" +
@@ -824,6 +826,7 @@ void BakeTexel(const Context& ctx, std::uint32_t x, std::uint32_t y, TileCounts&
                 found = UvBarycentric(*request.low[part], tri, u, v, w);
             }
             if (!found) continue;
+            if (covered == 0) out.texel_part[index] = part;
             ++covered;
             if (hidden) continue;
 
@@ -1032,6 +1035,7 @@ std::uint64_t Dilate(BakeResult& r, std::uint32_t width, const JobControl& contr
         for (const auto& [i, value] : fresh) {
             r.ao[i] = value;
             valued[i] = 1;
+            r.extension[i] = 1;
         }
         dilated += fresh.size();
     }
@@ -1096,6 +1100,9 @@ BakeResult RunBake(EmbreeBaker::Core& core, const BakerConfig& config, const Job
     result.texel_class.assign(texels, 0);
     result.coverage.assign(texels, 0);
     result.subsample_hits.assign(texels, 0);
+    result.texel_part.assign(texels, 0);
+    result.extension.assign(texels, 0);
+    result.used_surface = ConservativeCoverage(request.low, result.width, result.height);
 
     const std::vector<const BakeMesh*> high = request.detail.low_as_high ? request.low : request.high;
     if (has_id) PrepareId(high, result);
@@ -1186,10 +1193,22 @@ BakeResult RunBake(EmbreeBaker::Core& core, const BakerConfig& config, const Job
     if (HasUsage(request, MeshMapUsage::Thickness)) CountThickness(result);
     if (has_ao) result.dilated_texels = Dilate(result, request.common.dilation_width, control);
     if (has_normal) result.normal = result.normal_raw;
+    if (request.neutral_fallback) result.fallback_texels = ApplyNeutralFallback(result);
     return result;
 }
 
 }  // namespace
+
+std::vector<std::vector<std::size_t>> MatchedHighMeshes(const BakeRequest& request) {
+    const Matching matching = MatchMeshes(request, request.detail.low_as_high ? request.low : request.high);
+    std::vector<std::vector<std::size_t>> matched(matching.allowed.size());
+    for (std::size_t p = 0; p < matching.allowed.size(); ++p) {
+        for (std::size_t h = 0; h < matching.allowed[p].size(); ++h) {
+            if (matching.allowed[p][h]) matched[p].push_back(h);
+        }
+    }
+    return matched;
+}
 
 JobHandle EmbreeBaker::bake(const BakeRequest& request) {
     bool diagnostic = false;

@@ -13,6 +13,7 @@
 // Errors print "<ErrorClass>: <message>" on stderr and exit 3.
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <cmath>
@@ -22,7 +23,9 @@
 #include <functional>
 #include <future>
 #include <limits>
+#include <map>
 #include <optional>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <system_error>
@@ -32,6 +35,9 @@
 #include <vector>
 #include <xmmintrin.h>
 
+#include "bake/bake_accounting.h"
+#include "bake/bake_publication.h"
+#include "bake/bake_receipt.h"
 #include "bake/bake_request.h"
 #include "bake/baker.h"
 #include "bake/baking_parameters.h"
@@ -1663,6 +1669,7 @@ void CaseCageFileThreadsInProcess() {
 #include "opacity_bake_cases.h"
 #include "height_bake_cases.h"
 #include "thickness_bake_cases.h"
+#include "receipt_bake_cases.h"
 
 const std::vector<std::pair<std::string, std::function<void()>>>& Cases() {
     static const std::vector<std::pair<std::string, std::function<void()>>> cases = {
@@ -1751,6 +1758,13 @@ const std::vector<std::pair<std::string, std::function<void()>>>& Cases() {
         {"thickness_record", CaseThicknessRecord},
         {"thickness_refusals", CaseThicknessRefusals},
         {"thickness_parameters", CaseThicknessParameters},
+        {"accounting_plane", CaseAccountingPlane},
+        {"accounting_sphere", CaseAccountingSphere},
+        {"accounting_bevel", CaseAccountingBevel},
+        {"accounting_buried_face", CaseAccountingBuriedFace},
+        {"receipt_content", CaseReceiptContent},
+        {"evidence_regenerated", CaseEvidenceRegenerated},
+        {"publication_atomic", CasePublicationAtomic},
     };
     return cases;
 }

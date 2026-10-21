@@ -1211,6 +1211,15 @@ pub fn build(b: *std.Build) void {
     material_tests_step.dependOn(&b.addInstallArtifact(material_tests_exe, .{}).step);
     // The CPU baker reads high and cage mesh files with the mesh loaders (decision 311).
     bake_tests_mod.linkLibrary(mesh_lib);
+    // Evidence maps, used-surface accounting, `BakeReceipt` and atomic publication
+    // (phase3.3_baker-evidence-publication, decision 347). Map files use the export's PNG encoder
+    // over the zlib `uzp_mesh` compiles.
+    bake_tests_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &.{ "bake/bake_accounting.cpp", "bake/bake_receipt.cpp", "bake/bake_publication.cpp", "export/png_writer.cpp" },
+        .flags = &bake_flags,
+    });
+    bake_tests_mod.addIncludePath(b.path("thirdparty/zlib"));
 
     const mesh_tests_mod = b.createModule(.{
         .target = target,

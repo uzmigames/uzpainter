@@ -218,6 +218,11 @@ struct BakeRequest {
     std::vector<const BakeMesh*> cage;
     /// Empty, or one byte per texel (row-major, row 0 at v = 1): non-zero texels are hidden.
     std::vector<std::uint8_t> hidden_mask;
+    /// The neutral fallback (decision 347): sets the used-surface texels of the compatible Normal map
+    /// that hold no baked value (misses, hidden texels, ring texels) to the flat tangent normal
+    /// (0, 0, 1); RAW is kept and the receipt counts them (`fallback_texels`). Off by default:
+    /// UzPainter never repairs on its own. Normal only; with any other usage it is refused.
+    bool neutral_fallback = false;
     /// Ray-casting workers; 0 = every hardware thread. Never changes the output bytes.
     std::uint32_t threads = 0;
 };
@@ -409,6 +414,16 @@ struct BakeResult {
     SubsampleCounts subsamples;
     RayClassCounts rays;
     std::uint64_t dilated_texels = 0;
+    /// The conservative used surface (decision 347, `bake_accounting.h`): 1 where the texel's open
+    /// square overlaps the interior of a low UV triangle, 0 elsewhere. Every texel the baker samples
+    /// lies in it.
+    std::vector<std::uint8_t> used_surface;
+    /// The low part of the texel's first covered sub-sample (0 on `Uncovered` texels).
+    std::vector<std::uint32_t> texel_part;
+    /// 1 where `DilationWidth` wrote the AO map (`ao` differs from `ao_raw` only there).
+    std::vector<std::uint8_t> extension;
+    /// Texels of `normal` set to the neutral value by `BakeRequest::neutral_fallback`.
+    std::uint64_t fallback_texels = 0;
     DistanceRecord distances;
     /// Baked on the explicit diagnostic path of an unqualified BVH build thread count: never
     /// evidence (decision 306). Not part of the canonical bytes.
