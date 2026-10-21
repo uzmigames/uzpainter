@@ -1207,7 +1207,7 @@ pub fn build(b: *std.Build) void {
         .name = "uzp-material-tests",
         .root_module = material_tests_mod,
     });
-    const material_tests_step = b.step("uzp-material-tests", "Build the CPU UzEngine material writer tests");
+    const material_tests_step = b.step("uzp-material-tests", "Build the CPU tests of the .uzmat material writer");
     material_tests_step.dependOn(&b.addInstallArtifact(material_tests_exe, .{}).step);
     // The CPU baker reads high and cage mesh files with the mesh loaders (decision 311).
     bake_tests_mod.linkLibrary(mesh_lib);
