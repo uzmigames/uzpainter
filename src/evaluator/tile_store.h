@@ -75,7 +75,8 @@ struct BlendOp {
     Operand mask = Operand::Constant({1.0f, 1.0f, 1.0f}, 1.0f);
     core::BlendingMode mode = core::BlendingMode::Normal;
     float opacity = 1.0f;
-    /// An effect's mix (a mask or content effect, arith.h `CompositeInput::effectMix`).
+    /// A mask effect's mix (arith.h `CompositeInput::effectMix`; content effects take the layer
+    /// mix, decision 346).
     bool effectMix = false;
     /// The coverage-weighted source-over (arith.h `CompositeInput::coverageWeights`).
     bool coverageWeights = false;
@@ -84,6 +85,9 @@ struct BlendOp {
     bool emptyBackdrop = false;
     /// The fused read-out over the base (arith.h `CompositeInput::fusedReadout`).
     bool fusedReadout = false;
+    /// Every colour component of the source is rounded toward zero to binary16 before the blend
+    /// (arith::HalfTowardZero): the recorded Blur filter (dag.h `kRecordedBlurAsset`).
+    bool sourceHalfTowardZero = false;
     /// The composite before any write rule: `dst` is a 32-bit float tile of the source's channel
     /// count without a coverage plane, the operands keep their own formats and the clamp of UNORM
     /// formats follows the source's format (the float32 read-out the virtual normal maps read,

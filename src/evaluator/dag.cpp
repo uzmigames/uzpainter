@@ -248,6 +248,41 @@ render::Unexpected UnsupportedEffect(const core::Effect& effect, bool mask) {
                     effect.uid);
 }
 
+/// Why a content filter effect is not the one recorded configuration of the starter-asset Blur
+/// (DagEffect::Kind::RecordedBlur, decision 346), or empty when it is. Every other filter, Blur
+/// parameter, blending, channel format, resolution and colour management stays outside the
+/// profile: nothing else is evaluated as the content rounded to binary16.
+std::optional<std::string> RecordedBlurRefusal(const Context& ctx, const core::Effect& effect) {
+    const std::string owner = " (phase3.2_proc-filter-families item 2.5, decision 346)";
+    if (!effect.procedural || effect.procedural->asset != kRecordedBlurAsset) {
+        return "filter effects in content stacks are outside this profile (P3-PROC)";
+    }
+    const core::ProceduralRef& ref = *effect.procedural;
+    if (!ref.params.empty() || ref.preset || !ref.image_inputs.empty() || !ref.output_mapping.empty() ||
+        ref.mask_output || ref.resolution_override) {
+        return "the Blur filter with parameters, a preset, inputs, an output mapping or a resolution "
+               "override is not recorded" + owner;
+    }
+    const auto blendIt = effect.blending.find(ctx.channel);
+    const core::Blending blending = blendIt == effect.blending.end() ? core::Blending{} : blendIt->second;
+    if (blending.mode != BlendingMode::Normal || blending.opacity != 1.0) {
+        return "the Blur filter blended other than Normal at opacity 1 is not recorded" + owner;
+    }
+    if (ctx.format != core::ChannelFormat::RGB16 && ctx.format != core::ChannelFormat::sRGB8) {
+        return std::string("the Blur filter on a ") + std::string(core::ToString(ctx.format)) +
+               " channel is not recorded" + owner;
+    }
+    if (ctx.grid.width != kRecordedBlurResolution || ctx.grid.height != kRecordedBlurResolution) {
+        return "the Blur filter at " + std::to_string(ctx.grid.width) + " x " + std::to_string(ctx.grid.height) +
+               " is not recorded" + owner;
+    }
+    const std::string& colour = ctx.project.settings.color_management.mode;
+    if (!colour.empty() && colour != "legacy") {
+        return "the Blur filter under colour management '" + colour + "' is not recorded" + owner;
+    }
+    return std::nullopt;
+}
+
 /// Appends `effect` to `chain` with its hash chained from `previous`.
 void Chain(DagEffect& effect, const Digest& previous, std::vector<DagEffect>& chain) {
     HashWriter writer;
@@ -255,6 +290,8 @@ void Chain(DagEffect& effect, const Digest& previous, std::vector<DagEffect>& ch
     if (effect.kind == DagEffect::Kind::Fill) {
         writer.Str("fill").U32(static_cast<uint32_t>(effect.mode)).F32(effect.opacity);
         writer.Sub(effect.source->hash);
+    } else if (effect.kind == DagEffect::Kind::RecordedBlur) {
+        writer.Str("filter").Str(kRecordedBlurAsset);
     } else {
         writer.Str("levels");
         for (const arith::LevelsComponent& c : effect.levels) {
@@ -314,6 +351,12 @@ render::Result<std::vector<DagEffect>> ContentEffectsOf(const Context& ctx, cons
             for (size_t c = 0; c < 3; ++c) {
                 node.levels[c] = LevelsOf(components[components.size() == 3 ? c : 0]);
             }
+        } else if (effect.kind == core::EffectKind::filter) {
+            if (!effect.active_channels.contains(ctx.channel)) continue;
+            if (std::optional<std::string> refusal = RecordedBlurRefusal(ctx, effect)) {
+                return EvalFail(EvalErrorKind::UnsupportedNode, *refusal, effect.uid);
+            }
+            node.kind = DagEffect::Kind::RecordedBlur;
         } else {
             return UnsupportedEffect(effect, false);
         }

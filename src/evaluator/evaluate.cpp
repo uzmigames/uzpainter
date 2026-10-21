@@ -513,9 +513,12 @@ private:
     /// Runs `effects` over `start` (a layer's content or a mask) in `format`, from the highest
     /// cached output up; each output is stored in `format` (whose coverage plane is the start's:
     /// levels keep it, a fill effect over a covered backdrop keeps full coverage) and cached
-    /// under (`owner`, `kind`, the effect's chained hash).
+    /// under (`owner`, `kind`, the effect's chained hash). A mask's fill effect blends through the
+    /// effect mix a + (r - a) alpha (masks-levels.json `mask-stack-effect-mix`); a content fill
+    /// effect through the layer mix a (1 - alpha) + r alpha (Tier 0 `effect-order`, decision 346).
     render::Result<Operand> RunEffects(core::Id owner, CacheKind kind, Operand start,
                                        const std::vector<DagEffect>& effects, TileFormat format) {
+        const bool effectMix = kind == CacheKind::Mask;
         Operand acc = start;
         size_t first = 0;
         for (size_t i = effects.size(); i > 0; --i) {
@@ -552,6 +555,40 @@ private:
                 acc = Operand::Of(*dst);
                 continue;
             }
+            if (effect.kind == DagEffect::Kind::RecordedBlur) {
+                // The content rounded toward zero to binary16, blended Normal at opacity 1 (the
+                // only recorded configuration, decision 346): the result is that value, stored.
+                // The recording covers every texel; a content that may leave texels uncovered
+                // (a coverage plane) is not recorded.
+                if (format.alpha) {
+                    return EvalFail(EvalErrorKind::UnsupportedNode,
+                                    "the Blur filter over a content with uncovered texels is not recorded "
+                                    "(phase3.2_proc-filter-families item 2.5, decision 346)",
+                                    effect.uid);
+                }
+                if (acc.kind == Operand::Kind::Constant) {
+                    std::array<float, 4> value = acc.value;
+                    for (uint32_t c = 0; c < format.channels; ++c) {
+                        value[c] = arith::HalfToFloat(arith::HalfTowardZero(value[c]));
+                    }
+                    const std::array<float, 4> stored = StoredConstant(value, format);
+                    acc = Operand::Constant({stored[0], stored[1], stored[2]}, stored[3]);
+                    continue;
+                }
+                render::Result<TileHandle> dst = Allocate(key, format);
+                if (!dst) return render::Unexpected(dst.error());
+                BlendOp op;
+                op.dst = *dst;
+                op.acc = acc;
+                op.source = acc;
+                op.sourceHalfTowardZero = true;
+                render::Result<void> queued = m_env.store.Blend(op);
+                if (!queued) return render::Unexpected(queued.error());
+                ++m_stats.blends;
+                Defer(acc);
+                acc = Operand::Of(*dst);
+                continue;
+            }
             render::Result<Operand> source = SourceOperand(effect.uid, *effect.source, format);
             if (!source) return source;
             if (acc.kind == Operand::Kind::Constant && source->kind == Operand::Kind::Constant) {
@@ -561,7 +598,7 @@ private:
                 in.opacity = effect.opacity;
                 in.mode = effect.mode;
                 in.clampUnorm = format.IsUnorm();
-                in.effectMix = true;
+                in.effectMix = effectMix;
                 in.channels = format.channels;
                 const std::array<float, 4> stored = StoredConstant(arith::Composite(in), format);
                 acc = Operand::Constant({stored[0], stored[1], stored[2]}, stored[3]);
@@ -575,7 +612,7 @@ private:
             op.source = *source;
             op.mode = effect.mode;
             op.opacity = effect.opacity;
-            op.effectMix = true;
+            op.effectMix = effectMix;
             render::Result<void> queued = m_env.store.Blend(op);
             if (!queued) return render::Unexpected(queued.error());
             ++m_stats.blends;

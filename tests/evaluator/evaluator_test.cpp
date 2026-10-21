@@ -1960,7 +1960,8 @@ core::LevelsParams ParseLevels(const core::json::Object& o) {
 /// A spec effect of a content stack (`mask` false) or of a mask stack: {"kind": "fill" |
 /// "levels", "uid"?, "visible"?, ...}. A content fill effect has "sources", "active_channels"?,
 /// "blending"? and "projection"?; a mask fill effect "source", "mode"?, "opacity"? and
-/// "projection"?; a levels effect the fields of `ParseLevels`.
+/// "projection"?; a levels effect the fields of `ParseLevels`; a content filter effect "asset",
+/// "params"?, "active_channels" and "blending"?.
 core::Effect ParseEffect(Spec& spec, const core::json::Value& value, bool mask) {
     const core::json::Object& o = Obj(value, "effect");
     const std::string kind = Str(Key(o, "kind"), "effect.kind");
@@ -2006,6 +2007,22 @@ core::Effect ParseEffect(Spec& spec, const core::json::Value& value, bool mask) 
         // The document model keeps a mono blending on every mask effect; a levels effect's is
         // not evaluated (Painter's API refuses blending on it).
         if (mask) effect.mono_blending = core::Blending{};
+    } else if (kind == "filter" && !mask) {
+        effect.kind = core::EffectKind::filter;
+        core::ProceduralRef ref;
+        ref.asset = Str(Key(o, "asset"), "effect.asset");
+        if (o.contains("params")) ref.params = Obj(o.at("params"), "effect.params");
+        effect.procedural = ref;
+        for (const core::json::Value& c : Arr(Key(o, "active_channels"), "active_channels")) {
+            effect.active_channels.insert(EnumOf<ChannelType>(Str(c, "active channel"), "active channel"));
+        }
+        if (o.contains("blending")) {
+            for (const auto& [channel, entry] : Obj(o.at("blending"), "effect.blending")) {
+                const core::json::Object& b = Obj(entry, "blending entry");
+                effect.blending[EnumOf<ChannelType>(channel, "blending channel")] =
+                    Blend(EnumOf<BlendingMode>(Str(Key(b, "mode"), "mode"), "mode"), Num(Key(b, "opacity"), "opacity"));
+            }
+        }
     } else {
         throw core::ManifestError("effect.kind: unknown kind '" + kind + "'");
     }
@@ -5516,7 +5533,10 @@ int RunMasks(const fs::path& assets) {
         for (size_t i = 0; i < texels; ++i) {
             const float s = rig.G(i);
             const float r = arith::Clamp01(arith::BlendKernel(BlendingMode::Multiply, s, u));
-            const float e1 = OperandOf(StoreValue(s + (r - s) * 0.7f, tile, 0), tile, 0);
+            // A content fill effect takes the layer mix a (1 - alpha) + r alpha (decision 346).
+            const float kept = s * (1.0f - 0.7f);
+            const float added = r * 0.7f;
+            const float e1 = OperandOf(StoreValue(kept + added, tile, 0), tile, 0);
             const float e2 = OperandOf(StoreValue(arith::Levels(e1, levels), tile, 0), tile, 0);
             model.push_back(StoreValue(1.0f + (e2 - 1.0f) * 1.0f, tile, 0));
         }

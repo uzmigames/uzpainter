@@ -83,6 +83,7 @@ enum BlendFlags : uint32_t {
     kFlagCoverageWeights = 64,  ///< The coverage-weighted source-over (BlendOp::coverageWeights).
     kFlagEmptyBackdrop = 128,   ///< The backdrop is an isolated list's empty start.
     kFlagFusedReadout = 256,    ///< The fused read-out over the base (BlendOp::fusedReadout).
+    kFlagSourceHalfTowardZero = 512,  ///< The source rounded toward zero to binary16 (BlendOp).
 };
 
 /// Offsets inside a parameter block.

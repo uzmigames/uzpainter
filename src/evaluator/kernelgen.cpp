@@ -152,6 +152,7 @@ std::array<uint32_t, kBlendParamsStride> EncodeBlendParams(const BlendOp& op,
     if (op.coverageWeights) flags |= kFlagCoverageWeights;
     if (op.emptyBackdrop) flags |= kFlagEmptyBackdrop;
     if (op.fusedReadout) flags |= kFlagFusedReadout;
+    if (op.sourceHalfTowardZero) flags |= kFlagSourceHalfTowardZero;
     params[kParamFlags] = flags;
     params[kParamAccIndex] = bindings.accSrv;
     for (size_t i = 0; i < 4; ++i) params[kParamAccConst + i] = std::bit_cast<uint32_t>(op.acc.value[i]);

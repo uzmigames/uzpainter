@@ -29,11 +29,14 @@
 // value (arith::Levels); a disabled mask counts as 1; a `Mesh` geometry mask (geometry_mask.h)
 // multiplies the result. Content effects run in list order on a fill layer's own content for the
 // channel: a fill effect blends its source for the channel (when the channel is active on it)
-// with its per-channel mode and opacity through the effect mix, a levels effect remaps the
-// channel it affects; the content is stored in the channel format after every effect.
+// with its per-channel mode and opacity through the layer mix a (1 - alpha) + r alpha (decision
+// 346; masks keep the effect mix), a levels effect remaps the channel it affects, the recorded
+// Blur (`kRecordedBlurAsset`) rounds the content toward zero to binary16; the content is stored
+// in the channel format after every effect.
 //
 // Outside this profile (explicit `evaluator:unsupported_*` failures, the capability manifest's
-// release gaps): paint layers and effects, generator and filter effects (P3-PROC), compare-mask,
+// release gaps): paint layers and effects, generator and filter effects other than the recorded
+// Blur (P3-PROC), compare-mask,
 // colour-selection and anchor effects (P4-NODES), `UVTile` geometry masks, content effects on a
 // group, `Material` source mode, procedural, vector,
 // font and reference sources, the 3D projections, symmetry, physical-size UV scale modes,
@@ -106,9 +109,19 @@ struct DagSource {
     Digest hash{};
 };
 
+/// The starter-asset Blur filter in the one configuration Tier 0 `effect-order` records (decision
+/// 346): the asset at its default parameters (no parameter set), blended Normal at opacity 1 on an
+/// RGB16 or sRGB8 channel of a 256 x 256 set under legacy colour management. There its output is
+/// the content rounded toward zero to binary16. This is not a Blur implementation: every other
+/// filter, parameter, blending, format, resolution and colour management fails with
+/// `unsupported_node`, the family is uncertified and no alias names it.
+inline constexpr std::string_view kRecordedBlurAsset = "uzasset://filter/blur@1";
+inline constexpr uint32_t kRecordedBlurResolution = 256;
+
 /// One effect of a mask or of a fill layer's content stack, bottom-up.
 struct DagEffect {
-    enum class Kind : uint8_t { Fill, Levels };
+    /// RecordedBlur: the content filter `kRecordedBlurAsset` in its recorded configuration.
+    enum class Kind : uint8_t { Fill, Levels, RecordedBlur };
     Kind kind = Kind::Fill;
     core::Id uid = core::kNoId;
     /// Fill: the effect's mode and opacity (the channel's, or the mono blending of a mask effect).

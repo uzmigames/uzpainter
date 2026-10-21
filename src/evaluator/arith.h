@@ -159,8 +159,9 @@ struct CompositeInput {
     core::BlendingMode mode = core::BlendingMode::Normal;
     /// UNORM formats clamp r to [0, 1] before the opacity mix (blend-modes.json).
     bool clampUnorm = false;
-    /// The mix of an effect (a mask or content effect, parity/semantics/masks-levels.json): over
-    /// an opaque backdrop v = a + (r - a) alpha for every mode, instead of the layer mix.
+    /// The mix of a mask effect (parity/semantics/masks-levels.json): over an opaque backdrop
+    /// v = a + (r - a) alpha for every mode, instead of the layer mix. A content fill effect takes
+    /// the layer mix (Tier 0 `effect-order`, decision 346).
     bool effectMix = false;
     /// The source-over onto a backdrop that is not opaque weights its terms with the coverage it
     /// computes (profile.h `EvaluatorProfile::coverageWeights`): wb = (1 - as) ab, ao = as + wb,

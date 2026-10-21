@@ -261,6 +261,12 @@ render::Result<void> CpuTileStore::Blend(const BlendOp& op) {
             else in.acc = op.acc.value;
             if (src != nullptr) load(*src, texel, in.src);
             else in.src = op.source.value;
+            if (op.sourceHalfTowardZero) {
+                for (int c = 0; c < in.channels; ++c) {
+                    const size_t i = static_cast<size_t>(c);
+                    in.src[i] = arith::HalfToFloat(arith::HalfTowardZero(in.src[i]));
+                }
+            }
             if (mask != nullptr) {
                 const uint32_t* values = &mask->values[texel * mask->format.StoredChannels()];
                 in.mask = OperandOf(values[0], mask->format, 0);

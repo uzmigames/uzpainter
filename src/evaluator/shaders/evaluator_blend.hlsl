@@ -18,11 +18,13 @@
 // hardware arithmetic tables at the offsets of evaluator_tables.hlsli), the mask tile's
 // encoding and, for the normal-map modes, the function tables SRV (the GPU's sine and cosine,
 // hwmath.h, at the offsets UZP_POW_SIN and UZP_POW_COS). 32-bit float results are stored raw (the channel base re-composition is a read-out
-// step of evaluate.cpp). The flag FLAG_EFFECT_MIX selects the mix of an effect (a mask or content
-// effect: a + (r - a) alpha for every mode); FLAG_COVERAGE_WEIGHTS the coverage-weighted
+// step of evaluate.cpp). The flag FLAG_EFFECT_MIX selects the mix of a mask effect (a + (r - a)
+// alpha for every mode); FLAG_COVERAGE_WEIGHTS the coverage-weighted
 // source-over onto a backdrop that is not opaque, FLAG_EMPTY_BACKDROP marks the empty start of an
 // isolated list and FLAG_FUSED_READOUT the fused read-out over the base (arith.h
-// CompositeInput::coverageWeights, emptyBackdrop, fusedReadout).
+// CompositeInput::coverageWeights, emptyBackdrop, fusedReadout). FLAG_SRC_HALF_TOWARD_ZERO
+// rounds the source's colour toward zero to binary16 first (BlendOp::sourceHalfTowardZero, the
+// recorded Blur filter of dag.h).
 //
 // With UZP_LEVELS the kernel is the Levels effect instead (arith.cpp Levels, LevelsOp of
 // tile_store.h): parameter block width, height, source SRV, destination UAV, operand tables SRV,
@@ -85,6 +87,7 @@ cbuffer Root : register(b0) {
 #define FLAG_COVERAGE_WEIGHTS 64u
 #define FLAG_EMPTY_BACKDROP 128u
 #define FLAG_FUSED_READOUT 256u
+#define FLAG_SRC_HALF_TOWARD_ZERO 512u
 
 static const float kNaN = asfloat(0x7FC00000u);
 /// The SRV of the operand tables (kernelgen.h OperandTableWords), set from the parameter block.
@@ -752,6 +755,13 @@ void main(uint3 id : SV_DispatchThreadID) {
     } else {
         src = float4(asfloat(BufferWord(g_paramsSrv, base + P_SRC_CONST)), asfloat(BufferWord(g_paramsSrv, base + P_SRC_CONST + 1)),
                      asfloat(BufferWord(g_paramsSrv, base + P_SRC_CONST + 2)), asfloat(BufferWord(g_paramsSrv, base + P_SRC_CONST + 3)));
+    }
+    if (flags & FLAG_SRC_HALF_TOWARD_ZERO) {
+        src.x = HalfTowardZero(src.x);
+#if UZP_CHANNELS == 3
+        src.y = HalfTowardZero(src.y);
+        src.z = HalfTowardZero(src.z);
+#endif
     }
     float mask;
     if (flags & FLAG_MASK_TILE) {

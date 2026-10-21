@@ -3,7 +3,7 @@
 Masks, mask and content effects and Levels as the evaluator implements them (`src/evaluator/
 dag.cpp`, `evaluate.cpp`, `arith.cpp` Levels and the effect mix, `hwmath.h` log2/exp2), evaluated
 by the CPU store on the Tier 0 goldens that record them (`mask-precision`, `group-masks` s2-s3,
-`group-coverage-order`, `levels-clamp`, `effect-order` s6, `api-probes/mask-stack`), against both
+`group-coverage-order`, `levels-clamp`, `effect-order`, `api-probes/mask-stack`), against both
 recordings, as |delta|
 statistics in export units only (CONTRACT §6.4; nothing recorded is published). Also the converter
 from a Tier 0 instruction sequence with masks and effects to an evaluator spec (`spec_from_steps`).
@@ -92,6 +92,10 @@ LAYER_KINDS = {
 GETTERS = ("get_", "is_", "has_", "mask_effects", "source_mode")
 # Node uids are the step numbers moved clear of the template's object ids.
 UID_OFFSET = 1000
+# The filter `effect-order` records (default parameters) and the evaluator's asset for that one
+# configuration (src/evaluator/dag.h `kRecordedBlurAsset`, decision 346).
+RECORDED_BLUR_SEARCH = "s:starterassets u:filter n:Blur="
+RECORDED_BLUR_ASSET = "uzasset://filter/blur@1"
 
 
 class Unmodelled(AssertionError):
@@ -185,6 +189,7 @@ def spec_from_steps(
                 continue
             target = nodes[anchor]["set"]
             node = new_node(n, kind, target)
+            node["filter_search"] = args.get("filter_search")
             if target != texture_set:
                 continue
             if "above_step" in args:
@@ -265,7 +270,14 @@ def spec_from_steps(
         node = nodes[step]
         effect: dict[str, Any] = {"kind": node["kind"], "uid": node["uid"]}
         if node["kind"] == "filter":
-            raise Unmodelled(f"step {step}: filter effects are a release gap (P3-PROC)")
+            # The one recorded filter configuration (decision 346): the starter-asset Blur at its
+            # default parameters, the evaluator's `kRecordedBlurAsset`. This maps the golden's
+            # step; it is no alias (resource search still refuses the Painter name).
+            if node["filter_search"] != RECORDED_BLUR_SEARCH or node.get("in_mask"):
+                raise Unmodelled(f"step {step}: filter effects are a release gap (P3-PROC)")
+            effect["asset"] = RECORDED_BLUR_ASSET
+            effect["active_channels"] = node["active"] or []
+            return effect
         if node["kind"] == "levels":
             effect["components"] = [node["levels"] or {}]
             if not node.get("in_mask"):
@@ -331,6 +343,7 @@ MASK_MIX = ("semantics/mask-precision", ["s3"], None)
 GROUP_MASKS = ("semantics/group-masks", ["s2", "s3"], None)
 GROUP_COVERAGE = ("semantics/group-coverage-order", ["s0", "s1", "s2", "s3"], None)
 LEVELS = ("semantics/effect-order", ["s6"], None)
+EFFECT_ORDER = ("semantics/effect-order", ["s0", "s1", "s2", "s3", "s4", "s5", "s7"], None)
 LEVELS_CLAMP = ("semantics/levels-clamp", ["s0", "s1", "s2", "s3"], None)
 PROBE = ("api-probes/mask-stack", ["uzp_plane"], ["BaseColor"])
 
@@ -420,8 +433,8 @@ def build_document(exe: Path, work: Path) -> dict[str, Any]:
             "mask-stack-effect-mix",
             "The mix of a mask effect over the mask below it (two mask effects, Multiply)",
             "v = a + (r - a) alpha for every mode (the layer mix a (1 - alpha) + r alpha misses 6 "
-            "of 65536 texels of the second, Multiply, effect); the same mix is used for content "
-            "fill effects.",
+            "of 65536 texels of the second, Multiply, effect); a content fill effect takes the "
+            "layer mix instead (entry content-effect-order).",
             [PYDOC, W3C],
             [],
             runs.residuals(MASK_MIX),
@@ -531,18 +544,24 @@ def build_document(exe: Path, work: Path) -> dict[str, Any]:
             "Content effects run bottom-up in list order on the layer's own content for the "
             "channel, the content stored in the channel format after each effect: a fill effect "
             "blends its source for the channel with its per-channel mode and opacity through the "
-            "effect mix, a levels effect remaps its affected channel only.",
-            [PYDOC],
+            "layer mix fl(fl(a fl(1 - alpha)) + fl(r alpha)) with r = kernel(mode, a, b) (not the "
+            "mask effect mix fl(a + fl(fl(r - a) alpha))), a levels effect remaps its affected "
+            "channel only, and the starter-asset Blur at its default parameters, Normal at "
+            "opacity 1, on this 256 x 256 RGB16 or sRGB8 content is the content rounded toward "
+            "zero to binary16.",
+            [PYDOC, W3C],
             [],
-            [],
+            runs.residuals(EFFECT_ORDER),
             notes=(
-                "Release gap until P3-PROC: every Tier 0 order but s6 (levels alone, entry "
-                "`levels`) and s7 (Blur alone) holds the starter-asset Blur filter, so the order "
-                "of fill and levels effects and the content fill effect's mix are implemented "
-                "from the documented list order and the fitted mask-effect mix but not observed. "
-                "s0-s5 and s7 are owned by phase3.2_proc-filter-families item 3.4 (decision 069)."
+                "Decision 346. The Blur rule holds only in that recorded configuration: it is "
+                "not a Blur implementation, every other filter, parameter, blending, format, "
+                "resolution and colour management fails with unsupported_node, the family is "
+                "uncertified and no alias names it. Evidence that no kernel acts there: the "
+                "linear fields of s7 (codes 257 x, 257 y, 256 x + y) are unchanged at the texture "
+                "borders, which bounds any kernel weight off the centre below 0.002. With the "
+                "mask effect mix the content fill effect misses s3 on 20 values, s4 on 32, s0, "
+                "s1 and s2 on 1 or 2 (one 16-bit code, RGB16). s6 is entry `levels`."
             ),
-            gap=True,
         ),
         entry(
             "geometry-mask-mesh",
@@ -565,6 +584,7 @@ def build_document(exe: Path, work: Path) -> dict[str, Any]:
             GROUP_MASKS,
             GROUP_COVERAGE,
             LEVELS,
+            EFFECT_ORDER,
             LEVELS_CLAMP,
             PROBE,
         )

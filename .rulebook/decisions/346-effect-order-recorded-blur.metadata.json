@@ -1,0 +1,12 @@
+{
+  "id": 346,
+  "slug": "346-effect-order-recorded-blur",
+  "title": "Tier 0 effect-order s0-s5 and s7 replay exactly: the content fill effect uses the layer mix, and the starter Blur at its recorded configuration is the content rounded toward zero to binary16; this is not a Blur implementation",
+  "status": "accepted",
+  "date": "2026-10-21",
+  "relatedTasks": [
+    "phase3.2_proc-filter-families",
+    "phase1.11_compositor-mask-effects"
+  ],
+  "supersededBy": null
+}

@@ -258,10 +258,65 @@ def test_content_effect_levels_equals_the_golden(
     evaluator_tests: Path, srgb8_decode: np.ndarray, tmp_path: Path, backend: str
 ) -> None:
     """3.3: `effect-order` s6 (levels alone, input 0.1-0.8, gamma 1.6, output 0.05-0.95, one
-    effect per channel) on RGB16 and sRGB8. The other orders contain the starter-asset Blur
-    filter, a release gap until P3-PROC; the order of fill and levels effects is the list order
-    (unit case `masks`)."""
+    effect per channel) on RGB16 and sRGB8. The other orders, around the starter-asset Blur, are
+    `test_content_effect_order_equals_the_golden` (decision 346)."""
     assert_golden(evaluator_tests, tmp_path, srgb8_decode, "effect-order", "s6", backend)
+
+
+@pytest.mark.parametrize("backend", backends())
+@pytest.mark.parametrize("texture_set", ["s0", "s1", "s2", "s3", "s4", "s5", "s7"])
+def test_content_effect_order_equals_the_golden(
+    evaluator_tests: Path, srgb8_decode: np.ndarray, tmp_path: Path, texture_set: str, backend: str
+) -> None:
+    """phase3.2_proc-filter-families 3.4 (phase1.11 3.3, decisions 069, 346): `effect-order` s0 FLB,
+    s1 FBL, s2 LFB, s3 LBF, s4 BFL, s5 BLF and s7 B (a fill effect F, Multiply 0.7; levels L; the
+    starter-asset Blur B at its default parameters) on RGB16 and sRGB8 equal both recordings. The
+    effects run in list order, stored in the channel format after each; the content fill effect
+    takes the layer mix a (1 - alpha) + r alpha; the recorded Blur is the content rounded toward
+    zero to binary16 (only in that configuration: `test_blur_outside_the_recording_is_refused`)."""
+    assert_golden(evaluator_tests, tmp_path, srgb8_decode, "effect-order", texture_set, backend)
+
+
+@pytest.mark.parametrize(
+    ("change", "refusal"),
+    [
+        ("params", "the Blur filter with parameters"),
+        ("blending", "the Blur filter blended other than Normal at opacity 1"),
+        ("resolution", "the Blur filter at 512 x 512"),
+        ("format", "the Blur filter on a RGB32F channel"),
+        ("asset", "filter effects in content stacks are outside this profile"),
+    ],
+)
+def test_blur_outside_the_recording_is_refused(
+    evaluator_tests: Path, tmp_path: Path, change: str, refusal: str
+) -> None:
+    """Decision 346: the evaluator rounds the content to binary16 for the starter Blur only in the
+    configuration `effect-order` records. A Blur parameter other than the defaults, another
+    blending, resolution or channel format, or another filter asset fails with
+    `unsupported_node`; nothing else is evaluated as that rounding."""
+    needs_store()
+    document = envelope_manifest("semantics/effect-order")
+    spec = spec_from_steps(document, "s7", tmp_path, ["User0"])
+    (layer,) = spec["layers"]
+    (blur,) = layer["effects"]
+    assert blur["kind"] == "filter"
+    if change == "params":
+        blur["params"] = {"intensity": 0.5}
+    elif change == "blending":
+        blur["blending"] = {"User0": {"mode": "Multiply", "opacity": 1.0}}
+    elif change == "resolution":
+        # A uniform content, so that nothing but the Blur is outside a recording at 512.
+        spec["resolution"] = [512, 512]
+        uniform = {"uniform": [0.25, 0.5, 0.75], "color_space": "Working"}
+        layer["sources"] = {channel: dict(uniform) for channel in layer["sources"]}
+    elif change == "format":
+        spec["channels"] = [{"type": "User0", "format": "RGB32F"}, *spec["channels"][1:]]
+    else:
+        blur["asset"] = "uzasset://filter/sharpen@1"
+    with pytest.raises(AssertionError) as failure:
+        evaluate(evaluator_tests, spec, tmp_path, "cpu")
+    assert "unsupported_node" in str(failure.value)
+    assert refusal in str(failure.value)
 
 
 def test_mask_stack_probe_equals_r1(

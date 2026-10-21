@@ -501,7 +501,7 @@
       "entry_id": "mask-stack-effect-mix",
       "subject": "The mix of a mask effect over the mask below it (two mask effects, Multiply)",
       "status": "exact",
-      "formula": "v = a + (r - a) alpha for every mode (the layer mix a (1 - alpha) + r alpha misses 6 of 65536 texels of the second, Multiply, effect); the same mix is used for content fill effects.",
+      "formula": "v = a + (r - a) alpha for every mode (the layer mix a (1 - alpha) + r alpha misses 6 of 65536 texels of the second, Multiply, effect); a content fill effect takes the layer mix instead (entry content-effect-order).",
       "public_sources": [
         {
           "source_id": "A-PYDOC",
@@ -2295,17 +2295,442 @@
     {
       "entry_id": "content-effect-order",
       "subject": "Content effects in list order (fill effect and levels)",
-      "status": "gap",
-      "formula": "Content effects run bottom-up in list order on the layer's own content for the channel, the content stored in the channel format after each effect: a fill effect blends its source for the channel with its per-channel mode and opacity through the effect mix, a levels effect remaps its affected channel only.",
+      "status": "exact",
+      "formula": "Content effects run bottom-up in list order on the layer's own content for the channel, the content stored in the channel format after each effect: a fill effect blends its source for the channel with its per-channel mode and opacity through the layer mix fl(fl(a fl(1 - alpha)) + fl(r alpha)) with r = kernel(mode, a, b) (not the mask effect mix fl(a + fl(fl(r - a) alpha))), a levels effect remaps its affected channel only, and the starter-asset Blur at its default parameters, Normal at opacity 1, on this 256 x 256 RGB16 or sRGB8 content is the content rounded toward zero to binary16.",
       "public_sources": [
         {
           "source_id": "A-PYDOC",
           "locator": "substance_painter.layerstack: LayerNode.add_mask, MaskBackground, insert_fill (mask and content stacks), FillEffectNode, LevelsEffectNode and its parameters, Node.set_blending_mode"
+        },
+        {
+          "source_id": "S-W3C-BLEND",
+          "locator": "§5.1 simple alpha compositing; §10 blend modes (the mask kernels)"
         }
       ],
       "parameters": [],
-      "residuals": [],
-      "notes": "Release gap until P3-PROC: every Tier 0 order but s6 (levels alone, entry `levels`) and s7 (Blur alone) holds the starter-asset Blur filter, so the order of fill and levels effects and the content fill effect's mix are implemented from the documented list order and the fitted mask-effect mix but not observed. s0-s5 and s7 are owned by phase3.2_proc-filter-families item 3.4 (decision 069)."
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s0/user0",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s0/user0",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s0/user1",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s0/user1",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s1/user0",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s1/user0",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s1/user1",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s1/user1",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s2/user0",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s2/user0",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s2/user1",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s2/user1",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s3/user0",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s3/user0",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s3/user1",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s3/user1",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s4/user0",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s4/user0",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s4/user1",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s4/user1",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s5/user0",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s5/user0",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s5/user1",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s5/user1",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s7/user0",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s7/user0",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s7/user1",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s7/user1",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        }
+      ],
+      "notes": "Decision 346. The Blur rule holds only in that recorded configuration: it is not a Blur implementation, every other filter, parameter, blending, format, resolution and colour management fails with unsupported_node, the family is uncertified and no alias names it. Evidence that no kernel acts there: the linear fields of s7 (codes 257 x, 257 y, 256 x + y) are unchanged at the texture borders, which bounds any kernel weight off the centre below 0.002. With the mask effect mix the content fill effect misses s3 on 20 values, s4 on 32, s0, s1 and s2 on 1 or 2 (one 16-bit code, RGB16). s6 is entry `levels`."
     },
     {
       "entry_id": "geometry-mask-mesh",
