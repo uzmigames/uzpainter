@@ -714,16 +714,21 @@ def test_receipt_schema_copies_the_pinned_assets3d_export_block() -> None:
     assert schema["properties"]["manifest_export"] == {
         "anyOf": [{"$ref": "#/$defs/export"}, {"type": "null"}]
     }
-    # The checkout beside this one, or beside the folder of a git worktree of it.
-    for assets3d in (REPO_ROOT.parent / "Assets3D", REPO_ROOT.parent.parent / "Assets3D"):
-        shown = subprocess.run(
-            ["git", "-C", str(assets3d), "show", f"{A3D_COMMIT}:{A3D_SCHEMA}"],
-            capture_output=True,
-            check=False,
-        )
-        if shown.returncode == 0:
-            break
-    else:
+    # The checkout beside this repository's main checkout: the parent of the git directory all of
+    # its worktrees share, wherever a worktree lives (even nested inside the main checkout).
+    common = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "rev-parse", "--path-format=absolute", "--git-common-dir"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assets3d = Path(common.stdout.strip()).parent.parent / "Assets3D"
+    shown = subprocess.run(
+        ["git", "-C", str(assets3d), "show", f"{A3D_COMMIT}:{A3D_SCHEMA}"],
+        capture_output=True,
+        check=False,
+    )
+    if common.returncode != 0 or shown.returncode != 0:
         pytest.skip("the Assets3D checkout with the pinned commit is not beside this repository")
     pinned = json.loads(shown.stdout)
     original = {name: pinned["$defs"][name] for name in A3D_DEFS}
