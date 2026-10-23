@@ -415,6 +415,7 @@ def test_a_virtual_normal_on_uv_islands_is_refused_per_source(run: Run) -> None:
 
 SNAPSHOT = """
 stack = create()
+initial = diagnostics.snapshot_layer_tree()
 a = ls.insert_fill(top(stack))
 a.set_name("A")
 a.active_channels = {CT.BaseColor}
@@ -431,7 +432,8 @@ b_uid = b.uid()
 ls.delete_node(b)
 a.set_visible(False)
 last = diagnostics.snapshot_layer_tree()
-result = {"first": first, "uids": {"a": a.uid(), "b": b_uid, "fx": fx.uid(), "group": group.uid()},
+result = {"initial": initial, "first": first,
+          "uids": {"a": a.uid(), "b": b_uid, "fx": fx.uid(), "group": group.uid()},
           "same": diagnostics.diff_snapshots(first, again),
           "later": diagnostics.diff_snapshots(
               opacity, dict(opacity, revision=opacity["revision"] + 7)),
@@ -448,8 +450,11 @@ def test_snapshot_diff_reports_exactly_the_seeded_changes(run: Run) -> None:
     first = r["first"]
     assert first["schema"] == "uzpainter/layer-tree/1"
     [stack] = first["stacks"]
-    # Root layers top first.
-    assert [n["uid"] for n in first["nodes"]] == [uids["b"], uids["a"]]
+    # Project creation includes Painter's empty bottom paint layer (decision 348).
+    [paint] = r["initial"]["nodes"]
+    assert paint["kind"] == "paint" and paint["name"] == "Layer 1"
+    assert [n["uid"] for n in first["nodes"]] == [uids["b"], uids["a"], paint["uid"]]
+    assert first["nodes"][-1] == {**paint, "index": 2}
     b = first["nodes"][0]
     assert {k: b[k] for k in ("node", "kind", "name", "visible", "parent", "slot", "index")} == {
         "node": "layer",
