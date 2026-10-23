@@ -30,6 +30,6 @@
 - [ ] 4.1 Acceptance: exact-signature serving byte-equal; mismatches unavailable; snapshots project-private
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
-- [ ] 5.1 Update or create documentation covering the implementation
-- [ ] 5.2 Write tests covering the new behavior
-- [ ] 5.3 Run tests and confirm they pass
+- [x] 5.1 Update or create documentation covering the implementation (`docs/procedural-snapshots.md`, decision 327)
+- [x] 5.2 Write tests covering the new behavior (native snapshot/ingestion tests, bridge controls and installed CLI preflight)
+- [x] 5.3 Run tests and confirm they pass (56 bridge/CLI/provenance tests, Ruff and mypy; licensed Painter capture and `inspect --verify`, 2026-10-23). Full-suite acceptance and prerequisite 1.1 remain open.
