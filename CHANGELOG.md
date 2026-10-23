@@ -12,6 +12,7 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
 
 ### Added
 
+- Authored SpecularWeight empty-channel base probes for the default and Alpha-blend project templates, each at L8, L16 and L32F, with repeated EXR32F/PNG16 exports and recorder save/reopen. These requests support the open UzEngine preset evidence; recording, defaults and acceptance remain pending.
 - Export receipts now identify the actual CPU or GPU execution backend, adapter and driver. Missing GPU identity refuses publication before evaluation or filesystem changes; historical receipts remain readable. Capture uses the active device's driver identity.
 - Qualified Vulkan devices now serve worker exports, CLI exports and viewport capture. CLI jobs acquire the selected backend after preflight and finish before the final report; worker GPU faults preserve unpublished generations and trigger recovery, including faults from background Python jobs.
 - Vulkan worker admission uses the queried tile budget before project creation and mutation, with explicit transactions checked at their final state. Debug tests cover conservative heap-based admission, device loss, stalls and unavailable devices.

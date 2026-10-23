@@ -1266,6 +1266,46 @@ REMAINING_BASE_TEMPLATES = (
 TEMPLATE_BASE_MAPS = ["documentMap/basecolor:RGB", "documentMap/specular:RGB"]
 
 
+def specularweight_base_probes() -> list[Golden]:
+    """Observe an existing empty channel, not the export planner's absent-channel skip.
+
+    A missing preset channel is skipped; an existing SpecularWeight channel currently
+    fails evaluation with missing_base_value. These requests establish neither a fallback
+    for absent channels nor a base outside the captured template/format combinations.
+    """
+    probes = []
+    for template in (None, ALPHA_BLEND):
+        template_name = "default" if template is None else "alpha-blend"
+        for channel_format in ("L8", "L16", "L32F"):
+            s = start("plane", template)
+            s.channels((("SpecularWeight", channel_format),))
+            maps = ["documentMap/specularweight:L"]
+            export(s, maps, EXR32F, "infinite")
+            export(s, maps, PNG16, "infinite")
+            probes.append(
+                Golden(
+                    f"specularweight-empty-base-{template_name}-{channel_format.lower()}",
+                    "tier0/stack/base-values",
+                    "SpecularWeight empty-channel base (phase3.2_uze-uzmat-preset items "
+                    "2.7 and 3.4): an empty plane at 256 px under Legacy, "
+                    + ("no template" if template is None else f"template {template}")
+                    + f", with SpecularWeight freshly added as {channel_format}; no inserted "
+                    "layers or assigned sources. Export documentMap/specularweight:L twice "
+                    "as OpenEXR 32f "
+                    "and twice as PNG 16, infinite padding, no dithering; recorder repeats "
+                    "exports after save and reopen. An absent channel remains a skipped "
+                    "preset map; an existing channel with no observed base currently raises "
+                    "missing_base_value. This capture does not authorise a fallback for "
+                    "absent channels or other templates/formats.",
+                    "plane",
+                    ["plane"],
+                    s,
+                    template=template,
+                )
+            )
+    return probes
+
+
 def template_base(template: str) -> Golden:
     s = start("plane", template)
     export(s, TEMPLATE_BASE_MAPS, EXR32F, "infinite")
@@ -2090,6 +2130,7 @@ def later_goldens() -> list[Golden]:
         export_presets_gltf(ocio=True),
         blend_subnormal(),
         ao_mixed_grid_probe(),
+        *specularweight_base_probes(),
     ]
 
 
