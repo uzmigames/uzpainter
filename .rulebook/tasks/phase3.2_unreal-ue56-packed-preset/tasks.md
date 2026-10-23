@@ -247,3 +247,11 @@ Validation: 60 request/catalog tests and 99 shelf/recorder/provenance tests pass
 Ruff, format and mypy pass. Manifests and five recipes match the generator.
 No recording ran during the full GPU suite; item 2.1 remains open until the
 actual outputs are admitted, and no preset defaults are accepted by these tests.
+
+The next recording batch shares at most 60 minutes with the endpoint-plane and
+AO product controls, followed by at most 30 minutes initial analysis. It starts
+after the full suite releases the GPU. Its private ledger records elapsed time;
+timeout, identity/precondition failure or completed repeats/reopen ends the
+batch. The AO prediction and R-322 processing controls stay unchanged after
+observation; failed preconditions and residuals are published before another
+experiment. These limits grant no tolerance or acceptance.

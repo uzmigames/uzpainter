@@ -63,3 +63,19 @@ arithmetic checks every input pair; tests also verify mesh assignments, empty
 versus explicit-white layers, repeats, save/reopen declaration, fixture hashes
 and generated request. Ruff, mypy and the generated-catalog check pass. No new
 Painter capture, admission, implementation acceptance or task completion is claimed.
+
+The next capture shares a 60-minute live-recording budget with the endpoint-plane
+and R-322 controls, after the full suite releases the GPU; initial CPU analysis
+has a separate 30-minute budget. The private ledger records elapsed times. Stop
+on timeout, changed identity, failed preconditions or completed repeats/reopen.
+The exact operand/product checks and prediction above remain frozen; a failed
+control is reported before another experiment is selected.
+
+CPU verifier: `python -m tools.parity.fit.ao_operand_control`. The raw private
+record must match the current envelope, unique identities and the frozen protocol
+hash `2961757c5df30fd45fdf084bb33bd8837800b8633b9e70376ee60bbe26c5969d`.
+The published mesh/product EXR hashes are checked independently. Both recordings
+must expose four 256px AO L32F sets and all 96 exports. The report retains every
+operand/product precondition, repeat/reopen comparison and prediction residual,
+using hashes and counts only. Twenty-eight CPU checks, Ruff and mypy pass;
+missing oracle data remains unavailable rather than a pass.
