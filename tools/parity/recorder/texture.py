@@ -599,6 +599,10 @@ def record_once(
     operator_outputs: tuple[list[dict[str, Any]], list[Path]] = ([], []),
 ) -> tuple[dict[str, Any], list[Path]]:
     session.wait_ready()
+    if job.export_probes or any(
+        API_CAPTURES[step.call][0] == "presets" for step in job.api_captures
+    ):
+        session.wait_catalog_ready()
     template = session.call("template_capture")
     outputs: list[dict[str, Any]] = [
         {

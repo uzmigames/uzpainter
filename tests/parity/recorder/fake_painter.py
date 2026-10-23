@@ -556,6 +556,8 @@ class FakeWorld:
         self.export_path: str | None = None  # Settings.export_path of the open project
         self.default_channels = dict(CHANNEL_FORMATS)  # a project created without a template
         self.shelf_path: Path | None = None  # application shelf (templates are its .spt files)
+        self.shelf_refreshes = 0
+        self.shelf_crawling_polls = 0
         self.template_channels: dict[str, dict[ChannelType, ChannelFormat]] = {}
         self.baking = fake_baking_parameters()
         self.enabled_bakers = [MeshMapUsage.Normal, MeshMapUsage.AO]
@@ -1141,12 +1143,26 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
     )
 
     class Shelf:
+        def is_crawling(self) -> bool:
+            if world.shelf_crawling_polls <= 0:
+                return False
+            world.shelf_crawling_polls -= 1
+            return True
+
         def path(self) -> str:
             if world.shelf_path is None:
                 raise ValueError("the shelf doesn't exist anymore")
             return str(world.shelf_path)
 
     class Shelves:
+        @staticmethod
+        def refresh_all() -> None:
+            world.shelf_refreshes += 1
+
+        @staticmethod
+        def all() -> list[Shelf]:
+            return [Shelf()]
+
         @staticmethod
         def application_shelf() -> Shelf:
             return Shelf()

@@ -190,7 +190,7 @@ class ProjectState:
 
 
 # Readiness polls: never preceded by an identity check (they run in tight loops).
-UNVERIFIED_OPERATIONS = frozenset({"hello", "state", "baking_state"})
+UNVERIFIED_OPERATIONS = frozenset({"hello", "state", "baking_state", "catalog_ready"})
 
 BuildPolicy = Callable[[], frozenset[str]]
 
@@ -406,6 +406,23 @@ class PainterSession:
 
     def wait_ready(self, timeout_s: float = 600.0) -> ProjectState:
         return self.wait_for(lambda s: s.ready, "the project to be ready", timeout_s)
+
+    def wait_catalog_ready(self, timeout_s: float = 120.0) -> None:
+        """Refresh once, then poll documented crawling state; never capture a partial catalog."""
+        self.call("refresh_catalog")
+        deadline = self.monotonic() + timeout_s
+        while True:
+            ready = self.call("catalog_ready")
+            if not isinstance(ready, bool):
+                raise RecorderError("shelf readiness did not return a boolean")
+            if ready:
+                return
+            remaining = deadline - self.monotonic()
+            if remaining <= 0:
+                raise RecorderError(
+                    f"timed out after {timeout_s:.0f} s waiting for shelf discovery"
+                )
+            self.sleep(min(self.poll_interval_s, remaining))
 
     def wait_closed(self, timeout_s: float = 600.0) -> ProjectState:
         return self.wait_for(lambda s: not s.is_open, "the project to close", timeout_s)

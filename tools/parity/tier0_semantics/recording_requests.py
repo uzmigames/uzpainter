@@ -41,6 +41,7 @@ from tools.parity.schemas import Schema, validation_errors
 from tools.parity.tier0_semantics import ao_operand_control as ao_control
 from tools.parity.tier0_semantics import padding_plane_control as plane_control
 from tools.parity.tier0_semantics import request_fixtures as rf
+from tools.parity.tier0_semantics import unreal_preset_control as unreal_control
 from tools.parity.tier0_semantics.corpus import (
     BLEND_FAMILIES,
     FIXTURE_DIR,
@@ -77,6 +78,7 @@ Generate = Callable[[], bytes]
 def probe_groups() -> dict[str, dict[str, Config]]:
     """Literal export configurations per golden: group -> probe id -> configuration."""
     return {
+        **unreal_control.probe_groups(),
         "padding-islands": rf.alpha_probes(
             ("uzp_islands",),
             (
@@ -2282,6 +2284,8 @@ def later_goldens() -> list[Golden]:
         padding_window_side_probe(),
         padding_normal_combine_probe(),
         padding_corner_reach_probe(),
+        unreal_control.request(ocio=False),
+        unreal_control.request(ocio=True),
         export_presets_gltf(ocio=False),
         export_presets_gltf(ocio=True),
         export_presets_gltf(ocio=False, predefined=True),

@@ -1675,7 +1675,18 @@ def show_node(args: dict[str, Any]) -> dict[str, Any]:
     return {"name": node.get_name(), "texture_set": node.get_stack().material().name()}
 
 
+def refresh_catalog(args: dict[str, Any]) -> None:
+    """Start documented shelf discovery before recording resource-preset observations."""
+    substance_painter.resource.Shelves.refresh_all()
+
+
+def catalog_ready(args: dict[str, Any]) -> bool:
+    return not any(shelf.is_crawling() for shelf in substance_painter.resource.Shelves.all())
+
+
 OPERATIONS = {
+    "refresh_catalog": refresh_catalog,
+    "catalog_ready": catalog_ready,
     "hello": hello,
     "state": state,
     "apply_step": apply_step,

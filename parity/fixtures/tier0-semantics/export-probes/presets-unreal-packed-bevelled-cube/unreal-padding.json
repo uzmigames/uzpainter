@@ -1,0 +1,16 @@
+{
+  "defaultExportPreset": "resource://starter_assets/Unreal Engine (Packed)?version=8339356058946582545.spexp",
+  "exportList": [
+    {
+      "rootPath": "uzp_bevelled_cube"
+    }
+  ],
+  "exportParameters": [
+    {
+      "parameters": {
+        "paddingAlgorithm": "infinite"
+      }
+    }
+  ],
+  "exportShaderParams": false
+}

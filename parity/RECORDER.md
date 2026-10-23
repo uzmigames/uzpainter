@@ -78,6 +78,11 @@ Enum arguments accept only the documented member names listed in `painter_side.p
 
 **Storage format** is measured from the file: PNG IHDR and colour chunks, the OpenEXR channel list, or a TGA8 header and validated pixel stream. If the file states no encoding, the encoding comes from the source channel's documented storage (`textureset.ChannelFormat`: `sRGB8` is sRGB, the others are linear), and `export_settings.encoding_basis` says which applies. A `meshMap` export that states no encoding is linear with basis `baked_mesh_map`: a baked mesh map stores data, not colour. A converted virtual map (Diffuse, Specular, Glossiness, Glossiness2, Unity4Diff, Unity4Gloss, reflection, 1/ior, f0, View_2D) and an export probe's file derive from no single channel: when the file states no encoding the record says `undetermined` (basis `converted_virtual_map` or `export_probe`) and makes no colour-space claim (decision 087).
 
+Before preset readbacks or export probes, each recording refreshes the documented
+shelf catalog and polls `Shelf.is_crawling()` until every shelf is ready. The same
+check runs after Full save/reopen. A 120-second timeout or malformed readiness
+result refuses capture instead of recording a partial resource catalog.
+
 TGA capture and the fit decoder share `tools/parity/tga.py`: uncompressed or RLE
 L/LA/RGB/RGBA with explicit 8-bit alpha where present. Both image origins are
 normalized to top-first RGB-order samples without colour conversion. Palette,
@@ -523,6 +528,19 @@ outputs; the projection settings are pinned in the instruction sequence.
 Channel readbacks do not reveal the pre-write AO_Mixed operand, and
 the request presumes no operator or exact result. Authored only; not recorded
 or admitted, and not part of the existing Wand recording operation.
+
+R-322 now has separate `export-presets-unreal-packed-legacy` and
+`export-presets-unreal-packed-ocio` requests. Run each in its matching colour
+session through the same recorder command. The authored bevelled cube uses the
+distinct R-314 channel sources and mesh maps, with the versioned resource URL
+observed in R-314 Legacy r2 (private record
+`e729f2294b0d4acc019a2fa7b025c01df0821fa9dd9acf78ee00fcce4e4ce2fd`).
+Five probes preserve all own defaults, override only padding, pair PNG8/TGA8
+with identical explicit processing, or use pipeline PNG16. They capture actual
+resource output-map lists and dry-run lists before export, with immediate
+repeats and Full save/reopen. Refusals remain observations; no fallback preset or
+inferred default is substituted. These requests are authored, not yet captured;
+UE import, DDS cooking and pilot acceptance require their separate evidence.
 
 ### 11.3 After the sessions
 
