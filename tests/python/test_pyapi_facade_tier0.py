@@ -355,6 +355,7 @@ def replay(facade: Run, probe: str, work: Path) -> tuple[dict[str, Any], dict[st
 # ── Normalisation and comparison ────────────────────────────────────────────────────────────────
 
 CONTEXT = re.compile(r"^project(\d+)$")
+RESOURCE_URL = re.compile(r"^resource://project(\d+)(?=/)")
 
 
 def contexts(value: Any, found: set[int]) -> None:
@@ -362,6 +363,12 @@ def contexts(value: Any, found: set[int]) -> None:
         for key, item in value.items():
             if key == "context" and isinstance(item, str) and CONTEXT.match(item):
                 found.add(int(item[len("project") :]))
+            elif (
+                key == "resource_url"
+                and isinstance(item, str)
+                and (url := RESOURCE_URL.match(item)) is not None
+            ):
+                found.add(int(url[1]))
             else:
                 contexts(item, found)
     elif isinstance(value, list):
@@ -376,6 +383,10 @@ def shift_contexts(value: Any, base: int) -> Any:
         for key, item in value.items():
             if key == "context" and isinstance(item, str) and CONTEXT.match(item):
                 out[key] = f"project{int(item[len('project') :]) - base}"
+            elif key == "resource_url" and isinstance(item, str) and RESOURCE_URL.match(item):
+                out[key] = RESOURCE_URL.sub(
+                    lambda match: f"resource://project{int(match[1]) - base}", item, count=1
+                )
             else:
                 out[key] = shift_contexts(item, base)
         return out
