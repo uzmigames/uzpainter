@@ -213,3 +213,17 @@ Item 2.5 stays open: Painter TGA processing/file evidence R-322 and export
 integration remain unadmitted. The public export configuration still refuses
 TGA; no PNG processing rules were silently reused. No Painter or GPU ran, and
 no Unreal preset or consumer acceptance is claimed.
+
+## 12. TGA recorder preparation (2026-10-23)
+
+The recorder measures TGA8 from its header and complete pixel stream. Its shared
+reader preserves L/LA/RGB/RGBA codes, RLE/raw packets, alpha and both image origins;
+the fit decoder uses the same samples without colour conversion. Optional TGA 2.0
+extension/developer areas are explicitly outside this domain: their indirect
+offsets must not let metadata satisfy missing pixels. The source fingerprint
+includes this reader. Storage encoding retains the documented source basis.
+
+Validation: 150 CPU capture/TGA/envelope regressions pass; Ruff, format and mypy
+pass on all five changed Python files. Independent review also decoded 30 native
+writer files byte-exactly. This prepares recording only; actual Painter metadata
+compatibility, item 2.5 and R-322 acceptance remain open.

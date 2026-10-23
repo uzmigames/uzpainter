@@ -167,7 +167,11 @@ def recorder_version() -> str:
     """`RECORDER_VERSION+src.<digest>`: the digest covers every recorder source (line endings
     normalised), so a code change of the recorder is visible in the record."""
     digest = hashlib.sha256()
-    sources = [*sorted(RECORDER_DIR.glob("*.py")), RECORDER_DIR / "documented_symbols.json"]
+    sources = [
+        *sorted(RECORDER_DIR.glob("*.py")),
+        RECORDER_DIR / "documented_symbols.json",
+        RECORDER_DIR.parent / "tga.py",
+    ]
     for path in sources:
         digest.update(path.name.encode("utf-8") + b"\0")
         digest.update(path.read_bytes().replace(b"\r\n", b"\n") + b"\0")

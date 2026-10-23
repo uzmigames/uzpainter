@@ -76,7 +76,18 @@ Enum arguments accept only the documented member names listed in `painter_side.p
 
 **Captures (recordings R5-R7, decision 100).** The export-preset captures and the bitmap colour-space capture are read, like export probes, after the state steps in both recordings, in step order with the export steps and probes. Each is a private `api_readback`, `presets/s<n>` or `color-spaces/s<n>`. What Painter raises (an unknown preset, an invalid stack, a source that is not a bitmap) is recorded as `raised` and does not refuse the golden. Malformed arguments refuse the golden before Painter is touched. A texture golden may consist of captures and probes alone.
 
-**Storage format** is measured from the file: PNG IHDR and colour chunks, and the OpenEXR channel list. If the file states no encoding, the encoding comes from the source channel's documented storage (`textureset.ChannelFormat`: `sRGB8` is sRGB, the others are linear), and `export_settings.encoding_basis` says which applies. A `meshMap` export that states no encoding is linear with basis `baked_mesh_map`: a baked mesh map stores data, not colour. A converted virtual map (Diffuse, Specular, Glossiness, Glossiness2, Unity4Diff, Unity4Gloss, reflection, 1/ior, f0, View_2D) and an export probe's file derive from no single channel: when the file states no encoding the record says `undetermined` (basis `converted_virtual_map` or `export_probe`) and makes no colour-space claim (decision 087).
+**Storage format** is measured from the file: PNG IHDR and colour chunks, the OpenEXR channel list, or a TGA8 header and validated pixel stream. If the file states no encoding, the encoding comes from the source channel's documented storage (`textureset.ChannelFormat`: `sRGB8` is sRGB, the others are linear), and `export_settings.encoding_basis` says which applies. A `meshMap` export that states no encoding is linear with basis `baked_mesh_map`: a baked mesh map stores data, not colour. A converted virtual map (Diffuse, Specular, Glossiness, Glossiness2, Unity4Diff, Unity4Gloss, reflection, 1/ior, f0, View_2D) and an export probe's file derive from no single channel: when the file states no encoding the record says `undetermined` (basis `converted_virtual_map` or `export_probe`) and makes no colour-space claim (decision 087).
+
+TGA capture and the fit decoder share `tools/parity/tga.py`: uncompressed or RLE
+L/LA/RGB/RGBA with explicit 8-bit alpha where present. Both image origins are
+normalized to top-first RGB-order samples without colour conversion. Palette,
+packed RGB, interleaved rows, ambiguous alpha, truncated packets and dimensions
+outside the native writer's byte-count limit are refused. Image identifiers and
+empty TGA 2.0 footers are not decoded as texels; optional extension/developer areas
+are refused because they can reference metadata before their top-level offsets.
+Encoding metadata is not inferred from TGA filenames; the documented source basis above
+still applies. The shared reader enters the recorder source fingerprint. These
+authored-byte checks enable R-322 capture; they do not establish Painter TGA parity.
 
 **Operator step (UI-set values; decisions 029, 047; `texture_sheet.py`).** Some Tier 0 cases depend on values that only Painter's UI can set. Their manifest names each value in `applied_settings` with `applied_by: operator_settings_sheet`, one entry per target:
 

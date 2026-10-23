@@ -1,7 +1,8 @@
 """Pixel capture checks: measured storage format, current-output verification, silhouette.
 
 - Storage format (`golden-private.json` `storage_format`) is measured from the file bytes: PNG
-  IHDR and colour chunks, OpenEXR channel list. Never inferred from a map name.
+  IHDR and colour chunks, OpenEXR channel list, TGA header and pixel stream.
+  Never inferred from a map name.
 - Current-output verification (task items 2.3, 2.4): before a capture the recorder writes a fence
   file after the last applied instruction (and, for Iray, after convergence). A capture is
   accepted only if it is exactly the set of files the capture call reported, in a directory that
@@ -19,13 +20,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from tools.parity import tga
 from tools.parity.recorder.session import RecorderError
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 EXR_MAGIC = 20000630
 PNG_CHANNELS = {0: 1, 2: 3, 3: 3, 4: 2, 6: 4}
 EXR_SAMPLE_TYPES = {0: ("uint", 32), 1: ("half", 16), 2: ("float", 32)}
-MEDIA_TYPES = {"png": "image/png", "exr": "image/x-exr"}
+MEDIA_TYPES = {"png": "image/png", "exr": "image/x-exr", "tga": "image/x-tga"}
 
 
 class StaleCaptureError(RecorderError):
@@ -120,7 +122,15 @@ def measure_storage_format(path: Path) -> StorageFormat:
         return png_format(data)
     if len(data) >= 4 and struct.unpack("<i", data[:4])[0] == EXR_MAGIC:
         return exr_format(data)
-    raise RecorderError(f"{path.name}: container not supported by the recorder (PNG, OpenEXR)")
+    if path.suffix.lower() == ".tga":
+        try:
+            measured = tga.inspect(data)
+        except ValueError as error:
+            raise RecorderError(f"{path.name}: TGA not supported: {error}") from error
+        return StorageFormat("tga", "uint", 8, measured.channels, None)
+    raise RecorderError(
+        f"{path.name}: container not supported by the recorder (PNG, OpenEXR, TGA8)"
+    )
 
 
 def write_fence(path: Path) -> int:

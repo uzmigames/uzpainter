@@ -17,6 +17,7 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
+from tools.parity import tga
 from tools.parity.feasibility import png
 
 Array = npt.NDArray[Any]
@@ -59,10 +60,10 @@ def decode_exr(data: bytes) -> Decoded:
 
 
 def decode(data: bytes) -> Decoded:
-    """Decode a PNG or OpenEXR export by its signature (never by its name)."""
+    """Decode PNG/OpenEXR signatures or a validated TGA8 header and pixel stream."""
     if data.startswith(png.SIGNATURE):
         header = png.chunks(data)[0][1]
         return Decoded(png.decode(data).astype(np.int64), True, int(header[8]))
     if data[:4] == b"\x76\x2f\x31\x01":
         return decode_exr(data)
-    raise ValueError("not a PNG or OpenEXR file")
+    return Decoded(tga.decode(data).astype(np.int64), True, 8)
