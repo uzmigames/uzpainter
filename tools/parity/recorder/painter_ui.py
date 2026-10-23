@@ -482,9 +482,10 @@ class PainterUi:
         while True:
             menus = [
                 w
-                for w in self.desktop.windows(process=self.window.process_id())
-                if w.element_info.class_name == MENU_CLASS
+                for w in self.menu_containers()
+                if w.element_info.class_name == MENU_CLASS and w.is_visible()
             ]
+            menus = list({str(m.rectangle()): m for m in menus}.values())
             if len(menus) == 1:
                 return menus[0]
             if time.monotonic() > deadline:
@@ -922,7 +923,7 @@ class PainterUi:
                 for child in element.iter_children():
                     children.append(child)
             except Exception as error:
-                rows[-1]["children_error"] = f"{type(error).__name__}: {error}"
+                rows[-1]["children_error"] = f"{repr(error).split('(', 1)[0]}: {error}"
             pending.extend(reversed(children))
         return rows
 
@@ -944,6 +945,9 @@ class PainterUi:
                 for tab in bar.iter_children()
                 if str(tab.window_text()).strip() == ASSETS_TITLE
             ]
+            if not docks and not tabs and _ == 0:
+                self.show_assets()
+                continue
             if len(tabs) != 1:
                 raise RecorderError(
                     f"Painter's Assets window: {len(docks)} docks and {len(tabs)} tabs found"
@@ -951,6 +955,63 @@ class PainterUi:
             tabs[0].iface_selection_item.Select()
             time.sleep(1.0)
         raise RecorderError("Painter's Assets window could not be shown")
+
+    def menu_containers(self) -> list[Any]:
+        """Qt popups can be UIA children of the main window despite owning another HWND."""
+        from pywinauto.controls.uiawrapper import UIAWrapper
+        from pywinauto.uia_element_info import UIAElementInfo
+
+        desktop = UIAWrapper(UIAElementInfo())
+        return [
+            *self.window.iter_children(),
+            *desktop.iter_children(process=self.window.process_id()),
+        ]
+
+    def menu_item(self, label: str) -> Any:
+        matches = {}
+        for container in self.menu_containers():
+            if (
+                container.element_info.class_name != "QMenuBar"
+                and container.element_info.control_type != "Menu"
+            ):
+                continue
+            for item in container.iter_descendants():
+                if (
+                    item.element_info.control_type == "MenuItem"
+                    and menu_label(item.window_text()) == label
+                    and item.is_visible()
+                ):
+                    matches[str(item.rectangle())] = item
+        if len(matches) != 1:
+            raise RecorderError(f"Painter's menu has {len(matches)} visible {label!r} items")
+        return next(iter(matches.values()))
+
+    def click_menu_item(self, item: Any) -> None:
+        import win32gui
+        from pywinauto.controls.uiawrapper import UIAWrapper
+        from pywinauto.uia_element_info import UIAElementInfo
+
+        box = item.rectangle()
+        point = ((box.left + box.right) // 2, (box.top + box.bottom) // 2)
+        owner = win32gui.GetAncestor(win32gui.WindowFromPoint(point), 2)
+        popup = UIAWrapper(UIAElementInfo(owner))
+        is_menu = popup.element_info.control_type == "Menu" or (
+            popup.element_info.control_type == "Window"
+            and popup.element_info.class_name == MENU_CLASS
+        )
+        if popup.process_id() != self.window.process_id() or not is_menu:
+            raise RecorderError("the menu item is not covered by a confirmed Painter menu")
+        self.click(item, owner=owner)
+
+    def show_assets(self) -> None:
+        """Restore only the hidden Assets panel through Window > Views > Assets."""
+        self.front()
+        self.click(self.menu_item("Window"))
+        time.sleep(self.settle_s)
+        self.click_menu_item(self.menu_item("Views"))
+        time.sleep(self.settle_s)
+        self.click_menu_item(self.menu_item("Assets"))
+        time.sleep(self.settle_s)
 
     def asset_items(self, dock: Any, gui_name: str) -> list[Any]:
         return [
@@ -1051,7 +1112,7 @@ class PainterUi:
             evidence["label"] = "absent" if not matches else "disabled"
             return str(evidence["label"])
         evidence["label"] = str(matches[0].window_text())
-        self.click(matches[0], owner=menu.handle)
+        self.click_menu_item(matches[0])
         dialog = self.file_dialog()
         if dialog is None:
             evidence["dialog"] = None

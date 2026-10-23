@@ -366,7 +366,7 @@ def save_dialog_ui(
     cancelled: list[Any] = []
     monkeypatch.setattr(ui, "asset_item", lambda gui_name, evidence: Element(Info()))
     monkeypatch.setattr(ui, "context_menu", lambda item: Element(Info()))
-    monkeypatch.setattr(ui, "click", lambda element, owner=None: None)
+    monkeypatch.setattr(ui, "click_menu_item", lambda element: None)
     monkeypatch.setattr(ui, "file_dialog", lambda: dialog)
     monkeypatch.setattr(ui, "survey", lambda root: [])
     elements = [Element(Info(automation_id="FileTypeControlHost")), name]
@@ -474,3 +474,88 @@ def test_assets_capture_failure_keeps_one_private_survey(tmp_path: Path) -> None
     assert evidence["refused"] == "Assets missing"
     assert evidence["window_survey"][0]["children_error"] == "viewport E_FAIL"
     assert len(operator.log) == 1 and ui.window_surveyed
+
+
+@pytest.mark.parametrize(
+    "pid,kind,class_name,allowed",
+    [
+        (41, "Menu", "QMenu", True),
+        (42, "Menu", "QMenu", False),
+        (41, "Pane", "QMenu", False),
+        (41, "Window", "QMenu", True),
+        (42, "Window", "QMenu", False),
+        (41, "Window", "QMainWindow", False),
+    ],
+)
+def test_menu_click_requires_the_actual_popup_to_belong_to_painter(
+    monkeypatch: pytest.MonkeyPatch, pid: int, kind: str, class_name: str, allowed: bool
+) -> None:
+    import sys
+    from types import SimpleNamespace
+
+    from tools.parity.recorder.painter_ui import PainterUi
+
+    popup = SimpleNamespace(
+        process_id=lambda: pid,
+        element_info=SimpleNamespace(control_type=kind, class_name=class_name),
+    )
+    monkeypatch.setitem(
+        sys.modules, "pywinauto.controls.uiawrapper", SimpleNamespace(UIAWrapper=lambda info: popup)
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "pywinauto.uia_element_info",
+        SimpleNamespace(UIAElementInfo=lambda owner: owner),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "win32gui",
+        SimpleNamespace(WindowFromPoint=lambda point: 707, GetAncestor=lambda handle, kind: 707),
+    )
+    ui = PainterUi.__new__(PainterUi)
+    ui.window = SimpleNamespace(process_id=lambda: 41)
+    item = SimpleNamespace(rectangle=lambda: SimpleNamespace(left=0, top=0, right=20, bottom=20))
+    clicked = []
+    monkeypatch.setattr(ui, "click", lambda element, owner=None: clicked.append((element, owner)))
+    if allowed:
+        ui.click_menu_item(item)
+        assert clicked == [(item, 707)]
+    else:
+        with pytest.raises(RecorderError, match="confirmed Painter menu"):
+            ui.click_menu_item(item)
+        assert clicked == []
+
+
+def test_hidden_assets_is_restored_once_then_resolved(monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+
+    from tools.parity.recorder.painter_ui import PainterUi
+
+    ui = PainterUi.__new__(PainterUi)
+    shown: list[bool] = []
+    dock = SimpleNamespace(window_text=lambda: "Assets")
+    ui.window = SimpleNamespace(iter_children=lambda: iter([dock] if shown else []))
+    monkeypatch.setattr(ui, "show_assets", lambda: shown.append(True))
+    monkeypatch.setattr(ui, "on_screen", lambda element: True)
+    assert ui.assets_dock() is dock
+    assert shown == [True]
+
+
+def test_popup_can_extend_beyond_main_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+
+    from tools.parity.recorder.painter_ui import PainterUi
+
+    ui = PainterUi.__new__(PainterUi)
+    ui.timeout_s = 0
+    ui.window = SimpleNamespace(
+        rectangle=lambda: SimpleNamespace(left=0, top=0, right=800, bottom=600)
+    )
+    popup = SimpleNamespace(
+        element_info=SimpleNamespace(class_name="QMenu"),
+        is_visible=lambda: True,
+        rectangle=lambda: SimpleNamespace(left=10, top=580, right=210, bottom=650),
+    )
+    assert not ui.on_screen(popup)
+    monkeypatch.setattr(ui, "menu_containers", lambda: [popup])
+    assert ui.menu() is popup
