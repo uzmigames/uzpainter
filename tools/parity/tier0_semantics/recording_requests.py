@@ -38,6 +38,7 @@ from tools.parity.envelope.registry import current_envelope, manifest_root
 from tools.parity.recorder import vocabulary as ps
 from tools.parity.recorder.job import EXPORT
 from tools.parity.schemas import Schema, validation_errors
+from tools.parity.tier0_semantics import ao_operand_control as ao_control
 from tools.parity.tier0_semantics import padding_plane_control as plane_control
 from tools.parity.tier0_semantics import request_fixtures as rf
 from tools.parity.tier0_semantics.corpus import (
@@ -111,6 +112,16 @@ def probe_generator(group: str, probe: str) -> Generate:
 
 # Authored inputs of the requests: id -> (kind, repository path, generator).
 REQUEST_FIXTURES: dict[str, tuple[str, str, Generate]] = {
+    ao_control.MESH_VALUES: (
+        "image",
+        f"{FIXTURE_DIR}/bitmaps/{ao_control.MESH_VALUES}.exr",
+        ao_control.mesh_values,
+    ),
+    ao_control.PRODUCT_VALUES: (
+        "image",
+        f"{FIXTURE_DIR}/bitmaps/{ao_control.PRODUCT_VALUES}.exr",
+        ao_control.product_values,
+    ),
     "ao-precomposed-half": (
         "image",
         f"{FIXTURE_DIR}/bitmaps/ao-precomposed-half.exr",
@@ -2282,6 +2293,7 @@ def later_goldens() -> list[Golden]:
         *ao_mixed_stability_probes(),
         ao_mixed_precomposed_probe(),
         ao_mixed_precomposed_scalar_probe(),
+        ao_control.request(),
         *specularweight_base_probes(),
     ]
 
