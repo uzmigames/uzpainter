@@ -14,8 +14,10 @@ current envelope before calls. Every export used a fresh destination. No pilot
 project was opened, no retry was used and no golden was admitted.
 
 - Envelope: `painter-12.2.0+js-api.1.1.20-env-a981b586eae7`.
-- Colour mode: OCIO, Substance configuration SHA-256
+- Colour mode: OCIO, recorded colour-configuration fingerprint
   `8f384af9da9410394dbc6f1eb5395530c7532dbbac8cb59bc2e9ea3abc32ff10`.
+- Installed Substance OCIO configuration file SHA-256:
+  `15059d4b4e52893863f2063dfccb3902d182b522ad233564db32a5e30a43b7f4`.
 - Project creation: texture resolution 256, mesh unit scale 1.
 - Native inspector SHA-256:
   `957834bff2e80f63732cb5c8fa82c216b56ecb5c86079612e9a9aad1367b743b`.
