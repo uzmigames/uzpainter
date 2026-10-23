@@ -12,7 +12,7 @@ it, before it may ever be used on a pilot project: it never opens a production p
 reads a `.spp` file, and never treats a texture export, `mapexport.saveMeshMap` or
 `fileIO.urlToLocalFile` as a resource export.
 
-**Cases.** Twelve disposable bitmaps (`CASES`): PNG 8 and 16 bit, grey, RGB and RGBA, with an
+**Cases.** Thirteen disposable bitmaps (`CASES`): PNG 8 and 16 bit, grey, RGB and RGBA, with an
 sRGB chunk, a linear `gAMA` or no colour chunk; two written by Pillow exactly as the pilots' mask
 and base-colour generators write theirs; one 2048 px 16-bit grey mask generated at run time by a
 deterministic stored-deflate encoder (too large to commit); TGA raw and RLE; OpenEXR half (ZIP)
@@ -28,7 +28,8 @@ staged copy that differs refuses the run.
    BaseColor of its own fill layer, so the project uses it, and saves the project (Full).
 2. Condition `A_source_present`: for each case, `Resource.show_in_ui` highlights it and the operator
    uses the Assets window's Export resource on it, into a fresh empty folder written after a fence.
-3. The project is closed, every staged source file is deleted, Painter is restarted, every staged
+3. The project is closed, staged sources are moved to private hash-checked preservation, Painter
+   is restarted, every staged
    path is recorded absent (`sources_absent`; otherwise the run is refused), and a moved copy of
    the project is reopened. `list_project_resources` must list every case again.
 4. Condition `B_source_removed`: the exports of step 2 again, from the reopened project. This is
@@ -787,8 +788,23 @@ def record_qualification(
             )
         session.call("close_project")
         session.wait_closed()
+        preserved = directory / "preserved-sources"
+        preserved.mkdir()
+        evidence["preserved_sources"] = {}
         for case in CASES:
-            staged[case.case_id].unlink()
+            source = staged[case.case_id]
+            data = source.read_bytes()
+            if hashlib.sha256(data).hexdigest() != case.sha256:
+                raise RecorderError(f"staged source changed before preservation: {case.case_id}")
+            target = preserved / case.file_name
+            source.rename(target)
+            if hashlib.sha256(target.read_bytes()).hexdigest() != case.sha256:
+                raise RecorderError(f"preserved source differs: {case.case_id}")
+            evidence["preserved_sources"][case.case_id] = {
+                "path": target.relative_to(directory).as_posix(),
+                "sha256": case.sha256,
+                "size_bytes": len(data),
+            }
         session = restart(session)
         fresh = session.identity
         if fresh is None or fresh.session_id == identity.session_id:

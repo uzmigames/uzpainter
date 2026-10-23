@@ -197,6 +197,12 @@ def exact(condition: str, data: bytes, target: Path) -> str:
 
 def test_identical_bytes_in_both_conditions_qualify(tmp_path: Path) -> None:
     result = run(tmp_path, exact)
+    for case in rq.CASES:
+        saved = result["evidence"]["preserved_sources"][case.case_id]
+        path = result["directory"] / saved["path"]
+        assert path.parent.name == "preserved-sources"
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == saved["sha256"] == case.sha256
+        assert path.stat().st_size == saved["size_bytes"]
     outcome = result["analysis"]["outcome"]
     assert outcome["verdict"] == "EXACT" and outcome["pilot_forms_exact"] is True
     assert len(outcome["qualified_forms"]) == len(rq.CASES)

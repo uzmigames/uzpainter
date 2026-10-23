@@ -160,6 +160,12 @@ The Codex supervisor's joint findings SUP-018 and SUP-019 (`tmp/claude-supervisi
   - **Failures that prove nothing.** These are `exact-bytes-version-differs`, `stale-or-link`, `not-project`, `multiple-files`, `other-bytes-undecoded`, and exact bytes with an unstable version. They are listed in `unresolved_cases`. With no exact case, they make the run `INCONCLUSIVE`, under item 5's re-run cap; they never make it `RE_ENCODED`.
 - **SUP-025 (2026-10-19).** `sources_removal_verified` also needs each case's recorded `path` to be `sources/<file name>` (a missing or other path fails), and `RE_ENCODED` needs every status to be an established failure with at least one `re-encoded` export; any other unmatched combination, such as `no-file` in A and `exact` in B, is `INCONCLUSIVE`.
 
+## Amendment (2026-10-23): preserve staged sources
+
+Condition B now moves the thirteen staged sources into a separate private `preserved-sources/` directory instead of deleting them. Each file is checked against its pinned SHA-256 before and after the move, and private evidence records its preserved path, SHA-256 and size. The imported `sources/<file name>` paths must still all be absent immediately before B opens the moved project; any reappearance refuses the run. The fresh-process requirement and every export-byte/version check remain unchanged.
+
+This tests the same source-path absence: committed authored fixtures already remained elsewhere even under the original deletion procedure. Preserved paths are never supplied to Painter. Physical destruction of the authored bytes is not required. The existing 35 qualification tests pass, including restored-source refusal, with added checks that preserved files retain their pinned bytes. No pilot project or baseline changes follow from this preparation.
+
 ## Alternatives Considered
 
 - **Reading the resource bytes through `getResourceInfo.filePath` or `urlToLocalFile`.** Rejected (SUP-008): that is metadata or path conversion.
