@@ -132,6 +132,9 @@ private:
 class BakingParameters {
 public:
     explicit BakingParameters(std::string texture_set);
+    /// Pins an explicit catalog for this handle and its properties (e.g. another observed
+    /// Painter version); the ordinary constructor uses the embedded catalog unchanged.
+    BakingParameters(std::string texture_set, std::vector<PropertySpec> catalog);
     const std::string& texture_set() const;
     /// The common and detail parameters.
     std::map<std::string, Property> common() const;
@@ -217,11 +220,14 @@ core::BakeSettings ToBakeSettings(const BakingParameters& parameters);
 /// checked like `set()`: an unknown key, a key in the wrong group, a wrong JSON type, a value
 /// `set()` refuses or a baker `StoresBakerValues` refuses with values refuses the whole load. Loading a linked
 /// set loads its group.
+/// When the catalog omits Detail.OffsetMap, an old empty string round-trips unchanged;
+/// a nonempty legacy path is refused before request construction, never discarded.
 void LoadBakeSettings(const BakingParameters& parameters, const core::BakeSettings& settings);
 
 /// A `BakeRequest` from `parameters` over `base` (decisions 311 and 323). Every key that maps to a
 /// request field is read (its set value or its default; a key without either raises
-/// `NotYetSupported`). A value selecting behaviour the baker does not implement is refused with
+/// `NotYetSupported`). OffsetMap is read only when the pinned catalog exposes it.
+/// A value selecting behaviour the baker does not implement is refused with
 /// `NotYetSupported` naming its owner: `OffsetMap` given, AO `Attenuation` other than None,
 /// `Spread` other than 180, `IgnoreBackfaceSecondary` other than Never, `FilterMethodSecondary`
 /// other than Always, `GroundPlane` on. Position's four labels map to `BakeRequest::position` and

@@ -1575,6 +1575,45 @@ void CaseParametersToRequest() {
     CHECK((mapped.keys_not_read == std::vector<std::string>{"SmoothNormals", "SkewFaceBehavior"}));
     CHECK(mapped.request.ao.distribution == Distribution::Cosine);  // the default
     CHECK(SerializeResult(Bake(baker, mapped.request)) == SerializeResult(Bake(baker, base)));
+    // Painter 12.2's observed catalog removes OffsetMap. Pin that shape without promoting
+    // the embedded defaults or mutating the catalog used by other parameter handles.
+    std::vector<PropertySpec> newer_catalog = PropertySpecs();
+    std::erase_if(newer_catalog, [](const PropertySpec& spec) {
+        return spec.group == PropertyGroup::Detail && spec.short_name == "OffsetMap";
+    });
+    CHECK_EQ(newer_catalog.size() + 1, PropertySpecs().size());
+    BakingParameters newer("bevelled_cube", std::move(newer_catalog));
+    CHECK(!newer.common().contains("OffsetMap"));
+    CHECK(params.common().contains("OffsetMap"));
+    const auto saved = ToBakeSettings(params);
+    LoadBakeSettings(newer, saved);
+    CHECK(ToBakeSettings(newer) == saved);
+    CHECK(SerializeResult(Bake(baker, RequestFromParameters(newer, base).request)) ==
+          SerializeResult(Bake(baker, mapped.request)));
+    auto legacy_empty = saved;
+    legacy_empty.detail["OffsetMap"] = uzp::core::json::Value("");
+    LoadBakeSettings(newer, legacy_empty);
+    CHECK(ToBakeSettings(newer) == legacy_empty);
+    (void)RequestFromParameters(newer, base);
+    // A stale nonempty path or malformed value refuses the whole load before request/bake.
+    for (const auto& legacy : {uzp::core::json::Value("offset.png"), uzp::core::json::Value(true)}) {
+        auto rejected = saved;
+        rejected.common["DilationWidth"] = uzp::core::json::Value(3);
+        rejected.detail["OffsetMap"] = legacy;
+        bool reached_request = false;
+        const auto load_then_request = [&] {
+            LoadBakeSettings(newer, rejected);
+            reached_request = true;
+            (void)RequestFromParameters(newer, base);
+        };
+        const auto error = legacy.IsString() ? ExpectThrow<NotYetSupported>(load_then_request)
+                                            : ExpectThrow<ValueError>(load_then_request);
+        CHECK(Contains(error, "OffsetMap"));
+        CHECK(!reached_request);
+        CHECK(ToBakeSettings(newer) == legacy_empty);
+    }
+    LoadBakeSettings(newer, saved);
+    CHECK(ToBakeSettings(newer) == saved);
     // Sub-samples and dilation through their keys.
     BakingParameters::set({{common.at("SubSampling"), EnumLabel{"Subsampling 2x2"}}, {common.at("DilationWidth"), std::int64_t{4}}});
     BakeRequest expected = base;

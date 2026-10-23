@@ -234,6 +234,8 @@ struct ParameterSlot {
 
 struct ParameterStore {
     std::string texture_set;
+    std::shared_ptr<const std::vector<PropertySpec>> catalog;
+    const std::vector<PropertySpec>& Specs() const { return catalog ? *catalog : PropertySpecs(); }
     std::shared_ptr<ParameterSlot> common = std::make_shared<ParameterSlot>();  // common and detail keys
     std::shared_ptr<ParameterSlot> ao = std::make_shared<ParameterSlot>();
     /// The set's own values of the other stored bakers (decision 337): never in a link group.
@@ -300,11 +302,16 @@ BakingParameters::BakingParameters(std::string texture_set) : store_(std::make_s
     store_->texture_set = std::move(texture_set);
 }
 
+BakingParameters::BakingParameters(std::string texture_set, std::vector<PropertySpec> catalog)
+    : BakingParameters(std::move(texture_set)) {
+    store_->catalog = std::make_shared<const std::vector<PropertySpec>>(std::move(catalog));
+}
+
 const std::string& BakingParameters::texture_set() const { return store_->texture_set; }
 
 std::map<std::string, Property> BakingParameters::common() const {
     std::map<std::string, Property> out;
-    for (const PropertySpec& spec : PropertySpecs()) {
+    for (const PropertySpec& spec : store_->Specs()) {
         if (spec.group != PropertyGroup::Baker) out.emplace(spec.short_name, Property(store_, &spec));
     }
     return out;
@@ -312,7 +319,7 @@ std::map<std::string, Property> BakingParameters::common() const {
 
 std::map<std::string, Property> BakingParameters::baker(MeshMapUsage usage) const {
     std::map<std::string, Property> out;
-    for (const PropertySpec& spec : PropertySpecs()) {
+    for (const PropertySpec& spec : store_->Specs()) {
         if (spec.group == PropertyGroup::Baker && spec.usage == usage) out.emplace(spec.short_name, Property(store_, &spec));
     }
     return out;
@@ -609,8 +616,8 @@ PropertyValue FromJson(const PropertySpec& spec, const json::Value& value, const
     throw wrong();
 }
 
-const PropertySpec* SpecOf(const std::string& key, PropertyGroup group, MeshMapUsage usage) {
-    for (const PropertySpec& spec : PropertySpecs()) {
+const PropertySpec* SpecOf(const ParameterStore& store, const std::string& key, PropertyGroup group, MeshMapUsage usage) {
+    for (const PropertySpec& spec : store.Specs()) {
         if (spec.short_name != key) continue;
         if (group == PropertyGroup::Baker ? spec.group == group && spec.usage == usage : spec.group == group) {
             return &spec;
@@ -624,7 +631,7 @@ const PropertySpec* SpecOf(const std::string& key, PropertyGroup group, MeshMapU
 core::BakeSettings ToBakeSettings(const BakingParameters& parameters) {
     core::BakeSettings out;
     const ParameterStore& store = *parameters.store_;
-    for (const PropertySpec& spec : PropertySpecs()) {
+    for (const PropertySpec& spec : store.Specs()) {
         const ParameterSlot* slot = store.SlotOf(spec);
         if (!slot) continue;
         const auto it = slot->values.find(spec.short_name);
@@ -636,15 +643,31 @@ core::BakeSettings ToBakeSettings(const BakingParameters& parameters) {
             case PropertyGroup::Baker: out.per_baker[UsageName(spec.usage)][spec.short_name] = std::move(value); break;
         }
     }
+    // Preserve an explicitly stored empty legacy OffsetMap even when the current catalog
+    // no longer exposes it. A save must not silently discard stored project settings.
+    if (!SpecOf(store, "OffsetMap", PropertyGroup::Detail, MeshMapUsage::AO)) {
+        const auto legacy = store.common->values.find("OffsetMap");
+        if (legacy != store.common->values.end()) out.detail["OffsetMap"] = std::get<std::string>(legacy->second);
+    }
     return out;
 }
 
 void LoadBakeSettings(const BakingParameters& parameters, const core::BakeSettings& settings) {
+    ParameterStore& store = *parameters.store_;
     ParameterSlot common, ao, position, id, thickness, height;
-    const auto load = [](const json::Object& object, PropertyGroup group, MeshMapUsage usage, const std::string& where,
+    const auto load = [&](const json::Object& object, PropertyGroup group, MeshMapUsage usage, const std::string& where,
                          ParameterSlot& into) {
         for (const auto& [key, value] : object) {
-            const PropertySpec* spec = SpecOf(key, group, usage);
+            const PropertySpec* spec = SpecOf(store, key, group, usage);
+            if (!spec && group == PropertyGroup::Detail && key == "OffsetMap") {
+                if (!value.IsString()) throw ValueError(where + ".OffsetMap takes a string");
+                const auto& path = std::get<std::string>(value.data);
+                if (!path.empty())
+                    throw NotYetSupported("OffsetMap: stored per-texel cage offset is absent from the current catalog "
+                                          "(phase3.5_embree-bakers)");
+                into.values[key] = path;
+                continue;
+            }
             if (!spec) throw ValueError(where + " has no key '" + key + "'");
             into.values[key] = Checked(*spec, FromJson(*spec, value, where));
         }
@@ -673,7 +696,6 @@ void LoadBakeSettings(const BakingParameters& parameters, const core::BakeSettin
         }
         if (!known) throw ValueError("bake_settings.per_baker has no baker '" + baker + "'");
     }
-    ParameterStore& store = *parameters.store_;
     store.common->values = std::move(common.values);
     store.ao->values = std::move(ao.values);
     store.position->values = std::move(position.values);
@@ -736,7 +758,7 @@ MappedRequest RequestFromParameters(const BakingParameters& parameters, BakeRequ
                            : sub == "Subsampling 2x2" ? 2u
                            : sub == "Subsampling 4x4" ? 4u
                                                       : 8u;
-    if (!text(common, "OffsetMap").empty()) {
+    if (common.contains("OffsetMap") && !text(common, "OffsetMap").empty()) {
         throw NotYetSupported("OffsetMap: the per-texel cage offset is not implemented (phase3.5_embree-bakers)");
     }
     out.keys_not_read = {"SmoothNormals", "SkewFaceBehavior"};
