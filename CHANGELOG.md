@@ -12,6 +12,7 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
 
 ### Added
 
+- Height-normal and mask-effects fits are reproduced against the current Painter 12.2.0 envelope. All 23 entries retain identical formulas and residuals; refreshed publication identities fix stale-envelope validation failures.
 - Native procedural references preserve legacy resolution objects and persist mode/value/offset overrides. Admission resolves Auto, fixed and explicit set/tile sizes before submission, refuses unsupported dimensions without clamping, and changes snapshot signatures when Auto follows a resize. Manifest, recipe and save/reopen tests cover the new contract; SourceSubstance facade wiring remains pending.
 - A fresh padding control isolates one versus two hinges with matching endpoint planes. Authored geometry, request and three CPU predictions are frozen before Painter capture; the broader direct-plane diagnostic still fails exact parity and changes no production policy.
 - Native TGA8 encoding through pinned stb accepts already quantized L/LA/RGB/RGBA bytes, preserves alpha and writes deterministic RLE. Painter-compatible TGA processing remains gated on R-322; independent decoding and all four build modes validate the byte writer.

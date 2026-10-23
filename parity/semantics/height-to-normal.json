@@ -3,7 +3,7 @@
   "record_class": "public_semantics",
   "semantics_id": "height-to-normal",
   "description": "Height to normal for both methods of Painter 12.1.5 (Sharp, Smooth (Sobel)) and the virtual normal maps Normal_OpenGL / Normal_DirectX: the stencils on the Height read-out, the reoriented combination with the Normal mesh map and the Normal channel (at any coverage, both conventions), the scale at 256 to 2048 px, the encoding to 16 bits, fitted on the Tier 0 height-normal goldens, blend-normal-channel and the recordings of decision 077.",
-  "painter_build_id": "12.1.5+js-api.1.1.20",
+  "painter_build_id": "12.2.0+js-api.1.1.20",
   "corpus": [
     "tier0/semantics-ui/height-normal-sharp-bevelled-cube",
     "tier0/semantics-ui/height-normal-sharp-plane-strength",

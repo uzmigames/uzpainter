@@ -6,6 +6,25 @@ Child of `phase1.14_compositor-core` (P1-COMPOSITOR; `docs/architecture/04-layer
 
 ## Run record
 
+### Current-envelope fit reproduction (2026-10-23)
+
+`tools.parity.fit.normal.fit(Context(store, repository))` was re-derived against
+`painter-12.2.0+js-api.1.1.20-env-a981b586eae7` on the CPU, validated with
+`publishable_problems`, then published as `parity/semantics/height-to-normal.json`.
+All 14 entries, including formulas, public sources, statuses and residuals, are
+identical to the previously published 12.1.5 document. The only changed document
+field is the build identity supplied by the fresh fit's current envelope.
+This resolves a stale publication, not a compositor change or a new acceptance
+exception. Existing nonzero residuals and gaps remain unchanged. No Painter or
+GPU ran for this refresh; the earlier GPU evidence below remains historical.
+
+The original `test_published_fit_reproduces` passes after publication (1 passed
+in 227.29 seconds, `scripts/tmp/semantic-normal-check.xml`). The two refreshed
+fits also pass schema/source/envelope checks, and the publication guard checks
+both fits and both run reports against the private-store index with zero blocks.
+
+### Original run
+
 | Item | Value |
 |---|---|
 | Hardware | NVIDIA GeForce RTX 4090, Windows 11 Pro 10.0.26200 |

@@ -3,7 +3,7 @@
   "record_class": "public_semantics",
   "semantics_id": "masks-levels",
   "description": "Masks, mask and content effects and the Levels effect of the evaluator (04 sections 1 and 2, task phase1.11_compositor-mask-effects), evaluated by the CPU store under the current profile. Residuals are |delta| in export units (16-bit PNG codes, OpenEXR float32 values) per texture set and channel, against both recordings (r1 same session, r2 after save and reopen).",
-  "painter_build_id": "12.1.5+js-api.1.1.20",
+  "painter_build_id": "12.2.0+js-api.1.1.20",
   "corpus": [
     "tier0/api-probes/mask-stack",
     "tier0/semantics/effect-order",

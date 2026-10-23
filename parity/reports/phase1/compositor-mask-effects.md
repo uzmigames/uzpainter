@@ -6,6 +6,22 @@ Child of `phase1.14_compositor-core` (P1-COMPOSITOR; `docs/architecture/04-layer
 
 ## Run record
 
+### Current-envelope fit reproduction (2026-10-23)
+
+`tests.evaluator.masks_fits.build_document` was re-derived with a fresh Debug
+`uzp-evaluator-tests` build on the CPU against
+`painter-12.2.0+js-api.1.1.20-env-a981b586eae7`. The generated document passed
+`publishable_problems` before publication. All nine entries, including formulas,
+public sources, statuses and residuals, equal the previous 12.1.5 publication;
+only the build identity from the current envelope changes.
+
+The original publication-validity and reproduction tests both pass (2 passed,
+`scripts/tmp/semantic-masks-check.xml`). No evaluator, fit-generator or assertion
+changed. No Painter or GPU ran for this refresh, and no existing gap or nonzero
+residual was relabelled as exact. Earlier GPU evidence below remains historical.
+
+### Original run
+
 | Item | Value |
 |---|---|
 | Hardware | NVIDIA GeForce RTX 4090, Windows 11 Pro 10.0.26200 |
