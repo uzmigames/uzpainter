@@ -74,3 +74,20 @@ The model panel was asked once (C1-C9 in the scratch dossier): cx/gpt-6-astra, k
 - Scripts that poll `is_busy()` or wait for `ProjectEditionEntered` work unchanged.
 - phase1.22 lists the host symbols' statuses.
 - When P21-F or P21-G is recorded, any difference is fixed or excluded by name in `test_pyapi_lifecycle_tier0.py`.
+
+## Current-envelope reload investigation (2026-10-23)
+
+The admitted Painter 12.2.0 `phase1-reload-mesh` first recording differs from the historical evidence above: after s8 reports callback `SUCCESS`, s9 records `LayerStacksModelDataChanged` and engine computations becoming false, s10 raises `RuntimeError: No active stack`, and s11 records another model change and engine computations becoming true. Its reopened recording has no such episode. The current facade replay remains divergent; no generic exclusion, replacement golden, or product timing change is justified.
+
+Four bounded private controls tested that episode, each in two fresh Painter sessions with same-session and save/reopen recordings:
+
+| Control | Private report under `oracle-work` | Result |
+| --- | --- | --- |
+| Reload followed by 20 seconds of readiness sampling | `reload-readiness-controls/run-nuix7daj/report.json` | 357 samples, no post-callback episode. This changes the original read schedule; the attempted `Stack.uid` read is invalid, although active-stack access and root reads succeed. |
+| Exact original reload sequence, no predecessor | `reload-original-sequence-controls/run-hyxrfvm0/report.json` | All four recordings retain engine computations and valid roots at s9-s11, with no model-change events. |
+| Complete mesh-map-update, cleanup, exact reload | `reload-original-sequence-controls/run-bqlemc8g/report.json` | Same negative result in all four recordings. |
+| Complete levels-params, cleanup, mesh-map-update, cleanup, exact reload | `reload-original-sequence-controls/run-tcuauw9u/report.json` | Same negative result in all four recordings. |
+
+The final control records its hypothesis before launching Painter: delayed layer-change events from preceding probes in the same process might not be represented by busy/engine flags. Before the prefix, after levels, and after mesh-map-update, measured boundaries are identical: Edition UI, closed project, not busy, engine enabled, no pending work, connected or held callbacks, owned shelves/plugins, resource reloads or shelf crawls; throttling remains 2000 ms. After reload cleanup, four held callback references remain with completed callback flags, but no connected listeners or pending work. This alone does not establish a callback leak.
+
+These controls do not reproduce or explain the original long-session episode. Evidence stays private and unadmitted; the original golden and replay failure remain intact. Investigation stops at this bounded prefix until a further causal hypothesis is supported. Track unresolved current-envelope parity under `phase5.2_parity-report-tiers` item 2.2.

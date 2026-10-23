@@ -4,6 +4,7 @@
 ## 2. Implementation
 - [ ] 2.1 Local comparison command, run on the owner's machine (decision 028; the local run report is the evidence), that runs every tier on DX12 and on Vulkan against the frozen build and fetches oracle blobs through `uzpainter parity fetch`/`verify`
 - [ ] 2.2 Tier 0 run over the 14 §3 corpus, including the Phase 4 node kinds and the UDIM fixture
+  - Current-envelope reload remains divergent (2026-10-23, decision 109 investigation addendum): Painter 12.2.0 first recording has post-success model-change events, engine disable/enable and `No active stack`; its reopened recording does not. Four bounded private controls (20-second sampling, exact sequence, mesh-map-update prefix, levels-params plus mesh-map-update prefix; two fresh sessions each) did not reproduce it. No golden replacement, exclusion or product change; further probing requires a supported causal hypothesis.
 - [ ] 2.3 Tier 1 run for wand v1, belt v5, tunic v10, bracer r9, hat v8, body v6b and every other Tier 1 fixture of 14 §3: every exported map per set, save/reopen, dump-and-rebuild
 - [ ] 2.4 Tier 2a per certified procedural asset and Tier 2b for the ten bakers (evidence first, then maps)
 - [ ] 2.5 Tier 3: `painter_iray` versus converged Iray references per fixture and material region next to the noise floor (07 §4), and the DXR-versus-Vulkan cross-backend report (07 §3.5)

@@ -1267,7 +1267,8 @@ def test_bake_parameter_tools_with_python_disabled(
     assert inspect["texture_set"] == "uzp_plane" and inspect["parity_status"] == "pending-evidence"
     common = inspect["values"]["common"]
     assert common["DilationWidth"] == 32 and common["CageMode"] == "Distance-based"
-    assert common["OutputSize"] is None  # Painter states no default
+    # Fresh 256px projects initialize the value separately from the declared null default.
+    assert common["OutputSize"] == [8, 8]
     assert inspect["values"]["bakers"]["AO"]["Attenuation"] == "Linear"
     assert set(inspect["values"]["bakers"]) == {
         "ID",
@@ -1278,7 +1279,7 @@ def test_bake_parameter_tools_with_python_disabled(
         "Height",
         "BentNormals",
     }
-    assert inspect["explicit"] == {"common": {}, "detail": {}, "per_baker": {}}
+    assert inspect["explicit"] == {"common": {"OutputSize": [8, 8]}, "detail": {}, "per_baker": {}}
     assert inspect["linked"] == {"common": ["uzp_plane"], "AO": ["uzp_plane"]}
     cage_mode = inspect["properties"]["common"]["CageMode"]
     assert cage_mode["label"] == "Cage type" and cage_mode["enum_values"]["Custom file"] == 2
