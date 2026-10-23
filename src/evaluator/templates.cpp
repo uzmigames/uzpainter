@@ -59,6 +59,20 @@ TemplateChannel ParseChannel(const Value& value, std::string_view path, bool def
         channel.format = Enum<core::ChannelFormat>(String(object, "format", path),
                                                    std::string(path) + ".format");
     }
+    if (const auto it = object.find("project_templates"); it != object.end()) {
+        const std::string scopePath = std::string(path) + ".project_templates";
+        if (!defaults) Fail(scopePath, "only channel defaults may restrict project templates");
+        if (!it->second.IsArray()) Fail(scopePath, "expected a non-empty array of template ids");
+        const auto& scope = std::get<core::json::Array>(it->second.data);
+        if (scope.empty()) Fail(scopePath, "expected a non-empty array of template ids");
+        std::set<std::string> seen;
+        for (const Value& entry : scope) {
+            if (!entry.IsString()) Fail(scopePath, "expected a template id");
+            const std::string& id = std::get<std::string>(entry.data);
+            if (id.empty() || !seen.insert(id).second) Fail(scopePath, "empty or duplicate template id");
+            channel.projectTemplates.push_back(id);
+        }
+    }
     const Value& base = Need(object, "base", path);
     const std::string basePath = std::string(path) + ".base";
     if (!base.IsArray()) Fail(basePath, "expected an array of three numbers");
@@ -190,6 +204,13 @@ TemplateLibrary TemplateLibrary::Load(const std::filesystem::path& directory) {
     if (!library.templates_.contains(kDefaultTemplateId)) {
         Fail(directory.string(), "no 'default' template");
     }
+    for (const TemplateChannel& channel : library.defaults_.channels) {
+        for (const std::string& id : channel.projectTemplates) {
+            if (!library.templates_.contains(id)) {
+                Fail(directory.string(), "channel default names unknown project template '" + id + "'");
+            }
+        }
+    }
     return library;
 }
 
@@ -221,6 +242,9 @@ render::Result<const TemplateChannel*> TemplateLibrary::BaseChannel(std::string_
     std::string recorded;  // the formats of the type's entries, when none applies to `format`
     for (const TemplateChannel& fallback : defaults_.channels) {
         if (fallback.type != type) continue;
+        if (!fallback.projectTemplates.empty() &&
+            std::find(fallback.projectTemplates.begin(), fallback.projectTemplates.end(), templateId) ==
+                fallback.projectTemplates.end()) continue;
         if (!fallback.format || fallback.format == format) return &fallback;
         recorded += (recorded.empty() ? "" : " and ") + std::string(core::ToString(*fallback.format));
     }

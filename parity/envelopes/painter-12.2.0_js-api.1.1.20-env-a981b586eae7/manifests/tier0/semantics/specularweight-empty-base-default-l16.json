@@ -1,0 +1,199 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/semantics/specularweight-empty-base-default-l16",
+  "tier": "0",
+  "domain": "tier0/stack/base-values",
+  "description": "SpecularWeight empty-channel base (phase3.2_uze-uzmat-preset items 2.7 and 3.4): an empty plane at 256 px under Legacy, no template, with SpecularWeight freshly added as L16; no inserted layers or assigned sources. Export documentMap/specularweight:L twice as OpenEXR 32f and twice as PNG 16, infinite padding, no dithering; recorder repeats exports after save and reopen. An absent channel remains a skipped preset map; an existing channel with no observed base currently raises missing_base_value. This capture does not authorise a fallback for absent channels or other templates/formats.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "SpecularWeight",
+          "format": "L16"
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/specularweight:L"
+          ],
+          "file_format": "exr",
+          "bit_depth": "32f",
+          "padding": "infinite",
+          "dithering": false
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/specularweight:L"
+          ],
+          "file_format": "exr",
+          "bit_depth": "32f",
+          "padding": "infinite",
+          "dithering": false
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/specularweight:L"
+          ],
+          "file_format": "png",
+          "bit_depth": 16,
+          "padding": "infinite",
+          "dithering": false
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/specularweight:L"
+          ],
+          "file_format": "png",
+          "bit_depth": 16,
+          "padding": "infinite",
+          "dithering": false
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.exr.bit_depth",
+      "value": "32f",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "infinite",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.png.bit_depth",
+      "value": 16,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "01b3053826b865a9d0b8ea54948798c69571c2978024651407a61a26b522371e",
+      "size_bytes": 8077
+    },
+    {
+      "record_id": "r1-uzp_plane-specularweight-step3",
+      "kind": "exported_map",
+      "sha256": "a28f05b4a83bb11f5c5884ed250cb28983f61e67493b2ac563e49cb12f988ef2",
+      "size_bytes": 1453
+    },
+    {
+      "record_id": "r1-uzp_plane-specularweight-step4",
+      "kind": "exported_map",
+      "sha256": "a28f05b4a83bb11f5c5884ed250cb28983f61e67493b2ac563e49cb12f988ef2",
+      "size_bytes": 1453
+    },
+    {
+      "record_id": "r1-uzp_plane-specularweight-step5",
+      "kind": "exported_map",
+      "sha256": "e19c7af6a2512fff3ca76c48755ad80b2a4698702290a843aa4fbb3ac3c08773",
+      "size_bytes": 716
+    },
+    {
+      "record_id": "r1-uzp_plane-specularweight-step6",
+      "kind": "exported_map",
+      "sha256": "e19c7af6a2512fff3ca76c48755ad80b2a4698702290a843aa4fbb3ac3c08773",
+      "size_bytes": 716
+    },
+    {
+      "record_id": "r2-uzp_plane-specularweight-step3",
+      "kind": "exported_map",
+      "sha256": "a28f05b4a83bb11f5c5884ed250cb28983f61e67493b2ac563e49cb12f988ef2",
+      "size_bytes": 1453
+    },
+    {
+      "record_id": "r2-uzp_plane-specularweight-step4",
+      "kind": "exported_map",
+      "sha256": "a28f05b4a83bb11f5c5884ed250cb28983f61e67493b2ac563e49cb12f988ef2",
+      "size_bytes": 1453
+    },
+    {
+      "record_id": "r2-uzp_plane-specularweight-step5",
+      "kind": "exported_map",
+      "sha256": "e19c7af6a2512fff3ca76c48755ad80b2a4698702290a843aa4fbb3ac3c08773",
+      "size_bytes": 716
+    },
+    {
+      "record_id": "r2-uzp_plane-specularweight-step6",
+      "kind": "exported_map",
+      "sha256": "e19c7af6a2512fff3ca76c48755ad80b2a4698702290a843aa4fbb3ac3c08773",
+      "size_bytes": 716
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "d4c261535d9af09b11158ec61076a3b5fd181661d179ddba2329122fba43b4a1",
+      "size_bytes": 402
+    }
+  ]
+}

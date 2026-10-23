@@ -262,8 +262,8 @@ def authored_spec(root: Path) -> Path:
     }
     document = {
         "name": "s0",
-        # A template with an Opacity base (no shipped template or channel default has a
-        # SpecularWeight base, so the authored set has no SpecularWeight channel).
+        # Alpha-test supplies Opacity; its SpecularWeight base is not observed, so that
+        # channel remains absent in this fixture.
         "template": "pbr-metallic-roughness-alpha-test",
         "resolution": [SIZE, SIZE],
         "mesh": str(GRID),
@@ -405,7 +405,7 @@ def test_receipt_lists_formats_bindings_and_gaps(filtered: tuple[Path, Any]) -> 
     assert "albedo alpha" in opacity["gap"] and "SM5" in opacity["gap"]
     assert "unsupported" in opacity["gap"]
     assert gaps(files["s0_height.uztexture"]) == {"Height"}
-    # The authored set has no SpecularWeight channel (no template gives its base): the map is
+    # The authored set has no SpecularWeight channel (Alpha-test has no observed base): the map is
     # absent, and its gap is checked by test_specularweight_is_a_consumer_gap.
     assert {s["file_name"] for s in receipt["skipped"]} >= {"$textureSet_specularweight"}
     open_items = receipt["manifest_export"]["open_items"]
@@ -797,7 +797,7 @@ def test_specularweight_is_a_consumer_gap(export_tests: Path, tmp_path: Path) ->
     """2.7: on a set with a SpecularWeight channel the shipped preset (ORM filtered out) writes
     `<set>_specularweight` (PNG 16, its own canonical map) with a BC4 derivative that has no engine
     binding, and the receipt lists the file as a SpecularWeight consumer gap (`receipt` builds it
-    without evaluation: no template gives SpecularWeight a base)."""
+    without evaluation; test_specularweight_base covers publication on recorded templates)."""
     receipt = receipt_of(export_tests, SKELETON, shipped_config("C:/export", WITHOUT_ORM), tmp_path)
     files = {f["path"]: f for f in receipt["files"]}
     entry = files["s0_specularweight.png"]

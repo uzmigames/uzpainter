@@ -41,6 +41,9 @@ struct TemplateChannel {
     /// to that format only (its base is recorded on that format alone; the type may have one such
     /// entry per format).
     std::optional<core::ChannelFormat> format;
+    /// Empty means all projects; a non-empty list restricts an added-channel default to the
+    /// templates whose empty-channel exports establish it.
+    std::vector<std::string> projectTemplates;
     std::array<float, 3> base{0.0f, 0.0f, 0.0f};
     /// "observed", "fitted", "inferred" or "unobserved" (EVALUATOR.md §3).
     std::string baseProvenance;
@@ -79,8 +82,9 @@ public:
 
     /// The entry giving the base value of channel `type` stored as `format` in a stack created
     /// from `templateId`: the template's entry when it lists the channel, else the channel default
-    /// for any format or for `format` (none for a format-restricted default when `format` is
-    /// unknown). `evaluator:unknown_template` or `evaluator:missing_base_value` otherwise.
+    /// for any format or for `format`, within its optional project_templates scope (none for a
+    /// format-restricted default when `format` is unknown). `evaluator:unknown_template` or
+    /// `evaluator:missing_base_value` otherwise.
     [[nodiscard]] render::Result<const TemplateChannel*> BaseChannel(
         std::string_view templateId, core::ChannelType type,
         std::optional<core::ChannelFormat> format = std::nullopt) const;

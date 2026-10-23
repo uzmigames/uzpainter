@@ -103,6 +103,57 @@
       }
     },
     {
+      "type": "SpecularWeight",
+      "format": "L8",
+      "project_templates": ["default", "pbr-metallic-roughness-alpha-blend"],
+      "base": [1.0, 1.0, 1.0],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/specularweight-empty-base-default-l8",
+        "record_sha256": "c25ff4ed1dd548e848b70eb446a6600ad1d4f698de5f2984708b5113abb0abe0",
+        "additional_evidence": [{
+          "golden_id": "tier0/semantics/specularweight-empty-base-alpha-blend-l8",
+          "record_sha256": "1cb327123983118543deaa353cd44b335e7c3b8f001fcc8a0fe201bf8ee0534e"
+        }],
+        "map": "uzp_plane/specularweight",
+        "note": "An added empty L8 channel exports 1.0 in EXR32F and 65535 in PNG16, twice before and twice after save/reopen. Restricted to the two recorded templates. A missing channel remains absent."
+      }
+    },
+    {
+      "type": "SpecularWeight",
+      "format": "L16",
+      "project_templates": ["default", "pbr-metallic-roughness-alpha-blend"],
+      "base": [1.0, 1.0, 1.0],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/specularweight-empty-base-default-l16",
+        "record_sha256": "01b3053826b865a9d0b8ea54948798c69571c2978024651407a61a26b522371e",
+        "additional_evidence": [{
+          "golden_id": "tier0/semantics/specularweight-empty-base-alpha-blend-l16",
+          "record_sha256": "165c9bf21d35cd0548e1cbdd695c3105aef312cd19575f72ae30c701cc44af01"
+        }],
+        "map": "uzp_plane/specularweight",
+        "note": "An added empty L16 channel exports 1.0 in EXR32F and 65535 in PNG16, twice before and twice after save/reopen. Restricted to the two recorded templates. A missing channel remains absent."
+      }
+    },
+    {
+      "type": "SpecularWeight",
+      "format": "L32F",
+      "project_templates": ["default", "pbr-metallic-roughness-alpha-blend"],
+      "base": [1.0, 1.0, 1.0],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/specularweight-empty-base-default-l32f",
+        "record_sha256": "be309d4c3948e14c5ced68e448718628c1e99a8762b94ec384bbf68b429254ce",
+        "additional_evidence": [{
+          "golden_id": "tier0/semantics/specularweight-empty-base-alpha-blend-l32f",
+          "record_sha256": "2f51b654db842f4f824930a86a9b5c9bf810a371bcd38b12744fa0caba40f0bf"
+        }],
+        "map": "uzp_plane/specularweight",
+        "note": "An added empty L32F channel exports 1.0 in EXR32F and 65535 in PNG16, twice before and twice after save/reopen. Restricted to the two recorded templates. A missing channel remains absent."
+      }
+    },
+    {
       "type": "SubsurfaceRadiusScale",
       "base": [
         1.0,
