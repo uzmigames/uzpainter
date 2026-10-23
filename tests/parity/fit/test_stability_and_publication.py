@@ -11,12 +11,14 @@ import json
 import re
 import subprocess
 import sys
+from functools import cache
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pytest
 
+from tools.parity.envelope.corpus import DEFAULTS, MIGRATION, SCRIPT, TEXTURE, recorder_kind
 from tools.parity.envelope.registry import (
     current_envelope,
     initial_registry,
@@ -39,7 +41,10 @@ from tools.parity.fit.stability import (
 )
 from tools.parity.fit.stats import difference
 from tools.parity.guard.guard import Snapshot, run_guard
+from tools.parity.recorder.job import job_from_manifest
 from tools.parity.recorder.script_run import R1, R1_REPEAT, R2
+from tools.parity.recorder.session import RecorderError
+from tools.parity.recorder.texture import REOPEN_COUNT, reopen_count
 from tools.parity.schemas import REPO_ROOT, Schema, load_json, validation_errors
 from tools.parity.store.store import locate
 from tools.parity.tier0_semantics.corpus import COVERAGE, OWNED_ELSEWHERE
@@ -142,6 +147,41 @@ def test_storage_key_names_every_measured_field() -> None:
 # --- 3.1 schema and sources --------------------------------------------------------------------
 
 
+def recording_protocol(manifest: dict[str, Any]) -> dict[str, str]:
+    """Recording IDs and conditions produced by this manifest's recorder route."""
+    kind = recorder_kind(manifest)
+    result = {R1: "same_session", R2: "after_save_reopen"}
+    if kind == TEXTURE:
+        count = reopen_count(job_from_manifest(manifest))
+        result.update({f"r{i}": "after_save_reopen" for i in range(2, count + 2)})
+    elif kind in (SCRIPT, MIGRATION):
+        result[R1_REPEAT] = "same_session"
+    elif kind == DEFAULTS:
+        result["r3"] = "same_session"
+    return result
+
+
+@cache
+def golden_manifests(build: str) -> dict[str, dict[str, Any]]:
+    envelopes = [e for e in load_registry()["envelopes"] if e["painter_build"] == build]
+    assert envelopes, build
+    manifests = {}
+    for path in manifest_root(envelopes[-1]).rglob("*.json"):
+        manifest = load_json(path)
+        if manifest.get("schema") == "uzpainter/parity/golden-public/1":
+            assert manifest["golden_id"] not in manifests
+            manifests[manifest["golden_id"]] = manifest
+    return manifests
+
+
+@cache
+def golden_recording_protocol(build: str, golden_id: str) -> dict[str, str]:
+    manifest = golden_manifests(build)[golden_id]
+    assert manifest["software"]["painter"]["build_id"] == build
+    assert manifest["private_records"], golden_id
+    return recording_protocol(manifest)
+
+
 @pytest.mark.parametrize("path", sorted(SEMANTICS.glob("*.json")), ids=lambda p: p.name)
 def test_fits_validate_and_name_a_public_source_and_a_residual(path: Path) -> None:
     document = load_json(path)
@@ -156,13 +196,53 @@ def test_fits_validate_and_name_a_public_source_and_a_residual(path: Path) -> No
         if entry["status"] == "gap":
             continue
         assert entry["residuals"], entry["entry_id"]
-        # r1 and r2 always; a Tier 1 golden's same-session repeat (`r1-repeat`) may add its own.
+        # Keep the baseline r1/r2 contract; extra IDs need their own golden's protocol.
         recordings = {r["compared_against"] for r in entry["residuals"]}
-        assert {R1, R2} <= recordings <= {R1, R1_REPEAT, R2}, entry["entry_id"]
+        assert {R1, R2} <= recordings, entry["entry_id"]
         zero = all(r["difference"]["differing"] == 0 for r in entry["residuals"])
         assert (entry["status"] == "exact") == zero, entry["entry_id"]
         for r in entry["residuals"]:
             assert r["golden_id"] in document["corpus"]
+            if r["compared_against"] not in (R1, R2):
+                protocol = golden_recording_protocol(document["painter_build_id"], r["golden_id"])
+                assert r["compared_against"] in protocol, (entry["entry_id"], r)
+
+
+@pytest.mark.parametrize("count", [1, 2, 3])
+def test_residual_recording_protocol_follows_declared_reopens(count: int) -> None:
+    path = manifest_root(current_envelope()) / "tier0/semantics/ao-mixed-grid-l16-reopen3.json"
+    manifest = load_json(path)
+    setting = next(s for s in manifest["applied_settings"] if s["name"] == REOPEN_COUNT)
+    setting["value"] = count
+    assert recording_protocol(manifest) == {
+        "r1": "same_session",
+        **{f"r{i}": "after_save_reopen" for i in range(2, count + 2)},
+    }
+    assert "r5" not in recording_protocol(manifest)
+    assert R1_REPEAT not in recording_protocol(manifest)
+    manifest["applied_settings"].remove(setting)
+    assert recording_protocol(manifest) == {R1: "same_session", R2: "after_save_reopen"}
+
+
+@pytest.mark.parametrize("value", [0, 4, True, 3.0, "3"])
+def test_residual_recording_protocol_rejects_invalid_reopens(value: Any) -> None:
+    path = manifest_root(current_envelope()) / "tier0/semantics/ao-mixed-grid-l16-reopen3.json"
+    manifest = load_json(path)
+    setting = next(s for s in manifest["applied_settings"] if s["name"] == REOPEN_COUNT)
+    setting["value"] = value
+    with pytest.raises(RecorderError):
+        recording_protocol(manifest)
+
+
+@pytest.mark.parametrize("golden_id", ["phase1/tier1/wand-v1", "phase2/tier1/tunic-v10"])
+def test_residual_same_session_repeat_requires_script_or_migration(golden_id: str) -> None:
+    build = current_envelope()["painter_build"]
+    assert golden_recording_protocol(build, golden_id) == {
+        R1: "same_session",
+        R1_REPEAT: "same_session",
+        R2: "after_save_reopen",
+    }
+    assert "r3" not in golden_recording_protocol(build, golden_id)
 
 
 # --- decision 037: fits and the current envelope -------------------------------------------------
