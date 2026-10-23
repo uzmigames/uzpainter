@@ -422,6 +422,7 @@ const export_sources = [_][]const u8{
     "export/uzmat_writer.cpp",
     "export/virtual_maps.cpp",
     "export/write.cpp",
+    "export/resize.cpp",
 };
 /// Test-only fault hooks of the export publication (`src/export/fault.h`): compiled, with
 /// `-DUZP_EXPORT_FAULT_HOOKS=1` on every export source, into `uzp-export-tests.exe` only, never

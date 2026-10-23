@@ -3,6 +3,7 @@
 #include "export/encode.h"
 #include "export/cook_dds.h"
 #include "export/padding.h"
+#include "export/resize.h"
 #include "export/uzmat_writer.h"
 #include "export/uztexture_writer.h"
 #include "uzp_core/manifest/sha256.h"
@@ -209,6 +210,9 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
     }
     // 1. Every file's processing and padding, before any evaluation.
     std::map<core::Id, Coverage> coverages;
+    // A resized file's coverage at its own size, by file index (resize.h, decision 349).
+    std::map<size_t, Coverage> resizedCoverages;
+    std::vector<Resize> resizes(plan.files.size(), Resize::none);
     std::vector<std::vector<std::string>> bypassed(plan.files.size());
     for (size_t i = 0; i < plan.files.size(); ++i) {
         const PlannedFile& file = plan.files[i];
@@ -228,7 +232,21 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
             if (diagnostic != nullptr) IslandTriangles(*coverage, *diagnostic->mesh, set->material_id);
             coverages.emplace(set->id, std::move(*coverage));
         }
-        const Coverage& coverage = coverages.at(set->id);
+        resizes[i] = ResizeOf(static_cast<uint32_t>(set->resolution.width),
+                              static_cast<uint32_t>(set->resolution.height), file);
+        if (resizes[i] != Resize::none) {
+            std::optional<Coverage> target = CoverageAt(*set, inputs, file.width, file.height);
+            if (!target) {
+                return ExportFail("the padding of " + file.relativePath + " needs the UV coverage of the texture set \"" +
+                                  set->name + "\" at its size, and no texturing mesh provides it");
+            }
+            if (std::optional<std::string> refusal = ResizeCoverageRefusal(file, coverages.at(set->id), *target)) {
+                throw core::NotYetSupported(*refusal);
+            }
+            resizedCoverages.emplace(i, std::move(*target));
+        }
+        const Coverage& coverage =
+            resizes[i] != Resize::none ? resizedCoverages.at(i) : coverages.at(set->id);
         if (diagnostic == nullptr) {
             CheckIslandNormal(file, coverage);
             CheckPadding(file, coverage);
@@ -281,18 +299,25 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
         SourceInputs measured;
         if (diagnostic != nullptr && file.layout != FileLayout::Statistics) {
             measured = inputs;
-            measured.islandNormal = &coverages.at(file.textureSetId);
+            measured.islandNormal =
+                resizes[i] != Resize::none ? &resizedCoverages.at(i) : &coverages.at(file.textureSetId);
         }
+        const SourceInputs& sourceInputs = measured.islandNormal != nullptr ? measured : inputs;
+        // An upscaled file is its texture set evaluated at the file's size; a downscaled one the
+        // mean of the set's evaluation (resize.h, decision 349).
         render::Result<FileRaster> raster =
-            EvaluateFileOn(project, revision, file, measured.islandNormal != nullptr ? measured : inputs, templates,
-                           store, cache);
+            resizes[i] == Resize::upscale
+                ? EvaluateFileOn(AtFileSize(project, file), revision, file, sourceInputs, templates, store, cache)
+                : EvaluateFileOn(project, revision, file, sourceInputs, templates, store, cache);
+        if (raster && resizes[i] == Resize::downscale) raster = Downscale(file, *raster);
         if (!raster) return render::Unexpected(raster.error());
         try {
 #if defined(UZP_EXPORT_FAULT_HOOKS)
             if (fault::Fails(fault::Point::fail_encode, i)) throw std::runtime_error("injected encoder failure");
 #endif
-            const Coverage* coverage =
-                file.layout != FileLayout::Statistics ? &coverages.at(file.textureSetId) : nullptr;
+            const Coverage* coverage = file.layout == FileLayout::Statistics ? nullptr
+                                       : resizes[i] != Resize::none   ? &resizedCoverages.at(i)
+                                                                      : &coverages.at(file.textureSetId);
             const auto canonical = canonicals.find(i);
             EncodedImage image = EncodeFile(file, *raster, coverage,
                                             diagnostic != nullptr ? InexactPadding::measure : InexactPadding::refuse,

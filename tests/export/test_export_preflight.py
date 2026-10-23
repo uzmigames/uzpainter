@@ -161,7 +161,12 @@ def test_a_mixed_plan_blocks_the_whole_batch(export_tests: Path, tmp_path: Path)
     assert result["preflight"]["status"] == "blocked"
     [blocked] = [f for f in result["preflight"]["files"] if f["status"] == "blocked"]
     assert "dithering at PNG 8 bits" in blocked["reason"]
-    assert blocked["references"] == ["R-090", "decision 103"], blocked
+    assert blocked["references"] == [
+        "R-090",
+        "decision 103",
+        "decision 349",
+        "phase3.2_unreal-ue56-packed-preset",
+    ], blocked
     assert result["export"] == {"error": "NotYetSupported", "message": blocked["reason"]}
     assert files_under(out) == {}
 

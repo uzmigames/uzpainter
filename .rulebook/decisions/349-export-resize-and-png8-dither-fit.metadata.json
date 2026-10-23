@@ -1,0 +1,12 @@
+{
+  "id": 349,
+  "slug": "export-resize-and-png8-dither-fit",
+  "title": "Export resize (upscale, downscale by half) and PNG 8 dithering on integer channels are exact; the rest stays refused",
+  "status": "accepted",
+  "date": "2026-10-22",
+  "relatedTasks": [
+    "phase3.2_unreal-ue56-packed-preset",
+    "phase1.25_pilot-wand"
+  ],
+  "supersededBy": null
+}

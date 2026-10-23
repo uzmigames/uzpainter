@@ -3,6 +3,7 @@
 #include "evaluator/geometry_mask.h"
 #include "evaluator/sources.h"
 #include "export/encode.h"
+#include "export/resize.h"
 #include "export/write.h"
 #include "mesh/reload.h"
 #include "mesh/texturing_mesh.h"
@@ -21,9 +22,10 @@ constexpr std::string_view kSrgb8NotRecorded =
     "recording R-090 P10 records BaseColor, Specular and Emissive only; decision 126";
 constexpr std::string_view kL8MaterialNotRecorded =
     "tier0/semantics/export-l8-material records RGB and L files of one L8 channel under Legacy; decision 204";
-constexpr std::string_view kDitherNotFitted = "recording R-090 P3, decision 103";
+constexpr std::string_view kDitherNotFitted =
+    "recording R-090 P3, decisions 103 and 349; owner phase3.2_unreal-ue56-packed-preset item 2.9";
 constexpr std::string_view kResizeNotFitted =
-    "recording R-090 P4, decision 103; owner phase3.2_unreal-ue56-packed-preset";
+    "recording R-090 P4, decisions 103 and 349; owner phase3.2_unreal-ue56-packed-preset item 2.9";
 constexpr std::string_view kPaddingNotFitted =
     "recording R-090 P5 and P9, decision 103; owner phase3.2_unreal-ue56-packed-preset";
 
@@ -60,6 +62,21 @@ std::optional<core::ChannelType> L8Channel(const core::TextureSet& set, const Pl
         if (stack.id != file.stackId) continue;
         const auto it = stack.channels.find(*source.channel);
         if (it != stack.channels.end() && it->second.format == core::ChannelFormat::L8) return *source.channel;
+    }
+    return std::nullopt;
+}
+
+/// The stack channel format a channel of `file` reads one component of (a documentMap source,
+/// not its luma), or nothing.
+std::optional<core::ChannelFormat> DocumentFormat(const core::TextureSet& set, const PlannedFile& file,
+                                                  const PlannedChannel& channel) {
+    if (channel.luma || channel.source.type != SourceType::documentMap || !channel.source.channel) {
+        return std::nullopt;
+    }
+    for (const core::Stack& stack : set.stacks) {
+        if (stack.id != file.stackId) continue;
+        const auto it = stack.channels.find(*channel.source.channel);
+        if (it != stack.channels.end()) return it->second.format;
     }
     return std::nullopt;
 }
@@ -107,28 +124,76 @@ std::optional<std::string> ProcessingRefusal(const core::Project& project, const
     if (file.layout == FileLayout::Statistics) return std::nullopt;
     const core::TextureSet& set = SetOf(project, file);
     const ResolvedParameters& p = *file.parameters;
+    const auto width = static_cast<uint32_t>(set.resolution.width);
+    const auto height = static_cast<uint32_t>(set.resolution.height);
+    const Resize resize = ResizeOf(width, height, file);
     if (p.dithering) {
         // Dithering changes nothing at PNG 16 (recording R-090 P3: on equals off on every map); at
-        // PNG 8 it is deterministic but not fitted; in OpenEXR no recording compares it with off.
-        if (p.fileFormat == FileFormat::png && p.bitDepth == BitDepth::u8) {
-            return Refused(file, "dithering at PNG 8 bits is recorded (deterministic) but not fitted",
-                           kDitherNotFitted);
-        }
+        // PNG 8 it changes nothing on an RGB16 channel and an sRGB8 BaseColor (decision 349), and
+        // changes a float channel or a virtual normal deterministically, unfitted; in OpenEXR no
+        // recording compares it with off; with a resize it is not recorded.
         if (p.fileFormat == FileFormat::exr) {
             return Refused(file, "dithering in OpenEXR is not compared with dithering off by any recording",
                            kDitherNotFitted);
         }
+        if (resize != Resize::none) {
+            return Refused(file, "dithering with a resize is not recorded", kDitherNotFitted);
+        }
+        if (p.bitDepth == BitDepth::u8) {
+            for (const PlannedChannel& channel : file.channels) {
+                const std::optional<core::ChannelFormat> format = DocumentFormat(set, file, channel);
+                const bool unchanged = format == core::ChannelFormat::RGB16 ||
+                                       (format == core::ChannelFormat::sRGB8 &&
+                                        channel.source.channel == core::ChannelType::BaseColor);
+                if (unchanged) continue;
+                return Refused(file,
+                               "dithering at PNG 8 bits of a source other than an RGB16 channel or an sRGB8 "
+                               "BaseColor (a float channel, a virtual or mesh map, a luma, a constant) is recorded "
+                               "(deterministic) but not fitted",
+                               kDitherNotFitted);
+            }
+        }
     }
-    const auto width = static_cast<uint32_t>(set.resolution.width);
-    const auto height = static_cast<uint32_t>(set.resolution.height);
-    if (file.width != width || file.height != height) {
-        return Refused(file,
-                       "resizing " + std::to_string(width) + "x" + std::to_string(height) + " to " +
-                           std::to_string(file.width) + "x" + std::to_string(file.height) +
-                           " (sizeLog2) is recorded but only partly fitted, and no resize is implemented (sRGB8 "
-                           "channels, virtual normals after a downscale and BilinearHQ normal-channel magnification "
-                           "are not reproduced)",
-                       kResizeNotFitted);
+    if (resize != Resize::none) {
+        const std::string what = "resizing " + std::to_string(width) + "x" + std::to_string(height) + " to " +
+                                 std::to_string(file.width) + "x" + std::to_string(file.height) + " (sizeLog2)";
+        if (std::min(file.width, file.height) < 128) {
+            return Refused(file,
+                           what + ": Painter writes no side below 128 (sizeLog2 6 on a 256 set is written at 128), "
+                                  "and the plan does not reproduce it",
+                           kResizeNotFitted);
+        }
+        if (resize == Resize::other) {
+            return Refused(file, what + " is not recorded: only halving sides or enlarging them by powers of two is",
+                           kResizeNotFitted);
+        }
+        const bool upscale = resize == Resize::upscale;
+        const bool recordedFormat = (p.fileFormat == FileFormat::png && p.bitDepth == BitDepth::u16) ||
+                                    (p.fileFormat == FileFormat::exr && p.bitDepth == BitDepth::f32) ||
+                                    (!upscale && p.fileFormat == FileFormat::png && p.bitDepth == BitDepth::u8);
+        if (!recordedFormat) {
+            return Refused(file, what + " is recorded at PNG 16 and OpenEXR 32f, and downscaled at PNG 8, only",
+                           kResizeNotFitted);
+        }
+        for (const PlannedChannel& channel : file.channels) {
+            const std::optional<core::ChannelFormat> format = DocumentFormat(set, file, channel);
+            bool admitted = format == core::ChannelFormat::RGB16 || format == core::ChannelFormat::L16F;
+            if (upscale) {
+                const std::optional<VirtualMap> map = channel.source.virtualMap;
+                admitted = admitted ||
+                           (format == core::ChannelFormat::sRGB8 &&
+                            channel.source.channel == core::ChannelType::BaseColor) ||
+                           (channel.source.type == SourceType::virtualMap &&
+                            (map == VirtualMap::Normal_OpenGL || map == VirtualMap::Normal_DirectX));
+            }
+            if (admitted) continue;
+            return Refused(file,
+                           what + (upscale ? " is exact for RGB16 and L16F channels, an sRGB8 BaseColor and the "
+                                             "Normal_OpenGL and Normal_DirectX virtual maps only"
+                                           : " is exact for RGB16 and L16F channels only (an sRGB8 channel and a "
+                                             "virtual normal after a downscale are not reproduced)"),
+                           kResizeNotFitted);
+        }
     }
     if (p.paddingAlgorithm != Padding::infinite && p.paddingAlgorithm != Padding::passthrough) {
         return Refused(file,
@@ -277,8 +342,24 @@ ExportPreflight PreflightExport(const core::Project& project, const ExportPlan& 
                            "): the island normal and padding checks (decisions 245, 259) did not run";
             continue;
         }
-        if (blocked(IslandNormalFileRefusal(file, *coverage))) continue;
-        blocked(PaddingRefusal(file, *coverage));
+        const Coverage* checked = &*coverage;
+        std::optional<Coverage> target;
+        if (ResizeOf(static_cast<uint32_t>(set.resolution.width), static_cast<uint32_t>(set.resolution.height),
+                     file) != Resize::none) {
+            // A resized file: its coverage at its own size (resize.h, decision 349).
+            target = CoverageAt(set, inputs, file.width, file.height);
+            if (!target) {
+                entry.status = PreflightStatus::needs_evaluation;
+                entry.reason = "the UV coverage of the texture set \"" + file.textureSet + "\" at " +
+                               std::to_string(file.width) + "x" + std::to_string(file.height) +
+                               " is not available: the island normal and padding checks did not run";
+                continue;
+            }
+            if (blocked(ResizeCoverageRefusal(file, *coverage, *target))) continue;
+            checked = &*target;
+        }
+        if (blocked(IslandNormalFileRefusal(file, *checked))) continue;
+        blocked(PaddingRefusal(file, *checked));
     }
     for (const FilePreflight& file : preflight.files) {
         if (file.status == PreflightStatus::blocked) {
