@@ -136,6 +136,7 @@
 #include "export/padding.h"
 #include "export/plan.h"
 #include "export/png_writer.h"
+#include "export/tga_writer.h"
 #include "export/preset_aliases.h"
 #include "export/publish.h"
 #include "export/virtual_maps.h"
@@ -1574,9 +1575,24 @@ int RunAliases() {
     return 0;
 }
 
+int RunTga(const std::vector<std::string>& args) {
+    const std::string raw = ReadText(args[4]);
+    exporter::TgaImage image{static_cast<uint32_t>(std::stoul(args[1])),
+                             static_cast<uint32_t>(std::stoul(args[2])),
+                             static_cast<uint32_t>(std::stoul(args[3])),
+                             std::vector<uint8_t>(raw.begin(), raw.end())};
+    const std::string bytes = exporter::EncodeTga(image);
+    if (bytes != exporter::EncodeTga(image)) throw std::runtime_error("TGA8: nondeterministic encoding");
+    std::ofstream output(args[5], std::ios::binary);
+    output.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+    if (!output) throw std::runtime_error("TGA8: test output write failed");
+    return 0;
+}
+
 int main(int argc, char** argv) {
     std::vector<std::string> args(argv + 1, argv + argc);
     try {
+        if (args.size() == 6 && args[0] == "tga") return RunTga(args);
         if (args.size() >= 2 && args[0] == "--fault") {
             exporter::fault::Arm(args[1]);
             args.erase(args.begin(), args.begin() + 2);

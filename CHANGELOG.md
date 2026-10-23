@@ -12,6 +12,7 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
 
 ### Added
 
+- Native TGA8 encoding through pinned stb accepts already quantized L/LA/RGB/RGBA bytes, preserves alpha and writes deterministic RLE. Painter-compatible TGA processing remains gated on R-322; independent decoding and all four build modes validate the byte writer.
 - The capability inventory includes seven newly recorded mesh-export and procedural symbols. Unimplemented members remain release gaps; resolution value fields retain pending status until their individual symbols have compared trace evidence.
 - Procedural snapshot signatures include external glTF buffers and mesh import settings. Geometry changes cannot reuse a snapshot merely because the root mesh file is unchanged; renaming that source file preserves the signature.
 - The glTF texture preset resolves Painter's recorded predefined URL and uses its confirmed four-map packing and PNG8 defaults. Supplemental SpecularWeight has explicit PNG8/no-dithering defaults and a consumer-gap receipt. Authored consumer tests cover shared ORM images; AO_Mixed and full pilot parity remain pending.

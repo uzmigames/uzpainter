@@ -66,3 +66,20 @@ Four points were open:
   - 2.6, 2.7 and 2.10, because the shipped presets cannot export (refused on R-322) and their ORM still reads AO_Mixed;
   - 2.8 and 3.1 to 3.5.
 - The dry run, the DDS companions, the receipts and the SpecularWeight gap are evidenced only on a test-only copy, `tests/export/test_unreal_preset.py` `variant_presets`. That copy's provenance says `confirmed`, and its ORM's R reads `ambientOcclusion`. It is not shipped-preset, Painter-parity or UE 5.6 evidence.
+
+## Native writer evidence (2026-10-23)
+
+The missing-writer premise of section 6 is resolved by `src/export/tga_writer.{h,cpp}`.
+`EncodeTga` accepts explicit, already quantized top-first L/LA/RGB/RGBA bytes and
+writes RLE TGA8 through stb image_write v1.16 at pinned commit
+`003501f6d7a8668ce8b6d875e34dd97ad0d5d5b5`. `tools/vendoring` records the upstream
+archive hash, verbatim header and MIT licence; no upstream patch is needed.
+The writer preserves alpha, validates TGA dimension and stb signed-int indexing
+limits, and exposes no mutable stb settings.
+
+This does not supersede the parity refusal: no PNG quantization, transfer, padding
+or alpha-dropping rule has been promoted to TGA. Painter export configuration
+still refuses TGA on R-322, and both Unreal presets remain unconfirmed. The native
+writer tests use authored bytes, an independent RLE decoder and Pillow; they do
+not establish Painter bytes or UE 5.6 acceptance. Item 2.5 remains open for that
+integration and evidence.

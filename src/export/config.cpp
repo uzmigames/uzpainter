@@ -143,8 +143,8 @@ std::string FormatOwner(FileFormat format) {
         case FileFormat::png:
         case FileFormat::exr: return {};
         case FileFormat::tga:
-            return "phase3.2_unreal-ue56-packed-preset item 2.5 (the TGA writer over stb, which is not vendored yet; "
-                   "Painter's TGA files: recording R-322, decision 322)";
+            return "phase3.2_unreal-ue56-packed-preset item 2.5 (native quantized TGA8 writer exists; "
+                   "Painter's TGA processing and files still require recording R-322, decision 322)";
         case FileFormat::bmp:
         case FileFormat::jpeg: return "phase3.2_unreal-ue56-packed-preset (BMP and JPEG writers)";
         case FileFormat::dds:

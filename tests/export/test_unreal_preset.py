@@ -279,8 +279,9 @@ def test_specularweight_is_a_separate_map_and_a_consumer_gap(
 
 
 def test_tga_is_refused_naming_r322(export_tests: Path, tmp_path: Path) -> None:
-    """2.5: TGA stays refused before anything is written, naming item 2.5 and R-322: no TGA
-    writer is vendored and Painter's TGA files are not recorded."""
+    """2.5: TGA stays refused before writing, naming item 2.5 and R-322.
+    Painter-compatible TGA processing and files have not been recorded or admitted.
+    The native quantized-byte writer does not establish that compatibility."""
     presets = variant_presets(tmp_path / "presets")
     out = tmp_path / "out"
     [result] = plan(

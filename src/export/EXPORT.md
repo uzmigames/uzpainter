@@ -162,7 +162,7 @@ Task `phase1.17_export-presets`. Local run report: `parity/reports/phase1/export
   - `SpecularWeight`: absent when the stack has no SpecularWeight channel. The receipt reports it as a consumer gap, and the mapping `Specular = 0.5 x SpecularWeight` is not applied.
 
   Padding and dithering come from `exportParameters`.
-- **TGA.** Refused before writing (`NotYetSupported`, naming item 2.5 and R-322): stb is not vendored, and Painter's TGA files are not recorded.
+- **TGA.** `tga_writer.{h,cpp}` provides `EncodeTga(TgaImage)` for already quantized top-first L, LA, RGB and RGBA bytes. Pinned stb v1.16 writes deterministic RLE TGA8, retaining alpha even when opaque, with bottom-left file origin and BGR(A) storage for colour. Dimensions must be 1..65535 and the sample count must fit stb's signed-int indexing. No transfer, quantization, padding or alpha removal is inferred from PNG. Painter export configuration remains refused before writing (`NotYetSupported`, naming item 2.5 and R-322): its TGA processing and bytes are not recorded. The native writer's authored tests are not Painter or UE 5.6 acceptance.
 - **DDS variant.** `unreal-engine-packed-dds` has the same maps at PNG 16 and a preset-level `dds` block. No Painter name answers to it, and it shares the default preset's `unconfirmed` layout and R-322.
   - Targets: BaseColor and Emissive `BC7_SRGB` with colour mips, ORM `BC7` with linear mips, Normal `BC5` with normal mips; SpecularWeight has none.
   - Only a shipped preset may carry `dds`; an inline preset's `dds` key is refused as undocumented. `LoadShippedPreset` checks every target against the preset's maps, and BC5 must go with normal mips and BC7_SRGB with colour mips.

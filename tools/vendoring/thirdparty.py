@@ -1328,6 +1328,42 @@ LIBRARIES: tuple[Library, ...] = (
     ),
 )
 
+LIBRARIES += (
+    Library(
+        name="stb image_write",
+        folder="stb",
+        upstream="https://github.com/nothings/stb",
+        version="stb_image_write v1.16",
+        commit="003501f6d7a8668ce8b6d875e34dd97ad0d5d5b5",
+        archive_url="https://codeload.github.com/nothings/stb/tar.gz/003501f6d7a8668ce8b6d875e34dd97ad0d5d5b5",
+        archive_name="stb-003501f6.tar.gz",
+        archive_sha256="a6c31950b3bdf05eb92258768ba2a11bd44449490574b1aac67028452288c40d",
+        archive_root="stb-003501f6d7a8668ce8b6d875e34dd97ad0d5d5b5/",
+        version_source=(
+            "UzPainter selection: TGA8 writer, phase3.2_unreal-ue56-packed-preset item 2.5; "
+            "upstream HEAD pinned on 2026-10-23"
+        ),
+        select=("stb_image_write.h", "LICENSE"),
+        licence_files=("LICENSE",),
+        include_dirs=("",),
+        licence="MIT (chosen from upstream's MIT/public-domain dual licence)",
+        role="shipped: compiled privately into the export TGA writer",
+        features=(
+            "Memory-only TGA8 writer; STB_IMAGE_WRITE_STATIC and STBI_WRITE_NO_STDIO; "
+            "no public stb globals"
+        ),
+        uzengine_folder=None,
+        uzengine_note=(
+            "Selected independently for UzPainter's TGA writer; no UzEngine source copied"
+        ),
+        core=False,
+        importer=(
+            "Rulebook task phase3.2_unreal-ue56-packed-preset, tools.vendoring.import_thirdparty"
+        ),
+        retrieved="2026-10-23",
+    ),
+)
+
 LIBRARY_BY_NAME = {lib.name: lib for lib in LIBRARIES}
 LIBRARY_BY_FOLDER = {lib.folder: lib for lib in LIBRARIES}
 

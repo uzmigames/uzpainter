@@ -179,3 +179,36 @@ still misses two texels per set/export, including precomposed opacity-1 sets.
 Decision 131 records the scoped conclusion and private aggregate report.
 The authored scalar fixture/request tests pass; no exact operator or acceptance
 is claimed, and item 2.10 remains open.
+
+## 11. Native TGA8 writer (2026-10-23)
+
+The writer portion of item 2.5 is implemented in `src/export/tga_writer.{h,cpp}`:
+`EncodeTga(TgaImage)` takes explicitly quantized L/LA/RGB/RGBA bytes, top row
+first, and writes deterministic RLE TGA8 through pinned stb image_write v1.16.
+Alpha is retained, including fully opaque alpha. Zero/over-65535 dimensions,
+invalid layouts, sample-count mismatch and rasters exceeding stb's signed-int
+indexing limit are refused before encoding. Private static stb settings are
+never mutated. Build integration includes the application, Python API tests and
+native export tests.
+
+`tools/vendoring` pins upstream commit
+`003501f6d7a8668ce8b6d875e34dd97ad0d5d5b5`, archive SHA-256
+`a6c31950b3bdf05eb92258768ba2a11bd44449490574b1aac67028452288c40d`,
+verbatim header and MIT licence. The folder manifest, licence inventory and
+include checks pass.
+
+Validation: 51 CPU tests passed, 88 unrelated cases deselected
+(`scripts/tmp/tga-final.xml`): 19 writer cases, TGA/unsupported-format refusal
+regressions and vendoring checks. Writer tests verify RLE/raw packet transitions,
+orientation, all four layouts, alpha extremes and dimension/indexing limits,
+using an independent decoder and Pillow. Ruff, mypy (three touched Python files)
+and `zig fmt --check build.zig` pass.
+
+`zig build export-tests` also passes with `-Doptimize=ReleaseSafe`, `ReleaseFast`
+and `ReleaseSmall`. The same 19 authored writer cases pass against each of those
+three binaries, in addition to the Debug pytest run.
+
+Item 2.5 stays open: Painter TGA processing/file evidence R-322 and export
+integration remain unadmitted. The public export configuration still refuses
+TGA; no PNG processing rules were silently reused. No Painter or GPU ran, and
+no Unreal preset or consumer acceptance is claimed.

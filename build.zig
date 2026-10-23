@@ -310,6 +310,7 @@ const app_thirdparty_include_dirs = [_][]const u8{
     "thirdparty/tinyexr",
     "thirdparty/cpython-dev/include",
     "thirdparty/pybind11/include",
+    "thirdparty/stb",
 };
 const python_import_library = "thirdparty/cpython-dev/libs/python313.lib";
 const zlib_sources = [_][]const u8{
@@ -440,6 +441,7 @@ const export_sources = [_][]const u8{
     "export/padding.cpp",
     "export/plan.cpp",
     "export/png_writer.cpp",
+    "export/tga_writer.cpp",
     "export/preset_aliases.cpp",
     "export/project_export.cpp",
     "export/publish.cpp",
@@ -1834,6 +1836,7 @@ pub fn build(b: *std.Build) void {
     export_tests_mod.addIncludePath(b.path("thirdparty/spng/spng"));
     export_tests_mod.addIncludePath(b.path("thirdparty/zlib"));
     export_tests_mod.addIncludePath(b.path("thirdparty/tinyexr"));
+    export_tests_mod.addIncludePath(b.path("thirdparty/stb"));
     export_tests_mod.linkLibrary(mesh_lib);
     // The end-to-end export opens `.uzp` projects (`src/export/project_export.h`).
     export_tests_mod.linkLibrary(store_lib);
