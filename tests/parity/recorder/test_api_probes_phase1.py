@@ -95,6 +95,13 @@ def probe_path(stem: str) -> Path:
     return request if request.is_file() else MANIFEST_DIR / f"{stem}.json"
 
 
+def job_manifest(stem: str) -> dict[str, Any]:
+    """Replay authored instructions as a new fake recording, without old private records."""
+    manifest: dict[str, Any] = load_json(probe_path(stem))
+    manifest["private_records"] = []
+    return manifest
+
+
 PROBES = [probe_path(stem) for stem in STEMS]
 # The maps each probe exports: BaseColor, except P20-A, which exports every channel of the default
 # project (decision 107).
@@ -248,7 +255,7 @@ def test_a_rewrite_names_two_inputs() -> None:
 
 @pytest.mark.parametrize("replacement", ["missing", None, [], 7])
 def test_after_reopen_rewrite_requires_a_pinned_input(replacement: Any) -> None:
-    manifest = load_json(REQUEST_DIR / "p22b-reload-order-zam.json")
+    manifest = job_manifest("p22b-reload-order-zam")
     manifest["instruction_sequence"]["steps"][5]["args"]["with_input_after_reopen"] = replacement
     with pytest.raises(RecorderError, match="requires a reload rewrite and must name an input"):
         probe_job_from_manifest(manifest)
@@ -256,7 +263,7 @@ def test_after_reopen_rewrite_requires_a_pinned_input(replacement: Any) -> None:
 
 @pytest.mark.parametrize("removed", ["rewrite_input", "with_input"])
 def test_after_reopen_rewrite_requires_the_original_rewrite(removed: str) -> None:
-    manifest = load_json(REQUEST_DIR / "p22b-reload-order-zam.json")
+    manifest = job_manifest("p22b-reload-order-zam")
     del manifest["instruction_sequence"]["steps"][5]["args"][removed]
     with pytest.raises(RecorderError, match="requires a reload rewrite and must name an input"):
         probe_job_from_manifest(manifest)
@@ -275,7 +282,7 @@ def test_reload_order_requests_copy_distinct_bytes_after_reopen(
     monkeypatch.delenv("OCIO", raising=False)
     monkeypatch.delenv("PAINTER_ACE_CONFIG", raising=False)
     suffix = "-all-origins" if all_origins else ""
-    job = load_probe_job(REQUEST_DIR / f"p22b-reload-order-{order}{suffix}.json")
+    job = probe_job_from_manifest(job_manifest(f"p22b-reload-order-{order}{suffix}"))
     assert manifest_symbol_problems(job.manifest) == []
     assert job.observed and not job.exports and job.manifest["private_records"] == []
     names = [step.args["image"] for step in job.state_steps[1:]]
@@ -339,7 +346,7 @@ def test_reload_order_requests_copy_distinct_bytes_after_reopen(
 
 
 def test_mesh_map_alias_request_distinguishes_names_from_shared_content() -> None:
-    job = load_probe_job(REQUEST_DIR / "p22b-mesh-map-alias-update.json")
+    job = probe_job_from_manifest(job_manifest("p22b-mesh-map-alias-update"))
     assert manifest_symbol_problems(job.manifest) == []
     assert job.observed and not job.exports and job.manifest["private_records"] == []
     assert [s.step for s in job.state_steps] == list(range(2, 10))

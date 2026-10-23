@@ -46,7 +46,20 @@ SOFTWARE = {
 }
 # The modules of decision 295's group, and the symbols it routes to another evidence route.
 MODULES = ("textureset", "project", "export", "baking", "source")
+BAKING_JOB_ROUTES = {
+    f"substance_painter.baking.{name}": "phase3.5_embree-bakers"
+    for name in (
+        "BakingStatus",
+        "BakingStatus.Success",
+        "BakingStatus.Fail",
+        "BakingStatus.Cancel",
+        "bake_async",
+        "bake_selected_textures_async",
+    )
+}
 ROUTED = {
+    # Decision 355 implemented the job surface; decision 297's bake probe owns its evidence.
+    **BAKING_JOB_ROUTES,
     # The module is supported since 8fa4f517 (baking-defaults replay); these members still wait
     # for a recorded baking probe, owned by phase3.5_embree-bakers (their inventory notes).
     **{
@@ -180,6 +193,16 @@ def test_the_requests_name_the_symbols_they_exercise() -> None:
             if stem in stems and symbol in pending_of_the_group():
                 short = symbol.rsplit(".", 1)[1]
                 assert short in description, (stem, symbol)
+
+
+def test_baking_job_routes_match_the_inventory_evidence_owner() -> None:
+    entries = {e["symbol"]: e for e in load_json(INVENTORY)["entries"] if e["context"] == "any"}
+    for symbol, owner in BAKING_JOB_ROUTES.items():
+        entry = entries[symbol]
+        assert entry["status"] == "pending-evidence"
+        assert owner in entry["notes"]
+        assert "decision 355" in entry["notes"] and "decision 297" in entry["notes"]
+        assert (REPO_ROOT / ".rulebook" / "tasks" / owner / "tasks.md").is_file()
 
 
 def test_a_blocked_export_path_is_only_an_export_probe_argument() -> None:
