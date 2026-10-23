@@ -412,6 +412,30 @@ def test_reload_mesh_calls_back_on_the_dispatcher_thread_for_success_and_failure
 
 # ── 2.6, 3.5 Engine computations ────────────────────────────────────────────────────────────────
 
+
+def test_baking_mode_preserves_explicit_computation_state(facade: Run) -> None:
+    """12.2.0 keeps Baking enabled; Visualisation still masks the script's state."""
+    result = ok(
+        facade("""
+create()
+rows = []
+for enabled in (True, False, True):
+    sp.application.enable_engine_computations(enabled)
+    for mode in (ui.UIMode.Baking, ui.UIMode.Visualisation, ui.UIMode.Edition):
+        ui.switch_to_mode(mode)
+        rows.append([enabled, ui.get_current_mode().name,
+                     sp.application.engine_computations_status(),
+                     uzpainter.application.engine_computations_status()])
+result = rows
+""")
+    )
+    assert result == [
+        [enabled, mode, enabled and mode != "Visualisation", enabled]
+        for enabled in (True, False, True)
+        for mode in ("Baking", "Visualisation", "Edition")
+    ]
+
+
 ENGINE = """
 listen("EngineComputationsStatusChanged", "BusyStatusChanged", "ExportTexturesAboutToStart",
        "ExportTexturesEnded")

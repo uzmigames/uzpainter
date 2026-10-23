@@ -18,9 +18,9 @@ again (P21-F, P21-G; decision 319).
 - **Engine computations.** The native state (`uzpainter.application`): while disabled, background
   jobs stay queued. Explicit synchronous exports finish without enabling computations (observed
   R10), and their busy section covers only that export. Each state change delivers
-  `EngineComputationsStatusChanged`. `engine_computations_status()` also reads False while the UI
-  mode is Baking or Visualisation, and the script's state again in Edition
-  (`p22b-host-application` s27-s32, both recordings; decision 297).
+  `EngineComputationsStatusChanged`. `engine_computations_status()` reads False in Visualisation;
+  Baking and Edition expose the script's state (`p22b-host-application` s27-s32, both recordings
+  of the current 12.2.0 oracle; decision 297).
 """
 
 from __future__ import annotations
@@ -119,9 +119,9 @@ def execute_when_not_busy(callback: Callable[[], Any]) -> None:
 
 
 def engine_computations_status() -> bool:
-    """Whether engine computations are enabled: the script's state, in the Edition UI mode."""
-    in_edition_mode = SESSION.ui_mode is None or SESSION.ui_mode.name == "Edition"
-    return in_edition_mode and bool(uzpainter.application.engine_computations_status())
+    """Whether computations are enabled outside the Visualisation UI mode."""
+    visualisation = SESSION.ui_mode is not None and SESSION.ui_mode.name == "Visualisation"
+    return not visualisation and bool(uzpainter.application.engine_computations_status())
 
 
 def enable_engine_computations(enable: bool) -> None:

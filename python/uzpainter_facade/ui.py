@@ -3,9 +3,10 @@
 UzPainter has no desktop UI. The Qt members of `ui` change no texture, render or script-visible
 state in Painter, so each raises `UnsupportedInUzPainter(symbol, reason, alternative)` instead of
 pretending to succeed. The UI mode is script state: `switch_to_mode` stores it and
-`get_current_mode` reads it back (Edition until a mode is set). In the Baking and Visualisation
-modes `application.engine_computations_status()` reads False, as Painter's does
-(`p22b-host-application` s27-s30; `host.engine_computations_status`); nothing else reads it.
+`get_current_mode` reads it back (Edition until a mode is set). Visualisation makes
+`application.engine_computations_status()` read False; Baking preserves the script's state
+(`p22b-host-application` s27-s30 in the current 12.2.0 oracle; `host.engine_computations_status`).
+Nothing else reads the mode.
 """
 
 from __future__ import annotations
