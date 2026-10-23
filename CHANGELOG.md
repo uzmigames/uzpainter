@@ -171,6 +171,7 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
 
 ### Fixed
 
+- Baking parameters follow the promoted Painter 12.2 catalog and nine recorded initialization controls. Fresh projects store the observed bake size at creation (256, 512, 1024 or 2048), preserve it through texture-set resizing and reopen, and expose initial Curvature bounds separately from unset declared defaults. Unobserved creation sizes retain an explicit refusal.
 - Padding blend weights for own taps in one triangle use box-normalised float32 distances, correcting ten recorded ring differences without adding new ones. Seam uncertainty and production refusals remain in force.
 - Baking parameter handles can pin an explicit property catalog. Catalogs without `OffsetMap` preserve an empty legacy setting and reject nonempty or malformed legacy values atomically; the embedded defaults remain unchanged.
 - Shader-cache includes and atomic temporary files use normalized extended Windows paths, so deep export folders no longer fail when a temporary filename exceeds `MAX_PATH`. DXIL and SPIR-V regressions cover compilation, persisted entries and cache reuse.

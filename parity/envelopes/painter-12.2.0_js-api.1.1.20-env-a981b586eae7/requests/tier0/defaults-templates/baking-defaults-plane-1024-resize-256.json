@@ -1,0 +1,145 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/defaults-templates/baking-defaults-plane-1024-resize-256",
+  "tier": "0",
+  "domain": "tier0/defaults/baking",
+  "description": "Baking initialization control: fresh authored plane at 1024 px, then set_resolutions(width=256, height=256); capture every baking parameter and state only after these steps. r1 after setup, r2 after save/reopen, r3 after repeating setup on another fresh project. No bake or baking-parameter mutation; no value predicted. Compare against fresh resolution controls to distinguish initial from current resolution.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "default_texture_resolution": 1024
+        }
+      },
+      {
+        "call": "substance_painter.textureset.set_resolutions",
+        "args": {
+          "width": 256,
+          "height": 256
+        },
+        "step": 2
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.baking.BakingParameters.common"
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "Normal"
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "WorldSpaceNormal"
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "ID"
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "AO"
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "Curvature"
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "Position"
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "Thickness"
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "Height"
+        }
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "BentNormals"
+        }
+      },
+      {
+        "step": 13,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "Opacity"
+        }
+      },
+      {
+        "step": 14,
+        "call": "substance_painter.baking.BakingParameters.get_curvature_method"
+      },
+      {
+        "step": 15,
+        "call": "substance_painter.baking.BakingParameters.get_enabled_bakers"
+      },
+      {
+        "step": 16,
+        "call": "substance_painter.baking.BakingParameters.is_textureset_enabled"
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.default_texture_resolution",
+      "value": 1024,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": []
+}

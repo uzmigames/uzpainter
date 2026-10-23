@@ -14,7 +14,7 @@
 // What still raises `uzp::core::NotYetSupported`, never a guess (decision 323):
 // - `Property::properties()`: Painter's meta properties carry its descriptive text, which is not
 //   reproduced;
-// - a default the observation does not establish (`OutputSize`, `TonemappingBounds`);
+// - an unset OutputSize outside the observed project-creation resolutions;
 // - a value outside a key's range: how Painter treats it is not recorded;
 // - storing a value for a baker other than AO, Position, ID (decision 337), Thickness and Height
 //   (decision 341), which its owner baker task brings.
@@ -70,9 +70,13 @@ struct PropertySpec {
     /// component); absent when unbounded on that side.
     std::optional<PropertyValue> minimum;
     std::optional<PropertyValue> maximum;
-    /// The value on a fresh project (an `Enum` as its label); absent when not established.
+    /// The established default (an `Enum` as its label); absent when Painter declares none.
     std::optional<PropertyValue> default_value;
     std::string default_note;
+    /// A separately observed initialization value when Painter declares no default.
+    std::optional<PropertyValue> initial_value;
+    /// Observed square project-creation sizes; no extrapolation to unrecorded sizes.
+    std::map<int, PropertyValue> initial_by_resolution;
     /// The private observation the entry must equal: the record's SHA-256 and its output.
     std::string record_sha256;
     std::string output_id;
@@ -108,7 +112,7 @@ public:
     PropertyGroup group() const;
     const PropertySpec& spec() const { return *spec_; }
 
-    /// The value set through `BakingParameters::set`, else the default, else `NotYetSupported`.
+    /// The stored value, declared default or observed initial value, else `NotYetSupported`.
     PropertyValue value() const;
     const std::string& name() const;
     const std::string& label() const;

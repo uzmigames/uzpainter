@@ -112,6 +112,20 @@ void LinkChecked(BakingSession& session, const std::vector<std::string>& group, 
 
 }  // namespace
 
+void InitializeBakingSettings(core::Project& project) {
+    for (const PropertySpec& spec : PropertySpecs()) {
+        if (spec.short_name != "OutputSize") continue;
+        for (auto& set : project.texture_sets) {
+            if (set.resolution.width != set.resolution.height || set.bake_settings.common.contains("OutputSize"))
+                continue;
+            const auto initial = spec.initial_by_resolution.find(set.resolution.width);
+            if (initial == spec.initial_by_resolution.end()) continue;
+            const auto& size = std::get<std::pair<std::int64_t, std::int64_t>>(initial->second);
+            set.bake_settings.common["OutputSize"] = Array{size.first, size.second};
+        }
+    }
+}
+
 BakingSession LoadBakingSession(const core::Project& project) {
     const Sets sets(project);
     BakingSession session(sets.names);

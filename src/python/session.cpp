@@ -15,6 +15,7 @@
 #include <system_error>
 #include <utility>
 
+#include "bake/baking_project.h"
 #include "evaluator/dag.h"
 #include "evaluator/profile.h"
 #include "evaluator/sources.h"
@@ -366,6 +367,7 @@ core::TransactionResult Session::Create(const std::filesystem::path& mesh_path, 
                 store.StageResource(file.bytes, std::string(mesh::kExternalFileMime));
             }
             mesh::CreateTextureSets(edit, imported, mesh::MeshSource{mesh_source, NowUtc()}, channels);
+            bake::InitializeBakingSettings(edit.project());
             // Painter's new stack holds one empty paint layer, "Layer 1", at its bottom (every
             // structure readback of the Tier 0 api-probes, both recordings; decisions 105, 348).
             std::vector<core::InsertPosition> stacks;

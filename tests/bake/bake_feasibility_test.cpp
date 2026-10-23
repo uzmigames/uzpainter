@@ -1116,10 +1116,11 @@ void CaseParameters() {
     for (const char* key : {"OutputSize", "DilationWidth", "ApplyDiffusion", "HipolyMesh", "LowAsHigh", "CageMode",
                             "CageMesh", "MaxHeight", "MaxDepth", "RelativeScale", "SmoothNormals", "IgnoreBackface",
                             "FilterMethod", "LowpolySuffix", "HipolySuffix", "BackfaceCullingSuffix", "SubSampling",
-                            "SkewFaceBehavior", "OffsetMap"}) {
+                            "SkewFaceBehavior"}) {
         CHECK(common.count(key) == 1);
     }
-    CHECK_EQ(common.size(), 19u);
+    CHECK_EQ(common.size(), 18u);
+    CHECK(!common.contains("OffsetMap"));
     for (const char* key : {"NbSecondary", "MinDistance", "MaxDistance", "MaxDistanceRelativeScale", "Spread",
                             "Distribution", "IgnoreBackfaceSecondary", "FilterMethodSecondary", "Attenuation",
                             "GroundPlane", "GroundOffset"}) {
@@ -1156,6 +1157,9 @@ void CaseParameters() {
     CHECK(Contains(message, "descriptive text"));
     // Another baker's values are readable, never stored here (their owner task).
     const auto curvature = params.baker(MeshMapUsage::Curvature);
+    CHECK(!curvature.at("TonemappingBounds").spec().default_value.has_value());
+    CHECK((std::get<std::pair<double, double>>(curvature.at("TonemappingBounds").value()) ==
+           std::pair<double, double>{-1.0, 1.0}));
     CHECK(std::get<std::int64_t>(curvature.at("NbSecondary").value()) == 32);
     message = ExpectThrow<NotYetSupported>([&] { BakingParameters::set({{curvature.at("NbSecondary"), std::int64_t{8}}}); });
     CHECK(Contains(message, "phase3.4_baker-curvature"));
@@ -1575,21 +1579,29 @@ void CaseParametersToRequest() {
     CHECK((mapped.keys_not_read == std::vector<std::string>{"SmoothNormals", "SkewFaceBehavior"}));
     CHECK(mapped.request.ao.distribution == Distribution::Cosine);  // the default
     CHECK(SerializeResult(Bake(baker, mapped.request)) == SerializeResult(Bake(baker, base)));
-    // Painter 12.2's observed catalog removes OffsetMap. Pin that shape without promoting
-    // the embedded defaults or mutating the catalog used by other parameter handles.
-    std::vector<PropertySpec> newer_catalog = PropertySpecs();
-    std::erase_if(newer_catalog, [](const PropertySpec& spec) {
-        return spec.group == PropertyGroup::Detail && spec.short_name == "OffsetMap";
-    });
-    CHECK_EQ(newer_catalog.size() + 1, PropertySpecs().size());
-    BakingParameters newer("bevelled_cube", std::move(newer_catalog));
+    // The current catalog omits OffsetMap; an explicitly pinned older catalog keeps its
+    // own shape and still refuses unsupported per-texel cage inputs before baking.
+    std::vector<PropertySpec> legacy_catalog = PropertySpecs();
+    PropertySpec offset;
+    offset.short_name = "OffsetMap";
+    offset.name = "Detail.OffsetMap";
+    offset.group = PropertyGroup::Detail;
+    offset.type = PropertyType::String;
+    offset.default_value = std::string();
+    legacy_catalog.push_back(std::move(offset));
+    BakingParameters older("bevelled_cube", std::move(legacy_catalog));
+    BakingParameters newer("bevelled_cube");
     CHECK(!newer.common().contains("OffsetMap"));
-    CHECK(params.common().contains("OffsetMap"));
+    CHECK(older.common().contains("OffsetMap"));
     const auto saved = ToBakeSettings(params);
     LoadBakeSettings(newer, saved);
     CHECK(ToBakeSettings(newer) == saved);
     CHECK(SerializeResult(Bake(baker, RequestFromParameters(newer, base).request)) ==
           SerializeResult(Bake(baker, mapped.request)));
+    LoadBakeSettings(older, saved);
+    BakingParameters::set({{older.common().at("OffsetMap"), std::string("offset.png")}});
+    message = ExpectThrow<NotYetSupported>([&] { (void)RequestFromParameters(older, base); });
+    CHECK(Contains(message, "OffsetMap") && Contains(message, "phase3.5_embree-bakers"));
     auto legacy_empty = saved;
     legacy_empty.detail["OffsetMap"] = uzp::core::json::Value("");
     LoadBakeSettings(newer, legacy_empty);
@@ -1642,8 +1654,7 @@ void CaseParametersToRequest() {
              {ao.at("GroundPlane"), true, "phase3.4_baker-ao"},
              {ao.at("Spread"), 90.0, "phase3.4_baker-ao"},
              {ao.at("IgnoreBackfaceSecondary"), EnumLabel{"Always"}, "phase3.4_baker-ao"},
-             {ao.at("FilterMethodSecondary"), EnumLabel{"Only same mesh name"}, "phase3.4_baker-ao"},
-             {common.at("OffsetMap"), std::string("offset.png"), "phase3.5_embree-bakers"}}) {
+             {ao.at("FilterMethodSecondary"), EnumLabel{"Only same mesh name"}, "phase3.4_baker-ao"}}) {
         const PropertyValue before = property.value();
         BakingParameters::set({{property, value}});
         message = ExpectThrow<NotYetSupported>([&] { (void)RequestFromParameters(params, base); });

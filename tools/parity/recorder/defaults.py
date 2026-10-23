@@ -7,7 +7,8 @@ of every key (value, name, short name, label, widget type, enum values, the enum
 enum label, meta properties), or one of the documented baking state getters. Recordings:
 `r1` same session, `r2` after save and reopen, `r3` on a second fresh project in the same
 session. A controlled fresh-project request may set only `default_texture_resolution` in
-addition to the mesh, to observe whether effective baking defaults depend on that setting.
+addition to the mesh, and one set_resolutions before captures, to distinguish creation-time
+initialization from the texture set's current resolution.
 
 Project templates (`03-project-model.md` §2): the shipped templates are the `.spt` files of the
 documented application shelf (`resource.Shelves.application_shelf`), named by their
@@ -56,9 +57,21 @@ def baking_output_id(step: Step) -> str:
 
 
 def check_baking_job(job: Job) -> None:
-    """A fresh project, then `common()` and the ten bakers, each captured exactly once."""
-    if len(job.state_steps) != 1 or job.state_steps[0].call != ps.CREATE:
-        raise RecorderError("a baking-defaults job creates one project and changes nothing else")
+    """A fresh project, optional resolution control, then every parameter capture."""
+    if not job.state_steps or job.state_steps[0].call != ps.CREATE:
+        raise RecorderError("a baking-defaults job starts with one fresh project")
+    controls = job.state_steps[1:]
+    if len(controls) > 1 or any(step.call != ps.SET_RESOLUTIONS for step in controls):
+        raise RecorderError(
+            "a baking-defaults job permits only one resolution control after create"
+        )
+    for step in controls:
+        if set(step.args) != {"width", "height"} or any(
+            type(size) is not int or size <= 0 or size & (size - 1) for size in step.args.values()
+        ):
+            raise RecorderError("baking resolution controls need power-of-two width and height")
+        if any(capture.step < step.step for capture in job.captures):
+            raise RecorderError("a baking resolution control must precede every capture")
     create = job.state_steps[0].args
     if "mesh" not in create or set(create) - {"mesh", "default_texture_resolution"}:
         raise RecorderError(

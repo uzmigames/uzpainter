@@ -31,7 +31,9 @@ def synthetic_record(table: dict[str, Any]) -> dict[str, Any]:
                 meta[key] = value
             observed = entry["default"]
             if observed is None:
-                observed = [1, 1] if entry["type"] == "IntPair" else [0.0, 1.0]
+                observed = entry.get(
+                    "initial_value", entry.get("initial_by_resolution", {}).get("256", [0.0, 1.0])
+                )
             properties[entry["short_name"]] = {
                 "short_name": entry["short_name"],
                 "name": entry["name"],
@@ -48,7 +50,11 @@ def synthetic_record(table: dict[str, Any]) -> dict[str, Any]:
         default = table["texture_set_state"][name]["default"]
         outputs.append({"output_id": output_id, "values": {"texture_sets": {"plane": default}}})
     recordings = [{"recording_id": f"r{i}", "outputs": copy.deepcopy(outputs)} for i in (1, 2, 3)]
-    return {"golden_id": bd.GOLDEN_ID, "recordings": recordings}
+    return {
+        "golden_id": bd.GOLDEN_ID,
+        "recordings": recordings,
+        "key": {"project_settings": {"create": {"default_texture_resolution": 256}}},
+    }
 
 
 def observed(
@@ -79,6 +85,39 @@ def test_a_table_equal_to_its_record_passes() -> None:
     table = bd.load_table()
     sha = table["observation"]["record_sha256"]
     assert bd.check(table, synthetic_record(table), sha) == []
+
+
+@pytest.mark.parametrize("recording_ids", [[], ["r1"], ["r1", "r2"], ["r1", "r2", "r2"]])
+def test_incomplete_capture_cannot_establish_defaults(recording_ids: list[str]) -> None:
+    table = bd.load_table()
+    sha = table["observation"]["record_sha256"]
+    record = synthetic_record(table)
+    template = record["recordings"][0]
+    record["recordings"] = [dict(template, recording_id=rid) for rid in recording_ids]
+    assert bd.check(table, record, sha) == [
+        f"record {sha[:12]}: expected recordings r1, r2, r3 in order"
+    ]
+
+
+def test_control_cases_keep_distinct_authored_requests_and_traces() -> None:
+    import json
+
+    from tools.parity.schemas import REPO_ROOT
+
+    requests = REPO_ROOT / "parity/envelopes/painter-12.1.5_js-api.1.1.20/requests"
+    expected = [("plane", 256), ("plane", 1024), ("bevelled-cube", 256)]
+    assert bd.BASELINE.golden_id == bd.GOLDEN_ID
+    assert len({case.trace_id for case in bd.CASES}) == 9
+    for case, (mesh, resolution) in zip(bd.CONTROL_CASES[:3], expected, strict=True):
+        request = json.loads((requests / case.manifest_relative).read_text(encoding="utf-8"))
+        assert request["golden_id"] == case.golden_id
+        [create] = [
+            step
+            for step in request["instruction_sequence"]["steps"]
+            if step["call"] == "substance_painter.project.create"
+        ]
+        assert create["args"]["mesh"] == mesh
+        assert create["args"]["default_texture_resolution"] == resolution
 
 
 @pytest.mark.parametrize(
@@ -121,6 +160,17 @@ def test_an_unestablished_default_must_stay_null() -> None:
     assert problems == [f"baking/common OutputSize (record {sha[:12]}): default differs"]
 
 
+def test_initial_value_is_checked_in_every_control_recording() -> None:
+    table = bd.load_table()
+    sha = table["observation"]["record_sha256"]
+    record = synthetic_record(table)
+    assert bd.check_initial_record(table, record, sha) == []
+    observed(record, "baking/baker/Curvature", "TonemappingBounds", 2)["value"] = [0.0, 1.0]
+    assert bd.check_initial_record(table, record, sha) == [
+        f"baking/baker/Curvature TonemappingBounds (record {sha[:12]} r3): initial_value differs"
+    ]
+
+
 def test_the_model_check_names_each_difference() -> None:
     table = bd.load_table()
     model: dict[str, Any] = {
@@ -146,4 +196,7 @@ def test_the_private_capture_equals_the_table() -> None:
         pytest.skip(f"oracle_unavailable: record {sha[:12]} is not in this machine's store")
     report = bd.run(bd.TABLE, None, store)
     assert report["status"] == "pass", report["problems"]
-    assert report["records"] == [sha] and report["entries"] == 60
+    assert report["records"] == sorted(
+        {sha} | {item["record_sha256"] for item in bd.load_table()["initial_observations"]}
+    )
+    assert report["entries"] == sum(len(entries) for _, entries in bd.groups(bd.load_table()))

@@ -1,0 +1,150 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/defaults-templates/baking-defaults-plane-2048",
+  "tier": "0",
+  "domain": "tier0/defaults/baking",
+  "description": "Baking initialization control: fresh authored plane at 2048 px; capture every baking parameter and state only after these steps. r1 after setup, r2 after save/reopen, r3 after repeating setup on another fresh project. No bake or baking-parameter mutation; no value predicted. Compare against fresh resolution controls to distinguish initial from current resolution.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "default_texture_resolution": 2048
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.baking.BakingParameters.common"
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "Normal"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "WorldSpaceNormal"
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "ID"
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "AO"
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "Curvature"
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "Position"
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "Thickness"
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "Height"
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "BentNormals"
+        }
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "Opacity"
+        }
+      },
+      {
+        "step": 13,
+        "call": "substance_painter.baking.BakingParameters.get_curvature_method"
+      },
+      {
+        "step": 14,
+        "call": "substance_painter.baking.BakingParameters.get_enabled_bakers"
+      },
+      {
+        "step": 15,
+        "call": "substance_painter.baking.BakingParameters.is_textureset_enabled"
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.default_texture_resolution",
+      "value": 2048,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "14ec8230d8805b010df158d7efe65ae87d02b97fb03c9b840378d34be01dd709",
+      "size_bytes": 114916
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "997d5bfb01abd4493ca872f54ea760dff33055e38712838423e37d302e1d5244",
+      "size_bytes": 402
+    }
+  ]
+}

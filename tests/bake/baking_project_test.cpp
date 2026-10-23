@@ -280,10 +280,12 @@ json::Array Dump(const std::map<std::string, Property>& properties) {
         if (spec.minimum) range["min"] = Plain(spec, *spec.minimum);
         if (spec.maximum) range["max"] = Plain(spec, *spec.maximum);
         if (!range.empty()) entry["range"] = std::move(range);
-        try {
-            entry["default"] = Plain(spec, property.value());
-        } catch (const NotYetSupported&) {
-            entry["default"] = nullptr;
+        entry["default"] = spec.default_value ? Plain(spec, *spec.default_value) : json::Value(nullptr);
+        if (spec.initial_value) entry["initial_value"] = Plain(spec, *spec.initial_value);
+        if (!spec.initial_by_resolution.empty()) {
+            json::Object initial;
+            for (const auto& [size, value] : spec.initial_by_resolution) initial[std::to_string(size)] = Plain(spec, value);
+            entry["initial_by_resolution"] = std::move(initial);
         }
         out.push_back(std::move(entry));
     }

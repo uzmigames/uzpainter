@@ -318,6 +318,46 @@ def test_controlled_resolution_refuses_invalid_request_before_connection(
     assert transport.sent == []
 
 
+@pytest.mark.parametrize("width,height", [(1024, 1024), (256, 256), (256, 1024)])
+def test_baking_resize_control_keeps_all_three_recordings(
+    make_session: Callable[[Any], PainterSession],
+    world: Any,
+    baking_job: Job,
+    work: Path,
+    inbox: Path,
+    width: int,
+    height: int,
+) -> None:
+    manifest = copy.deepcopy(baking_job.manifest)
+    steps = manifest["instruction_sequence"]["steps"]
+    steps.insert(1, {"call": ps.SET_RESOLUTIONS, "args": {"width": width, "height": height}})
+    for index, step in enumerate(steps, 1):
+        step["step"] = index
+    job = job_from_manifest(manifest)
+    record, _ = read_run(record_defaults(make_session, world, job, work, inbox))
+    assert record_problems(record) == []
+    assert [r["recording_id"] for r in record["recordings"]] == ["r1", "r2", "r3"]
+    assert all(len(r["outputs"]) == 14 for r in record["recordings"])
+
+
+def test_baking_resolution_requests_validate_without_private_records() -> None:
+    from tools.bake.recording_requests import requests
+
+    authored = requests()
+    assert len(authored) == 5
+    for path, manifest in authored.items():
+        assert path.stem == manifest["golden_id"].rsplit("/", 1)[1]
+        assert validation_errors(manifest, Schema.GOLDEN_PUBLIC) == []
+        assert manifest["private_records"] == [] and manifest["expectations"] == []
+        job = job_from_manifest(manifest)
+        check_baking_job(job)
+        assert len(job.captures) == 14
+        if len(job.state_steps) == 2:
+            job.state_steps[1].args["width"] = 255
+            with pytest.raises(RecorderError, match="power-of-two"):
+                check_baking_job(job)
+
+
 @pytest.mark.parametrize(
     ("mesh", "size"), [("plane", 256), ("plane", 1024), ("bevelled-cube", 256)]
 )

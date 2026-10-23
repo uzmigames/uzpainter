@@ -266,7 +266,9 @@ def recipes() -> dict[Any, tuple[str, str]]:
         r[f"{root}.properties.Property.properties"] = (params, meta)
     facade_params = "b = sp.baking.BakingParameters.from_texture_set(ts.all_texture_sets()[0])"
     r[("substance_painter.properties.Property.value", "default-unestablished")] = (
-        facade_params,
+        "sp.project.close()\n"
+        "sp.project.create(PLANE, settings=sp.project.Settings(default_texture_resolution=4096))\n"
+        + facade_params,
         "b.common()['OutputSize'].value()",
     )
     r[("substance_painter.baking.BakingParameters.set", "out-of-range")] = (

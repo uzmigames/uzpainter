@@ -32,6 +32,7 @@ import hashlib
 import json
 import sys
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +42,39 @@ from tools.parity.store.store import OracleStore, locate
 TABLE = REPO_ROOT / "assets" / "defaults" / "baking.json"
 SCHEMA = "uzpainter/baking-defaults/1"
 GOLDEN_ID = "tier0/defaults-templates/baking-defaults"
+
+
+@dataclass(frozen=True)
+class BakingCase:
+    """One authored capture; each control keeps its own golden and exercised-symbol trace."""
+
+    name: str
+
+    @property
+    def golden_id(self) -> str:
+        return f"tier0/defaults-templates/{self.name}"
+
+    @property
+    def manifest_relative(self) -> Path:
+        return Path(self.golden_id + ".json")
+
+    @property
+    def trace_id(self) -> str:
+        return f"facade/{self.name}"
+
+
+BASELINE = BakingCase("baking-defaults")
+CONTROL_CASES = (
+    BakingCase("baking-defaults-plane-256"),
+    BakingCase("baking-defaults-plane-1024"),
+    BakingCase("baking-defaults-bevelled-cube-256"),
+    BakingCase("baking-defaults-plane-512"),
+    BakingCase("baking-defaults-plane-2048"),
+    BakingCase("baking-defaults-plane-256-resize-1024"),
+    BakingCase("baking-defaults-plane-1024-resize-256"),
+    BakingCase("baking-defaults-plane-256-resize-256x1024"),
+)
+CASES = (BASELINE, *CONTROL_CASES)
 USAGES = (
     "Normal",
     "WorldSpaceNormal",
@@ -69,6 +103,8 @@ ENTRY_FIELDS = frozenset(
         "range",
         "default",
         "default_note",
+        "initial_value",
+        "initial_by_resolution",
         "provenance",
     }
 )
@@ -175,6 +211,8 @@ def check_entry(entry: Mapping[str, Any], observed: Mapping[str, Any], where: st
             fields.append("default")
     elif not same(entry.get("default"), observed["value"]):
         fields.append("default")
+    if "initial_value" in entry and not same(entry["initial_value"], observed["value"]):
+        fields.append("initial_value")
     unknown = set(entry) - ENTRY_FIELDS
     if unknown:
         fields.append("unknown fields " + ", ".join(sorted(unknown)))
@@ -188,6 +226,8 @@ def check(table: Mapping[str, Any], record: Mapping[str, Any], sha256: str) -> l
     if record.get("golden_id") != GOLDEN_ID:
         problems.append(f"record {sha256[:12]}: not {GOLDEN_ID}")
         return problems
+    if [r.get("recording_id") for r in record.get("recordings", [])] != ["r1", "r2", "r3"]:
+        return [f"record {sha256[:12]}: expected recordings r1, r2, r3 in order"]
     for output_id, entries in groups(table):
         try:
             observations = texture_set_values(record, output_id)
@@ -248,6 +288,8 @@ def check_model(table: Mapping[str, Any], model: Mapping[str, Any]) -> list[str]
                 "enum_values",
                 "range",
                 "default",
+                "initial_value",
+                "initial_by_resolution",
             ):
                 if not same(
                     entry.get(field, {} if field in ("enum_values", "range") else None),
@@ -259,6 +301,43 @@ def check_model(table: Mapping[str, Any], model: Mapping[str, Any]) -> list[str]
             table["texture_set_state"][name]["default"], model["texture_set_state"].get(name)
         ):
             problems.append(f"model texture_set_state {name}: differs")
+    return problems
+
+
+def check_initial_record(
+    table: Mapping[str, Any], record: Mapping[str, Any], sha256: str
+) -> list[str]:
+    """Initial values require independent resolution/geometry controls, not declared defaults."""
+    if [r.get("recording_id") for r in record.get("recordings", [])] != ["r1", "r2", "r3"]:
+        return [f"record {sha256[:12]}: expected recordings r1, r2, r3 in order"]
+    problems = []
+    for output_id, entries in groups(table):
+        initial = [
+            entry
+            for entry in entries
+            if "initial_value" in entry or "initial_by_resolution" in entry
+        ]
+        if not initial:
+            continue
+        for index, values in enumerate(texture_set_values(record, output_id), 1):
+            for entry in initial:
+                key = entry["short_name"]
+                observed = values["properties"].get(key, {})
+                expected = entry.get("initial_value")
+                if "initial_by_resolution" in entry:
+                    size = record["key"]["project_settings"]["create"].get(
+                        "default_texture_resolution"
+                    )
+                    if size is None:
+                        sets = record["key"]["effective_defaults"]["project.create"]["texture_sets"]
+                        [created] = sets.values()
+                        width, height = created["resolution"]
+                        size = width if width == height else None
+                    expected = entry["initial_by_resolution"].get(str(size))
+                if expected is None or not same(expected, observed.get("value")):
+                    problems.append(
+                        f"{output_id} {key} (record {sha256[:12]} r{index}): initial_value differs"
+                    )
     return problems
 
 
@@ -283,6 +362,16 @@ def run(
         problems.append("every entry must cite the table's one observation")
     for sha256 in hashes:
         problems += check(table, load_record(store, sha256), sha256)
+    observations = table.get("initial_observations", [])
+    if {item["golden_id"] for item in observations} != {case.golden_id for case in CASES}:
+        problems.append("initial values must cite the baseline and every authored control")
+    for observation in observations:
+        sha256 = observation["record_sha256"]
+        record = load_record(store, sha256)
+        if record.get("golden_id") != observation["golden_id"]:
+            problems.append(f"record {sha256[:12]}: initialization golden differs")
+        problems += check_initial_record(table, record, sha256)
+    hashes = sorted(set(hashes) | {item["record_sha256"] for item in observations})
     if model is not None:
         problems += check_model(table, json.loads(model.read_text(encoding="utf-8")))
     return {

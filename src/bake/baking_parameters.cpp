@@ -149,6 +149,17 @@ PropertySpec ParseEntry(const json::Value& value, PropertyGroup group, MeshMapUs
     } else {
         spec.default_value = TableValue(spec, default_value, at + ".default");
     }
+    if (const auto initial = entry.find("initial_value"); initial != entry.end()) {
+        spec.initial_value = TableValue(spec, initial->second, at + ".initial_value");
+    }
+    if (const auto initial = entry.find("initial_by_resolution"); initial != entry.end()) {
+        for (const auto& [size, value] : AsObject(initial->second, at + ".initial_by_resolution")) {
+            const int resolution = std::stoi(size);
+            if (std::to_string(resolution) != size || resolution <= 0 || (resolution & (resolution - 1)))
+                Malformed(at + ".initial_by_resolution: expected power-of-two size");
+            spec.initial_by_resolution.emplace(resolution, TableValue(spec, value, at + ".initial_by_resolution"));
+        }
+    }
     const json::Object& provenance = AsObject(Member(entry, "provenance", at), at + ".provenance");
     spec.record_sha256 = AsString(Member(provenance, "record_sha256", at), at + ".record_sha256");
     spec.output_id = AsString(Member(provenance, "output_id", at), at + ".output_id");
@@ -275,6 +286,7 @@ PropertyValue Property::value() const {
         if (it != slot->values.end()) return it->second;
     }
     if (spec_->default_value) return *spec_->default_value;
+    if (spec_->initial_value) return *spec_->initial_value;
     throw NotYetSupported("the default of " + spec_->short_name + " is not established: " + spec_->default_note +
                           " (decision 323)");
 }

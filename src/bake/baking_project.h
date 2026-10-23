@@ -7,6 +7,10 @@
 
 namespace uzp::bake {
 
+// Called once after creating texture sets. Persist observed initial values so later texture
+// resolution edits cannot silently change the bake resolution. Unobserved sizes remain unset.
+void InitializeBakingSettings(core::Project& project);
+
 // A fresh, independent session. Persisted groups use texture-set IDs; API names are
 // resolved from this project. Legacy manifests without groups retain the common link.
 // Malformed groups, conflicting linked values and unsupported parameters are refused.

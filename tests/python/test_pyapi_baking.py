@@ -37,18 +37,12 @@ from tools.parity.store.store import locate
 PAINTER_SIDE = REPO_ROOT / "tools" / "parity" / "recorder" / "painter_side.py"
 RECORDINGS = {"r1": "same_session", "r2": "after_save_reopen", "r3": "same_session"}
 
-UNESTABLISHED = (
-    "Painter states no default (defaultValue unset) and the fresh project's value is not "
-    "established as one: value() raises NotYetSupported until a value is set (decision 323)"
-)
 META = (
     "the meta properties carry Painter's descriptive text, which the clean room does not "
     "reproduce: properties() raises NotYetSupported (decision 323)"
 )
 # (output id, key, field) -> reason; `*` stands for every key of every output.
 REFUSED: dict[tuple[str, str, str], str] = {
-    ("baking/common", "OutputSize", "value"): UNESTABLISHED,
-    ("baking/baker/Curvature", "TonemappingBounds", "value"): UNESTABLISHED,
     ("*", "*", "properties"): META,
 }
 
@@ -112,7 +106,7 @@ result = {
 common, ao = b.common(), b.baker(ts.MeshMapUsage.AO)
 cage = common["CageMode"]
 baking.BakingParameters.set({common["DilationWidth"]: 4, cage: cage.enum_value("Custom file"),
-                             common["MaxHeight"]: 1, ao["NbSecondary"]: 32})
+                             common["MaxHeight"]: 0, ao["NbSecondary"]: 32})
 result["set"] = [common["DilationWidth"].value(), cage.value(), common["MaxHeight"].value(),
                  ao["NbSecondary"].value(), uzpainter.project.revision() - before,
                  sproject.needs_saving()]
@@ -140,7 +134,9 @@ def test_baking_parameters_equal_the_table_and_set_values_survive_reopen(facade:
             for field in ("name", "label", "widget_type"):
                 assert g[field] == entry[field], (where, field)
             assert g["enum_values"] == entry.get("enum_values", {}), where
-            default = entry["default"]  # an Enum's default is its integer, as value() gives it
+            default = entry.get("initial_value", entry["default"])
+            if "initial_by_resolution" in entry:
+                default = entry["initial_by_resolution"]["256"]
             assert strict(as_json(g["value"]), as_json(default)), where
             if entry["type"] in ("IntPair", "FloatPair") and default is not None:
                 assert g["pair"] == "tuple", where  # Painter documents value() -> Tuple
@@ -153,8 +149,8 @@ def test_baking_parameters_equal_the_table_and_set_values_survive_reopen(facade:
     assert result["same"] == [True, True, True]
     assert result["revision"][0] == result["revision"][1]  # reading changes nothing
     # One set() is one revision; the integer of an enum label is stored by its label.
-    assert result["set"] == [4, 2, 1.0, 32, 1, True]
-    assert result["reopened"] == [4, 2, 1.0, 32]
+    assert result["set"] == [4, 2, 0.0, 32, 1, True]
+    assert result["reopened"] == [4, 2, 0.0, 32]
 
 
 REFUSALS = """
@@ -178,8 +174,8 @@ result = {
     # One refused value refuses the whole batch: the valid value is not stored either.
     "batch": raises(set_, {ao["NbSecondary"]: 32, dilation: -1}),
     "other_baker": raises(set_, {next(iter(curvature.values())): 0}),
-    "unestablished": [raises(common["OutputSize"].value),
-                      raises(curvature["TonemappingBounds"].value)],
+    "output_initial": common["OutputSize"].value(),
+    "curvature_initial": curvature["TonemappingBounds"].value(),
     "properties": raises(cage.properties),
     "unknown_label": raises(cage.enum_value, "No such label"),
     "state": [raises(b.set_textureset_enabled, False),
@@ -211,15 +207,46 @@ def test_baking_refusals_raise_before_any_change(facade: Run) -> None:
         "NotYetSupported: storing the bake parameters of Curvature "
         "(owned by phase3.4_baker-curvature)"
     )
-    keys = ("OutputSize", "TonemappingBounds")
-    for refused, key in zip(result["unestablished"], keys, strict=True):
-        assert refused.startswith(f"NotYetSupported: the default of {key} is not established")
+    assert result["output_initial"] == [8, 8]
+    assert result["curvature_initial"] == [-1.0, 1.0]
     assert result["properties"].startswith("NotYetSupported: the meta properties of CageMode")
     assert result["unknown_label"] == "ValueError: CageMode has no enum value 'No such label'"
     for refused in result["state"]:
         assert refused.startswith("NotYetSupported: uzpainter.baking.BakingParameters."), refused
         assert refused.endswith("is a release gap (phase3.5_embree-bakers; decision 323)")
     assert result["after"] == [64, 32, 0, True]
+
+
+def test_initial_size_is_persisted_and_unobserved_creation_sizes_have_no_fallback(
+    facade: Run,
+) -> None:
+    result = ok(
+        facade(r"""
+from substance_painter import baking
+create(256)
+def output_size():
+    return baking.BakingParameters.from_texture_set(ts.all_texture_sets()[0]).common()["OutputSize"]
+initial = output_size().value()
+baking.BakingParameters.set({output_size(): (9, 10)})
+ts.set_resolutions(ts.all_texture_sets(), ts.Resolution(1024, 256))
+project.save_as(WORK + "/size.spp")
+project.close()
+project.open(WORK + "/size.spp")
+explicit = output_size().value()
+project.close()
+create(4096)
+unknown = raises(output_size().value)
+baking.BakingParameters.set({output_size(): (8, 8)})
+result = {"initial": initial, "explicit": explicit, "unknown": unknown,
+          "set_unobserved": output_size().value()}
+""")
+    )
+    assert result["initial"] == [8, 8]
+    assert result["explicit"] == [9, 10]
+    assert result["unknown"].startswith(
+        "NotYetSupported: the default of OutputSize is not established"
+    )
+    assert result["set_unobserved"] == [8, 8]
 
 
 # ── The bake job through the facade (phase3.3_baker-evidence-publication items 2.6, 3.4) ──────
@@ -337,9 +364,9 @@ def call(operation, **kwargs):
 
 def create():
     TRACE["mark"]("setup")
-    step = PAYLOAD["create"]
-    call("apply_step", step=step["step"], call=step["call"], args=step["args"],
-         resolved=step["resolved"])
+    for step in PAYLOAD["setup"]:
+        call("apply_step", step=step["step"], call=step["call"], args=step["args"],
+             resolved=step["resolved"])
 
 
 def recording():
@@ -369,10 +396,11 @@ result = {"r1": r1, "r2": r2, "r3": r3, "trace": TRACE["stop"]()}
 """
 
 
-def golden() -> tuple[dict[str, Any], dict[str, Any]]:
+def golden(case: bd.BakingCase = bd.BASELINE) -> tuple[dict[str, Any], dict[str, Any]]:
     envelope = current_envelope()
-    path = manifest_root(envelope) / "tier0/defaults-templates/baking-defaults.json"
+    path = manifest_root(envelope) / case.manifest_relative
     manifest = json.loads(path.read_text(encoding="utf-8"))
+    assert manifest["golden_id"] == case.golden_id
     store = locate()
     record_id = str(envelope["record_prefix"]) + "golden-record"
     ref = next(r for r in manifest["private_records"] if r["record_id"] == record_id)
@@ -415,8 +443,8 @@ def compare_parameters(
     return differences, refused
 
 
-def test_baking_defaults_equal_painter(facade: Run, tmp_path: Path) -> None:
-    manifest, record = golden()
+def compare_baking_case(facade: Run, tmp_path: Path, case: bd.BakingCase) -> None:
+    manifest, record = golden(case)
     job = job_from_manifest(json.loads(json.dumps(manifest)))
     inputs = tmp_path / "inputs"
     inputs.mkdir()
@@ -424,15 +452,19 @@ def test_baking_defaults_equal_painter(facade: Run, tmp_path: Path) -> None:
     for input_id, source in job.inputs.items():
         staged[input_id] = inputs / f"{input_id}{source.suffix}"
         staged[input_id].write_bytes(source.read_bytes())
-    [create] = job.state_steps
     payload = {
         "painter_side": PAINTER_SIDE.as_posix(),
-        "create": {
-            "step": create.step,
-            "call": create.call,
-            "args": create.args,
-            "resolved": {"mesh": staged[create.args["mesh"]].as_posix()},
-        },
+        "setup": [
+            {
+                "step": step.step,
+                "call": step.call,
+                "args": step.args,
+                "resolved": {"mesh": staged[step.args["mesh"]].as_posix()}
+                if "mesh" in step.args
+                else {},
+            }
+            for step in job.state_steps
+        ],
         "captures": [
             {"call": s.call, "args": s.args, "output_id": baking_output_id(s)} for s in job.captures
         ],
@@ -477,4 +509,9 @@ def test_baking_defaults_equal_painter(facade: Run, tmp_path: Path) -> None:
     # The refused fields raise NotYetSupported inside compared outputs: a refusal is no evidence of
     # its class, which no compared value shows.
     symbols = [s for s in exercised(replayed["trace"]) if not s.endswith(".NotYetSupported")]
-    check_trace("facade/baking-defaults", manifest["golden_id"], symbols)
+    check_trace(case.trace_id, manifest["golden_id"], symbols)
+
+
+@pytest.mark.parametrize("case", bd.CASES, ids=lambda case: case.name)
+def test_baking_defaults_equal_painter(facade: Run, tmp_path: Path, case: bd.BakingCase) -> None:
+    compare_baking_case(facade, tmp_path, case)
