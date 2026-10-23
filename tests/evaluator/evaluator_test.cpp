@@ -8191,9 +8191,12 @@ std::vector<ExcludedFeature> ExcludedFeatures() {
                                 roots.insert(roots.begin(), std::move(added));
                             }});
     };
-    layer("a paint layer", "phase4.1_nodes-paint-layers", true, [](core::Project&, core::Layer& l, core::Id) {
+    // Empty paint is transparent (decision 348); only plane content remains excluded.
+    layer("a paint layer with plane content", "phase4.1_nodes-paint-layers", true,
+          [](core::Project& p, core::Layer& l, core::Id) {
         l.kind = core::LayerKind::paint;
         l.paint = core::PaintContent{};
+        l.paint->planes[ChannelType::User0] = p.AllocateId();
     });
     layer("an instance layer", "phase4.1_nodes-instances-anchors", false, [](core::Project&, core::Layer& l, core::Id fill) {
         l.kind = core::LayerKind::instance;
@@ -8325,7 +8328,7 @@ int RunNotYetSupported(const fs::path& assets) {
           "every excluded feature (" + std::to_string(features.size()) +
               ": 3D, warp and UV-set projections, symmetry, physical-size scale, one-axis wrap, Material mode, vector, "
               "font, procedural and reference sources, OCIO, generator, filter, paint, anchor, compare-mask, "
-              "colour-selection effects, content fill and mask levels effects, paint and instance layers, geometry "
+              "colour-selection effects, content fill and mask levels effects, paint-plane content and instance layers, geometry "
               "masks, Height and DirectX Normal cases, unrecorded bitmap colour spaces) fails its transaction with NotYetSupported naming its owner "
               "task; the document, its revision, records and save state are unchanged",
           transactionFailures);
