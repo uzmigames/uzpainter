@@ -206,7 +206,10 @@ def check_files(paths: Iterable[Path]) -> list[Problem]:
 
 
 def recorder_sources(directory: Path = RECORDER_DIR) -> list[Path]:
-    return sorted(directory.glob("*.py"))
+    sources = list(directory.glob("*.py"))
+    if directory == RECORDER_DIR:
+        sources.extend((RECORDER_DIR.parents[2] / "python" / "uzpainter_snapshot").glob("*.py"))
+    return sorted(sources)
 
 
 def inventory_symbols(objects_inv: Path) -> dict[str, str]:

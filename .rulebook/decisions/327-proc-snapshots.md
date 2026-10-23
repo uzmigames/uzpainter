@@ -127,7 +127,7 @@ widened certified domain follows. Tests cover signed 2^53 adjacent integers,
 both int64 extremes, product and expansion overflow, and product underflow.
 
 
-- Item 2.5 (`uzpainter assets snapshot`) records through Painter's documented export API with `RecordSnapshot`. The owner's Painter is needed, so the item and test 3.1 stay open.
-- An RGBA (4-channel) or 2-channel output cannot be recorded until a plane format holds it. Item 2.5 raises `NotYetSupported` naming this task for such an output.
+- Item 2.5 (`uzpainter assets snapshot`) now records through the owner's Painter and the fixed shipped bridge, using isolated embedded CPython. No separate Python executable is required. Its initial domain is the exact authored full-UV plane at 128-square, scalar f32/raw, Legacy/OpenGL/PerVertex/scale 1, singleton source output, scalar effective defaults and no image inputs. The full layer tree, formats, projection and ownership are checked around two paired L32F/RGB32F exports. Every component must be bit-equal, and the saved project's exact signature must serve the same bytes after reopening. This is a frozen capture recipe, not certification of the underlying asset. `docs/procedural-snapshots.md` defines the command and domain.
+- A private capture pin is `uzasset://snapshot/<sha256 of the complete observed versioned ResourceID>@1`. It is not a library alias. The literal ResourceID, effective parameters, recorder hashes, identity and exports stay in the private receipt; no captured value is shipped. Unsupported shapes and contexts refuse before any store mutation.
 - The seam's callers (item 2.6 and phase3.3) resolve `UseContext::outputId` and `settings` from the document. `EvaluationSettings` gives the settings.
-- The repository guard rule waits for `tools/parity/` to be released.
+- The repository guard covers project-private snapshot payloads (task item 3.4); the recorder provenance scan also covers the shipped snapshot bridge and its separately auditable Painter-side source.

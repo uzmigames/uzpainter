@@ -1509,7 +1509,8 @@ pub fn build(b: *std.Build) void {
     app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &pyapi_sources, .flags = &pyapi_flags });
     app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &asset_library_sources, .flags = &pyapi_flags });
     // `UzPainter.exe assets list [--parity]` (src/procedural/cli.h).
-    app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &.{"procedural/cli.cpp"}, .flags = &pyapi_flags });
+    app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &.{ "procedural/cli.cpp", "procedural/snapshot_cli.cpp", "procedural/snapshot_recording.cpp", "procedural/admission.cpp", "procedural/snapshot_backend.cpp" }, .flags = &pyapi_flags });
+    painter_step.dependOn(&b.addInstallBinFile(b.path("parity/fixtures/meshes/plane.obj"), "assets/snapshot/plane.obj").step);
     // The supervisor and worker roles (phase2.1). The worker's test-only fault hooks exist in a
     // Debug build only: ReleaseFast, ReleaseSafe and ReleaseSmall contain none of their code and
     // refuse `--test-faults` (decision 120). They reach the store's hooks to end the worker inside

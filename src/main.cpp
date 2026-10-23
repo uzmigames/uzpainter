@@ -16,6 +16,7 @@
 #include "export/cli.h"
 #include "preview/cli.h"
 #include "procedural/cli.h"
+#include "procedural/snapshot_cli.h"
 #include "python/capabilities.h"
 #include "python/recipe.h"
 #include "python/run.h"
@@ -67,6 +68,7 @@ constexpr const char* kUsage =
     "                         [--test-gpu-unavailable]       (Debug-only device failure fixture)\n"
     "       UzPainter.exe capabilities\n"
     "       UzPainter.exe assets list [--parity] [--library <dir>]\n"
+    "       UzPainter.exe assets snapshot <file.uzp> --request <request.json>\n"
     "       UzPainter.exe cache info | clear\n"
     "       UzPainter.exe --preview <file.uzp> [--gpu-backend dx12|vulkan] [--headless]\n"
     "       UzPainter.exe --mcp [--mcp-http <host>:<port> [--token <token>] [--allow-remote]]\n"
@@ -180,6 +182,9 @@ int main() {
         return uzp::python::RunCapabilitiesCommand(args, stdout, stderr);
     }
     if (!args.empty() && uzp::procedural::IsAssetsCommand(args.front())) {
+        if (args.size() > 1 && args[1] == "snapshot") {
+            return uzp::procedural::RunSnapshotCommand(args, stdout, stderr);
+        }
         return uzp::procedural::RunAssetsCommand(args, stdout, stderr);
     }
     if (!args.empty() && uzp::render::IsCacheCommand(args.front())) {
