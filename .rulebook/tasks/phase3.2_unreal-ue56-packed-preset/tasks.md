@@ -146,3 +146,19 @@ The 18 node ids:
 - from `test_uze_preset.py`: `test_shipped_preset_loads_with_its_targets` and `test_dry_run_lists_outputs_with_formats`.
 
 Logs: `tmp/scratch/ue-preset/run1.{log,xml}` and `run2.{log,xml}`. Ruff and mypy pass on the two Python files.
+
+## 10. AO_Mixed stability controls (2026-10-23, decision 131 amendment)
+
+The current Painter 12.2.0 envelope now admits `ao-mixed-grid-l32f` and
+`ao-mixed-grid-l16-reopen3`. Their private record hashes and aggregate results are
+recorded in decision 131's 2026-10-23 amendment. L16 r2, r3 and r4 are identical,
+while r1 differs in AO_Mixed despite identical channel and mesh exports. L32F
+exposes a channel change after reopen at opacity 0.75; the product of exported
+operands still does not reproduce all AO_Mixed texels. Same-session repeats and
+PNG/OpenEXR twins are consistent. No exact operator is established, no acceptance
+requirement is weakened, and item 2.10 and the production refusal remain open.
+
+Recorder preparation preserves the default two recordings and accepts an explicit,
+bounded `recorder.reopen_count` of 1 through 3, validated before connecting. Its
+549 recorder tests, 93 focused recorder/grid checks, Ruff, mypy and the private-store
+guard passed. These validate capture machinery; they do not claim export parity.

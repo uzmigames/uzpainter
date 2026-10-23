@@ -67,3 +67,55 @@ CPU analysis of the admitted `ao-mixed-grid` (R-131), R-086a and R-092, read-onl
   - the grid with an L32F AO channel at opacity 0.5 and 0.75, exporting the channel and AO_Mixed as OpenEXR 32f; this exposes the operand;
   - a second and a third reopen (r2, r3) of the L16 grid, to show whether the post-reopen operator is itself reproducible.
 - **Open question for the acceptance rule.** This decision compares r1 only. The phase3.2_unreal-ue56-packed-preset item 2.10 acceptance requires both recordings. That conflict is settled when the r3 recording shows whether r2 is reproducible.
+
+## Amendment (2026-10-23, current-envelope stability controls)
+
+The coordinator recorded and admitted the two authored controls under
+`painter-12.2.0+js-api.1.1.20-env-a981b586eae7`. Public manifests are under that
+envelope's `manifests/tier0/semantics/`; private record references:
+
+- `ao-mixed-grid-l32f`: `2461404b1f25e0e2ec2ab74c24df788eb333e3da033ffd369bfce364bd2460c1`.
+- `ao-mixed-grid-l16-reopen3`: `16ff9bbab29885692b30cbe7178e3790ab896ca32cec12eb81cef9ae8fb96969`.
+
+The L16 control retains r1 and three successive Full save/close/reopen recordings,
+r2 through r4. Every decoded exported map is identical between r2, r3 and r4.
+Relative to r1, AO_Mixed changes at 27, 39, 0 and 27 texels in s0 through s3,
+respectively, in each export. The AO channel and mesh-map exports remain identical.
+The new r1 and r2 also exactly reproduce the corresponding current-envelope
+`ao-mixed-grid` recordings. This establishes repeatable post-reopen behavior for
+this control, not an exact operator or a change to acceptance requirements.
+
+The L32F control exposes a further distinction. In r1, every channel value matches
+`fma(float32(C - 1), opacity, 1)` with float32 source C and unquantized float32
+opacity. After reopen, s1 (opacity 0.75) has 11,520 channel texels increased by one
+float32 ULP and 3,584 increased by two ULPs; its AO_Mixed changes at one texel.
+Other sets are unchanged. These are aggregate counts; recorded pixels remain
+private. API readbacks are unchanged after normalizing the transient project
+resource-context identifier.
+
+All immediate export repeats agree. PNG 8 and OpenEXR 32f AO_Mixed twins agree
+exactly as code and float32(code / 255); mesh-map EXR values equal the authored
+code / 255 rounded to float32. Nearest and BilinearHQ controls agree.
+
+`WriteUnorm8(float32(mesh_export * channel_export))` still misses 2, 1, 0 and 2
+texels per set in each L32F recording. Using mesh code multiplied by a float32
+reciprocal of 255 reduces some residuals but does not eliminate them and is not
+established by the mesh export. No partially improved model is accepted. The
+production refusal and item 2.10 remain unchanged; post-reopen reproducibility
+alone does not resolve the r1/r2 acceptance question.
+
+Private analysis: `tmp/scratch/ao-mixed-fit/stability.py` and
+`current-stability-controls.json`, with the existing current-grid control checked
+first. The script reads the store without writing recorded pixels to public files.
+
+A bounded offline follow-up rejected 81 arithmetic hypotheses: three authored
+mesh normalizations and three source normalizations (division by 255, float32
+reciprocal multiplication by 255, or 16-bit code times the reciprocal of 65535),
+combined with nine multiplication/FMA evaluation orders. None is exact even on
+r1 across the old L16 grid and the two new controls; none fits all recordings.
+Six exported-operand product variants also fail across the eight goldens with
+sufficiently precise channel exports. The PNG8-only isolation golden is not used
+to infer a high-precision channel operand and remains required for any eventual
+operator acceptance. Diagnostic script/report: private
+`tmp/scratch/ao-mixed-fit/bounded-arithmetic.{py,json}`. No residual ranking is a
+fit verdict, and no candidate advances to production.

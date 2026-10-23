@@ -2163,6 +2163,8 @@ def later_goldens() -> list[Golden]:
 # live under the envelope's `manifests/`, and their requests are deleted.
 ADMITTED = frozenset(
     {
+        "ao-mixed-grid-l32f",
+        "ao-mixed-grid-l16-reopen3",
         "export-bit-depth",
         "export-padding",
         "export-padding-bevelled-cube",
