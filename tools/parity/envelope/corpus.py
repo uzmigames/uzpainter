@@ -1,10 +1,12 @@
 """Record any texture-corpus golden (tiers 0-2b) with the recorder command its manifest needs.
 
-The corpus holds four kinds of jobs; each is recorded exactly as its own command records it
+The corpus holds six kinds of jobs; each is recorded exactly as its own command records it
 (`parity/RECORDER.md` §3, §8, §9):
 
 - API probes (`tier0/api-probes`): `tools.parity.recorder.probes`;
 - baking defaults (`record-defaults`) and shipped templates (`record-templates`);
+- Tier 1 pipeline scripts (`record-script`) and project migrations (`record-migration`),
+  resolved from pinned Assets3D files or the private store before connecting to Painter;
 - every other texture golden (`record`); one whose settings sheet names values only Painter's
   UI can set (`texture_sheet.py`) is recorded with the UI operator (`painter_ui.py`, decision
   029), so a refresh or a study never records a default in place of the sheet's value.
@@ -29,13 +31,30 @@ from tools.parity.recorder.defaults import (
     record_project_templates,
 )
 from tools.parity.recorder.job import job_from_manifest
+from tools.parity.recorder.migration import (
+    INTERFACE as MIGRATION_INTERFACE,
+)
+from tools.parity.recorder.migration import (
+    migration_job_from_manifest,
+    record_migration_golden,
+)
 from tools.parity.recorder.probes import probe_job_from_manifest, record_probe_golden
+from tools.parity.recorder.script_run import (
+    INTERFACE as SCRIPT_INTERFACE,
+)
+from tools.parity.recorder.script_run import (
+    ScriptSession,
+    record_script_golden,
+    script_job_from_manifest,
+)
 from tools.parity.recorder.session import PainterIdentity, PainterSession, RecorderError
 from tools.parity.recorder.texture import record_texture_golden
 from tools.parity.recorder.texture_sheet import Operator, texture_sheet
 from tools.parity.schemas import REPO_ROOT, Schema, load_json, validation_errors
+from tools.parity.store.store import OracleStore
 
 TEXTURE, PROBE, DEFAULTS, TEMPLATES = "texture", "probe", "defaults", "templates"
+SCRIPT, MIGRATION = "script", "migration"
 Now = Callable[[], datetime]
 
 
@@ -45,6 +64,13 @@ def recorder_kind(manifest: Mapping[str, Any], repo_root: Path = REPO_ROOT) -> s
         raise RecorderError(
             f"{manifest['golden_id']}: Tier 3 references are recorded by an operator"
         )
+    interface = manifest["instruction_sequence"]["interface"]
+    if interface in (SCRIPT_INTERFACE, MIGRATION_INTERFACE):
+        if manifest["tier"] != "1":
+            raise RecorderError(
+                f"{manifest['golden_id']}: pipeline and migration goldens are Tier 1"
+            )
+        return SCRIPT if interface == SCRIPT_INTERFACE else MIGRATION
     try:
         job = job_from_manifest(dict(manifest), repo_root)
     except RecorderError:
@@ -87,10 +113,37 @@ def record_golden(
     record_prefix: str = "",
     repo_root: Path = REPO_ROOT,
     operator: Operator | None = None,
+    *,
+    assets_root: Path | None = None,
+    store: OracleStore | None = None,
 ) -> Path:
     """Record one golden with its own recorder command; returns the inbox run. A golden with
     UI-set values uses `operator`, by default the UI operator of Painter's panels."""
     kind = recorder_kind(manifest, repo_root)
+    if kind == MIGRATION:
+        migration = migration_job_from_manifest(
+            dict(manifest), assets_root or repo_root.parent / "Assets3D", store, repo_root
+        )
+        return record_migration_golden(
+            session, migration, work, inbox, now, record_prefix=record_prefix
+        )
+    if kind == SCRIPT:
+        script = script_job_from_manifest(
+            dict(manifest), assets_root or repo_root.parent / "Assets3D", store, repo_root
+        )
+        # Preserve the caller's guards and timing while loading the script transport operation.
+        script_session = ScriptSession(
+            session.transport,
+            sleep=session.sleep,
+            monotonic=session.monotonic,
+            poll_interval_s=session.poll_interval_s,
+            allowed_builds=session.allowed_builds,
+            host_environment=session.host_environment,
+            verify_calls=session.verify_calls,
+        )
+        return record_script_golden(
+            script_session, script, work, inbox, now, record_prefix=record_prefix
+        )
     if kind == PROBE:
         probe = probe_job_from_manifest(dict(manifest), repo_root)
         return record_probe_golden(session, probe, work, inbox, now, record_prefix=record_prefix)

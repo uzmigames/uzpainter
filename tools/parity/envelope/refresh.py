@@ -39,11 +39,12 @@ import os
 import shutil
 import uuid
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
+from tools.parity.envelope import colour_sessions as colours
 from tools.parity.envelope.canary import canary_ids, drift_free, run_canary
 from tools.parity.envelope.compare import SourceUnavailable, run_source
 from tools.parity.envelope.corpus import job_manifest, record_golden
@@ -71,6 +72,7 @@ from tools.parity.recorder.environment import (
     HostEnvironment,
     capture_host_environment,
     envelope_sha256,
+    environment_record,
 )
 from tools.parity.recorder.launcher import PainterLauncher
 from tools.parity.recorder.output import MANIFEST_FILE, ensure_outside_repository
@@ -213,9 +215,21 @@ def open_candidate(
     envelope_hash = envelope_sha256(identity.environment)
     registry = load_registry(repo_root)
     existing = registry["candidate"]
+    resumed = None
+    if existing is not None:
+        work = work_root / "envelopes" / envelope_directory(existing["envelope_id"])
+        if (work / "candidate.json").is_file():
+            resumed = load_json(work / "candidate.json")
+    declared_resume = False
+    if resumed is not None and "anchor_environment" in resumed:
+        colours.same_host(resumed["anchor_environment"], identity.environment)
+        declared_resume = any(
+            colours.matches(identity, info.get("colour", colours.LEGACY))
+            for info in resumed["goldens"].values()
+        )
     if existing is not None and (
         existing["painter_build"] != identity.build_id
-        or existing["envelope_sha256"] != envelope_hash
+        or (existing["envelope_sha256"] != envelope_hash and not declared_resume)
     ):
         quarantine(
             existing,
@@ -233,14 +247,18 @@ def open_candidate(
         work = work_root / "envelopes" / envelope_directory(existing["envelope_id"])
         ledger_path = work / "candidate.json"
         if ledger_path.is_file():
-            return Candidate(
+            candidate = Candidate(
                 existing,
                 load_json(ledger_path),
                 work,
                 inbox_root / "envelopes" / envelope_directory(existing["envelope_id"]),
             )
+            prepare_colours(candidate, identity, repo_root)
+            return candidate
         entry = existing  # no ledger in its directory: the candidate starts afresh there
     else:
+        if not colours.matches(identity, colours.LEGACY):
+            raise RecorderError("a new refresh needs a Legacy anchor session; use --launch")
         entry = {
             "envelope_id": envelope_id_for(identity.build_id, identity.environment, registry),
             "painter_build": identity.build_id,
@@ -282,8 +300,40 @@ def open_candidate(
         work_root / "envelopes" / envelope_directory(entry["envelope_id"]),
         inbox_root / "envelopes" / envelope_directory(entry["envelope_id"]),
     )
+    prepare_colours(candidate, identity, repo_root)
     candidate.save()
     return candidate
+
+
+def prepare_colours(candidate: Candidate, identity: PainterIdentity, repo_root: Path) -> None:
+    """Upgrade a v1 ledger only after its existing runs pass the original anchor check."""
+    ledger = candidate.ledger
+    if "anchor_environment" not in ledger:
+        if identity.environment is None or not colours.matches(identity, colours.LEGACY):
+            raise RecorderError("a legacy candidate ledger needs its original Legacy session")
+        if envelope_sha256(identity.environment) != candidate.entry["envelope_sha256"]:
+            raise IdentityChanged("legacy candidate anchor differs")
+        for golden, info in ledger["goldens"].items():
+            if info["status"] == RECORDED:
+                check_run(Path(info["run"]), golden, candidate)
+                original = load_json(repo_root / info["manifest"])
+                if colours.declaration(original) != colours.LEGACY:
+                    raise IdentityChanged(
+                        "legacy run has an OCIO declaration under the Legacy anchor"
+                    )
+        ledger["anchor_environment"] = dict(identity.environment)
+        ledger["colour_sessions"] = {}
+        colours.bind(ledger, identity, colours.LEGACY)
+    anchor = ledger["anchor_environment"]
+    colours.known(anchor)
+    if envelope_sha256(anchor) != candidate.entry["envelope_sha256"]:
+        raise IdentityChanged("candidate anchor was changed")
+    for info in ledger["goldens"].values():
+        declared = colours.declaration(load_json(repo_root / info["manifest"]))
+        if "colour" in info and info["colour"] != declared:
+            raise IdentityChanged("a golden's colour declaration changed during refresh")
+        info["colour"] = declared
+    candidate.save()
 
 
 def check_run(run: Path, golden_id: str, candidate: Candidate) -> None:
@@ -300,7 +350,20 @@ def check_run(run: Path, golden_id: str, candidate: Candidate) -> None:
     environment = record.get("environment")
     if build != candidate.entry["painter_build"]:
         raise IdentityChanged(f"{golden_id} was recorded on build {build}, not the candidate's")
-    if environment is None or envelope_sha256(environment) != candidate.entry["envelope_sha256"]:
+    expected_hash = candidate.entry["envelope_sha256"]
+    if "anchor_environment" in candidate.ledger:
+        info = candidate.ledger["goldens"][golden_id]
+        declared = info["colour"]
+        if colours.declaration(load_json(run / MANIFEST_FILE)) != declared:
+            raise IdentityChanged(f"{golden_id} was recorded with another colour declaration")
+        slot = candidate.ledger["colour_sessions"].get(declared)
+        if slot is None:
+            raise IdentityChanged(f"{golden_id} has no pinned colour session")
+        colours.same_host(candidate.ledger["anchor_environment"], slot["environment"])
+        expected_hash = envelope_sha256(slot["environment"])
+        if declared == colours.LEGACY and expected_hash != candidate.entry["envelope_sha256"]:
+            raise IdentityChanged("Legacy colour session differs from the candidate anchor")
+    if environment is None or envelope_sha256(environment) != expected_hash:
         raise IdentityChanged(f"{golden_id} was recorded under another environment")
 
 
@@ -356,6 +419,7 @@ def record_candidate(
     today: date,
     host: HostEnvironment,
     repo_root: Path,
+    switch: Callable[[str, PainterSession], PainterSession] | None = None,
 ) -> None:
     identity = session.connect()
     if identity.build_id != candidate.entry["painter_build"]:
@@ -364,10 +428,32 @@ def record_candidate(
             f"{candidate.entry['painter_build']}"
         )
     canary = [g for g in candidate.ledger["order"] if g in set(canary_ids())]
-    for golden_id in candidate.ledger["order"]:
+    # Preserve the canary-first order within each colour, and avoid restarting per golden.
+    order = sorted(
+        candidate.ledger["order"],
+        key=lambda g: (
+            candidate.ledger["goldens"][g]["colour"] != colours.LEGACY,
+            candidate.ledger["goldens"][g]["colour"],
+        ),
+    )
+    for golden_id in order:
         info = candidate.ledger["goldens"][golden_id]
         if info["status"] != RECORDED:
             session.verify_identity(host)
+            declared = info["colour"]
+            if not colours.matches(identity, declared):
+                if switch is None:
+                    info.update(
+                        status="pending",
+                        error=f"needs declared colour session {declared}; use --launch",
+                    )
+                    candidate.save()
+                    continue
+                session = switch(declared, session)
+                identity = session.connect()
+                session.verify_identity(host)
+            colours.bind(candidate.ledger, identity, declared)
+            candidate.save()
             manifest = job_manifest(load_json(repo_root / info["manifest"]), identity)
             try:
                 run = record_golden(
@@ -378,8 +464,26 @@ def record_candidate(
                     now,
                     str(candidate.entry["record_prefix"]),
                     repo_root,
+                    store=store,
                 )
                 check_run(run, golden_id, candidate)
+                # Re-read file bytes after the run too; a path alone never pins an OCIO config.
+                session.verify_identity(host)
+                state = dict(session.call("hello")["colour_management"])
+                assert identity.environment is not None
+                colours.bind(
+                    candidate.ledger,
+                    replace(
+                        identity,
+                        colour_management=state,
+                        environment=environment_record(
+                            painter_build=identity.build_id,
+                            colour_management=state,
+                            host=identity.environment,
+                        ),
+                    ),
+                    declared,
+                )
             except UnseenBuild as error:
                 raise IdentityChanged(str(error)) from error
             except IdentityChanged:
@@ -399,6 +503,10 @@ def record_candidate(
             candidate.ledger["canary_published"] = True
             candidate.save()
     session.verify_identity(host)
+    if switch is not None and not colours.matches(identity, colours.LEGACY):
+        session = switch(colours.LEGACY, session)
+        colours.bind(candidate.ledger, session.connect(), colours.LEGACY)
+        session.verify_identity(host)
 
 
 def consistency_problems(candidate: Candidate, repo_root: Path) -> list[str]:
@@ -417,6 +525,9 @@ def consistency_problems(candidate: Candidate, repo_root: Path) -> list[str]:
             )
             continue
         try:
+            declared = colours.declaration(load_json(repo_root / info["manifest"]))
+            if info.get("colour", colours.LEGACY) != declared:
+                raise IdentityChanged("golden colour declaration differs from its source")
             check_run(Path(info["run"]), golden_id, candidate)
         except (RecorderError, SourceUnavailable, OSError) as error:
             problems.append(f"{golden_id}: {error}")
@@ -484,9 +595,10 @@ def refresh(
     today: date,
     host: HostEnvironment,
     repo_root: Path,
+    switch: Callable[[str, PainterSession], PainterSession] | None = None,
 ) -> Outcome:
     candidate = open_candidate(identity, work_root, inbox_root, today, repo_root)
-    record_candidate(session, candidate, store, now, today, host, repo_root)
+    record_candidate(session, candidate, store, now, today, host, repo_root, switch)
     problems = consistency_problems(candidate, repo_root)
     if problems:
         return Outcome(
@@ -514,12 +626,15 @@ def close_own_project(session: PainterSession) -> None:
     """After an abort, close the throwaway project only when the Painter process is still the
     one the recorder connected to (a project in any other process is not the recorder's)."""
     identity = session.identity
+    verify_calls = session.verify_calls
     session.verify_calls = False
     try:
         if identity is not None and session.call("hello")["session_id"] == identity.session_id:
             session.call("close_project")
     except (RecorderError, OSError, KeyError, TypeError):
         return
+    finally:
+        session.verify_calls = verify_calls
 
 
 def ensure_current(
@@ -538,11 +653,27 @@ def ensure_current(
     work_root = ensure_outside_repository(work_root, repo_root)
     inbox_root = ensure_outside_repository(inbox_root, repo_root)
     aborts = 0
+    active_session: PainterSession | None = None
+
+    def switch(colour: str, previous: PainterSession) -> PainterSession:
+        nonlocal active_session
+        assert launcher is not None
+        _ = launcher.pid  # refuse to take ownership of an unrelated process
+        settings = colours.launch_environment(colour, launcher.exe)
+        launcher.stop(previous)
+        launcher.start(settings)
+        active_session = make_session(lambda: recordable_builds(repo_root), True)
+        return active_session
+
     while True:
         today = now().date()
         session = make_session(lambda: recordable_builds(repo_root), True)
+        active_session = session
         try:
             found = detect(session, repo_root)
+            if launcher is not None and not colours.matches(found.identity, colours.LEGACY):
+                session = switch(colours.LEGACY, session)
+                found = detect(session, repo_root)
         except OSError as error:
             raise RecorderError(f"Painter's remote endpoint is not reachable: {error}") from error
         current = found.current
@@ -584,10 +715,19 @@ def ensure_current(
                             path,
                         )
             return refresh(
-                session, found.identity, store, work_root, inbox_root, now, today, host, repo_root
+                session,
+                found.identity,
+                store,
+                work_root,
+                inbox_root,
+                now,
+                today,
+                host,
+                repo_root,
+                switch if launcher is not None else None,
             )
         except IdentityChanged as error:
-            close_own_project(session)
+            close_own_project(active_session or session)
             registry = load_registry(repo_root)
             if registry["candidate"] is not None:
                 quarantine(
@@ -599,5 +739,5 @@ def ensure_current(
                     f"refresh aborted {aborts} times; the last abort: {error}"
                 ) from error
             if launcher is not None:
-                launcher.stop()
-                launcher.start()
+                launcher.stop(active_session)
+                launcher.start(colours.launch_environment(colours.LEGACY, launcher.exe))

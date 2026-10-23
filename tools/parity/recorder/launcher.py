@@ -90,6 +90,7 @@ class PainterLauncher:
         self.ready_timeout_s = ready_timeout_s
         self.stop_timeout_s = stop_timeout_s
         self.popen = popen if popen is not None else self.spawn
+        self.custom_popen = popen is not None
         self.answers = answers if answers is not None else (lambda: endpoint_answers(host, port))
         self.sleep = sleep
         self.monotonic = monotonic
@@ -101,7 +102,7 @@ class PainterLauncher:
     def spawn(command: list[str]) -> Any:
         return subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    def start(self) -> None:
+    def start(self, environment: dict[str, str | None] | None = None) -> None:
         if self.process is not None:
             raise RecorderError("the launcher already runs a Painter process; stop it first")
         if self.answers():
@@ -111,7 +112,25 @@ class PainterLauncher:
             )
         if self.popen is self.spawn and not self.exe.is_file():
             raise RecorderError(f"Painter executable not found: {self.exe} (set {PAINTER_EXE_ENV})")
-        self.process = self.popen([str(self.exe), *self.args])
+        # Only the spawned process receives the override; never leave the recorder's
+        # environment changed after starting a colour-specific Painter session.
+        child_environment = dict(os.environ)
+        for key, value in (environment or {}).items():
+            if value is None:
+                child_environment.pop(key, None)
+            else:
+                child_environment[key] = value
+        if environment is not None and not self.custom_popen:
+            self.process = subprocess.Popen(
+                [str(self.exe), *self.args],
+                env=child_environment,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        else:
+            if environment is not None:
+                raise RecorderError("the custom launcher cannot override the child environment")
+            self.process = self.popen([str(self.exe), *self.args])
         self.starts += 1
         deadline = self.monotonic() + self.ready_timeout_s
         while not self.answers():
@@ -145,7 +164,12 @@ class PainterLauncher:
             return
         if session is not None and self.process.poll() is None:
             try:
+                # The endpoint may have restarted or been replaced. Never close a project
+                # through an identity other than the session the caller owns, even when
+                # per-call verification was disabled for detection or cleanup.
+                session.verify_identity()
                 if session.state().is_open:
+                    session.verify_identity()
                     session.call("close_project")
                     session.wait_closed(timeout_s=self.stop_timeout_s)
             except (RecorderError, OSError):

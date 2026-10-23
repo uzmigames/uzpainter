@@ -12,6 +12,7 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
 
 ### Added
 
+- Transactional oracle refresh now dispatches Tier 1 pipeline and migration recordings and preserves declared Legacy/OCIO sessions across the full corpus. Each colour session pins its configuration bytes and the same build/host identity; resumed runs are validated before promotion, and the launcher only closes projects belonging to its recorded session.
 - Cross-backend comparison checks exact DX12/Vulkan file bytes and native-depth samples, validates project identity and verdict consistency, and publishes only hashes and diagnostics. Authored-fixture reports do not replace Painter parity evidence.
 - Native CPU Normal calculation (`phase3.2_baker-normal`): retained MikkTSpace corner frames, inverse-frame projection, RGB16 OpenGL/DirectX encoding and shared primary hits with AO. The explicit native domain is one sample, zero dilation and identity imported low transforms; Painter parity and Python/MCP baking remain pending.
 - Normal comparison inspection (`phase3.2_baker-normal` item 2.3): reports count finite candidate vectors with negative decoded Z without repairing samples or changing verdicts. Historical reports remain valid; normal-baker implementation and parity acceptance remain open.
