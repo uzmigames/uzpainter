@@ -115,7 +115,8 @@ struct BoundMeshMaps {
 /// float32(code / (2^n - 1)), a float sample keeps its bits. Fails loudly (`request_failed`),
 /// naming the mesh map, when the set has no binding of a usage, the binding is marked invalid
 /// (its report quoted), the resources do not hold its image, the image's size, channels or sample
-/// type are not the binding's, or the set is not square. Nothing is substituted.
+/// type are not the binding's, a sample exceeds its UNORM code range, a float is non-finite or
+/// not an exact binary16 value for Float16, or the set is not square. Nothing is substituted.
 [[nodiscard]] render::Result<BoundMeshMaps> BindMeshMaps(const core::TextureSet& set,
                                                          std::span<const core::MeshMapUsage> usages,
                                                          const evaluator::IResourceProvider& resources);

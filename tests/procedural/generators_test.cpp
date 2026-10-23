@@ -672,6 +672,59 @@ int RunBind(const fs::path& shipped) {
         Check(names(encoding, "is invalid") && names(encoding, "u16"),
               "a Curvature image of another sample type than its binding fails loudly", encoding);
     }
+    // A provider cannot smuggle invalid samples through an otherwise matching image layout.
+    for (const auto& [format, encoding, sample] : std::vector<std::tuple<core::ChannelFormat, render::TexelEncoding, uint32_t>>{
+             {core::ChannelFormat::L8, render::TexelEncoding::Unorm8, 256},
+             {core::ChannelFormat::L16, render::TexelEncoding::Unorm16, 65536},
+             {core::ChannelFormat::L32F, render::TexelEncoding::Float32, 0x7fc00001},
+             {core::ChannelFormat::L32F, render::TexelEncoding::Float32, 0x7f800000},
+             {core::ChannelFormat::L32F, render::TexelEncoding::Float32, 0xff800000},
+             {core::ChannelFormat::L16F, render::TexelEncoding::Float16, 0x7f800000},
+             {core::ChannelFormat::L16F, render::TexelEncoding::Float16, Bits(0.1f)}}) {
+        core::TextureSet set = maps->set;
+        set.resolution = {2, 2, {}};
+        set.mesh_maps.at(MeshMapUsage::Curvature).format = format;
+        auto image = std::make_shared<evaluator::DecodedImage>();
+        image->width = image->height = 2;
+        image->channels = 1;
+        image->encoding = encoding;
+        image->values = {0, 0, sample, 0};
+        evaluator::MapResourceProvider corrupt;
+        corrupt.Add(set.mesh_maps.at(MeshMapUsage::Curvature).resource, image);
+        const std::string message = failure(set, corrupt);
+        Check(names(message, "Curvature mesh map") && names(message, "sample 2"),
+              "invalid mesh-map sample refuses at binding " + std::string(core::ToString(format)) + "/" + std::to_string(sample), message);
+        Check(image->values[2] == sample && !set.mesh_maps.at(MeshMapUsage::Curvature).invalid,
+              "sample refusal does not clamp image bytes or mutate the mesh-map binding");
+    }
+    for (const auto& [format, encoding, samples] :
+         std::vector<std::tuple<core::ChannelFormat, render::TexelEncoding, std::vector<uint32_t>>>{
+             {core::ChannelFormat::L8, render::TexelEncoding::Unorm8, {0, 1, 254, 255}},
+             {core::ChannelFormat::L16, render::TexelEncoding::Unorm16, {0, 1, 65534, 65535}},
+             {core::ChannelFormat::L16F, render::TexelEncoding::Float16,
+              {Bits(-0.0f), Bits(-2.0f), Bits(0x1p-24f), Bits(65504.0f)}},
+             {core::ChannelFormat::L32F, render::TexelEncoding::Float32,
+              {Bits(-0.0f), Bits(-2.0f), Bits(0x1p-149f), Bits(1e30f)}}}) {
+        core::TextureSet set = maps->set;
+        set.resolution = {2, 2, {}};
+        set.mesh_maps.at(MeshMapUsage::Curvature).format = format;
+        auto image = std::make_shared<evaluator::DecodedImage>();
+        image->width = image->height = 2;
+        image->channels = 1;
+        image->encoding = encoding;
+        image->values = samples;
+        evaluator::MapResourceProvider valid;
+        valid.Add(set.mesh_maps.at(MeshMapUsage::Curvature).resource, image);
+        const auto boundSamples = BindMeshMaps(set, usages, valid);
+        bool exact = bool(boundSamples);
+        for (size_t i = 0; exact && i < samples.size(); ++i) {
+            const uint32_t expected = encoding == render::TexelEncoding::Unorm8 ? Bits(static_cast<float>(samples[i]) / 255.0f) :
+                encoding == render::TexelEncoding::Unorm16 ? Bits(static_cast<float>(samples[i]) / 65535.0f) : samples[i];
+            exact = Bits(boundSamples->images.at("Curvature").texels[i]) == expected;
+        }
+        Check(exact, "valid mesh-map samples retain codes or float bits " + std::string(core::ToString(format)),
+              boundSamples ? "" : boundSamples.error().Describe());
+    }
     // A texture set that is not square fails.
     {
         core::TextureSet set = maps->set;

@@ -7,6 +7,7 @@
 #include "uzp_core/types/errors.h"
 
 #include <bit>
+#include <cmath>
 #include <functional>
 #include <memory>
 
@@ -650,6 +651,16 @@ render::TexelEncoding EncodingOf(ChannelFormat format) {
     return render::TexelEncoding::Float32;
 }
 
+bool ExactHalfBits(uint32_t bits) {
+    const uint32_t magnitude = bits & 0x7fffffffu;
+    if (magnitude == 0) return true;
+    const uint32_t exponent = magnitude >> 23;
+    if (exponent < 103 || magnitude > 0x477fe000u) return false;  // 2^-24 through 65504
+    // Normal halves keep ten fraction bits; subnormals retain fewer at a fixed 2^-24 step.
+    const uint32_t discarded = exponent >= 113 ? 13 : 126 - exponent;
+    return (magnitude & ((uint32_t{1} << discarded) - 1)) == 0;
+}
+
 }  // namespace
 
 std::span<const std::string_view> GeneratorAssets() { return AssetNames(); }
@@ -722,8 +733,22 @@ render::Result<BoundMeshMaps> BindMeshMaps(const core::TextureSet& set, std::spa
         raster.texels.reserve(image->values.size());
         const bool unorm = spec.format == ChannelFormat::U8 || spec.format == ChannelFormat::U16;
         const float max = spec.format == ChannelFormat::U8 ? 255.0f : 65535.0f;
-        for (const uint32_t value : image->values) {
-            raster.texels.push_back(unorm ? static_cast<float>(value) / max : std::bit_cast<float>(value));
+        for (size_t i = 0; i < image->values.size(); ++i) {
+            const uint32_t value = image->values[i];
+            const auto invalidSample = [&](std::string_view reason) {
+                return Failed(what + " is invalid: sample " + std::to_string(i) + " " + std::string(reason));
+            };
+            if (unorm) {
+                if (value > static_cast<uint32_t>(max)) return invalidSample("exceeds the declared UNORM code range");
+                raster.texels.push_back(static_cast<float>(value) / max);
+                continue;
+            }
+            const float decoded = std::bit_cast<float>(value);
+            if (!std::isfinite(decoded)) return invalidSample("is not finite");
+            if (spec.format == ChannelFormat::F16 && !ExactHalfBits(value)) {
+                return invalidSample("is not an exact binary16 value");
+            }
+            raster.texels.push_back(decoded);
         }
         bound.inputs[name] = ImageInput{spec, map.resource};
         bound.images[name] = std::move(raster);

@@ -221,7 +221,18 @@ def test_missing_or_invalid_mesh_map_fails_loudly(generator_tests: Path, tmp_pat
     """3.2: a generator with a missing or invalid mesh map fails evaluation, naming the map;
     nothing is substituted."""
     passed = run_case(generator_tests, "bind", tmp_path)
-    assert len(passed) == 16, sorted(passed)
+    assert len(passed) == 28, sorted(passed)
+    assert (
+        sum(check.startswith("invalid mesh-map sample refuses at binding ") for check in passed)
+        == 7
+    )
+    assert (
+        sum(
+            check.startswith("valid mesh-map samples retain codes or float bits ")
+            for check in passed
+        )
+        == 4
+    )
     for check in (
         "a texture set without a Curvature binding fails loudly, naming it",
         "a Curvature binding marked invalid fails loudly, naming it with its report",
