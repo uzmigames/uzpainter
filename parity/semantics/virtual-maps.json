@@ -3,7 +3,7 @@
   "record_class": "public_semantics",
   "semantics_id": "virtual-maps",
   "description": "The documented virtualMap sources of the export plan (src/export/virtual_maps.h, decision 086): the operators reproduced exactly through the plan (evaluated by EvaluateFileOn and written at 16 bits) and the documented maps without a golden yet.",
-  "painter_build_id": "12.1.5+js-api.1.1.20",
+  "painter_build_id": "12.2.0+js-api.1.1.20",
   "corpus": [
     "tier0/semantics-ui/height-normal-sharp-plane-strength",
     "tier0/semantics-ui/height-normal-sobel-plane-strength",

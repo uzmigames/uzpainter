@@ -3,7 +3,7 @@
   "record_class": "public_semantics",
   "semantics_id": "export-processing",
   "description": "The export's processing and encoders (src/export/encode.h, padding.h, png_writer.h, exr_writer.h; decisions 089, 090, 103 and 126): Painter's PNG and OpenEXR files re-encoded byte for byte, the recorded processing written by WriteExport and applied to Painter's own values byte-identical to Painter's files, and the processing not fitted yet.",
-  "painter_build_id": "12.1.5+js-api.1.1.20",
+  "painter_build_id": "12.2.0+js-api.1.1.20",
   "corpus": [
     "phase0/normal-convention/hemisphere/per-fragment",
     "phase0/normal-convention/hemisphere/per-vertex",
@@ -66,11 +66,14 @@
     "tier0/semantics-ui/height-normal-sobel-sphere",
     "tier0/semantics/ao-mixed",
     "tier0/semantics/ao-mixed-grid",
+    "tier0/semantics/ao-mixed-grid-l16-reopen3",
+    "tier0/semantics/ao-mixed-grid-l32f",
     "tier0/semantics/ao-mixed-isolation",
     "tier0/semantics/ao-mixed-isolation-8bit",
     "tier0/semantics/ao-mixed-isolation-float",
     "tier0/semantics/ao-mixed-opacity",
     "tier0/semantics/ao-mixed-opacity-float",
+    "tier0/semantics/ao-mixed-precomposed-half-l32f",
     "tier0/semantics/base-values-asm-pbr-metallic-roughness",
     "tier0/semantics/base-values-asm-pbr-metallic-roughness-anisotropy-angle",
     "tier0/semantics/base-values-asm-pbr-metallic-roughness-coated",
@@ -167,6 +170,7 @@
     "tier0/semantics/export-padding-seam-field-256",
     "tier0/semantics/export-padding-seam-ramp-1024",
     "tier0/semantics/export-padding-sphere",
+    "tier0/semantics/export-padding-tau-prism",
     "tier0/semantics/export-padding-tie-2048",
     "tier0/semantics/export-padding-tie-2048-v2",
     "tier0/semantics/export-padding-tie-512",
@@ -231,6 +235,12 @@
     "tier0/semantics/resample-uv-lod-boundaries",
     "tier0/semantics/resample-uv-minify",
     "tier0/semantics/resample-uv-rotation",
+    "tier0/semantics/specularweight-empty-base-alpha-blend-l16",
+    "tier0/semantics/specularweight-empty-base-alpha-blend-l32f",
+    "tier0/semantics/specularweight-empty-base-alpha-blend-l8",
+    "tier0/semantics/specularweight-empty-base-default-l16",
+    "tier0/semantics/specularweight-empty-base-default-l32f",
+    "tier0/semantics/specularweight-empty-base-default-l8",
     "tier0/semantics/srgb-bitmap-minification",
     "tier0/semantics/srgb-bitmap-variants-v2",
     "tier0/semantics/view-2d-state-camera",
@@ -296,7 +306,7 @@
         },
         {
           "name": "files",
-          "value": 1953,
+          "value": 1957,
           "origin": "fitted"
         }
       ],
@@ -2177,6 +2187,96 @@
           }
         },
         {
+          "golden_id": "tier0/semantics/ao-mixed-grid-l16-reopen3",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed-grid-l16-reopen3",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed-grid-l16-reopen3",
+          "map": "png files re-encoded",
+          "compared_against": "r3",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed-grid-l16-reopen3",
+          "map": "png files re-encoded",
+          "compared_against": "r4",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed-grid-l32f",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed-grid-l32f",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
           "golden_id": "tier0/semantics/ao-mixed-isolation",
           "map": "png files re-encoded",
           "compared_against": "r1",
@@ -2264,6 +2364,36 @@
             "total": 12,
             "affected_texels": 0,
             "texels": 12
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed-precomposed-half-l32f",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 3,
+            "affected_texels": 0,
+            "texels": 3
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed-precomposed-half-l32f",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 3,
+            "affected_texels": 0,
+            "texels": 3
           }
         },
         {
@@ -5477,6 +5607,186 @@
           }
         },
         {
+          "golden_id": "tier0/semantics/specularweight-empty-base-alpha-blend-l16",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/specularweight-empty-base-alpha-blend-l16",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/specularweight-empty-base-alpha-blend-l32f",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/specularweight-empty-base-alpha-blend-l32f",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/specularweight-empty-base-alpha-blend-l8",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/specularweight-empty-base-alpha-blend-l8",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/specularweight-empty-base-default-l16",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/specularweight-empty-base-default-l16",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/specularweight-empty-base-default-l32f",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/specularweight-empty-base-default-l32f",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/specularweight-empty-base-default-l8",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/specularweight-empty-base-default-l8",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
           "golden_id": "tier0/semantics/srgb-bitmap-minification",
           "map": "png files re-encoded",
           "compared_against": "r1",
@@ -5776,7 +6086,7 @@
         },
         {
           "name": "files",
-          "value": 1176,
+          "value": 1192,
           "origin": "fitted"
         }
       ],
@@ -6142,6 +6452,96 @@
           }
         },
         {
+          "golden_id": "tier0/semantics/ao-mixed-grid-l16-reopen3",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed-grid-l16-reopen3",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed-grid-l16-reopen3",
+          "map": "exr files re-encoded",
+          "compared_against": "r3",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed-grid-l16-reopen3",
+          "map": "exr files re-encoded",
+          "compared_against": "r4",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed-grid-l32f",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed-grid-l32f",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
           "golden_id": "tier0/semantics/ao-mixed-isolation-float",
           "map": "exr files re-encoded",
           "compared_against": "r1",
@@ -6199,6 +6599,36 @@
             "total": 12,
             "affected_texels": 0,
             "texels": 12
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed-precomposed-half-l32f",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 4,
+            "affected_texels": 0,
+            "texels": 4
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed-precomposed-half-l32f",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 4,
+            "affected_texels": 0,
+            "texels": 4
           }
         },
         {
@@ -8122,6 +8552,36 @@
           }
         },
         {
+          "golden_id": "tier0/semantics/export-padding-tau-prism",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-tau-prism",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
           "golden_id": "tier0/semantics/export-padding-tie-2048",
           "map": "exr files re-encoded",
           "compared_against": "r1",
@@ -9739,6 +10199,186 @@
             "total": 16,
             "affected_texels": 0,
             "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/specularweight-empty-base-alpha-blend-l16",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/specularweight-empty-base-alpha-blend-l16",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/specularweight-empty-base-alpha-blend-l32f",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/specularweight-empty-base-alpha-blend-l32f",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/specularweight-empty-base-alpha-blend-l8",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/specularweight-empty-base-alpha-blend-l8",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/specularweight-empty-base-default-l16",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/specularweight-empty-base-default-l16",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/specularweight-empty-base-default-l32f",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/specularweight-empty-base-default-l32f",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/specularweight-empty-base-default-l8",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/specularweight-empty-base-default-l8",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
           }
         },
         {
