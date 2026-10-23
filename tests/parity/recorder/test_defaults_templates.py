@@ -22,6 +22,7 @@ from tools.parity.guard.guard import run_guard, staged_snapshot
 from tools.parity.recorder import vocabulary as ps
 from tools.parity.recorder.defaults import (
     capture_problems,
+    check_baking_job,
     check_template_job,
     record_baking_defaults,
     record_project_templates,
@@ -280,6 +281,62 @@ def test_defaults_need_a_fresh_project(
     manifest["instruction_sequence"]["steps"][0]["args"]["normal_map_format"] = "DirectX"
     with pytest.raises(RecorderError, match="fresh project"):
         record_baking_defaults(make_session(world), job_from_manifest(manifest), work, inbox)
+
+
+@pytest.mark.parametrize("size", [256, 1024])
+def test_controlled_resolution_defaults_keep_three_recordings(
+    make_session: Callable[[Any], PainterSession],
+    world: Any,
+    baking_job: Job,
+    work: Path,
+    inbox: Path,
+    size: int,
+) -> None:
+    manifest = copy.deepcopy(baking_job.manifest)
+    manifest["instruction_sequence"]["steps"][0]["args"]["default_texture_resolution"] = size
+    job = job_from_manifest(manifest)
+    record, _ = read_run(record_defaults(make_session, world, job, work, inbox))
+    assert record_problems(record) == []
+    assert record["key"]["project_settings"]["create"]["default_texture_resolution"] == size
+    assert record["key"]["instruction_sequence_sha256"] != baking_job.instruction_sequence_sha256
+    assert [r["recording_id"] for r in record["recordings"]] == ["r1", "r2", "r3"]
+    for recording in record["recordings"]:
+        outputs = outputs_by_id(recording)
+        assert {"baking/common", "baking/baker/Curvature"} <= outputs.keys()
+        assert len(outputs) == len(baking_job.captures)
+
+
+@pytest.mark.parametrize("size", [True, 0, -256, 255, 256.0, "256", None])
+def test_controlled_resolution_refuses_invalid_request_before_connection(
+    fake: types.ModuleType, baking_job: Job, work: Path, inbox: Path, size: Any
+) -> None:
+    manifest = copy.deepcopy(baking_job.manifest)
+    manifest["instruction_sequence"]["steps"][0]["args"]["default_texture_resolution"] = size
+    transport = fake.LocalTransport(fake.FakeWorld())
+    with pytest.raises(RecorderError, match="positive power-of-two integer"):
+        record_baking_defaults(PainterSession(transport), job_from_manifest(manifest), work, inbox)
+    assert transport.sent == []
+
+
+@pytest.mark.parametrize(
+    ("mesh", "size"), [("plane", 256), ("plane", 1024), ("bevelled-cube", 256)]
+)
+def test_baker_default_requests_are_complete_unrecorded_and_pinned(mesh: str, size: int) -> None:
+    requests = (
+        REPO_ROOT
+        / "parity/envelopes/painter-12.1.5_js-api.1.1.20"
+        / "requests/tier0/defaults-templates"
+    )
+    path = requests / f"baking-defaults-{mesh}-{size}.json"
+    manifest = load_json(path)
+    assert validation_errors(manifest, Schema.GOLDEN_PUBLIC) == []
+    job = load_job(path)  # verifies the authored mesh's pinned hash
+    check_baking_job(job)
+    assert job.state_steps[0].args == {"mesh": mesh, "default_texture_resolution": size}
+    assert manifest["private_records"] == []
+    assert manifest["expectations"] == []
+    assert len(job.captures) == 14
+    assert not job.exports
 
 
 def test_texture_command_refuses_a_baking_job(

@@ -15,6 +15,7 @@ from typing import Any
 import numpy as np
 import pytest
 
+from tests.export.padding_reference import NEIGHBOURS, Ring, hinge, unfold
 from tools.parity.envelope.registry import current_envelope
 from tools.parity.guard.guard import load_index, run_guard, worktree_snapshot
 from tools.parity.recorder import vocabulary as ps
@@ -31,6 +32,7 @@ from tools.parity.tier0_semantics.recording_requests import (
     blend_subnormal,
     ocio_goldens,
     padding_normal_combine_probe,
+    padding_tau_prism_probe,
     probe_groups,
     request_dir,
     request_root,
@@ -466,7 +468,7 @@ def test_fold_copies_share_their_seam_and_fold_by_their_angle(probe: str) -> Non
         assert (lift > 1e-6) == (copy.angle > 0) and (lift < -1e-6) == (copy.angle < 0), copy.name
 
 
-@pytest.mark.parametrize("probe", rf.HINGE_PROBES)
+@pytest.mark.parametrize("probe", (*rf.HINGE_PROBES, "tau-prism"))
 def test_hinge_copies_share_their_hinges_and_bend_by_their_angles(probe: str) -> None:
     """Decision 289: each copy's A and B cover 16 texel centres each, none on an edge; the
     copies lie at least 7 texels apart in UV and apart in 3D; across every designed hinge (the
@@ -474,11 +476,12 @@ def test_hinge_copies_share_their_hinges_and_bend_by_their_angles(probe: str) ->
     positions bend the far face by the hinge's angle, on the near face's normal side exactly
     when it is positive (concave); the box is [-256, 256] x [-64, 64] x [-256, 256]."""
     owner: dict[tuple[int, int], int] = {}
-    placed, _ = rf.hinge_layout(probe)
+    placed, _ = rf.tau_prism_layout() if probe == "tau-prism" else rf.hinge_layout(probe)
     for index, (copy, (oc, orow), _) in enumerate(placed):
         cells = [covered_centres([(c + oc, r + orow) for c, r in uvs]) for _, uvs in copy.tris]
         union = set().union(*cells)
-        assert sum(map(len, cells)) == len(union) == 32, copy.name
+        expected = 20 if copy.name.startswith("distance-") else 32
+        assert sum(map(len, cells)) == len(union) == expected, copy.name
         owner |= dict.fromkeys(union, index)
     for (x, y), index in owner.items():
         near = {owner.get((x + dx, y + dy), index) for dx in range(-6, 7) for dy in range(-6, 7)}
@@ -490,7 +493,7 @@ def test_hinge_copies_share_their_hinges_and_bend_by_their_angles(probe: str) ->
     for i, (lo, hi) in enumerate(bounds):
         for lo2, hi2 in bounds[i + 1 :]:
             assert any(hi[a] < lo2[a] or hi2[a] < lo[a] for a in range(3)), placed[i][0].name
-    vertices, _, faces = obj_uvs(f"hinge-{probe}")
+    vertices, _, faces = obj_uvs("tau-prism" if probe == "tau-prism" else f"hinge-{probe}")
     low = tuple(min(c) for c in zip(*vertices, strict=True))
     high = tuple(max(c) for c in zip(*vertices, strict=True))
     assert (low, high) == ((-256.0, -64.0, -256.0), (256.0, 64.0, 256.0))
@@ -522,6 +525,86 @@ def test_hinge_copies_share_their_hinges_and_bend_by_their_angles(probe: str) ->
             # A flat hinge's off-hinge vertices sit within float32 rounding of the near plane.
             assert (lift > 1e-4) == (angle > 0) and (lift < -1e-4) == (angle < 0), copy.name
     assert first == len(refs) - 2  # the two box anchors
+
+
+def test_tau_prism_discriminates_mixed_gates_and_single_far_depths() -> None:
+    """The authored probe selects real multi-hinge taps; competing tau policies disagree.
+
+    All forty distance controls have a selected single far tap two hinges away. Its chart
+    has one covered row, while the narrow seam face has no covered centre of its own.
+    """
+    path = REPO_ROOT / FIXTURE_DIR / "meshes/tau-prism.obj"
+    assert path.read_bytes() == rf.tau_prism()
+    ring = Ring(path, "uzp_tau_prism", 512, 512)
+    copies, _ = rf.tau_prism_layout()
+    names = [copy.name for copy, _, _ in copies for _ in copy.tris]
+    mixed: dict[tuple[bool, ...], int] = {}
+    single = set()
+    differing = 0
+    for x, y, candidates, count in ring.texels():
+        own = [
+            (x + dx, y + dy)
+            for dy, dx in NEIGHBOURS
+            if 0 <= x + dx < 512 and 0 <= y + dy < 512 and ring.owner[y + dy, x + dx] >= 0
+        ]
+        tau = ring.tau(x, y, own)
+        t = ring.tris[tau]
+        far = [c for c in candidates[:count] if c[1]]
+        for _, _, (tx, ty) in far:
+            k = int(ring.owner[ty, tx])
+            tap = ring.tris[k]
+            paths = ring._paths(tap.face, t.face)
+            # The reference caps paths at four hinges; this check targets reachable taps.
+            if not paths:
+                continue
+            assert len(paths) == 1
+            if len(far) == 1 and len(paths[0]) == 3 and names[k].startswith("distance-"):
+                single.add(names[k])
+            gates = []
+            point = tap.point(tap.bary(tx + 0.5, ty + 0.5))
+            developed = point
+            for a, b in zip(paths[0], paths[0][1:], strict=False):
+                i, j, va, vb = ring.links[b][a]
+                tau_side = ring.tris[i].chart == ring.tris[j].chart == t.chart
+                if tau_side:
+                    gates.append(ring.folded(i, j))
+                # Competing policy: always unfold tau-side hinges, preserving seam gate.
+                if tau_side or ring.folded(i, j):
+                    developed = unfold(hinge(ring.tris[i], ring.tris[j], va, vb), developed)
+            if len(gates) >= 2 and any(gates) and not all(gates):
+                key = tuple(gates)
+                mixed[key] = mixed.get(key, 0) + 1
+                q = t.point(t.bary(x + 0.5, y + 0.5))
+                gated = ring.frame(point, k, tau, q)
+                gated_distance = np.linalg.norm(np.subtract(q, gated))
+                always_distance = np.linalg.norm(np.subtract(q, developed))
+                if abs(gated_distance - always_distance) > 1e-5:
+                    differing += 1
+    assert mixed == {
+        (False, True): 48,
+        (True, False): 48,
+        (False, True, False): 48,
+        (True, False, True): 48,
+    }
+    assert differing == 192
+    assert single == {c.name for c, _, _ in copies if c.name.startswith("distance-")}
+    assert len(single) == 40
+
+
+def test_tau_prism_request_uses_eight_float_channels_and_repeated_exports() -> None:
+    golden = padding_tau_prism_probe()
+    assert golden.name in {g.name for g in requested_goldens()}
+    steps = golden.sequence.steps
+    assert steps[0]["args"]["default_texture_resolution"] == 512
+    exports = [s["args"] for s in steps if s["call"] == EXPORT]
+    assert [(e["file_format"], e["bit_depth"], e["padding"]) for e in exports] == [
+        ("exr", "32f", "infinite"),
+        ("exr", "32f", "infinite"),
+        ("exr", "32f", "passthrough"),
+        ("exr", "32f", "passthrough"),
+    ]
+    for export in exports:
+        assert export["maps"] == [f"documentMap/user{i}:RGB" for i in range(8)]
 
 
 def _through(

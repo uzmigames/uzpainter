@@ -6,7 +6,8 @@ to Painter), each capture step of the job reads, on every texture set,
 of every key (value, name, short name, label, widget type, enum values, the enum value of each
 enum label, meta properties), or one of the documented baking state getters. Recordings:
 `r1` same session, `r2` after save and reopen, `r3` on a second fresh project in the same
-session.
+session. A controlled fresh-project request may set only `default_texture_resolution` in
+addition to the mesh, to observe whether effective baking defaults depend on that setting.
 
 Project templates (`03-project-model.md` §2): the shipped templates are the `.spt` files of the
 documented application shelf (`resource.Shelves.application_shelf`), named by their
@@ -58,8 +59,18 @@ def check_baking_job(job: Job) -> None:
     """A fresh project, then `common()` and the ten bakers, each captured exactly once."""
     if len(job.state_steps) != 1 or job.state_steps[0].call != ps.CREATE:
         raise RecorderError("a baking-defaults job creates one project and changes nothing else")
-    if set(job.state_steps[0].args) != {"mesh"}:
-        raise RecorderError("defaults are read on a fresh project: create takes only `mesh`")
+    create = job.state_steps[0].args
+    if "mesh" not in create or set(create) - {"mesh", "default_texture_resolution"}:
+        raise RecorderError(
+            "defaults are read on a fresh project: create takes only `mesh` and optional "
+            "`default_texture_resolution`"
+        )
+    if "default_texture_resolution" in create:
+        size = create["default_texture_resolution"]
+        if type(size) is not int or size <= 0 or size & (size - 1):
+            raise RecorderError(
+                "default_texture_resolution must be a positive power-of-two integer"
+            )
     if job.exports or job.export_probes or job.api_captures:
         raise RecorderError("a baking-defaults job exports nothing")
     ids = [baking_output_id(step) for step in job.captures]

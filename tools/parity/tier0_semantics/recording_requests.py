@@ -290,6 +290,13 @@ for _probe in rf.FOLD_PROBES:
 
 
 # Decision 289's far-side hinge meshes: copies of one ratio-1 seam pair bent along hinges.
+REQUEST_FIXTURES["tau-prism"] = (
+    "mesh",
+    f"{FIXTURE_DIR}/meshes/tau-prism.obj",
+    rf.tau_prism,
+)
+
+
 def hinge_generator(probe: str) -> Generate:
     return lambda: rf.hinge_probe(probe)
 
@@ -371,6 +378,7 @@ MESH_SETS = {
     **{tie_sweep_mesh(f, b): ["uzp_tie_sweep"] for f in rf.SWEEP_FAMILIES for b in rf.SWEEP_BOXES},
     **{concave_fold_mesh(p): ["uzp_concave_fold"] for p in rf.FOLD_PROBES},
     **{hinge_mesh(p): ["uzp_hinge"] for p in rf.HINGE_PROBES},
+    "tau-prism": ["uzp_tau_prism"],
     "window-side": ["uzp_window_side"],
     "corner-reach": ["uzp_corner"],
     "normal-combine": list(rf.COMBINE_SETS),
@@ -1625,6 +1633,25 @@ def padding_hinge_probes() -> list[Golden]:
     ]
 
 
+def padding_tau_prism_probe() -> Golden:
+    """Decision 342's pending tau-side gate discriminator, kept separate from admitted probes."""
+    return Golden(
+        "export-padding-tau-prism",
+        EXPORT_DOMAIN,
+        "Decision 342 tau-side development probe (phase1.25_pilot-wand item 2.7), exploratory: "
+        "32 open faceted prism sectors with a longitudinal UV seam; tau-side hinges cycle "
+        "8, 12, 9.9 and 10.25 degrees across the 0.985 normal gate, both signs, diagonals and "
+        "0.1875/0.3125 texel facet depths; 40 narrow far-chart controls sweep total tau/far "
+        "angle 8/9.9/10/10.25/12 degrees, both signs, and seam-triangle depth "
+        "0.0625/0.125/0.1875/0.3125 texel, with one far tap at seam endpoints. "
+        "Disjoint copies, fixed mesh box "
+        "[-256,256] x [-64,64] x [-256,256] cm; document resolution 512. " + KERNEL_TAIL,
+        "tau-prism",
+        ["tau-prism", *kernel_bitmaps(512)],
+        kernel_probe("tau-prism", 512),
+    )
+
+
 def padding_window_side_probe() -> Golden:
     """Decision 289's window-side probe for decision 291: Painter's side of the far window when
     the far point lies on a window boundary in exact arithmetic."""
@@ -2055,6 +2082,7 @@ def later_goldens() -> list[Golden]:
         *padding_tie_sweep_probes(),
         *padding_concave_fold_probes(),
         *padding_hinge_probes(),
+        padding_tau_prism_probe(),
         padding_window_side_probe(),
         padding_normal_combine_probe(),
         padding_corner_reach_probe(),

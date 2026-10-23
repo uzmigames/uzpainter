@@ -1646,6 +1646,68 @@ def hinge_copies(probe: str) -> list[Any]:
     return copies
 
 
+def tau_prism_copies() -> list[HingeCopy]:
+    """Decision 342: open prism sectors with a longitudinal seam and mixed tau-side gates.
+
+    Four narrow bands next to the seam put the nearest covered centre beyond two or three
+    hinges. Rotating the angle cycle changes which hinges pass the gate without changing
+    UV coverage. Both signs, quad diagonals and two band depths are independent controls.
+    """
+    angles = (8.0, 12.0, 9.9, 10.25)
+    copies = []
+    for sign in (-1, 1):
+        for split in (0, 1):
+            for depth in (0.1875, 0.3125):
+                for phase in range(4):
+                    cycle = angles[phase:] + angles[:phase]
+                    bands = [_band(depth)]
+                    bands += [_band(depth, sign * a) for a in cycle[:3]]
+                    bands += [_band(4.0 - 4 * depth, sign * cycle[3])]
+                    copies.append(
+                        HingeCopy(
+                            f"tau-s{sign:+d}-d{depth:g}-p{phase}-q{split}",
+                            [_band(4.0)],
+                            a=bands,
+                            fold=sign * 6.0,
+                            split=split,
+                        )
+                    )
+    # Keep covered centres off facet boundaries (four 0.1875 bands end at depth 0.75).
+    for copy in copies:
+        copy.tris = [(ps, [(c - 0.03125, r) for c, r in uv]) for ps, uv in copy.tris]
+    # B covers one row: end-of-seam ring texels can select exactly one far tap beyond J.
+    # Sweep total tau/far angle through the gate while varying J's subtexel depth.
+    for sign in (-1, 1):
+        for total in (8.0, 9.9, 10.0, 10.25, 12.0):
+            for depth in (0.0625, 0.125, 0.1875, 0.3125):
+                copies.append(
+                    HingeCopy(
+                        f"distance-s{sign:+d}-a{total:g}-d{depth:g}",
+                        [_band(depth), _band(0.75 - depth, sign * (total - 6.0))],
+                        fold=sign * 6.0,
+                    )
+                )
+    return copies
+
+
+def tau_prism_layout() -> tuple[list[tuple[Any, tuple[float, float], Vec3]], tuple[float, float]]:
+    return _pack(tau_prism_copies())
+
+
+def tau_prism() -> bytes:
+    """512 px kernel probe; authored geometry only, no recorded Painter data."""
+    placed, anchors = tau_prism_layout()
+    data, faces = _packed_obj_lines(placed, anchors)
+    return obj(
+        "uzp_tau_prism",
+        "Decision 342 tau-side probe: 32 open faceted prism sectors, longitudinal UV seam, "
+        "8/12/9.9/10.25 degree hinges, both signs and diagonals, two facet depths; "
+        "40 narrow far-chart controls sweeping total angle and seam-triangle depth.",
+        [("uzp_tau_prism", faces)],
+        "".join(data),
+    )
+
+
 def hinge_layout(
     probe: str,
 ) -> tuple[list[tuple[Any, tuple[float, float], Vec3]], tuple[float, float]]:
