@@ -359,6 +359,23 @@ int RunKernelCache(const fs::path& dir) {
               rejected.error().reason.find("test_ramp") != std::string::npos,
           "a DXC error is reported as kernel_compile_failed", Describe(rejected));
 
+    // Includes and atomic-write temporary names must work beyond legacy Win32 MAX_PATH.
+    // This process has the same manifest/CRT as the export harness; Python's IO alone would
+    // not reproduce the failure because python.exe is long-path aware.
+    const fs::path deepRoot = dir / std::string(90, 'a') / std::string(90, 'b') / std::string(90, 'c');
+    CountingCompiler deepCompiler(**dxc, {});
+    KernelCache deepCache(deepCompiler, deepRoot);
+    for (const KernelTarget target : {KernelTarget::Dxil, KernelTarget::Spirv}) {
+        const auto compiled = deepCache.Get(base, target);
+        Check(compiled.has_value(), "declared includes compile under a cache path longer than MAX_PATH", Describe(compiled));
+        if (!compiled) continue;
+        KernelCache reopened(deepCompiler, deepRoot);
+        const int before = deepCompiler.compiles;
+        const auto hit = reopened.Get(base, target);
+        Check(hit && hit->cacheHit && hit->bytecode == compiled->bytecode && deepCompiler.compiles == before,
+              "a deep cache entry is persisted and reused by a fresh cache", Describe(hit));
+    }
+
     // The default folder is under the user's local app-data folder.
     const fs::path defaultRoot = DefaultKernelCacheRoot();
     wchar_t localAppData[MAX_PATH] = {};

@@ -78,6 +78,15 @@ constexpr size_t kHeaderSize = 32;
 
 enum class EntryState : uint8_t { Absent, Valid, Corrupt };
 
+// The atomic-write suffix can exceed MAX_PATH even when the final include path fits.
+// Extended Win32 paths require absolute paths and backslashes, including for the CRT.
+fs::path IoPath(const fs::path& path) {
+    std::wstring value = fs::absolute(path).lexically_normal().make_preferred().wstring();
+    if (value.starts_with(L"\\\\?\\")) return value;
+    if (value.starts_with(L"\\\\")) return L"\\\\?\\UNC\\" + value.substr(2);
+    return L"\\\\?\\" + value;
+}
+
 uint64_t LoadU64(const uint8_t* p) {
     uint64_t v;
     std::memcpy(&v, p, sizeof(v));
@@ -86,8 +95,8 @@ uint64_t LoadU64(const uint8_t* p) {
 
 EntryState ReadEntry(const fs::path& path, uint64_t key, std::vector<uint8_t>& bytecode) {
     std::error_code ec;
-    if (!fs::is_regular_file(path, ec)) return EntryState::Absent;
-    std::ifstream file(path, std::ios::binary);
+    if (!fs::is_regular_file(IoPath(path), ec)) return EntryState::Absent;
+    std::ifstream file(IoPath(path), std::ios::binary);
     if (!file) return EntryState::Corrupt;
     std::vector<uint8_t> data((std::istreambuf_iterator<char>(file)),
                               std::istreambuf_iterator<char>());
@@ -112,22 +121,23 @@ EntryState ReadEntry(const fs::path& path, uint64_t key, std::vector<uint8_t>& b
 /// so readers in other processes see the old file or the new one, never a partial one.
 bool WriteAtomically(const fs::path& path, std::string_view data) {
     std::error_code ec;
-    fs::create_directories(path.parent_path(), ec);
+    fs::create_directories(IoPath(path.parent_path()), ec);
+    if (ec) return false;
     const fs::path temp =
         path.parent_path() /
         (path.filename().string() + ".tmp-" + std::to_string(GetCurrentProcessId()) + "-" +
          std::to_string(std::hash<std::thread::id>{}(std::this_thread::get_id())));
     {
-        std::ofstream file(temp, std::ios::binary | std::ios::trunc);
+        std::ofstream file(IoPath(temp), std::ios::binary | std::ios::trunc);
         file.write(data.data(), static_cast<std::streamsize>(data.size()));
         if (!file) {
             file.close();
-            fs::remove(temp, ec);
+            fs::remove(IoPath(temp), ec);
             return false;
         }
     }
-    if (!MoveFileExW(temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING)) {
-        fs::remove(temp, ec);
+    if (!MoveFileExW(IoPath(temp).c_str(), IoPath(path).c_str(), MOVEFILE_REPLACE_EXISTING)) {
+        fs::remove(IoPath(temp), ec);
         return false;
     }
     return true;
@@ -295,7 +305,7 @@ Result<fs::path> KernelCache::MaterialiseIncludes(const KernelSource& source) {
     const fs::path folder = m_root / "includes" / Hex64(HashText(encoded));
     for (const KernelInclude* include : includes) {
         const fs::path file = folder / fs::path(include->name);
-        std::ifstream existing(file, std::ios::binary);
+        std::ifstream existing(IoPath(file), std::ios::binary);
         const std::string current((std::istreambuf_iterator<char>(existing)),
                                   std::istreambuf_iterator<char>());
         if (existing.is_open() && current == include->text) continue;
@@ -306,7 +316,7 @@ Result<fs::path> KernelCache::MaterialiseIncludes(const KernelSource& source) {
                             "' could not be written to " + file.string());
         }
     }
-    return folder;
+    return IoPath(folder);
 }
 
 Result<CompiledKernel> KernelCache::Get(const KernelSource& source, KernelTarget target) {

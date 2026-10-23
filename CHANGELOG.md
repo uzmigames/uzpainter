@@ -161,6 +161,7 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
 
 ### Fixed
 
+- Shader-cache includes and atomic temporary files use normalized extended Windows paths, so deep export folders no longer fail when a temporary filename exceeds `MAX_PATH`. DXIL and SPIR-V regressions cover compilation, persisted entries and cache reuse.
 - `parity/semantics/export-processing.json` was stale after batches A–D admitted 51 goldens with export steps. Regenerated: 195 goldens, all new residuals zero, no existing entry changed.
 - MCP `layer_insert` and `effect_insert` gate each kind on the native insert they run, so compare mask and colour selection are release gaps (decision 182).
 - The preview viewport had cracks along shared triangle edges. Coverage now uses watertight edge functions; depth and barycentrics stay Möller–Trumbore, so no other pixel changes (decision 178).
