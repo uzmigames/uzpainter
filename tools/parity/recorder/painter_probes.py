@@ -1454,7 +1454,7 @@ def substance_edit(call: str, args: dict[str, Any]) -> Any:
             )
         elif args.get("mode") == "Auto":
             source.resolution = substance_painter.source.ResolutionOverride(
-                substance_painter.source.ResolutionMode.Auto
+                substance_painter.source.ResolutionMode.Auto, (128, 128), 0
             )
         else:
             raise ValueError("this control supports Custom128 and Auto resolution only")

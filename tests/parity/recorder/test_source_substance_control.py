@@ -39,8 +39,8 @@ class Mode(enum.Enum):
 @dataclass
 class Override:
     mode: Any
-    value: Any = (128, 128)
-    log2_offset: Any = 0
+    value: Any
+    log2_offset: Any
 
 
 def test_request_has_documented_calls_and_no_authored_parameter_defaults() -> None:
