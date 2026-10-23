@@ -1,0 +1,11 @@
+{
+  "id": 359,
+  "slug": "shelf-crawl-comparisons-preserve-complete-events-and-accept-only-measured-sampling-paths",
+  "title": "Shelf crawl comparisons preserve complete events and accept only measured sampling paths",
+  "status": "accepted",
+  "date": "2026-10-23",
+  "relatedTasks": [
+    "phase1.24_python-api-facade"
+  ],
+  "supersededBy": null
+}

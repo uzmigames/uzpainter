@@ -30,6 +30,9 @@ each rule still has a reason to exist:
 - Decision 338: only after-save/reopen s20's ReloadResourcesEnded result list compares as
   a multiset of complete objects. Duplicates and all other event fields/order stay exact.
   Raw result order is fresh-process-unstable, not claimed as exact parity.
+- Decision 359: s16-s17 compare one completed crawl of the authored shelf. Polls may sample
+  False alone or True followed by False; complete events and all other state fields stay exact.
+  The presence of the intermediate poll is not claimed as raw parity.
 
 The outputs that cannot equal Painter's are in `EXCLUDED`, with their kind and owner; each must
 be recorded in the golden and still differ.
@@ -57,6 +60,8 @@ from tests.python.reload_result_multiset import (
     comparison_contract,
     write_raw_replay,
 )
+from tests.python.shelf_crawl_sampling import comparable_shelf
+from tests.python.shelf_crawl_sampling import comparison_contract as shelf_contract
 from tests.python.test_pyapi_facade_tier0 import CONDITIONS, contexts
 
 HOST_VERSION = (
@@ -254,6 +259,7 @@ def test_host_probe_equals_painter(facade: Run, tmp_path: Path, probe: str) -> N
     excluded = EXCLUDED[probe]
     expected, ours = comparable(probe, golden, replayed, tmp_path / "run", textures=True)
     expected, ours = comparable_reload(probe, expected, ours)
+    expected, ours = comparable_shelf(probe, expected, ours)
     differences = compare_observed(ours, expected, job, tmp_path, excluded)
     save_trace(
         f"facade-observed/{probe}",
@@ -261,7 +267,11 @@ def test_host_probe_equals_painter(facade: Run, tmp_path: Path, probe: str) -> N
         replayed,
         excluded,
         differences,
-        comparison_contract=comparison_contract(probe),
+        comparison_contract=(
+            {"contracts": [comparison_contract(probe), shelf_contract(probe)]}
+            if shelf_contract(probe) is not None
+            else comparison_contract(probe)
+        ),
     )
     assert replayed["cleanup_failures"] == [], replayed["cleanup_failures"]
     assert differences == [], "\n".join(differences)
