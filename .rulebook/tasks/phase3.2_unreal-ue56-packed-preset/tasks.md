@@ -162,3 +162,10 @@ Recorder preparation preserves the default two recordings and accepts an explici
 bounded `recorder.reopen_count` of 1 through 3, validated before connecting. Its
 549 recorder tests, 93 focused recorder/grid checks, Ruff, mypy and the private-store
 guard passed. These validate capture machinery; they do not claim export parity.
+
+The follow-up `ao-mixed-precomposed-half-l32f` is also admitted. Its equal-operand
+precondition fails: the replicated RGB EXR source gains one-ULP differences from
+RGB-to-scalar conversion at 68 rows, exactly explained by float32 sum times the
+float32 reciprocal of three. The paired AO_Mixed outputs agree, but their channel
+operands differ, so no operator conclusion follows. Decision 131 records the
+hashes, scope and failed precondition. Item 2.10 and the refusal remain unchanged.

@@ -1,0 +1,9 @@
+{
+  "defaultExportPreset": "export-preset-generator://gltf",
+  "exportList": [
+    {
+      "rootPath": "uzp_bevelled_cube"
+    }
+  ],
+  "exportShaderParams": false
+}

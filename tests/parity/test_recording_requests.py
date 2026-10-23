@@ -23,9 +23,11 @@ from tools.parity.recorder.capture import decode_png
 from tools.parity.recorder.job import EXPORT, load_job
 from tools.parity.schemas import REPO_ROOT, Schema, load_json, validation_errors
 from tools.parity.store.store import locate
+from tools.parity.tier0_semantics import recording_requests as requests
 from tools.parity.tier0_semantics import request_fixtures as rf
 from tools.parity.tier0_semantics.corpus import FIXTURE_DIR
 from tools.parity.tier0_semantics.recording_requests import (
+    ADMITTED,
     OCIO_SETTING,
     REQUEST_FIXTURES,
     SUBNORMAL_MODES,
@@ -34,6 +36,7 @@ from tools.parity.tier0_semantics.recording_requests import (
     padding_normal_combine_probe,
     padding_tau_prism_probe,
     probe_groups,
+    request_catalog_problems,
     request_dir,
     request_root,
     requested_goldens,
@@ -43,15 +46,17 @@ from tools.parity.tier0_semantics.recording_requests import (
 
 
 def request_paths() -> list[Path]:
-    return sorted(request_dir(REPO_ROOT).glob("*.json"))
+    return sorted(p for p in request_dir(REPO_ROOT).glob("*.json") if p.stem not in ADMITTED)
 
 
 def test_every_requested_golden_is_committed_once() -> None:
+    assert request_catalog_problems(REPO_ROOT) == []
     assert sorted(p.stem for p in request_paths()) == sorted(g.name for g in requested_goldens())
     assert ocio_goldens() == {
         "export-ocio-encode",
         "export-presets-ocio",
         "export-presets-gltf-ocio",
+        "export-presets-gltf-predefined-ocio",
     }
 
 
@@ -72,6 +77,157 @@ def test_requests_live_beside_the_envelope_manifests() -> None:
     root = request_root(REPO_ROOT)
     assert root.name == "requests"
     assert (root.parent / "manifests").is_dir()
+
+
+@pytest.fixture
+def retained_catalog(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path, Path]:
+    admitted_name = "ao-mixed-grid"
+    pending_name = "export-presets-gltf-legacy"
+    selected = [g for g in requests.all_goldens() if g.name in (admitted_name, pending_name)]
+    pending_data = (request_dir(REPO_ROOT) / f"{pending_name}.json").read_bytes()
+    from tools.parity.envelope.registry import manifest_root
+
+    admitted_data = (
+        manifest_root(current_envelope(REPO_ROOT), REPO_ROOT)
+        / "tier0"
+        / "semantics"
+        / f"{admitted_name}.json"
+    ).read_bytes()
+    monkeypatch.setattr(requests, "all_goldens", lambda: selected)
+    monkeypatch.setattr(requests, "ADMITTED", frozenset({admitted_name}))
+    monkeypatch.setattr(requests, "PRESERVED_REQUESTS", frozenset({admitted_name}))
+    monkeypatch.setattr(requests, "manifest_root", lambda entry, root: root / "manifests")
+    monkeypatch.setattr(requests, "current_envelope", lambda root: {})
+    pending = request_dir(tmp_path) / f"{pending_name}.json"
+    admitted = tmp_path / "manifests" / "tier0" / "semantics" / f"{admitted_name}.json"
+    preserved = requests.preserved_request_dir(tmp_path) / f"{admitted_name}.json"
+    for path in (pending, admitted, preserved):
+        path.parent.mkdir(parents=True, exist_ok=True)
+    pending.write_bytes(pending_data)
+    admitted.write_bytes(admitted_data)
+    preserved.write_text(
+        json.dumps({**json.loads(admitted_data), "private_records": []}), encoding="utf-8"
+    )
+    assert request_catalog_problems(tmp_path) == []
+    return pending, admitted, preserved
+
+
+@pytest.mark.parametrize(
+    ("change", "error"),
+    [
+        ("pending_missing", "pending request missing"),
+        ("admitted_missing", "admitted manifest missing"),
+        ("preserved_missing", "preserved request missing"),
+        ("duplicate", "duplicate pending/preserved request"),
+        ("stale", "preserved source differs"),
+        ("unadmitted", "preserved source is not admitted"),
+        ("invalid_json", "cannot read manifest"),
+        ("nonobject", "manifest must be an object"),
+        ("private_source", "request source contains private records"),
+        ("no_records", "admitted manifest has no private records"),
+        ("wrong_id", "request source id differs"),
+        ("pending_admitted", "pending factory already has an admitted manifest"),
+    ],
+)
+def test_retained_catalog_rejects_missing_duplicate_and_stale_sources(
+    tmp_path: Path,
+    retained_catalog: tuple[Path, Path, Path],
+    change: str,
+    error: str,
+) -> None:
+    pending, admitted, preserved = retained_catalog
+    if change.endswith("_missing"):
+        path = {
+            "pending_missing": pending,
+            "admitted_missing": admitted,
+            "preserved_missing": preserved,
+        }[change]
+        path.rename(path.with_suffix(".held"))
+    elif change == "duplicate" or change == "unadmitted":
+        (preserved.parent / pending.name).write_bytes(pending.read_bytes())
+    elif change == "pending_admitted":
+        (admitted.parent / pending.name).write_bytes(pending.read_bytes())
+    elif change in ("invalid_json", "nonobject"):
+        preserved.write_text("{" if change == "invalid_json" else "[]", encoding="utf-8")
+    else:
+        path = admitted if change == "no_records" else preserved
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if change == "stale":
+            data["description"] += " changed"
+        elif change == "wrong_id":
+            data["golden_id"] = "tier0/semantics/other"
+        else:
+            data["private_records"] = (
+                []
+                if change == "no_records"
+                else json.loads(admitted.read_bytes())["private_records"]
+            )
+        path.write_text(json.dumps(data), encoding="utf-8")
+    assert any(error in problem for problem in request_catalog_problems(tmp_path))
+
+
+def test_generator_plans_preserved_sources_outside_pending_queue(
+    tmp_path: Path,
+    retained_catalog: tuple[Path, Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pending, admitted, preserved = retained_catalog
+    entry = current_envelope(REPO_ROOT)
+    monkeypatch.setattr(requests, "current_envelope", lambda root: entry)
+    hashes = {name: "1" * 64 for golden in requests.all_goldens() for name in golden.inputs}
+    planned = requests.planned_requests(hashes, tmp_path)
+    assert set(planned) == {pending, admitted, preserved}
+    assert planned[preserved] == planned[admitted]
+    assert planned[preserved]["private_records"] == []
+
+
+@pytest.mark.parametrize("original_path", [False, True])
+def test_generator_refuses_to_overwrite_changed_preserved_source(
+    tmp_path: Path,
+    retained_catalog: tuple[Path, Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    original_path: bool,
+) -> None:
+    from tools.parity.tier0_semantics import __main__ as generator
+
+    _, admitted, preserved = retained_catalog
+    expected = json.loads(preserved.read_bytes())
+    if original_path:
+        preserved = requests.request_dir(tmp_path) / preserved.name
+    changed = {**expected, "description": expected["description"] + " changed"}
+    preserved.write_text(json.dumps(changed), encoding="utf-8")
+    marker = tmp_path / "fixture.bin"
+    marker.write_bytes(b"original")
+    manifest_before = admitted.read_bytes()
+    source_before = preserved.read_bytes()
+    monkeypatch.setattr(
+        generator, "planned", lambda root: ({marker: b"new"}, {preserved: expected})
+    )
+    assert any("preserved request changed" in error for error in generator.write(tmp_path))
+    assert marker.read_bytes() == b"original"
+    assert admitted.read_bytes() == manifest_before
+    assert preserved.read_bytes() == source_before
+
+
+def test_admitted_original_and_copy_stay_out_of_pending_queue(
+    tmp_path: Path,
+    retained_catalog: tuple[Path, Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pending, admitted, preserved = retained_catalog
+    original = pending.parent / preserved.name
+    original.write_bytes(preserved.read_bytes())
+    assert request_catalog_problems(tmp_path) == []
+    assert [golden.name for golden in requests.requested_goldens()] == [pending.stem]
+    entry = current_envelope(REPO_ROOT)
+    monkeypatch.setattr(requests, "current_envelope", lambda root: entry)
+    hashes = {name: "1" * 64 for golden in requests.all_goldens() for name in golden.inputs}
+    planned = requests.planned_requests(hashes, tmp_path)
+    assert set(planned) == {pending, admitted, preserved, original}
+    assert planned[original] == planned[preserved]
+    changed = {**json.loads(original.read_bytes()), "description": "changed retained source"}
+    original.write_text(json.dumps(changed), encoding="utf-8")
+    assert any("preserved source differs" in error for error in request_catalog_problems(tmp_path))
 
 
 def obj_uvs(name: str) -> tuple[list[tuple[float, ...]], list[tuple[float, ...]], list[str]]:
@@ -593,7 +749,7 @@ def test_tau_prism_discriminates_mixed_gates_and_single_far_depths() -> None:
 
 def test_tau_prism_request_uses_eight_float_channels_and_repeated_exports() -> None:
     golden = padding_tau_prism_probe()
-    assert golden.name in {g.name for g in requested_goldens()}
+    assert golden.name in ADMITTED
     steps = golden.sequence.steps
     assert steps[0]["args"]["default_texture_resolution"] == 512
     exports = [s["args"] for s in steps if s["call"] == EXPORT]

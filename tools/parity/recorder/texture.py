@@ -57,6 +57,7 @@ from tools.parity.recorder.session import (
     PainterSession,
     RecorderError,
 )
+from tools.parity.recorder.sidecars import gltf_sidecars
 from tools.parity.recorder.texture_sheet import Operator, operate, readback_specs, texture_sheet
 
 Now = Callable[[], datetime]
@@ -467,7 +468,25 @@ def probe_outputs(
     outputs.append(probe_readback(f"{prefix}/export", EXPORT, probe, value, raised))
     if raised is not None:
         outputs[-1]["value"] = {"directory": inventory}
+    sidecars = gltf_sidecars(present, root)
     for path, name in zip(present, on_disk, strict=True):
+        if path in sidecars:
+            outputs.append(
+                {
+                    "output_id": "/".join(
+                        [prefix, *(output_safe(part) for part in name.split("/"))]
+                    ),
+                    "kind": "exported_sidecar",
+                    "file": name,
+                    "blob": {
+                        "sha256": sha256_file(path),
+                        "size_bytes": path.stat().st_size,
+                        "media_type": sidecars[path],
+                    },
+                    "export_settings": {"step": probe.step, "probe": True},
+                }
+            )
+            continue
         groups = sorted(key for key, names in reported.items() if name in names)
         measured = measure_storage_format(path)
         encoding, basis = (

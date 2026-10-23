@@ -257,6 +257,7 @@
           "enum": [
             "private_oracle_record",
             "exported_map",
+            "exported_sidecar",
             "api_readback",
             "effective_default_capture",
             "template_capture",

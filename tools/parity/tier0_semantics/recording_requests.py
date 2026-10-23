@@ -6,9 +6,11 @@ under `tier0/semantics/` (decision 099). Their manifests are requested goldens: 
 the current envelope's `requests/` root with `private_records` empty, because every manifest
 under `manifests/` must name its records (the Tier 0 gate, the refresh and the store verify read
 them all). After the Painter session admits a golden (`python -m tools.parity.store record
-<manifests path> --run <run>`), its name joins `ADMITTED`: its request file is deleted and the
-generator plans its manifest under `manifests/` instead (`current.api_goldens` cannot take it,
-because its inputs are the request fixtures).
+<manifests path> --run <run>`), its name joins `ADMITTED`: its authored request can remain
+at its original path or under `requests/admitted/tier0/semantics/`, and the generator plans
+its manifest under `manifests/` (`current.api_goldens` cannot take it, because its inputs are
+the request fixtures). Admission excludes retained sources from the pending queue without
+deleting or moving files. Every retained copy must match the admitted authored content.
 
 Later decisions add requests the same way (`later_goldens`): decision 145's sRGB bitmap variants
 (decision 156), decision 126's inferred template bases and decision 129's padding probes P-ramp
@@ -27,6 +29,7 @@ three that name `OCIO` in `applied_settings` (`export-ocio-encode`, `export-pres
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -34,6 +37,7 @@ from typing import Any
 from tools.parity.envelope.registry import current_envelope, manifest_root
 from tools.parity.recorder import vocabulary as ps
 from tools.parity.recorder.job import EXPORT
+from tools.parity.schemas import Schema, validation_errors
 from tools.parity.tier0_semantics import request_fixtures as rf
 from tools.parity.tier0_semantics.corpus import (
     BLEND_FAMILIES,
@@ -91,6 +95,9 @@ def probe_groups() -> dict[str, dict[str, Config]]:
         "colour-space": rf.colour_space_probes(),
         "presets-bevelled-cube": rf.preset_probes("uzp_bevelled_cube"),
         "presets-gltf-bevelled-cube": rf.gltf_preset_probes("uzp_bevelled_cube"),
+        "presets-gltf-predefined-bevelled-cube": rf.gltf_preset_probes(
+            "uzp_bevelled_cube", predefined=True
+        ),
     }
 
 
@@ -100,6 +107,11 @@ def probe_generator(group: str, probe: str) -> Generate:
 
 # Authored inputs of the requests: id -> (kind, repository path, generator).
 REQUEST_FIXTURES: dict[str, tuple[str, str, Generate]] = {
+    "ao-precomposed-half": (
+        "image",
+        f"{FIXTURE_DIR}/bitmaps/ao-precomposed-half.exr",
+        rf.ao_precomposed_half,
+    ),
     "islands": ("mesh", f"{FIXTURE_DIR}/meshes/islands.obj", rf.islands),
     "seam": ("mesh", f"{FIXTURE_DIR}/meshes/seam.obj", rf.seam),
     "seam-side-mask": ("mask", f"{FIXTURE_DIR}/bitmaps/seam-side-mask.png", rf.seam_side_mask),
@@ -901,7 +913,7 @@ WAND_BASE = [75 / 255, 70 / 255, 65 / 255]
 # --- Decision 314: the glTF PBR Metal Roughness preset (recording R-314) ------------------
 
 
-def export_presets_gltf(ocio: bool) -> Golden:
+def export_presets_gltf(ocio: bool, *, predefined: bool = False) -> Golden:
     """Recording R-314 (phase3.1_unreal-gltf-pbr-preset item 2.1): Painter's files, dry run and
     `list_output_maps()` for its glTF PBR Metal Roughness preset, every channel the shipped preset
     reads filled with a distinct source."""
@@ -937,8 +949,11 @@ def export_presets_gltf(ocio: bool) -> Golden:
     s.add(PREDEFINED_PRESETS)
     s.add(RESOURCE_PRESETS)
     s.add(PREDEFINED_OUTPUT_MAPS, texture_set="uzp_bevelled_cube")
-    s.add(RESOURCE_OUTPUT_MAPS, preset=rf.GLTF_PRESET)
-    inputs = probes(s, "presets-gltf-bevelled-cube")
+    if not predefined:
+        s.add(RESOURCE_OUTPUT_MAPS, preset=rf.GLTF_PRESET)
+    inputs = probes(
+        s, "presets-gltf-predefined-bevelled-cube" if predefined else "presets-gltf-bevelled-cube"
+    )
     template = (
         "no template (the pipeline's default OpenPBR channels) with Opacity, EmissionColor, AO "
         "and SpecularWeight added, under OCIO"
@@ -946,7 +961,9 @@ def export_presets_gltf(ocio: bool) -> Golden:
         else f"the shipped template {ALPHA_BLEND!r} with AO and SpecularWeight added, under Legacy"
     )
     return Golden(
-        "export-presets-gltf-" + ("ocio" if ocio else "legacy"),
+        "export-presets-gltf-"
+        + ("predefined-" if predefined else "")
+        + ("ocio" if ocio else "legacy"),
         "tier0/export/presets",
         f"Recording R-314 (decision 314, phase3.1_unreal-gltf-pbr-preset item 2.1) on the "
         f"authored bevelled cube at 256 px, OpenGL, {template}: normal-b bound as the Normal mesh "
@@ -957,7 +974,14 @@ def export_presets_gltf(ocio: bool) -> Golden:
         "maps on the set, and the output maps of the starter glTF PBR Metal Roughness preset. "
         "Probes: that preset with its own parameters and with the pipeline's (PNG 16, infinite, no "
         "dithering). Confirms or corrects every map of the shipped gltf-pbr-metal-roughness preset "
-        "(assets/export-presets/), its channels, its name, its parameters and its URL.",
+        "(assets/export-presets/), its channels, its name, its parameters and its URL."
+        + (
+            " Corrected follow-up: export-preset-generator://gltf, observed by the original "
+            "R-314 preset-list capture; the starter-assets URL was undefined. The predefined "
+            "output-map capture supplies the layout; no resource-preset capture is requested."
+            if predefined
+            else ""
+        ),
         "bevelled-cube",
         [
             "bevelled-cube",
@@ -1833,6 +1857,52 @@ def ao_mixed_stability_probes() -> list[Golden]:
     return [floating, reopened]
 
 
+def ao_mixed_precomposed_probe() -> Golden:
+    """Distinguish composition history from a product of identical exported operands."""
+    s = start("grid2x2")
+    s.channels((("AO", "L32F"),))
+    resources = s.imports("grey-a", "grey-b", "ao-precomposed-half")
+    s.add(ps.SET_MESH_MAP, usage="AO", resource_step=resources["grey-a"])
+    for index, (filtering, source, opacity) in enumerate(
+        (
+            ("Nearest", "grey-b", 0.5),
+            ("Nearest", "ao-precomposed-half", 1.0),
+            ("BilinearHQ", "grey-b", 0.5),
+            ("BilinearHQ", "ao-precomposed-half", 1.0),
+        )
+    ):
+        node = s.fill(["AO"], texture_set=f"s{index}")
+        s.bitmap(node, "AO", resources[source])
+        projection(s, node, filtering, "RepeatNone")
+        s.blend(node, "AO", "Normal", opacity)
+    maps = [
+        "virtualMap/AO_Mixed:L",
+        "documentMap/ambientOcclusion:L",
+        "meshMap/ambient_occlusion:L",
+    ]
+    export(s, maps, PNG8, "passthrough")
+    export(s, maps, EXR32F, "passthrough")
+    return Golden(
+        "ao-mixed-precomposed-half-l32f",
+        "tier0/ao-mixed/operator",
+        "Decision 131 composition-path control, Legacy, AO L32F, 256 px, grid2x2. "
+        "The same grey-a AO mesh map supplies code x/255 to all sets. s0/s2 use grey-b "
+        "at opacity 0.5; s1/s3 use the authored EXR32F ao-precomposed-half at opacity 1. "
+        "Its RGB rows are fma(float32(float32(y/255)-1),0.5,1), with no oracle pixels. "
+        "s0/s1 use Nearest; s2/s3 use BilinearHQ. Identity UV, RepeatNone, Normal blend. "
+        "The authored precomposed values survive the opacity-1 blend exactly at every "
+        "row. Compare matched pairs only after verifying bit-identical channel and mesh "
+        "EXR exports. A virtual operator determined solely by those exported operands "
+        "predicts identical AO_Mixed in each pair. A difference rejects that hypothesis; "
+        "agreement alone does not establish an arithmetic rule. AO_Mixed, channel and "
+        "mesh exported twice as PNG8 and twice as EXR32F, passthrough, no dithering; "
+        "repeat all exports after Full save/close/reopen. No opacity-0.75 case.",
+        "grid2x2",
+        ["grid2x2", "grey-a", "grey-b", "ao-precomposed-half"],
+        s,
+    )
+
+
 def padding_normal_combine_probe() -> Golden:
     """Decision 276 item 5's recording: the float32 form (item 4 (b)) and the order (item 4 (c))
     of Painter's gutter combination of a bound Normal mesh map with the padded mesh-free normal,
@@ -2151,18 +2221,33 @@ def later_goldens() -> list[Golden]:
         padding_corner_reach_probe(),
         export_presets_gltf(ocio=False),
         export_presets_gltf(ocio=True),
+        export_presets_gltf(ocio=False, predefined=True),
+        export_presets_gltf(ocio=True, predefined=True),
         blend_subnormal(),
         ao_mixed_grid_probe(),
         *ao_mixed_stability_probes(),
+        ao_mixed_precomposed_probe(),
         *specularweight_base_probes(),
     ]
 
 
 # Goldens that the Painter sessions of 2026-10-12, 2026-10-13 and 2026-10-19 recorded and the
 # store admitted (decisions 101, 160, 167, 172, 180, 198, 216, 266, 272 and 278): their manifests
-# live under the envelope's `manifests/`, and their requests are deleted.
+# live under the envelope's `manifests/`; retained sources are excluded from the pending queue.
 ADMITTED = frozenset(
     {
+        "export-presets-gltf-legacy",
+        "export-presets-gltf-ocio",
+        "export-presets-gltf-predefined-legacy",
+        "export-presets-gltf-predefined-ocio",
+        "ao-mixed-precomposed-half-l32f",
+        "export-padding-tau-prism",
+        "specularweight-empty-base-default-l8",
+        "specularweight-empty-base-default-l16",
+        "specularweight-empty-base-default-l32f",
+        "specularweight-empty-base-alpha-blend-l8",
+        "specularweight-empty-base-alpha-blend-l16",
+        "specularweight-empty-base-alpha-blend-l32f",
         "ao-mixed-grid-l32f",
         "ao-mixed-grid-l16-reopen3",
         "export-bit-depth",
@@ -2256,6 +2341,19 @@ def decision_100_goldens() -> list[Golden]:
 
 def all_goldens() -> list[Golden]:
     return [*decision_100_goldens(), *later_goldens()]
+
+
+PRESERVED_REQUESTS = frozenset(
+    {
+        "ao-mixed-grid-l32f",
+        "ao-mixed-grid-l16-reopen3",
+        "ao-mixed-precomposed-half-l32f",
+        "export-presets-gltf-legacy",
+        "export-presets-gltf-ocio",
+        "export-presets-gltf-predefined-legacy",
+        "export-presets-gltf-predefined-ocio",
+    }
+)
 
 
 def requested_goldens() -> list[Golden]:
@@ -2377,8 +2475,106 @@ def planned_requests(hashes: dict[str, str], root: Path) -> dict[Path, dict[str,
     planned |= {
         admitted / f"{g.name}.json": request_manifest(g, hashes, entry) for g in admitted_goldens()
     }
+    planned |= {
+        path: request_manifest(g, hashes, entry)
+        for g in admitted_goldens()
+        if g.name in PRESERVED_REQUESTS
+        for path in preserved_request_paths(root, g.name)
+    }
     return planned
 
 
 def request_dir(root: Path) -> Path:
     return request_root(root) / "tier0" / "semantics"
+
+
+def preserved_request_dir(root: Path) -> Path:
+    """Additional retained-source directory; originals may stay at their initial paths."""
+    return request_root(root) / "admitted" / "tier0" / "semantics"
+
+
+def preserved_request_paths(root: Path, name: str) -> list[Path]:
+    """Retain each existing authored copy; a new source defaults to its original path."""
+    if name not in PRESERVED_REQUESTS:
+        return []
+    original = request_dir(root) / f"{name}.json"
+    archived = preserved_request_dir(root) / f"{name}.json"
+    return [path for path in (original, archived) if path.is_file()] or [original]
+
+
+def request_catalog_problems(root: Path) -> list[str]:
+    """Check the pending queue and retained sources against actual admitted manifests."""
+    problems: list[str] = []
+
+    def read(path: Path) -> dict[str, Any] | None:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            problems.append(f"{path.name}: cannot read manifest: {error}")
+            return None
+        if not isinstance(data, dict):
+            problems.append(f"{path.name}: manifest must be an object")
+            return None
+        return data
+
+    names = [g.name for g in all_goldens()]
+    if len(names) != len(set(names)):
+        problems.append("request factories contain duplicate names")
+    if ADMITTED - set(names):
+        problems.append(f"ADMITTED names have no factory: {sorted(ADMITTED - set(names))}")
+    pending = {p.stem: p for p in request_dir(root).glob("*.json")}
+    preserved = {p.stem: p for p in preserved_request_dir(root).glob("*.json")}
+    expected = set(names) - ADMITTED
+    for name in sorted(expected - pending.keys()):
+        problems.append(f"pending request missing: {name}")
+    for name in sorted(pending.keys() - expected - PRESERVED_REQUESTS):
+        problems.append(f"unexpected pending request: {name}")
+    for name in sorted((pending.keys() & preserved.keys()) - ADMITTED):
+        problems.append(f"duplicate pending/preserved request: {name}")
+    for name in sorted(PRESERVED_REQUESTS - (preserved.keys() | pending.keys())):
+        problems.append(f"preserved request missing: {name}")
+    for name in sorted(preserved.keys() - PRESERVED_REQUESTS):
+        problems.append(f"unexpected preserved request: {name}")
+    for name in sorted(PRESERVED_REQUESTS - ADMITTED):
+        problems.append(f"preserved request declaration is not admitted: {name}")
+    for name in sorted(preserved.keys() - ADMITTED):
+        problems.append(f"preserved source is not admitted: {name}")
+    admitted = manifest_root(current_envelope(root), root) / "tier0" / "semantics"
+    for name in names:
+        path = admitted / f"{name}.json"
+        if name not in ADMITTED and path.exists():
+            problems.append(f"pending factory already has an admitted manifest: {name}")
+        if name in ADMITTED:
+            if not path.is_file():
+                problems.append(f"admitted manifest missing: {name}")
+                continue
+            data = read(path)
+            if data is None:
+                continue
+            if data.get("golden_id") != f"{GOLDEN_PREFIX}/{name}":
+                problems.append(f"admitted manifest id differs from its filename: {name}")
+            problems.extend(
+                f"{name}: {error}" for error in validation_errors(data, Schema.GOLDEN_PUBLIC)
+            )
+            if not data.get("private_records"):
+                problems.append(f"admitted manifest has no private records: {name}")
+            for source_path in (pending.get(name), preserved.get(name)):
+                if source_path is None:
+                    continue
+                source = read(source_path)
+                if source != {**data, "private_records": []}:
+                    problems.append(
+                        f"preserved source differs from admitted authored content: {name}"
+                    )
+    for name, path in list(pending.items()) + list(preserved.items()):
+        source = read(path)
+        if source is None:
+            continue
+        if source.get("private_records"):
+            problems.append(f"request source contains private records: {name}")
+        if source.get("golden_id") != f"{GOLDEN_PREFIX}/{name}":
+            problems.append(f"request source id differs from its filename: {name}")
+        problems.extend(
+            f"{name}: {error}" for error in validation_errors(source, Schema.GOLDEN_PUBLIC)
+        )
+    return problems

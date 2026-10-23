@@ -119,3 +119,36 @@ to infer a high-precision channel operand and remains required for any eventual
 operator acceptance. Diagnostic script/report: private
 `tmp/scratch/ao-mixed-fit/bounded-arithmetic.{py,json}`. No residual ranking is a
 fit verdict, and no candidate advances to production.
+
+### Precomposed-source control (2026-10-23)
+
+`ao-mixed-precomposed-half-l32f` is admitted in the same envelope, private record
+`c889c68fd5d8063df78e9e966d13b07febb36a99e2e9e23dfc40eed4845ac2eb`.
+Its authored RGB EXR source (SHA-256
+`d5cdfd94bf239cfdb4630c78cf0bb72f5582ebea8bcc7a7a8f7edb4e474c3d84`)
+precomputes the opacity-0.5 channel formula without oracle pixels. The scalar
+identity through an opacity-1 blend is independently tested on all 256 rows.
+
+The capture does **not** satisfy the intended equal-operand precondition. In both
+Nearest and BilinearHQ pairs, and in both recordings, the precomposed source's
+channel differs from the original at 17,408 texels (68 rows), by at most one
+float32 ULP. Mesh maps are identical. AO_Mixed is identical across each pair;
+all immediate repeats and r1/r2 exports agree. Because the channels differ,
+this result neither establishes an operator of exported operands nor disproves
+composition-path dependence.
+
+The changed channel is explained exactly by the RGB-to-scalar arithmetic on
+this replicated-grey fixture: `float32(float32(float32(c+c)+c) * float32(1/3))`.
+Float32 division by three instead of reciprocal multiplication does not match.
+The original opacity-0.5 channel equals the authored c exactly. This isolates
+the RGB source conversion as the failed control precondition, rather than
+failure of the authored scalar opacity-1 identity. It is scoped evidence for
+this fixture, not general acceptance of a new RGB conversion or AO_Mixed rule.
+A scalar float EXR source could isolate that conversion in a future control;
+none is recorded or claimed here. The AO_Mixed refusal remains.
+
+Private aggregate diagnostics: `tmp/scratch/ao-mixed-fit/precomposed-analysis.json`
+and `precomposed-conversion.json`. Authored sources remain at their original paths
+and/or under `requests/admitted/tier0/semantics/`. The admission catalog excludes
+them from the pending queue and checks every copy against its admitted manifest,
+without deleting or moving files. Recorded pixels remain solely in the private store.

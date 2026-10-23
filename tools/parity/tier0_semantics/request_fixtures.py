@@ -2404,12 +2404,12 @@ def preset_probes(root: str) -> dict[str, Config]:
 GLTF_PRESET = "resource://starter_assets/glTF PBR Metal Roughness"
 
 
-def gltf_preset_probes(root: str) -> dict[str, Config]:
+def gltf_preset_probes(root: str, *, predefined: bool = False) -> dict[str, Config]:
     """Decision 314 (recording R-314): the glTF PBR Metal Roughness preset with its own
     parameters and with the pipeline's overrides."""
     base: Config = {
         "exportShaderParams": False,
-        "defaultExportPreset": GLTF_PRESET,
+        "defaultExportPreset": "export-preset-generator://gltf" if predefined else GLTF_PRESET,
         "exportList": [{"rootPath": root}],
     }
     return {

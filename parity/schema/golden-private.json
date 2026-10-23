@@ -242,6 +242,7 @@
         "kind": {
           "enum": [
             "exported_map",
+            "exported_sidecar",
             "api_readback",
             "effective_default_capture",
             "template_capture",
@@ -253,6 +254,7 @@
       },
       "oneOf": [
         { "$ref": "#/$defs/exported_map" },
+        { "$ref": "#/$defs/exported_sidecar" },
         { "$ref": "#/$defs/api_readback" },
         { "$ref": "#/$defs/capture" },
         { "$ref": "#/$defs/iray_reference" },
@@ -272,6 +274,19 @@
         "map": { "type": "string", "minLength": 1 },
         "blob": { "$ref": "#/$defs/blob" },
         "storage_format": { "$ref": "#/$defs/storage_format" },
+        "export_settings": { "type": "object" }
+      }
+    },
+    "exported_sidecar": {
+      "description": "A glTF document or local binary buffer exported beside textures, fenced and hashed without claiming pixel storage.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["output_id", "kind", "file", "blob", "export_settings"],
+      "properties": {
+        "output_id": true,
+        "kind": { "const": "exported_sidecar" },
+        "file": { "type": "string", "minLength": 1 },
+        "blob": { "$ref": "#/$defs/blob" },
         "export_settings": { "type": "object" }
       }
     },

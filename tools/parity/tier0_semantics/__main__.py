@@ -35,6 +35,9 @@ from tools.parity.tier0_semantics.current import planned_current, ui_manifest_di
 from tools.parity.tier0_semantics.recording_requests import (
     REQUEST_FIXTURES,
     planned_requests,
+    preserved_request_dir,
+    preserved_request_paths,
+    request_catalog_problems,
     request_dir,
 )
 
@@ -70,7 +73,7 @@ def authored(data: dict[str, Any]) -> dict[str, Any]:
 
 def problems(root: Path = REPO_ROOT) -> list[str]:
     files, manifests = planned(root)
-    found: list[str] = []
+    found: list[str] = request_catalog_problems(root)
     for path, blob in files.items():
         if not path.is_file() or path.read_bytes() != blob:
             found.append(f"{path.relative_to(root).as_posix()}: differs from the generator")
@@ -84,6 +87,7 @@ def problems(root: Path = REPO_ROOT) -> list[str]:
     extra = sorted(set((root / MANIFEST_DIR).glob("*.json")) - set(manifests))
     extra += sorted(set(ui_manifest_dir(root).glob("*.json")) - set(manifests))
     extra += sorted(set(request_dir(root).glob("*.json")) - set(manifests))
+    extra += sorted(set(preserved_request_dir(root).glob("*.json")) - set(manifests))
     found += [f"{p.relative_to(root).as_posix()}: not in the corpus" for p in extra]
     return found
 
@@ -96,6 +100,8 @@ def write(root: Path = REPO_ROOT) -> list[str]:
             current = json.loads(path.read_text(encoding="utf-8"))
             if current["private_records"] and authored(current) != authored(data):
                 refused.append(f"{path.relative_to(root).as_posix()}: recorded golden changed")
+            if path in preserved_request_paths(root, path.stem) and current != data:
+                refused.append(f"{path.relative_to(root).as_posix()}: preserved request changed")
     if refused:
         return refused
     for path, blob in files.items():
