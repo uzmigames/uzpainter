@@ -69,3 +69,24 @@ artifacts under `scripts/tmp/plane-control-freeze/`; only aggregates and hashes
 are published here. The fixture and material are registered in the request
 catalog; the generated current-envelope request is pending capture. No admission
 is claimed. Painter remains closed while the full suite owns the GPU.
+
+## Bounded capture batch
+
+The next batch starts only after the full suite releases the GPU. Its hypothesis
+and three predictions remain exactly those committed above: the 80 differing
+one-hinge texels distinguish the generic policy; the two-hinge copies are negative
+controls. The batch shares at most 60 minutes of live recording with the authored
+AO and R-322 controls, followed by at most 30 minutes of initial CPU scoring.
+The private run ledger records start/end times and elapsed time; waiting for the
+suite is excluded. Stop on timeout, identity change, failed state precondition or
+completion of the declared repeats/reopen. Preserve every residual, record the
+outcome and select a separately documented next hypothesis before another batch.
+Neither timeout nor agreement on this control changes the production refusal.
+
+CPU verifier: `python -m tools.parity.fit.padding_plane_control --manifest <admitted-manifest> --predictions scripts/tmp/plane-control-freeze/predictions.json`.
+It checks the raw record identity before indexing, frozen inputs/protocol,
+effective RGB32F state, covered inputs and every infinite repeat/reopen. Scores
+cover all 1,280 ring texels by policy, hinge count and aspect group. Uncovered
+passthrough changes are separate. The freeze does not contain ordered tap lists,
+so the report explicitly declines to certify tap order. Its 21 authored tests,
+Ruff and mypy pass; this is verification tooling, not a new observation.
