@@ -12,6 +12,7 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
 
 ### Added
 
+- A fresh padding control isolates one versus two hinges with matching endpoint planes. Authored geometry, request and three CPU predictions are frozen before Painter capture; the broader direct-plane diagnostic still fails exact parity and changes no production policy.
 - Native TGA8 encoding through pinned stb accepts already quantized L/LA/RGB/RGBA bytes, preserves alpha and writes deterministic RLE. Painter-compatible TGA processing remains gated on R-322; independent decoding and all four build modes validate the byte writer.
 - The capability inventory includes seven newly recorded mesh-export and procedural symbols. Unimplemented members remain release gaps; resolution value fields retain pending status until their individual symbols have compared trace evidence.
 - Procedural snapshot signatures include external glTF buffers and mesh import settings. Geometry changes cannot reuse a snapshot merely because the root mesh file is unchanged; renaming that source file preserves the signature.

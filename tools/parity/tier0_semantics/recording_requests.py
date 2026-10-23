@@ -38,6 +38,7 @@ from tools.parity.envelope.registry import current_envelope, manifest_root
 from tools.parity.recorder import vocabulary as ps
 from tools.parity.recorder.job import EXPORT
 from tools.parity.schemas import Schema, validation_errors
+from tools.parity.tier0_semantics import padding_plane_control as plane_control
 from tools.parity.tier0_semantics import request_fixtures as rf
 from tools.parity.tier0_semantics.corpus import (
     BLEND_FAMILIES,
@@ -310,6 +311,12 @@ for _probe in rf.FOLD_PROBES:
 
 
 # Decision 289's far-side hinge meshes: copies of one ratio-1 seam pair bent along hinges.
+REQUEST_FIXTURES[plane_control.MESH] = (
+    "mesh",
+    f"{FIXTURE_DIR}/meshes/{plane_control.MESH}.obj",
+    plane_control.mesh,
+)
+
 REQUEST_FIXTURES["tau-prism"] = (
     "mesh",
     f"{FIXTURE_DIR}/meshes/tau-prism.obj",
@@ -399,6 +406,7 @@ MESH_SETS = {
     **{concave_fold_mesh(p): ["uzp_concave_fold"] for p in rf.FOLD_PROBES},
     **{hinge_mesh(p): ["uzp_hinge"] for p in rf.HINGE_PROBES},
     "tau-prism": ["uzp_tau_prism"],
+    plane_control.MESH: [plane_control.MATERIAL],
     "window-side": ["uzp_window_side"],
     "corner-reach": ["uzp_corner"],
     "normal-combine": list(rf.COMBINE_SETS),
@@ -2259,6 +2267,7 @@ def later_goldens() -> list[Golden]:
         *padding_concave_fold_probes(),
         *padding_hinge_probes(),
         padding_tau_prism_probe(),
+        plane_control.request(),
         padding_window_side_probe(),
         padding_normal_combine_probe(),
         padding_corner_reach_probe(),
