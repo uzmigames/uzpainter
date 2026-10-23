@@ -29,20 +29,11 @@ import pytest
 from tests.python.capability_trace import SOURCE, check_trace, exercised
 from tests.python.conftest import REPO_ROOT, Run
 from tools.bake import bake_defaults as bd
+from tools.parity.envelope.registry import current_envelope, manifest_root
 from tools.parity.recorder.defaults import baking_output_id
 from tools.parity.recorder.job import job_from_manifest
 from tools.parity.store.store import locate
 
-MANIFEST = (
-    REPO_ROOT
-    / "parity"
-    / "envelopes"
-    / "painter-12.1.5_js-api.1.1.20"
-    / "manifests"
-    / "tier0"
-    / "defaults-templates"
-    / "baking-defaults.json"
-)
 PAINTER_SIDE = REPO_ROOT / "tools" / "parity" / "recorder" / "painter_side.py"
 RECORDINGS = {"r1": "same_session", "r2": "after_save_reopen", "r3": "same_session"}
 
@@ -379,9 +370,12 @@ result = {"r1": r1, "r2": r2, "r3": r3, "trace": TRACE["stop"]()}
 
 
 def golden() -> tuple[dict[str, Any], dict[str, Any]]:
-    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    envelope = current_envelope()
+    path = manifest_root(envelope) / "tier0/defaults-templates/baking-defaults.json"
+    manifest = json.loads(path.read_text(encoding="utf-8"))
     store = locate()
-    ref = next(r for r in manifest["private_records"] if r["record_id"] == "golden-record")
+    record_id = str(envelope["record_prefix"]) + "golden-record"
+    ref = next(r for r in manifest["private_records"] if r["record_id"] == record_id)
     data = None if store is None else store.load(ref["sha256"], ref["size_bytes"])
     if data is None:
         # Decision 028: the oracle comparison runs only where the private store holds the record.
