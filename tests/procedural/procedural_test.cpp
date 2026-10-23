@@ -2131,6 +2131,7 @@ int RunSnapshot(const fs::path& work) {
 }
 
 #include "typed_params_cases.h"
+#include "resolution_cases.h"
 #include "snapshot_recording_cases.h"
 
 }  // namespace
@@ -2145,6 +2146,7 @@ int main(int argc, char** argv) {
     if (mode == "seam") return RunSeam();
     if (mode == "domain") return RunDomain();
     if (mode == "typed-params") return RunTypedParams();
+    if (mode == "resolution") return RunResolution(dir);
     if (mode == "snapshot-recording") return RunSnapshotRecording(dir);
     if (mode == "primitives") return RunPrimitives();
     if (mode == "kernels") return RunKernels(dir);

@@ -45,6 +45,9 @@ constexpr std::optional<E> FromString(std::string_view name) {
 enum class NormalMapFormat { OpenGL, DirectX };
 UZP_ENUM_TABLE(NormalMapFormat, "OpenGL", "DirectX");
 
+enum class ProceduralResolutionMode { Auto, Asset, Custom, TextureSet, UVTile, Document, Manual };
+UZP_ENUM_TABLE(ProceduralResolutionMode, "Auto", "Asset", "Custom", "TextureSet", "UVTile", "Document", "Manual");
+
 enum class TangentSpace { PerVertex, PerFragment };
 UZP_ENUM_TABLE(TangentSpace, "PerVertex", "PerFragment");
 

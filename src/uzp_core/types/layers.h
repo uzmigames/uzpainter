@@ -29,6 +29,18 @@ struct Resolution {
     bool operator==(const Resolution&) const = default;
 };
 
+/// Public source-resolution fields; legacy width/height stays a distinct serialized form.
+struct ProceduralResolutionOverride {
+    ProceduralResolutionMode mode = ProceduralResolutionMode::Auto;
+    std::array<int, 2> value{1024, 1024};
+    int log2_offset = 0;
+    json::Object extra;
+
+    bool operator==(const ProceduralResolutionOverride&) const = default;
+};
+
+using ProceduralResolution = std::variant<Resolution, ProceduralResolutionOverride>;
+
 struct Blending {
     BlendingMode mode = BlendingMode::Normal;
     double opacity = 1.0;
@@ -77,7 +89,7 @@ struct ProceduralRef {
     std::map<std::string, ResourceBinding> image_inputs;
     std::map<std::string, std::string> output_mapping;  // channel name -> asset output
     std::optional<std::string> mask_output;
-    std::optional<Resolution> resolution_override;
+    std::optional<ProceduralResolution> resolution_override;
     json::Object extra;
 
     bool operator==(const ProceduralRef&) const = default;

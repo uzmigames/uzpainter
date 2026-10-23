@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <charconv>
 #include <cstdint>
+#include <limits>
 #include <set>
 #include <tuple>
 #include <type_traits>
@@ -46,6 +47,16 @@ json::Value Write(const Resolution& r) {
     json::Object o = r.extra;
     o["width"] = r.width;
     o["height"] = r.height;
+    return o;
+}
+
+json::Value Write(const ProceduralResolution& resolution) {
+    if (const auto* legacy = std::get_if<Resolution>(&resolution)) return Write(*legacy);
+    const auto& r = std::get<ProceduralResolutionOverride>(resolution);
+    json::Object o = r.extra;
+    o["mode"] = EnumValue(r.mode);
+    o["value"] = json::Array{r.value[0], r.value[1]};
+    o["log2_offset"] = r.log2_offset;
     return o;
 }
 
@@ -445,6 +456,29 @@ LevelsParams ReadLevels(const json::Value& value, const std::string& path) {
     return out;
 }
 
+ProceduralResolution ReadProceduralResolution(const json::Value& value, const std::string& path) {
+    const json::Object& object = AsObject(value, path);
+    const bool modern = object.contains("mode") || object.contains("value") || object.contains("log2_offset");
+    if (!modern) return ReadResolution(value, path);
+    if (object.contains("width") || object.contains("height")) Fail(path, "mixed legacy and mode-based resolution");
+    ObjectReader r(value, path);
+    ProceduralResolutionOverride out;
+    out.mode = r.Enum<ProceduralResolutionMode>("mode");
+    const json::Array& sizes = r.Array("value");
+    if (sizes.size() != 2) Fail(r.Path("value"), "expected two pixel dimensions");
+    const auto checked = [&](const json::Value& v, const std::string& field) {
+        const auto n = AsInt(v, field);
+        if (n < std::numeric_limits<int>::min() || n > std::numeric_limits<int>::max()) {
+            Fail(field, "outside signed-int range");
+        }
+        return static_cast<int>(n);
+    };
+    out.value = {checked(sizes[0], r.Path("value[0]")), checked(sizes[1], r.Path("value[1]"))};
+    out.log2_offset = checked(r.Need("log2_offset"), r.Path("log2_offset"));
+    out.extra = r.Rest();
+    return out;
+}
+
 ProceduralRef ReadProcedural(ObjectReader& r) {
     ProceduralRef out;
     out.asset = r.String("asset");
@@ -458,7 +492,7 @@ ProceduralRef ReadProcedural(ObjectReader& r) {
     }
     out.mask_output = r.OptionalString("mask_output");
     if (const json::Value* resolution = r.GetOptional("resolution_override")) {
-        out.resolution_override = ReadResolution(*resolution, r.Path("resolution_override"));
+        out.resolution_override = ReadProceduralResolution(*resolution, r.Path("resolution_override"));
     }
     out.extra = r.Rest();
     return out;

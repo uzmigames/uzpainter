@@ -30,6 +30,7 @@ constexpr std::string_view kPlaneVersions = "plane_versions";
 // ── Keys this version does not know ─────────────────────────────────────────────────────────
 
 void Strip(Resolution& r) { r.extra.clear(); }
+void Strip(ProceduralResolution& r) { std::visit([](auto& value) { value.extra.clear(); }, r); }
 void Strip(Blending& b) { b.extra.clear(); }
 void Strip(ChannelBlending& blending) {
     for (auto& [channel, b] : blending) Strip(b);

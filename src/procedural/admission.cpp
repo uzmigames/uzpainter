@@ -4,9 +4,67 @@
 #include "uzp_core/manifest/sha256.h"
 #include "uzp_core/types/errors.h"
 
+#include <bit>
+
 namespace uzp::procedural {
 
 namespace json = core::json;
+
+namespace {
+
+std::expected<uint32_t, UnsupportedProcedural> EffectiveResolution(const core::ProceduralRef& ref,
+                                                                 const UseContext& context) {
+    if (!ref.resolution_override) return context.output.resolution;
+    const auto refused = [&](std::string reason) -> std::expected<uint32_t, UnsupportedProcedural> {
+        auto error = Refuse(ref.asset, std::move(reason));
+        error.field = "resolution_override";
+        return Refused(std::move(error));
+    };
+    if (context.content) return refused("resolution overrides are prohibited on filter sources");
+    const auto square = [&](int width, int height, int maximum) -> std::expected<uint32_t, UnsupportedProcedural> {
+        if (width != height) return refused("rectangular procedural output is not supported by RasterSpec");
+        if (width < 128 || width > maximum || !std::has_single_bit(static_cast<uint32_t>(width))) {
+            return refused("effective resolution must be a power of two between 128 and " + std::to_string(maximum));
+        }
+        return static_cast<uint32_t>(width);
+    };
+    if (const auto* legacy = std::get_if<core::Resolution>(&*ref.resolution_override)) {
+        return square(legacy->width, legacy->height, 8192);
+    }
+    const auto& r = std::get<core::ProceduralResolutionOverride>(*ref.resolution_override);
+    for (const int size : r.value) {
+        if (size < 128 || size > 4096 || !std::has_single_bit(static_cast<uint32_t>(size))) {
+            return refused("resolution value must contain powers of two between 128 and 4096");
+        }
+    }
+    using Mode = core::ProceduralResolutionMode;
+    switch (r.mode) {
+        case Mode::Auto: {
+            const uint32_t base = context.output.resolution;
+            if (base < 128 || base > 8192 || !std::has_single_bit(base)) {
+                return refused("Auto needs a parent output resolution between 128 and 8192");
+            }
+            // Bound before addition or shifting, including INT_MIN and INT_MAX offsets.
+            if (r.log2_offset < -31 || r.log2_offset > 31) return refused("Auto offset exceeds the raster domain");
+            const int exponent = static_cast<int>(std::bit_width(base)) - 1 + r.log2_offset;
+            if (exponent < 7 || exponent > 13) return refused("Auto effective resolution is outside 128..8192");
+            return uint32_t{1} << exponent;
+        }
+        case Mode::Custom:
+        case Mode::Manual: return square(r.value[0], r.value[1], 4096);
+        case Mode::TextureSet:
+        case Mode::UVTile: {
+            const auto& dimensions = r.mode == Mode::TextureSet ? context.textureSetResolution : context.uvTileResolution;
+            if (!dimensions) return refused("resolution mode needs explicit texture-set or UV-tile context");
+            return square(dimensions->width, dimensions->height, 8192);
+        }
+        case Mode::Asset:
+        case Mode::Document: return refused("Asset/Document pixel dimensions are documented for vector files, not procedural assets");
+    }
+    return refused("unknown resolution mode");
+}
+
+}  // namespace
 
 std::expected<ProceduralRequest, UnsupportedProcedural> RequestFor(const core::ProceduralRef& ref,
                                                                    const UseContext& context,
@@ -56,6 +114,9 @@ std::expected<ProceduralRequest, UnsupportedProcedural> RequestFor(const core::P
     request.meshClass = context.meshClass;
     request.uvTiles = context.uvTiles;
     request.output = context.output;
+    const auto resolution = EffectiveResolution(ref, context);
+    if (!resolution) return Refused(resolution.error());
+    request.output.resolution = *resolution;
     request.tile = context.tile;
     request.seed = context.seed;
     request.outputId = context.outputId;

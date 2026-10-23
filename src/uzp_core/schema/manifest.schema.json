@@ -117,6 +117,23 @@
       "required": ["width", "height"],
       "properties": { "width": { "$ref": "#/$defs/powerOfTwo" }, "height": { "$ref": "#/$defs/powerOfTwo" } }
     },
+    "proceduralResolution": {
+      "anyOf": [
+        {
+          "allOf": [{ "$ref": "#/$defs/resolution" }, { "not": { "anyOf": [{ "required": ["mode"] }, { "required": ["value"] }, { "required": ["log2_offset"] }] } }]
+        },
+        {
+          "type": "object",
+          "required": ["mode", "value", "log2_offset"],
+          "not": { "anyOf": [{ "required": ["width"] }, { "required": ["height"] }] },
+          "properties": {
+            "mode": { "enum": ["Auto", "Asset", "Custom", "TextureSet", "UVTile", "Document", "Manual"] },
+            "value": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "enum": [128, 256, 512, 1024, 2048, 4096] } },
+            "log2_offset": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 }
+          }
+        }
+      ]
+    },
     "blending": {
       "type": "object",
       "required": ["mode", "opacity"],
@@ -174,7 +191,7 @@
           "additionalProperties": { "$ref": "#/$defs/nonEmpty" }
         },
         "mask_output": { "$ref": "#/$defs/optionalString" },
-        "resolution_override": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/resolution" }] }
+        "resolution_override": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/proceduralResolution" }] }
       }
     },
     "source": {

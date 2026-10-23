@@ -224,7 +224,27 @@ private:
             Channel(*type, what + " output_mapping");
             if (output.empty()) Fail(what + ": output_mapping names an empty output");
         }
-        if (ref.resolution_override) CheckResolution(*ref.resolution_override, what + " resolution_override");
+        if (ref.resolution_override) {
+            if (const auto* legacy = std::get_if<Resolution>(&*ref.resolution_override)) {
+                if (legacy->extra.contains("mode") || legacy->extra.contains("value") || legacy->extra.contains("log2_offset")) {
+                    Fail(what + " resolution_override: mixed legacy and mode-based resolution");
+                }
+                CheckResolution(*legacy, what + " resolution_override");
+            } else {
+                const auto& r = std::get<ProceduralResolutionOverride>(*ref.resolution_override);
+                if (r.extra.contains("width") || r.extra.contains("height")) {
+                    Fail(what + " resolution_override: mixed legacy and mode-based resolution");
+                }
+                if (static_cast<size_t>(r.mode) >= EnumTable<ProceduralResolutionMode>::names.size()) {
+                    Fail(what + " resolution_override: unknown mode");
+                }
+                for (const int size : r.value) {
+                    if (!PowerOfTwoInRange(size) || size > 4096) {
+                        Fail(what + " resolution_override.value: expected powers of two between 128 and 4096");
+                    }
+                }
+            }
+        }
     }
 
     void SourceCheck(const Source& source, bool mask, const std::string& what) {

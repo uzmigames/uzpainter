@@ -96,3 +96,23 @@ The certified domain states what the calibration and held-out cases sample; exac
 ## 7. Painter API semantics to keep (from `python-doc`)
 
 `SourceSubstance`: `get/set_parameters` (booleans passed as int, as documented; a value that no backend can serve — outside the asset's certified editable domain and matching no snapshot signature of the project — raises `UnsupportedProcedural` before mutation, §6), `get_properties`, `get_preset_list`/`apply_preset`, `image_inputs` with `get/set/reset/remove_source` (bitmap, colour, anchor), `image_outputs`, `output_mapping`, `active_output`, `mask_output`, `resolution: ResolutionOverride{mode, value, log2_offset}` with the documented constraints (power of two in [128, 4096]; `Auto` follows the texture-set resolution; raises for sources used by a Filter effect). Generators bind mesh maps by usage automatically (Adobe's public "Mesh Map" documentation); a missing or invalid mesh map fails evaluation loudly.
+
+The native `ProceduralRef` persists either the legacy `{width,height}` resolution
+or `{mode,value:[width,height],log2_offset}`, preserving legacy canonical bytes and
+unknown manifest keys. Recipe dumps retain the known fields and strip extras.
+`Manual` and `Document` spellings survive native roundtrips. Mixed representations
+are rejected. The value pair uses the documented powers of two from 128 through
+4096; legacy dimensions retain their existing 128..8192 domain.
+
+`RequestFor` resolves the effective square output before backend admission. `Auto`
+uses the parent context (the set in a fill, not necessarily in other uses) and
+applies its offset with checked integer exponents. `Custom`/`Manual` uses `value`;
+`TextureSet` and `UVTile` require explicit owning-set/current-tile dimensions in
+`UseContext`. Only `Auto` uses the offset. Effective sizes outside 128..8192,
+rectangles and missing required context are refused without clamping. `Asset`/
+`Document` describes vector-file pixel dimensions in the public documentation;
+no procedural meaning is inferred. A missing override leaves the existing use
+context unchanged. The resolved output enters the snapshot signature, so an
+Auto resize cannot silently reuse the previous snapshot. Filter overrides remain
+prohibited, including final transaction validation when no filter-content context
+was supplied. These native rules do not establish SourceSubstance facade parity.

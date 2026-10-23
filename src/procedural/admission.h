@@ -48,6 +48,10 @@ struct UseContext {
     std::string outputId;
     /// The project settings that affect evaluation (`EvaluationSettings`).
     Params settings;
+    /// Explicit owning-set/current-UV-tile dimensions for their respective modes.
+    /// Neither is inferred from the parent output: a brush context can differ from its set.
+    std::optional<core::Resolution> textureSetResolution;
+    std::optional<core::Resolution> uvTileResolution;
 };
 
 /// The project settings that affect a procedural evaluation, as the signature names them
@@ -68,7 +72,11 @@ struct UseContext {
 /// hash, with the specs of `context`; the output id and settings of `context`; and the
 /// context's `content` input of a filter. Refused: a URL that is not a pin, a parameter that is
 /// not a supported scalar, vector or tagged color, an image input whose spec `context` does not give, and a
-/// bound input named `content` beside the context's.
+/// bound input named `content` beside the context's. Resolution overrides resolve before
+/// admission: Auto scales the parent output by an integer log2 offset; Custom/Manual and legacy
+/// width/height use their explicit size; TextureSet/UVTile need their explicit context. Asset
+/// pixel dimensions have no documented procedural meaning and are refused. Rectangular or
+/// out-of-domain effective sizes are never clamped; the effective output enters the signature.
 [[nodiscard]] std::expected<ProceduralRequest, UnsupportedProcedural> RequestFor(
     const core::ProceduralRef& ref, const UseContext& context, const AssetLibrary& library);
 
