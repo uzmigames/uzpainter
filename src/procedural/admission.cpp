@@ -79,6 +79,13 @@ Params EvaluationSettings(const core::ProjectSettings& settings) {
 Params EvaluationSettings(const core::Project& project) {
     Params settings = EvaluationSettings(project.settings);
     settings["mesh.sha256"] = project.mesh ? project.mesh->resource : std::string();
+    if (project.mesh) {
+        json::Object geometry = project.mesh->import_report;
+        // Match the evaluator's mesh identity: external buffers and import settings matter;
+        // the source file's name and size are metadata, not geometry.
+        geometry.erase("source");
+        if (!geometry.empty()) settings["mesh.import_report_sha256"] = core::Sha256Hex(json::WriteCanonical(geometry));
+    }
     return settings;
 }
 

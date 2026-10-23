@@ -56,7 +56,11 @@ projections, material outputs or parameter families.
 ## Storage and result
 
 The destination stays locked during recording. UUID, revision, evaluation settings
-and the actual mesh resource hash come from that document. The native command
+and the actual mesh resource hash come from that document. A hash of the import
+report, excluding source-file metadata, also pins external glTF buffers and mesh
+derivation settings. Older signatures lacking that hash do not match projects
+with an effective import report and require a new capture; their stored rasters
+remain intact. The native command
 checks returned identity, signatures and file hashes, decodes the exports at their
 native precision, and writes one store transaction. It then saves, closes, reopens
 and checks `SnapshotBackend.Stored` against the decoded capture before reporting

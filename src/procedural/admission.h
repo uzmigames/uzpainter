@@ -57,8 +57,10 @@ struct UseContext {
 /// rules' canonical JSON). Every setting that can change a procedural's texels is listed, so a
 /// snapshot recorded under other settings never matches.
 [[nodiscard]] Params EvaluationSettings(const core::ProjectSettings& settings);
-/// Recording and project-backed callers additionally pin the actual imported mesh bytes.
-/// A mesh reload changes the signature even when its class, UV tiles and settings are unchanged.
+/// Recording and project-backed callers additionally pin the actual imported mesh bytes and
+/// its nonempty import report except source metadata, including glTF external buffers and
+/// derivation settings. A geometry reload changes the signature even when its root file,
+/// class, UV tiles and project settings are unchanged.
 [[nodiscard]] Params EvaluationSettings(const core::Project& project);
 
 /// The request of `ref` in `context`: its pinned asset; its parameters over the record's defaults

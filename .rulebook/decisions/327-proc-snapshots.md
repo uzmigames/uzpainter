@@ -131,3 +131,14 @@ both int64 extremes, product and expansion overflow, and product underflow.
 - A private capture pin is `uzasset://snapshot/<sha256 of the complete observed versioned ResourceID>@1`. It is not a library alias. The literal ResourceID, effective parameters, recorder hashes, identity and exports stay in the private receipt; no captured value is shipped. Unsupported shapes and contexts refuse before any store mutation.
 - The seam's callers (item 2.6 and phase3.3) resolve `UseContext::outputId` and `settings` from the document. `EvaluationSettings` gives the settings.
 - The repository guard covers project-private snapshot payloads (task item 3.4); the recorder provenance scan also covers the shipped snapshot bridge and its separately auditable Painter-side source.
+
+Mesh identity correction (2026-10-23): `EvaluationSettings(project)` now hashes
+the nonempty mesh import report after removing its `source` metadata. This
+matches the evaluator's geometry identity and includes external glTF buffer
+hashes, derived geometry and import settings. The root file hash alone cannot
+distinguish two glTF imports using different external buffers. Native CPU
+regressions reproduced that stale-snapshot match before the fix and now reject
+it, while a source filename change keeps the signature. Historical snapshots
+are retained; signatures without this identity cannot serve a project carrying
+a nonempty effective import report and need recapture. The 40 snapshot backend,
+recording-boundary and bridge tests pass; no new Painter capture is claimed.

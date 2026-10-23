@@ -18,7 +18,7 @@ std::expected<std::string, std::string> SnapshotExportTexels(std::string_view fi
 /// Ingest a captured export into its original project/revision in one store transaction.
 /// The Document must belong to and remain attached to this store at its current journal
 /// revision. Saving a named checkpoint is not required; no commit sink is replaced here.
-/// The signature must carry EvaluationSettings(project), including the actual mesh hash.
+/// The signature must carry EvaluationSettings(project), including the mesh and import hashes.
 /// A mismatch or a malformed export fails before submission; no request-provided fingerprint
 /// substitutes for the document's identity. This boundary does not certify source isolation.
 std::expected<core::RequestOutcome, std::string> RecordSnapshotExport(

@@ -12,6 +12,7 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
 
 ### Added
 
+- Procedural snapshot signatures include external glTF buffers and mesh import settings. Geometry changes cannot reuse a snapshot merely because the root mesh file is unchanged; renaming that source file preserves the signature.
 - The glTF texture preset resolves Painter's recorded predefined URL and uses its confirmed four-map packing and PNG8 defaults. Supplemental SpecularWeight has explicit PNG8/no-dithering defaults and a consumer-gap receipt. Authored consumer tests cover shared ORM images; AO_Mixed and full pilot parity remain pending.
 - glTF recording preserves and hashes validated `.gltf`, `.glb` and local `.bin` sidecars separately from texture maps. Legacy/OCIO captures identify the predefined glTF URL and repeatable PNG16 maps; padding-only follow-ups confirm PNG8 defaults without overriding depth or dithering.
 - An authored scalar Y/FLOAT AO control produces bit-identical channel and mesh operands across eight paired exports. The virtual outputs also agree, but the two-texel arithmetic residual remains unresolved; AO_Mixed is still refused.

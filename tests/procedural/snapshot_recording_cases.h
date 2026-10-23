@@ -53,6 +53,28 @@ int RunSnapshotRecording(const fs::path& work) {
     reloaded.settings = EvaluationSettings(meshProject);
     Check(meshBackend.CanEvaluate(reloaded), "restoring exact mesh bytes restores the snapshot signature");
 
+    meshProject.mesh->import_report = {
+        {"source", json::Object{{"name", "quad.gltf"}, {"size", 256}}},
+        {"external_files", json::Array{json::Object{{"uri", "quad.bin"}, {"sha256", std::string(64, '3')}, {"size", 128}}}},
+        {"units", json::Object{{"scale_to_internal", 1.0}}},
+    };
+    meshRequest.settings = EvaluationSettings(meshProject);
+    SnapshotBackend externalBackend;
+    externalBackend.Add(meshRequest, SnapshotRaster{meshRequest.output, std::string(128, '\0')});
+    auto externalFiles = std::get<json::Array>(meshProject.mesh->import_report.at("external_files").data);
+    std::get<json::Object>(externalFiles[0].data)["sha256"] = std::string(64, '4');
+    meshProject.mesh->import_report["external_files"] = externalFiles;
+    reloaded.settings = EvaluationSettings(meshProject);
+    Check(!externalBackend.CanEvaluate(reloaded), "external glTF buffer replacement invalidates a snapshot with the same root file");
+    std::get<json::Object>(externalFiles[0].data)["sha256"] = std::string(64, '3');
+    meshProject.mesh->import_report["external_files"] = externalFiles;
+    meshProject.mesh->import_report["source"] = json::Object{{"name", "renamed.gltf"}, {"size", 256}};
+    reloaded.settings = EvaluationSettings(meshProject);
+    Check(externalBackend.CanEvaluate(reloaded), "mesh source metadata does not invalidate the exact geometry snapshot");
+    meshProject.mesh->import_report["units"] = json::Object{{"scale_to_internal", 2.0}};
+    reloaded.settings = EvaluationSettings(meshProject);
+    Check(!externalBackend.CanEvaluate(reloaded), "changed mesh import settings invalidate the snapshot");
+
     core::Id generator = core::kNoId;
     core::DocumentState initial;
     initial.project_uuid = "6f1c2a3e-0000-4000-8000-0000000a3271";
