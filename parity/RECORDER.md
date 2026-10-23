@@ -88,6 +88,17 @@ Enum arguments accept only the documented member names listed in `painter_side.p
 
 **Baking jobs** (`phase0.9_normal-convention-fixture`). Bake steps are state steps, applied once before `r1`; a `BakingParameters.set` or `set_enabled_bakers` step after the last `bake_async` is refused. Each `set` step sets one parameter with one documented `BakingParameters.set` call per texture set. The high-poly mesh is an input of the manifest (`parameter: "HipolyMesh"`, `input: <input id>`): the recorder stages it and passes `file:///` followed by the staged file's POSIX path, the form of the documented `QUrl.fromLocalFile(...).toString()` example. A path holding a character that a URL would percent-encode, such as a space, refuses the golden. For `bake_async`, `painter_side.py` connects a handler for `event.BakingProcessEnded` to the documented dispatcher, launches the bake and returns. The host then polls the `baking_state` operation (which launches the next texture set when one ends) for up to 1800 s, and waits for readiness. A status other than `Success`, or no end in time, refuses the golden. The handler is disconnected when the bake ends or the project closes. `key.effective_defaults.bakes` records, per bake step, the status of each texture set and the bakers enabled at bake time. Painter's bake backend cannot be read or fixed through the documented API, so `key.bake_backend` stays `null` and the public manifest lists it in `uncontrolled_settings`.
 
+### Private base-mesh controls
+
+The `export_base_mesh` session operation calls the documented
+`export.export_mesh(path, MeshExportOption.BaseMesh)` only when the project is
+in edition state and not busy. It returns the API status/message and call
+timestamps; callers must check the outcome and validate their private output.
+It never selects displaced or tessellated export. The authored 18-export
+control in `reports/phase2/base-mesh-export-control.md` measures repeatability
+and precision losses. This route alone proves neither original-file identity
+nor permission to replace a pilot input or reference.
+
 ## 4. Iray references (Tier 3)
 
 `python -m tools.parity.recorder iray <manifest.json> --condition separate_session --operator-id <id>` (twice, restarting Painter in between), then `--condition k_times_samples --k 4 --operator-id <id>`. The staged references of one golden must share one envelope; a reference staged under another envelope refuses the assembly. This implements `07-preview-and-render-parity.md` §2.2 as procedure `iray-capture/1`. The procedure, its answers to 07 §2.1 and its qualification status are in `parity/reports/phase0/iray-capture-procedure.md`; no render golden is admitted before it is qualified.

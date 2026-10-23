@@ -483,6 +483,18 @@
       "documented_as": "substance_painter.export.ExportStatus",
       "page": "substance_painter/export.html"
     },
+    "substance_painter.export.MeshExportOption.BaseMesh": {
+      "documented_as": "substance_painter.export.MeshExportOption",
+      "page": "substance_painter/export.html"
+    },
+    "substance_painter.export.MeshExportResult.message": {
+      "documented_as": "substance_painter.export.MeshExportResult",
+      "page": "substance_painter/export.html"
+    },
+    "substance_painter.export.MeshExportResult.status": {
+      "documented_as": "substance_painter.export.MeshExportResult",
+      "page": "substance_painter/export.html"
+    },
     "substance_painter.export.PredefinedExportPreset": {
       "documented_as": "substance_painter.export.PredefinedExportPreset",
       "page": "substance_painter/export.html"
@@ -521,6 +533,10 @@
     },
     "substance_painter.export.TextureExportResult.textures": {
       "documented_as": "substance_painter.export.TextureExportResult",
+      "page": "substance_painter/export.html"
+    },
+    "substance_painter.export.export_mesh": {
+      "documented_as": "substance_painter.export.export_mesh",
       "page": "substance_painter/export.html"
     },
     "substance_painter.export.export_project_textures": {

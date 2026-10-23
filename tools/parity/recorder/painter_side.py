@@ -1427,6 +1427,22 @@ def list_textures(args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def export_base_mesh(args: dict[str, Any]) -> dict[str, Any]:
+    """Export the current undisplaced mesh through A-PYDOC, for private geometry controls."""
+    if not substance_painter.project.is_in_edition_state() or substance_painter.project.is_busy():
+        raise RuntimeError("project not ready for mesh export")
+    called_at = time.time()
+    result = substance_painter.export.export_mesh(
+        args["path"], substance_painter.export.MeshExportOption.BaseMesh
+    )
+    return {
+        "status": result.status.name,
+        "message": result.message,
+        "called_at": called_at,
+        "returned_at": time.time(),
+    }
+
+
 def save_as(args: dict[str, Any]) -> dict[str, Any]:
     substance_painter.project.save_as(args["path"], substance_painter.project.ProjectSaveMode.Full)
     return {"saved_at": time.time()}
@@ -1668,6 +1684,7 @@ OPERATIONS = {
     "node_locations": node_locations,
     "rebind_nodes": rebind_nodes,
     "export_textures": export_textures,
+    "export_base_mesh": export_base_mesh,
     "list_textures": list_textures,
     "save_as": save_as,
     "close_project": close_project,
