@@ -46,6 +46,16 @@ uint32_t StoreValueBits(float value, const TileFormat& format, uint32_t plane) {
 
 GpuTileStore::GpuTileStore(render::IDevice& device) : m_device(device) {}
 
+render::Result<ExecutionIdentity> GpuTileStore::Execution() const {
+    const auto report = render::QueryCapabilities(m_device, render::AdmissionPolicy{});
+    if (!report) return render::Unexpected(report.error());
+    if (report->adapter.empty() || report->adapter == "unknown" || report->driver.empty() || report->driver == "unknown") {
+        return render::Fail(render::ErrorCode::RequestFailed, report->backend,
+                            "export: the active GPU adapter and driver must be identified");
+    }
+    return ExecutionIdentity{std::string(render::BackendName(report->backend)), report->adapter, report->driver};
+}
+
 GpuTileStore::~GpuTileStore() {
     for (auto& [handle, tile] : m_tiles) m_device.DestroyTexture(tile.texture);
     for (PendingUpload& upload : m_uploads) m_device.DestroyBuffer(upload.staging);

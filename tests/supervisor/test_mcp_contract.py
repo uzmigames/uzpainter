@@ -11,8 +11,8 @@ transports they do not cover, through MCP clients on stdio (`Mcp`) and on Stream
 Synthetic fixtures only (2.1), no oracle data: the project is UzmiGames' plane
 (parity/fixtures/meshes/plane.obj), created and saved once through typed MCP tools; each test opens
 a copy. The long job is the Debug build's `test_job` under `--test-faults` (a fill layer committed
-with its operation row at a chosen step). Every supervisor runs with Python disabled on a Vulkan
-worker, so no device is created.
+with its operation row at a chosen step). Every supervisor runs with Python disabled and
+`--test-gpu-unavailable`, so no device is created.
 """
 
 from __future__ import annotations
@@ -36,12 +36,11 @@ from tests.supervisor.conftest import PLANE, Mcp, wait_until_gone
 from tests.supervisor.test_supervisor_transports import TOKEN, Http, free_port
 from tests.supervisor.test_typed_tools import GAP_CALLS
 
-BASE = ("--gpu-backend", "vulkan", "--test-faults")
+BASE = ("--gpu-backend", "vulkan", "--test-gpu-unavailable", "--test-faults")
 # 2.1: the long-job fixture; its fill layer commits at step 1 of 30 (about 3 s in all).
 LONG_JOB = {"name": "Job", "steps": 30, "step_ms": 100, "commit_at": 1}
-# 3.6 (spec scenario): native bake, the procedural families, later node kinds and painter_iray.
+# 3.6 (spec scenario): procedural families, later node kinds and painter_iray.
 LATER_FAMILIES = (
-    "bake.start",
     "stack.procedural",
     "effect.insert_paint",
     "layer.instantiate",
@@ -574,7 +573,7 @@ def test_unavailable_families_and_python_needs_are_gaps(
     transport: str,
 ) -> None:
     """3.6, spec scenario: in `uzpainter://capabilities` every unavailable family is a release-gap
-    tool, native bake, the procedural families, later node kinds and painter_iray are
+    tool, the procedural families, later node kinds and painter_iray are
     `capability gap` rows of the operation matrix, and every row that still needs Python is
     `needs Python`, a gap, never `available`. Each unavailable family is refused
     `capability_gap` before admission and nothing is committed."""
@@ -584,6 +583,7 @@ def test_unavailable_families_and_python_needs_are_gaps(
     gaps = {row["tool"] for row in document["tools"] if row["status"] == "release-gap"}
     assert gaps == set(GAP_CALLS)
     rows = {row["operation"]: row for row in document["operation_matrix"]}
+    assert rows["bake.start"]["status"] == "available"  # decision 355: publication still gated
     for operation in LATER_FAMILIES:
         assert rows[operation]["status"] == "capability gap", rows[operation]
     python_rows = {name for name, row in rows.items() if row["tool"] == "run_python"}

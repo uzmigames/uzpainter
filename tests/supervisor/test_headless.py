@@ -10,8 +10,8 @@ drive UzPainter.
   watches for windows sees the explicit preview's window in
   tests/preview/test_preview_window.py `test_standalone_preview_opens_and_closes`.
 
-CPU only on the Vulkan worker (no device); the DX12 case creates the worker's device and skips
-under `UZP_NO_GPU=1`.
+The Vulkan case uses the explicit unavailable-device fixture; the DX12 case creates the worker's
+device and skips under `UZP_NO_GPU=1`.
 """
 
 from __future__ import annotations
@@ -144,6 +144,7 @@ def test_headless_reaches_every_child_and_no_role_shows_an_error_dialog(
         tmp_path,
         "--gpu-backend",
         "vulkan",
+        "--test-gpu-unavailable",
         "--allow-python",
         "--headless",
         env={"UZP_HEADLESS": ""},
@@ -156,17 +157,18 @@ def test_headless_reaches_every_child_and_no_role_shows_an_error_dialog(
 
 
 @pytest.mark.parametrize(
-    "backend",
+    ("backend", "gpu_unavailable"),
     [
-        "vulkan",
+        ("vulkan", True),
         pytest.param(
             "dx12",
+            False,
             marks=pytest.mark.skipif(NO_GPU, reason="UZP_NO_GPU=1: the DX12 worker needs a GPU"),
         ),
     ],
 )
 def test_a_session_without_a_console_shows_no_window(
-    painter: Path, tmp_path: Path, sessions: list[Mcp], backend: str
+    painter: Path, tmp_path: Path, sessions: list[Mcp], backend: str, gpu_unavailable: bool
 ) -> None:
     """NFR-01: started by a host that has no console (`DETACHED_PROCESS`, as a GUI host or
     `pythonw` starts it), without `--headless`, an MCP session that runs Python, captures, loses
@@ -187,6 +189,7 @@ def test_a_session_without_a_console_shows_no_window(
             tmp_path,
             "--gpu-backend",
             backend,
+            *(("--test-gpu-unavailable",) if gpu_unavailable else ()),
             "--allow-python",
             env={"UZP_HEADLESS": ""},
             creationflags=subprocess.DETACHED_PROCESS,

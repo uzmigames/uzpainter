@@ -3,8 +3,8 @@
 (parity/reports/phase2/practical-e2e.md B2, B3, B14 and B16).
 
 `UzPainter.exe` comes from a fresh `zig build painter` install, so the shipped `capabilities.json`,
-the embedded interpreter and `python/` are beside it. CPU only: no Phase 1 Python call uses the
-GPU, so `run` creates no device (decision 111).
+the embedded interpreter and `python/` are beside it. GPU creation stays lazy; export tests
+cover selected hardware and the explicit Debug CPU fixture.
 """
 
 from __future__ import annotations
@@ -150,6 +150,7 @@ def test_run_reports_a_raising_script_as_a_structured_failure(
         ["--gpu-backend"],
         ["x.py", "--gpu-backend", "dx12", "--gpu-backend", "dx12"],
         ["x.py", "--diagnostic-measure-export", "--diagnostic-measure-export"],
+        ["x.py", "--test-gpu-unavailable", "--test-gpu-unavailable"],
     ],
 )
 def test_run_usage_errors(painter: Path, args: list[str]) -> None:
@@ -426,9 +427,10 @@ def test_help_prints_every_verb_and_option(painter: Path) -> None:
     assert unknown.stdout == "" and unknown.stderr == usage
 
 
-def test_run_with_an_unavailable_backend(painter: Path, tmp_path: Path) -> None:
-    """3.3 (decision 111): under `--gpu-backend vulkan`, which this build cannot serve, the host
-    still runs the script and project create, save and reopen succeed. The first Python call that
+@pytest.mark.parametrize("backend", ["dx12", "vulkan"])
+def test_run_with_an_unavailable_backend(painter: Path, tmp_path: Path, backend: str) -> None:
+    """3.3 (decision 111): explicit device failure on either backend leaves CPU operations
+    working: the script and project create, save and reopen succeed. The first Python call that
     uses the GPU, a `painter_viewport` capture (phase2.2_preview-capture, decision 148), creates
     its device on that backend and raises `gpu_backend_unavailable` before anything is written,
     with the revision unchanged. It needs an OCIO project (the bundle of tests/preview/conftest.py):
@@ -442,9 +444,9 @@ def test_run_with_an_unavailable_backend(painter: Path, tmp_path: Path) -> None:
         import os, sys, uzpainter
         from uzpainter import project
         project.create({str(PLANE.as_posix())!r})
-        project.save_as(sys.argv[1] + "/vulkan.uzp")
+        project.save_as(sys.argv[1] + "/unavailable.uzp")
         project.close()
-        project.open(sys.argv[1] + "/vulkan.uzp")
+        project.open(sys.argv[1] + "/unavailable.uzp")
         reopened = project.file_path()
         project.close()
         project.open({str(bundle)!r})
@@ -456,18 +458,32 @@ def test_run_with_an_unavailable_backend(painter: Path, tmp_path: Path) -> None:
             refused = str(error)
         result = {{"refused": refused, "same": project.revision() == before,
                   "open": project.is_open(), "path": reopened,
-                  "written": os.path.exists(sys.argv[1] + "/vp.png")}}
+                  "written": os.path.exists(sys.argv[1] + "/vp.png"), "argv": sys.argv[1:]}}
         """,
     )
-    status, documents, _ = cli(painter, "run", path, str(tmp_path), "--gpu-backend", "vulkan")
+    status, documents, _ = cli(
+        painter, "run", path, str(tmp_path), "--gpu-backend", backend, "--test-gpu-unavailable"
+    )
     assert status == 0
     (report,) = documents
-    assert report["gpu_backend"] == "vulkan"
+    assert report["gpu_backend"] == backend
     result = report["result"]
     assert result["refused"] and result["refused"].startswith("gpu_backend_unavailable"), result
-    assert "vulkan" in result["refused"]
+    assert backend in result["refused"]
+    assert "device creation disabled by --test-gpu-unavailable" in result["refused"]
     assert result["same"] and result["open"] and not result["written"]
-    assert Path(result["path"]).name == "vulkan.uzp"
+    assert Path(result["path"]).name == "unavailable.uzp"
+    assert result["argv"] == [str(tmp_path)]
+
+
+def test_run_passes_gpu_failure_flag_after_separator(painter: Path, tmp_path: Path) -> None:
+    """After `--`, the device-failure flag belongs to the script."""
+    path = script(tmp_path, "import sys\nresult = sys.argv[1:]\n")
+    status, documents, stderr = cli(painter, "run", path, "--", "--test-gpu-unavailable")
+    assert status == 0, stderr
+    (report,) = documents
+    assert report["status"] == "ok"
+    assert report["result"] == ["--test-gpu-unavailable"]
 
 
 def test_capabilities_prints_the_shipped_manifest(painter: Path, tmp_path: Path) -> None:
@@ -698,7 +714,14 @@ def test_persistent_results_serve_a_later_process_byte_for_byte(
 
     def run_export(folder: str, *flags: str) -> dict[str, str]:
         status, documents, _, err = cache_cli(
-            painter, env, *flags, "run", str(export), str(tmp_path), folder
+            painter,
+            env,
+            *flags,
+            "run",
+            str(export),
+            "--test-gpu-unavailable",
+            str(tmp_path),
+            folder,
         )
         assert status == 0, err
         [report] = documents
@@ -744,3 +767,227 @@ def test_persistent_results_serve_a_later_process_byte_for_byte(
     assert entries(area) == {}
     assert run_export("after-clear") == cold
     assert entries(area).keys() == stored.keys()
+
+
+CLI_EXPORT = """
+import ctypes, json, os, sys
+from uzpainter import project, export, layerstack as ls, textureset as ts
+from uzpainter import colormanagement as cm, resource, application
+store, destination, plane, mask_path, mode = sys.argv[1:]
+if os.path.exists(store):
+    project.open(store)
+else:
+    project.create(plane, project.Settings(default_texture_resolution=256))
+    layer = ls.insert_fill(ls.InsertPosition.from_textureset_stack(ts.get_active_stack()))
+    layer.active_channels = {ts.ChannelType.Height}
+    layer.set_source(ts.ChannelType.Height, cm.Color(0.25, 0.25, 0.25, "Raw"))
+    layer.add_mask(ls.MaskBackground.Black)
+    mask = resource.import_project_resource(mask_path, resource.Usage.TEXTURE)
+    fill = ls.insert_fill(ls.InsertPosition.inside_node(layer, ls.NodeStack.Mask))
+    fill.set_source(None, mask.identifier())
+    project.save_as(store)
+config = {
+    "exportPath": destination, "exportShaderParams": False, "defaultExportPreset": "height",
+    "exportPresets": [{"name": "height", "maps": [{"fileName": "$textureSet_height",
+        "channels": [{"destChannel": "L", "srcChannel": "L",
+                      "srcMapType": "documentMap", "srcMapName": "height"}],
+        "parameters": {"fileFormat": "png", "bitDepth": "16",
+                       "dithering": False, "paddingAlgorithm": "infinite"}}]}],
+    "exportList": [{"rootPath": "uzp_plane"}]
+}
+kernel32 = ctypes.WinDLL("kernel32")
+kernel32.GetModuleHandleW.argtypes = [ctypes.c_wchar_p]
+kernel32.GetModuleHandleW.restype = ctypes.c_void_p
+def loaded():
+    names = ("D3D12Core.dll", "vulkan-1.dll")
+    return {name: bool(kernel32.GetModuleHandleW(name)) for name in names}
+if mode == "refused":
+    before = loaded()
+    config["defaultExportPreset"] = "missing-preset"
+    try:
+        export.start(config).wait()
+        raise AssertionError("invalid preset succeeded")
+    except ValueError:
+        result = {"before": before, "after": loaded(), "exists": os.path.exists(destination)}
+elif mode == "paused":
+    application.enable_engine_computations(False)
+    job = export.start(config)
+    result = {"job": job.id, "status": job.status, "loaded": loaded()}
+else:
+    print("before export")
+    job = export.start(config)
+    result = {"job": job.id} if mode == "async" else job.wait()
+    print("script returned", file=sys.stderr)
+"""
+
+
+def run_cli_export(
+    painter: Path, tmp_path: Path, backend: str, mode: str, *, unavailable: bool = False
+) -> tuple[dict[str, Any], Path]:
+    path = script(tmp_path, CLI_EXPORT)
+    destination = tmp_path / (mode + ("-cpu" if unavailable else "-" + backend))
+    flags = ("--test-gpu-unavailable",) if unavailable else ()
+    status, reports, err = cli(
+        painter,
+        "run",
+        path,
+        "--gpu-backend",
+        backend,
+        *flags,
+        str(tmp_path / "project.uzp"),
+        str(destination),
+        str(PLANE),
+        str(PROBE_IMAGES / "mask-left-half.png"),
+        mode,
+    )
+    assert status == 0, (reports, err)
+    [report] = reports
+    assert report["status"] == "ok", report
+    assert "project left open was not closed" not in err
+    assert report["gpu_backend"] == backend
+    if mode in {"sync", "async"}:
+        assert report["stdout"] == "before export\n"
+        assert report["stderr"] == "script returned\n"
+    return report, destination
+
+
+@pytest.mark.parametrize("backend", ["dx12", "vulkan"])
+def test_cli_export_refusal_and_paused_job_create_no_device(
+    painter: Path, tmp_path: Path, backend: str
+) -> None:
+    refused, destination = run_cli_export(painter, tmp_path, backend, "refused")
+    assert refused["result"] == {
+        "before": {"D3D12Core.dll": False, "vulkan-1.dll": False},
+        "after": {"D3D12Core.dll": False, "vulkan-1.dll": False},
+        "exists": False,
+    }
+    assert not destination.exists()
+    paused, destination = run_cli_export(painter, tmp_path, backend, "paused")
+    assert paused["result"]["status"] == "queued"
+    assert not any(paused["result"]["loaded"].values())
+    assert not destination.exists()
+
+
+@pytest.mark.parametrize("mode", ["sync", "async"])
+def test_cli_export_unavailable_fixture_keeps_cpu_and_joins_jobs(
+    painter: Path, tmp_path: Path, mode: str
+) -> None:
+    _, destination = run_cli_export(painter, tmp_path, "vulkan", mode, unavailable=True)
+    receipt = json.loads((destination / "generations/000001/receipt.json").read_text())
+    assert receipt["backend"] == "cpu"
+    assert receipt["adapter"] is None and receipt["driver"] is None
+    assert (destination / "current.json").is_file()
+
+
+@pytest.mark.skipif(os.environ.get("UZP_NO_GPU") == "1", reason="CLI export hardware lane")
+@pytest.mark.parametrize("backend", ["dx12", "vulkan"])
+@pytest.mark.parametrize("mode", ["sync", "async"])
+def test_cli_export_uses_selected_gpu_and_equals_cpu(
+    painter: Path, tmp_path: Path, backend: str, mode: str
+) -> None:
+    _, cpu = run_cli_export(painter, tmp_path, backend, "sync", unavailable=True)
+    _, gpu = run_cli_export(painter, tmp_path, backend, mode)
+    receipt = json.loads((gpu / "generations/000001/receipt.json").read_text())
+    assert receipt["backend"] == backend
+    assert receipt["adapter"] and receipt["adapter"] != "unknown"
+    assert receipt["driver"] and receipt["driver"] != "unknown"
+
+    def maps(folder: Path) -> dict[str, bytes]:
+        return {p.name: p.read_bytes() for p in (folder / "generations/000001/files").glob("*.png")}
+
+    assert maps(gpu) and maps(gpu) == maps(cpu)
+
+
+CLI_PAUSE_RACE = """
+import threading, time
+from ctypes import wintypes
+class Entry(ctypes.Structure):
+    _fields_ = [("size", wintypes.DWORD), ("usage", wintypes.DWORD),
+                ("id", wintypes.DWORD), ("owner", wintypes.DWORD),
+                ("base", wintypes.LONG), ("delta", wintypes.LONG), ("flags", wintypes.DWORD)]
+kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+kernel32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+kernel32.Thread32First.argtypes = [wintypes.HANDLE, ctypes.POINTER(Entry)]
+kernel32.Thread32Next.argtypes = [wintypes.HANDLE, ctypes.POINTER(Entry)]
+kernel32.OpenThread.restype = wintypes.HANDLE
+kernel32.OpenThread.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+kernel32.SuspendThread.argtypes = [wintypes.HANDLE]
+kernel32.ResumeThread.argtypes = [wintypes.HANDLE]
+kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+
+def threads():
+    snapshot = kernel32.CreateToolhelp32Snapshot(4, 0)
+    try:
+        entry = Entry()
+        entry.size = ctypes.sizeof(entry)
+        found = set()
+        more = kernel32.Thread32First(snapshot, ctypes.byref(entry))
+        while more:
+            if entry.owner == os.getpid():
+                found.add(entry.id)
+            more = kernel32.Thread32Next(snapshot, ctypes.byref(entry))
+        return found
+    finally:
+        kernel32.CloseHandle(snapshot)
+
+application.enable_engine_computations(False)
+before = threads()
+job = export.start(config)
+time.sleep(0.1)
+created = threads() - before
+assert len(created) == 1, created
+handle = kernel32.OpenThread(2, False, created.pop())
+assert handle
+assert kernel32.SuspendThread(handle) != 0xffffffff
+# Hold only this child process's new job worker until the host has entered its wait.
+def pause_later():
+    try:
+        time.sleep(0.25)
+        application.enable_engine_computations(False)
+    finally:
+        kernel32.ResumeThread(handle)
+        kernel32.CloseHandle(handle)
+    with open(destination + ".paused", "w") as marker:
+        marker.write(job.status)
+try:
+    application.enable_engine_computations(True)
+    threading.Thread(target=pause_later).start()
+except BaseException:
+    kernel32.ResumeThread(handle)
+    kernel32.CloseHandle(handle)
+    raise
+result = {"job": job.id}
+"""
+
+
+def test_cli_export_pause_during_host_wait_does_not_hang(painter: Path, tmp_path: Path) -> None:
+    source = CLI_EXPORT.split('if mode == "refused":')[0] + CLI_PAUSE_RACE
+    path = script(tmp_path, source)
+    destination = tmp_path / "export"
+    process = subprocess.run(
+        [
+            str(painter),
+            "run",
+            path,
+            "--test-gpu-unavailable",
+            str(tmp_path / "project.uzp"),
+            str(destination),
+            str(PLANE),
+            str(PROBE_IMAGES / "mask-left-half.png"),
+            "race",
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=20,
+        check=False,
+    )
+    assert process.returncode == 0, (process.stdout, process.stderr)
+    [line] = process.stdout.splitlines()
+    assert line.startswith(JSON_PREFIX), line
+    report = json.loads(line[len(JSON_PREFIX) :])
+    assert report["status"] == "ok", report
+    assert report["stdout"] == report["stderr"] == ""
+    assert "project left open was not closed" not in process.stderr
+    assert (tmp_path / "export.paused").read_text() in {"queued", "cancelled"}
+    assert not destination.exists()

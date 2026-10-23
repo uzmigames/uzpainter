@@ -167,6 +167,80 @@ def assert_one_generation(result: dict[str, Any], fx: Fixture, allowed: dict[str
 # ── Publication ──────────────────────────────────────────────────────────────
 
 
+@pytest.mark.parametrize("existing", [False, True])
+def test_execution_identity_failure_precedes_all_work(
+    export_tests: Path, tmp_path: Path, existing: bool
+) -> None:
+    """Execution identity refusal neither evaluates tiles nor changes a delivery or its files."""
+    source = spec(tmp_path / "source")
+    out = tmp_path / "delivery"
+    cfg = tmp_path / "export.json"
+    cfg.write_text(json.dumps(config(out)), encoding="utf-8")
+    if existing:
+        published = one(export_tests, "publish", str(TEMPLATES), str(source), str(cfg))
+        assert "error" not in published
+    before = files_under(out) if out.exists() else {}
+    directories = sorted(str(p.relative_to(out)) for p in out.rglob("*") if p.is_dir())
+    message = "test-only execution identity unavailable"
+    failed = one(
+        export_tests,
+        "publish",
+        str(TEMPLATES),
+        str(source),
+        str(cfg),
+        "--execution-error",
+        message,
+    )
+    assert failed == {
+        "error": "Failure",
+        "message": message,
+        "execution_calls": 1,
+        "tile_calls": 0,
+    }
+    assert out.exists() == existing
+    assert (files_under(out) if out.exists() else {}) == before
+    assert sorted(str(p.relative_to(out)) for p in out.rglob("*") if p.is_dir()) == directories
+
+
+@pytest.mark.parametrize("existing", [False, True])
+@pytest.mark.parametrize("checkpoint", [1, 2])
+def test_publication_checkpoint_failure_preserves_selected_generation(
+    export_tests: Path, tmp_path: Path, existing: bool, checkpoint: int
+) -> None:
+    """Cancellation/fault/deadline checks before and after locking create no generation."""
+    source = spec(tmp_path / "source")
+    out = tmp_path / "delivery"
+    cfg = tmp_path / "export.json"
+    cfg.write_text(json.dumps(config(out)), encoding="utf-8")
+    if existing:
+        assert "error" not in one(export_tests, "publish", str(TEMPLATES), str(source), str(cfg))
+    before = files_under(out) if out.exists() else {}
+    failed = one(
+        export_tests,
+        "publish",
+        str(TEMPLATES),
+        str(source),
+        str(cfg),
+        "--publication-checkpoint",
+        str(checkpoint),
+    )
+    assert failed == {
+        "error": "Failure",
+        "message": "test-only publication checkpoint failure",
+        "checkpoint_calls": checkpoint,
+    }
+    after = files_under(out) if out.exists() else {}
+    # Acquiring the publication lock may leave its empty coordination file, never a generation.
+    assert {k: v for k, v in after.items() if k != "publication.lock"} == {
+        k: v for k, v in before.items() if k != "publication.lock"
+    }
+    generations = out / "generations"
+    actual = sorted(p.name for p in generations.iterdir()) if generations.exists() else []
+    assert actual == (["000001"] if existing else [])
+    if checkpoint == 1:
+        assert out.exists() == existing
+
+
 def test_publication_writes_a_verified_generation(export_tests: Path, tmp_path: Path) -> None:
     """2.1, 2.2, 3.3: the files go to generations/000001/files under their planned names, with
     plan.json and receipt.json; current.json names the generation and its receipt's SHA-256; the
@@ -527,6 +601,15 @@ def test_receipt_schema_and_fields(export_tests: Path, tmp_path: Path) -> None:
     spec_doc = json.loads(fx.spec_b.read_text(encoding="utf-8"))
     mesh_sha = hashlib.sha256(Path(spec_doc["mesh"]).read_bytes()).hexdigest()
     assert receipt["revision"] == 1
+    assert receipt["backend"] == "cpu"
+    assert receipt["adapter"] is None and receipt["driver"] is None
+    validate(
+        {
+            key: value
+            for key, value in receipt.items()
+            if key not in {"backend", "adapter", "driver"}
+        }
+    )
     assert receipt["app_version"] == "0.0.0-test" and receipt["build"] == "uzp-export-tests"
     assert receipt["compat_profile"] and receipt["evaluator_profile"]
     assert receipt["resource_hashes"] == sorted([spec_doc["resources"][0]["sha256"], mesh_sha])
@@ -607,6 +690,12 @@ def test_receipt_schema_and_fields(export_tests: Path, tmp_path: Path) -> None:
     broken["files"][0]["path"] = "s0_User0.png.uzp-staging"
     with pytest.raises(jsonschema.ValidationError):
         validate(broken)
+    broken = {**receipt, "backend": "vulkan"}
+    with pytest.raises(jsonschema.ValidationError):
+        validate(broken)
+    validate({**broken, "adapter": "synthetic GPU", "driver": "1.2.3"})
+    with pytest.raises(jsonschema.ValidationError):
+        validate({**receipt, "driver": "GPU driver on a CPU export"})
 
 
 def test_receipt_geometry_only_normal_and_skipped_maps(export_tests: Path, tmp_path: Path) -> None:

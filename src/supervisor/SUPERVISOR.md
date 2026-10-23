@@ -230,7 +230,7 @@ The worker starts in this order:
    `main()` has already turned the Windows error dialogs off for every role (decision 252): the error mode, Windows Error Reporting's UI, and the CRT's `abort()` report. Under headless, a worker started with `--preview` exits with a usage error before this step.
 2. It opens a handle on its supervisor's process.
 3. It creates the pipe (`pipe.h`): the first and only instance of its name, remote clients refused, a DACL for the current user only, overlapped I/O.
-4. It starts the engine thread for the requested backend. Without a device it still starts, with `gpu_status: unavailable`.
+4. It starts the engine thread for the requested backend. Without a device it still starts, with `gpu_status: unavailable`. The Debug-only `--test-gpu-unavailable` fixture injects that failure before device creation, independently of the selected backend. Both the supervisor and worker accept it; the supervisor passes it to every replacement worker. Release builds reject it before starting a worker.
 5. It starts the embedded interpreter.
 6. It accepts only the client whose process id the pipe name carries. Any other client is disconnected. The connect deadline and the supervisor's process are checked before every attempt.
 7. It sends the handshake.
@@ -319,7 +319,7 @@ Replies carry `committed_revision` while a project is open. A bad frame gets `{"
 
 The Diagnostics tools (task phase2.1_recipe-diagnostic-views, decision 136) read the committed revision through `python::DiagnosticRun` (`src/python/diagnostics.h`), the code behind `uzpainter.diagnostics`. They are listed with `mutating: false`, so admission forwards them as reads: no lease, key, precondition or operation row. Their `path` must lie inside `--output-root`, and a relative path is taken under it; anything else is `invalid_arguments`. With `--roots`, the supervisor first confines the path to the export root (see Roots). Each export is an ordinary generation with its plan and receipt, so a call never overwrites an earlier one.
 
-In this task the GPU operations are exactly the tools that run on the engine thread (decision 120). The Phase 1 export computes on the CPU evaluator (decision 111), so it is not refused on a worker without a device. It joins the GPU set when it moves to the GPU evaluator.
+GPU operations run on the engine thread (decision 120). Exports use the operational worker engine and its admission budget, and record the actual backend, adapter and driver. A worker without a device retains the CPU export path (decision 111), including the unavailable-device fixture; its receipt explicitly records CPU execution. An export that started on the GPU never falls back after a failure. Device loss and timeout fail the job before publishing a generation and trigger the same worker recovery as channel evaluation, including a background Python export that fails while the command loop is idle. Cancellation and deadline checkpoints run after encoding and before generation creation.
 
 The worker ends in four ways:
 
@@ -369,7 +369,7 @@ The two save faults act inside that save only (`SaveFaultScope`). They reach the
 All tests are in `tests/supervisor/`:
 
 - `test_ipc_codec.py` (pure Python) covers the codec, every handshake mismatch and the exit causes.
-- `test_worker_pipe.py` runs the worker with the test process as its supervisor, on Vulkan, so no device is created. It covers the handshake, the Python gate, the unavailable backend, the precondition, script failures, protocol errors, refused clients, broken pipes and usage errors.
+- `test_worker_pipe.py` runs the worker with the test process as its supervisor and the explicit `--test-gpu-unavailable` fixture, so no device is created. It checks the unavailable-device path on DX12 and Vulkan, plus the handshake, Python gate, precondition, script failures, protocol errors, refused clients, broken pipes and usage errors. Hardware lanes omit this flag.
 - `test_supervisor_mcp.py` drives the supervisor over stdio MCP. It covers stdout cleanliness, fatal mismatches, external kill, abort and SEH with their minidumps, a lost acknowledgement, calls held during a relaunch, and a killed supervisor.
 - `test_admission.py` is pure Python, with a stand-in worker. It covers:
   - the lease with two owners;
@@ -426,7 +426,7 @@ All tests are in `tests/supervisor/`:
   - `run_python` with and without `--allow-python`;
   - HTTP mode: the guard, the bind usage errors, a reconnect that keeps the lease and the job, and a clean Ctrl+Break.
   - stdio mode: Ctrl+Break with a saved project open ends like HTTP, with no lock sidecar and no ledger `-wal`/`-shm` left (B14 of `parity/reports/phase2/practical-e2e.md`).
-- `test_supervisor_gpu.py` runs on DX12 and skips under `UZP_NO_GPU=1`. It checks that the device lives only in the worker, the evaluation payload by path and hash, an evaluator release gap as `capability_gap`, and device removal and GPU stall with relaunch on the same backend.
+- `test_supervisor_gpu.py` and `test_supervisor_gpu_export.py` use `UZP_SUPERVISOR_BACKEND` (DX12 by default) and skip under `UZP_NO_GPU=1`; an explicit hardware lane must be ready. It checks that the device lives only in the worker, the evaluation payload by path and hash, an evaluator release gap as `capability_gap`, and device removal and GPU stall with relaunch on the same backend.
 - `test_settling.py` holds the settling cases of 02 §7 that the children's tests do not cover, over stdio MCP (phase2.4_supervisor-worker, decisions 150 and 151):
   - the worker killed inside a save's checkpoint commit and inside a full save's compaction;
   - a client disconnect while a long mutating job runs, and a reconnect on the same ledger that commits the retried key once;

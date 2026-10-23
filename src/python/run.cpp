@@ -2,18 +2,23 @@
 
 #include "python/run.h"
 
+#include <chrono>
 #include <exception>
 #include <filesystem>
+#include <memory>
 #include <optional>
 
 #include <pybind11/embed.h>
 
 #include "export/receipt.h"
 #include "python/capture.h"
+#include "python/dispatcher.h"
+#include "python/jobs.h"
 #include "python/interpreter.h"
 #include "python/script.h"
 #include "python/session.h"
 #include "render/backend.h"
+#include "render/engine_thread.h"
 #include "uzp_core/manifest/json.h"
 
 namespace uzp::python {
@@ -24,6 +29,7 @@ namespace json = core::json;
 
 constexpr const char* kUsage =
     "usage: UzPainter.exe run <script.py> [args...] [--gpu-backend dx12|vulkan] [--diagnostic-measure-export] "
+    "[--test-gpu-unavailable] "
     "[-- args...]\n";
 constexpr std::string_view kDiagnosticFlag = "--diagnostic-measure-export";
 
@@ -55,6 +61,7 @@ bool DiagnosticMeasureExport() { return g_diagnosticMeasureExport; }
 int RunRunCommand(const std::vector<std::string>& args, std::FILE* out, std::FILE* err) {
     std::optional<render::Backend> backend;
     bool diagnostic = false;
+    bool test_gpu_unavailable = false;
     std::vector<std::string> positional;
     for (size_t i = 1; i < args.size(); ++i) {
         if (args[i] == "--") {  // the rest goes to the script as given
@@ -67,6 +74,18 @@ int RunRunCommand(const std::vector<std::string>& args, std::FILE* out, std::FIL
                 return kRunUsage;
             }
             diagnostic = true;
+            continue;
+        }
+        if (args[i] == "--test-gpu-unavailable") {
+            if (test_gpu_unavailable) {
+                std::fprintf(err, "%s", kUsage);
+                return kRunUsage;
+            }
+#if !UZP_HOST_FAULT_HOOKS
+            std::fprintf(err, "UzPainter.exe run: --test-gpu-unavailable needs a Debug build (the fault hooks are not compiled in)\n");
+            return kRunUsage;
+#endif
+            test_gpu_unavailable = true;
             continue;
         }
         if (args[i] != "--gpu-backend") {
@@ -88,8 +107,33 @@ int RunRunCommand(const std::vector<std::string>& args, std::FILE* out, std::FIL
     }
     g_diagnosticMeasureExport = diagnostic;
     const std::string backend_name(render::BackendName(backend.value_or(render::Backend::Dx12)));
-    // The first GPU operation (a painter_viewport capture) creates its device on this backend.
-    SetCaptureGpu(backend.value_or(render::Backend::Dx12), nullptr);
+    // Export and viewport calls acquire their devices lazily on the selected backend.
+    std::unique_ptr<render::Engine> unavailable_engine;
+#if UZP_HOST_FAULT_HOOKS
+    if (test_gpu_unavailable) {
+        render::EngineOptions options;
+        options.device.backend = backend.value_or(render::Backend::Dx12);
+        options.createDevice = [chosen = options.device.backend]() -> render::Result<std::unique_ptr<render::IDevice>> {
+            return render::Fail(render::ErrorCode::GpuBackendUnavailable, chosen,
+                                "device creation disabled by --test-gpu-unavailable");
+        };
+        unavailable_engine = std::make_unique<render::Engine>(options);
+    }
+#endif
+    if (test_gpu_unavailable) {
+        SetExportGpu(nullptr);  // Explicit Debug fixture preserves CPU-only operations.
+    } else {
+        SetExportGpuFactory([chosen = backend.value_or(render::Backend::Dx12)] {
+            render::EngineOptions options;
+            options.device.backend = chosen;
+            return std::make_shared<render::Engine>(options);
+        });
+    }
+    SetCaptureGpu(backend.value_or(render::Backend::Dx12), unavailable_engine.get());
+    struct ResetCapture {
+        render::Backend backend;
+        ~ResetCapture() { SetExportGpu(nullptr); SetCaptureGpu(backend, nullptr); }
+    } reset_capture{backend.value_or(render::Backend::Dx12)};
 
     const std::string error = Start();
     if (!error.empty()) {
@@ -106,7 +150,20 @@ int RunRunCommand(const std::vector<std::string>& args, std::FILE* out, std::FIL
         try {
             InterruptOnConsoleBreak();
             report = RunScript(PathFromUtf8(positional.front()),
-                               std::vector<std::string>(positional.begin() + 1, positional.end()));
+                               std::vector<std::string>(positional.begin() + 1, positional.end()), [] {
+                // A single-process host must finish jobs before closing the project or exiting.
+                // Paused queued jobs remain unexecuted; callback-created jobs are drained too.
+                auto& jobs = JobEngine::Get();
+                do {
+                    for (const auto& job : jobs.List()) {
+                        do {
+                            // Python callbacks can pause the queue while the host waits without the GIL.
+                            if (jobs.Paused()) job->CancelQueued();
+                        } while (!job->Wait(std::chrono::milliseconds(100)));
+                    }
+                    Dispatcher::Get().Drain();
+                } while (jobs.Busy());
+            });
             status = std::get<std::string>(report.at("status").data) == "ok" ? kRunOk : kRunFailed;
         } catch (const std::exception& error) {
             // The host failed around the script (a value it could not hand over or report): never

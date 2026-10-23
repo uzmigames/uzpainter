@@ -15,6 +15,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "uzp_core/types/enums.h"
@@ -145,9 +146,18 @@ struct TileImage {
     std::vector<std::byte> texels;
 };
 
+/// The evaluator that produced an export; a CPU store has no GPU adapter or driver.
+struct ExecutionIdentity {
+    std::string backend = "cpu";
+    std::string adapter;
+    std::string driver;
+};
+
 class ITileStore {
 public:
     virtual ~ITileStore() = default;
+
+    [[nodiscard]] virtual render::Result<ExecutionIdentity> Execution() const = 0;
 
     virtual render::Result<TileHandle> Allocate(const TileFormat& format, uint32_t width,
                                                 uint32_t height) = 0;

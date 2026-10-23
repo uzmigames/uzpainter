@@ -332,12 +332,14 @@ int RunQualify() {
     {
         VulkanDeviceRecord r = GoodRecord();
         r.memoryBudget = true;
+        r.driverVersionName = "617.14.0.0";
         r.heaps[0].budgetBytes = 20ull << 30;
         r.heaps[0].usageBytes = 2ull << 30;
         r.formats.push_back({"R32G32B32_SFLOAT", VK_FORMAT_R32G32B32_SFLOAT, 0, 0, 0});
         const CapabilityReport report = VulkanCapabilityReport(r, AdmissionPolicy{});
         const AdmissionBudget expected = DeriveVulkanAdmissionBudget(DeriveVulkanVram(r), AdmissionPolicy{});
         Check(report.backend == Backend::Vulkan && report.adapter == "Fabricated dGPU" &&
+                  report.driver == r.driverVersionName && report.ToJson().find("617.14.0.0") != std::string::npos &&
                   report.admission.bytes == expected.bytes &&
                   report.admission.maxTilesByDescriptors == expected.maxTilesByDescriptors &&
                   report.vram.budgetBytes == (20ull << 30) && report.vram.usageBytes == (2ull << 30) &&
@@ -682,6 +684,36 @@ int RunFaults() {
         Check((*device)->Shutdown(Clock::now() + Ms(10000)) == VulkanTeardown::Abandoned && ElapsedMs(start) < 1000,
               "the lost device is abandoned at once");
     }
+
+#if defined(UZP_WORKER_FAULT_HOOKS)
+    // The worker's per-device hook must take the same persistent failure path, without
+    // changing process-global Vulkan function pointers or losing the real driver.
+    {
+        Result<std::unique_ptr<VulkanDevice>> device = NewDevice();
+        if (!device) return Finish();
+        const ComputeKernel kernel = kernelOn(**device);
+        (*device)->InjectDeviceLoss();
+        Dispatch d = Submit(**device, kernel);
+        Check(d.fence.has_value(), "worker device loss: submission accepted before the injected wait", Describe(d.fence));
+        const WaitResult wait = (*device)->Queue().Wait(d.fence.value_or(1), Clock::now() + Ms(5000));
+        Check(wait.status == WaitStatus::DeviceLost && wait.backendReason == VK_ERROR_DEVICE_LOST,
+              "worker device loss: the wait reports VK_ERROR_DEVICE_LOST");
+        Check((*device)->WaitFailure(wait).Describe() ==
+                  "device_removed {backend: vulkan, reason: VK_ERROR_DEVICE_LOST (-4)}",
+              "worker device loss: the backend and native reason reach the error");
+        const auto removed = (*device)->CheckRemoved();
+        Check(removed && removed->code == ErrorCode::DeviceRemoved,
+              "worker device loss: the device stays removed");
+        Result<uint64_t> next = (*device)->Queue().Submit([](uz::IRHICommandList&) {});
+        Check(!next && next.error().code == ErrorCode::DeviceRemoved,
+              "worker device loss: no subsequent submission is accepted", Describe(next));
+        (*device)->DestroyBuffer(d.buffer);
+        Check(BufferAlive(**device, d.buffer), "worker device loss: in-flight staging memory is retained");
+        const auto start = Clock::now();
+        Check((*device)->Shutdown(Clock::now() + Ms(5000)) == VulkanTeardown::Abandoned && ElapsedMs(start) < 1000,
+              "worker device loss: teardown abandons resources without an unbounded drain");
+    }
+#endif
 
     // A stalled queue: the wait times out at its deadline and teardown abandons the device within
     // its own deadline, without vkDeviceWaitIdle.

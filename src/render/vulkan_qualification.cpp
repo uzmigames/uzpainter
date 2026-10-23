@@ -494,6 +494,7 @@ CapabilityReport VulkanCapabilityReport(const VulkanDeviceRecord& device, const 
     CapabilityReport report;
     report.backend = Backend::Vulkan;
     report.adapter = device.name;
+    report.driver = device.driverVersionName;
     report.vendorId = device.vendorId;
     report.deviceId = device.deviceId;
     report.softwareAdapter = device.type == "cpu";

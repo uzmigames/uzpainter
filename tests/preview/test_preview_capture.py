@@ -15,6 +15,8 @@ import ctypes.wintypes
 import hashlib
 import json
 import math
+import os
+import re
 import textwrap
 import zlib
 from pathlib import Path
@@ -24,7 +26,14 @@ import numpy as np
 import pytest
 from jsonschema import Draft202012Validator
 
-from tests.preview.conftest import NO_GPU, OCIO_CONFIG, ocio_bundle, run_report
+from tests.preview.conftest import (
+    BACKEND,
+    NO_GPU,
+    OCIO_CONFIG,
+    ocio_bundle,
+    require_gpu,
+    run_report,
+)
 from tests.supervisor.conftest import PLANE, Pipe
 from tools.parity.fit.decode import decode
 
@@ -47,7 +56,7 @@ SECTION_5 = {
     "display_configuration",
     "hashes",
 }
-GPU = pytest.mark.skipif(NO_GPU, reason="UZP_NO_GPU=1: painter_viewport needs a DX12 adapter")
+GPU = pytest.mark.skipif(NO_GPU, reason="UZP_NO_GPU=1: painter_viewport needs a GPU adapter")
 
 PRELUDE = f"""
 import json, os, sys
@@ -386,7 +395,7 @@ def test_worker_capture_tool(painter: Path, tmp_path: Path, pipes: list[Pipe]) -
         encoding="utf-8",
     )
     assert run_report(painter, script)["status"] == "ok"
-    pipe = Pipe(painter, tmp_path, "--gpu-backend", "dx12")
+    pipe = Pipe(painter, tmp_path, "--gpu-backend", BACKEND)
     pipes.append(pipe)
     tools = {t["name"]: t for t in pipe.request({"method": "tools/list"})["result"]["tools"]}
     assert (tools["capture"]["gpu"], tools["capture"]["mutating"]) == (True, False)
@@ -444,6 +453,81 @@ def windows_of(pid: int) -> list[int]:
     return found
 
 
+def _headless_auxiliary(class_name: str, module: str, visible: bool) -> bool:
+    """Only the observed hidden OS/OBS utility windows are outside the preview contract."""
+    if visible or not module:
+        return False
+    owner = Path(module).resolve()
+    if class_name == "IME":
+        return owner == (Path(os.environ["SYSTEMROOT"]) / "System32" / "user32.dll").resolve()
+    return (
+        bool(re.fullmatch(r"temp_d3d_window_[0-9]+", class_name))
+        and owner
+        == (Path(os.environ["PROGRAMDATA"]) / "obs-studio-hook" / "graphics-hook64.dll").resolve()
+    )
+
+
+def headless_windows_of(pid: int) -> list[dict[str, Any]]:
+    """Unexpected top-level HWNDs; visible windows and unknown owners always fail."""
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = [
+        ctypes.wintypes.DWORD,
+        ctypes.wintypes.BOOL,
+        ctypes.wintypes.DWORD,
+    ]
+    kernel32.OpenProcess.restype = ctypes.wintypes.HANDLE
+    kernel32.CloseHandle.argtypes = [ctypes.wintypes.HANDLE]
+    kernel32.K32GetModuleFileNameExW.argtypes = [
+        ctypes.wintypes.HANDLE,
+        ctypes.wintypes.HMODULE,
+        ctypes.wintypes.LPWSTR,
+        ctypes.wintypes.DWORD,
+    ]
+    user32.GetClassNameW.argtypes = [ctypes.wintypes.HWND, ctypes.wintypes.LPWSTR, ctypes.c_int]
+    user32.GetClassLongPtrW.argtypes = [ctypes.wintypes.HWND, ctypes.c_int]
+    user32.GetClassLongPtrW.restype = ctypes.c_void_p
+    user32.IsWindowVisible.argtypes = [ctypes.wintypes.HWND]
+    # PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, on this test's own worker only.
+    process = kernel32.OpenProcess(0x410, False, pid)
+    assert process, f"cannot inspect worker {pid}: {ctypes.get_last_error()}"
+    unexpected = []
+    try:
+        for hwnd in windows_of(pid):
+            class_name = ctypes.create_unicode_buffer(512)
+            module = ctypes.create_unicode_buffer(32768)
+            assert user32.GetClassNameW(hwnd, class_name, len(class_name))
+            owner = user32.GetClassLongPtrW(hwnd, -16)  # GCLP_HMODULE
+            if owner:
+                kernel32.K32GetModuleFileNameExW(process, owner, module, len(module))
+            visible = bool(user32.IsWindowVisible(hwnd))
+            if not _headless_auxiliary(class_name.value, module.value, visible):
+                unexpected.append(
+                    {
+                        "hwnd": hwnd,
+                        "class": class_name.value,
+                        "module": module.value,
+                        "visible": visible,
+                    }
+                )
+    finally:
+        kernel32.CloseHandle(process)
+    return unexpected
+
+
+def test_headless_auxiliary_windows_require_hidden_known_owners() -> None:
+    obs = str(Path(os.environ["PROGRAMDATA"]) / "obs-studio-hook" / "graphics-hook64.dll")
+    ime = str(Path(os.environ["SYSTEMROOT"]) / "System32" / "user32.dll")
+    assert _headless_auxiliary("temp_d3d_window_4039785", obs, False)
+    assert _headless_auxiliary("IME", ime, False)
+    for class_name, module in (("temp_d3d_window_4039785", obs), ("IME", ime)):
+        assert not _headless_auxiliary(class_name, module, True)
+        assert not _headless_auxiliary(class_name, "", False)
+        assert not _headless_auxiliary(class_name, str(REPO_ROOT / "UzPainter.exe"), False)
+    assert not _headless_auxiliary("UzEngineWindow", obs, False)
+    assert not _headless_auxiliary("UzEngineWindow", ime, False)
+    assert not _headless_auxiliary("temp_d3d_window_unknown", obs, False)
+
+
 def display_code(linear: float) -> int:
     """decision 134's table entry of a binary16 value: round(65535 encode(clamp(L, 0, 1)))."""
     value = 0.0 if math.isnan(linear) else min(max(linear, 0.0), 1.0)
@@ -455,7 +539,7 @@ def check_viewport(receipt: dict[str, Any], size: tuple[int, int]) -> np.ndarray
     """A `painter_viewport` capture's receipt and files; its display codes (height, width, 3)."""
     check_receipt(receipt)
     assert receipt["mode"] == "painter_viewport" and receipt["source"] is None
-    assert receipt["backend"] == "dx12" and receipt["adapter"] and receipt["driver"]
+    assert receipt["backend"] == BACKEND and receipt["adapter"] and receipt["driver"]
     assert (receipt["samples"], receipt["size"]) == (1, list(size))
     assert receipt["display_configuration"] == {
         "mode": "ocio",
@@ -534,24 +618,24 @@ result = {"shot": shot, "rotated": rotated, "refused": refused, "rev": rev,
 @pytest.mark.preview_settling("viewport_capture_headless")
 def test_headless_viewport_capture(painter: Path, tmp_path: Path, pipes: list[Pipe]) -> None:
     """2.1-2.3, 3.1: a worker with no window renders `painter_viewport` offscreen: the process
-    owns no window before or after, the PNG holds the display codes of the OpenEXR's binary16
+    owns no application window before or after (known hidden OS/OBS utilities are identified
+    by their class owner), the PNG holds the display codes of the OpenEXR's binary16
     linear values through decision 134's table, and `UzPainter.exe run` (its own device) gives the
     same bytes. A `preset` argument renders that preset without committing it. Refusals come
     before any device; a Legacy project is the unsupported configuration."""
     bundle = ocio_bundle(painter, tmp_path / "fixture")
-    pipe = Pipe(painter, tmp_path, "--gpu-backend", "dx12")
+    pipe = Pipe(painter, tmp_path, "--gpu-backend", BACKEND)
     pipes.append(pipe)
-    if pipe.handshake["gpu_status"] != "ready":
-        pytest.skip("no DX12 device on this machine")
+    require_gpu(pipe)
     pid = pipe.process.pid
-    assert windows_of(pid) == []
+    assert headless_windows_of(pid) == []
     revision = pipe.call("project_open", {"path": str(bundle)})["result"]["revision"]
     reply = pipe.call(
         "capture", {"mode": "painter_viewport", "path": "vp/shot.png", "size": [96, 64]}
     )
     receipt = reply["result"]
     codes = check_viewport(receipt, (96, 64))
-    assert windows_of(pid) == []
+    assert headless_windows_of(pid) == []
     assert receipt["revision"] == revision and receipt["camera"]["source"] == "fit"
     assert receipt["seed"] == 0
     background = codes[0, 0]
@@ -598,10 +682,9 @@ def test_viewport_capture_after_a_mutation_shows_it(
     """3.2: in a worker, a capture right after a committed `camera_set` names the new revision,
     uses the new default camera and shows a different image."""
     bundle = ocio_bundle(painter, tmp_path / "fixture")
-    pipe = Pipe(painter, tmp_path, "--gpu-backend", "dx12")
+    pipe = Pipe(painter, tmp_path, "--gpu-backend", BACKEND)
     pipes.append(pipe)
-    if pipe.handshake["gpu_status"] != "ready":
-        pytest.skip("no DX12 device on this machine")
+    require_gpu(pipe)
     revision = pipe.call("project_open", {"path": str(bundle)})["result"]["revision"]
     args = {"mode": "painter_viewport", "size": [64, 64]}
     before = pipe.call("capture", {**args, "path": "before.png"})["result"]
@@ -637,10 +720,9 @@ def test_a_stored_double_sided_changes_the_digest_and_no_pixel(
     reads the shader parameters and the preview has no face culling, so the PNG and the OpenEXR
     are byte-identical."""
     bundle = ocio_bundle(painter, tmp_path / "fixture")
-    pipe = Pipe(painter, tmp_path, "--gpu-backend", "dx12")
+    pipe = Pipe(painter, tmp_path, "--gpu-backend", BACKEND)
     pipes.append(pipe)
-    if pipe.handshake["gpu_status"] != "ready":
-        pytest.skip("no DX12 device on this machine")
+    require_gpu(pipe)
     revision = pipe.call("project_open", {"path": str(bundle)})["result"]["revision"]
     args = {"mode": "painter_viewport", "size": [64, 64]}
     before = pipe.call("capture", {**args, "path": "single.png"})["result"]

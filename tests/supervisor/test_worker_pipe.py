@@ -1,8 +1,8 @@
 """The worker role through its pipe, with the test process as its supervisor
 (src/supervisor/worker.h; task phase2.1_supervisor-ipc-worker items 2.3-2.7, 2.10, 3.1, 3.6).
 
-CPU only: every worker here runs `--gpu-backend vulkan`, which has no device before Phase 3
-(`render::CreateDevice`), so the worker starts with `gpu_status: unavailable` and touches no GPU.
+CPU only: every worker here uses `--test-gpu-unavailable`, so the worker starts with
+`gpu_status: unavailable` and touches no GPU.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ KEY = {"idempotency_key": "k-1"}
 
 def test_handshake_reports_the_worker(painter: Path, tmp_path: Path, pipes: list[Pipe]) -> None:
     """2.4: protocol, pid, build, backend, GPU status and Python policy."""
-    pipe = Pipe(painter, tmp_path, "--gpu-backend", "vulkan")
+    pipe = Pipe(painter, tmp_path, "--gpu-backend", "vulkan", "--test-gpu-unavailable")
     pipes.append(pipe)
     assert pipe.handshake == {
         "protocol": "uzp-ipc/1",
@@ -33,7 +33,9 @@ def test_handshake_reports_the_worker(painter: Path, tmp_path: Path, pipes: list
         "gpu_status": "unavailable",
         "python": "disabled",
     }
-    allowed = Pipe(painter, tmp_path, "--gpu-backend", "vulkan", "--allow-python")
+    allowed = Pipe(
+        painter, tmp_path, "--gpu-backend", "vulkan", "--test-gpu-unavailable", "--allow-python"
+    )
     pipes.append(allowed)
     assert allowed.handshake["python"] == "allowed"
 
@@ -41,7 +43,7 @@ def test_handshake_reports_the_worker(painter: Path, tmp_path: Path, pipes: list
 def test_python_disabled_at_the_pipe(painter: Path, tmp_path: Path, pipes: list[Pipe]) -> None:
     """2.7, 3.6: without --allow-python, run_python is not listed and is refused before anything
     else is looked at, even with a valid key and precondition."""
-    pipe = Pipe(painter, tmp_path, "--gpu-backend", "vulkan")
+    pipe = Pipe(painter, tmp_path, "--gpu-backend", "vulkan", "--test-gpu-unavailable")
     pipes.append(pipe)
     names = [tool["name"] for tool in pipe.request({"method": "tools/list"})["result"]["tools"]]
     assert "run_python" not in names
@@ -63,13 +65,14 @@ def test_python_disabled_at_the_pipe(painter: Path, tmp_path: Path, pipes: list[
     assert not marker.exists()
 
 
+@pytest.mark.parametrize("backend", ["dx12", "vulkan"])
 def test_unavailable_backend_refuses_gpu_calls_before_mutating(
-    painter: Path, tmp_path: Path, pipes: list[Pipe]
+    painter: Path, tmp_path: Path, pipes: list[Pipe], backend: str
 ) -> None:
     """2.6, 3.6: `gpu_backend_unavailable {backend, reason}` for the GPU call, no revision moved,
     and project open, save and inspect still work."""
     project = make_project(painter, tmp_path)
-    pipe = Pipe(painter, tmp_path, "--gpu-backend", "vulkan")
+    pipe = Pipe(painter, tmp_path, "--gpu-backend", backend, "--test-gpu-unavailable")
     pipes.append(pipe)
     opened = pipe.call("project_open", {"path": str(project)})
     revision = opened["result"]["revision"]
@@ -77,7 +80,7 @@ def test_unavailable_backend_refuses_gpu_calls_before_mutating(
     reply = pipe.call("evaluate_channel", {"channel": "BaseColor"})
     error = reply["error"]
     assert error["code"] == "gpu_backend_unavailable"
-    assert error["details"]["backend"] == "vulkan" and error["details"]["reason"]
+    assert error["details"]["backend"] == backend and error["details"]["reason"]
     assert not (tmp_path / "out").exists()  # nothing written
     saved = pipe.call("project_save", {})
     assert saved["result"]["current"] == revision and saved["result"]["named"] == revision
@@ -95,7 +98,9 @@ def test_mutating_calls_need_key_and_current_precondition(
     (phase2.2 item 2.5); a stale precondition is refused before the call runs; the reply carries
     `committed_revision`."""
     project = make_project(painter, tmp_path)
-    pipe = Pipe(painter, tmp_path, "--gpu-backend", "vulkan", "--allow-python")
+    pipe = Pipe(
+        painter, tmp_path, "--gpu-backend", "vulkan", "--test-gpu-unavailable", "--allow-python"
+    )
     pipes.append(pipe)
     revision = pipe.call("project_open", {"path": str(project)})["result"]["revision"]
     for extra in (
@@ -139,7 +144,9 @@ def test_script_failure_is_structured_with_partial_changes(
     """02 §5 at the pipe: a script raising after a committed call keeps that call; the error
     names the last committed revision and the traceback."""
     project = make_project(painter, tmp_path)
-    pipe = Pipe(painter, tmp_path, "--gpu-backend", "vulkan", "--allow-python")
+    pipe = Pipe(
+        painter, tmp_path, "--gpu-backend", "vulkan", "--test-gpu-unavailable", "--allow-python"
+    )
     pipes.append(pipe)
     revision = pipe.call("project_open", {"path": str(project)})["result"]["revision"]
     reply = pipe.call(
@@ -160,7 +167,7 @@ def test_protocol_errors_keep_the_worker_serving(
 ) -> None:
     """2.3, 2.5: a bad frame, a missing id, an unknown method or tool each get a structured error
     and the worker keeps answering."""
-    pipe = Pipe(painter, tmp_path, "--gpu-backend", "vulkan")
+    pipe = Pipe(painter, tmp_path, "--gpu-backend", "vulkan", "--test-gpu-unavailable")
     pipes.append(pipe)
     pipe.send_raw(b"this is not json\n")
     assert pipe.frame()["error"]["code"] == "invalid_frame"
@@ -180,7 +187,7 @@ def test_worker_exits_when_its_supervisor_closes_the_pipe(
 ) -> None:
     """2.10: a broken pipe ends the worker (exit code 4) without committing anything further."""
     project = make_project(painter, tmp_path)
-    pipe = Pipe(painter, tmp_path, "--gpu-backend", "vulkan")
+    pipe = Pipe(painter, tmp_path, "--gpu-backend", "vulkan", "--test-gpu-unavailable")
     pipes.append(pipe)
     pipe.call("project_open", {"path": str(project)})
     pipe.file.close()
@@ -195,7 +202,9 @@ def test_crash_reports_go_to_a_crash_dir_outside_the_code_page(
     and a native fault writes the minidump and both reports into that folder."""
     folder = tmp_path / "ação ☃ 日本"
     folder.mkdir()
-    pipe = Pipe(painter, folder, "--gpu-backend", "vulkan", "--test-faults")
+    pipe = Pipe(
+        painter, folder, "--gpu-backend", "vulkan", "--test-gpu-unavailable", "--test-faults"
+    )
     pipes.append(pipe)
     assert pipe.handshake["worker_pid"] == pipe.process.pid
     with pytest.raises(EOFError):  # the worker dies in the fault, before any reply
@@ -225,6 +234,7 @@ def test_worker_accepts_only_its_supervisor(painter: Path, tmp_path: Path) -> No
                     name,
                     "--gpu-backend",
                     "vulkan",
+                    "--test-gpu-unavailable",
                     "--connect-timeout-ms",
                     "4000",
                     "--output-root",
@@ -270,6 +280,7 @@ def test_worker_exits_when_its_supervisor_process_ends(painter: Path, tmp_path: 
             name,
             "--gpu-backend",
             "vulkan",
+            "--test-gpu-unavailable",
             "--output-root",
             str(tmp_path / "out"),
         ],

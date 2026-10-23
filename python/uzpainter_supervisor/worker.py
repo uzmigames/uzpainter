@@ -84,6 +84,7 @@ class WorkerConfig:
     test_faults: bool
     preview: bool = False
     protocol: str = ipc.PROTOCOL
+    test_gpu_unavailable: bool = False
 
     def argv(self, pipe: str, crash_dir: Path) -> list[str]:
         args = [self.exe, "--worker", "--pipe", pipe, "--gpu-backend", self.gpu_backend]
@@ -94,6 +95,8 @@ class WorkerConfig:
         args += ["--output-root", str(self.output_root), "--crash-dir", str(crash_dir)]
         if self.test_faults:
             args.append("--test-faults")
+        if self.test_gpu_unavailable:
+            args.append("--test-gpu-unavailable")
         if self.preview:
             args.append("--preview")
         return args

@@ -32,6 +32,7 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -122,6 +123,9 @@ struct PublishRequest {
     /// The diagnostic measure export (write.h, decision 286): not conformant, its receipt marked
     /// `non_conformant`. Never set by production: only `UzPainter.exe run --diagnostic-measure-export`.
     std::optional<DiagnosticMeasure> diagnostic;
+    /// Called after encoding and again after acquiring the lock, before creating a generation.
+    /// A failed checkpoint publishes nothing (cancellation, deadline or device failure).
+    std::function<render::Result<void>()> beforePublish;
 };
 
 struct Publication {

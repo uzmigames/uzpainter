@@ -11,10 +11,11 @@
 // - `kill`: the worker terminates itself at once (a kill point; exit code `kKillExitCode`);
 // - `abort`: `std::abort()`, which the worker's SIGABRT handler turns into a crash report;
 // - `seh`: a write through a null pointer (an access violation the crash handler reports);
-// - `remove_device`: the next GPU request first calls `ID3D12Device5::RemoveDevice` on the engine
-//   thread, so it fails with `device_removed {backend, reason}`;
-// - `gpu_stall`: the next GPU request first makes the direct queue wait on a fence nothing ever
-//   signals, so its deadline wait returns `timeout`;
+// - `remove_device`: the next GPU request calls `ID3D12Device5::RemoveDevice` on DX12, or injects
+//   `VK_ERROR_DEVICE_LOST` into its Vulkan queue wait without faulting the driver. The device
+//   stays failed and reports `device_removed {backend, reason}`;
+// - `gpu_stall`: the next GPU request makes its queue wait on a DX12 fence or Vulkan timeline
+//   semaphore nothing signals, so its deadline wait returns `timeout`;
 // - `kill_before_reply`: the next call runs to its end, then the worker terminates before the
 //   reply is written (the call's commit is durable, its acknowledgement is lost).
 // - `kill_during_save`: the next `project_save` terminates the worker at the first page write of
@@ -78,6 +79,11 @@ void MaybeKillOnOpen();
 
 /// The handshake with the fields of `UZP_TEST_HANDSHAKE` replaced; unchanged without it.
 [[nodiscard]] core::json::Object OverrideHandshake(core::json::Object handshake);
+
+/// Called only under --test-faults. UZP_TEST_VULKAN_HEAP_BYTES simulates a capability
+/// record without memory-budget support, preserving the real device's identity and limits.
+/// The underlying driver may still expose the extension; this tests the admission fallback.
+void ConfigureVulkanHeapFixture(render::EngineOptions& options);
 
 }  // namespace uzp::supervisor::fault
 

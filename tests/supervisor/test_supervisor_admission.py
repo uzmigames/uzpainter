@@ -2,7 +2,7 @@
 (python/uzpainter_supervisor/admission.py, src/supervisor/worker.cpp; task
 phase2.2_supervisor-admission-ledger items 2.1, 2.2, 2.6-2.8, 3.1, 3.2, 3.5; decisions 138, 139).
 
-CPU only: the supervisors run `--gpu-backend vulkan` with `--test-faults` (Debug build), so the
+The default CPU lane uses `--test-gpu-unavailable` with `--test-faults` (Debug build), so the
 typed `test_mutation` exists. Each supervisor writes its own ledger under the test's folder.
 """
 
@@ -14,9 +14,9 @@ from typing import Any
 
 import pytest
 
-from tests.supervisor.conftest import BACKEND, Mcp, make_project
+from tests.supervisor.conftest import BACKEND, GPU_UNAVAILABLE_ARGS, Mcp, make_project
 
-BASE = ("--gpu-backend", BACKEND, "--allow-python", "--test-faults")
+BASE = (*GPU_UNAVAILABLE_ARGS, "--gpu-backend", BACKEND, "--allow-python", "--test-faults")
 
 
 def opened(

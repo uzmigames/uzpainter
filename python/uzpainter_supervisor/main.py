@@ -92,6 +92,7 @@ def parse_args(argv: list[str], hooks_compiled: bool) -> argparse.Namespace:
     parser.add_argument("--crash-dir", type=Path)
     parser.add_argument("--ledger", type=Path)
     parser.add_argument("--test-faults", action="store_true")
+    parser.add_argument("--test-gpu-unavailable", action="store_true")
     parser.add_argument("--preview", action="store_true")
     parser.add_argument("--headless", action="store_true")
     parser.add_argument("--mcp-http")
@@ -105,6 +106,8 @@ def parse_args(argv: list[str], hooks_compiled: bool) -> argparse.Namespace:
         raise _UsageError("--gpu-deadline-ms must be between 1 and 86400000")
     if args.test_faults and not hooks_compiled:
         raise _UsageError("--test-faults needs a Debug build (the fault hooks are not compiled in)")
+    if args.test_gpu_unavailable and not hooks_compiled:
+        raise _UsageError("--test-gpu-unavailable needs a Debug build")
     args.bind = None
     if args.mcp_http is None:
         if args.token is not None or args.allow_remote:
@@ -163,6 +166,7 @@ def main(argv: list[str], exe: str, build: str, protocol: str, hooks_compiled: b
         output_root=(args.output_root or base / "outputs").resolve(),
         crash_root=(args.crash_dir or base / "crashes").resolve(),
         test_faults=args.test_faults,
+        test_gpu_unavailable=args.test_gpu_unavailable,
         preview=args.preview,
         protocol=protocol,
     )

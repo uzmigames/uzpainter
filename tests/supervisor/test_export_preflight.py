@@ -14,7 +14,7 @@ from typing import Any
 from tests.supervisor.conftest import REPO_ROOT, Mcp
 
 SPHERE = REPO_ROOT / "parity" / "fixtures" / "tier0-semantics" / "meshes" / "sphere.obj"
-BASE = ("--gpu-backend", "vulkan")
+BASE = ("--gpu-backend", "vulkan", "--test-gpu-unavailable")
 
 
 def rgb(kind: str, name: str) -> list[dict[str, str]]:

@@ -38,6 +38,8 @@ public:
     void BeginRequest(render::EngineContext& context) { m_context = &context; }
     void EndRequest() { m_context = nullptr; }
 
+    [[nodiscard]] render::Result<ExecutionIdentity> Execution() const override;
+
     render::Result<TileHandle> Allocate(const TileFormat& format, uint32_t width,
                                         uint32_t height) override;
     void Release(TileHandle tile) override;

@@ -5,9 +5,9 @@
 // the typed plan (`uzpainter/export-plan/1`, decision 085), `export.list_project_textures(config)`
 // is the dry run in Painter's `{(texture set, stack): [files]}` shape (decision 091). `export.start`
 // queues the export of the current revision as a job: the plan is compiled and checked, every
-// file is evaluated on the CPU evaluator (the evaluator the export tests compare with Painter's
-// goldens; the revision's kept evaluation, evaluation.h, so the tiles an earlier export, capture or
-// diagnostic of the same revision computed are not computed again), encoded, and published as a
+// file is evaluated on the host's operational GPU engine, or on the kept CPU evaluation when
+// the host has no operational engine. The store records its actual execution identity. Files
+// are encoded and published as a
 // new generation under the configuration's `exportPath`
 // with its receipt (`PublishExport`, decision 097); `fixed_names` folders then receive the
 // generation's files under their fixed names (`CopyFixedNames`; `exportPath` itself gives Painter's
@@ -18,7 +18,7 @@
 // absolute, as resolved when the call that named each one ran (None when there is none), so a
 // later switch of project or of working directory does not move its sources.
 //
-// The export job checks for cancellation at every tile the CPU evaluator allocates and before
+// The export job checks for cancellation at every tile the evaluator allocates and before
 // every file it evaluates (nothing is written then), and before every fixed-name folder; its commit
 // point is the publication of the generation (`JobContext::Commit {generation, revision}`), so a
 // cancel during the fixed-name copies reports `stopped: after_commit` (jobs.h, decision 140).
@@ -28,10 +28,13 @@
 #include <windows.h>
 #include <shlobj.h>
 
+#include <algorithm>
 #include <memory>
+#include <mutex>
 
 #include "evaluator/error.h"
 #include "evaluator/evaluator.h"
+#include "evaluator/gpu_store.h"
 #include "evaluator/templates.h"
 #include "export/fixed_names.h"
 #include "export/plan.h"
@@ -50,6 +53,31 @@
 namespace uzp::python {
 
 namespace {
+
+struct ExportGpu {
+    render::Engine* engine = nullptr;
+    std::function<std::shared_ptr<render::Engine>()> createEngine;
+    std::function<render::Result<void>(render::EngineContext&)> beforeGpu;
+    std::function<void(const render::Error&)> failed;
+};
+
+std::mutex g_exportGpuMutex;
+ExportGpu g_exportGpu;
+
+ExportGpu ExportGpuOf() {
+    std::lock_guard lock(g_exportGpuMutex);
+    return g_exportGpu;
+}
+
+/// A failed wait can leave tiles in flight. As with Evaluator::Shutdown, keep their store
+/// until process exit when the engine cannot prove its last submission completed.
+struct ExportGpuTiles {
+    render::EngineContext& context;
+    std::unique_ptr<evaluator::GpuTileStore> store;
+    ~ExportGpuTiles() {
+        if (!context.Wait(context.Device().Queue().LastSubmitted())) (void)store.release();
+    }
+};
 
 std::string DefaultExportPath() {
     // Resolve redirected Documents without creating it or consulting another application's settings.
@@ -74,11 +102,13 @@ std::string ProjectPath() {
     return path ? exporter::Utf8String(*path) : std::string();
 }
 
-[[noreturn]] void RaiseRender(const render::Error& error) {
+[[noreturn]] void RaiseRender(const render::Error& error, bool gpu = false) {
     if (const std::optional<evaluator::EvalErrorKind> kind = evaluator::EvalErrorKindOf(error)) {
         throw ApiError(std::string(evaluator::ErrorClassName(*kind)), error.reason);
     }
-    throw ApiError("RuntimeError", error.reason);
+    ApiError raised("RuntimeError", gpu ? error.Describe() : error.reason);
+    if (gpu) raised.render_error = error;
+    throw raised;
 }
 
 core::json::Object WrittenJson(const exporter::WrittenFile& file) {
@@ -89,7 +119,7 @@ core::json::Object WrittenJson(const exporter::WrittenFile& file) {
             {"size", static_cast<std::int64_t>(file.size)}};
 }
 
-/// The CPU evaluator's tile store, refusing the next tile once the job was asked to stop: the
+/// The evaluator's tile store, refusing the next tile once the job was asked to stop: the
 /// evaluation then fails, and the job ends cancelled before anything is written (a tile checkpoint).
 class StoppableTileStore final : public evaluator::ITileStore {
 public:
@@ -97,6 +127,8 @@ public:
 
     /// Whether a tile was refused.
     bool stopped() const { return stopped_; }
+
+    render::Result<evaluator::ExecutionIdentity> Execution() const override { return inner_.Execution(); }
 
     render::Result<evaluator::TileHandle> Allocate(const evaluator::TileFormat& format, uint32_t width,
                                                    uint32_t height) override {
@@ -132,9 +164,10 @@ JobBody ExportBody(std::shared_ptr<OpenProject> project, core::Snapshot snapshot
     // The export's own sources, absolute, read when it is queued: the mesh from the exported
     // revision itself. A project written before the mesh source was recorded has none (None).
     std::string mesh_source = snapshot.project->mesh ? snapshot.project->mesh->source : std::string();
+    const ExportGpu gpu = ExportGpuOf();
     return [project = std::move(project), snapshot = std::move(snapshot), config = std::move(config),
             project_path = std::move(project_path), project_source = std::move(project_source),
-            mesh_source = std::move(mesh_source), fixed_names = std::move(fixed_names), diagnostic](JobContext& context) {
+            mesh_source = std::move(mesh_source), fixed_names = std::move(fixed_names), diagnostic, gpu](JobContext& context) {
         const core::Project& p = *snapshot.project;
         const exporter::ExportPlan plan = exporter::CompilePlan(p, config, exporter::PlanContext{project_path});
         exporter::CheckExportable(plan);
@@ -157,17 +190,85 @@ JobBody ExportBody(std::shared_ptr<OpenProject> project, core::Snapshot snapshot
                                 "evaluating " + plan.files[file].relativePath);
             return true;
         };
-        StoppableTileStore tiles(evaluation->cpu.store(), context);
         exporter::PublishRequest request;
         request.identity = exporter::BuildIdentity{kAppVersion, std::string("uzpainter-") + UZP_BUILD_MODE};
         request.projectPath = project_path;
         // `UzPainter.exe run --diagnostic-measure-export` only (run.h): not conformant (decision 286).
         if (diagnostic) request.diagnostic = exporter::DiagnosticMeasure{evaluation->mesh};
-        render::Result<exporter::Publication> published = exporter::PublishExport(
-            p, snapshot.revision, plan, inputs, *evaluation->templates, tiles, evaluation->cpu.cache(), request);
+        bool stopped_at_tile = false;
+        bool stopped_before_publish = false;
+        request.beforePublish = [&]() -> render::Result<void> {
+            if (!context.CancelRequested()) return {};
+            stopped_before_publish = true;
+            return render::Fail(render::ErrorCode::RequestFailed, std::nullopt, "export: cancelled before publication");
+        };
+        const auto publish = [&](evaluator::ITileStore& store, evaluator::TileCache& cache,
+                                 const exporter::PublishRequest& publication) {
+            StoppableTileStore tiles(store, context);
+            auto result = exporter::PublishExport(p, snapshot.revision, plan, inputs, *evaluation->templates,
+                                                   tiles, cache, publication);
+            stopped_at_tile = tiles.stopped();
+            return result;
+        };
+        render::Result<exporter::Publication> published = [&]() -> render::Result<exporter::Publication> {
+            // A CLI job acquires its own engine only after plan and source preflight. Keeping
+            // ownership here outlives the submitted work and its GPU tile-store cleanup.
+            const auto ownedEngine = gpu.createEngine ? gpu.createEngine() : nullptr;
+            render::Engine* engine = gpu.engine ? gpu.engine : ownedEngine.get();
+            if (!engine) return publish(evaluation->cpu.store(), evaluation->cpu.cache(), request);
+            const auto capabilities = engine->Capabilities();
+            if (!capabilities) return render::Unexpected(capabilities.error());
+            std::exception_ptr exception;
+            auto result = engine->Submit(snapshot.project,
+                [&](render::EngineContext& engineContext, const core::Project&) -> render::Result<exporter::Publication> {
+                    try {
+                        const auto allowed = request.beforePublish();
+                        if (!allowed) return render::Unexpected(allowed.error());
+                        if (gpu.beforeGpu) {
+                            const auto ready = gpu.beforeGpu(engineContext);
+                            if (!ready) return render::Unexpected(ready.error());
+                        }
+                        ExportGpuTiles tiles{engineContext, std::make_unique<evaluator::GpuTileStore>(engineContext.Device())};
+                        tiles.store->BeginRequest(engineContext);
+                        evaluator::TileCache cache(evaluator::LimitsOf(capabilities->admission));
+                        exporter::PublishRequest gpuRequest = request;
+                        gpuRequest.beforePublish = [&]() -> render::Result<void> {
+                            const auto ready = request.beforePublish();
+                            if (!ready) return ready;
+                            const auto flushed = tiles.store->Flush();
+                            if (!flushed) return flushed;
+                            if (const auto removed = engineContext.Device().CheckRemoved()) return render::Unexpected(*removed);
+                            if (render::Clock::now() >= engineContext.RequestDeadline()) {
+                                return render::Fail(render::ErrorCode::Timeout, engineContext.Device().GetBackend(),
+                                                    "export: request deadline expired before publication");
+                            }
+                            const auto remaining = std::chrono::ceil<std::chrono::milliseconds>(
+                                engineContext.RequestDeadline() - render::Clock::now());
+                            gpuRequest.lockTimeout = std::min(request.lockTimeout, remaining);
+                            return {};
+                        };
+                        auto publication = publish(*tiles.store, cache, gpuRequest);
+                        if (!publication && render::Clock::now() >= engineContext.RequestDeadline()) {
+                            return render::Fail(render::ErrorCode::Timeout, engineContext.Device().GetBackend(),
+                                                "export: request deadline expired before publication");
+                        }
+                        return publication;
+                    } catch (...) {
+                        exception = std::current_exception();
+                        return render::Fail(render::ErrorCode::RequestFailed, engineContext.Device().GetBackend(),
+                                            "export: evaluation raised an exception");
+                    }
+                }).get();
+            if (exception && (result || (result.error().code != render::ErrorCode::DeviceRemoved &&
+                                         result.error().code != render::ErrorCode::Timeout))) {
+                std::rethrow_exception(exception);
+            }
+            return result;
+        }();
         if (!published) {
-            if (stopped_at_file || tiles.stopped()) context.Checkpoint();  // nothing was written
-            RaiseRender(published.error());
+            if (gpu.failed) gpu.failed(published.error());
+            if (stopped_at_file || stopped_at_tile || stopped_before_publish) context.Checkpoint();
+            RaiseRender(published.error(), gpu.engine != nullptr || bool(gpu.createEngine));
         }
         evaluation.Keep();
         context.Commit({{"generation", published->generation},
@@ -224,6 +325,18 @@ JobHandle StartExport(const py::object& config, const std::vector<std::string>& 
 }
 
 }  // namespace
+
+void SetExportGpu(render::Engine* engine,
+                  std::function<render::Result<void>(render::EngineContext&)> beforeGpu,
+                  std::function<void(const render::Error&)> failed) {
+    std::lock_guard lock(g_exportGpuMutex);
+    g_exportGpu = {engine, {}, std::move(beforeGpu), std::move(failed)};
+}
+
+void SetExportGpuFactory(std::function<std::shared_ptr<render::Engine>()> createEngine) {
+    std::lock_guard lock(g_exportGpuMutex);
+    g_exportGpu = {nullptr, std::move(createEngine), {}, {}};
+}
 
 JobBody ExportJob(std::string config, std::vector<std::string> fixed_names) {
     if (Session::Get().TransactionOpen()) {

@@ -10,7 +10,7 @@
 //   dispatch        a cached DXIL kernel dispatched by the engine thread, read back exactly
 //   deadline        a stalled GPU queue: the wait returns `timeout` within the deadline
 //   device-removed  `ID3D12Device5::RemoveDevice`, then `device_removed {backend: dx12, ...}`
-//   unavailable     Vulkan and a missing DX12 adapter: `gpu_backend_unavailable`, no work run
+//   unavailable     injected Vulkan failure and a missing DX12 adapter; no work run
 //   capabilities    the DX12 capability report and the derived admission budget
 //   readback-layout  readback row pitch and texel layouts; the RHI's 16-bit unorm formats
 //   readback-pitch   widths 1, 3, 1023 and 4097 texels read back with unshifted rows
@@ -674,10 +674,8 @@ int RunDeviceRemoved(const fs::path& dir) {
 
 bool Loaded(const wchar_t* module) { return GetModuleHandleW(module) != nullptr; }
 
-// Two cases, neither a stand-in for the other: a DX12 adapter index that does not exist (the
-// deterministic unavailable-device fixture) and a Vulkan request, which the product path refuses
-// by design (decision 310) without loading the Vulkan loader. The qualified Vulkan device and its
-// refusal of an unqualified device are the `vulkan-*` cases (vulkan_test.cpp).
+// The Vulkan failure is injected at the engine's device boundary, independent of hardware.
+// The missing DX12 index separately checks the real factory's adapter lookup failure.
 int RunUnavailable(const fs::path& dir) {
     Check(!Loaded(L"D3D12Core.dll") && !Loaded(L"vulkan-1.dll"),
           "no GPU runtime is loaded before the test");
@@ -693,12 +691,17 @@ int RunUnavailable(const fs::path& dir) {
     missingAdapter.backend = Backend::Dx12;
     missingAdapter.adapterIndex = 64;
     const Case cases[] = {
-        {"vulkan", vulkan, Backend::Vulkan, "DX12 is not used"},
+        {"vulkan", vulkan, Backend::Vulkan, "unavailable-device fixture"},
         {"dx12 adapter 64", missingAdapter, Backend::Dx12, "no DXGI adapter at index 64"},
     };
     for (const Case& c : cases) {
         EngineOptions options = TestOptions(dir);
         options.device = c.device;
+        if (c.backend == Backend::Vulkan) {
+            options.createDevice = []() -> Result<std::unique_ptr<IDevice>> {
+                return Fail(ErrorCode::GpuBackendUnavailable, Backend::Vulkan, "unavailable-device fixture");
+            };
+        }
         Engine engine(options);
         const std::string name = c.name;
         const std::optional<Error>& error = engine.DeviceError();
@@ -730,6 +733,40 @@ int RunUnavailable(const fs::path& dir) {
 
 // ── capabilities ─────────────────────────────────────────────────────────────
 
+int RunVulkanProductFactory(const fs::path& dir) {
+    DeviceOptions missing;
+    missing.backend = Backend::Vulkan;
+    missing.adapterIndex = UINT32_MAX;
+    auto refused = CreateDevice(missing);
+    Check(!refused && refused.error().code == ErrorCode::GpuBackendUnavailable &&
+              refused.error().backend == Backend::Vulkan && !refused.error().reason.empty(),
+          "Vulkan factory refuses a missing adapter without fallback");
+    EngineOptions options = TestOptions(dir);
+    options.device.backend = Backend::Vulkan;
+    Engine engine(options);
+    if (engine.DeviceError()) {
+        Info(engine.DeviceError()->Describe());
+        Check(engine.DeviceError()->code == ErrorCode::GpuBackendUnavailable &&
+                  engine.DeviceError()->backend == Backend::Vulkan,
+              "unavailable Vulkan product factory reports its requested backend");
+        return g_failures ? Finish() : kExitSkip;
+    }
+    auto report = engine.Capabilities();
+    Check(report && report->backend == Backend::Vulkan && !report->adapter.empty() &&
+              !report->driver.empty(), "product factory reports the Vulkan adapter and driver");
+    auto submitted = engine.Submit(std::make_shared<const int>(0),
+        [](EngineContext& context, const int&) -> Result<void> {
+            if (context.Device().GetBackend() != Backend::Vulkan ||
+                context.Device().NativeKernelTarget() != KernelTarget::Spirv) {
+                return Fail(ErrorCode::RequestFailed, Backend::Vulkan, "factory selected another backend");
+            }
+            return context.SubmitAndWait([](uz::IRHICommandList&) {});
+        });
+    auto result = Get(submitted);
+    Check(result.has_value(), "product Vulkan queue submits and completes", Describe(result));
+    return Finish();
+}
+
 int RunCapabilities(const fs::path& dir) {
     Engine engine(TestOptions(dir));
     if (NoAdapter(engine)) return kExitSkip;
@@ -739,6 +776,8 @@ int RunCapabilities(const fs::path& dir) {
     std::printf("REPORT %s\n", report->ToJson().c_str());
     Check(report->backend == Backend::Dx12 && !report->adapter.empty(),
           "the report names the DX12 adapter", report->adapter);
+    Check(!report->driver.empty() && report->driver != "unknown", "the report names the active DX12 driver",
+          report->driver);
     Check(!report->softwareAdapter, "the adapter is a hardware adapter");
     Check(report->formats.size() == 31, "every RHI format is reported",
           std::to_string(report->formats.size()));
@@ -1727,6 +1766,7 @@ int main(int argc, char** argv) {
     else if (mode == "deadline") code = RunDeadline(dir);
     else if (mode == "device-removed") code = RunDeviceRemoved(dir);
     else if (mode == "unavailable") code = RunUnavailable(dir);
+    else if (mode == "vulkan-product-factory") code = RunVulkanProductFactory(dir);
     else if (mode == "capabilities") code = RunCapabilities(dir);
     else if (mode == "readback-pitch") code = RunReadbackPitch(dir);
     else if (mode == "readback-exact") code = RunReadbackExact(dir);

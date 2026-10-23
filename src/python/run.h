@@ -7,8 +7,13 @@
 //
 // `--gpu-backend <name>` is the process's backend wherever it appears among the arguments before
 // `--` (it is not passed to the script; everything after `--` is, as given); dx12 by default. The
-// host creates no device: the backend is checked and reported (`gpu_backend`); the first GPU
-// operation, a `painter_viewport` capture, creates one for its own use (decisions 111, 148).
+// host creates no device at startup. Exports acquire an owned engine after plan/source preflight;
+// `painter_viewport` captures create one per call. Both use the reported process backend.
+// Before returning, run joins active jobs and cancels still-paused queued jobs, while capturing
+// callback output; the project is closed only after those jobs and their GPU resources finish.
+// `--test-gpu-unavailable` before `--` is a Debug-only fixture: captures use an engine whose
+// device factory fails with `gpu_backend_unavailable` before loading any GPU. CPU operations
+// still run and `gpu_backend` keeps the requested backend. Release builds reject the flag.
 //
 // Output: one line `UZP_JSON:{...}` on `out`, the report of `RunScript` (script.h) with
 // `gpu_backend`: the value assigned to `result`, the script's captured stdout and stderr (with

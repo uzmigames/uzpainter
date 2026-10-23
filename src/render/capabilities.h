@@ -74,6 +74,7 @@ struct AdmissionBudget {
 struct CapabilityReport {
     Backend backend = Backend::Dx12;
     std::string adapter;
+    std::string driver = "unknown";
     uint32_t vendorId = 0;
     uint32_t deviceId = 0;
     bool softwareAdapter = false;

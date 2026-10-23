@@ -2,7 +2,7 @@
 its pipe (src/supervisor/worker.cpp; task phase2.2_supervisor-admission-ledger items 2.3-2.5,
 3.3, 3.4, 3.6; decision 138).
 
-CPU only: the workers run `--gpu-backend vulkan` (no device). `test_mutation` is the Debug-only
+CPU only: the workers use `--test-gpu-unavailable`. `test_mutation` is the Debug-only
 typed mutation under `--test-faults`: one transaction through `ProjectStore::Submit`, the path
 the typed tools of phase2.6 take.
 """
@@ -21,7 +21,15 @@ from tests.supervisor.conftest import INSERT_FILL, Pipe, make_project
 def opened(painter: Path, tmp_path: Path, pipes: list[Pipe]) -> tuple[Pipe, Path, int]:
     """A worker holding a fresh plane project; the project and its revision."""
     project = make_project(painter, tmp_path)
-    pipe = Pipe(painter, tmp_path, "--gpu-backend", "vulkan", "--allow-python", "--test-faults")
+    pipe = Pipe(
+        painter,
+        tmp_path,
+        "--gpu-backend",
+        "vulkan",
+        "--test-gpu-unavailable",
+        "--allow-python",
+        "--test-faults",
+    )
     pipes.append(pipe)
     revision = pipe.call("project_open", {"path": str(project)})["result"]["revision"]
     assert isinstance(revision, int)

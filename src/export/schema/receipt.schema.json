@@ -168,6 +168,27 @@
           }
         }
       }
+    },
+    "backend": {
+      "enum": [
+        "cpu",
+        "dx12",
+        "vulkan"
+      ]
+    },
+    "adapter": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "driver": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
     }
   },
   "$defs": {
@@ -1387,5 +1408,70 @@
         }
       ]
     }
-  }
+  },
+  "dependentRequired": {
+    "backend": [
+      "adapter",
+      "driver"
+    ],
+    "adapter": [
+      "backend",
+      "driver"
+    ],
+    "driver": [
+      "backend",
+      "adapter"
+    ]
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "backend"
+        ],
+        "properties": {
+          "backend": {
+            "const": "cpu"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "adapter": {
+            "type": "null"
+          },
+          "driver": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "backend"
+        ],
+        "properties": {
+          "backend": {
+            "enum": [
+              "dx12",
+              "vulkan"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "adapter": {
+            "type": "string",
+            "minLength": 1
+          },
+          "driver": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  ]
 }

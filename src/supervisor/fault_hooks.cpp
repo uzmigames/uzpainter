@@ -7,12 +7,14 @@
 #include "dx12_device.h"
 #include "dx12_guids.h"
 #include "render/device.h"
+#include "render/vulkan_backend.h"
 #include "store/fault.h"
 
 #include <windows.h>
 #include <wrl/client.h>
 
 #include <atomic>
+#include <charconv>
 #include <fstream>
 #include <cstdlib>
 
@@ -29,6 +31,41 @@ std::atomic<store::fault::Fault> g_save_fault{store::fault::Fault::none};
 render::Dx12Device* Dx12(render::EngineContext& context) { return dynamic_cast<render::Dx12Device*>(&context.Device()); }
 
 }  // namespace
+
+void ConfigureVulkanHeapFixture(render::EngineOptions& options) {
+    const char* value = std::getenv("UZP_TEST_VULKAN_HEAP_BYTES");
+    if (!value || options.device.backend != render::Backend::Vulkan || options.createDevice) return;
+    const std::string text(value);
+    const auto deviceOptions = options.device;
+    options.createDevice = [text, deviceOptions]() -> render::Result<std::unique_ptr<render::IDevice>> {
+        uint64_t bytes = 0;
+        const auto parsed = std::from_chars(text.data(), text.data() + text.size(), bytes);
+        if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size() || bytes == 0) {
+            return render::Fail(render::ErrorCode::GpuBackendUnavailable, render::Backend::Vulkan,
+                                "UZP_TEST_VULKAN_HEAP_BYTES must be a positive byte count");
+        }
+        auto survey = render::SurveyVulkan();
+        for (auto& record : survey.devices) {
+            record.memoryBudget = false;
+            std::erase(record.extensions, std::string("VK_EXT_memory_budget"));
+            bool assigned = false;
+            for (auto& heap : record.heaps) {
+                heap.budgetBytes = heap.usageBytes = 0;
+                // VK_MEMORY_HEAP_DEVICE_LOCAL_BIT is 0x1 in the recorded Vulkan flags.
+                if ((heap.flags & 0x1u) != 0) {
+                    heap.sizeBytes = assigned ? 0 : bytes;
+                    assigned = true;
+                }
+            }
+        }
+        const auto qualified = render::QualifyVulkan(survey, deviceOptions.adapterIndex);
+        render::VulkanDeviceOptions native;
+        native.enableValidation = deviceOptions.enableValidation;
+        auto device = render::CreateQualifiedVulkanDevice(survey, qualified, native);
+        if (!device) return render::Unexpected(device.error());
+        return std::unique_ptr<render::IDevice>(std::move(*device));
+    };
+}
 
 std::optional<Fault> Parse(std::string_view name) {
     if (name == "kill") return Fault::kill;
@@ -81,10 +118,21 @@ bool GpuFaultArmed() { return g_gpu.load() != GpuFault::none; }
 render::Result<void> InjectGpuFault(render::EngineContext& context) {
     const GpuFault fault = g_gpu.exchange(GpuFault::none);
     if (fault == GpuFault::none) return {};
+    if (auto* vulkan = dynamic_cast<render::VulkanDevice*>(&context.Device())) {
+        if (fault == GpuFault::remove_device) {
+            vulkan->InjectDeviceLoss();
+        } else {
+            // Leave the semaphore unsignalled: timeout makes the worker exit, keeping GPU
+            // resources alive until then. Dropping the callback does not signal it.
+            const auto release = vulkan->InjectQueueStall();
+            if (!release) return render::Unexpected(release.error());
+        }
+        return context.SubmitAndWait([](uz::IRHICommandList&) {});
+    }
     render::Dx12Device* device = Dx12(context);
     if (!device) {
         return render::Fail(render::ErrorCode::RequestFailed, context.Device().GetBackend(),
-                            "the GPU fault hooks need a DX12 device");
+                            "the GPU fault hooks need a DX12 or Vulkan device");
     }
     if (fault == GpuFault::remove_device) {
         Microsoft::WRL::ComPtr<ID3D12Device5> device5;

@@ -55,7 +55,8 @@ core::json::Object ResultJson(const CallResult& result) {
 
 }  // namespace
 
-core::json::Object RunScript(const std::filesystem::path& script, const std::vector<std::string>& args) {
+core::json::Object RunScript(const std::filesystem::path& script, const std::vector<std::string>& args,
+                             const std::function<void()>& complete) {
     const std::u8string u8 = script.generic_u8string();
     const std::string path(u8.begin(), u8.end());
     std::ifstream file(script, std::ios::binary);
@@ -64,10 +65,11 @@ core::json::Object RunScript(const std::filesystem::path& script, const std::vec
                 {"error", core::json::Object{{"type", "FileNotFoundError"}, {"message", "cannot read " + path}, {"traceback", ""}}}};
     }
     const std::string source{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
-    return RunSource(path, source, args);
+    return RunSource(path, source, args, complete);
 }
 
-core::json::Object RunSource(const std::string& path, const std::string& source, const std::vector<std::string>& args) {
+core::json::Object RunSource(const std::string& path, const std::string& source, const std::vector<std::string>& args,
+                             const std::function<void()>& complete) {
     py::dict scope;
     py::exec(kRunner, scope);
     Session& session = Session::Get();
@@ -77,6 +79,7 @@ core::json::Object RunSource(const std::string& path, const std::string& source,
         // Events and callbacks of operations the script started are delivered after it returned
         // (10-python-api.md §4): their output and commits belong to the run.
         py::gil_scoped_release release;
+        if (complete) complete();
         Dispatcher::Get().Drain();
     }
     const py::tuple output = scope["finish"]().cast<py::tuple>();

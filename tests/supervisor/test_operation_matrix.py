@@ -23,7 +23,7 @@ from typing import Any
 from python.uzpainter_supervisor.registry import SUPERVISOR_TOOLS, _value_maps
 from tests.supervisor.conftest import REPO_ROOT, Mcp, Pipe, make_project
 
-BASE = ("--gpu-backend", "vulkan")
+BASE = ("--gpu-backend", "vulkan", "--test-gpu-unavailable")
 TOOLS_PATH = REPO_ROOT / "tools" / "capabilities" / "mcp-tools.json"
 UPDATE_ENV = "UZP_UPDATE_MCP_TOOLS"
 DESCRIPTION = (

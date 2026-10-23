@@ -44,9 +44,9 @@ struct EngineOptions {
     std::filesystem::path dxcompiler;
     AdmissionPolicy admission;
     /// Test seam: when set, the engine thread creates its device with this instead of
-    /// `CreateDevice(device)`. Only the native tests set it, to run the engine on a qualified
-    /// Vulkan device (decision 313); product paths leave it empty, so `--gpu-backend vulkan`
-    /// still has no device (decision 310).
+    /// `CreateDevice(device)`. Native tests use a qualified Vulkan device (decision 313);
+    /// the Debug-only `--test-gpu-unavailable` fixture returns a device-creation error without
+    /// touching the GPU. Ordinary product paths leave this empty (decision 310).
     std::function<Result<std::unique_ptr<IDevice>>()> createDevice;
 };
 

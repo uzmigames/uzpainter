@@ -19,6 +19,7 @@ namespace uzp::evaluator {
 
 class CpuTileStore final : public ITileStore {
 public:
+    [[nodiscard]] render::Result<ExecutionIdentity> Execution() const override { return ExecutionIdentity{}; }
     render::Result<TileHandle> Allocate(const TileFormat& format, uint32_t width,
                                         uint32_t height) override;
     void Release(TileHandle tile) override;

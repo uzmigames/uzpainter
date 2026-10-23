@@ -25,6 +25,9 @@
 //       (decisions 286, 308) As `export`, through the diagnostic measure export (`EncodeExport`
 //       with `DiagnosticMeasure`): prints {"written": [{relativePath, path, bypassed: [refusal],
 //       undecided: texels}]} or {"error": class, "message": text}. Not conformant.
+//   uzp-export-tests export-backend <cpu|dx12|vulkan> <templates> <spec.json> <config.json>
+//       Normal WriteExport using the requested tile store; Vulkan uses the qualified native
+//       test seam only. Reports backend/adapter and real file hashes; unavailable GPU exits 77.
 //   uzp-export-tests reencode <list.txt>
 //       (phase1.16) Each line a PNG or OpenEXR file: decoded at native depth (spng; DecodeExr) and
 //       encoded again with EncodePng / EncodeExr; prints one JSON line per file {"path", "format",
@@ -79,6 +82,8 @@
 //       of the planned file `relativePath` with that negative-Z policy, `fail` when none is given
 //       (`RequestUzTextureNormal`, decision 316). `--presets` reads the shipped presets from that
 //       directory instead of the one beside the executable (an authored variant of a preset).
+//       `--execution-error <reason>` uses a CPU-delegating test store whose Execution() fails;
+//       the result includes execution_calls and tile_calls to detect work before that refusal.
 //   uzp-export-tests [--fault <point>[:<n>]] fixed-copy <exportPath> <dir>
 //       (phase1.17) `CopyFixedNames`; prints {"generation", "files": [path...]} or {"error"}.
 //   uzp-export-tests project <spec.json> <out.uzp>
@@ -116,6 +121,7 @@
 #include "evaluator/cpu_store.h"
 #include "evaluator/evaluator.h"
 #include "evaluator/formats.h"
+#include "evaluator/gpu_store.h"
 #include "evaluator/profile.h"
 #include "evaluator/sources.h"
 #include "evaluator/templates.h"
@@ -135,10 +141,12 @@
 #include "export/virtual_maps.h"
 #include "export/write.h"
 #include "mesh/mesh_import.h"
+#include "render/vulkan_backend.h"
 #include "spng.h"
 #include "store/project_store.h"
 #include "uzp_core/document/nodes.h"
 #include "uzp_core/manifest/json.h"
+#include "uzp_core/manifest/manifest.h"
 #include "uzp_core/manifest/sha256.h"
 #include "uzp_core/types/errors.h"
 #include "uzp_core/types/validation.h"
@@ -613,7 +621,7 @@ int RunFiles(const fs::path& templatesDir, const fs::path& specPath, const fs::p
 // ── Writers (phase1.16) ─────────────────────────────────────────────────────
 
 int RunExport(const fs::path& templatesDir, const fs::path& specPath, const fs::path& configPath,
-              const std::optional<fs::path>& dds = std::nullopt) {
+              const std::optional<fs::path>& dds = std::nullopt, const std::string& backend = "cpu") {
     const Spec spec = ParseSpec(specPath);
     json::Object result;
     try {
@@ -625,8 +633,62 @@ int RunExport(const fs::path& templatesDir, const fs::path& specPath, const fs::
         inputs.templateId = spec.templateId;
         inputs.resources = spec.resources;
         inputs.geometry = spec.geometry;
-        render::Result<std::vector<exporter::WrittenFile>> written =
-            exporter::WriteExport(spec.project, 1, plan, inputs, *templates, cpu.store(), cpu.cache());
+        const auto write = [&](evaluator::ITileStore& store, evaluator::TileCache& cache) {
+            return exporter::WriteExport(spec.project, 1, plan, inputs, *templates, store, cache);
+        };
+        auto written = [&]() -> render::Result<std::vector<exporter::WrittenFile>> {
+            if (backend == "cpu") return write(cpu.store(), cpu.cache());
+            if (backend != "dx12" && backend != "vulkan") throw std::invalid_argument("unknown export backend");
+            render::EngineOptions options;
+            options.kernelCacheRoot = configPath.parent_path() / ("kernel-cache-" + backend);
+            if (backend == "vulkan") {
+                options.device.backend = render::Backend::Vulkan;
+                // Native diagnostic seam only; the product factory still refuses Vulkan.
+                options.createDevice = []() -> render::Result<std::unique_ptr<render::IDevice>> {
+                    const auto survey = render::SurveyVulkan();
+                    const auto qualification = render::QualifyVulkan(survey, 0);
+                    auto device = render::CreateQualifiedVulkanDevice(survey, qualification);
+                    if (!device) return render::Unexpected(device.error());
+                    return std::unique_ptr<render::IDevice>(std::move(*device));
+                };
+            }
+            render::Engine engine(options);
+            if (engine.DeviceError()) return render::Unexpected(*engine.DeviceError());
+            const auto capabilities = engine.Capabilities();
+            if (!capabilities) return render::Unexpected(capabilities.error());
+            result["driver"] = capabilities->driver;
+            return engine.Submit(std::make_shared<const int>(0),
+                [&](render::EngineContext& context, const int&) -> render::Result<std::vector<exporter::WrittenFile>> {
+                    result["adapter"] = context.Device().AdapterName();
+                    evaluator::GpuTileStore gpu(context.Device());
+                    evaluator::TileCache cache(evaluator::AdmissionLimits{64ull << 30, 1 << 20});
+                    gpu.BeginRequest(context);
+                    auto files = write(gpu, cache);
+                    auto flushed = gpu.Flush();
+                    gpu.EndRequest();
+                    if (!flushed) return render::Unexpected(flushed.error());
+                    return files;
+                }).get();
+        }();
+        result["backend"] = backend;
+        result["project_uuid"] = "00000000-0000-4000-8000-000000000118";
+        result["revision"] = 1;
+        result["project_sha256"] = core::Sha256Hex(json::WriteCanonical(core::ProjectToJson(spec.project)));
+        result["evaluator_profile"] = spec.project.versions.evaluator_profile;
+        json::Object resourceHashes;
+        for (const auto& [hash, metadata] : spec.project.resources) resourceHashes[hash] = hash;
+        if (spec.mesh) {
+            const auto source = json::Parse(ReadText(specPath));
+            resourceHashes["texturing_mesh"] = core::Sha256Hex(ReadText(
+                fs::path(Str(Key(Obj(source, "spec"), "mesh"), "mesh"))));
+        }
+        result["resource_hashes"] = std::move(resourceHashes);
+        if (!written && written.error().code == render::ErrorCode::GpuBackendUnavailable) {
+            result["error"] = "GpuBackendUnavailable";
+            result["message"] = written.error().reason;
+            std::cout << json::WriteCanonical(result) << "\n";
+            return 77;
+        }
         if (!written) {
             result["error"] = "Failure";
             result["message"] = written.error().reason;
@@ -642,6 +704,15 @@ int RunExport(const fs::path& templatesDir, const fs::path& specPath, const fs::
             result["plan"] = exporter::PlanJson(plan);
             result["list"] = ListJson(exporter::FilesByStack(plan));
             result["written"] = std::move(files);
+            json::Array bundleFiles;
+            for (const auto& f : *written) {
+                const auto planned = std::find_if(plan.files.begin(), plan.files.end(),
+                    [&](const auto& p) { return p.relativePath == f.relativePath; });
+                if (planned != plan.files.end())
+                    bundleFiles.push_back(json::Object{{"texture_set", planned->textureSet},
+                        {"map", planned->relativePath}, {"path", f.path}, {"sha256", f.sha256}});
+            }
+            result["files"] = std::move(bundleFiles);
         }
     } catch (const core::ValueError& e) {
         result["error"] = "ValueError";
@@ -1126,9 +1197,53 @@ json::Object FailureJson(const render::Error& error) {
     return json::Object{{"error", "Failure"}, {"message", error.reason}};
 }
 
+class ExecutionFaultStore final : public evaluator::ITileStore {
+public:
+    ExecutionFaultStore(evaluator::ITileStore& delegate, std::string reason)
+        : delegate_(delegate), reason_(std::move(reason)) {}
+    render::Result<evaluator::ExecutionIdentity> Execution() const override {
+        ++executionCalls;
+        return render::Fail(render::ErrorCode::RequestFailed, std::nullopt, reason_);
+    }
+    render::Result<evaluator::TileHandle> Allocate(const evaluator::TileFormat& format,
+                                                  uint32_t width, uint32_t height) override {
+        ++tileCalls;
+        return delegate_.Allocate(format, width, height);
+    }
+    void Release(evaluator::TileHandle tile) override { ++tileCalls; delegate_.Release(tile); }
+    render::Result<void> Upload(evaluator::TileHandle tile, const evaluator::DecodedImage& image,
+                                uint32_t x0, uint32_t y0) override {
+        ++tileCalls;
+        return delegate_.Upload(tile, image, x0, y0);
+    }
+    render::Result<void> Project(const evaluator::ProjectOp& op) override {
+        ++tileCalls; return delegate_.Project(op);
+    }
+    render::Result<void> Blend(const evaluator::BlendOp& op) override {
+        ++tileCalls; return delegate_.Blend(op);
+    }
+    render::Result<void> Levels(const evaluator::LevelsOp& op) override {
+        ++tileCalls; return delegate_.Levels(op);
+    }
+    render::Result<void> VirtualNormal(const evaluator::VirtualNormalOp& op) override {
+        ++tileCalls; return delegate_.VirtualNormal(op);
+    }
+    render::Result<void> Flush() override { ++tileCalls; return delegate_.Flush(); }
+    render::Result<evaluator::TileImage> Read(evaluator::TileHandle tile) override {
+        ++tileCalls; return delegate_.Read(tile);
+    }
+    uint64_t AllocatedBytes() const override { ++tileCalls; return delegate_.AllocatedBytes(); }
+    mutable std::int64_t executionCalls = 0;
+    mutable std::int64_t tileCalls = 0;
+private:
+    evaluator::ITileStore& delegate_;
+    std::string reason_;
+};
+
 int RunPublish(const fs::path& templatesDir, const fs::path& specPath, const fs::path& configPath,
                const std::optional<std::string>& uztexture, const std::optional<fs::path>& presets,
-               const std::optional<fs::path>& dds) {
+               const std::optional<fs::path>& dds, const std::optional<std::string>& executionError,
+               const std::optional<std::string>& publicationCheckpoint) {
     Spec spec = ParseSpec(specPath);
     const json::Value document = json::Parse(ReadText(specPath));
     const json::Object& o = Obj(document, "spec");
@@ -1171,8 +1286,21 @@ int RunPublish(const fs::path& templatesDir, const fs::path& specPath, const fs:
         exporter::PublishRequest request;
         request.identity = {"0.0.0-test", "uzp-export-tests"};
         request.projectPath = "C:/projects/fixture.uzp";
+        std::int64_t checkpointCalls = 0;
+        if (publicationCheckpoint) {
+            const int failAt = std::stoi(*publicationCheckpoint);
+            request.beforePublish = [&, failAt]() -> render::Result<void> {
+                if (++checkpointCalls == failAt) {
+                    return render::Fail(render::ErrorCode::RequestFailed, std::nullopt,
+                                        "test-only publication checkpoint failure");
+                }
+                return {};
+            };
+        }
+        ExecutionFaultStore faultStore(cpu.store(), executionError.value_or(""));
+        evaluator::ITileStore& tileStore = executionError ? static_cast<evaluator::ITileStore&>(faultStore) : cpu.store();
         render::Result<exporter::Publication> published =
-            exporter::PublishExport(spec.project, 1, plan, inputs, *templates, cpu.store(), cpu.cache(), request);
+            exporter::PublishExport(spec.project, 1, plan, inputs, *templates, tileStore, cpu.cache(), request);
         if (!published) {
             result = FailureJson(published.error());
         } else {
@@ -1187,6 +1315,11 @@ int RunPublish(const fs::path& templatesDir, const fs::path& specPath, const fs:
             result["generation"] = published->generation;
             result["receipt_sha256"] = published->receiptSha256;
             result["files"] = std::move(files);
+        }
+        if (publicationCheckpoint) result["checkpoint_calls"] = checkpointCalls;
+        if (executionError) {
+            result["execution_calls"] = faultStore.executionCalls;
+            result["tile_calls"] = faultStore.tileCalls;
         }
     } catch (const core::ValueError& e) {
         result["error"] = "ValueError";
@@ -1452,14 +1585,18 @@ int main(int argc, char** argv) {
             std::optional<std::string> uztexture;
             std::optional<fs::path> presets;
             std::optional<fs::path> dds;
+            std::optional<std::string> executionError;
+            std::optional<std::string> publicationCheckpoint;
             bool known = true;
             for (size_t i = 4; i < args.size(); i += 2) {
                 if (args[i] == "--uztexture") uztexture = args[i + 1];
                 else if (args[i] == "--presets") presets = fs::path(args[i + 1]);
                 else if (args[i] == "--dds") dds = fs::path(args[i + 1]);
+                else if (args[i] == "--execution-error") executionError = args[i + 1];
+                else if (args[i] == "--publication-checkpoint") publicationCheckpoint = args[i + 1];
                 else known = false;
             }
-            if (known) return RunPublish(args[1], args[2], args[3], uztexture, presets, dds);
+            if (known) return RunPublish(args[1], args[2], args[3], uztexture, presets, dds, executionError, publicationCheckpoint);
         }
         if (args.size() == 3 && args[0] == "fixed-copy") return RunFixedCopy(args[1], args[2]);
         if (args.size() == 3 && args[0] == "project") return RunProject(args[1], args[2]);
@@ -1481,6 +1618,8 @@ int main(int argc, char** argv) {
         if (args.size() == 2 && args[0] == "plan") return RunPlan(args[1]);
         if (args.size() == 5 && args[0] == "files") return RunFiles(args[1], args[2], args[3], args[4]);
         if (args.size() == 4 && args[0] == "export") return RunExport(args[1], args[2], args[3]);
+        if (args.size() == 5 && args[0] == "export-backend")
+            return RunExport(args[2], args[3], args[4], std::nullopt, args[1]);
         if (args.size() == 6 && args[0] == "export" && args[4] == "--dds") {
             return RunExport(args[1], args[2], args[3], fs::path(args[5]));
         }
@@ -1500,7 +1639,8 @@ int main(int argc, char** argv) {
                  "export <templates> <spec.json> <config.json> | "
                  "export-diagnostic <templates> <spec.json> <config.json> | reencode <list.txt> | roundtrip <out> | "
                  "[--fault <point>[:<n>]] publish <templates> <spec.json> <config.json> "
-                 "[--uztexture <relativePath>[:fail|:rgb]] [--presets <dir>] [--dds <requests.json>] | "
+                 "[--uztexture <relativePath>[:fail|:rgb]] [--presets <dir>] [--dds <requests.json>] "
+                 "[--execution-error <reason>] [--publication-checkpoint <call>] | "
                  "[--fault <point>[:<n>]] fixed-copy <exportPath> <dir> | consume-pinned <exportPath> | "
                  "consume-locked <exportPath> <dir> | receipt <project.json> <config.json> [<preset dir>] | hold-lock <exportPath> <ms> | recover --recover <exportPath> [--fixed-names <dir>]... | "
                  "presets <preset dir> <references.json> | aliases\n";

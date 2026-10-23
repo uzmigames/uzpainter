@@ -22,7 +22,7 @@ project. A worker without a preview gives the baseline; workers with the preview
   `uzpainter://capabilities` publishes, phase2.6_mcp-typed-tool-families item 2.9) and is
   refused by the worker's `capture` before any work.
 
-Local run on the owner's machine (decision 028): it needs a DX12 adapter and a desktop session
+Local run on the owner's machine (decision 028): it needs a GPU adapter and a desktop session
 (the windows open on a private desktop nobody sees, decision 252), and the UzmiGames asset
 repository at `E:\\UzmiGames\\Assets3D` (or `UZP_TEST_ASSETS3D`).
 """
@@ -44,7 +44,14 @@ import pytest
 
 from tests.adapters.assets3d.wand import ASSETS3D, Wand
 from tests.desktop import PrivateDesktop
-from tests.preview.conftest import JSON_PREFIX, NO_GPU, OCIO_CONFIG, ocio_bundle
+from tests.preview.conftest import (
+    BACKEND,
+    JSON_PREFIX,
+    NO_GPU,
+    OCIO_CONFIG,
+    ocio_bundle,
+    require_gpu,
+)
 from tests.preview.conftest import PreviewSettling as Settling
 from tests.preview.test_preview_window import (
     INSERT_FILL,
@@ -62,7 +69,7 @@ SEMANTICS = REPO_ROOT / "parity" / "semantics" / "export-processing.json"
 
 pytestmark = [
     pytest.mark.skipif(
-        NO_GPU, reason="UZP_NO_GPU=1: needs a DX12 adapter and a desktop session (decision 028)"
+        NO_GPU, reason="UZP_NO_GPU=1: needs a GPU adapter and a desktop session (decision 028)"
     ),
     pytest.mark.skipif(
         not (ASSETS3D / "AGENTS.md").is_file(),
@@ -70,7 +77,7 @@ pytestmark = [
     ),
 ]
 
-WORKER = ("--gpu-backend", "dx12", "--allow-python", "--test-faults")
+WORKER = ("--gpu-backend", BACKEND, "--allow-python", "--test-faults")
 # One export of the wand on the Debug worker's CPU evaluator takes about 7.5 minutes, 6.6 of them
 # its BaseColor (measured 2026-10-12), so the full scenarios run longer than an agent's 10-minute
 # test budget: they belong to the coordinator's batch. `UZP_PREVIEW_WAND_QUICK=1` leaves BaseColor
@@ -136,12 +143,11 @@ def hashes(files: dict[str, str]) -> dict[str, str]:
 
 
 def viewport(pipe: Pipe, path: str, revision: int) -> None:
-    """A `painter_viewport` capture of the open project's `revision` on the worker's DX12 device,
-    under Painter's substance config."""
+    """Capture the open revision on the selected device under Painter's substance config."""
     reply = pipe.call("capture", {"mode": "painter_viewport", "path": path, "size": [96, 64]})
     assert "error" not in reply, reply
     receipt = reply["result"]
-    assert receipt["revision"] == revision and receipt["backend"] == "dx12"
+    assert receipt["revision"] == revision and receipt["backend"] == BACKEND
     assert receipt["display_configuration"]["config_sha256"] == OCIO_CONFIG
     assert sha256(receipt["files"]["png"]) == receipt["hashes"]["png"]
 
@@ -176,9 +182,11 @@ class Session:
         shutil.copyfile(project, copy)
         self.root = root
         self.pipe = Pipe(painter, root, *WORKER, *extra, desktop=desktop)
-        if self.pipe.handshake["gpu_status"] != "ready":
+        try:
+            require_gpu(self.pipe)
+        except BaseException:
             self.pipe.close()
-            pytest.skip("no DX12 device on this machine")
+            raise
         opened = self.pipe.call("project_open", {"path": str(copy)})
         assert "error" not in opened, opened
         self.revision = opened["result"]["revision"]

@@ -498,6 +498,9 @@ public:
     }
 
     WaitResult Wait(uint64_t value, Deadline deadline) override {
+#if defined(UZP_WORKER_FAULT_HOOKS)
+        if (std::exchange(m_injectDeviceLoss, false)) m_lostReason = VK_ERROR_DEVICE_LOST;
+#endif
         if (m_lostReason) return {WaitStatus::DeviceLost, *m_lostReason};
         if (m_refused && value >= m_refused->value) return {WaitStatus::DeviceLost, m_refused->result};
         const uz::FenceWaitResult wait = m_fence->WaitCPU(value, deadline);
@@ -529,6 +532,10 @@ public:
     void Abandon() { m_abandoned = true; }
 
     void ArmStall(VkSemaphore semaphore) { m_stall = semaphore; }
+
+#if defined(UZP_WORKER_FAULT_HOOKS)
+    void ArmDeviceLoss() { m_injectDeviceLoss = true; }
+#endif
 
 private:
     struct InFlight {
@@ -585,6 +592,9 @@ private:
     std::optional<RefusedSignal> m_refused;
     std::optional<int32_t> m_partial;
     bool m_abandoned = false;
+#if defined(UZP_WORKER_FAULT_HOOKS)
+    bool m_injectDeviceLoss = false;
+#endif
 };
 
 // ── Device ───────────────────────────────────────────────────────────────────
@@ -822,5 +832,9 @@ Result<std::function<void()>> VulkanDevice::InjectQueueStall() {
         signal(device, &info);
     });
 }
+
+#if defined(UZP_WORKER_FAULT_HOOKS)
+void VulkanDevice::InjectDeviceLoss() { m_queue->ArmDeviceLoss(); }
+#endif
 
 }  // namespace uzp::render

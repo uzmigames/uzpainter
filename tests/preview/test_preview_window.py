@@ -2,9 +2,9 @@
 (`UzPainter.exe --worker ... --preview`) and the standalone `UzPainter.exe --preview <file.uzp>`
 (src/preview/preview.h, src/preview/cli.h).
 
-The worker runs on DX12 with its own engine; the preview thread has a second device. The cases
-open a real window, so they need a desktop session and skip under `UZP_NO_GPU=1` (hosted CI,
-decision 028). The window opens on a private desktop nobody sees (`tests/desktop.py`, decision
+The worker runs on the selected backend with its own engine; the preview thread has a second
+device. The cases need a desktop session and skip under `UZP_NO_GPU=1` (hosted CI, decision 028).
+The window opens on a private desktop nobody sees (`tests/desktop.py`, decision
 252), so a run never puts it on the owner's screen; only the anti-flicker case, which reads the
 screen, opens it there, and only when the owner asks for it with `UZP_SCREEN_TESTS=1`. The test
 process is the worker's supervisor (tests/supervisor/conftest.py `Pipe`); the stall hook is the
@@ -30,15 +30,15 @@ import numpy.typing as npt
 import pytest
 
 from tests.desktop import PrivateDesktop, WindowRecorder, visible_windows
-from tests.preview.conftest import ENVIRONMENT, NO_GPU, SPHERE, ocio_bundle
+from tests.preview.conftest import BACKEND, ENVIRONMENT, NO_GPU, SPHERE, ocio_bundle, require_gpu
 from tests.supervisor.conftest import JSON_PREFIX, Pipe, make_project
 
 pytestmark = pytest.mark.skipif(
-    NO_GPU, reason="UZP_NO_GPU=1: needs a DX12 adapter and a desktop session (decision 028)"
+    NO_GPU, reason="UZP_NO_GPU=1: needs a GPU adapter and a desktop session (decision 028)"
 )
 ON_SCREEN = os.environ.get("UZP_SCREEN_TESTS") == "1" and os.environ.get("UZP_HEADLESS") != "1"
 
-WORKER = ("--gpu-backend", "dx12", "--allow-python", "--test-faults")
+WORKER = ("--gpu-backend", BACKEND, "--allow-python", "--test-faults")
 TITLE = "UzPainter preview"
 SW_MINIMIZE = 6
 SW_RESTORE = 9
@@ -155,8 +155,7 @@ def baseline(painter: Path, tmp_path: Path, project: Path, pipes: list[Pipe]) ->
     """The same work in a worker without a preview."""
     pipe = Pipe(painter, tmp_path, *WORKER)
     pipes.append(pipe)
-    if pipe.handshake["gpu_status"] != "ready":
-        pytest.skip("no DX12 device on this machine")
+    require_gpu(pipe)
     run = Run(pipe, project, tmp_path / "export-baseline")
     first = run.evaluate("BaseColor")
     run.python(INSERT_FILL)
@@ -263,8 +262,7 @@ def test_the_previews_evaluation_never_delays_or_changes_the_workers_results(
 
     pipe = Pipe(painter, tmp_path, *WORKER)
     pipes.append(pipe)
-    if pipe.handshake["gpu_status"] != "ready":
-        pytest.skip("no DX12 device on this machine")
+    require_gpu(pipe)
     run = Run(pipe, copies[0], tmp_path / "export-baseline")
     first = run.evaluate("BaseColor")
     run.python(INSERT_FILL)
@@ -525,8 +523,7 @@ def test_window_presents_only_complete_frames(
     bundle = ocio_bundle(painter, tmp_path / "fixture")
     pipe = Pipe(painter, tmp_path, *WORKER, "--preview")
     pipes.append(pipe)
-    if pipe.handshake["gpu_status"] != "ready":
-        pytest.skip("no DX12 device on this machine")
+    require_gpu(pipe)
     (hwnd,) = wait_for(lambda: windows_of(pipe.process.pid, None))
     run = Run(pipe, bundle, tmp_path / "export")
     run.evaluate("BaseColor")
@@ -591,8 +588,7 @@ def test_a_new_evaluation_of_the_same_mesh_keeps_the_camera(
     bundle = ocio_bundle(painter, tmp_path / "fixture")
     pipe = Pipe(painter, tmp_path, *WORKER, "--preview", desktop=desktop)
     pipes.append(pipe)
-    if pipe.handshake["gpu_status"] != "ready":
-        pytest.skip("no DX12 device on this machine")
+    require_gpu(pipe)
     wait_for(lambda: status(pipe)["window_open"])
     run = Run(pipe, bundle, tmp_path / "export")
     wait_for(lambda: status(pipe)["revision_shown"] == run.revision)
@@ -628,8 +624,7 @@ def test_the_attached_preview_shows_the_committed_revision(
     bundle = ocio_bundle(painter, tmp_path / "fixture")
     pipe = Pipe(painter, tmp_path, *WORKER, "--preview", desktop=desktop)
     pipes.append(pipe)
-    if pipe.handshake["gpu_status"] != "ready":
-        pytest.skip("no DX12 device on this machine")
+    require_gpu(pipe)
     wait_for(lambda: status(pipe)["window_open"])
 
     def shown(revision: int) -> None:
@@ -677,7 +672,7 @@ def test_standalone_preview_opens_and_closes(
     recorder = WindowRecorder(desktop.handle).start()
     env = {k: v for k, v in os.environ.items() if k != "UZP_HEADLESS"}
     process = desktop.spawn(
-        [str(painter), "--preview", str(project), "--gpu-backend", "dx12"], capture=True, env=env
+        [str(painter), "--preview", str(project), "--gpu-backend", BACKEND], capture=True, env=env
     )
     try:
         (hwnd,) = wait_for(lambda: windows_of(process.pid, desktop))

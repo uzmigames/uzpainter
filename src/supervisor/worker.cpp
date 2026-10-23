@@ -75,7 +75,7 @@ namespace {
 constexpr const char* kUsage =
     "usage: UzPainter.exe --worker --pipe \\\\.\\pipe\\uzpainter-<supervisor-pid>-<n> --gpu-backend dx12|vulkan\n"
     "                     [--allow-python] [--gpu-deadline-ms <ms>] [--output-root <dir>] [--crash-dir <dir>]\n"
-    "                     [--connect-timeout-ms <ms>] [--test-faults] [--preview]\n";
+    "                     [--connect-timeout-ms <ms>] [--test-faults] [--test-gpu-unavailable] [--preview]\n";
 
 constexpr std::string_view kPipePrefix = "\\\\.\\pipe\\uzpainter-";
 
@@ -89,6 +89,7 @@ struct Options {
     std::filesystem::path output_root;
     std::filesystem::path crash_dir;
     bool test_faults = false;
+    bool test_gpu_unavailable = false;
     /// Attach the preview window (src/preview/preview.h) to this worker.
     bool preview = false;
 };
@@ -121,6 +122,12 @@ std::optional<Options> Parse(const std::vector<std::string>& args, std::string& 
             options.allow_python = true;
         } else if (arg == "--test-faults") {
             options.test_faults = true;
+        } else if (arg == "--test-gpu-unavailable") {
+            if (options.test_gpu_unavailable) {
+                error = "--test-gpu-unavailable may only be given once";
+                return std::nullopt;
+            }
+            options.test_gpu_unavailable = true;
         } else if (arg == "--preview") {
             options.preview = true;
         } else if (arg == "--pipe" || arg == "--gpu-backend" || arg == "--gpu-deadline-ms" || arg == "--output-root" ||
@@ -298,18 +305,37 @@ public:
     using Emit = std::function<void(const json::Object& frame)>;
 
     Worker(const Options& options, render::Engine& engine, JobControl& jobs, Emit emit, preview::PreviewHost* host,
-           preview::AttachedEvaluation* evaluation)
+           preview::AttachedEvaluation* evaluation, std::function<void()> wake)
         : m_options(options),
           m_engine(engine),
           m_jobs(jobs),
           m_emit(std::move(emit)),
+          m_wake(std::move(wake)),
           m_previewHost(host),
           m_previewEvaluation(evaluation) {
+        python::SetExportGpu(engine.DeviceError() ? nullptr : &engine,
+            [](render::EngineContext& context) -> render::Result<void> {
+#if defined(UZP_WORKER_FAULT_HOOKS)
+                return fault::InjectGpuFault(context);
+#else
+                (void)context;
+                return {};
+#endif
+            }, [this](const render::Error& error) {
+                if (error.code == render::ErrorCode::DeviceRemoved || error.code == render::ErrorCode::Timeout) {
+                    m_exportGpuFault = true;
+                    m_wake();
+                }
+            });
+        const auto capabilities = engine.Capabilities();
+        python::Session::Get().SetAdmissionLimits(
+            capabilities ? std::optional{evaluator::LimitsOf(capabilities->admission)} : std::nullopt);
         DefineTools();
     }
 
     /// The reply to one request frame.
     json::Object Handle(const json::Object& request);
+    bool ExportGpuFaulted() const { return m_exportGpuFault.load(); }
 
     /// Set by a call after which the worker must exit (after its reply).
     std::optional<int> exit_after_reply;
@@ -366,6 +392,7 @@ private:
     render::Engine& m_engine;
     JobControl& m_jobs;
     const Emit m_emit;
+    const std::function<void()> m_wake;
     std::vector<Tool> m_tools;
     std::map<std::string, Handler, std::less<>> m_handlers;
     /// A long tool: it runs as a job (`RunJob`), reports progress and can be cancelled. Its commit
@@ -378,6 +405,7 @@ private:
     std::map<std::string, LongTool, std::less<>> m_job_handlers;
     /// The receipt of the long job the call being handled ran (the reply's `job`).
     std::optional<json::Object> m_job_receipt;
+    std::atomic<bool> m_exportGpuFault{false};
     std::unique_ptr<evaluator::Evaluator> m_evaluator;
     std::uint64_t m_payloads = 0;
     /// The attached preview (`--preview`): its window, for `preview_status` and the stall hook. It is
@@ -774,6 +802,8 @@ json::Object Worker::Call(const json::Value& id, const json::Object& request) {
     m_job_receipt.reset();
     json::Object reply = Execute(id, request, *tool, arguments);
     if (m_job_receipt) reply["job"] = std::move(*m_job_receipt);
+    // A script may catch RuntimeError, but it cannot make a failed GPU usable again.
+    if (m_exportGpuFault.load()) exit_after_reply = kWorkerExitDeviceFault;
     return reply;
 }
 
@@ -852,7 +882,12 @@ json::Object Worker::RunJob(const json::Object& request, const Tool& tool, pytho
                                      {"committed_revision", CommittedRevision() ? json::Value(*CommittedRevision())
                                                                                 : json::Value(nullptr)}}};
     }
-    return job->Result();  // rethrows the error that failed it
+    try {
+        return job->Result();  // rethrows the error that failed it
+    } catch (const python::ApiError& error) {
+        if (error.render_error) FailRender(*error.render_error);
+        throw;
+    }
 }
 
 /// `worker/operations {after}`: what the supervisor reconciles its ledger from after a restart
@@ -1671,9 +1706,20 @@ public:
         }
         m_ready.notify_one();
     }
-    json::Object Pop() {
+    void Wake() {
+        {
+            std::lock_guard lock(m_mutex);
+            m_woken = true;
+        }
+        m_ready.notify_one();
+    }
+    std::optional<json::Object> Pop() {
         std::unique_lock lock(m_mutex);
-        m_ready.wait(lock, [this] { return !m_frames.empty(); });
+        m_ready.wait(lock, [this] { return m_woken || !m_frames.empty(); });
+        if (m_woken) {
+            m_woken = false;
+            return std::nullopt;
+        }
         json::Object frame = std::move(m_frames.front());
         m_frames.pop_front();
         return frame;
@@ -1683,6 +1729,7 @@ private:
     std::mutex m_mutex;
     std::condition_variable m_ready;
     std::deque<json::Object> m_frames;
+    bool m_woken = false;
 };
 
 /// The reply to `worker/cancel {job_id}`: `{job_id, acknowledged: true, state}` (JobControl::Cancel).
@@ -1721,6 +1768,10 @@ int RunWorkerCommand(const std::vector<std::string>& args, std::FILE* err) {
         std::fprintf(err, "UzPainter.exe --worker: --test-faults needs a Debug build (the fault hooks are not compiled in)\n");
         return kWorkerExitUsage;
     }
+    if (options.test_gpu_unavailable && !FaultHooksCompiled()) {
+        std::fprintf(err, "UzPainter.exe --worker: --test-gpu-unavailable needs a Debug build (the fault hooks are not compiled in)\n");
+        return kWorkerExitUsage;
+    }
     if (options.preview && preview::Headless()) {
         std::fprintf(err, "UzPainter.exe --worker: %s\n", preview::kHeadlessRefusal);
         return kWorkerExitUsage;
@@ -1744,6 +1795,15 @@ int RunWorkerCommand(const std::vector<std::string>& args, std::FILE* err) {
     render::EngineOptions engine_options;
     engine_options.device.backend = options.backend;
     engine_options.requestDeadline = options.gpu_deadline;
+#if defined(UZP_WORKER_FAULT_HOOKS)
+    if (options.test_faults) fault::ConfigureVulkanHeapFixture(engine_options);
+    if (options.test_gpu_unavailable) {
+        engine_options.createDevice = [backend = options.backend]() -> render::Result<std::unique_ptr<render::IDevice>> {
+            return render::Fail(render::ErrorCode::GpuBackendUnavailable, backend,
+                                "device creation disabled by --test-gpu-unavailable");
+        };
+    }
+#endif
     render::Engine engine(engine_options);
     if (const std::optional<render::Error>& unavailable = engine.DeviceError()) {
         std::fprintf(err, "UzPainter.exe --worker: %s\n", unavailable->Describe().c_str());
@@ -1828,11 +1888,15 @@ int RunWorkerCommand(const std::vector<std::string>& args, std::FILE* err) {
         [reader_pipe](const json::Object& frame) {
             if (!reader_pipe->Write(EncodeFrame(frame))) Exit(kWorkerExitSupervisorGone);
         },
-        preview_host.get(), preview_evaluation.get());
+        preview_host.get(), preview_evaluation.get(), [&inbox] { inbox.Wake(); });
     // The interpreter's thread holds the GIL only while Python runs (`run_python`).
     pybind11::gil_scoped_release release;
     for (;;) {
-        const json::Object request = inbox.Pop();
+        const auto pending = inbox.Pop();
+        // Background Python exports can fail after their run_python reply was sent.
+        if (worker.ExportGpuFaulted()) Exit(kWorkerExitDeviceFault);
+        if (!pending) continue;
+        const json::Object& request = *pending;
         json::Object reply = worker.Handle(request);
 #if defined(UZP_WORKER_FAULT_HOOKS)
         if (StringField(request, "name") != "test_fault" && fault::TakeKillBeforeReply()) fault::KillNow();

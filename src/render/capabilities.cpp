@@ -144,6 +144,12 @@ Result<CapabilityReport> QueryDx12(Dx12Device& device, const AdmissionPolicy& po
     DXGI_ADAPTER_DESC1 desc{};
     adapter->GetDesc1(&desc);
     report.adapter = Utf8(desc.Description);
+    LARGE_INTEGER driver{};
+    if (SUCCEEDED(adapter->CheckInterfaceSupport(__uuidof(IDXGIDevice), &driver))) {
+        const uint64_t version = static_cast<uint64_t>(driver.QuadPart);
+        report.driver = std::to_string(version >> 48) + "." + std::to_string((version >> 32) & 0xFFFF) + "." +
+                        std::to_string((version >> 16) & 0xFFFF) + "." + std::to_string(version & 0xFFFF);
+    }
     report.vendorId = desc.VendorId;
     report.deviceId = desc.DeviceId;
     report.softwareAdapter = (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0;
@@ -231,6 +237,7 @@ std::string CapabilityReport::ToJson() const {
     std::string json = "{";
     json += "\"backend\":" + JsonString(BackendName(backend));
     json += ",\"adapter\":" + JsonString(adapter);
+    json += ",\"driver\":" + JsonString(driver);
     json += ",\"vendor_id\":" + JsonString(Hex(vendorId, 4));
     json += ",\"device_id\":" + JsonString(Hex(deviceId, 4));
     json += std::string(",\"software_adapter\":") + JsonBool(softwareAdapter);

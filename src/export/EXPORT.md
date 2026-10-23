@@ -253,6 +253,7 @@ Task `phase1.17_export-publication-receipts`. Tests: `tests/export/test_export_p
   4. It renames `current.json.uzp-staging` over `current.json`. The pointer is `{schema: uzpainter/export-current/1, generation, receipt, receipt_sha256}`.
 
   A failure before the rename removes the new generation and returns an `export:` failure. The previous generation stays selected. An encoder that throws is caught, so the host keeps running. A refusal (`ValueError`, `NotYetSupported`) happens before anything is written.
+  Before evaluation or any filesystem change, it resolves the tile store's execution identity. An unavailable GPU identity fails the request without evaluating tiles, creating an output directory, or changing an existing generation.
 - **Completeness.** A generation is complete when:
   - its receipt reads as a receipt of that generation;
   - `plan.json` hashes to the receipt's plan hash;
@@ -272,6 +273,7 @@ Task `phase1.17_export-publication-receipts`. Tests: `tests/export/test_export_p
   - **`manifest_export`.** The Assets3D block in the form of `manifest-schema-v2.json` `$defs/export`, replacing v1's `exportacao`. `manifest_files` holds the `files` entries its keys name. Their paths are relative to the generation; the pipeline adapter rebases them. The block is null when the export writes no file.
   - **Resources.** `resource_hashes` lists the resources the files read: bitmaps of the read channel DAGs, a diagnostic material's masks, the mesh maps read, and the texturing mesh (its file and the files it reads beside it, such as a glTF's buffers).
   - **Identity.** `app_version` and `build` come from the caller (`PublishRequest::identity`).
+  - **Execution.** `backend`, `adapter` and `driver` come from the tile store that evaluated the export. CPU receipts use `backend: cpu` with null adapter and driver. GPU receipts identify the active device and refuse missing or unknown identities. DX12 resolves the device's adapter by LUID; Vulkan uses its physical-device record. Historical receipts without all three fields remain readable; new receipts always contain the complete trio. Capture receipts use the same capability identity.
   - **Colour space.** `colour_space` states what the file stores: `sRGB` when every colour channel (all but A) is written sRGB-encoded, `linear` when none is, and `mixed` otherwise. For example, an L8 BaseColor's RGB file holds sRGB, linear, sRGB (decision 204). Each image channel also states its `transfer`. Only a PNG writes sRGB-encoded values (decision 126), and the luma of an sRGB8 colour channel is one of them. Until phase3.2_uze-uzmat-preset every receipt said `linear`, so the files that change are exactly the sRGB-encoded PNGs (`test_receipt_colour_space_follows_the_written_encoding`).
   - **Consumer gaps.** A SpecularWeight map carries the consumer gap of `08-export.md` §4.
 - **`.uztexture` normal derivative** (phase3.1_uze-uztexture-writer items 2.7 and 3.5, decision 316).
@@ -288,6 +290,8 @@ Task `phase1.17_export-publication-receipts`. Tests: `tests/export/test_export_p
 ## 7. The end-to-end export (decision 104)
 
 Task `phase1.18_export-engine`. Tests: `tests/export/test_export_engine.py`.
+
+This command uses the CPU store. Python exports through `UzPainter.exe run` use the selected GPU after plan and source preflight (decision 357, `src/python/PYAPI.md`): DX12 by default, or explicit `--gpu-backend dx12|vulkan`, without CPU fallback after a GPU failure. Its Debug unavailable-device fixture explicitly selects CPU export. Every route records the tile store's actual execution identity in the receipt.
 
 `UzPainter.exe export <file.uzp> --config <config.json> --app-version <version> --build <id>` (`ExportProject`):
 

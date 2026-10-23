@@ -86,6 +86,7 @@ struct ReceiptInputs {
     std::string projectPath;
     BuildIdentity identity;
     std::set<std::string> resourceHashes;
+    evaluator::ExecutionIdentity execution{};
 };
 
 /// The receipt (see above).

@@ -365,6 +365,8 @@ render::Result<Publication> PublishExport(const core::Project& project, std::int
     if (request.identity.appVersion.empty() || request.identity.build.empty()) {
         return Fail("a publication needs the application's version and build (ARC-11)");
     }
+    const render::Result<evaluator::ExecutionIdentity> execution = store.Execution();
+    if (!execution) return render::Unexpected(execution.error());
     // 1. Everything encoded in memory: a refusal or a failure writes nothing.
     render::Result<std::vector<EncodedFile>> encoded =
         EncodeExport(project, revision, plan, inputs, templates, store, cache,
@@ -373,9 +375,18 @@ render::Result<Publication> PublishExport(const core::Project& project, std::int
     render::Result<std::set<std::string>> resources = ReadResourceHashes(project, plan, templates, inputs.templateId);
     if (!resources) return render::Unexpected(resources.error());
 
+    if (request.beforePublish) {
+        const render::Result<void> ready = request.beforePublish();
+        if (!ready) return render::Unexpected(ready.error());
+    }
+
     const fs::path exportPath = Utf8Path(plan.exportPath);
     render::Result<PublicationLock> lock = PublicationLock::Acquire(exportPath, request.lockTimeout);
     if (!lock) return render::Unexpected(lock.error());
+    if (request.beforePublish) {
+        const render::Result<void> ready = request.beforePublish();
+        if (!ready) return render::Unexpected(ready.error());
+    }
 
     // 2. A new generation, claimed by creating its directory.
     std::error_code error;
@@ -470,7 +481,7 @@ render::Result<Publication> PublishExport(const core::Project& project, std::int
 #endif
     const std::string receiptText = json::WriteCanonical(BuildReceipt({project, revision, plan, *encoded, id,
                                                                        MomentNow(), request.projectPath,
-                                                                       request.identity, std::move(*resources)}));
+                                                                       request.identity, std::move(*resources), *execution}));
     render::Result<void> receiptWritten = WriteDurable(directory / "receipt.json", receiptText);
     if (!receiptWritten) return failed(receiptWritten.error());
 #if defined(UZP_EXPORT_FAULT_HOOKS)

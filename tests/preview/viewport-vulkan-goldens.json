@@ -1,0 +1,49 @@
+{
+  "schema": "uzpainter/preview/vulkan-regression/1",
+  "purpose": "UzPainter per-backend viewport regression only; not Painter parity or cross-backend equality.",
+  "entries": [
+    {
+      "acceptance": false,
+      "adapter": "NVIDIA GeForce RTX 4090",
+      "backend": "vulkan",
+      "driver": "617.14.0.0",
+      "fixtures": {
+        "bevelled-cube": {
+          "display_sha256": "ca0f87909e3174e52e7d0509bc964b3ae51ed52b6e1f8f76484b6c970d5da130",
+          "linear_sha256": "09ffb179af9f65582ff14df25bb8991fbae83077bc533241ba4a0b0cea044e6e"
+        },
+        "cube-on-plane": {
+          "display_sha256": "25df8cd04b35aa5bded8da8fc32a681049b92763128e0de2d339f16a19ea83c8",
+          "linear_sha256": "90b9cbaa601f8acbcbf7fd6bd69e8e5c711cfc0cbb0dec8e7a0b097a045d70f8"
+        },
+        "plane": {
+          "display_sha256": "eef1621d8fa79427a0b72c555dd803e25101ca317ca7c8f772e5d9b4bc702820",
+          "linear_sha256": "483fdc408af9816afb34009bb341684367b3bbdaece2b7fd0948b94fe0d38734"
+        },
+        "sphere": {
+          "display_sha256": "2606a0424b5d41970183b3a0432099e4853c8977cf9e7d46ec03d0ddc3fd81ee",
+          "linear_sha256": "0537dd2b5ba3bff9a4e31f6af41a24478b9d11a76ae5f7ac07fa2cf13e4ff018"
+        }
+      },
+      "kernel": "a6382068c102894e",
+      "probe_matches_cpu": true,
+      "probe_rays": 4096,
+      "schema": "uzpainter/preview/backend-diagnostic/1",
+      "size": 256
+    }
+  ],
+  "contract": "docs/architecture/14-parity-testing.md section 3: realtime viewport is not a parity tier; regression goldens check repeatability.",
+  "cross_backend_diagnostic": {
+    "acceptance": false,
+    "differing_samples": {
+      "bevelled-cube.display.rgba16": 4,
+      "bevelled-cube.linear.rgba16": 4,
+      "cube-on-plane.display.rgba16": 0,
+      "cube-on-plane.linear.rgba16": 3,
+      "plane.display.rgba16": 30,
+      "plane.linear.rgba16": 35,
+      "sphere.display.rgba16": 12,
+      "sphere.linear.rgba16": 39
+    }
+  }
+}

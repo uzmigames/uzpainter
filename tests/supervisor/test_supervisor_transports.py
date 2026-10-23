@@ -2,7 +2,7 @@
 (python/uzpainter_supervisor/main.py, registry.py, roots.py, transport_http.py; task
 phase2.5_mcp-transport-registry items 3.1-3.6; decisions 158, 159).
 
-CPU only: every supervisor runs `--gpu-backend vulkan` (no device is created), and the Debug build's
+CPU only: every supervisor uses `--test-gpu-unavailable`, and the Debug build's
 `--test-faults` gives the typed `test_mutation` and the long `test_job`. Each supervisor writes its
 own ledger under the test's folder. The pure-Python halves of these checks are in
 test_registry.py, test_roots.py and test_transport_http.py.
@@ -30,7 +30,7 @@ import pytest
 
 from tests.supervisor.conftest import Mcp, make_project, wait_until_gone
 
-BASE = ("--gpu-backend", "vulkan", "--test-faults")
+BASE = ("--gpu-backend", "vulkan", "--test-gpu-unavailable", "--test-faults")
 TOKEN = "phase2.5-test-token"
 INSERT = (
     "from uzpainter import layerstack as ls, textureset as ts\n"

@@ -1,7 +1,7 @@
 """MCP `bake_start` over the job ledger (phase3.3_baker-evidence-publication items 2.7, 3.3, 3.5 and
 3.6; decision 355): the native bake job on the CPU baker (Embree), with Python disabled.
 
-CPU only: the supervisors run `--gpu-backend vulkan` without `--allow-python`, so the worker has
+CPU only: the supervisors use `--test-gpu-unavailable` without `--allow-python`, so the worker has
 no GPU device (`gpu_backend_unavailable` for GPU tools) while the CPU baker still bakes. Every
 usage's parity is `pending-evidence`, so a bake that runs to its end is refused at its publication
 (decision 001) and binds nothing; the receipts are in the job's error.
@@ -15,7 +15,7 @@ from typing import Any
 
 from tests.supervisor.conftest import BACKEND, Mcp, kill_pid, make_project, wait_until_gone
 
-ARGS = ("--gpu-backend", BACKEND)
+ARGS = ("--test-gpu-unavailable", "--gpu-backend", BACKEND)
 TERMINAL = ("succeeded", "failed", "cancelled", "interrupted")
 
 

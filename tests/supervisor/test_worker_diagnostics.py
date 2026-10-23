@@ -2,7 +2,7 @@
 phase2.1_recipe-diagnostic-views item 2.6; decision 136), through the worker's pipe with the test
 process as its supervisor.
 
-CPU only: the worker runs `--gpu-backend vulkan` (no device), and the Diagnostics tools are
+CPU only: the worker uses `--test-gpu-unavailable`, and the Diagnostics tools are
 GPU-free. Each tool's output is compared with `uzpainter.diagnostics` on the same saved project
 (`UzPainter.exe run`): the exported files hold the same float32 values as the Python views.
 """
@@ -91,7 +91,7 @@ def test_diagnostics_tools_equal_the_python_views(
         f"PLANE = {PLANE.as_posix()!r}\nIMAGES = {images.as_posix()!r}\n"
         f"PATH = {project.as_posix()!r}\nWORK = {work.as_posix()!r}\n" + PROJECT,
     )
-    pipe = Pipe(painter, tmp_path, "--gpu-backend", "vulkan")
+    pipe = Pipe(painter, tmp_path, "--gpu-backend", "vulkan", "--test-gpu-unavailable")
     pipes.append(pipe)
     tools = {t["name"]: t for t in pipe.request({"method": "tools/list"})["result"]["tools"]}
     for name in (

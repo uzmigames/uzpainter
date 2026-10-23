@@ -2,7 +2,7 @@
 (python/uzpainter_supervisor/admission.py, src/supervisor/worker.cpp, src/python/jobs.h; task
 phase2.3_supervisor-jobs items 3.1-3.5; decisions 140, 141).
 
-CPU only: the supervisors run `--gpu-backend vulkan` with `--test-faults` (Debug build), so the
+The default CPU lane uses `--test-gpu-unavailable` with `--test-faults` (Debug build), so the
 long typed `test_job` exists (N cancellable steps, one fill layer committed with its operation
 row at step `commit_at`). Each supervisor writes its own ledger under the test's folder.
 """
@@ -18,6 +18,7 @@ import pytest
 
 from tests.supervisor.conftest import (
     BACKEND,
+    GPU_UNAVAILABLE_ARGS,
     PLANE,
     Mcp,
     kill_pid,
@@ -26,7 +27,7 @@ from tests.supervisor.conftest import (
     wait_until_gone,
 )
 
-BASE = ("--gpu-backend", BACKEND, "--allow-python", "--test-faults")
+BASE = (*GPU_UNAVAILABLE_ARGS, "--gpu-backend", BACKEND, "--allow-python", "--test-faults")
 TERMINAL = ("succeeded", "failed", "cancelled", "interrupted")
 # Painter's json_config of one 16-bit height PNG of the plane fixture (tests/python's export).
 EXPORT_CONFIG: dict[str, Any] = {

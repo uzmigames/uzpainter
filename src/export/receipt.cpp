@@ -628,6 +628,9 @@ json::Object BuildReceipt(const ReceiptInputs& in) {
 
     receipt["schema"] = std::string(kReceiptSchema);
     receipt["build"] = in.identity.build;
+    receipt["backend"] = in.execution.backend;
+    receipt["adapter"] = in.execution.adapter.empty() ? json::Value(nullptr) : json::Value(in.execution.adapter);
+    receipt["driver"] = in.execution.driver.empty() ? json::Value(nullptr) : json::Value(in.execution.driver);
     receipt["generation"] = in.generation;
     receipt["moment"] = in.moment;
     receipt["plan"] = "plan.json";

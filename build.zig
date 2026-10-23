@@ -802,7 +802,9 @@ pub fn build(b: *std.Build) void {
         .files = &app_sources,
         .flags = &(cxx_flags ++ [_][]const u8{"-DSPNG_STATIC"} ++ app_defines),
     });
-    embed_inputs.add(app_mod, "src", &render_sources, &(cxx_flags ++ own_warning_flags));
+    const render_hook_flags: []const []const u8 = if (optimize == .Debug) &.{"-DUZP_WORKER_FAULT_HOOKS=1"} else &.{};
+    const render_fault_flags = std.mem.concat(b.allocator, []const u8, &.{ &(cxx_flags ++ own_warning_flags), render_hook_flags }) catch @panic("OOM");
+    embed_inputs.add(app_mod, "src", &render_sources, render_fault_flags);
     app_mod.addCSourceFiles(.{
         .root = b.path(core_root),
         .files = &.{agility_export_source},
@@ -947,9 +949,9 @@ pub fn build(b: *std.Build) void {
             "vulkan_test.cpp",
             "reference/image_reference.cpp",
         },
-        .flags = &(cxx_flags ++ own_warning_flags),
+        .flags = render_fault_flags,
     });
-    embed_inputs.add(render_tests_mod, "src", &render_sources, &(cxx_flags ++ own_warning_flags));
+    embed_inputs.add(render_tests_mod, "src", &render_sources, render_fault_flags);
     render_tests_mod.addCSourceFiles(.{
         .root = b.path(core_root),
         .files = &.{agility_export_source},
@@ -1501,7 +1503,9 @@ pub fn build(b: *std.Build) void {
     app_mod.linkLibrary(uzp_core_lib);
     // The native Python API (phase1.19) creates projects from meshes and re-derives the texturing
     // mesh of an export: the mesh importers join `UzPainter.exe`.
-    const pyapi_flags = evaluator_flags ++ app_defines;
+    const pyapi_flags = evaluator_flags ++ app_defines ++ [_][]const u8{
+        if (optimize == .Debug) "-DUZP_HOST_FAULT_HOOKS=1" else "-DUZP_HOST_FAULT_HOOKS=0",
+    };
     app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &pyapi_sources, .flags = &pyapi_flags });
     app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &asset_library_sources, .flags = &pyapi_flags });
     // `UzPainter.exe assets list [--parity]` (src/procedural/cli.h).
@@ -1787,8 +1791,8 @@ pub fn build(b: *std.Build) void {
     b.getInstallStep().dependOn(proc_material_tests_step);
 
     // ── The export plan compiler (phase1.15_export-plan-compiler) ─────────────────────────────
-    // `src/export/` over the evaluator; its tests evaluate on the CPU store only, so they run on
-    // machines without a GPU.
+    // `src/export/` over the evaluator; CPU publication tests also run without a GPU, while
+    // the backend diagnostic uses the same installed runtime as the render tests.
     const export_tests_mod = b.createModule(.{
         .target = target,
         .optimize = optimize,
@@ -1832,6 +1836,7 @@ pub fn build(b: *std.Build) void {
     });
     const export_tests_step = b.step("export-tests", "Build the native tests of the export plan compiler");
     export_tests_step.dependOn(&b.addInstallArtifact(export_tests_exe, .{}).step);
+    for (dx_runtime) |step| export_tests_step.dependOn(step);
     export_tests_step.dependOn(&install_templates.step);
     export_tests_step.dependOn(&install_export_presets.step);
     b.getInstallStep().dependOn(export_tests_step);

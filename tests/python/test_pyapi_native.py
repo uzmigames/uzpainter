@@ -1676,3 +1676,31 @@ result = {"before": before, "held": held, "during": during["hashes"], "after": a
     assert result["held"] == "running"
     assert result["during"] == result["after"]
     assert result["again"] == result["job"]
+
+
+def test_host_cancel_queued_preserves_a_running_job(run: Run) -> None:
+    result = ok(
+        run(
+            with_values("""
+        import uzp_job_test
+        create()
+        held = uzp_job_test.hold("checkpoint")
+        running = next(j for j in jobs.list() if j.id == held)
+        queued = export.start(__CONFIG__)
+        try:
+            cancelled_running = uzp_job_test.cancel_queued(held)
+            cancelled_queued = uzp_job_test.cancel_queued(queued.id)
+        finally:
+            uzp_job_test.release()
+        running.wait()
+        result = {"running": cancelled_running, "queued": cancelled_queued,
+                  "running_receipt": running.receipt(), "queued_receipt": queued.receipt()}
+    """)
+        )
+    )
+    assert result["running"] is False
+    assert result["queued"] is True
+    assert result["running_receipt"]["status"] == "succeeded"
+    assert result["running_receipt"]["cancel_requested"] is False
+    assert result["queued_receipt"]["status"] == "cancelled"
+    assert result["queued_receipt"]["stopped"] == "before_commit"

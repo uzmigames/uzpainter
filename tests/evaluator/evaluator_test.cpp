@@ -1179,7 +1179,7 @@ int RunOrder(const fs::path& assets) {
               "over the base");
     }
 
-    // 5. Explicit failures.
+    // 5. Empty paint is transparent (decision 348); plane content remains refused.
     resources.reset();
     {
         Builder builder(128, 128, formats);
@@ -1192,8 +1192,37 @@ int RunOrder(const fs::path& assets) {
         if (!builder.Validate("paint")) return Finish();
         CpuEvaluator cpu(templates, kWideLimits);
         render::Result<ChannelResult> result = evaluate(builder, ChannelType::User0, cpu);
-        Check(!result && KindName(result.error()) == "unsupported_node", "a paint layer fails with unsupported_node",
-              Describe(result));
+        Check(result && result->tiles.size() == 1 && result->tiles[0].constant &&
+                  (*result->tiles[0].constant)[0] == 1.0f && result->stats.blends == 0,
+              "an empty paint layer preserves the template base without a blend", Describe(result));
+
+        core::Layer below = builder.Fill("below paint", SameSource(channels, Uniform(0.25, 0.5, 0.75)),
+                                         Same(channels, BlendingMode::Normal, 1.0));
+        builder.SetRoot({below});
+        CpuEvaluator baseline(templates, kWideLimits);
+        std::vector<std::vector<uint32_t>> expected;
+        for (const ChannelType channel : channels) {
+            const auto output = evaluate(builder, channel, baseline);
+            Check(output.has_value(), "empty paint baseline evaluates", Describe(output));
+            if (!output) return Finish();
+            expected.push_back(Samples(*output));
+        }
+        paint.blending = Same(channels, BlendingMode::Subtract, 0.8);
+        builder.SetRoot({below, paint});
+        if (!builder.Validate("empty paint over fill")) return Finish();
+        bool transparent = true;
+        for (size_t i = 0; i < channels.size(); ++i) {
+            const auto output = evaluate(builder, channels[i], cpu);
+            transparent = transparent && output && Samples(*output) == expected[i];
+        }
+        Check(transparent, "an empty paint layer preserves the underlying RGB16, L16 and RGB32F channels");
+
+        paint.paint->planes[ChannelType::User0] = builder.project.AllocateId();
+        builder.SetRoot({below, paint});
+        if (!builder.Validate("paint plane content")) return Finish();
+        result = evaluate(builder, ChannelType::User0, cpu);
+        Check(!result && KindName(result.error()) == "unsupported_node",
+              "a paint layer with plane content fails with unsupported_node", Describe(result));
 
         Builder effects(128, 128, formats);
         core::Layer withEffect = effects.Fill("fx", SameSource(channels, Uniform(0.5, 0.5, 0.5)),
@@ -1673,6 +1702,7 @@ int RunProfile(const fs::path& assets) {
 /// reads are zero.
 class CountingStore final : public ITileStore {
 public:
+    render::Result<ExecutionIdentity> Execution() const override { return ExecutionIdentity{}; }
     render::Result<TileHandle> Allocate(const TileFormat& format, uint32_t width, uint32_t height) override {
         const TileHandle handle = m_next++;
         m_tiles[handle] = {format, width, height};

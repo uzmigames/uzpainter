@@ -1,6 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include "render/device.h"
+#include "render/vulkan_backend.h"
 
 #include "dx12_device.h"
 #include "dx12_guids.h"
@@ -57,11 +58,13 @@ std::string DeviceRemovedReasonText(int32_t hresult) {
 
 Result<std::unique_ptr<IDevice>> CreateDevice(const DeviceOptions& options) {
     if (options.backend == Backend::Vulkan) {
-        // Decision 310: the qualified Vulkan device (vulkan_backend.h) serves only the selftest
-        // Vulkan slice and the qualification tests until phase3.1 qualifies Vulkan outputs.
-        return Fail(ErrorCode::GpuBackendUnavailable, Backend::Vulkan,
-                    "this build's render layer serves no product path on Vulkan (decision 310); "
-                    "Vulkan devices are not available here and DX12 is not used in their place");
+        const VulkanSurvey survey = SurveyVulkan();
+        const VulkanQualification qualification = QualifyVulkan(survey, options.adapterIndex);
+        VulkanDeviceOptions native;
+        native.enableValidation = options.enableValidation;
+        auto device = CreateQualifiedVulkanDevice(survey, qualification, native);
+        if (!device) return Unexpected(device.error());
+        return std::unique_ptr<IDevice>(std::move(*device));
     }
 
     // The adapter is looked up first, so a missing one is reported by index rather than as a

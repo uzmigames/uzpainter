@@ -2,7 +2,7 @@
 python/uzpainter_supervisor/; task phase2.1_supervisor-ipc-worker items 2.1, 2.2, 2.4, 2.8, 2.10,
 3.1, 3.2, 3.5).
 
-CPU only: the supervisors run `--gpu-backend vulkan` (no device before Phase 3), with
+The default CPU lane uses `--test-gpu-unavailable`, with
 `--test-faults` (the Debug build has the hooks, decision 120). The device-fault and stall cases
 are in test_supervisor_gpu.py.
 """
@@ -20,6 +20,7 @@ from jsonschema import Draft202012Validator
 
 from tests.supervisor.conftest import (
     BACKEND,
+    GPU_UNAVAILABLE_ARGS,
     INSERT_FILL,
     PLANE,
     Mcp,
@@ -30,7 +31,7 @@ from tests.supervisor.conftest import (
     wait_until_gone,
 )
 
-BASE = ("--gpu-backend", BACKEND, "--allow-python", "--test-faults")
+BASE = (*GPU_UNAVAILABLE_ARGS, "--gpu-backend", BACKEND, "--allow-python", "--test-faults")
 
 
 def opened_session(
@@ -55,7 +56,7 @@ def test_tools_are_forwarded_and_stdout_carries_protocol_frames_only(
 ) -> None:
     """2.1, 2.2: the supervisor serves MCP on stdio and forwards the worker's tools; logs stay on
     stderr."""
-    session = Mcp(painter, tmp_path, "--gpu-backend", "vulkan")
+    session = Mcp(painter, tmp_path, "--gpu-backend", "vulkan", "--test-gpu-unavailable")
     sessions.append(session)
     tools = {tool["name"]: tool for tool in session.request("tools/list", {})["tools"]}
     assert set(tools) == {
@@ -181,6 +182,7 @@ def test_handshake_mismatch_is_a_fatal_supervisor_error(
         tmp_path,
         "--gpu-backend",
         "vulkan",
+        "--test-gpu-unavailable",
         "--test-faults",
         *args,
         env={"UZP_TEST_HANDSHAKE": json.dumps(override)},
@@ -657,7 +659,7 @@ def test_shader_set_stores_double_sided_as_a_non_parity_state(
     non-parity state, which a Tier 3 comparison rejects as render evidence."""
     from tools.parity.verdict import Comparison, Outcome, evaluate
 
-    session = Mcp(painter, tmp_path, "--gpu-backend", BACKEND)
+    session = Mcp(painter, tmp_path, *GPU_UNAVAILABLE_ARGS, "--gpu-backend", BACKEND)
     sessions.append(session)
     project = make_project(painter, tmp_path)
     revision = session.call("project_open", {"path": str(project), "wait": True})["result"][
@@ -809,6 +811,6 @@ def test_supervisor_killed_ends_its_worker(
     status = session.status()
     kill_pid(session.process.pid)
     assert wait_until_gone(status["worker_pid"], 30)
-    pipe = Pipe(painter, tmp_path, "--gpu-backend", "vulkan")
+    pipe = Pipe(painter, tmp_path, "--gpu-backend", "vulkan", "--test-gpu-unavailable")
     pipes.append(pipe)
     assert pipe.call("project_open", {"path": status["project"]})["result"]["revision"] == revision

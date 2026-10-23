@@ -9,7 +9,8 @@ Settling evidence (task phase2.3_realtime-preview, decision 162): a test that se
 preview gate carries `@pytest.mark.preview_settling(<case>, ...)`. With
 `UZP_PREVIEW_SETTLING_REPORT=<path>` the run merges each tagged test's result, run time and the
 timings it gave `preview_settling.metric` into that report (`tools/parity/settling/preview.py`).
-Every GPU case here runs on DX12 workers (`--gpu-backend dx12`)."""
+Worker GPU cases select `UZP_PREVIEW_BACKEND=dx12|vulkan` (DX12 by default). An explicitly
+selected backend must be ready; an unavailable device fails that hardware lane."""
 
 from __future__ import annotations
 
@@ -27,12 +28,15 @@ from typing import Any
 import pytest
 
 from tests.desktop import PrivateDesktop
-from tests.supervisor.conftest import painter, pipes  # noqa: F401  (fixtures)
+from tests.supervisor.conftest import Pipe, painter, pipes  # noqa: F401  (fixtures)
 from tools.parity.settling import preview as settling_report
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EXIT_SKIP = 77
 NO_GPU = os.environ.get("UZP_NO_GPU") == "1"
+BACKEND = os.environ.get("UZP_PREVIEW_BACKEND", "dx12")
+if BACKEND not in {"dx12", "vulkan"}:
+    raise ValueError(f"unsupported UZP_PREVIEW_BACKEND: {BACKEND}")
 GOLDENS = REPO_ROOT / "tests" / "preview" / "viewport-goldens.json"
 # The render-reference sphere: seen whole by the fit camera (the plane fixture lies edge-on).
 SPHERE = REPO_ROOT / "parity" / "fixtures" / "render-procedure" / "sphere.obj"
@@ -94,11 +98,20 @@ def run_case(exe: Path, case: str, *args: str, gpu: bool = False) -> tuple[set[s
     return passed, output
 
 
+def require_gpu(pipe: Pipe) -> None:
+    """Verify the worker uses the requested device; explicit hardware lanes never skip."""
+    assert pipe.handshake["gpu_backend"] == BACKEND, pipe.handshake
+    if pipe.handshake["gpu_status"] != "ready":
+        if "UZP_PREVIEW_BACKEND" in os.environ:
+            pytest.fail(f"requested {BACKEND} device unavailable: {pipe.handshake}")
+        pytest.skip(f"no {BACKEND} device on this machine")
+
+
 def run_report(exe: Path, script: Path, *args: str) -> dict[str, Any]:
     """`UzPainter.exe run <script> <args>`: its `UZP_JSON:` report (the status is checked by the
     caller)."""
     process = subprocess.run(
-        [str(exe), "run", str(script), *args],
+        [str(exe), "run", str(script), "--gpu-backend", BACKEND, *args],
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -228,7 +241,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         if outcome == "skipped" or exe_sha256 is None:
             continue
         for case in cases:
-            backend = settling_report.backend_of(case, "dx12")
+            backend = settling_report.backend_of(case, BACKEND)
             entry = entries.setdefault(
                 (case, backend),
                 {

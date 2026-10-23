@@ -15,8 +15,10 @@
 
 #include "python/jobs.h"
 #include "python/run.h"
+#include "python/session.h"
 
 #include <pybind11/embed.h>
+#include <pybind11/stl.h>
 
 #include <condition_variable>
 #include <cstdio>
@@ -38,6 +40,10 @@ bool hold_released = false;
 }  // namespace
 
 PYBIND11_EMBEDDED_MODULE(uzp_job_test, m) {
+    m.def("admission_limits", [](std::optional<std::uint64_t> bytes, std::uint64_t tiles) {
+        uzp::python::Session::Get().SetAdmissionLimits(
+            bytes ? std::optional(uzp::evaluator::AdmissionLimits{*bytes, tiles}) : std::nullopt);
+    });
     m.def(
         "hold",
         [](const std::string& end) {
@@ -66,6 +72,12 @@ PYBIND11_EMBEDDED_MODULE(uzp_job_test, m) {
             return job->id();
         },
         pybind11::arg("end") = "return");
+    m.def("cancel_queued", [](const std::string& id) {
+        for (const auto& job : uzp::python::JobEngine::Get().List()) {
+            if (job->id() == id) return job->CancelQueued();
+        }
+        throw pybind11::value_error("unknown job");
+    });
     m.def("release", [] {
         std::lock_guard lock(hold_mutex);
         hold_released = true;

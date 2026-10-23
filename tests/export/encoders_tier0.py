@@ -492,7 +492,13 @@ def _map_of(relative_path: str, texture_set: str) -> str:
 
 
 def write_export(
-    exe: Path, spec: dict[str, Any], spec_dir: Path, config: dict[str, Any], run_dir: Path
+    exe: Path,
+    spec: dict[str, Any],
+    spec_dir: Path,
+    config: dict[str, Any],
+    run_dir: Path,
+    *,
+    backend: str = "cpu",
 ) -> dict[str, Any]:
     """`uzp-export-tests export`: the plan, dry run and written files, or the refusal. The spec is
     written into `spec_dir`, where its resources are; the configuration into `run_dir`."""
@@ -500,20 +506,24 @@ def write_export(
     run_dir.mkdir(parents=True, exist_ok=True)
     (spec_dir / "spec.json").write_text(json.dumps(spec), encoding="utf-8")
     (run_dir / "config.json").write_text(json.dumps(config), encoding="utf-8")
+    command = ["export"] if backend == "cpu" else ["export-backend", backend]
     out = _run(
         [
             str(exe),
-            "export",
+            *command,
             str(TEMPLATES_DIR),
             str(spec_dir / "spec.json"),
             str(run_dir / "config.json"),
         ]
     )
     result: dict[str, Any] = json.loads(out)
+    if backend != "cpu" and "error" not in result:
+        assert result["backend"] == backend, result
+        assert result["adapter"] and result["driver"], result
     return result
 
 
-def export_goldens(exe: Path, tmp: Path, runs: int = 1) -> dict[str, Any]:
+def export_goldens(exe: Path, tmp: Path, runs: int = 1, *, backend: str = "cpu") -> dict[str, Any]:
     """Writes every export step of every texture set of `EXPORT_GOLDENS` `runs` times (each run in
     its own process and folder) and compares. Returns the counts, the problems and per file the
     decoded comparison with Painter (golden, `<set>/<map>`, recording, unit, Difference)."""
@@ -548,7 +558,7 @@ def export_goldens(exe: Path, tmp: Path, runs: int = 1) -> dict[str, Any]:
                         out_dir, [texture_set]
                     )
                     result = write_export(
-                        exe, spec, workdir / "spec", config, workdir / f"run{run}"
+                        exe, spec, workdir / "spec", config, workdir / f"run{run}", backend=backend
                     )
                     if "error" in result:
                         report["problems"].append(

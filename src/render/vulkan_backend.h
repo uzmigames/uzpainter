@@ -4,9 +4,9 @@
 // `uz::VulkanDevice`, for the device qualification of phase3.1_vulkan-compute-parity (items 2.1,
 // 2.2 and 2.8; decision 310).
 //
-// Reach: `render::CreateDevice` still refuses Vulkan, so no product path (`run`, the MCP worker,
-// the preview, export) runs on this device. Only the `selftest` Vulkan slice and the native tests
-// create it, through the three steps below, until phase3.1 has qualified Vulkan outputs:
+// Reach: `render::CreateDevice` selects this device only for an explicit Vulkan backend.
+// Product paths, the selftest Vulkan slice and native tests use the same three-step
+// qualification; failure never selects DX12 in its place:
 //
 //   SurveyVulkan                  the capability record: loader, a pre-check Vulkan 1.2 instance
 //                                 and every physical device; no logical device is created
@@ -128,6 +128,11 @@ public:
     /// semaphore that only the returned function signals, so that submission and every later
     /// fence value stay pending. The function stays callable after the device is abandoned.
     [[nodiscard]] Result<std::function<void()>> InjectQueueStall();
+
+    /// Debug-only worker hook: the next queue wait observes VK_ERROR_DEVICE_LOST without
+    /// faulting the real driver. Only defined in builds with UZP_WORKER_FAULT_HOOKS.
+    /// The queue stays failed and teardown keeps all resources until process exit.
+    void InjectDeviceLoss();
 
 private:
     friend Result<std::unique_ptr<VulkanDevice>> CreateQualifiedVulkanDevice(

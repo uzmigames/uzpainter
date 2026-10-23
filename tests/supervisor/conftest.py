@@ -13,8 +13,9 @@ Settling evidence (task phase2.4_supervisor-worker, decision 150): a test that s
 `docs/architecture/02-runtime-topology.md` §7 carries `@pytest.mark.settling(<case>, ...)`. With
 `UZP_SETTLING_REPORT=<path>` the run merges each tagged test's result, run time and the
 recoveries its supervisors reported, and the overhead measurements, into that report
-(`tools/parity/settling/report.py`). `UZP_SUPERVISOR_BACKEND` (default `vulkan`) is the backend
-the tagged MCP tests start their supervisors on.
+(`tools/parity/settling/report.py`). `UZP_SUPERVISOR_BACKEND` selects the hardware lane and
+requires a ready device. Without it, the default Vulkan identity uses the explicit
+`--test-gpu-unavailable` fixture for the tagged CPU tests.
 
 MCP contract evidence (task phase2.8_mcp-server, decision 186): a test that runs a Phase 2
 contract fixture of `docs/architecture/11-mcp-server.md` §7 carries
@@ -56,6 +57,8 @@ OCIO_CONFIG = "15059d4b4e52893863f2063dfccb3902d182b522ad233564db32a5e30a43b7f4"
 JSON_PREFIX = "UZP_JSON:"
 NO_GPU = os.environ.get("UZP_NO_GPU") == "1"
 BACKEND = os.environ.get("UZP_SUPERVISOR_BACKEND", "vulkan")
+# An explicit backend selects the hardware lane; the default lane needs no device.
+GPU_UNAVAILABLE_ARGS = () if "UZP_SUPERVISOR_BACKEND" in os.environ else ("--test-gpu-unavailable",)
 
 _pipe_numbers = itertools.count(int(time.time()) % 100000 * 1000)
 
@@ -115,12 +118,26 @@ def kill_pid(pid: int) -> None:
         ctypes.windll.kernel32.CloseHandle(handle)
 
 
-def run_script(painter: Path, tmp_path: Path, body: str, backend: str = "vulkan") -> Any:
+def run_script(
+    painter: Path,
+    tmp_path: Path,
+    body: str,
+    backend: str = "vulkan",
+    *,
+    gpu_unavailable: bool = False,
+) -> Any:
     """`UzPainter.exe run` of `body` (single process) on `backend`; the script's `result`."""
     path = tmp_path / f"script-{next(_pipe_numbers)}.py"
     path.write_text(textwrap.dedent(body), encoding="utf-8")
     process = subprocess.run(
-        [str(painter), "run", str(path), "--gpu-backend", backend],
+        [
+            str(painter),
+            "run",
+            str(path),
+            "--gpu-backend",
+            backend,
+            *(["--test-gpu-unavailable"] if gpu_unavailable else []),
+        ],
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -263,6 +280,7 @@ class Mcp:
         initialize: bool = True,
         ledger: Path | None = None,
         creationflags: int = 0,
+        expected_gpu_status: str = "ready",
     ) -> None:
         # Never the user's own ledger: one per test unless the test shares one.
         self.ledger = ledger or tmp_path / f"ledger-{next(_pipe_numbers)}.sqlite3"
@@ -303,6 +321,11 @@ class Mcp:
                 },
             )
             self.notify("notifications/initialized")
+            if "UZP_SUPERVISOR_BACKEND" in os.environ and "--test-gpu-unavailable" not in args:
+                status = self.status()
+                if status["gpu_status"] != expected_gpu_status:
+                    self.close()
+                assert status["gpu_status"] == expected_gpu_status, status
 
     def _read(self) -> None:
         assert self.process.stdout is not None

@@ -266,6 +266,24 @@ void CheckCreateSettings(const CreateSettings& settings) {
     }
 }
 
+void Session::SetAdmissionLimits(std::optional<evaluator::AdmissionLimits> limits) {
+    std::lock_guard lock(admission_mutex_);
+    admission_limits_ = limits;
+}
+
+void Session::RequireAdmission(const core::Project& project) const {
+    std::optional<evaluator::AdmissionLimits> limits;
+    {
+        std::lock_guard lock(admission_mutex_);
+        limits = admission_limits_;
+    }
+    if (!limits) return;
+    for (const auto& set : project.texture_sets) {
+        const auto admitted = evaluator::CheckTextureSet(*limits, set);
+        if (!admitted) throw ApiError("RuntimeError", admitted.error().Describe());
+    }
+}
+
 core::TransactionResult Session::Create(const std::filesystem::path& mesh_path, const CreateSettings& settings,
                                         const CreateCall& call) {
     if (IsOpen()) ThrowProjectError("a project is already open");
@@ -312,6 +330,17 @@ core::TransactionResult Session::Create(const std::filesystem::path& mesh_path, 
     display::InitialiseNewProject(p);
     core::Validate(p);
 
+    // All imported sets start with this resolution and these channels. Refuse the ordinary
+    // creation before making an untitled store; the optional extra edit is checked again below.
+    core::Project admission = p;
+    core::TextureSet admission_set;
+    admission_set.resolution = p.settings.default_resolution;
+    core::Stack admission_stack;
+    admission_stack.channels = fresh->StackChannels();
+    admission_set.stacks.push_back(std::move(admission_stack));
+    admission.texture_sets.push_back(std::move(admission_set));
+    if (!call.extra) RequireAdmission(admission);
+
     auto project = std::make_shared<OpenProject>();
     project->untitled_dir = std::filesystem::temp_directory_path() / "UzPainter" / ("untitled-" + RandomHex(8));
     std::filesystem::create_directories(project->untitled_dir);
@@ -345,6 +374,7 @@ core::TransactionResult Session::Create(const std::filesystem::path& mesh_path, 
             }
             for (const core::InsertPosition& position : stacks) edit.Insert(position, core::NodeType::PaintLayer, "Layer 1");
             if (call.extra) call.extra(edit, store);
+            RequireAdmission(edit.project());
         } catch (...) {
             error = std::current_exception();
             throw;
@@ -401,6 +431,7 @@ void Session::Open(const std::filesystem::path& path, bool untitled) {
 void Session::Rebuild(const core::json::Value& dump, const std::filesystem::path& resources_dir) {
     if (IsOpen()) ThrowProjectError("a project is already open");
     core::Project rebuilt = core::ProjectFromRecipe(dump, HostRecipe());
+    RequireAdmission(rebuilt);
 
     std::error_code ec;
     if (!std::filesystem::is_directory(resources_dir, ec)) {
@@ -782,9 +813,10 @@ CallResult Session::Mutate(const std::string& tool, core::json::Object arguments
     // Inside a native Transaction the bitmaps' images and the set changes are checked once, by the
     // commit (`CommitTransaction`): its calls may resize a set and rebind its bitmaps in either order.
     const evaluator::BitmapShapes shapes = thread.transaction ? evaluator::BitmapShapes{} : ShapesOf(*Current()->store);
-    const auto checked = [&call, &shapes](core::Edit& edit) {
+    const auto checked = [this, &call, &shapes, deferred = bool(thread.transaction)](core::Edit& edit) {
         call(edit);
         evaluator::RequireSupported(edit.base(), edit.project(), shapes);
+        if (!deferred) RequireAdmission(edit.project());
     };
     if (thread.transaction) {
         const core::Project before = thread.edit->project();
@@ -820,9 +852,10 @@ core::RequestOutcome Session::Submit(core::MutationRequest request, const std::f
     const std::vector<TextureInvalidation> invalidated = SourceInvalidation(request.tool, request.arguments);
     const evaluator::BitmapShapes shapes = ShapesOf(*project->store);
     core::RequestOutcome outcome =
-        project->store->Submit(*project->document, std::move(request), [&call, &shapes](core::Edit& edit) {
+        project->store->Submit(*project->document, std::move(request), [this, &call, &shapes](core::Edit& edit) {
             call(edit);
             evaluator::RequireSupported(edit.base(), edit.project(), shapes);
+            RequireAdmission(edit.project());
         });
     if (outcome.result) Record(FromResult(*outcome.result), invalidated, project);
     return outcome;
@@ -869,8 +902,10 @@ CallResult Session::CommitTransaction() {
     if (!transaction->failed()) {
         const evaluator::BitmapShapes shapes = ShapesOf(*project->store);
         try {
-            transaction->Apply(
-                [&shapes](core::Edit& edit) { evaluator::RequireSupported(edit.base(), edit.project(), shapes); });
+            transaction->Apply([this, &shapes](core::Edit& edit) {
+                evaluator::RequireSupported(edit.base(), edit.project(), shapes);
+                RequireAdmission(edit.project());
+            });
         } catch (...) {
             error = std::current_exception();
         }

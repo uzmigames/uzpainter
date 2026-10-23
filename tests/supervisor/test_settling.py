@@ -5,8 +5,8 @@ decisions 150, 151).
 
 The other §7 cases are the children's MCP tests, tagged with `settling` (test_supervisor_mcp.py,
 test_supervisor_admission.py, test_supervisor_jobs.py, test_supervisor_gpu.py). The supervisors
-start on `UZP_SUPERVISOR_BACKEND` (default `vulkan`, which has no device before phase3.1,
-decision 121) with `--test-faults` (Debug build, decisions 120 and 151).
+start on `UZP_SUPERVISOR_BACKEND`; without it the CPU lane uses `--test-gpu-unavailable` with
+`--test-faults` (Debug build, decisions 120 and 151).
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ import pytest
 
 from tests.supervisor.conftest import (
     BACKEND,
+    GPU_UNAVAILABLE_ARGS,
     INSERT_FILL,
     Mcp,
     Settling,
@@ -32,7 +33,7 @@ from tests.supervisor.conftest import (
 )
 from tests.supervisor.test_supervisor_jobs import EXPORT_CONFIG
 
-BASE = ("--gpu-backend", BACKEND, "--allow-python", "--test-faults")
+BASE = (*GPU_UNAVAILABLE_ARGS, "--gpu-backend", BACKEND, "--allow-python", "--test-faults")
 
 
 def opened(
@@ -253,7 +254,9 @@ def test_single_call_script_and_transaction_failures(
 def test_python_disabled_through_mcp(painter: Path, tmp_path: Path, sessions: list[Mcp]) -> None:
     """3.7: without `--allow-python`, `run_python` is not listed and a call of it is rejected at
     the IPC boundary with `python_disabled`, while the other tools serve."""
-    session, _, revision = opened(painter, tmp_path, sessions, "--gpu-backend", BACKEND)
+    session, _, revision = opened(
+        painter, tmp_path, sessions, *GPU_UNAVAILABLE_ARGS, "--gpu-backend", BACKEND
+    )
     names = {tool["name"] for tool in session.request("tools/list", {})["tools"]}
     assert "run_python" not in names and "project_inspect" in names
     refused = session.call(
@@ -266,18 +269,27 @@ def test_python_disabled_through_mcp(painter: Path, tmp_path: Path, sessions: li
 
 
 @pytest.mark.settling("gpu_backend_unavailable")
-@pytest.mark.skipif(BACKEND != "vulkan", reason="needs a backend without a device (Vulkan)")
+@pytest.mark.parametrize("backend", ["dx12", "vulkan"])
 def test_unavailable_backend_through_mcp(
-    painter: Path, tmp_path: Path, sessions: list[Mcp]
+    painter: Path, tmp_path: Path, sessions: list[Mcp], backend: str
 ) -> None:
     """3.7: a worker without a device answers a GPU call `gpu_backend_unavailable` before
     mutating, while the CPU evaluator's export, a save and a mutation still run."""
-    session, _, revision = opened(painter, tmp_path, sessions, *BASE)
+    session, _, revision = opened(
+        painter,
+        tmp_path,
+        sessions,
+        "--gpu-backend",
+        backend,
+        "--test-gpu-unavailable",
+        "--allow-python",
+        "--test-faults",
+    )
     assert session.status()["gpu_status"] == "unavailable"
     refused = session.call("evaluate_channel", {"channel": "BaseColor"})
     error = refused["error"]
     assert error["code"] == "gpu_backend_unavailable", refused
-    assert error["details"]["backend"] == "vulkan" and error["details"]["reason"]
+    assert error["details"]["backend"] == backend and error["details"]["reason"]
     assert revision_of(session) == revision
     export_dir = tmp_path / "export"
     exported = session.call(

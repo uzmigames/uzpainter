@@ -1,0 +1,11 @@
+{
+  "id": 357,
+  "slug": "cli-python-exports-use-the-selected-gpu-lazily-and-drain-jobs-before-reporting",
+  "title": "CLI Python exports use the selected GPU lazily and drain jobs before reporting",
+  "status": "accepted",
+  "date": "2026-10-23",
+  "relatedTasks": [
+    "phase3.1_vulkan-compute-parity"
+  ],
+  "supersededBy": null
+}

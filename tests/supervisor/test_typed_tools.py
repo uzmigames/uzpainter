@@ -34,7 +34,7 @@ from tools.parity import ocio_srgb_table
 from tools.parity.fit.decode import decode
 
 PROBE_IMAGES = REPO_ROOT / "parity" / "fixtures" / "api-probes"
-BASE = ("--gpu-backend", "vulkan")
+BASE = ("--gpu-backend", "vulkan", "--test-gpu-unavailable")
 
 # Every typed tool of 11 §2 the worker serves (the supervisor's own are listed separately).
 TYPED = {

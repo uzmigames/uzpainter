@@ -5,8 +5,9 @@
 // and the normal map's cavity (decision 258), and writes the linear colour rounded to binary16 and
 // its display codes from the display table (src/preview/display_transform.h).
 //
-// Every input is a raw buffer reached through the SM 6.6 descriptor heap; the indices arrive in
-// the root constants. Buffer layouts are those written by src/preview/viewport.cpp and
+// Inputs are raw buffers in the SM 6.6 descriptor heap on DX12; Vulkan reads the same words
+// through fixed buffer slots. Indices arrive in root/push constants. Buffer layouts come from
+// src/preview/viewport.cpp and
 // src/preview/visibility.h. `BVH_STACK` (the traversal stack) is defined by viewport.cpp as the
 // build's depth cap.
 //
@@ -14,6 +15,39 @@
 
 #include "image_common.hlsli"
 
+#ifdef UZP_FIXED_SLOTS
+struct Params {
+    uint g_width;
+    uint g_height;
+    uint g_frameSrv;
+    uint g_trianglesSrv;
+    uint g_tileOffsetsSrv;
+    uint g_tileTrianglesSrv;
+    uint g_materialsSrv;
+    uint g_mapsSrv;
+    uint g_lightingSrv;
+    uint g_tableSrv;
+    uint g_linearUav;
+    uint g_displayUav;
+    uint g_bvhNodesSrv;
+    uint g_occludersSrv;
+};
+[[vk::push_constant]] Params g_root;
+#define g_width g_root.g_width
+#define g_height g_root.g_height
+#define g_frameSrv g_root.g_frameSrv
+#define g_trianglesSrv g_root.g_trianglesSrv
+#define g_tileOffsetsSrv g_root.g_tileOffsetsSrv
+#define g_tileTrianglesSrv g_root.g_tileTrianglesSrv
+#define g_materialsSrv g_root.g_materialsSrv
+#define g_mapsSrv g_root.g_mapsSrv
+#define g_lightingSrv g_root.g_lightingSrv
+#define g_tableSrv g_root.g_tableSrv
+#define g_linearUav g_root.g_linearUav
+#define g_displayUav g_root.g_displayUav
+#define g_bvhNodesSrv g_root.g_bvhNodesSrv
+#define g_occludersSrv g_root.g_occludersSrv
+#else
 cbuffer Params : register(b0) {
     uint g_width;
     uint g_height;
@@ -30,6 +64,7 @@ cbuffer Params : register(b0) {
     uint g_bvhNodesSrv;
     uint g_occludersSrv;
 };
+#endif
 
 #define TILE 16u
 #define TRIANGLE_WORDS 40u
@@ -44,8 +79,24 @@ cbuffer Params : register(b0) {
 #define OUTPUT_SPECULAR_VISIBILITY 2u
 #define OUTPUT_CAVITY 3u
 
-float LoadF(ByteAddressBuffer b, uint word) { return asfloat(b.Load(word * 4u)); }
-float3 LoadF3(ByteAddressBuffer b, uint word) { return asfloat(b.Load3(word * 4u)); }
+#ifdef UZP_FIXED_SLOTS
+#define ViewportBuffer uint
+#define ViewportResource(index) index
+uint LoadWords(uint b, uint offset) { return BufferWord(b, offset / 4u); }
+uint2 LoadWords2(uint b, uint offset) { return uint2(LoadWords(b, offset), LoadWords(b, offset + 4u)); }
+uint3 LoadWords3(uint b, uint offset) { return uint3(LoadWords2(b, offset), LoadWords(b, offset + 8u)); }
+uint4 LoadWords4(uint b, uint offset) { return uint4(LoadWords3(b, offset), LoadWords(b, offset + 12u)); }
+#else
+#define ViewportBuffer ByteAddressBuffer
+#define ViewportResource(index) ResourceDescriptorHeap[index]
+uint LoadWords(ByteAddressBuffer b, uint offset) { return b.Load(offset); }
+uint2 LoadWords2(ByteAddressBuffer b, uint offset) { return b.Load2(offset); }
+uint3 LoadWords3(ByteAddressBuffer b, uint offset) { return b.Load3(offset); }
+uint4 LoadWords4(ByteAddressBuffer b, uint offset) { return b.Load4(offset); }
+#endif
+
+float LoadF(ViewportBuffer b, uint word) { return asfloat(LoadWords(b, word * 4u)); }
+float3 LoadF3(ViewportBuffer b, uint word) { return asfloat(LoadWords3(b, word * 4u)); }
 
 // ── Material maps ────────────────────────────────────────────────────────────────────────────
 
@@ -55,8 +106,8 @@ struct MapRef {
     uint height;
 };
 
-MapRef LoadMap(ByteAddressBuffer materials, uint material, uint slot) {
-    const uint3 w = materials.Load3((material * MATERIAL_WORDS + slot * 3u) * 4u);
+MapRef LoadMap(ViewportBuffer materials, uint material, uint slot) {
+    const uint3 w = LoadWords3(materials, (material * MATERIAL_WORDS + slot * 3u) * 4u);
     MapRef m;
     m.offset = w.x;
     m.width = w.y;
@@ -69,7 +120,7 @@ uint Wrap(int i, uint n) { return uint(((i % int(n)) + int(n)) % int(n)); }
 // Bilinear sample with wrapping of `components` values per texel at uv (texel (c, r) centred at
 // u = (c + 1/2) / W, v = 1 - (r + 1/2) / H).
 float3 SampleMap(MapRef m, uint components, float2 uv) {
-    ByteAddressBuffer maps = ResourceDescriptorHeap[g_mapsSrv];
+    ViewportBuffer maps = ViewportResource(g_mapsSrv);
     const float x = uv.x * float(m.width) - 0.5f;
     const float y = (1.0f - uv.y) * float(m.height) - 0.5f;
     const float fx = floor(x);
@@ -95,8 +146,8 @@ float3 SampleMap(MapRef m, uint components, float2 uv) {
 // ── Environment ──────────────────────────────────────────────────────────────────────────────
 
 // Bilinear sample of radiance level `level` in direction d (iray.json `environment-mapping`).
-float3 SampleLevel(ByteAddressBuffer lighting, uint level, float3 d, float rotationTurns) {
-    const uint3 desc = lighting.Load3((27u + level * 3u) * 4u);
+float3 SampleLevel(ViewportBuffer lighting, uint level, float3 d, float rotationTurns) {
+    const uint3 desc = LoadWords3(lighting, (27u + level * 3u) * 4u);
     const uint w = desc.y;
     const uint h = desc.z;
     float u = atan2(-d.x, d.z) / (2.0f * PI) + 0.25f + rotationTurns;
@@ -121,7 +172,7 @@ float3 SampleLevel(ByteAddressBuffer lighting, uint level, float3 d, float rotat
     return top + (bottom - top) * ty;
 }
 
-float3 Prefiltered(ByteAddressBuffer lighting, uint levels, float3 d, float roughness, float rotationTurns) {
+float3 Prefiltered(ViewportBuffer lighting, uint levels, float3 d, float roughness, float rotationTurns) {
     const float l = roughness * float(levels - 1u);
     const uint l0 = uint(floor(l));
     const uint l1 = min(l0 + 1u, levels - 1u);
@@ -132,7 +183,7 @@ float3 Prefiltered(ByteAddressBuffer lighting, uint levels, float3 d, float roug
 }
 
 // The SH irradiance at the unit normal n, in the frame of the environment (rotated like it).
-float3 Irradiance(ByteAddressBuffer lighting, float3 n) {
+float3 Irradiance(ViewportBuffer lighting, float3 n) {
     const float basis[9] = {0.282095f,         0.488603f * n.y,         0.488603f * n.z,
                             0.488603f * n.x,   1.092548f * n.x * n.y,   1.092548f * n.y * n.z,
                             0.315392f * (3.0f * n.z * n.z - 1.0f), 1.092548f * n.x * n.z,
@@ -152,8 +203,8 @@ float3 Unrotate(float3 d, float rotationTurns) {
     return float3(d.x * c - d.z * s, d.y, d.x * s + d.z * c);
 }
 
-float3 BrdfTable(ByteAddressBuffer lighting, uint size, float nv, float roughness) {
-    const uint offset = lighting.Load(45u * 4u);
+float3 BrdfTable(ViewportBuffer lighting, uint size, float nv, float roughness) {
+    const uint offset = LoadWords(lighting, 45u * 4u);
     const float x = clamp(nv * float(size) - 0.5f, 0.0f, float(size - 1u));
     const float y = clamp(roughness, 0.0f, 1.0f) * float(size - 1u);
     const uint x0 = uint(floor(x));
@@ -389,28 +440,28 @@ bool Blocks(ShadowRay r, float3 p0, float3 p1, float3 p2) {
 // not matter for an any-hit query, so the left child is visited first and the right one pushed.
 // A node at depth d has at most d pending siblings, and the build makes every node at depth
 // BVH_STACK a leaf, so the stack cannot overflow. The triangle `self` (the ray's own) is skipped.
-bool OccludedBvh(ByteAddressBuffer nodes, ByteAddressBuffer occluders, uint nodeCount, ShadowRay r, uint self) {
+bool OccludedBvh(ViewportBuffer nodes, ViewportBuffer occluders, uint nodeCount, ShadowRay r, uint self) {
     if (nodeCount == 0u) return false;
     uint stack[BVH_STACK];
     uint depth = 0u;
     uint node = 0u;
     for (;;) {
-        const uint4 a = nodes.Load4(node * NODE_BYTES);
-        const uint4 b = nodes.Load4(node * NODE_BYTES + 16u);
+        const uint4 a = LoadWords4(nodes, node * NODE_BYTES);
+        const uint4 b = LoadWords4(nodes, node * NODE_BYTES + 16u);
         if (b.w != 0u) {
             for (uint k = 0u; k < b.w; ++k) {
                 const uint base = (a.w + k) * OCCLUDER_BYTES;
-                const uint4 q0 = occluders.Load4(base);
+                const uint4 q0 = LoadWords4(occluders, base);
                 if (q0.w == self) continue;
-                if (Blocks(r, asfloat(q0.xyz), asfloat(occluders.Load3(base + 16u)), asfloat(occluders.Load3(base + 32u)))) {
+                if (Blocks(r, asfloat(q0.xyz), asfloat(LoadWords3(occluders, base + 16u)), asfloat(LoadWords3(occluders, base + 32u)))) {
                     return true;
                 }
             }
         } else {
             const uint left = a.w;
-            const bool hitLeft = HitsBox(r, asfloat(nodes.Load3(left * NODE_BYTES)), asfloat(nodes.Load3(left * NODE_BYTES + 16u)));
+            const bool hitLeft = HitsBox(r, asfloat(LoadWords3(nodes, left * NODE_BYTES)), asfloat(LoadWords3(nodes, left * NODE_BYTES + 16u)));
             const uint right = left + 1u;
-            const bool hitRight = HitsBox(r, asfloat(nodes.Load3(right * NODE_BYTES)), asfloat(nodes.Load3(right * NODE_BYTES + 16u)));
+            const bool hitRight = HitsBox(r, asfloat(LoadWords3(nodes, right * NODE_BYTES)), asfloat(LoadWords3(nodes, right * NODE_BYTES + 16u)));
             if (hitLeft) {
                 if (hitRight) stack[depth++] = right;
                 node = left;
@@ -428,12 +479,12 @@ bool OccludedBvh(ByteAddressBuffer nodes, ByteAddressBuffer occluders, uint node
 }
 
 // Any hit by testing every triangle in order (the reference of the traversal; tests only).
-bool OccludedLinear(ByteAddressBuffer occluders, uint count, ShadowRay r, uint self) {
+bool OccludedLinear(ViewportBuffer occluders, uint count, ShadowRay r, uint self) {
     for (uint j = 0u; j < count; ++j) {
         const uint base = j * OCCLUDER_BYTES;
-        const uint4 q0 = occluders.Load4(base);
+        const uint4 q0 = LoadWords4(occluders, base);
         if (q0.w == self) continue;
-        if (Blocks(r, asfloat(q0.xyz), asfloat(occluders.Load3(base + 16u)), asfloat(occluders.Load3(base + 32u)))) {
+        if (Blocks(r, asfloat(q0.xyz), asfloat(LoadWords3(occluders, base + 16u)), asfloat(LoadWords3(occluders, base + 32u)))) {
             return true;
         }
     }
@@ -488,7 +539,7 @@ void Basis(float3 n, out float3 t, out float3 b) {
 
 // The largest i in [0, size - 2] with cdf[i] <= x, for cdf[0] = 0 <= x < cdf[size - 1] = 1: the
 // interval it opens has cdf[i] <= x < cdf[i + 1], so it has a positive width.
-uint FindInterval(ByteAddressBuffer lighting, uint offset, uint size, float x) {
+uint FindInterval(ViewportBuffer lighting, uint offset, uint size, float x) {
     uint lo = 0u;
     uint hi = size - 1u;
     while (hi - lo > 1u) {
@@ -508,10 +559,10 @@ uint FindInterval(ByteAddressBuffer lighting, uint offset, uint size, float x) {
 
 // A direction drawn from the distribution (PBRT 4th ed. PiecewiseConstant2D, continuous within
 // a texel) and its density per unit solid angle (0 at a pole).
-float3 SampleEnvironment(ByteAddressBuffer lighting, float2 xi, float rotationTurns, out float pdf) {
-    const uint offset = lighting.Load(46u * 4u);
-    const uint w = lighting.Load(47u * 4u);
-    const uint h = lighting.Load(48u * 4u);
+float3 SampleEnvironment(ViewportBuffer lighting, float2 xi, float rotationTurns, out float pdf) {
+    const uint offset = LoadWords(lighting, 46u * 4u);
+    const uint w = LoadWords(lighting, 47u * 4u);
+    const uint h = LoadWords(lighting, 48u * 4u);
     const uint row = FindInterval(lighting, offset, h + 1u, xi.y);
     const float m0 = LoadF(lighting, offset + row);
     const float m1 = LoadF(lighting, offset + row + 1u);
@@ -530,10 +581,10 @@ float3 SampleEnvironment(ByteAddressBuffer lighting, float2 xi, float rotationTu
 }
 
 // The distribution's density per unit solid angle in direction d (unit).
-float EnvironmentPdf(ByteAddressBuffer lighting, float3 d, float rotationTurns) {
-    const uint offset = lighting.Load(46u * 4u);
-    const uint w = lighting.Load(47u * 4u);
-    const uint h = lighting.Load(48u * 4u);
+float EnvironmentPdf(ViewportBuffer lighting, float3 d, float rotationTurns) {
+    const uint offset = LoadWords(lighting, 46u * 4u);
+    const uint w = LoadWords(lighting, 47u * 4u);
+    const uint h = LoadWords(lighting, 48u * 4u);
     float u = atan2(-d.x, d.z) / (2.0f * PI) + 0.25f + rotationTurns;
     u -= floor(u);
     const float v = acos(clamp(d.y, -1.0f, 1.0f)) / PI;
@@ -614,7 +665,7 @@ float AoVisibility(VisibilityInputs v, float3 d) {
 // balance-heuristic mixture (Veach 1997) of cosine-weighted directions about the shading normal
 // and environment-importance directions, w = cos / p_mix. Directions below the geometric facet
 // are left out of both sums. V is V_ao (AoVisibility) for a direction no triangle blocks, else 0.
-float3 DiffuseVisibility(ByteAddressBuffer lighting, ByteAddressBuffer nodes, ByteAddressBuffer occluders,
+float3 DiffuseVisibility(ViewportBuffer lighting, ViewportBuffer nodes, ViewportBuffer occluders,
                          VisibilityInputs v, uint count) {
     if (count == 0u) return float3(1.0f, 1.0f, 1.0f);
     const uint cosineCount = (count + 1u) / 2u;
@@ -673,7 +724,7 @@ float3 DiffuseVisibility(ByteAddressBuffer lighting, ByteAddressBuffer nodes, By
 // direction no triangle blocks, else 0: V_ao weighted over the sampled lobe is the specular
 // occlusion, so it depends on the view and the roughness. `withCavity` is the same ratio over the
 // same rays with the weight of `cavityWeight` (the aperture times the cavity, decision 258).
-float3 SpecularVisibility(ByteAddressBuffer lighting, ByteAddressBuffer nodes, ByteAddressBuffer occluders,
+float3 SpecularVisibility(ViewportBuffer lighting, ViewportBuffer nodes, ViewportBuffer occluders,
                           VisibilityInputs v, VisibilityInputs cavityWeight, float3 view, float3 f0, float roughness,
                           uint count, out float3 withCavity) {
     withCavity = float3(1.0f, 1.0f, 1.0f);
@@ -761,22 +812,23 @@ float3 SpecularVisibility(ByteAddressBuffer lighting, ByteAddressBuffer nodes, B
 
 // ── Pass ─────────────────────────────────────────────────────────────────────────────────────
 
-uint DisplayCodeOf(ByteAddressBuffer table, float value) {
+uint DisplayCodeOf(ViewportBuffer table, float value) {
     const uint bits = f32tof16(RoundToHalf(value));
-    const uint word = table.Load((bits >> 1u) * 4u);
+    const uint word = LoadWords(table, (bits >> 1u) * 4u);
     return (bits & 1u) != 0u ? (word >> 16u) : (word & 0xFFFFu);
 }
 
+#if !defined(UZP_VIEWPORT_DISPLAY) && !defined(UZP_VIEWPORT_PROBE)
 [numthreads(8, 8, 1)]
 void main(uint3 id : SV_DispatchThreadID) {
     if (id.x >= g_width || id.y >= g_height) return;
-    ByteAddressBuffer frame = ResourceDescriptorHeap[g_frameSrv];
-    ByteAddressBuffer triangles = ResourceDescriptorHeap[g_trianglesSrv];
-    ByteAddressBuffer tileOffsets = ResourceDescriptorHeap[g_tileOffsetsSrv];
-    ByteAddressBuffer tileTriangles = ResourceDescriptorHeap[g_tileTrianglesSrv];
-    ByteAddressBuffer materials = ResourceDescriptorHeap[g_materialsSrv];
-    ByteAddressBuffer lighting = ResourceDescriptorHeap[g_lightingSrv];
-    ByteAddressBuffer table = ResourceDescriptorHeap[g_tableSrv];
+    ViewportBuffer frame = ViewportResource(g_frameSrv);
+    ViewportBuffer triangles = ViewportResource(g_trianglesSrv);
+    ViewportBuffer tileOffsets = ViewportResource(g_tileOffsetsSrv);
+    ViewportBuffer tileTriangles = ViewportResource(g_tileTrianglesSrv);
+    ViewportBuffer materials = ViewportResource(g_materialsSrv);
+    ViewportBuffer lighting = ViewportResource(g_lightingSrv);
+    ViewportBuffer table = ViewportResource(g_tableSrv);
 
     const float3 eye = LoadF3(frame, 0u);
     const float3 right = LoadF3(frame, 3u);
@@ -787,15 +839,15 @@ void main(uint3 id : SV_DispatchThreadID) {
     const float3 background = LoadF3(frame, 14u);
     const float rotationTurns = LoadF(frame, 17u);
     const float intensity = LoadF(frame, 18u);
-    const uint materialCount = frame.Load(20u * 4u);
-    const uint levels = frame.Load(21u * 4u);
-    const uint brdfSize = frame.Load(22u * 4u);
-    const uint tilesX = frame.Load(23u * 4u);
-    const bool orthographic = frame.Load(24u * 4u) != 0u;
-    const uint diffuseRays = frame.Load(25u * 4u);
-    const uint specularRays = frame.Load(26u * 4u);
-    const uint nodeCount = frame.Load(27u * 4u);
-    const uint outputMode = frame.Load(28u * 4u);
+    const uint materialCount = LoadWords(frame, 20u * 4u);
+    const uint levels = LoadWords(frame, 21u * 4u);
+    const uint brdfSize = LoadWords(frame, 22u * 4u);
+    const uint tilesX = LoadWords(frame, 23u * 4u);
+    const bool orthographic = LoadWords(frame, 24u * 4u) != 0u;
+    const uint diffuseRays = LoadWords(frame, 25u * 4u);
+    const uint specularRays = LoadWords(frame, 26u * 4u);
+    const uint nodeCount = LoadWords(frame, 27u * 4u);
+    const uint outputMode = LoadWords(frame, 28u * 4u);
     const float occlusionStrength = LoadF(frame, 29u);
     const float cavityRadius = LoadF(frame, 30u);
 
@@ -824,14 +876,14 @@ void main(uint3 id : SV_DispatchThreadID) {
     // Nearest hit among the tile's covering triangles, ascending index, strict nearer. The depth
     // and barycentrics of a covering triangle are Moller-Trumbore's.
     const uint tile = (id.y / TILE) * tilesX + id.x / TILE;
-    const uint first = tileOffsets.Load(tile * 4u);
-    const uint last = tileOffsets.Load((tile + 1u) * 4u);
+    const uint first = LoadWords(tileOffsets, tile * 4u);
+    const uint last = LoadWords(tileOffsets, (tile + 1u) * 4u);
     float bestT = 3.402823e38f;
     uint best = NO_MAP;
     float bestU = 0.0f;
     float bestV = 0.0f;
     for (uint k = first; k < last; ++k) {
-        const uint t = tileTriangles.Load(k * 4u);
+        const uint t = LoadWords(tileTriangles, k * 4u);
         const uint base = t * TRIANGLE_WORDS;
         const float3 p0 = LoadF3(triangles, base);
         const float3 p1 = LoadF3(triangles, base + 12u);
@@ -878,12 +930,12 @@ void main(uint3 id : SV_DispatchThreadID) {
         float3 ng = normalize(cross(p1 - p0, p2 - p0));
         float3 n = LoadF3(triangles, base + 3u) * w0 + LoadF3(triangles, base + 15u) * bestU +
                    LoadF3(triangles, base + 27u) * bestV;
-        const float2 uv = asfloat(triangles.Load2((base + 6u) * 4u)) * w0 +
-                          asfloat(triangles.Load2((base + 18u) * 4u)) * bestU +
-                          asfloat(triangles.Load2((base + 30u) * 4u)) * bestV;
-        const float4 t0 = asfloat(triangles.Load4((base + 8u) * 4u));
-        const float4 t1 = asfloat(triangles.Load4((base + 20u) * 4u));
-        const float4 t2 = asfloat(triangles.Load4((base + 32u) * 4u));
+        const float2 uv = asfloat(LoadWords2(triangles, (base + 6u) * 4u)) * w0 +
+                          asfloat(LoadWords2(triangles, (base + 18u) * 4u)) * bestU +
+                          asfloat(LoadWords2(triangles, (base + 30u) * 4u)) * bestV;
+        const float4 t0 = asfloat(LoadWords4(triangles, (base + 8u) * 4u));
+        const float4 t1 = asfloat(LoadWords4(triangles, (base + 20u) * 4u));
+        const float4 t2 = asfloat(LoadWords4(triangles, (base + 32u) * 4u));
         const float3 tangent = t0.xyz * w0 + t1.xyz * bestU + t2.xyz * bestV;
         const float handedness = (t0.w * w0 + t1.w * bestU + t2.w * bestV) < 0.0f ? -1.0f : 1.0f;
         const float3 view = -dir;
@@ -892,7 +944,7 @@ void main(uint3 id : SV_DispatchThreadID) {
             n = -n;
         }
         if (dot(n, n) == 0.0f) n = ng;
-        const uint material = triangles.Load((base + 36u) * 4u);
+        const uint material = LoadWords(triangles, (base + 36u) * 4u);
 
         float3 baseColour = float3(0.8f, 0.8f, 0.8f);
         float metalness = 0.0f;
@@ -931,9 +983,9 @@ void main(uint3 id : SV_DispatchThreadID) {
                 c.p[0] = p0;
                 c.p[1] = p1;
                 c.p[2] = p2;
-                c.uv[0] = asfloat(triangles.Load2((base + 6u) * 4u));
-                c.uv[1] = asfloat(triangles.Load2((base + 18u) * 4u));
-                c.uv[2] = asfloat(triangles.Load2((base + 30u) * 4u));
+                c.uv[0] = asfloat(LoadWords2(triangles, (base + 6u) * 4u));
+                c.uv[1] = asfloat(LoadWords2(triangles, (base + 18u) * 4u));
+                c.uv[2] = asfloat(LoadWords2(triangles, (base + 30u) * 4u));
                 c.at = uv;
                 c.n = n;
                 c.tangent = tangent;
@@ -968,8 +1020,8 @@ void main(uint3 id : SV_DispatchThreadID) {
 
         // Visibility (decision 251): rays leave the hit point, interpolated from the corners
         // and moved off the triangle along its geometric normal, towards the viewer's side.
-        ByteAddressBuffer nodes = ResourceDescriptorHeap[g_bvhNodesSrv];
-        ByteAddressBuffer occluders = ResourceDescriptorHeap[g_occludersSrv];
+        ViewportBuffer nodes = ViewportResource(g_bvhNodesSrv);
+        ViewportBuffer occluders = ViewportResource(g_occludersSrv);
         VisibilityInputs vis;
         vis.origin = OffsetRayOrigin(p0 * w0 + p1 * bestU + p2 * bestV, ng);
         vis.ng = ng;
@@ -1002,13 +1054,19 @@ void main(uint3 id : SV_DispatchThreadID) {
     }
 
     const float4 linearColour = float4(RoundToHalf(colour.x), RoundToHalf(colour.y), RoundToHalf(colour.z), 1.0f);
+#ifdef UZP_FIXED_SLOTS
+    StoreTexel(g_linearUav, id.xy, linearColour);
+#else
     RWTexture2D<float4> linearOut = ResourceDescriptorHeap[g_linearUav];
     linearOut[id.xy] = linearColour;
     const uint4 codes = uint4(DisplayCodeOf(table, linearColour.x), DisplayCodeOf(table, linearColour.y),
                               DisplayCodeOf(table, linearColour.z), 65535u);
     RWTexture2D<float4> displayOut = ResourceDescriptorHeap[g_displayUav];
     displayOut[id.xy] = float4(codes) / 65535.0f;
+#endif
 }
+
+#endif
 
 // `probe` (tests, viewport.h `TraceVisibility`): one thread per ray of the buffer at g_frameSrv
 // (words 0-2 the ray, occluder and node counts, word 3 zero, then 12 words per ray: point xyz,
@@ -1016,22 +1074,43 @@ void main(uint3 id : SV_DispatchThreadID) {
 // `normal` by OffsetRayOrigin (a zero normal moves nothing). Texel (i % g_width, i / g_width) of
 // g_linearUav receives (blocked through the BVH, blocked by the linear test of every triangle,
 // 0, 1).
+#ifndef UZP_VIEWPORT_DISPLAY
 [numthreads(64, 1, 1)]
 void probe(uint3 id : SV_DispatchThreadID) {
-    ByteAddressBuffer rays = ResourceDescriptorHeap[g_frameSrv];
-    ByteAddressBuffer nodes = ResourceDescriptorHeap[g_bvhNodesSrv];
-    ByteAddressBuffer occluders = ResourceDescriptorHeap[g_occludersSrv];
-    const uint count = rays.Load(0u);
+    ViewportBuffer rays = ViewportResource(g_frameSrv);
+    ViewportBuffer nodes = ViewportResource(g_bvhNodesSrv);
+    ViewportBuffer occluders = ViewportResource(g_occludersSrv);
+    const uint count = LoadWords(rays, 0u);
     const uint i = id.x;
     if (i >= count) return;
     const uint base = (4u + i * 12u) * 4u;
-    const float3 start = asfloat(rays.Load3(base));
-    const float3 normal = asfloat(rays.Load3(base + 12u));
-    const float3 dir = asfloat(rays.Load3(base + 24u));
-    const uint self = rays.Load(base + 36u);
+    const float3 start = asfloat(LoadWords3(rays, base));
+    const float3 normal = asfloat(LoadWords3(rays, base + 12u));
+    const float3 dir = asfloat(LoadWords3(rays, base + 24u));
+    const uint self = LoadWords(rays, base + 36u);
     const ShadowRay r = MakeShadowRay(OffsetRayOrigin(start, normal), dir);
-    const bool viaBvh = OccludedBvh(nodes, occluders, rays.Load(8u), r, self);
-    const bool viaLinear = OccludedLinear(occluders, rays.Load(4u), r, self);
+    const bool viaBvh = OccludedBvh(nodes, occluders, LoadWords(rays, 8u), r, self);
+    const bool viaLinear = OccludedLinear(occluders, LoadWords(rays, 4u), r, self);
+#ifdef UZP_FIXED_SLOTS
+    StoreTexel(g_linearUav, uint2(id.x % g_width, id.x / g_width),
+               float4(viaBvh ? 1.0f : 0.0f, viaLinear ? 1.0f : 0.0f, 0.0f, 1.0f));
+#else
     RWTexture2D<float4> result = ResourceDescriptorHeap[g_linearUav];
     result[uint2(i % g_width, i / g_width)] = float4(viaBvh ? 1.0f : 0.0f, viaLinear ? 1.0f : 0.0f, 0.0f, 1.0f);
+#endif
 }
+
+#endif
+
+#ifdef UZP_VIEWPORT_DISPLAY
+// The Vulkan subset binds one storage image. Read the completed binary16 colour in a
+// second dispatch, using the same display table and rounding as the DX12 pass.
+[numthreads(8, 8, 1)]
+void display(uint3 id : SV_DispatchThreadID) {
+    if (id.x >= g_width || id.y >= g_height) return;
+    const float4 colour = LoadTexel(g_linearUav, id.xy);
+    const uint4 codes = uint4(DisplayCodeOf(g_tableSrv, colour.x), DisplayCodeOf(g_tableSrv, colour.y),
+                             DisplayCodeOf(g_tableSrv, colour.z), 65535u);
+    StoreTexel(g_displayUav, id.xy, float4(codes) / 65535.0f);
+}
+#endif

@@ -6798,6 +6798,8 @@
    "uzpainter.event.flush",
    "uzpainter.event.post",
    "uzpainter.jobs.busy",
+   "uzpainter.layerstack.Node.uid",
+   "uzpainter.layerstack.PaintLayerNode",
    "uzpainter.layerstack.get_root_layer_nodes",
    "uzpainter.project.Metadata",
    "uzpainter.project.Metadata.get",
@@ -6830,9 +6832,12 @@
    "uzpainter.textureset.MeshMapUsage.Thickness",
    "uzpainter.textureset.MeshMapUsage.WorldSpaceNormal",
    "uzpainter.textureset.Stack",
+   "uzpainter.textureset.Stack.material",
+   "uzpainter.textureset.Stack.uid",
    "uzpainter.textureset.TextureSet",
    "uzpainter.textureset.TextureSet.all_stacks",
    "uzpainter.textureset.TextureSet.name",
+   "uzpainter.textureset.TextureSet.uid",
    "uzpainter.textureset.all_texture_sets",
    "uzpainter.textureset.get_active_stack"
   ]

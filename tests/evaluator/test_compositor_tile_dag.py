@@ -148,7 +148,9 @@ def test_evaluation_order_on_the_cpu(evaluator_tests: Path) -> None:
         "opacity",
         "an instance layer evaluates its source layer in its own position",
         "a 1:1 bitmap on RGB16 copies every code exactly",
-        "a paint layer fails with unsupported_node",
+        "an empty paint layer preserves the template base without a blend",
+        "an empty paint layer preserves the underlying RGB16, L16 and RGB32F channels",
+        "a paint layer with plane content fails with unsupported_node",
         "a non-separable blend mode (Tint) evaluates",
         "a bitmap without bytes fails with missing_resource",
     } <= passed

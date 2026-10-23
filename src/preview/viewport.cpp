@@ -5,6 +5,7 @@
 #include "preview/visibility.h"
 #include "render/image_pass.h"
 #include "render/kernel_cache.h"
+#include "render/kernel_bindings.h"
 #include "render/texture_readback.h"
 
 #include <algorithm>
@@ -177,8 +178,8 @@ public:
     Buffers(const Buffers&) = delete;
     Buffers& operator=(const Buffers&) = delete;
 
-    /// A raw shader-readable buffer holding `bytes` (zero-padded to 16 bytes); its SRV index.
-    Result<uint32_t> Raw(std::span<const std::byte> bytes, const char* name) {
+    /// A shader-readable buffer holding `bytes` (zero-padded to 16 bytes); its owned GPU handle.
+    Result<uz::RHIBufferHandle> Raw(std::span<const std::byte> bytes, const char* name) {
         Pair pair;
         pair.size = std::max<uint64_t>(16, (bytes.size() + 15) / 16 * 16);
         uz::RHIBufferDesc desc;
@@ -189,7 +190,7 @@ public:
         Result<uz::RHIBufferHandle> upload = m_device.CreateBuffer(desc);
         if (!upload) return Unexpected(upload.error());
         pair.upload = *upload;
-        desc.stride = 0;
+        desc.stride = m_device.GetBackend() == render::Backend::Vulkan ? sizeof(uint32_t) : 0;
         desc.usage = uz::RHIBufferUsage::StructuredBuffer | uz::RHIBufferUsage::CopyDst;
         desc.memory = uz::RHIMemoryType::Default;
         Result<uz::RHIBufferHandle> gpu = m_device.CreateBuffer(desc);
@@ -207,7 +208,7 @@ public:
         std::memset(mapped, 0, pair.size);
         if (!bytes.empty()) std::memcpy(mapped, bytes.data(), bytes.size());
         m_device.Rhi().UnmapBuffer(pair.upload);
-        return m_device.Rhi().GetBufferSRVIndex(pair.gpu);
+        return pair.gpu;
     }
 
     void RecordUploads(uz::IRHICommandList& cmd) const {
@@ -309,7 +310,18 @@ double CavityRadiusOf(const mesh::TexturingMesh& mesh) {
 }
 
 uint64_t ViewportKernelKey(render::KernelTarget target, std::string_view compilerVersion) {
-    return render::KernelKey(ViewportKernel(), target, compilerVersion);
+    return render::KernelKey(ViewportShaderSource(target), target, compilerVersion);
+}
+
+render::KernelSource ViewportShaderSource(render::KernelTarget target, std::string_view entry) {
+    render::KernelSource source = entry == "probe" ? ProbeKernel() : ViewportKernel();
+    if (target != render::KernelTarget::Spirv) return source;
+    source.defines.emplace_back(entry == "display" ? "UZP_DST_FORMAT=5" : "UZP_DST_FORMAT=6");
+    if (entry != "main") {
+        source.entryPoint = std::string(entry);
+        source.defines.emplace_back(entry == "display" ? "UZP_VIEWPORT_DISPLAY" : "UZP_VIEWPORT_PROBE");
+    }
+    return render::image_pass_detail::VulkanEntryPoint(std::move(source));
 }
 
 std::vector<float> WorldCorners(const mesh::TexturingMesh& mesh) {
@@ -384,9 +396,9 @@ struct ResidentInputs::State {
     explicit State(render::IDevice& d) : device(&d), buffers(d) {}
     render::IDevice* device;
     Buffers buffers;
-    /// The SRVs of the materials, the maps, the lighting, the display table, the BVH nodes and the
+    /// The buffers of the materials, the maps, the lighting, the display table, the BVH nodes and the
     /// occluders.
-    std::array<uint32_t, 6> srv{};
+    std::array<uz::RHIBufferHandle, 6> srv{};
     uint32_t nodeCount = 0;
     bool uploaded = false;
 };
@@ -496,7 +508,7 @@ Result<ResidentInputs::State*> ResidentAccess::Of(ResidentInputs& resident, rend
         {&bvh->occluders, "viewport_occluders"},
     }};
     for (size_t i = 0; i < inputs.size(); ++i) {
-        Result<uint32_t> index = state.buffers.Raw(Bytes(*inputs[i].first), inputs[i].second);
+        Result<uz::RHIBufferHandle> index = state.buffers.Raw(Bytes(*inputs[i].first), inputs[i].second);
         if (!index) return Unexpected(index.error());
         state.srv[i] = *index;
     }
@@ -645,11 +657,17 @@ Result<ViewportImage> RenderViewport(render::EngineContext& context, const Viewp
     frame.push_back(std::bit_cast<uint32_t>(kOcclusionStrength));
     PushFloat(frame, scene.cavity ? CavityRadiusOf(mesh) : 0.0);
 
-    Result<render::ComputeKernel> kernel = context.Kernel(ViewportKernel());
+    Result<render::ComputeKernel> kernel = context.Kernel(ViewportShaderSource(device.NativeKernelTarget()));
+    std::optional<render::ComputeKernel> displayKernel;
+    if (device.GetBackend() == render::Backend::Vulkan) {
+        auto compiled = context.Kernel(ViewportShaderSource(render::KernelTarget::Spirv, "display"));
+        if (!compiled) return Unexpected(compiled.error());
+        displayKernel = *compiled;
+    }
     if (!kernel) return Unexpected(kernel.error());
 
     Buffers buffers(device);
-    std::array<uint32_t, 4> srv{};
+    std::array<uz::RHIBufferHandle, 4> srv{};
     {
         const std::array<std::pair<const std::vector<uint32_t>*, const char*>, 4> perRender{{
             {&frame, "viewport_frame"},
@@ -658,7 +676,7 @@ Result<ViewportImage> RenderViewport(render::EngineContext& context, const Viewp
             {&tileTriangles, "viewport_tile_triangles"},
         }};
         for (size_t i = 0; i < perRender.size(); ++i) {
-            Result<uint32_t> index = buffers.Raw(Bytes(*perRender[i].first), perRender[i].second);
+            Result<uz::RHIBufferHandle> index = buffers.Raw(Bytes(*perRender[i].first), perRender[i].second);
             if (!index) return Unexpected(index.error());
             srv[i] = *index;
         }
@@ -683,34 +701,61 @@ Result<ViewportImage> RenderViewport(render::EngineContext& context, const Viewp
     }
     const std::array<uz::RHITextureHandle, 2> outputs{*linear, *display};
 
+    render::KernelBindings bindings(device);
     const std::array<uint32_t, 14> root{width,
                                         height,
-                                        srv[0],
-                                        srv[1],
-                                        srv[2],
-                                        srv[3],
-                                        state.srv[0],
-                                        state.srv[1],
-                                        state.srv[2],
-                                        state.srv[3],
-                                        device.Rhi().GetTextureUAVIndex(*linear),
+                                        bindings.Buffer(srv[0]),
+                                        bindings.Buffer(srv[1]),
+                                        bindings.Buffer(srv[2]),
+                                        bindings.Buffer(srv[3]),
+                                        bindings.Buffer(state.srv[0]),
+                                        bindings.Buffer(state.srv[1]),
+                                        bindings.Buffer(state.srv[2]),
+                                        bindings.Buffer(state.srv[3]),
+                                        bindings.Output(*linear),
                                         device.Rhi().GetTextureUAVIndex(*display),
-                                        state.srv[4],
-                                        state.srv[5]};
+                                        bindings.Buffer(state.srv[4]),
+                                        bindings.Buffer(state.srv[5])};
     const auto transition = [&](uz::IRHICommandList& cmd, uz::RHIResourceState before, uz::RHIResourceState after) {
         const uz::RHIBarrierDesc barriers[2] = {{outputs[0], uz::RHIBufferHandle::Invalid(), before, after},
                                                 {outputs[1], uz::RHIBufferHandle::Invalid(), before, after}};
         cmd.ResourceBarrier(barriers, 2);
     };
+    render::KernelBindings displayBindings(device);
+    std::array<uint32_t, 14> displayRoot{};
+    if (displayKernel) {
+        displayRoot[0] = width;
+        displayRoot[1] = height;
+        displayRoot[9] = displayBindings.Buffer(state.srv[3]);
+        displayRoot[10] = displayBindings.Texture(*linear);
+        displayRoot[11] = displayBindings.Output(*display);
+    }
+    if (auto valid = bindings.Validate(); !valid) {
+        for (auto output : outputs) device.DestroyTexture(output);
+        return Unexpected(valid.error());
+    }
     const bool upload = !state.uploaded;
     Result<void> done = context.SubmitAndWait([&](uz::IRHICommandList& cmd) {
         if (upload) state.buffers.RecordUploads(cmd);
         buffers.RecordUploads(cmd);
         transition(cmd, uz::RHIResourceState::Common, uz::RHIResourceState::UnorderedAccess);
         cmd.SetPipeline(kernel->pipeline);
-        cmd.SetRootConstants(render::kRootConstantsParam, root.data(), static_cast<uint32_t>(root.size()));
+        bindings.Record(cmd, root);
         cmd.Dispatch((width + 7) / 8, (height + 7) / 8, 1);
-        transition(cmd, uz::RHIResourceState::UnorderedAccess, uz::RHIResourceState::Common);
+        if (displayKernel) {
+            const uz::RHIBarrierDesc linearRead{*linear, uz::RHIBufferHandle::Invalid(),
+                uz::RHIResourceState::UnorderedAccess, uz::RHIResourceState::ShaderResource};
+            cmd.ResourceBarrier(&linearRead, 1);
+            cmd.SetPipeline(displayKernel->pipeline);
+            displayBindings.Record(cmd, displayRoot);
+            cmd.Dispatch((width + 7) / 8, (height + 7) / 8, 1);
+            const uz::RHIBarrierDesc finalBarriers[2] = {
+                {*linear, uz::RHIBufferHandle::Invalid(), uz::RHIResourceState::ShaderResource, uz::RHIResourceState::Common},
+                {*display, uz::RHIBufferHandle::Invalid(), uz::RHIResourceState::UnorderedAccess, uz::RHIResourceState::Common}};
+            cmd.ResourceBarrier(finalBarriers, 2);
+        } else {
+            transition(cmd, uz::RHIResourceState::UnorderedAccess, uz::RHIResourceState::Common);
+        }
     });
     const auto release = [&] {
         for (uz::RHITextureHandle texture : outputs) device.DestroyTexture(texture);
@@ -772,10 +817,10 @@ Result<VisibilityHits> TraceVisibility(render::EngineContext& context, const mes
         rayWords.insert(rayWords.end(), {ray.self, 0u, 0u});
     }
 
-    Result<render::ComputeKernel> kernel = context.Kernel(ProbeKernel());
+    Result<render::ComputeKernel> kernel = context.Kernel(ViewportShaderSource(device.NativeKernelTarget(), "probe"));
     if (!kernel) return Unexpected(kernel.error());
     Buffers buffers(device);
-    std::array<uint32_t, 3> srv{};
+    std::array<uz::RHIBufferHandle, 3> srv{};
     {
         const std::array<std::pair<const std::vector<uint32_t>*, const char*>, 3> inputs{{
             {&rayWords, "viewport_probe_rays"},
@@ -783,7 +828,7 @@ Result<VisibilityHits> TraceVisibility(render::EngineContext& context, const mes
             {&bvh->occluders, "viewport_occluders"},
         }};
         for (size_t i = 0; i < inputs.size(); ++i) {
-            Result<uint32_t> index = buffers.Raw(Bytes(*inputs[i].first), inputs[i].second);
+            Result<uz::RHIBufferHandle> index = buffers.Raw(Bytes(*inputs[i].first), inputs[i].second);
             if (!index) return Unexpected(index.error());
             srv[i] = *index;
         }
@@ -798,15 +843,20 @@ Result<VisibilityHits> TraceVisibility(render::EngineContext& context, const mes
     desc.debugName = "viewport_probe_result";
     Result<uz::RHITextureHandle> result = device.CreateTexture(desc);
     if (!result) return Unexpected(result.error());
-    const std::array<uint32_t, 14> root{width, height, srv[0], 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-                                        device.Rhi().GetTextureUAVIndex(*result), 0u, srv[1], srv[2]};
+    render::KernelBindings bindings(device);
+    const std::array<uint32_t, 14> root{width, height, bindings.Buffer(srv[0]), 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+                                      bindings.Output(*result), 0u, bindings.Buffer(srv[1]), bindings.Buffer(srv[2])};
+    if (auto valid = bindings.Validate(); !valid) {
+        device.DestroyTexture(*result);
+        return Unexpected(valid.error());
+    }
     Result<void> done = context.SubmitAndWait([&](uz::IRHICommandList& cmd) {
         buffers.RecordUploads(cmd);
         const uz::RHIBarrierDesc toWrite{*result, uz::RHIBufferHandle::Invalid(), uz::RHIResourceState::Common,
                                          uz::RHIResourceState::UnorderedAccess};
         cmd.ResourceBarrier(&toWrite, 1);
         cmd.SetPipeline(kernel->pipeline);
-        cmd.SetRootConstants(render::kRootConstantsParam, root.data(), static_cast<uint32_t>(root.size()));
+        bindings.Record(cmd, root);
         cmd.Dispatch((count + 63) / 64, 1, 1);
         const uz::RHIBarrierDesc toCommon{*result, uz::RHIBufferHandle::Invalid(), uz::RHIResourceState::UnorderedAccess,
                                           uz::RHIResourceState::Common};

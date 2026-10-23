@@ -14,6 +14,7 @@
 // `Transaction` left open is rolled back.
 
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -23,10 +24,13 @@ namespace uzp::python {
 
 /// `{status: "ok"|"failed", result, stdout, stderr, last_committed_revision, committed,
 ///   error?: {type, message, traceback}}`. Requires the running interpreter and the GIL.
-core::json::Object RunScript(const std::filesystem::path& script, const std::vector<std::string>& args);
+/// Optional host completion runs with the GIL released, while script output remains captured.
+core::json::Object RunScript(const std::filesystem::path& script, const std::vector<std::string>& args,
+                             const std::function<void()>& complete = {});
 
 /// The same for the source text `source` run under the file name `name` (the worker's
 /// `run_python`, src/supervisor/worker.cpp).
-core::json::Object RunSource(const std::string& name, const std::string& source, const std::vector<std::string>& args);
+core::json::Object RunSource(const std::string& name, const std::string& source, const std::vector<std::string>& args,
+                             const std::function<void()>& complete = {});
 
 }  // namespace uzp::python

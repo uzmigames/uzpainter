@@ -124,7 +124,11 @@ core::json::Object Job::Result() const {
     }
 }
 
-bool Job::Cancel() {
+bool Job::Cancel() { return Cancel(false); }
+
+bool Job::CancelQueued() { return Cancel(true); }
+
+bool Job::Cancel(bool queued_only) {
     std::lock_guard lock(mutex_);
     if (status_ == JobStatus::queued) {
         status_ = JobStatus::cancelled;
@@ -133,7 +137,7 @@ bool Job::Cancel() {
         ended_.notify_all();
         return true;
     }
-    if (status_ == JobStatus::running) {
+    if (!queued_only && status_ == JobStatus::running) {
         cancel_requested_ = true;
         return true;
     }

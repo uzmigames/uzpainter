@@ -128,13 +128,14 @@ def pyapi_runner(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 def runner(exe: Path, work: Path, prelude: str) -> Run:
     """Runs a script body (after `prelude`) with `work` as `WORK`; returns its report. A report
-    whose status is not "ok" carries the script's error and traceback."""
+    whose status is not "ok" carries the script's error and traceback. The Debug unavailable
+    fixture keeps this suite on its historical CPU export path."""
 
     def go(body: str) -> dict[str, Any]:
         script = work / "script.py"
         script.write_text(prelude + textwrap.dedent(body), encoding="utf-8")
         process = subprocess.run(
-            [str(exe), str(script), str(work)],
+            [str(exe), str(script), "--test-gpu-unavailable", str(work)],
             capture_output=True,
             text=True,
             encoding="utf-8",

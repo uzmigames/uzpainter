@@ -35,6 +35,7 @@
 #include <string_view>
 #include <vector>
 
+#include "evaluator/admission.h"
 #include "store/project_store.h"
 #include "uzp_core/document/document.h"
 #include "uzp_core/manifest/json.h"
@@ -158,6 +159,9 @@ struct TextureStateNotice {
 class Session {
 public:
     static Session& Get();
+    /// Worker startup pins its ready device's tile budget. No budget leaves CPU-only
+    /// metadata operations available, including workers whose selected GPU is unavailable.
+    void SetAdmissionLimits(std::optional<evaluator::AdmissionLimits> limits);
 
     // ── Lifecycle (`uzpainter.project`) ───────────────────────────────────────────────────────
     /// Imports the mesh and creates an untitled project with one texture set per material, in
@@ -263,6 +267,10 @@ private:
     void PublishTextures(const std::vector<TextureInvalidation>& invalidated,
                          const std::shared_ptr<OpenProject>& origin) const;
     void SetCurrent(std::shared_ptr<OpenProject> project);
+    void RequireAdmission(const core::Project& project) const;
+
+    mutable std::mutex admission_mutex_;
+    std::optional<evaluator::AdmissionLimits> admission_limits_;
 
     mutable std::mutex mutex_;  // guards current_
     std::shared_ptr<OpenProject> current_;

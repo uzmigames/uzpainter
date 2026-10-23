@@ -44,6 +44,12 @@
 #include <vector>
 
 #include "uzp_core/manifest/json.h"
+#include "render/backend.h"
+
+namespace uzp::render {
+class Engine;
+class EngineContext;
+}
 
 namespace uzp::python {
 
@@ -98,10 +104,13 @@ public:
     /// Drops a queued job; asks a running one to stop at its next checkpoint. False when it has
     /// already ended.
     bool Cancel();
+    /// Drops a queued job atomically; never requests cancellation of a running job.
+    bool CancelQueued();
 
 private:
     friend class JobEngine;
     friend class JobContext;
+    bool Cancel(bool queued_only);
     void Run();
 
     const std::string id_;
@@ -156,5 +165,15 @@ private:
 /// their fixed names. It checks at every tile and every file, and its commit point is the
 /// publication of the generation. Raises `RuntimeError` while a native `Transaction` is open.
 JobBody ExportJob(std::string config, std::vector<std::string> fixed_names);
+
+/// A host's operational engine for exports, or null for the CPU path. Set before submitting
+/// jobs; the engine and callback must outlive them. The worker supplies its Debug fault hook.
+void SetExportGpu(render::Engine* engine,
+                  std::function<render::Result<void>(render::EngineContext&)> beforeGpu = {},
+                  std::function<void(const render::Error&)> failed = {});
+
+/// Lazy CLI engine factory, copied into each queued export; the job owns the returned engine
+/// until all submitted work and tile-store cleanup finish. Plan/source refusals do not call it.
+void SetExportGpuFactory(std::function<std::shared_ptr<render::Engine>()> createEngine);
 
 }  // namespace uzp::python

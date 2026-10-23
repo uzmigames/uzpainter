@@ -6,7 +6,8 @@
 // through the pinned display transform (display_transform.h). It is a preview and a fast check,
 // never parity or acceptance evidence (decision 018).
 //
-// Pass, one compute dispatch on the render layer (src/render/):
+// Pass on the render layer (src/render/): one DX12 dispatch; Vulkan shades into binary16, then
+// applies the display table in a second dispatch (the qualified subset binds one storage image).
 // - Visibility: the CPU bins every triangle by its screen bounds into 16 x 16-pixel tiles (with
 //   a perspective camera, a triangle crossing the camera plane goes to every tile; an
 //   orthographic projection is affine, so it keeps its bounds); each pixel casts its centre ray
@@ -273,6 +274,9 @@ private:
 /// XXH64 of the viewport kernel's cache key for the device's bytecode format: the "build" part of
 /// a regression golden's key (it covers the HLSL, the defines, the compile flags and DXC).
 [[nodiscard]] uint64_t ViewportKernelKey(render::KernelTarget target, std::string_view compilerVersion);
+
+/// The exact shader variant used by the renderer; also compiled without a GPU by qualification tests.
+[[nodiscard]] render::KernelSource ViewportShaderSource(render::KernelTarget target, std::string_view entry = "main");
 
 /// The corners of every triangle of `mesh` in world space, nine floats per triangle in the
 /// viewport's triangle order (object, then triangle): what its visibility rays are traced against.

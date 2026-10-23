@@ -89,9 +89,18 @@ Worktree `wt/close-p2` at bbc83b54, Debug `UzPainter.exe` SHA-256 `c416de4fd7320
 
 Per-call overhead (ms; MCP median, `run` median, overhead median, p90, max): Vulkan read 17.7, 0.009, 17.7, 20.1, 21.7; Vulkan insert 56.2, 49.5, 6.7, 34.5, 59.4; DX12 read 20.6, 0.008, 20.6, 44.7, 1583; DX12 insert 64.4, 40.0, 24.3, 478, 1825.
 
+## Vulkan hardware rerun (2026-10-23)
+
+`UZP_SUPERVISOR_BACKEND=vulkan UZP_SETTLING_REPORT=parity/reports/phase2/supervisor-settling.json python -m pytest tests/supervisor -q` passed all 192 tests in 376.22 s, with no skips. The normal session fixture built a fresh Debug executable and recorded SHA-256 `90c0ecc09ccb4a2dad94cb7904940af5dde2d4cfbfd1c57dd202d833fa4bae29`. This reruns the full architecture 02 section 7 suite with a real Vulkan device; the unavailable-device case explicitly injects its own fixture.
+
+All 15 Vulkan cases in the JSON report now pass. GPU stall recovered in 352.114 ms and injected device loss in 317.773 ms, each with one replacement worker on the same backend and the last committed revision preserved. The hook injects loss into that worker's Vulkan queue; it does not fault the driver. Export regressions also verify no partial publication, publication-lock deadlines, recovery after Python catches an export error, and recovery after a background export fails while the worker command loop is idle. The idle-worker regression separately passed on DX12.
+
+The two 50-call overhead corpora recorded median overhead of 11.537 ms for reads and 12.063 ms for mutations; p90 was 12.447 ms and 18.786 ms respectively. The JSON merge preserves the earlier DX12 evidence. Three additional Vulkan admission tests, collected after this full run began, passed against the same executable: heap-derived admission without the memory-budget extension, invalid fixture rejection, and an inert fixture without `--test-faults`.
+
+The earlier tables remain historical evidence of the device-free Vulkan lane. Their pending device-loss and stall entries are superseded by this hardware run, satisfying the supervisor portion of phase3.1_vulkan-compute-parity item 3.4; the task's other acceptance obligations remain separate.
+
 ## Open
 
-- **Vulkan device cases.** The Vulkan device-loss hook and GPU stall wait for the Vulkan device: phase3.1_vulkan-compute-parity items 2.2 and 3.4 (decision 121). They are `pending` in the report.
 - **Hosted CPU lane.** Removed by the owner (decision 200). The local CPU-lane run above is the evidence of the children's item 4.1.
 - **G1.** phase1.25_pilot-wand is not accepted yet. The children and this task close on decision 326's recorded scope split (2026-10-20); the Wand's parity stays with phase1.25 and G1.
 - **HTTP reconnect.** Reconnecting to a running supervisor over HTTP is phase2.5_mcp-transport-registry's (decision 150).

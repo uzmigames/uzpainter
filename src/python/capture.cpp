@@ -485,9 +485,11 @@ json::Object CaptureViewport(const CaptureArguments& a) {
     const render::Result<render::CapabilityReport> capabilities = engine->Capabilities();
     const std::string adapter = capabilities ? capabilities->adapter : "unknown";
     const render::Backend backend = engine->Options().device.backend;
-    const std::string driver =
-        backend == render::Backend::Dx12 ? preview::DriverVersion(engine->Options().device.adapterIndex) : "unknown";
+    const std::string driver = capabilities ? capabilities->driver : "unknown";
     local.reset();
+    if (adapter.empty() || adapter == "unknown" || driver.empty() || driver == "unknown") {
+        throw ApiError("RuntimeError", "capture: the active GPU adapter and driver must be identified");
+    }
 
     // RGB of the display codes (16-bit PNG) and of the linear colour (binary16 OpenEXR); alpha is 1.
     exporter::PngImage png{width, height, 3, 16, {}};

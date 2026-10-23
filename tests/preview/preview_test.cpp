@@ -8,6 +8,10 @@
 //                        the persistent environment lighting (decision 253): stored cold, served warm
 //                        without decoding, damaged entries and other MXCSR bits not served (CPU)
 //   latest               the wait-free hand-over buffer, with a stalled reader
+//   viewport-spirv       compile/inspect the three Vulkan shader variants without a GPU
+//   viewport-backend <work-dir> dx12|vulkan
+//                        qualified native-test device only: repeated fixture captures and CPU
+//                        visibility checks, with backend/adapter/driver in backend-report.json
 //   viewport-unsupported an unsupported display configuration fails before any GPU work (DX12)
 //   viewport-normal-fade a normal map tilted past the viewer's horizon shades continuously (DX12)
 //   viewport-golden <goldens.json> [--bless]
@@ -47,6 +51,8 @@
 #include "render/engine_thread.h"
 #include "render/disk_cache.h"
 #include "render/kernel_cache.h"
+#include "render/vulkan_backend.h"
+#include "render/vulkan_kernels.h"
 #include "uzp_core/manifest/json.h"
 #include "uzp_core/manifest/sha256.h"
 
@@ -721,6 +727,151 @@ int RunViewportNormalFade(const fs::path& dir) {
     Check(high - low > 0.01 && step <= 0.02,
           "the shade is continuous where the perturbed normal turns past the horizon",
           "largest step " + std::to_string(step) + " of range " + std::to_string(high - low));
+    return Finish();
+}
+
+int RunViewportSpirv(const fs::path& dir) {
+    namespace render = uzp::render;
+    auto compiler = render::DxcKernelCompiler::Load(render::DefaultDxcompilerPath());
+    if (!compiler) {
+        Check(false, "DXC loads", compiler.error().Describe());
+        return Finish();
+    }
+    render::KernelCache cache(**compiler, dir / "kernel-cache");
+    for (std::string_view entry : {"main", "display", "probe"}) {
+        const auto source = ViewportShaderSource(render::KernelTarget::Spirv, entry);
+        auto compiled = cache.Get(source, render::KernelTarget::Spirv);
+        const std::string label = "Vulkan viewport " + std::string(entry);
+        Check(compiled.has_value(), label + " compiles to SPIR-V", compiled ? "" : compiled.error().Describe());
+        if (!compiled) continue;
+        const render::SpirvFacts facts = render::InspectSpirv(compiled->bytecode);
+        std::vector<uint32_t> words(compiled->bytecode.size() / 4);
+        std::memcpy(words.data(), compiled->bytecode.data(), compiled->bytecode.size());
+        size_t pushConstants = 0;
+        for (size_t at = 5; at < words.size();) {
+            const uint32_t count = words[at] >> 16;
+            if (!count || at + count > words.size()) break;
+            if ((words[at] & 0xffffu) == 59u && count >= 4 && words[at + 3] == 9u) ++pushConstants;
+            at += count;
+        }
+        bool slots = pushConstants == 1;
+        for (uint32_t set : facts.descriptorSets) slots &= set == 0;
+        for (uint32_t binding : facts.bindings) slots &= binding < 16 || binding == 48 || (binding >= 64 && binding < 80);
+        Check(slots, label + " uses fixed slots and push constants");
+        size_t images = 0;
+        for (uint32_t format : facts.imageFormats) {
+            if (format == 0) continue;
+            ++images;
+            Check(format == (entry == "display" ? 10u : 2u), label + " declares its storage image format");
+        }
+        Check(images == 1, label + " writes one storage image");
+        for (uint32_t capability : facts.capabilities) {
+            Check(capability == render::kSpirvCapabilityShader ||
+                      capability == render::kSpirvCapabilityStorageImageExtendedFormats ||
+                      capability == render::kSpirvCapabilitySignedZeroInfNanPreserve || capability == 10 || capability == 11,
+                  label + " needs only qualified capabilities", std::to_string(capability));
+        }
+    }
+    return Finish();
+}
+
+bool CpuOccluded(const std::vector<float>& corners, const VisibilityRay& ray);
+std::vector<VisibilityRay> RandomRays(const std::vector<float>& corners, size_t count, uint32_t seed);
+
+int RunViewportBackend(const fs::path& dir, std::string_view backend) {
+    namespace render = uzp::render;
+    const auto selected = render::ParseBackend(backend);
+    if (!selected) return 2;
+    EngineOptions options = TestOptions(dir);
+    options.device.backend = *selected;
+    if (*selected == render::Backend::Vulkan) {
+        options.createDevice = [&]() -> Result<std::unique_ptr<render::IDevice>> {
+            const auto survey = render::SurveyVulkan();
+            auto device = render::CreateQualifiedVulkanDevice(survey, render::QualifyVulkan(survey, 0), {});
+            if (!device) return render::Unexpected(device.error());
+            return std::unique_ptr<render::IDevice>(std::move(*device));
+        };
+    }
+    Engine engine(std::move(options));
+    if (engine.DeviceError()) {
+        Info(engine.DeviceError()->Describe());
+        return kExitSkip;
+    }
+    auto caps = engine.Capabilities();
+    if (!caps) {
+        Check(false, "backend capabilities", caps.error().Describe());
+        return Finish();
+    }
+    auto compiler = render::DxcKernelCompiler::Load(render::DefaultDxcompilerPath());
+    if (!compiler) {
+        Check(false, "DXC loads", compiler.error().Describe());
+        return Finish();
+    }
+    const auto target = *selected == render::Backend::Vulkan ? render::KernelTarget::Spirv : render::KernelTarget::Dxil;
+    const auto sky = DecodeEnvironment(Bytes(RepoRoot() / "parity/fixtures/render-procedure/sky-patch.exr"));
+    if (!sky) {
+        Check(false, "the environment decodes", sky.error());
+        return Finish();
+    }
+    const auto lighting = std::make_shared<const EnvironmentLighting>(PrecomputeLighting(*sky));
+    json::Object results;
+    constexpr uint32_t size = 256;
+    for (const Fixture& fixture : Fixtures()) {
+        ViewportScene scene;
+        scene.mesh = fixture.mesh;
+        scene.materials = {fixture.material};
+        if (fixture.second) scene.materials.push_back(*fixture.second);
+        scene.lighting = lighting;
+        scene.environmentRotationDegrees = fixture.rotation;
+        auto camera = FitCamera(*scene.mesh);
+        camera.yawDegrees = fixture.yaw;
+        camera.pitchDegrees = fixture.pitch;
+        std::optional<ViewportImage> first;
+        const auto rendered = engine.Submit(std::make_shared<const int>(0), [&](EngineContext& context, const int&) -> Result<void> {
+            ResidentInputs resident;
+            for (int repeat = 0; repeat < 2; ++repeat) {
+                auto image = RenderViewport(context, scene, camera, size, size, &resident);
+                if (!image) return render::Unexpected(image.error());
+                if (!first) first = std::move(*image);
+                else Check(first->linear == image->linear && first->display == image->display,
+                           fixture.name + ": cold and resident renders are byte-identical");
+            }
+            Check(resident.Builds() == 1, fixture.name + ": resident inputs reused");
+            return {};
+        }).get();
+        Check(rendered.has_value(), fixture.name + " renders", rendered ? "" : rendered.error().Describe());
+        if (!rendered || !first) return Finish();
+        bool display = true;
+        for (size_t i = 0; i < first->linear.size(); ++i) {
+            display &= first->display[i] == (i % 4 == 3 ? 65535 : DisplayTable()[first->linear[i]]);
+        }
+        Check(display, fixture.name + ": every display code equals the CPU table");
+        results[fixture.name] = json::Object{{"linear_sha256", HashOf(first->linear)}, {"display_sha256", HashOf(first->display)}};
+        for (const auto& [suffix, values] : {std::pair{"linear", &first->linear}, std::pair{"display", &first->display}}) {
+            std::ofstream stream(dir / (fixture.name + "." + suffix + ".rgba16"), std::ios::binary);
+            stream.write(reinterpret_cast<const char*>(values->data()), static_cast<std::streamsize>(values->size() * 2));
+        }
+    }
+    const auto probeMesh = CubeOnPlane();
+    const auto corners = WorldCorners(*probeMesh);
+    const auto rays = RandomRays(corners, 4096, 310);
+    auto hits = engine.Submit(std::make_shared<const int>(0), [&](EngineContext& context, const int&) {
+        return TraceVisibility(context, *probeMesh, rays);
+    }).get();
+    Check(hits.has_value(), "visibility probe renders", hits ? "" : hits.error().Describe());
+    if (!hits) return Finish();
+    bool reference = hits->bvh.size() == rays.size() && hits->linear.size() == rays.size();
+    if (reference) {
+        for (size_t i = 0; i < rays.size(); ++i) {
+            reference &= hits->bvh[i] == hits->linear[i] && (hits->bvh[i] != 0) == CpuOccluded(corners, rays[i]);
+        }
+    }
+    Check(reference, "visibility probe equals CPU and linear traversal");
+    std::ofstream(dir / "backend-report.json", std::ios::binary) << json::WriteCanonical(json::Object{
+        {"schema", "uzpainter/preview/backend-diagnostic/1"}, {"backend", backend}, {"adapter", caps->adapter},
+        {"driver", caps->driver}, {"kernel", Hex64(ViewportKernelKey(target, (*compiler)->Version()))},
+        {"size", static_cast<int64_t>(size)}, {"fixtures", results}, {"acceptance", false},
+        {"probe_rays", static_cast<int64_t>(rays.size())}, {"probe_matches_cpu", reference}}) << "\n";
     return Finish();
 }
 
@@ -3284,7 +3435,11 @@ int main(int argc, char** argv) {
     uz::LogInit((dir / ("preview-tests-" + std::string(mode) + ".log")).string().c_str());
     uz::LogSuppressConsole();
     int code = 2;
-    if (mode == "viewport-unsupported") {
+    if (mode == "viewport-spirv") {
+        code = RunViewportSpirv(dir);
+    } else if (mode == "viewport-backend" && argc == 4) {
+        code = RunViewportBackend(dir, argv[3]);
+    } else if (mode == "viewport-unsupported") {
         code = RunViewportUnsupported(dir);
     } else if (mode == "lighting-cache") {
         code = RunLightingCache(dir);

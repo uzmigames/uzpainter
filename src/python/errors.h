@@ -26,6 +26,7 @@
 #include <pybind11/eval.h>
 #include <pybind11/pybind11.h>
 
+#include "render/backend.h"
 #include "uzp_core/manifest/json.h"
 #include "uzp_core/transaction/transaction.h"
 #include "uzp_core/types/ids.h"
@@ -55,6 +56,9 @@ public:
     std::string asset;
     /// `ProjectError` subclasses of mesh import: the refusal's structured facts.
     core::json::Object details;
+    /// Native job failures retain the GPU cause for the supervisor's fault/recovery protocol.
+    /// Python still receives the existing API exception class.
+    std::optional<render::Error> render_error;
 
 private:
     std::string cls_;

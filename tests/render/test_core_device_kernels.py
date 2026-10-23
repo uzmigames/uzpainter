@@ -43,6 +43,7 @@ GPU_CASES = frozenset(
         "image-mips",
         "image-repeat",
         "vulkan-device",
+        "vulkan-product-factory",
         "vulkan-faults",
     }
 )
@@ -166,3 +167,11 @@ def test_capability_report(render_tests: Path, tmp_path: Path) -> None:
     assert report["vram"]["budget_bytes"] > 0
     assert report["admission"]["bytes"] > 0
     assert report["descriptors"]["shader_resources"] > 0
+
+
+def test_vulkan_product_factory(render_tests: Path, tmp_path: Path) -> None:
+    """The public factory qualifies Vulkan and executes work without a test device seam."""
+    passed, _ = run_case(render_tests, "vulkan-product-factory", tmp_path)
+    assert "Vulkan factory refuses a missing adapter without fallback" in passed
+    assert "product factory reports the Vulkan adapter and driver" in passed
+    assert "product Vulkan queue submits and completes" in passed

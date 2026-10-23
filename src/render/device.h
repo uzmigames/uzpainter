@@ -23,16 +23,15 @@ namespace uzp::render {
 
 struct DeviceOptions {
     Backend backend = Backend::Dx12;
-    /// Adapter index in DXGI's high-performance order (0 = the high-performance adapter).
+    /// Adapter index in DXGI's high-performance order or the Vulkan survey's vendored order.
     uint32_t adapterIndex = 0;
-    /// D3D12 debug layer (development only).
+    /// Backend validation layer (development only).
     bool enableValidation = false;
 };
 
 /// The device of `options.backend`, or `gpu_backend_unavailable {backend, reason}`.
-/// Only DX12 serves product paths; a Vulkan request is reported unavailable, never served by DX12
-/// (the qualified Vulkan device of vulkan_backend.h is created only by the selftest Vulkan slice
-/// and the qualification tests, decision 310).
+/// Vulkan surveys and qualifies the requested adapter before logical-device creation.
+/// An unavailable requested backend is never served by another backend.
 [[nodiscard]] Result<std::unique_ptr<IDevice>> CreateDevice(const DeviceOptions& options);
 
 /// "DXGI_ERROR_DEVICE_REMOVED (0x887A0005)" for a device-removed reason; the hex value alone for
