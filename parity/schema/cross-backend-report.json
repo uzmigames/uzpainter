@@ -1,0 +1,477 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:uzpainter:parity:schema:cross-backend-report:1",
+  "title": "Exact DX12/Vulkan comparison",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "record_class",
+    "outcome",
+    "runs",
+    "maps",
+    "structural"
+  ],
+  "properties": {
+    "schema": {
+      "const": "uzpainter/parity/cross-backend-report/1"
+    },
+    "record_class": {
+      "const": "cross_backend_report"
+    },
+    "outcome": {
+      "enum": [
+        "pass",
+        "fail"
+      ]
+    },
+    "runs": {
+      "type": "array",
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "bundle_sha256",
+          "project_sha256",
+          "build_sha256",
+          "resource_identity_sha256",
+          "adapter_sha256",
+          "driver_sha256",
+          "backend",
+          "project_uuid",
+          "revision",
+          "evaluator_profile",
+          "resource_hashes"
+        ],
+        "properties": {
+          "bundle_sha256": {
+            "$ref": "#/$defs/sha256"
+          },
+          "project_sha256": {
+            "$ref": "#/$defs/sha256"
+          },
+          "build_sha256": {
+            "$ref": "#/$defs/sha256"
+          },
+          "resource_identity_sha256": {
+            "$ref": "#/$defs/sha256"
+          },
+          "adapter_sha256": {
+            "$ref": "#/$defs/sha256"
+          },
+          "driver_sha256": {
+            "$ref": "#/$defs/sha256"
+          },
+          "backend": {
+            "enum": [
+              "dx12",
+              "vulkan"
+            ]
+          },
+          "project_uuid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "evaluator_profile": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$"
+          },
+          "resource_hashes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        }
+      }
+    },
+    "maps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/map_diagnostics"
+      }
+    },
+    "structural": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reason",
+          "backend"
+        ],
+        "properties": {
+          "reason": {
+            "enum": [
+              "input_unreadable",
+              "bundle_invalid",
+              "backend_mismatch",
+              "export_refused",
+              "identity_invalid",
+              "no_maps",
+              "map_invalid",
+              "duplicate_map",
+              "map_unreadable",
+              "map_hash_mismatch",
+              "map_missing",
+              "mapping_invalid",
+              "regions_invalid",
+              "storage_format_mismatch",
+              "shape_mismatch",
+              "map_decode_failed",
+              "decoder_unavailable",
+              "nonfinite_difference",
+              "project_uuid_mismatch",
+              "revision_mismatch",
+              "project_sha256_mismatch",
+              "evaluator_profile_mismatch",
+              "build_sha256_mismatch",
+              "resource_hashes_mismatch"
+            ]
+          },
+          "backend": {
+            "enum": [
+              "dx12",
+              "vulkan",
+              "pair"
+            ]
+          },
+          "output_id": {
+            "type": "string",
+            "pattern": "^map-[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "flip_tool": {
+      "description": "NVlabs/flip pinned by version and hash; diagnostic only, never a gate.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "sha256"
+      ],
+      "properties": {
+        "version": {
+          "const": "1.7"
+        },
+        "sha256": {
+          "const": "2081f715ea8190a5f58bc578b0cccd36a9a3f3cf78ad13fe6f86e5a75615bda7"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "pass"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "runs": {
+            "minItems": 2
+          },
+          "maps": {
+            "minItems": 1
+          },
+          "structural": {
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "maps": {
+            "contains": {
+              "required": [
+                "flip_mean"
+              ]
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "flip_tool"
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "abs_diff": {
+      "description": "Absolute difference statistics in native decoded units. max, mean and p99 always travel together.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max",
+        "mean",
+        "p99"
+      ],
+      "properties": {
+        "max": {
+          "type": "number",
+          "minimum": 0
+        },
+        "mean": {
+          "type": "number",
+          "minimum": 0
+        },
+        "p99": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "differing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "count",
+        "percent",
+        "total"
+      ],
+      "properties": {
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "percent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "map_diagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "output_id",
+        "storage_format",
+        "abs_diff",
+        "differing",
+        "regions",
+        "dx12_sha256",
+        "vulkan_sha256",
+        "bytes_equal"
+      ],
+      "properties": {
+        "output_id": {
+          "type": "string",
+          "pattern": "^map-[0-9a-f]{64}$"
+        },
+        "storage_format": {
+          "description": "Measured storage format that classifies the channel (never the map name).",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "container",
+            "sample_type",
+            "bits_per_channel",
+            "channels",
+            "encoding"
+          ],
+          "properties": {
+            "container": {
+              "enum": [
+                "png",
+                "exr",
+                "tga",
+                "tiff",
+                "dds",
+                "jpeg"
+              ]
+            },
+            "encoding": {
+              "description": "undetermined: the file states no encoding and no single source channel gives one (decision 087).",
+              "enum": [
+                "linear",
+                "srgb",
+                "display_referred",
+                "undetermined"
+              ]
+            },
+            "sample_type": {
+              "enum": [
+                "uint",
+                "half",
+                "float"
+              ]
+            },
+            "bits_per_channel": {
+              "enum": [
+                8,
+                16,
+                32
+              ]
+            },
+            "channels": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4
+            }
+          }
+        },
+        "abs_diff": {
+          "$ref": "#/$defs/abs_diff"
+        },
+        "differing": {
+          "$ref": "#/$defs/differing"
+        },
+        "regions": {
+          "description": "Per-region breakdown by the asset's material masks (empty when the golden defines no regions).",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "region",
+              "abs_diff",
+              "differing"
+            ],
+            "properties": {
+              "region": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$"
+              },
+              "abs_diff": {
+                "$ref": "#/$defs/abs_diff"
+              },
+              "differing": {
+                "$ref": "#/$defs/differing"
+              }
+            }
+          }
+        },
+        "normal": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "angular_max_deg",
+            "angular_mean_deg",
+            "non_finite_count",
+            "unnormalised_count"
+          ],
+          "properties": {
+            "angular_max_deg": {
+              "type": "number",
+              "minimum": 0
+            },
+            "angular_mean_deg": {
+              "type": "number",
+              "minimum": 0
+            },
+            "non_finite_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unnormalised_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "negative_z_count": {
+              "description": "Finite candidate normal vectors with decoded Z < 0, over the whole map. Inspection only: values and verdicts are unchanged. Optional for reports written before this diagnostic existed.",
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "exact_checks": {
+          "description": "CONTRACT.md \u00c2\u00a78.1, IDs and opacity (tools/parity/tier1/compare.py, exact_check): id_labels compares each texel's label (all its channels), alpha its alpha (the last channel of a grey-alpha or RGBA map, the only channel of a grey one); a NaN equals only a NaN. Counts are texels.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "check",
+              "equal",
+              "differing_count",
+              "edge_coverage_differing_count"
+            ],
+            "properties": {
+              "check": {
+                "enum": [
+                  "id_labels",
+                  "alpha"
+                ]
+              },
+              "equal": {
+                "type": "boolean",
+                "description": "True exactly when differing_count is 0."
+              },
+              "differing_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "edge_coverage_differing_count": {
+                "description": "The differing texels on an edge of the oracle's map: a texel whose label or alpha differs from that of one of its four neighbours inside the map, so both sides of a boundary (no wrapping).",
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "if": {
+              "properties": {
+                "equal": {
+                  "const": true
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "differing_count": {
+                  "const": 0
+                },
+                "edge_coverage_differing_count": {
+                  "const": 0
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "differing_count": {
+                  "minimum": 1
+                }
+              }
+            }
+          }
+        },
+        "flip_mean": {
+          "description": "Mean FLIP error; diagnostic only.",
+          "type": "number",
+          "minimum": 0
+        },
+        "private_difference_map_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "dx12_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "vulkan_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "bytes_equal": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,120 @@
+{
+  "schema": "uzpainter/parity/cross-backend-report/1",
+  "record_class": "cross_backend_report",
+  "outcome": "pass",
+  "runs": [
+    {
+      "backend": "dx12",
+      "bundle_sha256": "3554697e2fd05a2012ee8d49f343a7460f0eaaefb5ccf3d9a4b70f37528b9dfb",
+      "project_uuid": "00000000-0000-4000-8000-000000000118",
+      "revision": 1,
+      "project_sha256": "416453696e1c46616ec337801a892560580f1f858f3bcd700c16000b898cd8ec",
+      "evaluator_profile": "painter-12.1-isolated-coverage-weights",
+      "build_sha256": "52385ac9c88cb13c0be2abdf9699ff05d18fd08ce1e568e2b183e04fe93fa0a2",
+      "resource_hashes": [
+        "40dd18077469166d4854c50047ada41cb7d71ad774865017013de484b8433d7b",
+        "5b9df6c8bcc30a44ebe29ecde614f0cb846bf8c960c46d6e58a6a52d056b9819"
+      ],
+      "resource_identity_sha256": "433f68244f5004fe1039ef134e404c78bb9d6f944d8411cf16b05af862270f7d",
+      "adapter_sha256": "e7d862260256f76774c412d3a8659310c8fc1373f5edc571f010c9a270054e65",
+      "driver_sha256": "0d4a994517527cf2e05c37cdea47f0d1e4835db1b5edb9bb2917f5189a719f87"
+    },
+    {
+      "backend": "vulkan",
+      "bundle_sha256": "26ad5628d3f3bb38309eed492f3094c212237a63703ee828af306475f498ecb6",
+      "project_uuid": "00000000-0000-4000-8000-000000000118",
+      "revision": 1,
+      "project_sha256": "416453696e1c46616ec337801a892560580f1f858f3bcd700c16000b898cd8ec",
+      "evaluator_profile": "painter-12.1-isolated-coverage-weights",
+      "build_sha256": "52385ac9c88cb13c0be2abdf9699ff05d18fd08ce1e568e2b183e04fe93fa0a2",
+      "resource_hashes": [
+        "40dd18077469166d4854c50047ada41cb7d71ad774865017013de484b8433d7b",
+        "5b9df6c8bcc30a44ebe29ecde614f0cb846bf8c960c46d6e58a6a52d056b9819"
+      ],
+      "resource_identity_sha256": "433f68244f5004fe1039ef134e404c78bb9d6f944d8411cf16b05af862270f7d",
+      "adapter_sha256": "e7d862260256f76774c412d3a8659310c8fc1373f5edc571f010c9a270054e65",
+      "driver_sha256": "6289d4f1bb5a1f80da50714a9c677e157be7eb867af934cfcbe1742f44275504"
+    }
+  ],
+  "maps": [
+    {
+      "output_id": "map-4819bc880e1ede6e6639fc8f0f24c4d28e08dbeb4608eeb8f317405d2b4ebb95",
+      "storage_format": {
+        "container": "png",
+        "sample_type": "uint",
+        "bits_per_channel": 16,
+        "channels": 1,
+        "encoding": "undetermined"
+      },
+      "abs_diff": {
+        "max": 0,
+        "mean": 0,
+        "p99": 0
+      },
+      "differing": {
+        "count": 0,
+        "percent": 0.0,
+        "total": 65536
+      },
+      "regions": [],
+      "flip_mean": 0.0,
+      "dx12_sha256": "692b2919f165b31463be2349cfaf45834afb592e9817a2036869ebee89d6ce23",
+      "vulkan_sha256": "692b2919f165b31463be2349cfaf45834afb592e9817a2036869ebee89d6ce23",
+      "bytes_equal": true
+    },
+    {
+      "output_id": "map-8b675b44ff4c5926b942b6bf6342ea82684c29e6a6c859652964d252c914a7de",
+      "storage_format": {
+        "container": "exr",
+        "sample_type": "float",
+        "bits_per_channel": 32,
+        "channels": 1,
+        "encoding": "linear"
+      },
+      "abs_diff": {
+        "max": 0,
+        "mean": 0,
+        "p99": 0
+      },
+      "differing": {
+        "count": 0,
+        "percent": 0.0,
+        "total": 65536
+      },
+      "regions": [],
+      "dx12_sha256": "d1cb0a81806a3a94b43a32dd90915fc5d4b9f9060db388cab0b5ae95ae9ba894",
+      "vulkan_sha256": "d1cb0a81806a3a94b43a32dd90915fc5d4b9f9060db388cab0b5ae95ae9ba894",
+      "bytes_equal": true
+    },
+    {
+      "output_id": "map-db32fb65f45be37c4c163e06a0297a64fc4dadaed22622f7dd6479d57602adf2",
+      "storage_format": {
+        "container": "png",
+        "sample_type": "uint",
+        "bits_per_channel": 16,
+        "channels": 3,
+        "encoding": "undetermined"
+      },
+      "abs_diff": {
+        "max": 0,
+        "mean": 0,
+        "p99": 0
+      },
+      "differing": {
+        "count": 0,
+        "percent": 0.0,
+        "total": 196608
+      },
+      "regions": [],
+      "flip_mean": 0.0,
+      "dx12_sha256": "b0305b80b37e711c61d4087ab7729199f32c3a167e72c1737bae563b3f952727",
+      "vulkan_sha256": "b0305b80b37e711c61d4087ab7729199f32c3a167e72c1737bae563b3f952727",
+      "bytes_equal": true
+    }
+  ],
+  "structural": [],
+  "flip_tool": {
+    "version": "1.7",
+    "sha256": "2081f715ea8190a5f58bc578b0cccd36a9a3f3cf78ad13fe6f86e5a75615bda7"
+  }
+}

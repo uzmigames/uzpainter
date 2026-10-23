@@ -28,6 +28,7 @@ class Schema(StrEnum):
     GOLDEN_PRIVATE = "golden-private.json"
     EXCEPTIONS = "exceptions.json"
     COMPARISON_REPORT = "comparison-report.json"
+    CROSS_BACKEND_REPORT = "cross-backend-report.json"
     SEMANTICS = "semantics.json"
     ENVELOPE_REGISTRY = "envelope-registry.json"
     ORACLE_ENVELOPE = "oracle-envelope.json"

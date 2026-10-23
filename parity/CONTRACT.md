@@ -137,6 +137,7 @@ All schemas are JSON Schema draft 2020-12 under `parity/schema/`; `tools/parity/
 | `golden-private.json` | Private record: the golden key, at least two recordings (rule of §6.2), each output typed as exported map (with measured storage format), API readback, effective-default capture, template capture, Iray reference (convergence `Done`, capture route, settings-sheet hash, current-frame verification), operator-recorded settings or settings-panel evidence. `tools.parity.schemas.record_problems` adds the cross-field rules: ISO 8601 timestamps with offset, Iterations = S and Rendering time below Max Time, distinct sessions for the two Tier 3 references, k·S samples (k > 1) for the third. The record links to its manifest by `golden_id` only: the manifest names the record by SHA-256, so the record never hashes the manifest | `record_class` is `private_oracle_record` |
 | `exceptions.json` | The register (§5) | — |
 | `comparison-report.json` | The comparison-tool output (§8) | Numbers and hashes only |
+| `cross-backend-report.json` | Exact DX12/Vulkan comparison of one project revision (§8.5), without claiming Painter parity | Counts, constrained identifiers and hashes only; file paths and difference maps stay private |
 | `envelope-registry.json` | The envelope registry (§6.5): current, candidate, every promoted envelope with its manifest root, quarantine | Builds, hashes, paths and dates only |
 | `oracle-envelope.json` | Published envelope results: stability study, canary and corpus drift (§6.5) | Numbers and hashes only |
 | `recipe-rebuild-report.json` | A rebuild-from-dump report (P2-RECIPE): the recipe digest and export of a project and of its rebuild from the dump, and their equality. UzPainter against itself, no oracle data | Numbers, hashes and file names only |
@@ -178,6 +179,29 @@ Computed with NVIDIA's reference implementation (`NVlabs/flip`, BSD-3-Clause; ap
 - `pass` without a relied-on entry requires every compared map and region to have max |Δ| 0 and differing count 0 and every exact check to be equal; a Tier 3 `pass` and a `pass` against an unstable oracle always list an entry; `oracle_unavailable` compares nothing.
 - Tier 3 evidence comes from the DX12 or Vulkan GPU backends only, never from WARP or a CPU path.
 - **Difference maps and region crops are derived from oracle pixels and stay in the private store**; a public report carries numbers and, at most, the SHA-256 of a private difference map.
+
+### 8.5 Cross-backend comparison
+
+`python -m tools.parity.cross_backend DX12_BUNDLE VULKAN_BUNDLE --report REPORT`
+compares exported files from the same project UUID, revision, canonical project hash,
+evaluator profile, executable build hash and resource ID/hash map. Each bundle identifies
+its actual backend, adapter and driver, and lists every map as
+`{texture_set, map, path, sha256}`. Paths resolve beside the bundle. A missing or unknown
+identity, export refusal, changed input, duplicate map, missing map, bad file hash,
+undecodable file or storage-format mismatch fails before image comparison.
+
+The comparator measures storage from the bytes and decodes at native depth. A pass requires
+both identical file bytes and identical decoded values for every map. The optional
+`--mapping` file lists `{texture_set, map, kind}` entries (`normal`, `id` or `alpha`);
+`--regions` lists `{id, path, sha256}` masks at the compared resolution. These enable the
+corresponding diagnostics in §8.1. FLIP uses §8.3's pinned implementation and stays diagnostic.
+`--store PRIVATE_STORE` puts difference maps in an existing private store.
+
+Reports under `parity/reports/<phase>/cross-backend-*.json` carry counts and hashes, including
+hashes of both bundles and of their adapter/driver identities. The writer and repository
+guard check the schema and reject contradictory pass verdicts, region counts and exact
+checks. Native harness results qualify only their authored fixture domain; they neither
+activate the product Vulkan backend nor replace Tier 0, pilot or settling evidence.
 
 ## 9. Review
 

@@ -436,6 +436,12 @@ def _recipe_rebuild_report(path: str, document: Any, data: bytes, ctx: _Context)
     return validation_errors(document, Schema.RECIPE_REBUILD_REPORT)
 
 
+def _cross_backend_report(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
+    from tools.parity.cross_backend import report_problems
+
+    return report_problems(document)
+
+
 def _semantics(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
     return validation_errors(document, Schema.SEMANTICS)
 
@@ -611,6 +617,11 @@ PATH_RULES: tuple[tuple[re.Pattern[str], str, _Rule], ...] = (
         re.compile(r"^parity/reports/[^/]+/recipe-rebuild-[^/]+\.json$"),
         "recipe-rebuild-report.json (a rebuild-from-dump report)",
         _recipe_rebuild_report,
+    ),
+    (
+        re.compile(r"^parity/reports/[^/]+/cross-backend-[^/]+\.json$"),
+        "cross-backend-report.json (exact DX12/Vulkan comparison)",
+        _cross_backend_report,
     ),
     (re.compile(r"^parity/semantics/[^/]+$"), "semantics.json", _semantics),
     (re.compile(r"^parity/fixtures/.+$"), "authored input of a manifest", _fixture),
