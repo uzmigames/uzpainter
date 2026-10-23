@@ -99,7 +99,8 @@ def request(ocio: bool = False) -> Golden:
     s.add(rr.RESOURCE_OUTPUT_MAPS, preset=PRESET)
     inputs = list(input_fixtures())
     for input_id in inputs:
-        s.add(ps.LIST_TEXTURES, config=input_id)
+        for _ in range(2):
+            s.add(ps.LIST_TEXTURES, config=input_id)
     return Golden(
         "export-presets-unreal-packed-" + ("ocio" if ocio else "legacy"),
         "tier0/export/presets",

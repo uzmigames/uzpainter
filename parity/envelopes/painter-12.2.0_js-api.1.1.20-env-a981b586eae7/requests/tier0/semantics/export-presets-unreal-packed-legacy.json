@@ -606,25 +606,60 @@
         "step": 49,
         "call": "substance_painter.export.list_project_textures",
         "args": {
-          "config": "probe-presets-unreal-packed-bevelled-cube-unreal-padding"
+          "config": "probe-presets-unreal-packed-bevelled-cube-unreal-own"
         }
       },
       {
         "step": 50,
         "call": "substance_painter.export.list_project_textures",
         "args": {
-          "config": "probe-presets-unreal-packed-bevelled-cube-unreal-png8"
+          "config": "probe-presets-unreal-packed-bevelled-cube-unreal-padding"
         }
       },
       {
         "step": 51,
         "call": "substance_painter.export.list_project_textures",
         "args": {
-          "config": "probe-presets-unreal-packed-bevelled-cube-unreal-tga8"
+          "config": "probe-presets-unreal-packed-bevelled-cube-unreal-padding"
         }
       },
       {
         "step": 52,
+        "call": "substance_painter.export.list_project_textures",
+        "args": {
+          "config": "probe-presets-unreal-packed-bevelled-cube-unreal-png8"
+        }
+      },
+      {
+        "step": 53,
+        "call": "substance_painter.export.list_project_textures",
+        "args": {
+          "config": "probe-presets-unreal-packed-bevelled-cube-unreal-png8"
+        }
+      },
+      {
+        "step": 54,
+        "call": "substance_painter.export.list_project_textures",
+        "args": {
+          "config": "probe-presets-unreal-packed-bevelled-cube-unreal-tga8"
+        }
+      },
+      {
+        "step": 55,
+        "call": "substance_painter.export.list_project_textures",
+        "args": {
+          "config": "probe-presets-unreal-packed-bevelled-cube-unreal-tga8"
+        }
+      },
+      {
+        "step": 56,
+        "call": "substance_painter.export.list_project_textures",
+        "args": {
+          "config": "probe-presets-unreal-packed-bevelled-cube-unreal-pipeline"
+        }
+      },
+      {
+        "step": 57,
         "call": "substance_painter.export.list_project_textures",
         "args": {
           "config": "probe-presets-unreal-packed-bevelled-cube-unreal-pipeline"

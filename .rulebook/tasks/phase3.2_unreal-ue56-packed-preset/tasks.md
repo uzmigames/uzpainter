@@ -231,19 +231,20 @@ compatibility, item 2.5 and R-322 acceptance remain open.
 ## 13. R-322 requests and shelf readiness (2026-10-23)
 
 `export-presets-unreal-packed-legacy` and `export-presets-unreal-packed-ocio`
-reuse R-314's distinct authored channel/mesh state. Five probes separately test
+reuse R-314's distinct authored channel/mesh state. Five configurations separately test
 own defaults, padding-only defaults, matched explicit PNG8/TGA8 and pipeline
 PNG16. The versioned starter-assets URL comes from the documented R-314 Legacy
 r2 preset list (private record
 `e729f2294b0d4acc019a2fa7b025c01df0821fa9dd9acf78ee00fcce4e4ce2fd`).
-Each request captures lists/output maps and repeats after Full save/reopen.
+Each request captures lists/output maps and makes two consecutive export probes
+per configuration (ten probes), then repeats after Full save/reopen.
 
 The recorder now calls documented shelf refresh/readiness operations before
 preset observations and probes. It polls actual crawling state, with one refresh
 and a 120-second deadline per recording; failure prevents any preset capture.
 The same gate runs after reopen. Source-API provenance checks pass.
 
-Validation: 60 request/catalog tests and 99 shelf/recorder/provenance tests pass;
+Validation: 62 request/catalog tests and 99 shelf/recorder/provenance tests pass;
 Ruff, format and mypy pass. Manifests and five recipes match the generator.
 No recording ran during the full GPU suite; item 2.1 remains open until the
 actual outputs are admitted, and no preset defaults are accepted by these tests.
