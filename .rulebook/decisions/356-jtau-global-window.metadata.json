@@ -1,0 +1,11 @@
+{
+  "id": 356,
+  "slug": "jtau-global-window",
+  "title": "One strip map for every island, and the far window takes tau's island",
+  "status": "accepted",
+  "date": "2026-10-22",
+  "relatedTasks": [
+    "phase1.25_pilot-wand"
+  ],
+  "supersededBy": null
+}

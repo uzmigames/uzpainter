@@ -1,6 +1,7 @@
 """The measured `infinite` padding of src/export/padding.h (phase1.25 item 2.7; decisions 197, 206,
-267, 268, 270, 273, 275, 278 to 282, 285, 288, 290, 291, 294; measured only, decision 259), written
-again independently in Python for the tests: the ring over an OBJ's triangles, then the jump flood.
+267, 268, 270, 273, 275, 278 to 282, 285, 288, 290, 291, 294, 356; measured only, decision 259),
+written again independently in Python for the tests: the ring over an OBJ's triangles, then the
+jump flood.
 
 The geometry (barycentrics, folds about seam edges, distances) is double precision with each
 operation in padding.cpp's order, so that a far point at an exact half-texel boundary, where
@@ -830,6 +831,36 @@ class Ring:
                     winners.add(winner)
         return winners
 
+    def global_winners(self, x: int, y: int) -> set[tuple[int, int, int]]:
+        """Last seam drawn, over the seams of every chart in mesh order (triangle, edge), at each
+        sample of the ring texel's 3x3 neighbourhood: one strip map shared by all charts (decision
+        356)."""
+        grid = self.__dict__.get("_seam_grid")
+        if grid is None:
+            grid = {}
+            order = sorted(s for lst in self.seams.values() for s in lst)
+            for s in order:
+                e, edge, _ = s
+                a, b = self.tris[e].t[(edge + 1) % 3], self.tris[e].t[(edge + 2) % 3]
+                rows = range(math.floor(min(a[1], b[1]) - 1), math.floor(max(a[1], b[1]) + 1) + 1)
+                cols = range(math.floor(min(a[0], b[0]) - 1), math.floor(max(a[0], b[0]) + 1) + 1)
+                for gy in rows:
+                    for gx in cols:
+                        grid.setdefault((gx, gy), []).append(s)
+            self.__dict__["_seam_grid"] = grid
+        winners: set[tuple[int, int, int]] = set()
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                winner = None
+                for e, edge, j in grid.get((x + dx, y + dy), []):
+                    triangle = self.tris[e]
+                    a, b = triangle.t[(edge + 1) % 3], triangle.t[(edge + 2) % 3]
+                    if strip_covers(a, b, x + dx + 0.5, y + dy + 0.5):
+                        winner = (e, edge, j)
+                if winner is not None:
+                    winners.add(winner)
+        return winners
+
     def seam_runs(self, chart: int) -> dict[tuple[int, int, int], int]:
         """Each seam of `chart`'s run: seams joined end to end through a shared UV end, collinear
         (UV |sin| at most COLLINEAR) and with far triangles of one island, transitively."""
@@ -907,7 +938,8 @@ class Ring:
         # REACH_CAP texels (UV segment distance; those within REACH_HIGH kept for the reach flag);
         # none whose far triangle is tau (decision 288) or whose UV ends both lie on the tile's
         # left or right border (decision 290); decision 275: q folded into the far triangle, the
-        # far island's covered texels of columns floor(f_u - 1/2) +- 1, rows ceil(f_v - 1/2) +- 1;
+        # covered texels of the far island or of tau's (decision 356) of columns
+        # floor(f_u - 1/2) +- 1, rows ceil(f_v - 1/2) +- 1;
         # decision 278: the gate, with tau's normal (decision 292). Decision 291: the axes whose
         # f - 1/2 lies within WINDOW_SIDE of an integer.
         edges: list[tuple[tuple[bool, bool, bool], float]] = []
@@ -916,10 +948,11 @@ class Ring:
         sides: list[tuple[int, int]] = []
         charts = sorted({self.tris[int(self.owner[ty, tx])].chart for tx, ty in own})
         for chart in charts:
-            # A strip writes its seam's run; the query discovers every seam of a run that owns a
-            # sample of the 3x3 neighbourhood.
+            # A strip writes its seam's run into the one map of every chart (decision 356); the
+            # query discovers every seam of this chart's runs that owns a sample of the 3x3
+            # neighbourhood.
             runs = self.seam_runs(chart)
-            owned = {runs[w] for w in self.strip_winners(chart, x, y)}
+            owned = {runs[w] for w in self.global_winners(x, y) if w in runs}
             for e_index, edge, j in self.seams.get(chart, []):
                 E, J = self.tris[e_index], self.tris[j]
                 ua, ub = E.t[(edge + 1) % 3][0], E.t[(edge + 2) % 3][0]
@@ -948,7 +981,7 @@ class Ring:
                         if not (0 <= row < self.height and 0 <= col < self.width):
                             continue
                         k = int(self.owner[row, col])
-                        if k < 0 or self.tris[k].chart != J.chart:
+                        if k < 0 or self.tris[k].chart not in (J.chart, T.chart):
                             continue
                         put(col, row)
                         lst = via.setdefault((col, row), [])

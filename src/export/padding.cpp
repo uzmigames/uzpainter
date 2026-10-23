@@ -21,6 +21,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 
 namespace uzp::exporter {
@@ -242,6 +243,11 @@ uint32_t Find(std::vector<uint32_t>& parent, uint32_t i) {
     return i;
 }
 
+/// The key of texel cell (col, row) of the strip map (RingGeometry::strips); either may be negative.
+uint64_t StripCell(int64_t col, int64_t row) {
+    return (static_cast<uint64_t>(static_cast<uint32_t>(col)) << 32) | static_cast<uint32_t>(row);
+}
+
 /// A UV seam edge: edge `edge` (opposite corner `edge`) of triangle `own`, shared in 3D with
 /// triangle `far`, whose UVs there differ; `run`, its run (RingGeometry's constructor).
 struct SeamEdge {
@@ -264,6 +270,15 @@ public:
     std::vector<int32_t> owner;  // per texel: the covering triangle, -1 when uncovered
     std::map<std::pair<uint32_t, uint32_t>, std::vector<uint32_t>> edges;  // sorted vertex pair -> triangles
     std::map<uint32_t, std::vector<SeamEdge>> seams;  // island -> its triangles' seam edges, in mesh order
+    /// A seam edge as drawn into the one strip map shared by every island: `seams[chart][index]`.
+    struct DrawnSeam {
+        uint32_t chart = 0;
+        uint32_t index = 0;
+    };
+    std::vector<DrawnSeam> drawOrder;  // every seam edge in mesh order (own, edge, far)
+    /// Per texel cell (StripCell), the `drawOrder` indices, ascending, of the seams whose strip may
+    /// cover the cell's centre: the floor-texel box of the UV ends widened by one texel.
+    std::unordered_map<uint64_t, std::vector<uint32_t>> strips;
 
     /// `p`, a point of triangle `k`, in tau's frame for the ring point `q`: as it is in tau's planar
     /// face, rotated about an edge shared by the two faces, else rotated hinge by hinge along the
@@ -435,7 +450,20 @@ RingGeometry::RingGeometry(const Coverage& coverage) : width(coverage.width), he
                     continue;  // the same island across the edge
                 }
                 seams[own.chart].push_back({i, e, j});
+                drawOrder.push_back({own.chart, static_cast<uint32_t>(seams[own.chart].size() - 1)});
             }
+        }
+    }
+    // The strip map's cells (decision 356): each seam edge in the floor-texel box of its UV ends,
+    // widened by one texel, so that every texel centre its strip may cover is in a listed cell.
+    for (uint32_t d = 0; d < drawOrder.size(); ++d) {
+        const SeamEdge& seam = seams.at(drawOrder[d].chart)[drawOrder[d].index];
+        const auto& a = triangles[seam.own].t[(seam.edge + 1) % 3];
+        const auto& b = triangles[seam.own].t[(seam.edge + 2) % 3];
+        const auto lo = [](double p, double q) { return static_cast<int64_t>(std::floor(std::min(p, q) - 1.0)); };
+        const auto hi = [](double p, double q) { return static_cast<int64_t>(std::floor(std::max(p, q) + 1.0)); };
+        for (int64_t row = lo(a[1], b[1]); row <= hi(a[1], b[1]); ++row) {
+            for (int64_t col = lo(a[0], b[0]); col <= hi(a[0], b[0]); ++col) strips[StripCell(col, row)].push_back(d);
         }
     }
     // Each island's seam runs: seams joined end to end through a shared UV end, collinear (UV |sin|
@@ -945,11 +973,12 @@ CandidateSet Candidates(const RingGeometry& g, uint32_t x, uint32_t y, const std
     // The seam edges of every island that owns an own neighbour whose UV segment lies within
     // kReachCap texels of the ring texel's centre (decisions 279 and 285; those within kReachHigh
     // are kept for the reach flag), each through decision 278's gate:
-    // q folded about the edge into the far triangle J, f its point in J's texel space, and J's
-    // island's covered texels in the 3 x 3 block of columns floor(f_u - 1/2) +- 1 and rows
-    // ceil(f_v - 1/2) +- 1 (decision 275). No edge whose far triangle is tau (decision 288) or whose
-    // UV ends both lie on the tile's left or right border (decision 290) opens a window. The axes
-    // whose f - 1/2 lies within kWindowSide of an integer are kept (decision 291).
+    // q folded about the edge into the far triangle J, f its point in J's texel space, and the
+    // covered texels of J's island or of tau's (decision 356) in the 3 x 3 block of columns
+    // floor(f_u - 1/2) +- 1 and rows ceil(f_v - 1/2) +- 1 (decision 275). No edge whose far
+    // triangle is tau (decision 288) or whose UV ends both lie on the tile's left or right border
+    // (decision 290) opens a window. The axes whose f - 1/2 lies within kWindowSide of an integer
+    // are kept (decision 291).
     std::vector<uint32_t> charts;
     for (const size_t texel : own) charts.push_back(g.triangles[static_cast<size_t>(g.owner[texel])].chart);
     std::sort(charts.begin(), charts.end());
@@ -970,23 +999,34 @@ CandidateSet Candidates(const RingGeometry& g, uint32_t x, uint32_t y, const std
     };
     std::vector<Edge> edges;
     std::vector<WindowAxis> sides;
+    // One strip map shared by every island (decision 356): each one-texel seam strip (top-left fill)
+    // is drawn in mesh order (own triangle, edge, far triangle), including uncovered samples, and
+    // the last seam drawn owns each sample. Ownership is resolved before the gate, tau and
+    // tile-border exclusions; an island's query discovers every seam of a run whose seam owns a
+    // sample of the 3x3 neighbourhood.
+    std::array<std::optional<RingGeometry::DrawnSeam>, 9> winners{};
+    size_t sample = 0;
+    for (int dx = -1; dx <= 1; ++dx) {
+        for (int dy = -1; dy <= 1; ++dy, ++sample) {
+            const auto cell = g.strips.find(StripCell(static_cast<int64_t>(x) + dx, static_cast<int64_t>(y) + dy));
+            if (cell == g.strips.end()) continue;
+            const double px = static_cast<double>(x) + dx + 0.5;
+            const double py = static_cast<double>(y) + dy + 0.5;
+            for (const uint32_t d : cell->second) {
+                const RingGeometry::DrawnSeam& drawn = g.drawOrder[d];
+                const SeamEdge& seam = g.seams.at(drawn.chart)[drawn.index];
+                if (StripCovers(g.triangles[seam.own], seam.edge, px, py)) winners[sample] = drawn;
+            }
+        }
+    }
     for (const uint32_t chart : charts) {
         const auto seams = g.seams.find(chart);
         if (seams == g.seams.end()) continue;
-        // A one-texel seam strip (top-left fill) writes its run's ID in mesh order, including
-        // uncovered samples. Resolve ownership before gate, tau and tile-border exclusions; the query
-        // discovers every seam of a run that owns a sample of the 3x3 neighbourhood.
-        std::array<std::optional<uint32_t>, 9> ownedRuns{};
-        size_t sample = 0;
-        for (int dx = -1; dx <= 1; ++dx) {
-            for (int dy = -1; dy <= 1; ++dy, ++sample) {
-                const double px = static_cast<double>(x) + dx + 0.5;
-                const double py = static_cast<double>(y) + dy + 0.5;
-                for (const SeamEdge& drawn : seams->second) {
-                    if (StripCovers(g.triangles[drawn.own], drawn.edge, px, py)) ownedRuns[sample] = drawn.run;
-                }
-            }
-        }
+        const auto owned = [&](uint32_t run) {
+            return std::any_of(winners.begin(), winners.end(), [&](const auto& w) {
+                return w && w->chart == chart && seams->second[w->index].run == run;
+            });
+        };
         for (const SeamEdge& seam : seams->second) {
             const KernelTriangle& E = g.triangles[seam.own];
             const double ua = E.t[(seam.edge + 1) % 3][0];
@@ -994,10 +1034,7 @@ CandidateSet Candidates(const RingGeometry& g, uint32_t x, uint32_t y, const std
                 continue;
             }
             const double reach = SegmentDistance(E, seam.edge, x + 0.5, y + 0.5);
-            if (reach >= kReachHigh ||
-                std::find(ownedRuns.begin(), ownedRuns.end(), std::optional<uint32_t>(seam.run)) == ownedRuns.end()) {
-                continue;
-            }
+            if (reach >= kReachHigh || !owned(seam.run)) continue;
             const KernelTriangle& J = g.triangles[seam.farTriangle];
             const uint32_t va = E.vertex[(seam.edge + 1) % 3];
             const uint32_t vb = E.vertex[(seam.edge + 2) % 3];
@@ -1023,7 +1060,11 @@ CandidateSet Candidates(const RingGeometry& g, uint32_t x, uint32_t y, const std
                     if (row < 0 || col < 0 || row >= g.height || col >= g.width) continue;
                     const size_t texel = static_cast<size_t>(row) * g.width + static_cast<size_t>(col);
                     const int32_t k = g.owner[texel];
-                    if (k < 0 || g.triangles[static_cast<size_t>(k)].chart != J.chart) continue;
+                    if (k < 0) continue;
+                    // J's island, or tau's (decision 356): a texel of tau's island that is not an
+                    // own neighbour becomes a far tap at its frame distance.
+                    const uint32_t c = g.triangles[static_cast<size_t>(k)].chart;
+                    if (c != J.chart && c != T.chart) continue;
                     Entry& e = entry(texel);
                     if (e.via.empty() || e.via.back() != index) e.via.push_back(index);
                 }

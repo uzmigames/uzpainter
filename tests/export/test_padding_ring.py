@@ -1303,3 +1303,67 @@ def test_far_tap_keeps_its_own_chart_rigid(export_tests: Path, tmp_path: Path) -
         chosen = [values[ty, tx] for _, _, (tx, ty) in cands[:n]]
         value = [chain([v[c] for v in chosen], t) for c in range(3)]
         assert out[y, x].view(np.uint32).tolist() == np.array(value, F32).view(np.uint32).tolist()
+
+
+def test_far_window_takes_taus_own_island(export_tests: Path, tmp_path: Path) -> None:
+    """Decision 356: one strip map is shared by every island, and a seam's far window also takes
+    tau's own island. On the tie-sweep-seams-centred fixture (512 x 512), ring texel (22, 50) of
+    island 124 takes its three own neighbours of row 49 and, as a far tap at its frame distance,
+    (22, 48) of its own island, which J's island alone (decision 275) left out. UzPainter's taps,
+    their distances and the ring value equal `padding_reference`'s."""
+    mesh = (
+        Path(__file__).resolve().parents[2]
+        / "parity/fixtures/tier0-semantics/meshes/tie-sweep-seams-centred.obj"
+    )
+    size = 512
+    values = np.random.default_rng(356).random((size, size, 3)).astype(F32)
+    raw, result = tmp_path / "values.f32", tmp_path / "result.f32"
+    raw.write_bytes(values.tobytes())
+    cases = tmp_path / "cases.json"
+    cases.write_text(
+        json.dumps(
+            [
+                dict(
+                    mesh=str(mesh),
+                    material="uzp_tie_sweep",
+                    width=size,
+                    height=size,
+                    channels=3,
+                    values=str(raw),
+                    out=str(result),
+                )
+            ]
+        )
+    )
+    process = subprocess.run(
+        [str(export_tests), "ring", str(cases)],
+        capture_output=True,
+        text=True,
+        timeout=600,
+        check=False,
+    )
+    assert process.returncode == 0, process.stdout + process.stderr
+    native = {(r["x"], r["y"]): r for r in json.loads(process.stdout)["ring"]}
+    out = np.frombuffer(result.read_bytes(), F32).reshape(size, size, 3)
+    reference = Ring(mesh, "uzp_tie_sweep", size, size)
+    x, y = 22, 50
+    own = [
+        ((x + dx) % size, y + dy)
+        for dy, dx in NEIGHBOURS
+        if 0 <= y + dy < size and reference.owner[y + dy, (x + dx) % size] >= 0
+    ]
+    tau = reference.tau(x, y, own)
+    cands, undecided = reference.candidates(x, y, own, tau)
+    n = tap_count(cands)
+    expected = [((22, 49), False), ((23, 49), False), ((21, 49), False), ((22, 48), True)]
+    assert [(c[2], c[1]) for c in cands[:n]] == expected and not undecided
+    assert reference.tris[int(reference.owner[48, 22])].chart == reference.tris[tau].chart
+    r = native[(x, y)]
+    assert r["taps"] == n == 4 and not r["undecided"]
+    assert [((c[0], c[1]), bool(c[3])) for c in r["candidates"][:n]] == expected
+    for c, ref_c in zip(r["candidates"][:n], cands[:n], strict=True):
+        assert math.isclose(c[2], ref_c[0], rel_tol=1e-12)
+    t = fractions([c[0] for c in cands[:n]])
+    chosen = [values[ty, tx] for _, _, (tx, ty) in cands[:n]]
+    value = [chain([v[c] for v in chosen], t) for c in range(3)]
+    assert out[y, x].view(np.uint32).tolist() == np.array(value, F32).view(np.uint32).tolist()
