@@ -62,4 +62,18 @@ Both oracle environment records are available. All five golden map hashes are un
 
 Double-sided scope is already settled by decision 196's SUP-030 amendment: preserve the state across save/reopen, with render parity false while enabled and exported maps unchanged. The old unresolved-scope note is historical.
 
-Inventory and preservation do not complete recovery or authorize a changed reference. Decision 300's first resource-export qualification is inconclusive, with no qualified forms; nine original masks and the mesh remain recovery blockers. Item 2.8, the rebuild, infinite-padding equality and acceptance stay open. Any substituted input or changed baseline still requires the recorded owner decision specified by those items.
+Inventory and preservation do not complete recovery or authorize a changed reference. Decision 300's first qualification retry is `RE_ENCODED`, with no qualified forms: twelve cases re-encode in both conditions and the 2048 grey case writes no file. Nine cases preserve decoded texels, three change them; neither result recovers original file bytes. Nine original masks and original mesh identity remain blockers. Item 2.8, the rebuild, infinite-padding equality and acceptance stay open.
+
+## Owner decision package (item 2.8)
+
+This updates the existing scope question in decision 300 item 8 and the Sash inventory's owner package; it does not create a second request or choose a route. Rulebook's question lists for both pilot tasks contain no separate open question as of 2026-10-23. The pending scope question remains: **may a separately identified current reference be used for a pilot's gate if its original inputs cannot be restored, while retaining the existing approved reference?** The answer must name the pilot; approval for one does not change the other.
+
+| Route | Concrete evidence and work | Scope boundary |
+|---|---|---|
+| Restore originals | Nine masks must match the SHA-1 versions above; original OBJ identity remains unknown. No new backup location has been supplied. | Restoration needs no new scope decision; current evidence does not complete it. |
+| Export original resource files | The 13-case qualification is `RE_ENCODED`; none of the measured forms qualifies. | No missing pilot mask may be accepted through this route. Pixel equality is insufficient. |
+| Compare effective mesh through BaseMesh | The documented control in `base-mesh-export-control.md`, commit `416916ac`, completed 18 exports on authored meshes. A separate SPP-versus-delivered-FBX comparison is being prepared. Position/normal changes occur in the control, and the admitted Tunic readback does not record mesh unit scale or project projection settings. | Investigation continues; no claim that an export restores original OBJ bytes or that the delivered FBX is equivalent. |
+| Record `phase2/tier1/tunic-v10-current` | Decision 300 item 7 specifies unchanged sync, the F03 override, preserved inputs and named regenerated substitutes for unrecovered masks. Compare every new map with the retained migration golden and list differences. | Technical recording does not authorize using the result as a changed G2 baseline. The owner's explicit recorded approval is required for that use. |
+| Retain the current gate, replace or exclude the pilot | Retaining the gate leaves input recovery and parity open. Replacement or exclusion changes the required evidence. | Replacement or exclusion requires an explicit scope decision; no route is selected here. |
+
+The existing migration golden and all five map hashes remain unchanged. Double-sided scope is already settled by decision 196; this question does not reopen it. Item 2.8 remains open until restored identity or the required explicit scope decision is recorded. A concrete new-reference comparison has not yet been produced, so this package is preparation, not a request to approve unseen results.

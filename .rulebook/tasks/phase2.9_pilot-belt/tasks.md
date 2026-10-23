@@ -88,3 +88,8 @@
   2. A Sash migration readback of a hash-checked private copy of the `.spp` (`0691cc12…`), giving each resource's URL and SHA-1 version. No sash request generator for it exists yet: `tools/parity/recorder/migration.py` and `tunic.py` hold the Tunic's. Using the recording as a golden is the owner's choice.
   3. After `EXACT` or `PARTIAL`, the resource export request of decision 300 item 6.
   4. `phase2/tier1/sash-v5` (r1, r1-repeat, r2) cannot be requested on any of these outcomes without the arguments files and the low mesh. Only the owner's restore or his yes to `sash-v5-current` unblocks 2.2.
+
+## 10. Qualification update (2026-10-23)
+- Decision 300's first retry completed `RE_ENCODED`: twelve cases re-encode in both source-present and source-absent conditions, and the 2048 grey case writes no file. No form qualifies, so the conditional resource recovery in the historical notes above is not available. No Sash project was opened by this qualification and no Sash baseline changed.
+- The separate documented BaseMesh control (`parity/reports/phase2/base-mesh-export-control.md`, commit `416916ac`) establishes repeatability and measured losses on authored fixtures, not original pilot mesh-file identity. It does not restore arguments files or MTL identity.
+- Item 2.8's existing package is retained and updated with this verdict; the related Tunic package links the same decision 300 item 8 scope question. No duplicate question or scope answer was created. Technical recovery/current-reference preparation remains distinct from accepting a changed baseline.
