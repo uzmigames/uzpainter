@@ -1871,6 +1871,10 @@
       "documented_as": "substance_painter.source.SourceSubstance.active_output",
       "page": "substance_painter/source/substance.html"
     },
+    "substance_painter.source.SourceSubstance.get_parameters": {
+      "documented_as": "substance_painter.source.SourceSubstance.get_parameters",
+      "page": "substance_painter/source/substance.html"
+    },
     "substance_painter.source.SourceSubstance.get_preset_list": {
       "documented_as": "substance_painter.source.SourceSubstance.get_preset_list",
       "page": "substance_painter/source/substance.html"

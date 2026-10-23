@@ -542,6 +542,24 @@ repeats and Full save/reopen. Refusals remain observations; no fallback preset o
 inferred default is substituted. These requests are authored, not yet captured;
 UE import, DDS cooking and pilot acceptance require their separate evidence.
 
+`source-substance-single-output` is a separate Legacy API probe for
+`phase3.1_proc-backend-seam` items 2.6/3.2:
+
+```powershell
+python -m tools.parity.recorder.probes record "$req/tier0/api-probes/source-substance-single-output.json"
+```
+
+Its full-UV plane has User0 L32F at 128px. Eight documented getters surround
+effective-value roundtrips and Custom128/Auto assignments, for 53 operations per
+recording before and after save/reopen. Parameter values, property metadata and
+source defaults are obtained only through the documented API and remain in the
+private record. Boolean values are not coerced; legitimate setter refusals are
+observations. Shelf readiness is required both initially and after reopen.
+The first capture has a ten-minute live-session limit, follows the four frozen
+export controls and has no automatic retry. Stop on identity/setup failure or
+completed repeats/reopen and record elapsed time and every refusal. This request
+does not establish preset, image-input, multioutput or Filter behavior.
+
 ### 11.3 After the sessions
 
 - For each admitted Tier 0 golden, add its name to `recording_requests.ADMITTED` (the generator then plans its manifest under `manifests/`) and delete its request file. `python -m tools.parity.tier0_semantics check` must pass.

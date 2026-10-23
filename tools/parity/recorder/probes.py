@@ -122,17 +122,22 @@ EDIT_CALLS: frozenset[str] = (
     frozenset(CONSTANTS["EDIT_CALLS"])
     | frozenset(CONSTANTS["P295_EDIT_CALLS"])
     | frozenset(CONSTANTS["HOST_EDIT_CALLS"])
+    | frozenset(CONSTANTS["SUBSTANCE_EDIT_CALLS"])
+    | frozenset(CONSTANTS["SUBSTANCE_VALUE_ARGS"])
 )
 GETTER_CALLS: frozenset[str] = (
     frozenset(CONSTANTS["GETTER_CALLS"])
     | frozenset(CONSTANTS["P295_GETTER_CALLS"])
     | frozenset(CONSTANTS["HOST_GETTER_CALLS"])
+    | frozenset(CONSTANTS["SUBSTANCE_GETTER_CALLS"])
+    | frozenset(CONSTANTS["SUBSTANCE_VALUE_ARGS"])
 )
 INSERT_CALLS: frozenset[str] = frozenset(CONSTANTS["INSERT_CALLS"])
 VALUE_ARGS: dict[str, str] = {
     **CONSTANTS["VALUE_ARGS"],
     **CONSTANTS["P295_VALUE_ARGS"],
     **CONSTANTS["HOST_VALUE_ARGS"],
+    **CONSTANTS["SUBSTANCE_VALUE_ARGS"],
 }
 IMPORT_RESOURCE: str = CONSTANTS["IMPORT_RESOURCE"]
 EVENT_CONNECT: str = CONSTANTS["EVENT_CONNECT"]
@@ -875,6 +880,8 @@ def record_api_probe(
 ) -> Path:
     identity = session.connect()
     require_colour_management(job, identity)
+    if any("resource_url" in step.args for step in job.state_steps):
+        session.wait_catalog_ready()
     directory = run_directory(job, identity, work, now)
     staged = stage_inputs(job.inputs, directory / "inputs")
     preflight(session, job)
@@ -898,6 +905,8 @@ def record_api_probe(
         session.wait_ready()
         locations = session.call("probe_locations")
         save_and_reopen(session, directory / "project" / "probe.spp")
+        if any("resource_url" in step.args for step in job.state_steps):
+            session.wait_catalog_ready()
         found = session.call("probe_rebind", locations=locations)
         rebind = readback("identity/reopen", GET_NODE_BY_UID, {}, {"value": found})
         second, second_blobs = record_probes(

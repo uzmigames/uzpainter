@@ -58,6 +58,7 @@ if TYPE_CHECKING:
         channel_type,
         color_of,
         create_project,
+        describe_property,
         levels_field,
         member,
         scene_bounding_box,
@@ -1387,8 +1388,99 @@ def p22b_read(call: str, args: dict[str, Any]) -> Any:
     raise ValueError(f"readback {call!r} is not in the probe vocabulary")
 
 
+SUBSTANCE_GETTER_CALLS = (
+    "substance_painter.source.SourceSubstance.get_parameters",
+    "substance_painter.source.SourceSubstance.get_properties",
+    "substance_painter.source.SourceSubstance.get_preset_list",
+    "substance_painter.source.SourceSubstance.image_inputs",
+    "substance_painter.source.SourceSubstance.image_outputs",
+    "substance_painter.source.SourceSubstance.resource_id",
+)
+SUBSTANCE_EDIT_CALLS = ("substance_painter.source.SourceSubstance.set_parameters",)
+SUBSTANCE_VALUE_ARGS = {
+    "substance_painter.source.SourceSubstance.active_output": "roundtrip",
+    "substance_painter.source.SourceSubstance.resolution": "roundtrip",
+}
+
+
+def substance_source(args: dict[str, Any]) -> Any:
+    source = fresh(args["node_step"]).get_source(channel_arg(args))
+    if not isinstance(source, substance_painter.source.SourceSubstance):
+        raise ValueError("the selected fill source is not SourceSubstance")
+    return source
+
+
+def substance_read(call: str, args: dict[str, Any]) -> Any:
+    source = substance_source(args)
+    if call == "substance_painter.source.SourceSubstance.get_parameters":
+        return source.get_parameters()
+    if call == "substance_painter.source.SourceSubstance.get_properties":
+        return {name: describe_property(value) for name, value in source.get_properties().items()}
+    if call == "substance_painter.source.SourceSubstance.get_preset_list":
+        return source.get_preset_list()
+    if call == "substance_painter.source.SourceSubstance.image_inputs":
+        return source.image_inputs
+    if call == "substance_painter.source.SourceSubstance.image_outputs":
+        return source.image_outputs
+    if call == "substance_painter.source.SourceSubstance.resource_id":
+        resource_id = source.resource_id
+        return {"resource_id": describe(resource_id), "url": resource_id.url()}
+    if call == "substance_painter.source.SourceSubstance.active_output":
+        return source.active_output
+    if call == "substance_painter.source.SourceSubstance.resolution":
+        resolution = source.resolution
+        return {
+            "mode": describe(resolution.mode),
+            "value": describe(resolution.value),
+            "value_kind": "tuple"
+            if isinstance(resolution.value, tuple)
+            else "list"
+            if isinstance(resolution.value, list)
+            else "other",
+            "log2_offset": resolution.log2_offset,
+        }
+    raise ValueError("unsupported SourceSubstance getter")
+
+
+def substance_edit(call: str, args: dict[str, Any]) -> Any:
+    if (
+        call == "substance_painter.source.SourceSubstance.resolution"
+        and args.get("roundtrip") is False
+    ):
+        source = substance_source(args)
+        if args.get("mode") == "Custom":
+            source.resolution = substance_painter.source.ResolutionOverride(
+                substance_painter.source.ResolutionMode.Custom, (128, 128), 0
+            )
+        elif args.get("mode") == "Auto":
+            source.resolution = substance_painter.source.ResolutionOverride(
+                substance_painter.source.ResolutionMode.Auto
+            )
+        else:
+            raise ValueError("this control supports Custom128 and Auto resolution only")
+        return None
+    if args.get("roundtrip") is not True:
+        raise ValueError("this control requires an explicit effective-value roundtrip")
+    source = substance_source(args)
+    if call == "substance_painter.source.SourceSubstance.set_parameters":
+        # Keep returned types intact: a boolean refusal is an observation, not a coercion.
+        return source.set_parameters(source.get_parameters())
+    if call == "substance_painter.source.SourceSubstance.active_output":
+        source.active_output = source.active_output
+        return None
+    if call == "substance_painter.source.SourceSubstance.resolution":
+        current = source.resolution
+        source.resolution = substance_painter.source.ResolutionOverride(
+            current.mode, current.value, current.log2_offset
+        )
+        return None
+    raise ValueError("unsupported SourceSubstance setter")
+
+
 def edit(step: int, call: str, args: dict[str, Any], resolved: dict[str, Any]) -> Any:
     """Apply one edit call; returns what the documented call returned."""
+    if call in SUBSTANCE_EDIT_CALLS or call in SUBSTANCE_VALUE_ARGS:
+        return substance_edit(call, args)
     if call in P295_EDIT_CALLS or call in P295_VALUE_ARGS:
         return p295_edit(call, args)
     if call in HOST_EDIT_CALLS:  # decision 297
@@ -1484,6 +1576,8 @@ def edit(step: int, call: str, args: dict[str, Any], resolved: dict[str, Any]) -
     if call == SET_SOURCE:
         if "resource_step" in args:
             source = PROBE_RESOURCES[int(args["resource_step"])]
+        elif "resource_url" in args:
+            source = substance_painter.resource.ResourceID.from_url(str(args["resource_url"]))
         else:
             source = color_of(args["color"], args.get("color_space"))
         return node.set_source(channel_arg(args), source)
@@ -1577,6 +1671,8 @@ def resolution_contract(call: str, args: dict[str, Any]) -> Any:
 
 def read(call: str, args: dict[str, Any]) -> Any:
     """Evaluate one readback call; returns the raw documented value."""
+    if call in SUBSTANCE_GETTER_CALLS or call in SUBSTANCE_VALUE_ARGS:
+        return substance_read(call, args)
     if call in (
         "substance_painter.source.ResolutionMode",
         "substance_painter.source.ResolutionOverride",
@@ -1886,10 +1982,15 @@ def p295_read(call: str, args: dict[str, Any]) -> Any:
 
 
 def is_read(call: str, args: dict[str, Any]) -> bool:
-    values = {**VALUE_ARGS, **P295_VALUE_ARGS, **HOST_VALUE_ARGS}
+    values = {**VALUE_ARGS, **P295_VALUE_ARGS, **HOST_VALUE_ARGS, **SUBSTANCE_VALUE_ARGS}
     if call in values:
         return values[call] not in args
-    return call in GETTER_CALLS or call in P295_GETTER_CALLS or call in HOST_GETTER_CALLS
+    return (
+        call in GETTER_CALLS
+        or call in P295_GETTER_CALLS
+        or call in HOST_GETTER_CALLS
+        or call in SUBSTANCE_GETTER_CALLS
+    )
 
 
 def probe_step(args: dict[str, Any]) -> dict[str, Any]:
