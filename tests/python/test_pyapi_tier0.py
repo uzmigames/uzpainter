@@ -35,21 +35,12 @@ import numpy as np
 import pytest
 
 from tests.python.capability_trace import check_trace, exercised, traced
-from tests.python.conftest import REPO_ROOT, Run
+from tests.python.conftest import Run
+from tests.python.current_golden import current_manifest
 from tools.parity.fit.decode import decode
 from tools.parity.recorder.probes import probe_job_from_manifest
 from tools.parity.recorder.texture import export_roots
 from tools.parity.store.store import locate
-
-API_PROBES = (
-    REPO_ROOT
-    / "parity"
-    / "envelopes"
-    / "painter-12.1.5_js-api.1.1.20"
-    / "manifests"
-    / "tier0"
-    / "api-probes"
-)
 
 # Common readback helpers of both replays (values in the golden's shapes).
 HELPERS = """
@@ -241,7 +232,7 @@ result = outputs
 
 def golden_outputs(probe: str) -> dict[str, dict[str, Any]]:
     """`{condition: {output_id: value}}` of the probe's private golden record."""
-    manifest = json.loads((API_PROBES / f"{probe}.json").read_text(encoding="utf-8"))
+    manifest = current_manifest(f"tier0/api-probes/{probe}")
     store = locate()
     if store is None or not manifest["private_records"]:
         pytest.skip("no private oracle store on this machine (decision 028)")
@@ -282,7 +273,7 @@ EXPORTED = ("height",)
 def export_configs(probe: str, work: Path) -> dict[str, Any]:
     """Painter's export configuration of each compared map of `probe`, one map per export, as the
     recorder writes it, into `work`."""
-    manifest = json.loads((API_PROBES / f"{probe}.json").read_text(encoding="utf-8"))
+    manifest = current_manifest(f"tier0/api-probes/{probe}")
     job = probe_job_from_manifest(manifest)
     store = locate()
     assert store is not None
@@ -307,7 +298,7 @@ def export_configs(probe: str, work: Path) -> dict[str, Any]:
 
 def map_differences(probe: str, native: dict[str, dict[str, Any]]) -> list[str]:
     """The compared maps that differ from Painter's on any texel, both recordings."""
-    manifest = json.loads((API_PROBES / f"{probe}.json").read_text(encoding="utf-8"))
+    manifest = current_manifest(f"tier0/api-probes/{probe}")
     store = locate()
     assert store is not None
     record = json.loads(store.load(manifest["private_records"][0]["sha256"]) or b"null")

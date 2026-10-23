@@ -45,20 +45,12 @@ import pytest
 
 from tests.python.capability_trace import SOURCE, check_trace, exercised
 from tests.python.conftest import REPO_ROOT, Run
+from tests.python.current_golden import current_manifest
 from tools.parity.fit.decode import decode
 from tools.parity.recorder.probes import INPUT_ARGS, PAINTER_PROBES, probe_job_from_manifest
 from tools.parity.recorder.texture import export_roots
 from tools.parity.store.store import locate
 
-API_PROBES = (
-    REPO_ROOT
-    / "parity"
-    / "envelopes"
-    / "painter-12.1.5_js-api.1.1.20"
-    / "manifests"
-    / "tier0"
-    / "api-probes"
-)
 PAINTER_SIDE = REPO_ROOT / "tools" / "parity" / "recorder" / "painter_side.py"
 CONDITIONS = ("same_session", "after_save_reopen")
 CONTENT_FILL = (
@@ -308,7 +300,7 @@ def step_payload(step: Any, staged: dict[str, Path]) -> dict[str, Any]:
 
 
 def golden_record(probe: str) -> tuple[dict[str, Any], dict[str, Any]]:
-    manifest = json.loads((API_PROBES / f"{probe}.json").read_text(encoding="utf-8"))
+    manifest = current_manifest(f"tier0/api-probes/{probe}")
     store = locate()
     if store is None:
         pytest.skip("no private oracle store on this machine (decision 028)")
@@ -578,7 +570,6 @@ def test_facade_fill_channel_defaults_equal_painter(facade: Run, tmp_path: Path)
 
 # ── Colour rules: the readbacks of R5 and its Legacy twin (items 3.6, 3.7) ─────────────────────
 
-SEMANTICS = API_PROBES.parent / "semantics"
 # Every readback of both is exact: decision 107's 70/255 residual is Painter's Legacy decode, fitted
 # from P20-B (decision 214).
 COLOUR_GOLDENS: dict[str, dict[str, str]] = {
@@ -661,7 +652,7 @@ def texture_replay(
     from tools.parity.recorder.job import INPUT_ARGS as JOB_INPUTS
     from tools.parity.recorder.texture import output_safe
 
-    manifest = json.loads((SEMANTICS / f"{name}.json").read_text(encoding="utf-8"))
+    manifest = current_manifest(f"tier0/semantics/{name}")
     store = locate()
     if store is None:
         pytest.skip("no private oracle store on this machine (decision 028)")
@@ -798,7 +789,6 @@ def test_uniform_colour_ramps_export_as_painter(
 
 # ── Project templates (decision 116) ────────────────────────────────────────────────────────────
 
-TEMPLATES = API_PROBES.parent / "defaults-templates" / "project-templates.json"
 # The channels whose label Painter's template sets: the labels are Painter's own text, which
 # UzPainter does not ship (clean room, decision 116); they read back "" and change no texture.
 LABELS = {("templates/Dota 2.spt", f"User{i}") for i in range(4)}
@@ -856,7 +846,7 @@ def test_project_templates_equal_painter(facade: Run, tmp_path: Path) -> None:
     from tools.parity.recorder.defaults import template_output_id
     from tools.parity.recorder.job import job_from_manifest
 
-    manifest = json.loads(TEMPLATES.read_text(encoding="utf-8"))
+    manifest = current_manifest("tier0/defaults-templates/project-templates")
     store = locate()
     if store is None:
         pytest.skip("no private oracle store on this machine (decision 028)")

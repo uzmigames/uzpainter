@@ -36,8 +36,8 @@ import pytest
 
 from tests.python.capability_trace import SOURCE, check_trace, exercised
 from tests.python.conftest import Run
+from tests.python.current_golden import current_manifest
 from tests.python.test_pyapi_facade_tier0 import (
-    API_PROBES,
     PAINTER_SIDE,
     golden_record,
     normalised,
@@ -215,7 +215,7 @@ result = {"same_session": first, "after_save_reopen": second}
 
 
 def manifest(probe: str) -> dict[str, Any]:
-    data: dict[str, Any] = json.loads((API_PROBES / f"{probe}.json").read_text(encoding="utf-8"))
+    data: dict[str, Any] = current_manifest(f"tier0/api-probes/{probe}")
     return data
 
 
