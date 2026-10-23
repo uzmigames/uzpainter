@@ -61,6 +61,15 @@ def test_domain_refusals_name_field_value_and_range(procedural_tests: Path, tmp_
     )
 
 
+def test_typed_parameter_signatures_and_domain_refusals(
+    procedural_tests: Path, tmp_path: Path
+) -> None:
+    passed = run_case(procedural_tests, "typed-params", tmp_path)
+    assert "color alpha presence and working space each alter the signature" in passed
+    assert "structured values cannot enter a scalar certified range" in passed
+    assert "malformed project parameter refuses at admission" in passed
+
+
 def test_primitives_meet_public_expectations(procedural_tests: Path, tmp_path: Path) -> None:
     """2.3 / 3.3 (CPU lane): properties stated by the papers and IEEE 754."""
     passed = run_case(procedural_tests, "primitives", tmp_path)
@@ -115,9 +124,10 @@ def test_edits_refuse_before_mutation_and_reopen_identically(
     failed = [line for line in proc.stdout.splitlines() if line.startswith("FAIL ")]
     assert proc.returncode == 0 and not failed, proc.stdout + proc.stderr
     passed = {line[5:] for line in proc.stdout.splitlines() if line.startswith("PASS ")}
-    assert len(passed) == 23, sorted(passed)
+    assert len(passed) == 24, sorted(passed)
     refused = [check for check in passed if check.startswith("refused before mutation, ")]
-    assert len(refused) == 9
+    assert len(refused) == 10
+    assert any(check.endswith("a vector outside a scalar certified domain") for check in refused)
     assert sum("(3.6)" in check for check in refused) == 4
     for check in (
         "no refused edit evaluates, plans or stores any asset in its place (no substitution, "

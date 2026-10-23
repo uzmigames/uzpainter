@@ -88,13 +88,10 @@ json::Value ReadJson(const fs::path& file) {
     }
 }
 
-/// A parameter value of a record or a domain set: an integer, a number or a string. Booleans
-/// are integers, as Painter's documentation passes them (`SourceSubstance.set_parameters`).
+/// Library defaults and explicit domain sets use the same typed values as project requests.
 std::optional<ParamValue> ParamOf(const json::Value& value) {
-    if (value.IsBool()) return ParamValue{int64_t{std::get<bool>(value.data) ? 1 : 0}};
-    if (value.IsInt()) return ParamValue{std::get<int64_t>(value.data)};
-    if (value.IsDouble()) return ParamValue{std::get<double>(value.data)};
-    if (value.IsString()) return ParamValue{std::get<std::string>(value.data)};
+    const auto parsed = ParamFromJson(value);
+    if (parsed) return *parsed;
     return std::nullopt;
 }
 
@@ -178,7 +175,7 @@ CertifiedDomain DomainOf(const json::Value& document) {
             if (!set->IsArray() || std::get<json::Array>(set->data).empty()) Bad("domain " + name + ": a set");
             for (const json::Value& v : std::get<json::Array>(set->data)) {
                 const std::optional<ParamValue> value = ParamOf(v);
-                if (!value) Bad("domain " + name + ": set values are numbers or strings");
+                if (!value) Bad("domain " + name + ": invalid typed parameter in set");
                 parsed.set.push_back(*value);
             }
         } else {
@@ -352,7 +349,7 @@ AssetRecord RecordOf(const fs::path& file) {
     const json::Object& defaults = ObjectOf(Required(object, "defaults", file, "the record"), file, "defaults");
     for (const auto& [name, value] : defaults) {
         const std::optional<ParamValue> parsed = ParamOf(value);
-        if (!parsed) Fail(file, "default " + name + " is not a number or a string");
+        if (!parsed) Fail(file, "default " + name + " is not a typed parameter value");
         if (!record.domain.parameters.contains(name)) Fail(file, "default " + name + " is not a declared parameter");
         record.defaults[name] = *parsed;
     }

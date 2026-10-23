@@ -93,7 +93,9 @@ public:
     /// the current revision.
     void SetOperationHorizon(std::int64_t horizon);
 
-    void SetCommitSink(CommitSink sink);
+    void SetCommitSink(CommitSink sink, const void* owner = nullptr);
+    /// True only while a nonempty commit sink carries this caller's ownership token.
+    bool HasCommitSink(const void* owner) const;
 
 private:
     friend class Transaction;
@@ -106,6 +108,7 @@ private:
     std::map<std::string, OperationRecord, std::less<>> operations_;
     std::int64_t horizon_ = 0;
     CommitSink sink_;
+    const void* sink_owner_ = nullptr;
 
     std::mutex document_lock_;  // held by a transaction from admission to commit or rollback
     std::atomic<std::thread::id> lock_owner_{};

@@ -257,7 +257,7 @@ void ProjectStore::Attach(core::Document& document) {
     }
     document.SetCommitSink([this](const core::Snapshot& snapshot, const core::OperationRecord& record) {
         Commit(snapshot, record);
-    });
+    }, this);
 }
 
 void ProjectStore::Commit(const core::Snapshot& snapshot, const core::OperationRecord& record) {

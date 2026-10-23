@@ -114,9 +114,15 @@ void Document::SetOperationHorizon(std::int64_t horizon) {
     std::erase_if(operations_, [&](const auto& entry) { return entry.second.committed_revision <= horizon; });
 }
 
-void Document::SetCommitSink(CommitSink sink) {
+void Document::SetCommitSink(CommitSink sink, const void* owner) {
     std::lock_guard lock(state_mutex_);
     sink_ = std::move(sink);
+    sink_owner_ = sink_ ? owner : nullptr;
+}
+
+bool Document::HasCommitSink(const void* owner) const {
+    std::lock_guard lock(state_mutex_);
+    return bool(sink_) && sink_owner_ == owner;
 }
 
 }  // namespace uzp::core

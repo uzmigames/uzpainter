@@ -1612,6 +1612,15 @@ pub fn build(b: *std.Build) void {
         .flags = &evaluator_flags,
     });
     embed_inputs.add(procedural_tests_mod, "src", &procedural_sources, &evaluator_flags);
+    procedural_tests_mod.addIncludePath(b.path("thirdparty/tinyexr"));
+    procedural_tests_mod.addIncludePath(b.path("thirdparty/zlib"));
+    procedural_tests_mod.linkLibrary(mesh_lib);
+    procedural_tests_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &.{ "procedural/snapshot_recording.cpp", "export/exr_writer.cpp", "evaluator/arith.cpp", "evaluator/hwmath.cpp" },
+        .flags = &evaluator_flags,
+    });
+    procedural_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &.{tinyexr_unit}, .flags = &cxx_flags });
     embed_inputs.add(procedural_tests_mod, "src", &render_sources, &(cxx_flags ++ own_warning_flags));
     procedural_tests_mod.addCSourceFiles(.{
         .root = b.path(core_root),

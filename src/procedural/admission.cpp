@@ -19,21 +19,15 @@ std::expected<ProceduralRequest, UnsupportedProcedural> RequestFor(const core::P
     }
     if (const AssetRecord* record = library.Find(request.asset)) request.params = record->defaults;
     for (const auto& [name, value] : ref.params) {
-        if (value.IsBool()) {
-            request.params[name] = int64_t{std::get<bool>(value.data) ? 1 : 0};
-        } else if (value.IsInt()) {
-            request.params[name] = std::get<int64_t>(value.data);
-        } else if (value.IsDouble()) {
-            request.params[name] = std::get<double>(value.data);
-        } else if (value.IsString()) {
-            request.params[name] = std::get<std::string>(value.data);
-        } else {
-            UnsupportedProcedural refusal = Refuse(ref.asset, "a parameter value is a number, a boolean or a string");
+        const auto parsed = ParamFromJson(value);
+        if (!parsed) {
+            UnsupportedProcedural refusal = Refuse(ref.asset, parsed.error());
             refusal.field = "params." + name;
             refusal.value = json::WriteCanonical(value);
-            refusal.certified = "a number, a boolean or a string";
+            refusal.certified = "a finite scalar, a 2-4 component numeric vector or a tagged working-space color";
             return Refused(std::move(refusal));
         }
+        request.params[name] = *parsed;
     }
     request.preset = ref.preset;
     for (const auto& [name, binding] : ref.image_inputs) {
@@ -80,6 +74,12 @@ Params EvaluationSettings(const core::ProjectSettings& settings) {
         {"color_management.working_space", colour.working_space},
         {"color_management.io_rules_sha256", core::Sha256Hex(json::WriteCanonical(colour.io_rules))},
     };
+}
+
+Params EvaluationSettings(const core::Project& project) {
+    Params settings = EvaluationSettings(project.settings);
+    settings["mesh.sha256"] = project.mesh ? project.mesh->resource : std::string();
+    return settings;
 }
 
 std::expected<IProceduralBackend*, UnsupportedProcedural> Admit(const ProceduralRequest& request,

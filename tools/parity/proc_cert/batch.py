@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
@@ -133,7 +134,36 @@ def _need(condition: bool, message: str) -> None:
 
 
 def _number(value: Any) -> bool:
-    return isinstance(value, int | float) and not isinstance(value, bool)
+    return (
+        isinstance(value, int | float)
+        and not isinstance(value, bool)
+        and (not isinstance(value, float) or math.isfinite(value))
+    )
+
+
+def _param_number(value: Any) -> bool:
+    return _number(value) and (not isinstance(value, int) or -(1 << 63) <= value < (1 << 63))
+
+
+def _param(value: Any) -> bool:
+    if isinstance(value, bool | str):
+        return True
+    if _param_number(value):
+        return True
+    if isinstance(value, list):
+        return 2 <= len(value) <= 4 and all(_param_number(part) for part in value)
+    if isinstance(value, dict):
+        return (
+            set(value) == {"type", "working_space", "components", "alpha"}
+            and value["type"] == "color"
+            and isinstance(value["working_space"], str)
+            and bool(value["working_space"])
+            and isinstance(value["components"], list)
+            and len(value["components"]) == 3
+            and all(_param_number(part) for part in value["components"])
+            and (value["alpha"] is None or _param_number(value["alpha"]))
+        )
+    return False
 
 
 def _int(value: Any) -> bool:
@@ -142,9 +172,19 @@ def _int(value: Any) -> bool:
 
 def _normal(params: Mapping[str, Any]) -> dict[str, Any]:
     """Parameter values with numbers compared by value, so 1 and 1.0 are the same value."""
-    return {
-        name: str(Fraction(value)) if _number(value) else value for name, value in params.items()
-    }
+
+    def normalize(value: Any) -> Any:
+        if isinstance(value, bool) or _number(value):
+            return ["number", str(Fraction(value))]
+        if isinstance(value, str):
+            return ["string", value]
+        if isinstance(value, list):
+            return ["vector", [normalize(part) for part in value]]
+        if isinstance(value, dict):
+            return ["color", {key: normalize(part) for key, part in value.items()}]
+        return value
+
+    return {name: normalize(value) for name, value in params.items()}
 
 
 def _raster(document: Any, where: str) -> RasterSpec:
@@ -213,6 +253,8 @@ def parse_case(document: Any, set_name: str) -> Case:
     _need(isinstance(mesh.get("uv_tiles"), int), f"{where}: mesh.uv_tiles")
     params = document.get("params")
     _need(isinstance(params, dict), f"{where}: params")
+    for name, value in params.items():
+        _need(_param(value), f"{where}: params.{name}: invalid parameter value")
     seed = document.get("seed")
     _need(isinstance(seed, int) and not isinstance(seed, bool), f"{where}: seed")
     inputs = document.get("inputs", {})
@@ -256,6 +298,10 @@ class Domain:
                 self.ranges[name] = (Fraction(low), Fraction(high))
             else:
                 _need(isinstance(rule.get("set"), list) and bool(rule["set"]), f"domain {name}")
+                _need(
+                    all(_param(value) for value in rule["set"]),
+                    f"domain {name}: invalid parameter value",
+                )
                 self.sets[name] = list(rule["set"])
         self.constraints = document.get("constraints", [])
         _need(isinstance(self.constraints, list), "domain.constraints: not a list")
@@ -302,10 +348,12 @@ class Domain:
             return Refusal(f"params.{extra[0]}", params[extra[0]], "not a parameter")
         for name, (low, high) in sorted(self.ranges.items()):
             value = params[name]
-            if not _number(value) or not low <= Fraction(value) <= high:
+            if isinstance(value, bool):
+                value = int(value)
+            if not _param_number(value) or not low <= Fraction(value) <= high:
                 return Refusal(f"params.{name}", value, [float(low), float(high)])
         for name, allowed in sorted(self.sets.items()):
-            if params[name] not in allowed:
+            if not _param(params[name]) or params[name] not in allowed:
                 return Refusal(f"params.{name}", params[name], allowed)
         for constraint in self.constraints:
             total = sum(

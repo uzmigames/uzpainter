@@ -174,6 +174,37 @@ def test_a_library_that_breaks_a_rule_is_refused(
     assert proc.stdout.startswith("REFUSED ") and expected in proc.stdout, proc.stdout
 
 
+@pytest.mark.parametrize("color", [False, True])
+@pytest.mark.parametrize("malformed", [False, True])
+def test_structured_parameter_defaults_and_domain_sets(
+    procedural_tests: Path, tmp_path: Path, color: bool, malformed: bool
+) -> None:
+    root = tmp_path / "library"
+    shutil.copytree(FIXTURE, root)
+    value: Any = [1, 2.5]
+    if color:
+        value = {
+            "type": "color",
+            "working_space": "Linear sRGB",
+            "components": [0.25, 0.5, 1],
+            "alpha": None,
+        }
+        if malformed:
+            value["extra"] = 1
+    elif malformed:
+        value = [True, 2]
+
+    def change(document: Any) -> None:
+        document["defaults"]["amount"] = value
+        document["domain"]["parameters"]["amount"] = {"set": [value]}
+        document["domain"]["constraints"] = []
+
+    edit_json(root, RIDGE2, change)
+    proc = run(procedural_tests, "library-load", str(tmp_path), str(root))
+    assert proc.returncode == int(malformed), proc.stdout + proc.stderr
+    assert proc.stdout.startswith("REFUSED " if malformed else "LOADED "), proc.stdout
+
+
 def test_assets_list_and_parity(procedural_tests: Path, tmp_path: Path) -> None:
     """2.5: `UzPainter.exe assets list [--parity]` (RunAssetsCommand) lists the library's assets,
     with each one's parity status and certified domain, and no Painter name."""

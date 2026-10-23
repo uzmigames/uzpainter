@@ -44,6 +44,9 @@
 #include "procedural/primitives.h"
 #include "procedural/seam.h"
 #include "procedural/snapshot_backend.h"
+#include "procedural/snapshot_recording.h"
+#include "export/exr_writer.h"
+#include "store/bundle_codec.h"
 
 #include "render/engine_thread.h"
 #include "render/kernel_cache.h"
@@ -55,6 +58,7 @@
 #include "uzp_core/document/document.h"
 #include "uzp_core/manifest/sha256.h"
 #include "uzp_core/types/project.h"
+#include "uzp_core/types/errors.h"
 
 #include <algorithm>
 #include <bit>
@@ -66,6 +70,7 @@
 #include <fstream>
 #include <functional>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <random>
 #include <string>
@@ -1567,9 +1572,12 @@ int RunAdmission(const fs::path& work, const fs::path& fixture) {
          kOutsideDomain, "output.resolution"},
         {"a parameter the asset does not declare", RidgeRef("uzasset://test-generator/ridge@2", {{"gain", 1}}), context,
          kOutsideDomain, "params.gain"},
-        {"a parameter that is not a number, a boolean or a string",
+        {"a malformed vector parameter",
          RidgeRef("uzasset://test-generator/ridge@2", {{"amount", json::Array{}}}), context,
-         "a parameter value is a number, a boolean or a string", "params.amount"},
+         "a vector needs 2 to 4 components", "params.amount"},
+        {"a vector outside a scalar certified domain",
+         RidgeRef("uzasset://test-generator/ridge@2", {{"amount", json::Array{0, 1}}}), context,
+         kOutsideDomain, "params.amount"},
     };
     for (const Refusal& r : refusals) {
         const auto outcome = SetEffectProcedural(generator, r.ref, r.context, library, seam, submit);
@@ -1780,6 +1788,8 @@ int RunSnapshot(const fs::path& work) {
     ProceduralRequest colour = grey;
     colour.outputId = "colour";
     colour.output = RasterSpec{64, ChannelFormat::F16, "linear", 3};
+    colour.params["offset"] = ParamVector{{1.0, 2.5}};
+    colour.params["tint"] = ParamColor{"Linear sRGB", {0.25, 0.5, 1.0}, 0.75};
     const json::Value signature = SignatureJson(grey);
     Check(Keys(&signature) == std::vector<std::string>{"asset", "inputs", "mesh", "output", "params", "preset", "seed",
                                                        "settings", "version"} &&
@@ -2120,6 +2130,9 @@ int RunSnapshot(const fs::path& work) {
     return Finish();
 }
 
+#include "typed_params_cases.h"
+#include "snapshot_recording_cases.h"
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -2131,6 +2144,8 @@ int main(int argc, char** argv) {
     const fs::path dir = argv[2];
     if (mode == "seam") return RunSeam();
     if (mode == "domain") return RunDomain();
+    if (mode == "typed-params") return RunTypedParams();
+    if (mode == "snapshot-recording") return RunSnapshotRecording(dir);
     if (mode == "primitives") return RunPrimitives();
     if (mode == "kernels") return RunKernels(dir);
     if (mode == "gpu") return RunGpu(dir);

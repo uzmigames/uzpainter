@@ -76,6 +76,57 @@ Code: `src/procedural/seam.{h,cpp}` (`SignatureJson`), `src/procedural/admission
 
 ## Consequences
 
+Recording boundary extension (2026-10-23, implementation in progress):
+`EvaluationSettings(Project)` adds `mesh.sha256` from the actual imported mesh resource;
+the settings-only overload retains its earlier encoding. Recorders derive this field from
+the destination project, and project-backed evaluators must use the same overload. A mesh
+replacement therefore changes the signature even when its class and UV tile count match.
+`RecordSnapshotExport` checks the destination UUID, revision and all these settings before
+decoding the actual PNG/EXR and submitting one transaction. It preserves native codes and
+refuses precision conversion, resampling and non-finite export samples. This is an ingestion
+boundary, not evidence that a composited Painter export isolates a procedural source.
+The real-source recording CLI and its isolation controls remain open under item 2.5.
+
+Recording additionally requires the document's own UUID and its commit sink to
+belong to the destination store at the current journal revision. `Attach` marks
+the sink owner; replacing or clearing the sink clears that association. A
+detached document, or one attached to another store with the same UUID, refuses
+before decoding or opening a transaction. Recording never replaces a sink.
+
+Typed parameter boundary (2026-10-23): `ParamFromJson` and `ParamJson` now serve
+library defaults, explicit domain sets, project admission and snapshot signatures.
+Scalars retain their native JSON encoding; booleans become integer 0 or 1. A
+vector holds two to four finite numeric components. A color has exactly
+`type: "color"`, a nonempty `working_space`, three numeric `components`, and
+`alpha` (null or a finite number). Components never accept booleans. Vectors,
+colors, strings and scalars remain distinct; absent alpha and alpha 1 differ.
+Numeric equality preserves int64 values beyond binary64's exact-integer range.
+The signature parser requires every field and rejects unknown fields, retaining
+the original signed two's-complement encoding for uint64 seeds.
+
+The certification harness accepts these same structured forms and tags values
+by type when comparing evaluation identities. This fixes its former collision
+between numeric 1 and string "1", and treats scalar true and integer 1 as one
+evaluation. Raw case-list and batch pins remain unchanged; these in-memory
+identities do not change the native stored snapshot signature encoding.
+
+Certified-domain arithmetic follow-up (2026-10-23): integer range checks no
+longer round int64 parameters through binary64, and diagnostics retain their
+integer digits. Linear constraints split integers into exact signed 32-bit
+parts. Their product expansion uses normalized Dekker splitting without
+`std::fma`: the installed native runtime returned `0x1p-1011` for runtime
+`fma(-1, -0x1p63, -0x1p63)`, whose exact value is zero (constant folding returned
+zero). The native regression exercises this boundary with volatile inputs.
+Products with unrepresentable bits below the smallest binary64 subnormal and
+non-finite product/expansion results refuse with an exact-arithmetic-unavailable
+diagnostic. Representable subnormal products remain supported. This is a
+conservative boundary: cancellation requiring an overflowing intermediate is
+not certified, even when Python's arbitrary-precision `Fraction` can establish
+the final inequality. No claim of exact arithmetic over all real magnitudes or
+widened certified domain follows. Tests cover signed 2^53 adjacent integers,
+both int64 extremes, product and expansion overflow, and product underflow.
+
+
 - Item 2.5 (`uzpainter assets snapshot`) records through Painter's documented export API with `RecordSnapshot`. The owner's Painter is needed, so the item and test 3.1 stay open.
 - An RGBA (4-channel) or 2-channel output cannot be recorded until a plane format holds it. Item 2.5 raises `NotYetSupported` naming this task for such an output.
 - The seam's callers (item 2.6 and phase3.3) resolve `UseContext::outputId` and `settings` from the document. `EvaluationSettings` gives the settings.

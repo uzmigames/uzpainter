@@ -57,12 +57,15 @@ struct UseContext {
 /// rules' canonical JSON). Every setting that can change a procedural's texels is listed, so a
 /// snapshot recorded under other settings never matches.
 [[nodiscard]] Params EvaluationSettings(const core::ProjectSettings& settings);
+/// Recording and project-backed callers additionally pin the actual imported mesh bytes.
+/// A mesh reload changes the signature even when its class, UV tiles and settings are unchanged.
+[[nodiscard]] Params EvaluationSettings(const core::Project& project);
 
 /// The request of `ref` in `context`: its pinned asset; its parameters over the record's defaults
 /// when the library holds the asset (booleans as integers); its preset; its image inputs by
 /// hash, with the specs of `context`; the output id and settings of `context`; and the
 /// context's `content` input of a filter. Refused: a URL that is not a pin, a parameter that is
-/// not a number, a boolean or a string, an image input whose spec `context` does not give, and a
+/// not a supported scalar, vector or tagged color, an image input whose spec `context` does not give, and a
 /// bound input named `content` beside the context's.
 [[nodiscard]] std::expected<ProceduralRequest, UnsupportedProcedural> RequestFor(
     const core::ProceduralRef& ref, const UseContext& context, const AssetLibrary& library);

@@ -17,6 +17,7 @@
 #include "uzp_core/manifest/json.h"
 #include "uzp_core/types/resource_url.h"
 
+#include <array>
 #include <cstdint>
 #include <expected>
 #include <future>
@@ -30,8 +31,27 @@ namespace uzp::procedural {
 
 /// A parameter value. Booleans travel as integers, as Painter's documentation passes them
 /// (`SourceSubstance.set_parameters`, 05 §7); numbers compare by value, so 1 equals 1.0.
-using ParamValue = std::variant<int64_t, double, std::string>;
+using ParamNumber = std::variant<int64_t, double>;
+struct ParamVector {
+    std::vector<ParamNumber> components;
+    bool operator==(const ParamVector&) const = default;
+};
+struct ParamColor {
+    std::string working_space;
+    std::array<ParamNumber, 3> components;
+    std::optional<ParamNumber> alpha;
+    bool operator==(const ParamColor&) const = default;
+};
+using ParamValue = std::variant<int64_t, double, std::string, ParamVector, ParamColor>;
 using Params = std::map<std::string, ParamValue>;
+
+/// SourceSubstance's documented tuples and Color values (A-PYDOC): vectors have 2-4 numeric
+/// components; colors carry their working space and distinguish Color from (Color, alpha).
+/// Scalar encodings remain unchanged. Invalid structured values throw core::ValueError.
+[[nodiscard]] core::json::Value ParamJson(const ParamValue& value);
+/// Strict JSON boundary: booleans become scalar integers; vector/color components are finite
+/// numbers, never booleans. Colors have exactly type, working_space, components and alpha.
+[[nodiscard]] std::expected<ParamValue, std::string> ParamFromJson(const core::json::Value& value);
 
 /// Stored channel formats, in the certification harness's vocabulary (decision 305).
 enum class ChannelFormat : uint8_t { U8, U16, F16, F32 };
