@@ -1,0 +1,5 @@
+# Continue implementation means complete open Rulebook tasks sequentially
+**Source**: manual
+**Date**: 2026-10-23
+**Related Task**: phase1.25_pilot-wand
+Owner corrections in this session: first 'e pra vc conferir as tasks em aberto carai', then 'e pra vc continuar a implementacao implementando a task completamente ate arquivar e vai pra proxima, so para quando eu mandar'. Start from open Rulebook tasks and dependencies. Continue implementation, required evidence and checks through legitimate task acceptance/archive, then proceed to next task. Do not end at an isolated prerequisite slice. Preserve all blockers/evidence requirements; never mark incomplete parity work accepted or waive tests to satisfy continuity. New independent work may run in parallel, but complete dependencies needed for full task acceptance.
