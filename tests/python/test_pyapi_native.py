@@ -527,8 +527,7 @@ def test_empty_paint_layers(run: Run) -> None:
 
 
 LATER_PHASE = [
-    ("uzpainter.baking", "bake_async", "phase3.5_embree-bakers"),
-    ("uzpainter.baking", "bake_selected_textures_async", "phase3.5_embree-bakers"),
+    # Bake jobs are implemented; test_pyapi_baking covers their events and cancellation.
     ("uzpainter.baking", "set_linked_group", "phase3.5_embree-bakers"),
 ]
 
