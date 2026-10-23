@@ -310,6 +310,8 @@ EDIT_CALLS = (
 
 # Readback calls. `active_channels` and `affected_channel` read when no value is given.
 GETTER_CALLS = (
+    "substance_painter.source.ResolutionMode",
+    "substance_painter.source.ResolutionOverride",
     "substance_painter.layerstack.Node.get_name",
     "substance_painter.layerstack.Node.is_visible",
     "substance_painter.layerstack.Node.get_blending_mode",
@@ -1520,8 +1522,66 @@ def edit(step: int, call: str, args: dict[str, Any], resolved: dict[str, Any]) -
     raise ValueError(f"call {call!r} is not in the probe vocabulary")
 
 
+def resolution_contract(call: str, args: dict[str, Any]) -> Any:
+    """Observe public value types without assigning a source or editing the project."""
+    modes = {
+        "Auto": substance_painter.source.ResolutionMode.Auto,
+        "Asset": substance_painter.source.ResolutionMode.Asset,
+        "Custom": substance_painter.source.ResolutionMode.Custom,
+        "TextureSet": substance_painter.source.ResolutionMode.TextureSet,
+        "UVTile": substance_painter.source.ResolutionMode.UVTile,
+        "Document": substance_painter.source.ResolutionMode.Document,
+        "Manual": substance_painter.source.ResolutionMode.Manual,
+    }
+    if call == "substance_painter.source.ResolutionMode":
+        mode = (
+            modes[args["name"]]
+            if "name" in args
+            else substance_painter.source.ResolutionMode(args["value"])
+        )
+        return {"name": mode.name, "value": mode.value}
+    fields = ("mode", "value", "log2_offset")
+    kwargs = {
+        field: args["constructor_" + field] for field in fields if "constructor_" + field in args
+    }
+    if "mode" in kwargs and isinstance(kwargs["mode"], str) and kwargs["mode"] in modes:
+        kwargs["mode"] = modes[kwargs["mode"]]
+    if "value" in kwargs and isinstance(kwargs["value"], list) and not args.get("value_as_list"):
+        kwargs["value"] = tuple(kwargs["value"])
+    value = substance_painter.source.ResolutionOverride(**kwargs)
+    for field in fields:
+        if "assign_" + field not in args:
+            continue
+        replacement = args["assign_" + field]
+        if field == "mode" and isinstance(replacement, str) and replacement in modes:
+            replacement = modes[replacement]
+        if field == "value" and isinstance(replacement, list):
+            replacement = tuple(replacement)
+        if field == "mode":
+            value.mode = replacement
+        elif field == "value":
+            value.value = replacement
+        else:
+            value.log2_offset = replacement
+    return {
+        "mode": describe(value.mode),
+        "value": describe(value.value),
+        "value_kind": "tuple"
+        if isinstance(value.value, tuple)
+        else "list"
+        if isinstance(value.value, list)
+        else "other",
+        "log2_offset": value.log2_offset,
+    }
+
+
 def read(call: str, args: dict[str, Any]) -> Any:
     """Evaluate one readback call; returns the raw documented value."""
+    if call in (
+        "substance_painter.source.ResolutionMode",
+        "substance_painter.source.ResolutionOverride",
+    ):
+        return resolution_contract(call, args)
     if call in P295_GETTER_CALLS:
         return p295_read(call, args)
     if call in HOST_GETTER_CALLS:  # decision 297

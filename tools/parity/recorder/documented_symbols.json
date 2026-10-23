@@ -1779,6 +1779,54 @@
       "documented_as": "substance_painter.source",
       "page": "substance_painter/source/index.html"
     },
+    "substance_painter.source.ResolutionMode": {
+      "documented_as": "substance_painter.source.ResolutionMode",
+      "page": "substance_painter/source/index.html"
+    },
+    "substance_painter.source.ResolutionMode.Asset": {
+      "documented_as": "substance_painter.source.ResolutionMode",
+      "page": "substance_painter/source/index.html"
+    },
+    "substance_painter.source.ResolutionMode.Auto": {
+      "documented_as": "substance_painter.source.ResolutionMode",
+      "page": "substance_painter/source/index.html"
+    },
+    "substance_painter.source.ResolutionMode.Custom": {
+      "documented_as": "substance_painter.source.ResolutionMode",
+      "page": "substance_painter/source/index.html"
+    },
+    "substance_painter.source.ResolutionMode.Document": {
+      "documented_as": "substance_painter.source.ResolutionMode",
+      "page": "substance_painter/source/index.html"
+    },
+    "substance_painter.source.ResolutionMode.Manual": {
+      "documented_as": "substance_painter.source.ResolutionMode",
+      "page": "substance_painter/source/index.html"
+    },
+    "substance_painter.source.ResolutionMode.TextureSet": {
+      "documented_as": "substance_painter.source.ResolutionMode",
+      "page": "substance_painter/source/index.html"
+    },
+    "substance_painter.source.ResolutionMode.UVTile": {
+      "documented_as": "substance_painter.source.ResolutionMode",
+      "page": "substance_painter/source/index.html"
+    },
+    "substance_painter.source.ResolutionOverride": {
+      "documented_as": "substance_painter.source.ResolutionOverride",
+      "page": "substance_painter/source/index.html"
+    },
+    "substance_painter.source.ResolutionOverride.log2_offset": {
+      "documented_as": "substance_painter.source.ResolutionOverride",
+      "page": "substance_painter/source/index.html"
+    },
+    "substance_painter.source.ResolutionOverride.mode": {
+      "documented_as": "substance_painter.source.ResolutionOverride",
+      "page": "substance_painter/source/index.html"
+    },
+    "substance_painter.source.ResolutionOverride.value": {
+      "documented_as": "substance_painter.source.ResolutionOverride",
+      "page": "substance_painter/source/index.html"
+    },
     "substance_painter.source.SourceBitmap": {
       "documented_as": "substance_painter.source.SourceBitmap",
       "page": "substance_painter/source/bitmap.html"

@@ -31,6 +31,7 @@ The repository's mypy run cannot include `python/`. On its path, `substance_pain
 - `baking.BakingParameters` holds its native handle too (`src/python/PYAPI.md`, `baking`). `common()` and `baker(usage)` return the native `properties.Property` handles, so a `Property` is one class in both packages. `BakingParameters.set` is an edit call: the project then needs saving. Its refusals are decision 323's, each a `NotYetSupported` before any change. `tests/python/test_pyapi_baking.py` compares the defaults with the Tier 0 golden `tier0/defaults-templates/baking-defaults` on the owner's machine (phase3.1_baker-request-model item 3.1).
 - A node holds its uid (`Node(uid)`, as Painter's constructor takes it).
 - Projection and levels parameters are dataclasses, as Painter documents them.
+- `source.ResolutionMode` and the `ResolutionOverride` dataclass reproduce the admitted `tier0/api-probes/source-resolution-values` contract (46 readbacks, both recordings): legacy enum aliases and numeric construction, two power-of-two dimensions from 128 through 4096, constructor and assignment errors. Values retain their input list/tuple shape; mode and offset remain unvalidated as recorded. These standalone values do not evaluate procedural assets or establish automatic resolution and Filter assignment semantics. Evidence: `tests/python/test_pyapi_procedural_values.py`.
 
 ## 3. Painter's quirks and inert state (10 §4)
 

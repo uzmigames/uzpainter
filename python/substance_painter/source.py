@@ -8,8 +8,11 @@ from uzpainter_facade.nodes import (
     SourceSubstance,
     SourceUniformColor,
 )
+from uzpainter_facade.procedural import ResolutionMode, ResolutionOverride
 
 __all__ = [
+    "ResolutionMode",
+    "ResolutionOverride",
     "SourceBitmap",
     "SourceMode",
     "SourceSubstance",

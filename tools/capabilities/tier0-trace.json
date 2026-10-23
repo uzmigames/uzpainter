@@ -13895,6 +13895,47 @@
    "uzpainter.textureset.get_active_stack"
   ]
  },
+ "facade/source-resolution-values": {
+  "golden": "tier0/api-probes/source-resolution-values",
+  "symbols": [
+   "substance_painter.event.BusyStatusChanged",
+   "substance_painter.event.ProjectCreated",
+   "substance_painter.event.ProjectEditionEntered",
+   "substance_painter.event.TextureStateEvent.cache_key_invalidation_throttling_period",
+   "substance_painter.project.Settings",
+   "substance_painter.project.Settings.default_texture_resolution",
+   "substance_painter.project.create",
+   "substance_painter.source.ResolutionMode",
+   "substance_painter.source.ResolutionMode.Asset",
+   "substance_painter.source.ResolutionMode.Auto",
+   "substance_painter.source.ResolutionMode.Custom",
+   "substance_painter.source.ResolutionMode.Document",
+   "substance_painter.source.ResolutionMode.Manual",
+   "substance_painter.source.ResolutionMode.TextureSet",
+   "substance_painter.source.ResolutionMode.UVTile",
+   "substance_painter.source.ResolutionOverride",
+   "substance_painter.textureset.Stack",
+   "substance_painter.textureset.get_active_stack",
+   "uzpainter.application.engine_computations_status",
+   "uzpainter.event.flush",
+   "uzpainter.event.post",
+   "uzpainter.layerstack.Node.uid",
+   "uzpainter.layerstack.PaintLayerNode",
+   "uzpainter.layerstack.get_root_layer_nodes",
+   "uzpainter.project.Metadata",
+   "uzpainter.project.Metadata.get",
+   "uzpainter.project.Settings",
+   "uzpainter.project.create",
+   "uzpainter.project.is_open",
+   "uzpainter.project.revision",
+   "uzpainter.textureset.Stack",
+   "uzpainter.textureset.Stack.material",
+   "uzpainter.textureset.Stack.uid",
+   "uzpainter.textureset.TextureSet",
+   "uzpainter.textureset.TextureSet.uid",
+   "uzpainter.textureset.get_active_stack"
+  ]
+ },
  "facade/textureset-project-readback": {
   "golden": "tier0/api-probes/textureset-project-readback",
   "symbols": [

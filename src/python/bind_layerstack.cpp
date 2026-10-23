@@ -38,6 +38,8 @@ struct SourceBitmap {
     ChannelArg channel;
 };
 
+enum class SourceResolutionMode { Auto, Document, Manual, TextureSet, UVTile };
+
 struct LevelsParamsMono {
     double input_min = 0.0, input_max = 1.0, gamma = 1.0, output_min = 0.0, output_max = 1.0;
     bool clamp = false;
@@ -416,6 +418,12 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
     SealClass(rgb);
 
     // ── Sources ─────────────────────────────────────────────────────────────────────────────────
+    py::enum_<SourceResolutionMode>(source, "_ResolutionMode", py::arithmetic())
+        .value("Auto", SourceResolutionMode::Auto)
+        .value("Document", SourceResolutionMode::Document)
+        .value("Manual", SourceResolutionMode::Manual)
+        .value("TextureSet", SourceResolutionMode::TextureSet)
+        .value("UVTile", SourceResolutionMode::UVTile);
     py::class_<SourceUniformColor> uniform(source, "SourceUniformColor");
     uniform
         .def("get_color",
