@@ -650,7 +650,7 @@ float CompareDistance(const KernelTriangle& k, uint32_t width, uint32_t height, 
     const float dx = q[0] - p[0];
     const float dy = q[1] - p[1];
     const float dz = q[2] - p[2];
-    // This comparator evaluates y first; weight and far-comparator arithmetic stays separate.
+    // The own comparator and single-triangle weights evaluate y first; the far comparator stays separate.
     return evaluator::hw::Sqrt(std::fma(dz, dz, std::fma(dx, dx, dy * dy)));
 }
 
@@ -1218,12 +1218,32 @@ CandidateSet Candidates(const RingGeometry& g, uint32_t x, uint32_t y, const std
 }
 
 /// The chain's fractions over the first `n` candidates (decision 268).
-std::vector<float> Fractions(const std::vector<RingTap>& taps, uint32_t n) {
+std::vector<float> Fractions(const RingGeometry& g, uint32_t x, uint32_t y, uint32_t tau,
+                             const std::vector<Candidate>& candidates, uint32_t n) {
+    std::array<double, kMaxTaps> distances{};
+    bool singleOwnTriangle = n > 1;
+    for (uint32_t i = 0; i < n; ++i) {
+        const Candidate& c = candidates[i];
+        distances[i] = c.tap.distance;
+        singleOwnTriangle = singleOwnTriangle && !c.tap.across_seam && c.triangle == tau;
+    }
+    if (singleOwnTriangle) {
+        // Only the chain's shares use float32 positions; tap selection and flags keep their geometry.
+        std::array<double, kMaxTaps> measured{};
+        bool usable = true;
+        for (uint32_t i = 0; i < n; ++i) {
+            const RingTap& tap = candidates[i].tap;
+            measured[i] = CompareDistance(g.triangles[tau], g.width, g.height, x, y, tap.x, tap.y);
+            usable = usable && std::isfinite(measured[i]) && measured[i] > 0.0;
+        }
+        // A collapsed normalised position cannot define a reciprocal weight.
+        if (usable) distances = measured;
+    }
     std::vector<float> t;
     for (uint32_t level = 0; level + 1 < n; ++level) {
         double sum = 0.0;
-        for (uint32_t j = level; j < n; ++j) sum += 1.0 / taps[j].distance;
-        const double share = (1.0 / taps[level].distance) / sum;
+        for (uint32_t j = level; j < n; ++j) sum += 1.0 / distances[j];
+        const double share = (1.0 / distances[level]) / sum;
         const auto [k, levels] = kCodeLevels[level];
         const double u = std::clamp(std::nearbyint((share - 1.0 / k) * k / (k - 1) * levels), 0.0, static_cast<double>(levels));
         t.push_back(static_cast<float>((levels + (k - 1) * u) / (static_cast<double>(k) * levels)));
@@ -1306,7 +1326,7 @@ std::vector<RingTexel> RingOf(const Coverage& coverage) {
             const CandidateSet set = Candidates(g, rx, ry, own, triangles[0]);
             r.candidates = Taps(set.candidates);
             r.taps = TapCount(set.candidates);
-            r.fractions = Fractions(r.candidates, r.taps);
+            r.fractions = Fractions(g, rx, ry, triangles[0], set.candidates, r.taps);
             r.foldBracket = set.foldBracket;
             r.onFarPlane = set.onFarPlane;
             r.mixedGates = set.mixedGates;

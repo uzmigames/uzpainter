@@ -1126,6 +1126,39 @@ class Ring:
         nearest = min(own, key=key)
         return int(self.owner[nearest[1], nearest[0]])
 
+    def chain_fractions(
+        self, x: int, y: int, chosen: Sequence[tuple[float, bool, tuple[int, int]]]
+    ) -> list[np.float32]:
+        """Single-triangle own chains quantise distances from box-normalised float32 positions.
+
+        Selection and ordering keep their geometric distances. Mixed-triangle and far chains
+        retain the existing distance rule; their frame arithmetic is not inferred here.
+        Float32 collapse or non-finite distances also leave the geometric rule unchanged.
+        """
+        distances = [c[0] for c in chosen]
+        if len(chosen) > 1 and all(not c[1] for c in chosen):
+            triangles = {int(self.owner[ty, tx]) for _, _, (tx, ty) in chosen}
+            if len(triangles) == 1:
+                own = [
+                    ((x + dx) % self.width, y + dy)
+                    for dy, dx in NEIGHBOURS
+                    if 0 <= y + dy < self.height and self.owner[y + dy, (x + dx) % self.width] >= 0
+                ]
+                tau = self.tau(x, y, own)
+                if triangles == {tau}:
+                    T = self.tris[tau]
+                    measured = [
+                        float(
+                            compare_distance(
+                                T.uv, T.normalised, self.width, self.height, (x, y), c[2]
+                            )
+                        )
+                        for c in chosen
+                    ]
+                    if all(math.isfinite(d) and d > 0.0 for d in measured):
+                        distances = measured
+        return fractions(distances)
+
     def texels(self) -> list[tuple[int, int, list[tuple[float, bool, tuple[int, int]]], int]]:
         """Every ring texel: (x, y, candidates in tap order, the chain's number of taps)."""
         covered = self.owner >= 0
@@ -1159,7 +1192,7 @@ def padding(values: np.ndarray, path: Path, material: str, rounded: bool = True)
     seed = covered.copy()
     for x, y, cands, taps in ring.texels():
         chosen = cands[:taps]
-        t = fractions([c[0] for c in chosen])
+        t = ring.chain_fractions(x, y, chosen)
         for c in range(channels):
             out[y, x, c] = chain([F32(values[ty, tx, c]) for _, _, (tx, ty) in chosen], t, rounded)
         seed[y, x] = True

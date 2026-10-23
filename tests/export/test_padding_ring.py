@@ -152,7 +152,29 @@ def reference(
         cands = cands[len(group) :]
         ordered += sorted(group, key=key) if len(group) > 1 else group
     taps = ordered[:1] if ordered[0][0] <= 1e-6 * min(c[0] for c in ordered) else ordered[:4]
-    t = fractions([c[0] for c in taps])
+    distances = [c[0] for c in taps]
+    owners = {int(mesh.owner[ty, tx]) for _, _, (tx, ty) in taps}
+    if len(owners) == 1:
+
+        def tau_key(tap: tuple[int, int]) -> tuple[float, int, int]:
+            k = int(mesh.owner[tap[1], tap[0]])
+            d = compare_distance(
+                mesh.triangles[k][1],
+                mesh.normalised[k],
+                size,
+                size,
+                ring,
+                tap,
+                fused_determinant=False,
+            )
+            return float(d), -tap[0], tap[1]
+
+        nearest = min(own, key=tau_key)
+        if owners == {int(mesh.owner[nearest[1], nearest[0]])}:
+            measured = [float(mesh.compare(ring, c[2])) for c in taps]
+            if all(math.isfinite(d) and d > 0.0 for d in measured):
+                distances = measured
+    t = fractions(distances)
     out = np.array(
         [
             chain([F32(values[ty, tx, c]) for _, _, (tx, ty) in taps], t)
@@ -283,10 +305,8 @@ def test_seam_ring_reads_the_far_island(export_tests: Path, tmp_path: Path, offs
     values, out, ring = run(export_tests, tmp_path, flat, f"seam-{offset}", 3)
     _, out_folded, ring_folded = run(export_tests, tmp_path, folded, f"seam-folded-{offset}", 3)
     for name, outcome, texels in (("seam", out, ring), ("seam-folded", out_folded, ring_folded)):
-        expected = {
-            (x, y): (cands, taps)
-            for x, y, cands, taps in Ring(tmp_path / f"{name}-{offset}.obj", "m", 32, 32).texels()
-        }
+        reference_ring = Ring(tmp_path / f"{name}-{offset}.obj", "m", 32, 32)
+        expected = {(x, y): (cands, taps) for x, y, cands, taps in reference_ring.texels()}
         assert sorted(expected) == sorted((r["x"], r["y"]) for r in texels)
         for r in texels:
             x, y = r["x"], r["y"]
@@ -294,7 +314,7 @@ def test_seam_ring_reads_the_far_island(export_tests: Path, tmp_path: Path, offs
             assert [(c[0], c[1]) for c in r["candidates"][: r["taps"]]] == [
                 c[2] for c in cands[:n]
             ], (name, x, y)
-            t = fractions([c[0] for c in cands[:n]])
+            t = reference_ring.chain_fractions(x, y, cands[:n])
             chosen = [values[ty, tx] for _, _, (tx, ty) in cands[:n]]
             value = [chain([v[c] for v in chosen], t) for c in range(3)]
             assert (
@@ -335,7 +355,7 @@ def _matches_reference(
         )
         assert [(c[0], c[1]) for c in r["candidates"]] == [c[2] for c in cands], (name, x, y)
         assert set(r["undecided"]) == reference.undecided[(x, y)], (name, x, y)
-        t = fractions([c[0] for c in cands[:n]])
+        t = reference.chain_fractions(x, y, cands[:n])
         chosen = [values[ty, tx] for _, _, (tx, ty) in cands[:n]]
         value = [chain([v[c] for v in chosen], t) for c in range(3)]
         assert (
@@ -1299,7 +1319,7 @@ def test_far_tap_keeps_its_own_chart_rigid(export_tests: Path, tmp_path: Path) -
             assert abs(rigid - unfolded) > 1e-4 * rigid, (x, y, tx, ty)
             far += 1
         assert far == 2, (x, y)
-        t = fractions([c[0] for c in cands[:n]])
+        t = reference.chain_fractions(x, y, cands[:n])
         chosen = [values[ty, tx] for _, _, (tx, ty) in cands[:n]]
         value = [chain([v[c] for v in chosen], t) for c in range(3)]
         assert out[y, x].view(np.uint32).tolist() == np.array(value, F32).view(np.uint32).tolist()
@@ -1363,7 +1383,7 @@ def test_far_window_takes_taus_own_island(export_tests: Path, tmp_path: Path) ->
     assert [((c[0], c[1]), bool(c[3])) for c in r["candidates"][:n]] == expected
     for c, ref_c in zip(r["candidates"][:n], cands[:n], strict=True):
         assert math.isclose(c[2], ref_c[0], rel_tol=1e-12)
-    t = fractions([c[0] for c in cands[:n]])
+    t = reference.chain_fractions(x, y, cands[:n])
     chosen = [values[ty, tx] for _, _, (tx, ty) in cands[:n]]
     value = [chain([v[c] for v in chosen], t) for c in range(3)]
     assert out[y, x].view(np.uint32).tolist() == np.array(value, F32).view(np.uint32).tolist()

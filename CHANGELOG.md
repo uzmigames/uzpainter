@@ -171,6 +171,7 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
 
 ### Fixed
 
+- Padding blend weights for own taps in one triangle use box-normalised float32 distances, correcting ten recorded ring differences without adding new ones. Seam uncertainty and production refusals remain in force.
 - Baking parameter handles can pin an explicit property catalog. Catalogs without `OffsetMap` preserve an empty legacy setting and reject nonempty or malformed legacy values atomically; the embedded defaults remain unchanged.
 - Shader-cache includes and atomic temporary files use normalized extended Windows paths, so deep export folders no longer fail when a temporary filename exceeds `MAX_PATH`. DXIL and SPIR-V regressions cover compilation, persisted entries and cache reuse.
 - `parity/semantics/export-processing.json` was stale after batches A–D admitted 51 goldens with export steps. Regenerated: 195 goldens, all new residuals zero, no existing entry changed.
