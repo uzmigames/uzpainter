@@ -52,7 +52,7 @@ Implemented in `src/export/preset_aliases.{h,cpp}` and `assets/export-presets/` 
 
 - `assets3d-inline-five-map` is the pipeline's inline preset. It writes BaseColor sRGB-encoded (decision 126).
 - `pbr-metallic-roughness` and `blender-principled-bsdf` answer to their Painter names and `resource://starter_assets/` URLs through the alias table. They are refused until recording R-095 confirms their layouts.
-- `gltf-pbr-metal-roughness` answers to `glTF PBR Metal Roughness`. It is written from the glTF 2.0 specification (decision 314) and refused until recording R-314 confirms its layout (`phase3.1_unreal-gltf-pbr-preset`).
+- `gltf-pbr-metal-roughness` answers to `glTF PBR Metal Roughness` and `export-preset-generator://gltf`. R-314 confirms the four-map layout and PNG8 defaults (normal dithering enabled, other maps disabled); padding must be supplied explicitly. SpecularWeight is a supplemental UzPainter map with authored PNG8/no-dithering defaults and a consumer-gap receipt (decision 023), with no Painter counterpart. Pipeline parameters override these defaults. Full texture parity remains pending on AO_Mixed, padding, dithering and pilot acceptance (`phase3.1_unreal-gltf-pbr-preset`, decision 314); the texture preset does not generate glTF/GLB scenes.
 - Full output parity moved from `phase1.18_export-engine` item 6.2 to `phase3.3_unreal-gltf-presets` item 3.5 (decision 103).
 
 ### Unreal Engine (Packed)

@@ -4,6 +4,37 @@
 **Date**: 2026-10-19
 **Related Tasks**: phase3.1_unreal-gltf-pbr-preset
 
+## Update 2026-10-23: R-314 recorded
+
+This update supersedes the original layout, URL and recording-pending claims
+below. The original decision remains the record of the pre-observation design.
+
+- Six current-envelope goldens cover both Legacy and OCIO: original URL
+  rejection, corrected predefined exports with pipeline parameters, and
+  padding-only exports using the preset's other defaults. Public hashes and
+  observations: `parity/reports/phase3/r314-gltf-preset.md`.
+- The observed URL is `export-preset-generator://gltf`; the assumed
+  starter-assets resource is undefined. The alias now uses the predefined URL.
+- Four compatibility maps are confirmed: base colour/alpha, packed occlusion R
+  with roughness G and metallic B, OpenGL normal, and emissive. PNG8 defaults
+  enable dithering only for normal; explicit pipeline overrides produce PNG16
+  without dithering. Padding must be supplied. All four files repeat exactly
+  across save/reopen for both depths and both colour sessions.
+- The hand-authored preset follows those confirmed functional choices while
+  preserving a fifth, supplemental SpecularWeight file required by decision 023.
+  That extension has provenance `defined` and is not a Painter parity claim.
+  Its authored defaults are PNG8 without dithering, overridden by pipeline
+  parameters. Explicit defaults keep padding-only configurations valid when
+  SpecularWeight exists; they do not add an oracle claim for this fifth map.
+- Layout is `confirmed`, parity remains `pending`. The obsolete R-314 layout
+  refusal is replaced by the existing specific refusals for AO_Mixed and
+  unsupported padding/export paths. This texture preset does not reproduce the
+  glTF/GLB scene sidecars observed from Painter's generator.
+- Item 2.1 is complete. Real Wand/belt/tunic parity, Wand consumer acceptance,
+  pilot prerequisites and parent acceptance stay open. The consumer supports
+  binding one ORM file to both occlusion and metallic-roughness; its authored CPU
+  tests do not close those gates.
+
 ## Context
 
 Task `phase3.1_unreal-gltf-pbr-preset` ships a preset that answers to Painter's `glTF PBR Metal Roughness` (EXP-08, `docs/architecture/08-export.md` §4). The clean-room rule (decision 002, `docs/licensing-and-clean-room.md` §6) says the preset is written by hand from public sources and only confirmed against Painter's observed output. No recording of that preset exists yet. Its source is the Khronos glTF 2.0 Specification, version 2.0.1: §3.9.2 Metallic-Roughness Material, §3.9.3 Additional Textures, §3.9.4 Alpha Coverage, §3.8.3 Images, §2.6 File Extensions and Media Types, and the property reference §5.19 Material and §5.22 Material PBR Metallic Roughness.

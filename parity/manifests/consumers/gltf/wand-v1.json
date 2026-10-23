@@ -13,13 +13,32 @@
   "status": "pending-real-fixture",
   "validation_scope": "fastgltf structural validation, loaded triangle geometry, decoded PNG resources and material bindings; no Khronos validator or rendered-image claim",
   "required_slots": {
-    "baseColor": {"channels": "RGB and optional alpha", "transfer": "sRGB for RGB; linear alpha"},
-    "metallicRoughness": {"channels": "G roughness, B metallic", "transfer": "linear"},
-    "normal": {"channels": "RGB tangent-space OpenGL normal", "transfer": "linear"},
-    "occlusion": {"channels": "R", "transfer": "linear"},
-    "emissive": {"channels": "RGB", "transfer": "sRGB"}
+    "baseColor": {
+      "channels": "RGB and optional alpha",
+      "transfer": "sRGB for RGB; linear alpha"
+    },
+    "metallicRoughness": {
+      "channels": "G roughness, B metallic",
+      "transfer": "linear"
+    },
+    "normal": {
+      "channels": "RGB tangent-space OpenGL normal",
+      "transfer": "linear"
+    },
+    "occlusion": {
+      "channels": "R",
+      "transfer": "linear"
+    },
+    "emissive": {
+      "channels": "RGB",
+      "transfer": "sRGB"
+    }
   },
   "packing_reference_policy": "Independent native-depth single-channel roughness and metallic PNG files, each pinned by SHA-256; every G/B texel must equal its reference",
-  "blocked_by": ["R-314 preset layout observation", "phase1.25_pilot-wand exact export"],
+  "blocked_by": [
+    "phase1.25_pilot-wand exact export",
+    "AO_Mixed and unsupported padding parity",
+    "real Wand glTF consumer run"
+  ],
   "wand_report": null
 }

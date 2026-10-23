@@ -2,7 +2,7 @@
   "name": "gltf-pbr-metal-roughness",
   "maps": [
     {
-      "fileName": "$textureSet_BaseColor",
+      "fileName": "$textureSet_baseColor",
       "channels": [
         {
           "destChannel": "R",
@@ -30,17 +30,19 @@
         }
       ],
       "parameters": {
-        "fileFormat": "png"
+        "fileFormat": "png",
+        "bitDepth": "8",
+        "dithering": false
       }
     },
     {
-      "fileName": "$textureSet_MetallicRoughness",
+      "fileName": "$textureSet_occlusionRoughnessMetallic",
       "channels": [
         {
           "destChannel": "R",
           "srcChannel": "L",
-          "srcMapType": "defaultMap",
-          "srcMapName": "white"
+          "srcMapType": "virtualMap",
+          "srcMapName": "AO_Mixed"
         },
         {
           "destChannel": "G",
@@ -56,11 +58,13 @@
         }
       ],
       "parameters": {
-        "fileFormat": "png"
+        "fileFormat": "png",
+        "bitDepth": "8",
+        "dithering": false
       }
     },
     {
-      "fileName": "$textureSet_Normal",
+      "fileName": "$textureSet_normal",
       "channels": [
         {
           "destChannel": "R",
@@ -82,25 +86,13 @@
         }
       ],
       "parameters": {
-        "fileFormat": "png"
+        "fileFormat": "png",
+        "bitDepth": "8",
+        "dithering": true
       }
     },
     {
-      "fileName": "$textureSet_Occlusion",
-      "channels": [
-        {
-          "destChannel": "L",
-          "srcChannel": "L",
-          "srcMapType": "virtualMap",
-          "srcMapName": "AO_Mixed"
-        }
-      ],
-      "parameters": {
-        "fileFormat": "png"
-      }
-    },
-    {
-      "fileName": "$textureSet_Emissive",
+      "fileName": "$textureSet_emissive",
       "channels": [
         {
           "destChannel": "R",
@@ -122,7 +114,9 @@
         }
       ],
       "parameters": {
-        "fileFormat": "png"
+        "fileFormat": "png",
+        "bitDepth": "8",
+        "dithering": false
       }
     },
     {
@@ -136,7 +130,9 @@
         }
       ],
       "parameters": {
-        "fileFormat": "png"
+        "fileFormat": "png",
+        "bitDepth": "8",
+        "dithering": false
       }
     }
   ]

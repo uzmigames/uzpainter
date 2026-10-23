@@ -4,8 +4,8 @@ decision 095).
 
 The CPU cases run `uzp-export-tests.exe` (`presets`, `aliases`, `plan`, `export`, `receipt`) on
 every lane, with the shipped presets installed beside it: the provenance record of every preset,
-the alias table, the refusal of the presets whose layout no recording confirms (recording R-095;
-R-314 for the glTF preset of phase3.1_unreal-gltf-pbr-preset, decision 314), the glTF preset's
+the alias table, the refusal of presets whose layout no recording confirms (recording R-095),
+the glTF preset's recorded layout and retained AO_Mixed refusal (R-314, decision 314),
 packing, and the Assets3D five-map preset planning what the pipeline's own inline configuration
 plans. The Tier 0 case reads the private oracle store and skips, saying so, on a machine without
 it (decision 028): the five-map preset's normal map, written on the recorded plane goldens, is
@@ -53,7 +53,7 @@ BLENDER_URL = "resource://starter_assets/Blender (Principled BSDF)"
 BLENDER_VERSION = "13120355637414252359"
 GLTF = "gltf-pbr-metal-roughness"
 GLTF_NAME = "glTF PBR Metal Roughness"
-GLTF_URL = f"resource://starter_assets/{GLTF_NAME}"
+GLTF_URL = "export-preset-generator://gltf"
 # The recording an unconfirmed preset's refusal names when it is not R-095 (`parity.pending`).
 PENDING_RECORDING = {
     GLTF: "R-314",
@@ -203,6 +203,10 @@ def test_painter_names_resolve_to_shipped_presets(export_tests: Path, tmp_path: 
     )
     assert [x.get("id") for x in gltf[:3]] == [GLTF] * 3
     assert gltf[3]["error"] == "NotYetSupported" and "R-314" in gltf[3]["message"], gltf[3]
+    [obsolete] = resolve(
+        export_tests, installed, [f"resource://starter_assets/{GLTF_NAME}"], tmp_path
+    )
+    assert obsolete["id"] is None
 
     # defaultExportPreset "Blender (Principled BSDF)" reaches the shipped preset via ParseConfig.
     [planned] = plan_many(
@@ -237,30 +241,26 @@ def test_unconfirmed_presets_are_refused_naming_r095(export_tests: Path, tmp_pat
         )
 
 
-def test_gltf_preset_is_refused_naming_r314(export_tests: Path, tmp_path: Path) -> None:
-    """phase3.1 item 2.4, decision 314: `defaultExportPreset: "glTF PBR Metal Roughness"`, its
-    URL, the id, or an `exportList` entry naming any of them reaches the shipped glTF preset, which
-    is refused before anything is planned until recording R-314 confirms its layout."""
+def test_gltf_preset_refuses_unfitted_ao_mixed(export_tests: Path, tmp_path: Path) -> None:
+    """Confirmed aliases reach the layout, but its packed AO_Mixed stays refused."""
     cases = []
     for reference in (GLTF_NAME, GLTF_URL, GLTF):
-        cases.append((ONE_SET, shipped_config(reference)))
+        parameters = [{"parameters": dict(GLTF_PARAMETERS)}]
+        cases.append((ONE_SET, shipped_config(reference, exportParameters=parameters)))
         cases.append(
             (
                 ONE_SET,
                 shipped_config(
-                    FIVE_MAP, exportList=[{"rootPath": "s0", "exportPreset": reference}]
+                    FIVE_MAP,
+                    exportList=[{"rootPath": "s0", "exportPreset": reference}],
+                    exportParameters=parameters,
                 ),
             )
         )
     for result in plan_many(export_tests, cases, tmp_path):
-        refused(
-            result,
-            "NotYetSupported",
-            f'(shipped preset "{GLTF}")',
-            "no recording of Painter's output confirms its layout",
-            "R-314",
-            "decision 095",
-        )
+        refused(result, "NotYetSupported", "AO_Mixed", "$textureSet_occlusionRoughnessMetallic")
+    [unresolved] = plan_many(export_tests, [(ONE_SET, shipped_config(GLTF_URL))], tmp_path)
+    refused(unresolved, "ValueError", "paddingAlgorithm is undefined")
 
 
 def test_preset_references_resolve_inline_first(export_tests: Path, tmp_path: Path) -> None:
@@ -302,7 +302,7 @@ def test_preset_references_resolve_inline_first(export_tests: Path, tmp_path: Pa
         ),
         (ONE_SET, shipped_config("Blender")),
         (ONE_SET, shipped_config("resource://my_shelf/Mine")),
-        (ONE_SET, shipped_config("export-preset-generator://gltf")),
+        (ONE_SET, shipped_config("export-preset-generator://unshipped")),
     ]
     r = plan_many(export_tests, cases, tmp_path)
     assert [f["relativePath"] for f in r[0]["plan"]["files"]] == ["s0_x.png"]
@@ -327,17 +327,15 @@ GLTF_CHANNELS = {
 }
 GLTF_PARAMETERS = {"bitDepth": "16", "paddingAlgorithm": "infinite", "dithering": False}
 NO_OCCLUSION = [
-    "$textureSet_BaseColor",
-    "$textureSet_MetallicRoughness",
-    "$textureSet_Normal",
-    "$textureSet_Emissive",
+    "$textureSet_baseColor",
+    "$textureSet_normal",
+    "$textureSet_emissive",
     "$textureSet_SpecularWeight",
 ]
 
 
 def gltf_inline(*output_maps: str) -> dict[str, Any]:
-    """The shipped glTF preset's maps as the inline preset `gltf-copy` (so that its packing plans
-    while the shipped preset stays refused, R-314), filtered to `output_maps` when given."""
+    """The authored glTF maps as an inline preset, optionally filtered to supported outputs."""
     preset = json.loads((PRESETS / f"{GLTF}.json").read_text(encoding="utf-8"))
     preset["name"] = "gltf-copy"
     entry: dict[str, Any] = {"rootPath": "s0"}
@@ -362,7 +360,7 @@ def packing(file: dict[str, Any]) -> list[tuple[str, str, str, str]]:
 def test_gltf_preset_packs_the_gltf_slots(export_tests: Path, tmp_path: Path) -> None:
     """2.2, 2.5 (decision 314): the glTF preset's maps plan as the glTF 2.0 metallic-roughness
     material binds them: base colour RGB (A from opacity, dropped without an opacity channel),
-    metallic-roughness with roughness in G and metalness in B, the OpenGL (+Y up) normal and
+    occlusion R, roughness G and metalness B in one refused map, the OpenGL (+Y up) normal and
     emissive RGB, each a PNG; the occlusion map reads AO_Mixed and is refused until it is fitted
     (decision 131); SpecularWeight, which has no glTF core slot, is its own file, and the receipt
     reports it as a consumer gap (decision 023); Height has no map."""
@@ -373,38 +371,45 @@ def test_gltf_preset_packs_the_gltf_slots(export_tests: Path, tmp_path: Path) ->
         [
             (one_set, gltf_inline(*NO_OCCLUSION)),
             (one_set, gltf_inline()),
-            (with_opacity, gltf_inline("$textureSet_BaseColor")),
+            (with_opacity, gltf_inline("$textureSet_baseColor")),
         ],
         tmp_path,
     )
     files = {f["relativePath"]: f for f in planned["plan"]["files"]}
     assert list(files) == [
-        "s0_BaseColor.png",
-        "s0_MetallicRoughness.png",
-        "s0_Normal.png",
-        "s0_Emissive.png",
+        "s0_baseColor.png",
+        "s0_normal.png",
+        "s0_emissive.png",
         "s0_SpecularWeight.png",
     ]
     assert all(f["parameters"]["fileFormat"] == "png" for f in files.values())
-    assert packing(files["s0_BaseColor.png"]) == [(c, c, "documentMap", "basecolor") for c in "RGB"]
-    mr = files["s0_MetallicRoughness.png"]
-    assert mr["layout"] == "RGB"
-    assert packing(mr) == [
-        ("R", "L", "defaultMap", "white"),
-        ("G", "L", "documentMap", "roughness"),
-        ("B", "L", "documentMap", "metallic"),
+    assert packing(files["s0_baseColor.png"]) == [(c, c, "documentMap", "basecolor") for c in "RGB"]
+    preset = json.loads((PRESETS / f"{GLTF}.json").read_text(encoding="utf-8"))
+    orm = preset["maps"][1]
+    assert orm["fileName"] == "$textureSet_occlusionRoughnessMetallic"
+    assert [(c["destChannel"], c["srcMapType"], c["srcMapName"]) for c in orm["channels"]] == [
+        ("R", "virtualMap", "AO_Mixed"),
+        ("G", "documentMap", "roughness"),
+        ("B", "documentMap", "metallic"),
     ]
-    assert [c["source"].get("channel") for c in mr["channels"]] == [
-        None,
-        "SpecularRoughness",
-        "BaseMetalness",
-    ]
-    assert packing(files["s0_Normal.png"]) == [(c, c, "virtualMap", "Normal_OpenGL") for c in "RGB"]
-    assert packing(files["s0_Emissive.png"]) == [(c, c, "documentMap", "emissive") for c in "RGB"]
+    assert all(f["parameters"]["bitDepth"] == "16" for f in files.values())
+    assert all(not f["parameters"]["dithering"] for f in files.values())
+    assert packing(files["s0_normal.png"]) == [(c, c, "virtualMap", "Normal_OpenGL") for c in "RGB"]
+    assert packing(files["s0_emissive.png"]) == [(c, c, "documentMap", "emissive") for c in "RGB"]
     assert packing(files["s0_SpecularWeight.png"]) == [("L", "L", "documentMap", "specularweight")]
-    refused(occlusion, "NotYetSupported", '"$textureSet_Occlusion"', "AO_Mixed")
+    refused(occlusion, "NotYetSupported", '"$textureSet_occlusionRoughnessMetallic"', "AO_Mixed")
     [base] = alpha["plan"]["files"]
     assert base["layout"] == "RGBA" and packing(base)[3] == ("A", "L", "documentMap", "opacity")
+    own = gltf_inline(*NO_OCCLUSION)
+    own["exportParameters"] = [{"parameters": {"paddingAlgorithm": "infinite"}}]
+    [defaults] = plan_many(export_tests, [(one_set, own)], tmp_path)
+    assert all(f["parameters"]["bitDepth"] == "8" for f in defaults["plan"]["files"])
+    assert [f["parameters"]["dithering"] for f in defaults["plan"]["files"]] == [
+        False,
+        True,
+        False,
+        False,
+    ]
 
     (tmp_path / "project.json").write_text(json.dumps(one_set), encoding="utf-8")
     (tmp_path / "config.json").write_text(
@@ -417,6 +422,52 @@ def test_gltf_preset_packs_the_gltf_slots(export_tests: Path, tmp_path: Path) ->
     assert spec_file["path"] == "s0_SpecularWeight.png"
     [gap] = spec_file["consumer_gaps"]
     assert gap["channel"] == "SpecularWeight" and "not applied by the export" in gap["gap"]
+
+
+@pytest.mark.parametrize("suffix,depth", [("predefined", 16), ("predefined-padding", 8)])
+def test_gltf_layout_matches_private_r314_and_pipeline_repeats(suffix: str, depth: int) -> None:
+    """R-314 confirms layout; this does not claim UzPainter/Painter pixel parity."""
+    needs_store()
+    preset = json.loads((PRESETS / f"{GLTF}.json").read_text(encoding="utf-8"))
+    for mode in ("legacy", "ocio"):
+        golden = load(
+            locate(),
+            manifest_root(current_envelope())
+            / f"tier0/semantics/export-presets-gltf-{suffix}-{mode}.json",
+        )
+        for recording in golden.recordings.values():
+            [capture] = [
+                output
+                for output in recording.outputs.values()
+                if output.get("call", "").endswith("PredefinedExportPreset.list_output_maps")
+            ]
+            observed = capture["value"][GLTF_NAME]
+            assert observed["url"] == GLTF_URL
+            assert len(observed["output_maps"]) == 4
+            for authored, oracle in zip(preset["maps"][:4], observed["output_maps"], strict=True):
+                assert oracle["fileName"] == authored["fileName"].replace(
+                    "$textureSet", "uzp_bevelled_cube"
+                )
+                assert oracle["parameters"] == authored["parameters"]
+                normalized = [
+                    {**channel, "srcMapName": channel["srcMapName"].lower()}
+                    for channel in oracle["channels"]
+                ]
+                expected = [
+                    {**channel, "srcMapName": channel["srcMapName"].lower()}
+                    for channel in authored["channels"]
+                ]
+                assert normalized == expected
+            maps = golden.maps(recording.recording_id)
+            assert len(maps) == 4
+            for output_id in maps:
+                assert (
+                    golden.output(recording.recording_id, output_id)["storage_format"][
+                        "bits_per_channel"
+                    ]
+                    == depth
+                )
+                assert golden.map_sha256("r1", output_id) == golden.map_sha256("r2", output_id)
 
 
 # ── The Assets3D five-map preset ─────────────────────────────────────────────

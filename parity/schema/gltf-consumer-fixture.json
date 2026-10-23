@@ -41,7 +41,7 @@
       "const": "Independent native-depth single-channel roughness and metallic PNG files, each pinned by SHA-256; every G/B texel must equal its reference"
     },
     "blocked_by": {
-      "const": ["R-314 preset layout observation", "phase1.25_pilot-wand exact export"]
+      "const": ["phase1.25_pilot-wand exact export", "AO_Mixed and unsupported padding parity", "real Wand glTF consumer run"]
     },
     "wand_report": {"type": "null"}
   }

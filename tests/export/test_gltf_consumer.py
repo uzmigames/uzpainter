@@ -218,6 +218,28 @@ def test_real_publication_consumed_by_fastgltf(
     }
 
 
+def test_one_packed_texture_can_supply_occlusion_and_metallic_roughness(
+    publication: Publication, gltf_consumer: Path, tmp_path: Path
+) -> None:
+    """R-314 uses one ORM file for two glTF slots; bindings need not name distinct files."""
+    manifest = Path(__file__).resolve().parents[2] / "parity/manifests/consumers/gltf/wand-v1.json"
+    output = tmp_path / "consumer-orm"
+    report = run_fixture(
+        publication.root,
+        publication.mesh,
+        {**BINDINGS, "occlusion": BINDINGS["metallicRoughness"]},
+        publication.references,
+        output,
+        gltf_consumer,
+        manifest,
+        mesh_material="s0",
+    )
+    assert report["status"] == "pass"
+    assert (output / "occlusion.png").read_bytes() == (
+        output / "metallicRoughness.png"
+    ).read_bytes()
+
+
 def test_swapped_packing_rejected_with_coherent_receipt(
     publication: Publication, gltf_consumer: Path, tmp_path: Path
 ) -> None:

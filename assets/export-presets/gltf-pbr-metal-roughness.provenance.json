@@ -1,9 +1,9 @@
 {
   "schema": "uzpainter/export-preset-provenance/1",
-  "version": 1,
+  "version": 2,
   "author": "UzmiGames",
   "licence": "Apache-2.0",
-  "date": "2026-10-19",
+  "date": "2026-10-23",
   "reviewer": null,
   "preset": "gltf-pbr-metal-roughness",
   "answersTo": [
@@ -48,72 +48,93 @@
     },
     {
       "kind": "public-documentation",
-      "page": "UzPainter decision 023 (owner answer Q10); docs/architecture/08-export.md §4",
+      "page": "UzPainter decision 023 (owner answer Q10); docs/architecture/08-export.md section 4",
       "section": "SpecularWeight as a consumer gap",
       "facts": "SpecularWeight is exported and reported in the export receipt as a consumer gap wherever the consumer has no binding for it; omitting it silently was rejected."
     }
   ],
-  "privateRecords": [],
+  "privateRecords": [
+    {
+      "golden_id": "tier0/semantics/export-presets-gltf-legacy",
+      "record_sha256": "84e781acd971bbf87d35f774c78a07825e3fcec6f368f818979dc4b6c9417f89"
+    },
+    {
+      "golden_id": "tier0/semantics/export-presets-gltf-ocio",
+      "record_sha256": "297c38c5eb65a557f79ff7233f08e886ee521a2e9314350a6a190197e1acbab2"
+    },
+    {
+      "golden_id": "tier0/semantics/export-presets-gltf-predefined-legacy",
+      "record_sha256": "4ddfb774cf84f9631e0d64f467222ec9b6fb46988e31507eba4c6482411d77ce"
+    },
+    {
+      "golden_id": "tier0/semantics/export-presets-gltf-predefined-ocio",
+      "record_sha256": "4b665fe32a085ca75e70b0fae125f1db9f67cfadb20fc626fda20f81ce3784cd"
+    },
+    {
+      "golden_id": "tier0/semantics/export-presets-gltf-predefined-padding-legacy",
+      "record_sha256": "e729f2294b0d4acc019a2fa7b025c01df0821fa9dd9acf78ee00fcce4e4ce2fd"
+    },
+    {
+      "golden_id": "tier0/semantics/export-presets-gltf-predefined-padding-ocio",
+      "record_sha256": "4076be7a5e2026554c62512f14d258b188f7988a42e6e1430830dc2e5dfe6ec7"
+    }
+  ],
   "packing": [
     {
-      "fileName": "$textureSet_BaseColor",
+      "fileName": "$textureSet_baseColor",
       "decision": "RGB from documentMap basecolor, A from documentMap opacity (dropped when the stack has no opacity channel, probe P7); the colour is written in its channel's encoding (an sRGB8 BaseColor sRGB-encoded, decision 126)",
-      "source": "glTF 2.0 §3.9.2 and §5.22 baseColorTexture (sRGB RGB, linear alpha coverage in A); §3.9.4 Alpha Coverage",
-      "status": "hypothesis"
+      "source": "glTF 2.0 section 3.9.2 and section 5.22 baseColorTexture (sRGB RGB, linear alpha coverage in A); section 3.9.4 Alpha Coverage",
+      "status": "confirmed"
     },
     {
-      "fileName": "$textureSet_MetallicRoughness",
-      "decision": "R from defaultMap white, G from documentMap roughness, B from documentMap metallic, linear",
-      "source": "glTF 2.0 §3.9.2 and §5.22 metallicRoughnessTexture (roughness in G, metalness in B, linear, R and A ignored); R holds 1.0, full indirect lighting, so a consumer that also binds this texture as occlusion (R, §5.19 occlusionTexture) sees none (decision 314)",
-      "status": "hypothesis"
+      "fileName": "$textureSet_occlusionRoughnessMetallic",
+      "decision": "R from virtualMap AO_Mixed, G from documentMap roughness, B from documentMap metallic, linear; AO_Mixed remains refused until fitted",
+      "source": "glTF 2.0 sections 3.9.2, 3.9.3, 5.19 and 5.22 allow occlusion R and metallic-roughness G/B in one texture; independently authored combination confirmed by R-314 on authored fixtures",
+      "status": "confirmed"
     },
     {
-      "fileName": "$textureSet_Normal",
+      "fileName": "$textureSet_normal",
       "decision": "RGB from virtualMap Normal_OpenGL, linear",
-      "source": "glTF 2.0 §3.9.3 Normal Texture and §5.19 normalTexture (tangent space, +X right and +Y up: the OpenGL convention; linear)",
-      "status": "hypothesis"
+      "source": "glTF 2.0 section 3.9.3 Normal Texture and section 5.19 normalTexture (tangent space, +X right and +Y up: the OpenGL convention; linear)",
+      "status": "confirmed"
     },
     {
-      "fileName": "$textureSet_Occlusion",
-      "decision": "L from virtualMap AO_Mixed (the AO mesh map combined with the AO channel), linear; refused until AO_Mixed is fitted (decision 131)",
-      "source": "glTF 2.0 §3.9.3 Occlusion Texture and §5.19 occlusionTexture (R sampled linearly; a greyscale PNG decodes to R = G = B = L); the source map: decision 314",
-      "status": "hypothesis"
-    },
-    {
-      "fileName": "$textureSet_Emissive",
+      "fileName": "$textureSet_emissive",
       "decision": "RGB from documentMap emissive, written in its channel's encoding",
-      "source": "glTF 2.0 §5.19 emissiveTexture (sRGB RGB, A ignored)",
-      "status": "hypothesis"
+      "source": "glTF 2.0 section 5.19 emissiveTexture (sRGB RGB, A ignored)",
+      "status": "confirmed"
     },
     {
       "fileName": "$textureSet_SpecularWeight",
-      "decision": "L from documentMap specularweight, written when the stack has the channel; the receipt reports it as a consumer gap",
-      "source": "decision 023; glTF 2.0 §3.9.2 (the core metallic-roughness material has no specular input); decision 314",
-      "status": "hypothesis"
+      "decision": "UzPainter extension: L from documentMap specularweight, written when present and reported as a consumer gap. Its authored defaults are PNG8 without dithering, overridable by pipeline parameters. Painter glTF exports no such file; this is not a Painter parity claim.",
+      "source": "decision 023; glTF 2.0 section 3.9.2 (the core metallic-roughness material has no specular input); decision 314",
+      "status": "defined"
     },
     {
       "fileName": "(all)",
-      "decision": "Files named $textureSet_<glTF texture>, each with fileFormat png and no other parameter: bit depth, padding and dithering come from exportParameters until the recording shows what the preset itself sets; no Height map (no glTF core slot)",
-      "source": "glTF 2.0 §2.6 and §3.8.3 (PNG or JPEG; JPEG has no alpha and is lossy); decision 314",
-      "status": "hypothesis"
+      "decision": "Four compatibility maps use PNG 8; normal enables dithering, other three disable it. Pipeline parameters override map defaults (R-314 exports PNG16 without dithering). Required padding has no preset default: the own-parameters probe raises ValueError. Supplemental SpecularWeight uses the separately defined UzPainter defaults. No Height map. Correct URL is export-preset-generator://gltf; starter-assets URL is undefined. glTF/GLB scene generation is not provided by this texture preset. Padding-only follow-up confirms all four PNG8 files, stable across save/reopen in Legacy and OCIO.",
+      "source": "glTF 2.0 sections 2.6, 3.8.3 and 3.9; R-314 behavioural confirmation on authored fixtures; decision 023 for supplemental SpecularWeight",
+      "status": "confirmed"
     }
   ],
   "parity": {
-    "layout": "unconfirmed",
+    "layout": "confirmed",
     "status": "pending",
     "pending": [
       {
         "recording": "R-314",
         "owner": "phase3.1_unreal-gltf-pbr-preset item 2.1",
-        "what": "Painter's files and dry run for resource://starter_assets/glTF PBR Metal Roughness on the authored bevelled cube with every channel the preset reads filled distinctly (Opacity, Emissive and SpecularWeight too) and an AO mesh map bound, with the preset's own parameters and with the pipeline's, plus the preset's list_output_maps() (request tier0/semantics/export-presets-gltf): confirms or corrects every map, its channels, its name, the preset's own parameters and the URL."
+        "what": "Layout and predefined URL confirmed by R-314 Legacy/OCIO r1/r2. Full decoded texture parity remains pending (AO_Mixed, infinite/islandnormal padding, dithering and real pilot acceptance); own-parameter exports require explicit padding. SpecularWeight is a deliberate UzPainter extension with no Painter counterpart. The texture preset does not generate Painter glTF/GLB scene sidecars."
       }
     ],
     "tests": [
       "tests/export/test_export_presets.py::test_painter_names_resolve_to_shipped_presets",
-      "tests/export/test_export_presets.py::test_gltf_preset_is_refused_naming_r314",
+      "tests/export/test_export_presets.py::test_gltf_preset_refuses_unfitted_ao_mixed",
       "tests/export/test_export_presets.py::test_provenance_records_are_complete",
       "tests/export/test_export_presets.py::test_gltf_preset_packs_the_gltf_slots",
-      "tests/export/test_export_presets.py::test_shipped_presets_pass_the_guard"
+      "tests/export/test_export_presets.py::test_shipped_presets_pass_the_guard",
+      "tests/export/test_export_presets.py::test_gltf_layout_matches_private_r314_and_pipeline_repeats",
+      "tests/export/test_gltf_consumer.py::test_one_packed_texture_can_supply_occlusion_and_metallic_roughness"
     ]
   }
 }

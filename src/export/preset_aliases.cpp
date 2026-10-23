@@ -30,8 +30,9 @@ constexpr std::array<std::string_view, 7> kShippedIds{"pbr-metallic-roughness", 
 const std::array<PresetAlias, 4> kAliases{{
     {"PBR Metallic Roughness", "pbr-metallic-roughness", {}, kRecording},
     {"Blender (Principled BSDF)", "blender-principled-bsdf", kBlenderVersions, kRecording},
-    // phase3.1_unreal-gltf-pbr-preset item 2.4 (CLR-06); its URL's versions: recording R-314.
-    {"glTF PBR Metal Roughness", "gltf-pbr-metal-roughness", {}, "recording R-314, decision 314"},
+    // R-314 observes a predefined generator, not a starter-assets resource.
+    {"glTF PBR Metal Roughness", "gltf-pbr-metal-roughness", {}, "recording R-314, decision 314",
+     "export-preset-generator://gltf"},
     // phase3.2_unreal-ue56-packed-preset item 2.4 (CLR-06); its URL's versions: recording R-322.
     {"Unreal Engine (Packed)", "unreal-engine-packed", {}, "recording R-322, decision 322"},
 }};
@@ -220,14 +221,12 @@ std::optional<std::string> ShippedPresetId(std::string_view reference) {
     for (const PresetAlias& alias : kAliases) {
         if (reference == alias.painterName) return std::string(alias.presetId);
     }
-    if (!reference.starts_with(kStarterAssets)) return std::nullopt;
-    const std::string_view rest = reference.substr(kStarterAssets.size());
-    const size_t query = rest.find('?');
-    const std::string_view name = rest.substr(0, query);
     for (const PresetAlias& alias : kAliases) {
-        if (name != alias.painterName) continue;
-        if (query == std::string_view::npos) return std::string(alias.presetId);
-        const std::string_view text = rest.substr(query + 1);
+        const std::string url = alias.url.empty() ? std::string(kStarterAssets) + std::string(alias.painterName)
+                                                : std::string(alias.url);
+        if (reference == url) return std::string(alias.presetId);
+        if (!reference.starts_with(url + "?")) continue;
+        const std::string_view text = reference.substr(url.size() + 1);
         constexpr std::string_view kVersion = "version=";
         if (text.starts_with(kVersion) &&
             std::find(alias.versions.begin(), alias.versions.end(), text.substr(kVersion.size())) !=

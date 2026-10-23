@@ -9,7 +9,8 @@
 // (`uzpainter/export-preset-provenance/1`, `src/export/preset-provenance.schema.json`). A preset
 // reference (`defaultExportPreset`, `exportList[].exportPreset`) that names no inline preset
 // resolves here: a shipped id, a Painter preset name of the alias table, or Painter's
-// `resource://starter_assets/<Painter name>` URL with no query or a recorded `?version=`. Painter
+// observed URL (normally `resource://starter_assets/<Painter name>`, glTF's predefined
+// `export-preset-generator://gltf`) with no query or a recorded `?version=`. Painter
 // names are internal compatibility aliases only (CLR-06): the shipped files carry UzPainter ids.
 //
 // A preset whose layout no Painter recording confirms yet (provenance `parity.layout`
@@ -37,6 +38,8 @@ struct PresetAlias {
     std::string_view presetId;
     std::span<const std::string_view> versions;
     std::string_view recording;
+    /// Observed predefined URL; empty means resource://starter_assets/<painterName>.
+    std::string_view url = {};
 };
 
 /// The alias table, in shipped-preset order.
@@ -45,7 +48,7 @@ struct PresetAlias {
 [[nodiscard]] std::span<const std::string_view> ShippedPresetIds();
 
 /// The shipped preset a preset reference names: its id, an alias's Painter name, or
-/// `resource://starter_assets/<Painter name>` with no query or `?version=<recorded version>`;
+/// its observed URL with no query or `?version=<recorded version>`;
 /// nullopt for any other text. Throws `core::NotYetSupported` naming the alias's recording (R-095,
 /// R-314 for the glTF preset, R-322 for the Unreal preset) for an alias's URL with an unrecorded query
 /// (decision 095).
