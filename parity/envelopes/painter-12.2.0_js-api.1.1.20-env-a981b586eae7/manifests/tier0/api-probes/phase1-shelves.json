@@ -1,0 +1,148 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/api-probes/phase1-shelves",
+  "tier": "0",
+  "domain": "tier0/api-probes/phase1-shelves",
+  "description": "API probe P21-D (decision 110): on the plane, with ShelfCrawlingStarted/Ended connected, Shelves.add('uzp_probe_shelf') of a folder the recorder makes in its private work directory holding the checker image (its crawl is followed through Shelf.is_crawling() in every state poll); Shelves.all() names and paths, application_shelf() and user_shelf(), exists(), is_crawling(), then refresh() and is_crawling() again, in the first session and after save/reopen. The recorder removes the shelf once the project is closed.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    },
+    {
+      "input_id": "checker",
+      "kind": "image",
+      "path": "parity/fixtures/api-probes/checker-16.png",
+      "sha256": "4d1acf002ea180ad1af069b24c114ac41f58784b347174251b665673d7330126",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0",
+        "note": "16x16 8-bit RGB checker of 4x4 cells, (204,51,26) and (26,128,204)."
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.event.Dispatcher.connect",
+        "args": {
+          "events": [
+            "BusyStatusChanged",
+            "ShelfCrawlingStarted",
+            "ShelfCrawlingEnded"
+          ]
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.resource.Shelves.add",
+        "args": {
+          "name": "uzp_probe_shelf",
+          "folder": "probe-shelf",
+          "inputs": [
+            "checker"
+          ]
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.resource.Shelves.all",
+        "args": {}
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.resource.Shelves.application_shelf",
+        "args": {}
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.resource.Shelves.user_shelf",
+        "args": {}
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.resource.Shelves.exists",
+        "args": {
+          "name": "uzp_probe_shelf"
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.resource.Shelf.is_crawling",
+        "args": {
+          "name": "uzp_probe_shelf"
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.resource.Shelf.refresh",
+        "args": {
+          "name": "uzp_probe_shelf",
+          "probe": true
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.resource.Shelf.is_crawling",
+        "args": {
+          "name": "uzp_probe_shelf"
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "ab848640e529b0916aca5628fbd3de31d9e62970d51ac8013335996fc3ac9cc1",
+      "size_bytes": 15044
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "332ddce6024e25f9b84ec9ce03850aa0c52809a6ba64a43283ef0ef7cf1edd4b",
+      "size_bytes": 402
+    }
+  ]
+}

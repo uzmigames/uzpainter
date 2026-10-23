@@ -1,0 +1,230 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/api-probes/p22b-project-tangent-per-vertex",
+  "tier": "0",
+  "domain": "tier0/api-probes/p22b-project-tangent-per-vertex",
+  "description": "API probe P22-B (decision 295): project.create with Settings(tangent_space_mode=TangentSpace.PerVertex) (no documented getter reads it back); project Metadata.set of a bool, an int, a float, a str, a list and a dict, then Metadata.list, Metadata.get of each key and of a missing key, Metadata.list of an unused context; project.get_uuid (recorded as facts, not the value) and last_imported_mesh_path (relative to the run), in the first session and after save and reopen.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256,
+          "tangent_space_mode": "PerVertex"
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.project.Metadata.set",
+        "args": {
+          "context": "uzp_probe",
+          "key": "flag",
+          "value": true
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.project.Metadata.set",
+        "args": {
+          "context": "uzp_probe",
+          "key": "count",
+          "value": 7
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.project.Metadata.set",
+        "args": {
+          "context": "uzp_probe",
+          "key": "ratio",
+          "value": 0.25
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.project.Metadata.set",
+        "args": {
+          "context": "uzp_probe",
+          "key": "label",
+          "value": "uzp probe"
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.project.Metadata.set",
+        "args": {
+          "context": "uzp_probe",
+          "key": "items",
+          "value": [
+            1,
+            "two",
+            3.5,
+            false
+          ]
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.project.Metadata.set",
+        "args": {
+          "context": "uzp_probe",
+          "key": "mapping",
+          "dict_keys": [
+            "a",
+            "b",
+            "c"
+          ],
+          "dict_values": [
+            1,
+            "x",
+            true
+          ]
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.project.Metadata.list",
+        "args": {
+          "context": "uzp_probe"
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.project.Metadata.get",
+        "args": {
+          "context": "uzp_probe",
+          "key": "flag"
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.project.Metadata.get",
+        "args": {
+          "context": "uzp_probe",
+          "key": "count"
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.project.Metadata.get",
+        "args": {
+          "context": "uzp_probe",
+          "key": "ratio"
+        }
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.project.Metadata.get",
+        "args": {
+          "context": "uzp_probe",
+          "key": "label"
+        }
+      },
+      {
+        "step": 13,
+        "call": "substance_painter.project.Metadata.get",
+        "args": {
+          "context": "uzp_probe",
+          "key": "items"
+        }
+      },
+      {
+        "step": 14,
+        "call": "substance_painter.project.Metadata.get",
+        "args": {
+          "context": "uzp_probe",
+          "key": "mapping"
+        }
+      },
+      {
+        "step": 15,
+        "call": "substance_painter.project.Metadata.get",
+        "args": {
+          "context": "uzp_probe",
+          "key": "absent"
+        }
+      },
+      {
+        "step": 16,
+        "call": "substance_painter.project.Metadata.list",
+        "args": {
+          "context": "uzp_probe_empty"
+        }
+      },
+      {
+        "step": 17,
+        "call": "substance_painter.project.get_uuid",
+        "args": {}
+      },
+      {
+        "step": 18,
+        "call": "substance_painter.project.last_imported_mesh_path",
+        "args": {}
+      },
+      {
+        "step": 19,
+        "call": "substance_painter.project.get_uuid",
+        "args": {}
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "project.tangent_space_mode",
+      "value": "PerVertex",
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "752f7b321f0a07ae12565d7cf5441986168861e2d342eff59b6be500bf831e01",
+      "size_bytes": 8730
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "332ddce6024e25f9b84ec9ce03850aa0c52809a6ba64a43283ef0ef7cf1edd4b",
+      "size_bytes": 402
+    }
+  ]
+}

@@ -1,0 +1,201 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "phase2/tier1/tunic-v10",
+  "tier": "1",
+  "domain": "tier1/pilot/tunic-v10",
+  "description": "Tier 1 migration golden of the approved UzmiGames tunic 18-Tunica v10 of the Skeletal Mage (phase2.10 items 2.2, 3.1; decision 194). The tunic was painted interactively and has no pipeline round; its approved state is its Painter project, pinned here by SHA-256 (the hash the piece manifest verifies) and never read by UzPainter. The recorder copies it into its private work directory, checks the copy's hash and opens it in Painter through the documented API, reads back the project's state privately (the mesh it was last imported from, texture sets, resolution, mesh-map resources, channel formats, and every layer and effect with its sources, resource versions, per-channel blending and opacity, visibility and mask) and exports with an authored configuration: Painter's shipped Blender (Principled BSDF) preset, the one the delivered maps were written with, for the texture set DefaultMaterial as 16-bit PNG, sizeLog2 12, infinite padding, no dithering, no shader parameters (padding and dithering are the proposed migration configuration, not recovered facts). Recordings: r1 (same session: open, read back, export), r1-repeat (same session, export again) and r2 (after the copy is saved under a new name, closed and reopened: read back, export again). Recorded on Painter 12.1.5 under OCIO with Painter's substance configuration.",
+  "inputs": [
+    {
+      "input_id": "tunic-v10-project",
+      "kind": "painter_project",
+      "assets3d_path": "Creatures/Undead/Skeletal Mage/Models3D/18-Tunica/18-Tunica-v10.spp",
+      "sha256": "c43db46a2f2d4d935fa33cd62956ce7b4d097f00b45c93798ef9f498b27153a6",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D"
+      }
+    },
+    {
+      "input_id": "tunic-v10-export-config",
+      "kind": "recipe_json",
+      "path": "parity/fixtures/tier1/tunic-v10/export-config.json",
+      "sha256": "7167a93ec10baf82f6d394efff7ea91d3f525b747ed1a71b47dc5bc75b846de8",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0",
+        "note": "The export configuration of the Tunic v10 migration golden (decision 194)."
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "painter_project_migration",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.open",
+        "args": {
+          "project": "tunic-v10-project"
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "config": "tunic-v10-export-config"
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "OCIO",
+      "value": "resources/ocio/substance/config.ocio",
+      "applied_by": "environment_variable"
+    },
+    {
+      "name": "export.file_format",
+      "value": "png",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.png.bit_depth",
+      "value": 16,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.size_log2",
+      "value": 12,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "infinite",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.shader_params",
+      "value": false,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "59ef801eaf67c74879e3f5ec51dc526da110ce80fc364c4e366f2ba2582701bf",
+      "size_bytes": 138731
+    },
+    {
+      "record_id": "r1-export-defaultmaterial_basecolor_srgb",
+      "kind": "exported_map",
+      "sha256": "d821c2931f4b378b05d84ef5a28f7c4bf1e49800d1502bb416b5ceed02436e21",
+      "size_bytes": 16417775
+    },
+    {
+      "record_id": "r1-export-defaultmaterial_normal_raw",
+      "kind": "exported_map",
+      "sha256": "f372fdf3efbdddf2d5de0139d8b47c81c97e36c9d07154d9b3821b6c1d94c540",
+      "size_bytes": 37004784
+    },
+    {
+      "record_id": "r1-export-defaultmaterial_metallic_raw",
+      "kind": "exported_map",
+      "sha256": "d915331ab8750d70eed2630ced1cd2f9b6ed2adc11b1fdc5da7d9a720e799853",
+      "size_bytes": 98066
+    },
+    {
+      "record_id": "r1-export-defaultmaterial_roughness_raw",
+      "kind": "exported_map",
+      "sha256": "b36eeb5698b2370562d73d4a0ec36968bb98990c4d300b96a5878e68e2baeef9",
+      "size_bytes": 3888632
+    },
+    {
+      "record_id": "r1-export-defaultmaterial_displacement_raw",
+      "kind": "exported_map",
+      "sha256": "73998cf028cee4487b793967fa0041a363cc42f965a187bd6789b97cd286cf9a",
+      "size_bytes": 15579274
+    },
+    {
+      "record_id": "r1-repeat-export-defaultmaterial_basecolor_srgb",
+      "kind": "exported_map",
+      "sha256": "d821c2931f4b378b05d84ef5a28f7c4bf1e49800d1502bb416b5ceed02436e21",
+      "size_bytes": 16417775
+    },
+    {
+      "record_id": "r1-repeat-export-defaultmaterial_normal_raw",
+      "kind": "exported_map",
+      "sha256": "f372fdf3efbdddf2d5de0139d8b47c81c97e36c9d07154d9b3821b6c1d94c540",
+      "size_bytes": 37004784
+    },
+    {
+      "record_id": "r1-repeat-export-defaultmaterial_metallic_raw",
+      "kind": "exported_map",
+      "sha256": "d915331ab8750d70eed2630ced1cd2f9b6ed2adc11b1fdc5da7d9a720e799853",
+      "size_bytes": 98066
+    },
+    {
+      "record_id": "r1-repeat-export-defaultmaterial_roughness_raw",
+      "kind": "exported_map",
+      "sha256": "b36eeb5698b2370562d73d4a0ec36968bb98990c4d300b96a5878e68e2baeef9",
+      "size_bytes": 3888632
+    },
+    {
+      "record_id": "r1-repeat-export-defaultmaterial_displacement_raw",
+      "kind": "exported_map",
+      "sha256": "73998cf028cee4487b793967fa0041a363cc42f965a187bd6789b97cd286cf9a",
+      "size_bytes": 15579274
+    },
+    {
+      "record_id": "r2-export-defaultmaterial_basecolor_srgb",
+      "kind": "exported_map",
+      "sha256": "d821c2931f4b378b05d84ef5a28f7c4bf1e49800d1502bb416b5ceed02436e21",
+      "size_bytes": 16417775
+    },
+    {
+      "record_id": "r2-export-defaultmaterial_normal_raw",
+      "kind": "exported_map",
+      "sha256": "f372fdf3efbdddf2d5de0139d8b47c81c97e36c9d07154d9b3821b6c1d94c540",
+      "size_bytes": 37004784
+    },
+    {
+      "record_id": "r2-export-defaultmaterial_metallic_raw",
+      "kind": "exported_map",
+      "sha256": "d915331ab8750d70eed2630ced1cd2f9b6ed2adc11b1fdc5da7d9a720e799853",
+      "size_bytes": 98066
+    },
+    {
+      "record_id": "r2-export-defaultmaterial_roughness_raw",
+      "kind": "exported_map",
+      "sha256": "b36eeb5698b2370562d73d4a0ec36968bb98990c4d300b96a5878e68e2baeef9",
+      "size_bytes": 3888632
+    },
+    {
+      "record_id": "r2-export-defaultmaterial_displacement_raw",
+      "kind": "exported_map",
+      "sha256": "73998cf028cee4487b793967fa0041a363cc42f965a187bd6789b97cd286cf9a",
+      "size_bytes": 15579274
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "bcd2741110b945a443c69dbcbba5ffc09d281b1fa9ad74ad7e4fd4877db9d116",
+      "size_bytes": 402
+    }
+  ]
+}

@@ -1,0 +1,240 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/api-probes/phase1-display-ocio",
+  "tier": "0",
+  "domain": "tier0/api-probes/phase1-display-ocio",
+  "description": "Recording R-132-D (decision 132), under OCIO (Painter's substance config): on the plane saved to a work file, the authored sky-patch EXR imported as a project environment; get_environment_resource, get_color_lut_resource, get_tone_mapping (RuntimeError on a colour-managed project) and the default camera; then set_environment_resource (the resource URL's version read back), set_color_lut_resource(None), set_tone_mapping(ACES) and field_of_view 45, each followed by its getter, needs_saving() (whether a display change marks the project modified) and a save; in the first session and after save/reopen.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    },
+    {
+      "input_id": "sky-patch",
+      "kind": "environment",
+      "path": "parity/fixtures/render-procedure/sky-patch.exr",
+      "sha256": "de242a90e132cebfda1abf471b9c427a0e142f362a185973c4616ec78c696d59",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.event.Dispatcher.connect",
+        "args": {
+          "events": [
+            "BusyStatusChanged",
+            "CameraPropertiesChanged"
+          ]
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": {
+          "image": "sky-patch",
+          "usage": "ENVIRONMENT"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.project.save_as",
+        "args": {
+          "work_file": "display.spp",
+          "mode": "Full"
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.display.get_environment_resource",
+        "args": {}
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.display.get_color_lut_resource",
+        "args": {}
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.display.get_tone_mapping",
+        "args": {}
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.display.Camera.get_default_camera",
+        "args": {}
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.project.needs_saving",
+        "args": {}
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.display.set_environment_resource",
+        "args": {
+          "resource_step": 3,
+          "probe": true
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.display.get_environment_resource",
+        "args": {}
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.project.needs_saving",
+        "args": {}
+      },
+      {
+        "step": 13,
+        "call": "substance_painter.project.save",
+        "args": {
+          "mode": "Full",
+          "probe": true
+        }
+      },
+      {
+        "step": 14,
+        "call": "substance_painter.display.set_color_lut_resource",
+        "args": {
+          "probe": true
+        }
+      },
+      {
+        "step": 15,
+        "call": "substance_painter.display.get_color_lut_resource",
+        "args": {}
+      },
+      {
+        "step": 16,
+        "call": "substance_painter.project.needs_saving",
+        "args": {}
+      },
+      {
+        "step": 17,
+        "call": "substance_painter.project.save",
+        "args": {
+          "mode": "Full",
+          "probe": true
+        }
+      },
+      {
+        "step": 18,
+        "call": "substance_painter.display.set_tone_mapping",
+        "args": {
+          "function": "ACES",
+          "probe": true
+        }
+      },
+      {
+        "step": 19,
+        "call": "substance_painter.display.get_tone_mapping",
+        "args": {}
+      },
+      {
+        "step": 20,
+        "call": "substance_painter.project.needs_saving",
+        "args": {}
+      },
+      {
+        "step": 21,
+        "call": "substance_painter.project.save",
+        "args": {
+          "mode": "Full",
+          "probe": true
+        }
+      },
+      {
+        "step": 22,
+        "call": "substance_painter.display.Camera.field_of_view",
+        "args": {
+          "value": 45.0,
+          "probe": true
+        }
+      },
+      {
+        "step": 23,
+        "call": "substance_painter.display.Camera.get_default_camera",
+        "args": {}
+      },
+      {
+        "step": 24,
+        "call": "substance_painter.project.needs_saving",
+        "args": {}
+      },
+      {
+        "step": 25,
+        "call": "substance_painter.project.save",
+        "args": {
+          "mode": "Full",
+          "probe": true
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "OCIO",
+      "value": "resources/ocio/substance/config.ocio",
+      "applied_by": "environment_variable"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "d4024982d2ad1156d253ecb9dd4e07d0774a63dcf5e93d2ac66d7a0f4667e067",
+      "size_bytes": 29536
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "bcd2741110b945a443c69dbcbba5ffc09d281b1fa9ad74ad7e4fd4877db9d116",
+      "size_bytes": 402
+    }
+  ]
+}

@@ -1,0 +1,247 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/api-probes/phase1-layer-node-kinds",
+  "tier": "0",
+  "domain": "tier0/api-probes/phase1-layer-node-kinds",
+  "description": "API probe P22-B, layer stack (phase1.24 item 3.4, decision 296): on the plane, a fill layer whose content stack holds a paint effect (insert_paint) and the starter-asset Blur filter (found by the documented resource search 's:starterassets u:filter n:Blur=', as effect-order finds it), and whose black mask holds the starter-asset Metal Edge Wear generator ('s:starterassets u:generator n:Metal Edge Wear='); in the first session and after save/reopen: Node.get_type of each (NodeType PaintEffect, FilterEffect, GeneratorEffect), isinstance of layerstack.EffectNode, LayerNode.instances before and after layerstack.instantiate below the fill, the instance's get_type (NodeType InstanceLayer) and InstanceLayerNode.instance_source, and SelectionType.Properties set and read on the instance and on the fill. UzPainter refuses insert_paint, insert_filter_effect, insert_generator_effect and instantiate (release gaps), so its replay settles these symbols only once those gaps close (decision 296). The instantiate probe runs in both recordings and r1's instance is saved with the project, so the instances accumulate by design: LayerNode.instances reads 0 before and 1 after in the first session, and 1 (the saved instance, found again before the second instantiate) and 2 after save and reopen; the new instance's source stays the fill. These r1/r2 differences are the programmed state change, not instability (decision 296, item 4).",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.event.Dispatcher.connect",
+        "args": {
+          "events": [
+            "BusyStatusChanged"
+          ]
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "position": "top"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.layerstack.Node.set_name",
+        "args": {
+          "node_step": 3,
+          "name": "uzp fill"
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.layerstack.insert_paint",
+        "args": {
+          "inside_step": 3,
+          "node_stack": "Content"
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.layerstack.insert_filter_effect",
+        "args": {
+          "inside_step": 3,
+          "node_stack": "Content",
+          "search": "s:starterassets u:filter n:Blur="
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.layerstack.LayerNode.add_mask",
+        "args": {
+          "node_step": 3,
+          "background": "Black"
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.layerstack.insert_generator_effect",
+        "args": {
+          "inside_step": 3,
+          "node_stack": "Mask",
+          "search": "s:starterassets u:generator n:Metal Edge Wear="
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.layerstack.Node.get_type",
+        "args": {
+          "node_step": 5
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.layerstack.Node.get_type",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.layerstack.Node.get_type",
+        "args": {
+          "node_step": 8
+        }
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.layerstack.Node.get_type",
+        "args": {
+          "node_step": 3
+        }
+      },
+      {
+        "step": 13,
+        "call": "substance_painter.layerstack.EffectNode",
+        "args": {
+          "node_step": 5
+        }
+      },
+      {
+        "step": 14,
+        "call": "substance_painter.layerstack.EffectNode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 15,
+        "call": "substance_painter.layerstack.EffectNode",
+        "args": {
+          "node_step": 8
+        }
+      },
+      {
+        "step": 16,
+        "call": "substance_painter.layerstack.LayerNode.instances",
+        "args": {
+          "node_step": 3
+        }
+      },
+      {
+        "step": 17,
+        "call": "substance_painter.layerstack.instantiate",
+        "args": {
+          "below_step": 3,
+          "layer_step": 3,
+          "probe": true
+        }
+      },
+      {
+        "step": 18,
+        "call": "substance_painter.layerstack.Node.get_type",
+        "args": {
+          "node_step": 17
+        }
+      },
+      {
+        "step": 19,
+        "call": "substance_painter.layerstack.InstanceLayerNode.instance_source",
+        "args": {
+          "node_step": 17
+        }
+      },
+      {
+        "step": 20,
+        "call": "substance_painter.layerstack.LayerNode.instances",
+        "args": {
+          "node_step": 3
+        }
+      },
+      {
+        "step": 21,
+        "call": "substance_painter.layerstack.set_selection_type",
+        "args": {
+          "node_step": 17,
+          "selection_type": "Properties",
+          "probe": true
+        }
+      },
+      {
+        "step": 22,
+        "call": "substance_painter.layerstack.get_selection_type",
+        "args": {
+          "node_step": 17
+        }
+      },
+      {
+        "step": 23,
+        "call": "substance_painter.layerstack.set_selection_type",
+        "args": {
+          "node_step": 3,
+          "selection_type": "Properties",
+          "probe": true
+        }
+      },
+      {
+        "step": 24,
+        "call": "substance_painter.layerstack.get_selection_type",
+        "args": {
+          "node_step": 3
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "37dfb546327560a8fa4671bba02985b1ba92d5addd88af838aae89e719fa977b",
+      "size_bytes": 26874
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "332ddce6024e25f9b84ec9ce03850aa0c52809a6ba64a43283ef0ef7cf1edd4b",
+      "size_bytes": 402
+    }
+  ]
+}

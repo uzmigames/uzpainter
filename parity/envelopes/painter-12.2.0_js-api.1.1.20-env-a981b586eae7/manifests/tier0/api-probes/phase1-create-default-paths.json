@@ -1,0 +1,154 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/api-probes/phase1-create-default-paths",
+  "tier": "0",
+  "domain": "tier0/api-probes/phase1-create-default-paths",
+  "description": "API probe P21-B (decision 110): project.create(plane, Settings(default_save_path, export_path)) with two folders the recorder makes in its private work directory; export.get_default_export_path(), file_path() and needs_saving(); an export_project_textures of BaseColor (PNG 16, infinite) whose configuration has no exportPath: its result and where each file went (relative to the private run directory); then project.save() of the untitled project: what it raises or where it saved; in the first session and after save/reopen, with the events.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256,
+          "default_save_path": "default-save",
+          "export_path": "default-export"
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.event.Dispatcher.connect",
+        "args": {
+          "events": [
+            "BusyStatusChanged",
+            "ProjectAboutToSave",
+            "ProjectSaved",
+            "ExportTexturesAboutToStart",
+            "ExportTexturesEnded"
+          ]
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.export.get_default_export_path",
+        "args": {}
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.project.file_path",
+        "args": {}
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.project.needs_saving",
+        "args": {}
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/basecolor:RGB"
+          ],
+          "file_format": "png",
+          "bit_depth": 16,
+          "padding": "infinite",
+          "dithering": false,
+          "default_export_path": true,
+          "probe": true
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.project.save",
+        "args": {
+          "mode": "Full",
+          "probe": true
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.project.file_path",
+        "args": {}
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.project.needs_saving",
+        "args": {}
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.file_format",
+      "value": "png",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.bit_depth",
+      "value": 16,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "infinite",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "41ba01a2eab67aab2545fef37e6cd59f2a6382c41d764fd92f6ecd79bdd1c0ae",
+      "size_bytes": 12938
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "332ddce6024e25f9b84ec9ce03850aa0c52809a6ba64a43283ef0ef7cf1edd4b",
+      "size_bytes": 402
+    }
+  ]
+}

@@ -1,0 +1,587 @@
+{
+  "schema": "uzpainter/parity/oracle-envelope-drift/1",
+  "scope": "canary",
+  "envelope_id": "painter-12.2.0+js-api.1.1.20-env-a981b586eae7",
+  "painter_build": "12.2.0+js-api.1.1.20",
+  "envelope_sha256": "a981b586eae7042e972f42fa291550ceece70a3572af24ab3a84cfb87820931a",
+  "previous_envelope_id": "painter-12.1.5+js-api.1.1.20",
+  "previous_painter_build": "12.1.5+js-api.1.1.20",
+  "generated_on": "2026-10-23",
+  "goldens": [
+    {
+      "golden_id": "phase0/normal-convention/hemisphere/per-fragment",
+      "tier": "2b",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 5,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 1,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 5,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 1,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "a9e716b5faf03111b62586fa21b43ddacbc86d33de68be53d9ef4c1dd518bb9a",
+      "previous_record_sha256": "9c9fe905933982b534c2edb8d5fc11a5fd643e3f8d6b12f38b01cbf3271a252e"
+    },
+    {
+      "golden_id": "tier0/api-probes/fill-layer-readback",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 2,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 49,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 2,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 30,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "46b6067aec4df93913c57e5be73591ed245184d103e1d49db9ef0fd6a7bea7bb",
+      "previous_record_sha256": "1830d45e63c10b60fbb15d3fbc69dd40db22528af30a36e9f08e79a1e265088e"
+    },
+    {
+      "golden_id": "tier0/defaults-templates/baking-defaults",
+      "tier": "0",
+      "status": "changed",
+      "changed_recordings": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "differs",
+          "maps_compared": 0,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 14,
+          "other_outputs_differing": 1,
+          "other_outputs_differing_raw": 1,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "differs",
+          "maps_compared": 0,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 14,
+          "other_outputs_differing": 1,
+          "other_outputs_differing_raw": 1,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r3",
+          "right": "new.r3",
+          "category": "envelope_drift",
+          "status": "differs",
+          "maps_compared": 0,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 14,
+          "other_outputs_differing": 1,
+          "other_outputs_differing_raw": 1,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [
+        {
+          "pair": "previous.r1~new.r1",
+          "output_id": "baking/common",
+          "kind": "effective_default_capture",
+          "status": "differs",
+          "equal_raw": false
+        },
+        {
+          "pair": "previous.r2~new.r2",
+          "output_id": "baking/common",
+          "kind": "effective_default_capture",
+          "status": "differs",
+          "equal_raw": false
+        },
+        {
+          "pair": "previous.r3~new.r3",
+          "output_id": "baking/common",
+          "kind": "effective_default_capture",
+          "status": "differs",
+          "equal_raw": false
+        }
+      ],
+      "record_sha256": "d9035d90c6952a6f501f38f21737ac814577753d4dec6dca991d4d3b3c789910",
+      "previous_record_sha256": "53d9cfc9d9d6055457230117952f89e12cb1acc67915766ec5fe3b087883ef96"
+    },
+    {
+      "golden_id": "tier0/semantics/blend-basic",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 64,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 273,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 64,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 273,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "efaae7ff287b234784ba05484d1adf12ececf1e7cc3620cabd0eeb1e698e11b5",
+      "previous_record_sha256": "a08e98a8a46fad5e4dde1b483d4305f608d7feb4d39a2cfd44637eb33a4556e9"
+    },
+    {
+      "golden_id": "tier0/semantics/blend-component",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 64,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 239,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 64,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 239,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "ac6dc60b321f5df8074de285341b3a26eb56f3b9df8ea71bf1b9089e2d728991",
+      "previous_record_sha256": "ca5f1cd5ecaa46f2619f523d754fa4e05eecafe3d5d6d7ad9fe253758d968af1"
+    },
+    {
+      "golden_id": "tier0/semantics/colour-ramps-srgb",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 192,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 217,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 192,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 217,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "acf1a8c2cc3e5f9efdeea3110cda8ae6cb88af31138add2a27c9ff6c87ee01e5",
+      "previous_record_sha256": "ac241b7c0623e7c46268c5a9241631071a0ec6d9c15790ae8afac25839c7a165"
+    },
+    {
+      "golden_id": "tier0/semantics/height-normal-sphere",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 4,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 5,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 4,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 5,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "3e56c39464d3aa3f79427bf9a9d0520a5eab8fd2c2eb87fcd72af3b1cd13e642",
+      "previous_record_sha256": "1a05c72b79b77abec0e566791dff59fcc76125ae8307a73e3acd8a00eb42816a"
+    },
+    {
+      "golden_id": "tier0/semantics/levels-clamp",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 16,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 45,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 16,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 45,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "1b3dab9786c5c2cb5212bd07d5a07c886fce292af12a47009b7f361ee336cc61",
+      "previous_record_sha256": "385ff8dd604e5fb04496871392b159d5e2068d2d5a395aced8738f262b6965c4"
+    },
+    {
+      "golden_id": "tier0/semantics/quantisation-thirds",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 36,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 337,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 36,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 337,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "f532f94579e5af8397901024603ba15a1a64612ca36e9ad5cda753c16d489996",
+      "previous_record_sha256": "7cf9c35b8d633e61ce37cae0730828f66b7e66462e15507632a16f5507a31d8c"
+    },
+    {
+      "golden_id": "tier0/semantics/resample-uv",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 32,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 97,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 32,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 97,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "2cfcc1a5dcb0667b03451e592ae53f87ab7fe61549434badf4b5f71d7941b42d",
+      "previous_record_sha256": "367d491d7c52a1658aa9cc4411a6ad7715e207b76e700793537a9eecd6f9c4f2"
+    }
+  ],
+  "divergence_candidates": [
+    "tier0/defaults-templates/baking-defaults"
+  ],
+  "fits_to_recheck": [
+    {
+      "semantics": "parity/semantics/ao-mixed.json",
+      "reason": "new_envelope",
+      "changed_goldens": []
+    },
+    {
+      "semantics": "parity/semantics/blend-kernels.json",
+      "reason": "new_envelope",
+      "changed_goldens": []
+    },
+    {
+      "semantics": "parity/semantics/blend-modes.json",
+      "reason": "new_envelope",
+      "changed_goldens": []
+    },
+    {
+      "semantics": "parity/semantics/colour-transfer.json",
+      "reason": "new_envelope",
+      "changed_goldens": []
+    },
+    {
+      "semantics": "parity/semantics/evaluator-profile.json",
+      "reason": "new_envelope",
+      "changed_goldens": []
+    },
+    {
+      "semantics": "parity/semantics/export-processing.json",
+      "reason": "new_envelope",
+      "changed_goldens": []
+    },
+    {
+      "semantics": "parity/semantics/height-to-normal.json",
+      "reason": "new_envelope",
+      "changed_goldens": []
+    },
+    {
+      "semantics": "parity/semantics/iray.json",
+      "reason": "new_envelope",
+      "changed_goldens": []
+    },
+    {
+      "semantics": "parity/semantics/masks-levels.json",
+      "reason": "new_envelope",
+      "changed_goldens": []
+    },
+    {
+      "semantics": "parity/semantics/polygon-triangulation.json",
+      "reason": "new_envelope",
+      "changed_goldens": []
+    },
+    {
+      "semantics": "parity/semantics/procedural-feasibility.json",
+      "reason": "new_envelope",
+      "changed_goldens": []
+    },
+    {
+      "semantics": "parity/semantics/quantisation-profile.json",
+      "reason": "new_envelope",
+      "changed_goldens": []
+    },
+    {
+      "semantics": "parity/semantics/resampling.json",
+      "reason": "new_envelope",
+      "changed_goldens": []
+    },
+    {
+      "semantics": "parity/semantics/srgb-transfer.json",
+      "reason": "new_envelope",
+      "changed_goldens": []
+    },
+    {
+      "semantics": "parity/semantics/tangent-frame.json",
+      "reason": "new_envelope",
+      "changed_goldens": []
+    },
+    {
+      "semantics": "parity/semantics/uv-sampling.json",
+      "reason": "new_envelope",
+      "changed_goldens": []
+    },
+    {
+      "semantics": "parity/semantics/virtual-maps.json",
+      "reason": "new_envelope",
+      "changed_goldens": []
+    }
+  ],
+  "new_evaluator_profile_needed": false,
+  "stale_tier3": [
+    "phase0/iray-references/base-light-grey",
+    "phase0/iray-references/base-saturated",
+    "phase0/iray-references/cube-mid-grey",
+    "phase0/iray-references/cube-saturated--ref-match-000",
+    "phase0/iray-references/cube-saturated--ref-match-180",
+    "phase0/iray-references/emission",
+    "phase0/iray-references/height-stripes",
+    "phase0/iray-references/metal0-rough010",
+    "phase0/iray-references/metal0-rough050",
+    "phase0/iray-references/metal0-rough090",
+    "phase0/iray-references/metal1-rough010",
+    "phase0/iray-references/metal1-rough050",
+    "phase0/iray-references/metal1-rough090",
+    "phase0/iray-references/neutral-grey-diffuse",
+    "phase0/iray-references/neutral-grey-diffuse--ref-match-000",
+    "phase0/iray-references/neutral-grey-diffuse--ref-match-180",
+    "phase0/iray-references/neutral-reflective",
+    "phase0/iray-references/neutral-reflective--ref-match-000",
+    "phase0/iray-references/neutral-reflective--ref-match-180",
+    "phase0/iray-references/normal-ridges",
+    "phase0/iray-references/opacity-stripes",
+    "phase0/iray-references/plane-mid-grey",
+    "phase0/iray-stability/cube-mid-grey--yaw-m1",
+    "phase0/iray-stability/cube-mid-grey--yaw-p1",
+    "phase0/iray-stability/cube-saturated--ref-match-180--repeat",
+    "phase0/iray-stability/plane-mid-grey--ref-match-000",
+    "phase0/iray-stability/plane-mid-grey--ref-match-180",
+    "phase0/iray-stability/plane-mid-grey--repeat",
+    "phase0/iray-stability/plane-mid-grey--same-session",
+    "phase0/iray-stability/plane-mid-grey--yaw-m1",
+    "phase0/iray-stability/plane-mid-grey--yaw-p1",
+    "tier3/render-procedure/qualification-sphere"
+  ],
+  "summary": {
+    "goldens": 10,
+    "unchanged": 9,
+    "changed": 1,
+    "unstable": 0,
+    "unavailable": 0,
+    "new": 0,
+    "missing": 0,
+    "equal_pairs": 18
+  }
+}

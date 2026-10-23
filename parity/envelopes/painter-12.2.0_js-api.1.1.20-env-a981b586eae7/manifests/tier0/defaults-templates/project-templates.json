@@ -1,0 +1,258 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/defaults-templates/project-templates",
+  "tier": "0",
+  "domain": "tier0/templates/channel-formats",
+  "description": "Channel sets and formats of every project template shipped with Painter 12.1.0 (03-project-model.md section 2). The shipped templates are the .spt files of the documented application shelf (resource.Shelves.application_shelf), named by their shelf-relative path; the recorder lists the names only and Painter opens each one through project.create(template_file_path=...). One project per template on the authored plane, no project setting given, then each texture set's stacks, channels and ChannelFormat read through the documented textureset API: r1 as created, r2 after save and reopen. The job must name exactly the shipped templates. Recorder command: record-templates.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "template": "templates/ASM - PBR Metallic Roughness Anisotropy Angle.spt"
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "template": "templates/ASM - PBR Metallic Roughness Coated.spt"
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "template": "templates/ASM - PBR Metallic Roughness SSS.spt"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "template": "templates/ASM - PBR Metallic Roughness Sheen.spt"
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "template": "templates/ASM - PBR Metallic Roughness.spt"
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "template": "templates/Blender.spt"
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "template": "templates/Dota 2.spt"
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "template": "templates/KeyShot.spt"
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "template": "templates/Lens Studio.spt"
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "template": "templates/Maxwell - Metallic Roughness.spt"
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "template": "templates/Maxwell - Specular Glossiness.spt"
+        }
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "template": "templates/Non-PBR - Specular Glossiness.spt"
+        }
+      },
+      {
+        "step": 13,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "template": "templates/OpenPBR - Anisotropy.spt"
+        }
+      },
+      {
+        "step": 14,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "template": "templates/OpenPBR - Coat.spt"
+        }
+      },
+      {
+        "step": 15,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "template": "templates/OpenPBR - Fuzz.spt"
+        }
+      },
+      {
+        "step": 16,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "template": "templates/OpenPBR - Subsurface Scattering.spt"
+        }
+      },
+      {
+        "step": 17,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "template": "templates/PBR - Metallic Roughness Alpha-blend.spt"
+        }
+      },
+      {
+        "step": 18,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "template": "templates/PBR - Metallic Roughness Alpha-test.spt"
+        }
+      },
+      {
+        "step": 19,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "template": "templates/PBR - Specular Glossiness.spt"
+        }
+      },
+      {
+        "step": 20,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "template": "templates/Roblox (MaterialVariant).spt"
+        }
+      },
+      {
+        "step": 21,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "template": "templates/Roblox (SurfaceAppearance).spt"
+        }
+      },
+      {
+        "step": 22,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "template": "templates/Spark AR Studio.spt"
+        }
+      },
+      {
+        "step": 23,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "template": "templates/Unity HD Render Pipeline (Metallic Standard).spt"
+        }
+      },
+      {
+        "step": 24,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "template": "templates/Unreal Engine.spt"
+        }
+      },
+      {
+        "step": 25,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "template": "templates/VrayMtl - Metallic Roughness.spt"
+        }
+      },
+      {
+        "step": 26,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "template": "templates/VrayMtl - Specular Glossiness.spt"
+        }
+      }
+    ]
+  },
+  "applied_settings": [],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "c520995d6696b66f4102181bffe627825170e522137fde9fc06a17fe7f81658b",
+      "size_bytes": 56189
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "332ddce6024e25f9b84ec9ce03850aa0c52809a6ba64a43283ef0ef7cf1edd4b",
+      "size_bytes": 402
+    }
+  ]
+}

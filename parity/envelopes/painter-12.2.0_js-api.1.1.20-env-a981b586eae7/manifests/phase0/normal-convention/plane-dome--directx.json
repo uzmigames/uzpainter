@@ -1,0 +1,195 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "phase0/normal-convention/plane-dome/directx",
+  "tier": "2b",
+  "domain": "bake_map/normal",
+  "description": "Normal-convention fixture (P0-NORMAL): the plane-dome low/high pair, Normal mesh map baked by Painter at 512 px with the DirectX normal map format and tangent space the project default (not set), other baking parameters at their defaults; the baked map exported at 16 bits; recorded twice (same session; after save and reopen).",
+  "inputs": [
+    {
+      "input_id": "plane-dome-low",
+      "kind": "mesh",
+      "path": "parity/fixtures/normal-convention/plane-dome-low.obj",
+      "sha256": "f0546bc9a99737447522cb62a047c9f22586b93d51b0dbab51ac0c19ad1b7323",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    },
+    {
+      "input_id": "plane-dome-high",
+      "kind": "mesh",
+      "path": "parity/fixtures/normal-convention/plane-dome-high.obj",
+      "sha256": "edd1fa7a6d379eb954f304169ab574296dd271e3e3c75daa289717cafd0c9cec",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane-dome-low",
+          "normal_map_format": "DirectX",
+          "default_texture_resolution": 512
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "OutputSize",
+          "value": [
+            9,
+            9
+          ]
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "MaxHeight",
+          "value": 0.2
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "HipolyMesh",
+          "input": "plane-dome-high"
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.baking.BakingParameters.set_enabled_bakers",
+        "args": {
+          "usages": [
+            "Normal"
+          ]
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.baking.bake_async",
+        "args": {}
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "meshMap/normal_base:RGB"
+          ],
+          "file_format": "png",
+          "bit_depth": 16,
+          "padding": "passthrough",
+          "dithering": false
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "DirectX",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 512,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "baking.common.OutputSize",
+      "value": 9,
+      "unit": "log2 px",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "baking.common.MaxHeight",
+      "value": 0.2,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "baking.enabled_bakers",
+      "value": "Normal",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.file_format",
+      "value": "png",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.bit_depth",
+      "value": 16,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "passthrough",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "uncontrolled_settings": [
+    "preferences.bake_backend"
+  ],
+  "expectations": [
+    {
+      "expectation_id": "green-follows-plus-v",
+      "quantity": "Sign of (green - 1/2) on texels whose high-poly normal leans towards +v (the cap triangles on the -Z side of the plane)",
+      "value": -1,
+      "derivation": "public_documentation",
+      "source_id": "A-PYDOC",
+      "locator": "substance_painter.project.NormalMapFormat: OpenGL and DirectX tangent space (green +v for OpenGL, -v for DirectX)"
+    }
+  ],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "b5ab71c718486b559c1cce97019dbd22336b98ca34d2efc1ae563137fcae4ee3",
+      "size_bytes": 7380
+    },
+    {
+      "record_id": "r1-uzp_plane_low-normal_base",
+      "kind": "exported_map",
+      "sha256": "394d3a13241187baeb3bf3c39371676af1960ca6977017de249b1b1eff4e9d77",
+      "size_bytes": 23920
+    },
+    {
+      "record_id": "r2-uzp_plane_low-normal_base",
+      "kind": "exported_map",
+      "sha256": "394d3a13241187baeb3bf3c39371676af1960ca6977017de249b1b1eff4e9d77",
+      "size_bytes": 23920
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "332ddce6024e25f9b84ec9ce03850aa0c52809a6ba64a43283ef0ef7cf1edd4b",
+      "size_bytes": 402
+    }
+  ]
+}

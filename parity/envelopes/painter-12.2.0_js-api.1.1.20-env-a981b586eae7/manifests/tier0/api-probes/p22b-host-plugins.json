@@ -1,0 +1,194 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/api-probes/p22b-host-plugins",
+  "tier": "0",
+  "domain": "tier0/api-probes/p22b-host-plugins",
+  "description": "API probe P22-B (decision 297): on the plane, substance_painter_plugins on two throwaway modules the recorder writes under its private run directory (plugins/uzp_probe_plugin.py and startup/uzp_probe_startup.py, whose import and hooks append to a log the probe reads): path read, the probe root appended and read, update_sys_path, plugin_module_names and startup_module_names (the probe's own names only), start_plugin, is_plugin_started, plugins, reload_plugin, close_plugin with gc_collect False and with its default, each with the hooks the module ran; in the first session and after save and reopen. Only the probe's own modules and folders are recorded; the recorder closes and forgets them and restores path and sys.path when the golden ends.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.event.Dispatcher.connect",
+        "args": {
+          "events": [
+            "BusyStatusChanged"
+          ]
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter_plugins.path",
+        "args": {}
+      },
+      {
+        "step": 4,
+        "call": "substance_painter_plugins.path",
+        "args": {
+          "folder": "uzp-plugins",
+          "probe": true
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter_plugins.update_sys_path",
+        "args": {
+          "probe": true
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter_plugins.path",
+        "args": {}
+      },
+      {
+        "step": 7,
+        "call": "substance_painter_plugins.plugin_module_names",
+        "args": {}
+      },
+      {
+        "step": 8,
+        "call": "substance_painter_plugins.startup_module_names",
+        "args": {}
+      },
+      {
+        "step": 9,
+        "call": "substance_painter_plugins.start_plugin",
+        "args": {
+          "module": "uzp_probe_plugin",
+          "probe": true
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter_plugins.is_plugin_started",
+        "args": {
+          "module": "uzp_probe_plugin"
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter_plugins.plugins",
+        "args": {}
+      },
+      {
+        "step": 12,
+        "call": "substance_painter_plugins.reload_plugin",
+        "args": {
+          "module": "uzp_probe_plugin",
+          "probe": true
+        }
+      },
+      {
+        "step": 13,
+        "call": "substance_painter_plugins.is_plugin_started",
+        "args": {
+          "module": "uzp_probe_plugin"
+        }
+      },
+      {
+        "step": 14,
+        "call": "substance_painter_plugins.close_plugin",
+        "args": {
+          "module": "uzp_probe_plugin",
+          "gc_collect": false,
+          "probe": true
+        }
+      },
+      {
+        "step": 15,
+        "call": "substance_painter_plugins.is_plugin_started",
+        "args": {
+          "module": "uzp_probe_plugin"
+        }
+      },
+      {
+        "step": 16,
+        "call": "substance_painter_plugins.start_plugin",
+        "args": {
+          "module": "uzp_probe_startup",
+          "probe": true
+        }
+      },
+      {
+        "step": 17,
+        "call": "substance_painter_plugins.plugins",
+        "args": {}
+      },
+      {
+        "step": 18,
+        "call": "substance_painter_plugins.close_plugin",
+        "args": {
+          "module": "uzp_probe_startup",
+          "probe": true
+        }
+      },
+      {
+        "step": 19,
+        "call": "substance_painter_plugins.is_plugin_started",
+        "args": {
+          "module": "uzp_probe_startup"
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "25eb0202291695ec976e7900af7fac24c1abd4e92cdcd206c6578bd512e4a54d",
+      "size_bytes": 23075
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "332ddce6024e25f9b84ec9ce03850aa0c52809a6ba64a43283ef0ef7cf1edd4b",
+      "size_bytes": 402
+    }
+  ]
+}

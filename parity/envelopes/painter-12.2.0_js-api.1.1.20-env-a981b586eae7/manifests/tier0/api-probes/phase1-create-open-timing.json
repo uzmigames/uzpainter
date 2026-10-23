@@ -1,0 +1,115 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/api-probes/phase1-create-open-timing",
+  "tier": "0",
+  "domain": "tier0/api-probes/phase1-create-open-timing",
+  "description": "API probe P21-F (decision 109): the lifecycle procedure of lifecycle-events (create -> save_as -> close, open -> save -> close, twice) with the probe-step marker set during create and open (events dispatched inside the call carry during_step) and a second Python thread polling is_busy() and is_in_edition_state() about every millisecond from the call until ProjectEditionEntered (each change of state with its time, and the poll count).",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.event.Dispatcher.connect",
+        "args": {
+          "events": [
+            "ProjectCreated",
+            "ProjectOpened",
+            "ProjectEditionEntered",
+            "ProjectEditionLeft",
+            "ProjectAboutToSave",
+            "ProjectSaved",
+            "ProjectAboutToClose",
+            "ProjectClosed",
+            "BusyStatusChanged"
+          ],
+          "timing": true
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.project.save_as",
+        "args": {
+          "mode": "Full"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.project.close"
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.project.open"
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.project.save",
+        "args": {
+          "mode": "Full"
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.project.close"
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "d61208135acd8f4f64323d91b78306722a5a1a5aee10143f33c08623941f519b",
+      "size_bytes": 11405
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "332ddce6024e25f9b84ec9ce03850aa0c52809a6ba64a43283ef0ef7cf1edd4b",
+      "size_bytes": 402
+    }
+  ]
+}

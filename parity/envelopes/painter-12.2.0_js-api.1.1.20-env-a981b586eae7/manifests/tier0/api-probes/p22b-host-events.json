@@ -1,0 +1,244 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/api-probes/p22b-host-events",
+  "tier": "0",
+  "domain": "tier0/api-probes/p22b-host-events",
+  "description": "API probe P22-B (decision 297): on the plane with a BaseColor fill, saved to a work file; Dispatcher.connect_strong of Event (the base class), TextureStateEvent, ProjectSaved and EngineComputationsStatusChanged (each dispatch logged with its class and, for a texture state, its action, stack id, tile indices, channel type and cache key); a set_source and its readback; enable_engine_computations(False) and (True) with the status between, and disable_engine_computations(); the throttling period read, then set_cache_key_invalidation_throttling_period to 499 ms (documented ValueError) and 750 ms, read after each; a save, close and open of the project (the fill found again) and the source and period read again, the TextureStateEventAction (ADD, UPDATE, REMOVE) of each texture state dispatched on the way; in the first session and after save and reopen. The recorder disconnects the strong callbacks and restores the period it read before the first set when the golden ends.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.event.Dispatcher.connect",
+        "args": {
+          "events": [
+            "BusyStatusChanged",
+            "EngineComputationsStatusChanged",
+            "ProjectSaved",
+            "ProjectOpened",
+            "ProjectClosed"
+          ]
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "position": "top"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 3,
+          "channels": [
+            "BaseColor"
+          ]
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.project.save_as",
+        "args": {
+          "work_file": "host-events.spp",
+          "mode": "Full"
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.event.Dispatcher.connect_strong",
+        "args": {
+          "events": [
+            "Event",
+            "TextureStateEvent",
+            "ProjectSaved",
+            "EngineComputationsStatusChanged"
+          ],
+          "probe": true
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.2,
+            0.4,
+            0.6
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.application.enable_engine_computations",
+        "args": {
+          "enable": false,
+          "probe": true
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.application.engine_computations_status",
+        "args": {}
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.application.enable_engine_computations",
+        "args": {
+          "enable": true,
+          "probe": true
+        }
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.application.disable_engine_computations",
+        "args": {
+          "probe": true
+        }
+      },
+      {
+        "step": 13,
+        "call": "substance_painter.application.engine_computations_status",
+        "args": {}
+      },
+      {
+        "step": 14,
+        "call": "substance_painter.event.TextureStateEvent.cache_key_invalidation_throttling_period",
+        "args": {}
+      },
+      {
+        "step": 15,
+        "call": "substance_painter.event.TextureStateEvent.set_cache_key_invalidation_throttling_period",
+        "args": {
+          "milliseconds": 499,
+          "probe": true
+        }
+      },
+      {
+        "step": 16,
+        "call": "substance_painter.event.TextureStateEvent.cache_key_invalidation_throttling_period",
+        "args": {}
+      },
+      {
+        "step": 17,
+        "call": "substance_painter.event.TextureStateEvent.set_cache_key_invalidation_throttling_period",
+        "args": {
+          "milliseconds": 750,
+          "probe": true
+        }
+      },
+      {
+        "step": 18,
+        "call": "substance_painter.event.TextureStateEvent.cache_key_invalidation_throttling_period",
+        "args": {}
+      },
+      {
+        "step": 19,
+        "call": "substance_painter.project.save",
+        "args": {
+          "mode": "Full",
+          "probe": true
+        }
+      },
+      {
+        "step": 20,
+        "call": "substance_painter.project.close",
+        "args": {
+          "probe": true
+        }
+      },
+      {
+        "step": 21,
+        "call": "substance_painter.project.open",
+        "args": {
+          "probe": true
+        }
+      },
+      {
+        "step": 22,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 23,
+        "call": "substance_painter.event.TextureStateEvent.cache_key_invalidation_throttling_period",
+        "args": {}
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "6bcaeedaa985d6b3f7648b231356904cfa7a3cde7aa2d6869dea7494f8e21931",
+      "size_bytes": 34797
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "332ddce6024e25f9b84ec9ce03850aa0c52809a6ba64a43283ef0ef7cf1edd4b",
+      "size_bytes": 402
+    }
+  ]
+}

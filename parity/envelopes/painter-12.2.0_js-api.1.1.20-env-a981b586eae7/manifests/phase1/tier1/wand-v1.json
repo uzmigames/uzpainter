@@ -1,0 +1,500 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "phase1/tier1/wand-v1",
+  "tier": "1",
+  "domain": "tier1/pilot/wand-v1",
+  "description": "Tier 1 pilot golden of the UzmiGames wand 11-Varinha-Madeira v1 (phase1.25 items 2.2, 2.3, 3.1; decision 099). Three UzmiGames pipeline scripts run byte-unchanged in Painter, each pinned by SHA-256, through Painter's documented remote control (never the community MCP bridge): painter_create.py (a new project from the low-poly OBJ under OCIO with Painter's substance config, OpenGL normals, 2048 px, no cameras; imports the Normal and AO mesh maps; save_as Full), painter_layer_stack.py sync (the stack-wand.json group: 4 groups, 13 fills, the 13 UV masks and the T_base colour bitmap) and painter_export.py (BaseColor, Roughness, Metallic, Height and Normal_OpenGL as 16-bit PNG, sizeLog2 11, infinite padding, no dithering). Two adaptations, both by the recorder: (1) the Painter-side scripts read their arguments from a hard-coded Assets3D path; the recorder hash-checks and copies every input into its private work directory and runs each script in a namespace whose open maps exactly that path to a copy of the arguments in which mesh, normal, ao, dst and out name the staged copies and the work directory, every other key unchanged; (2) the sync command's own remote-execution function is replaced by the recorder's remote control with the same contract, so the Painter-side code the script builds is its own. Its route guard (Assets3D 9a718b9; decision 144) sends its own probe through that function before the sync and imports locate from Pipeline/qa/route_check.py, pinned here and loaded from its pinned bytes; the project lies in the private work directory, outside a production character's folder, so the guard passes with no attempt token, and any other verdict is refused. Recordings: r1 (same session: create, sync, export), r1-repeat (same session, export again) and r2 (after save, close and reopen, export again). Recorded on Painter 12.1.5 (the current envelope; phase1.25's text says 12.1.0).",
+  "inputs": [
+    {
+      "input_id": "painter-create-py",
+      "kind": "pipeline_script",
+      "assets3d_path": "Pipeline/retopology/wand11-v1/painter_create.py",
+      "sha256": "6820831ccd59b66314eaab5a010607f7f55d720e6d2e628aadf9d44a6018535f",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D"
+      }
+    },
+    {
+      "input_id": "painter-layer-stack-py",
+      "kind": "pipeline_script",
+      "assets3d_path": "Pipeline/painting/painter_layer_stack.py",
+      "sha256": "bf7006e256198879e5108b415439fb64d7e50b82d49afc58d2febaf3891ef62d",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D"
+      }
+    },
+    {
+      "input_id": "route-check-py",
+      "kind": "pipeline_script",
+      "assets3d_path": "Pipeline/qa/route_check.py",
+      "sha256": "d2024ead911d86527e4702fb74cccc7ddeeeebe425c86ee61cfd8f094f87dbc8",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D"
+      }
+    },
+    {
+      "input_id": "painter-export-py",
+      "kind": "pipeline_script",
+      "assets3d_path": "Pipeline/retopology/wand11-v1/painter_export.py",
+      "sha256": "777ac278c7ce376bd8652bdd8400f0e5e5e1bef561262ccb7c22a9ac1c95c468",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D"
+      }
+    },
+    {
+      "input_id": "painter-create-args",
+      "kind": "recipe_json",
+      "assets3d_path": "_tmp/claude/varinha11-v1/painter_create_args.json",
+      "sha256": "819658ba4d0c1fd40f9c97c6aa797d0caa4b3a44d4d008436506aed8d43d388b",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D"
+      }
+    },
+    {
+      "input_id": "painter-export-args",
+      "kind": "recipe_json",
+      "assets3d_path": "_tmp/claude/varinha11-v1/painter_export_args.json",
+      "sha256": "dcab1ddc9ffa7f8feb25a5b09d7e2dc32c74eb3bde713793a1afa2641e46a187",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D"
+      }
+    },
+    {
+      "input_id": "wand-stack",
+      "kind": "recipe_json",
+      "assets3d_path": "_tmp/claude/varinha11-v1/paint/stack-wand.json",
+      "sha256": "f7b6644640ab7853e54b9e37947d7b871c038e5ef7796319549c45b47663d00a",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D"
+      }
+    },
+    {
+      "input_id": "wand-mesh",
+      "kind": "mesh",
+      "assets3d_path": "_tmp/claude/varinha11-v1/paint/11-Varinha-Madeira-v1_low.obj",
+      "sha256": "208ab74350e928535e15e421b05e6fae6f386ff648cbba450408deb6e14aeefe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D"
+      }
+    },
+    {
+      "input_id": "wand-mesh-mtl",
+      "kind": "mesh",
+      "assets3d_path": "_tmp/claude/varinha11-v1/paint/11-Varinha-Madeira-v1_low.mtl",
+      "sha256": "31325861e16d9b40f49b3cdc26f538578c66bf746e3c2776ee7d6815ba8de6f8",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D"
+      }
+    },
+    {
+      "input_id": "wand-normal",
+      "kind": "image",
+      "assets3d_path": "_tmp/claude/varinha11-v1/bake/11-Varinha-Madeira_Normal_OpenGL_v1.png",
+      "sha256": "071a7123e3f87c2d9a63a6dd403a223cc42904ec233cf199c581da612e3dea3f",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D"
+      }
+    },
+    {
+      "input_id": "wand-ao",
+      "kind": "image",
+      "assets3d_path": "_tmp/claude/varinha11-v1/paint/11-Varinha-Madeira_AO_v1.png",
+      "sha256": "1dd1ed013f00ec042c365a36e17496342279c22ecd912108d91ec5c61ae31b0a",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D"
+      }
+    },
+    {
+      "input_id": "mask-m_gem",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/varinha11-v1/paint/masks/M_gem.png",
+      "sha256": "aebe5b6e883d0ebb5722fee1a5306fb45b43e28f9a28b0140f7aafc60c82fe4b",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D"
+      }
+    },
+    {
+      "input_id": "mask-m_iron",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/varinha11-v1/paint/masks/M_iron.png",
+      "sha256": "9204eadce68755f6eeb42175322cdf4bbc1acc5296c413f827d5efd3f83fa32e",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D"
+      }
+    },
+    {
+      "input_id": "mask-m_iron_dimple",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/varinha11-v1/paint/masks/M_iron_dimple.png",
+      "sha256": "b22e299993f8934f6a80573678b407222bd0e9de455b529e050b5bc986f63759",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D"
+      }
+    },
+    {
+      "input_id": "mask-m_iron_edge_bright",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/varinha11-v1/paint/masks/M_iron_edge_bright.png",
+      "sha256": "cc252f0cc25bdc7ff8172c82b692941da698fd86ec9a4f4e4085969a88a92c90",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D"
+      }
+    },
+    {
+      "input_id": "mask-m_iron_grime",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/varinha11-v1/paint/masks/M_iron_grime.png",
+      "sha256": "1581237aadc1d6f8f49e0b4454531797ee275ca91f319bd2b14a9ed95c5bb180",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D"
+      }
+    },
+    {
+      "input_id": "mask-m_leather",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/varinha11-v1/paint/masks/M_leather.png",
+      "sha256": "6dbbf901b9b03667126746fd46fbf804bc9e40330c93be3f62ad4513e35f8183",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D"
+      }
+    },
+    {
+      "input_id": "mask-m_leather_edge",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/varinha11-v1/paint/masks/M_leather_edge.png",
+      "sha256": "a24c4e8e92f768994dc3b8559663675f7b57e0c8ce7eb1861b0e4c2c2e1f07c7",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D"
+      }
+    },
+    {
+      "input_id": "mask-m_leather_recess",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/varinha11-v1/paint/masks/M_leather_recess.png",
+      "sha256": "cbca4daae07df9235bfbf2321e65a7fd56a8a6aa3dad14b34ef04b86e7a9653b",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D"
+      }
+    },
+    {
+      "input_id": "mask-m_leather_scuff",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/varinha11-v1/paint/masks/M_leather_scuff.png",
+      "sha256": "d26d984d94460b11fee3648f66c12c939ac77624e1907ce0bcb23d11e39486e1",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D"
+      }
+    },
+    {
+      "input_id": "mask-m_wood",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/varinha11-v1/paint/masks/M_wood.png",
+      "sha256": "436b4cba82cd01b9a01dd844be8d56c384a2100667767c9b5d76a32b3b702759",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D"
+      }
+    },
+    {
+      "input_id": "mask-m_wood_groove",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/varinha11-v1/paint/masks/M_wood_groove.png",
+      "sha256": "569ad61f3be06f2e55e8601006efc77b09ae70c20e5e17ae23ddf72bd5560c67",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D"
+      }
+    },
+    {
+      "input_id": "mask-m_wood_ridge",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/varinha11-v1/paint/masks/M_wood_ridge.png",
+      "sha256": "7c59118950b05e76f4e896ae841b6b458bb4f675a3b7de0f75d5db658c356411",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D"
+      }
+    },
+    {
+      "input_id": "mask-m_wood_streak",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/varinha11-v1/paint/masks/M_wood_streak.png",
+      "sha256": "39e57464995fb42dbfda5f474aa8c25bf08d921d7cdc0ea5ae314c5b96526883",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D"
+      }
+    },
+    {
+      "input_id": "mask-t_base",
+      "kind": "image",
+      "assets3d_path": "_tmp/claude/varinha11-v1/paint/masks/T_base.png",
+      "sha256": "87153c74d3cc759f4202163c3253c7f392f0bbb46dfc44f00e3ec66e286f5a23",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "uzmigames_pipeline_scripts",
+    "steps": [
+      {
+        "step": 1,
+        "call": "uzmigames.pipeline.run_script",
+        "args": {
+          "script": "painter-create-py",
+          "args_file": "painter-create-args",
+          "mesh": "wand-mesh",
+          "mesh_material_library": "wand-mesh-mtl",
+          "normal": "wand-normal",
+          "ao": "wand-ao"
+        }
+      },
+      {
+        "step": 2,
+        "call": "uzmigames.pipeline.run_script",
+        "args": {
+          "script": "painter-layer-stack-py",
+          "command": "sync",
+          "stack": "wand-stack",
+          "masks": [
+            "mask-m_gem",
+            "mask-m_iron",
+            "mask-m_iron_dimple",
+            "mask-m_iron_edge_bright",
+            "mask-m_iron_grime",
+            "mask-m_leather",
+            "mask-m_leather_edge",
+            "mask-m_leather_recess",
+            "mask-m_leather_scuff",
+            "mask-m_wood",
+            "mask-m_wood_groove",
+            "mask-m_wood_ridge",
+            "mask-m_wood_streak",
+            "mask-t_base"
+          ],
+          "mask_files": [
+            "M_gem.png",
+            "M_iron.png",
+            "M_iron_dimple.png",
+            "M_iron_edge_bright.png",
+            "M_iron_grime.png",
+            "M_leather.png",
+            "M_leather_edge.png",
+            "M_leather_recess.png",
+            "M_leather_scuff.png",
+            "M_wood.png",
+            "M_wood_groove.png",
+            "M_wood_ridge.png",
+            "M_wood_streak.png",
+            "T_base.png"
+          ],
+          "imports": [
+            "route-check-py"
+          ]
+        }
+      },
+      {
+        "step": 3,
+        "call": "uzmigames.pipeline.run_script",
+        "args": {
+          "script": "painter-export-py",
+          "args_file": "painter-export-args"
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "OCIO",
+      "value": "resources/ocio/substance/config.ocio",
+      "applied_by": "environment_variable"
+    },
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "project.default_texture_resolution",
+      "value": 2048,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "project.import_cameras",
+      "value": false,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "project.save_mode",
+      "value": "Full",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.file_format",
+      "value": "png",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.png.bit_depth",
+      "value": 16,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.size_log2",
+      "value": 11,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "infinite",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.shader_params",
+      "value": false,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "54fbcc2c259b578acd116412554e70940b472a500627a90177093e6fd4b3809f",
+      "size_bytes": 22427
+    },
+    {
+      "record_id": "r1-export-11-varinha-madeira_v1r2_basecolor",
+      "kind": "exported_map",
+      "sha256": "d90f391bd164909a4b6f98e50e16e2ef64894482aa35040f5ad901042de4f912",
+      "size_bytes": 2599215
+    },
+    {
+      "record_id": "r1-export-11-varinha-madeira_v1r2_roughness",
+      "kind": "exported_map",
+      "sha256": "75f9646644dc6bd9fc56d8dce4651e5c82a5a3737be14cb974676e823247cd1c",
+      "size_bytes": 221682
+    },
+    {
+      "record_id": "r1-export-11-varinha-madeira_v1r2_metallic",
+      "kind": "exported_map",
+      "sha256": "a7032d32273f1427e5e53930c7c6aa2b5622c53aad48d970eaaac1570c8644ec",
+      "size_bytes": 96941
+    },
+    {
+      "record_id": "r1-export-11-varinha-madeira_v1r2_height",
+      "kind": "exported_map",
+      "sha256": "c6dad51f4b365f2a30ba4646095e688a1471f1983cccd62a401ceca5bb2c1c6f",
+      "size_bytes": 123267
+    },
+    {
+      "record_id": "r1-export-11-varinha-madeira_v1r2_normal",
+      "kind": "exported_map",
+      "sha256": "ca048d689f861797b35f4928e9c673275012c51aea5cf1d63a2899a76735a2d7",
+      "size_bytes": 2798937
+    },
+    {
+      "record_id": "r1-repeat-export-11-varinha-madeira_v1r2_basecolor",
+      "kind": "exported_map",
+      "sha256": "d90f391bd164909a4b6f98e50e16e2ef64894482aa35040f5ad901042de4f912",
+      "size_bytes": 2599215
+    },
+    {
+      "record_id": "r1-repeat-export-11-varinha-madeira_v1r2_roughness",
+      "kind": "exported_map",
+      "sha256": "75f9646644dc6bd9fc56d8dce4651e5c82a5a3737be14cb974676e823247cd1c",
+      "size_bytes": 221682
+    },
+    {
+      "record_id": "r1-repeat-export-11-varinha-madeira_v1r2_metallic",
+      "kind": "exported_map",
+      "sha256": "a7032d32273f1427e5e53930c7c6aa2b5622c53aad48d970eaaac1570c8644ec",
+      "size_bytes": 96941
+    },
+    {
+      "record_id": "r1-repeat-export-11-varinha-madeira_v1r2_height",
+      "kind": "exported_map",
+      "sha256": "c6dad51f4b365f2a30ba4646095e688a1471f1983cccd62a401ceca5bb2c1c6f",
+      "size_bytes": 123267
+    },
+    {
+      "record_id": "r1-repeat-export-11-varinha-madeira_v1r2_normal",
+      "kind": "exported_map",
+      "sha256": "ca048d689f861797b35f4928e9c673275012c51aea5cf1d63a2899a76735a2d7",
+      "size_bytes": 2798937
+    },
+    {
+      "record_id": "r2-export-11-varinha-madeira_v1r2_basecolor",
+      "kind": "exported_map",
+      "sha256": "d90f391bd164909a4b6f98e50e16e2ef64894482aa35040f5ad901042de4f912",
+      "size_bytes": 2599215
+    },
+    {
+      "record_id": "r2-export-11-varinha-madeira_v1r2_roughness",
+      "kind": "exported_map",
+      "sha256": "75f9646644dc6bd9fc56d8dce4651e5c82a5a3737be14cb974676e823247cd1c",
+      "size_bytes": 221682
+    },
+    {
+      "record_id": "r2-export-11-varinha-madeira_v1r2_metallic",
+      "kind": "exported_map",
+      "sha256": "a7032d32273f1427e5e53930c7c6aa2b5622c53aad48d970eaaac1570c8644ec",
+      "size_bytes": 96941
+    },
+    {
+      "record_id": "r2-export-11-varinha-madeira_v1r2_height",
+      "kind": "exported_map",
+      "sha256": "c6dad51f4b365f2a30ba4646095e688a1471f1983cccd62a401ceca5bb2c1c6f",
+      "size_bytes": 123267
+    },
+    {
+      "record_id": "r2-export-11-varinha-madeira_v1r2_normal",
+      "kind": "exported_map",
+      "sha256": "ca048d689f861797b35f4928e9c673275012c51aea5cf1d63a2899a76735a2d7",
+      "size_bytes": 2798937
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "bcd2741110b945a443c69dbcbba5ffc09d281b1fa9ad74ad7e4fd4877db9d116",
+      "size_bytes": 402
+    }
+  ]
+}

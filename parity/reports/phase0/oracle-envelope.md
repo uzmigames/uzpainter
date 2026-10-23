@@ -4,14 +4,21 @@ Decisions 034 (envelope, stability study, canary) and 037 (rolling oracle: the a
 
 ## 1. Envelopes
 
-Current envelope (the acceptance oracle, decision 037): `painter-12.1.5+js-api.1.1.20`.
+Current envelope (the acceptance oracle, decision 037): `painter-12.2.0+js-api.1.1.20-env-a981b586eae7`.
 
 No candidate envelope is being recorded.
 
 | Envelope | Status | Painter build | Manifest root | Envelope SHA-256 | Environment known | Promoted | Superseded | Drift report |
 |---|---|---|---|---|---|---|---|---|
 | `painter-12.1.0+js-api.1.1.20` | superseded | `12.1.0+js-api.1.1.20` | `parity/manifests` | `0f0c8d5fec038127` | no | 2026-10-10 | 2026-10-11 | — |
-| `painter-12.1.5+js-api.1.1.20` | current | `12.1.5+js-api.1.1.20` | `parity/envelopes/painter-12.1.5_js-api.1.1.20/manifests` | `1497f6497fd984ca` | yes | 2026-10-11 | — | `parity/reports/phase0/oracle-envelope-drift-corpus-painter-12.1.5_js-api.1.1.20.json` |
+| `painter-12.1.5+js-api.1.1.20` | superseded | `12.1.5+js-api.1.1.20` | `parity/envelopes/painter-12.1.5_js-api.1.1.20/manifests` | `1497f6497fd984ca` | yes | 2026-10-11 | 2026-10-23 | `parity/reports/phase0/oracle-envelope-drift-corpus-painter-12.1.5_js-api.1.1.20.json` |
+| `painter-12.2.0+js-api.1.1.20-env-a981b586eae7` | current | `12.2.0+js-api.1.1.20` | `parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/manifests` | `a981b586eae7042e` | yes | 2026-10-23 | — | `parity/reports/phase0/oracle-envelope-drift-corpus-painter-12.2.0_js-api.1.1.20-env-a981b586eae7.json` |
+
+Quarantined candidates (partial outputs kept in the private quarantine):
+
+| Candidate | Painter build | Quarantined | Reason |
+|---|---|---|---|
+| `painter-12.2.0+js-api.1.1.20` | `12.2.0+js-api.1.1.20` | 2026-10-23 | the Painter identity cannot be verified: [WinError 10061] Nenhuma conexão pôde ser feita porque a máquina de destino as recusou ativamente |
 
 ## 2. Stability study (decision 034 (b))
 
@@ -212,6 +219,62 @@ Differing outputs:
 | `tier0/semantics/height-normal-sphere` | previous.r2~new.r2 | `uzp_sphere/Normal_OpenGL` | png/uint16/3ch/linear | `c9681bf694f7b618`, `86f31f854a74c8fe` | 21106 | 12.3135 | 12 | 2520 / 196608 | 1007 / 65536 |
 | `tier0/semantics/height-normal-sphere` | previous.r2~new.r2 | `uzp_sphere/height` | exr/float32/1ch/linear | `4185adcd17508243`, `e2f71c3f3e133b7e` | 0.878784 | 0.000398306 | 0 | 604 / 65536 | 604 / 65536 |
 
+### canary: `painter-12.2.0+js-api.1.1.20-env-a981b586eae7` against `painter-12.1.5+js-api.1.1.20`
+
+`parity/reports/phase0/oracle-envelope-drift-canary-painter-12.2.0_js-api.1.1.20-env-a981b586eae7.json`, generated 2026-10-23; Painter build `12.2.0+js-api.1.1.20` against `12.1.5+js-api.1.1.20`; envelope SHA-256 `a981b586eae7042e`. Goldens: goldens 10, unchanged 9, changed 1, unstable 0, unavailable 0, new 0, missing 0, equal_pairs 18.
+
+- Divergence candidates (UzPainter verdicts to re-establish): `tier0/defaults-templates/baking-defaults`
+- New evaluator profile needed (a Tier 0 semantics golden changed): no
+- Stale Tier 3 references (never pass until re-recorded): `phase0/iray-references/base-light-grey`, `phase0/iray-references/base-saturated`, `phase0/iray-references/cube-mid-grey`, `phase0/iray-references/cube-saturated--ref-match-000`, `phase0/iray-references/cube-saturated--ref-match-180`, `phase0/iray-references/emission`, `phase0/iray-references/height-stripes`, `phase0/iray-references/metal0-rough010`, `phase0/iray-references/metal0-rough050`, `phase0/iray-references/metal0-rough090`, `phase0/iray-references/metal1-rough010`, `phase0/iray-references/metal1-rough050`, `phase0/iray-references/metal1-rough090`, `phase0/iray-references/neutral-grey-diffuse`, `phase0/iray-references/neutral-grey-diffuse--ref-match-000`, `phase0/iray-references/neutral-grey-diffuse--ref-match-180`, `phase0/iray-references/neutral-reflective`, `phase0/iray-references/neutral-reflective--ref-match-000`, `phase0/iray-references/neutral-reflective--ref-match-180`, `phase0/iray-references/normal-ridges`, `phase0/iray-references/opacity-stripes`, `phase0/iray-references/plane-mid-grey`, `phase0/iray-stability/cube-mid-grey--yaw-m1`, `phase0/iray-stability/cube-mid-grey--yaw-p1`, `phase0/iray-stability/cube-saturated--ref-match-180--repeat`, `phase0/iray-stability/plane-mid-grey--ref-match-000`, `phase0/iray-stability/plane-mid-grey--ref-match-180`, `phase0/iray-stability/plane-mid-grey--repeat`, `phase0/iray-stability/plane-mid-grey--same-session`, `phase0/iray-stability/plane-mid-grey--yaw-m1`, `phase0/iray-stability/plane-mid-grey--yaw-p1`, `tier3/render-procedure/qualification-sphere`
+- Fits to re-check: `parity/semantics/ao-mixed.json` (new_envelope), `parity/semantics/blend-kernels.json` (new_envelope), `parity/semantics/blend-modes.json` (new_envelope), `parity/semantics/colour-transfer.json` (new_envelope), `parity/semantics/evaluator-profile.json` (new_envelope), `parity/semantics/export-processing.json` (new_envelope), `parity/semantics/height-to-normal.json` (new_envelope), `parity/semantics/iray.json` (new_envelope), `parity/semantics/masks-levels.json` (new_envelope), `parity/semantics/polygon-triangulation.json` (new_envelope), `parity/semantics/procedural-feasibility.json` (new_envelope), `parity/semantics/quantisation-profile.json` (new_envelope), `parity/semantics/resampling.json` (new_envelope), `parity/semantics/srgb-transfer.json` (new_envelope), `parity/semantics/tangent-frame.json` (new_envelope), `parity/semantics/uv-sampling.json` (new_envelope), `parity/semantics/virtual-maps.json` (new_envelope)
+
+| Golden | Status | Previous record | New record | Changed recordings |
+|---|---|---|---|---|
+| `phase0/normal-convention/hemisphere/per-fragment` | unchanged | `9c9fe905933982b5` | `a9e716b5faf03111` | — |
+| `tier0/api-probes/fill-layer-readback` | unchanged | `1830d45e63c10b60` | `46b6067aec4df939` | — |
+| `tier0/defaults-templates/baking-defaults` | changed | `53d9cfc9d9d60554` | `d9035d90c6952a6f` | r1, r2, r3 |
+| `tier0/semantics/blend-basic` | unchanged | `a08e98a8a46fad5e` | `efaae7ff287b2347` | — |
+| `tier0/semantics/blend-component` | unchanged | `ca5f1cd5ecaa46f2` | `ac6dc60b321f5df8` | — |
+| `tier0/semantics/colour-ramps-srgb` | unchanged | `ac241b7c0623e7c4` | `acf1a8c2cc3e5f9e` | — |
+| `tier0/semantics/height-normal-sphere` | unchanged | `1a05c72b79b77abe` | `3e56c39464d3aa3f` | — |
+| `tier0/semantics/levels-clamp` | unchanged | `385ff8dd604e5fb0` | `1b3dab9786c5c2cb` | — |
+| `tier0/semantics/quantisation-thirds` | unchanged | `7cf9c35b8d633e61` | `f532f94579e5af83` | — |
+| `tier0/semantics/resample-uv` | unchanged | `367d491d7c52a165` | `2cfcc1a5dcb0667b` | — |
+
+| Golden | Pair | Output | Storage | Blob SHA-256 (left, right) | max \|Δ\| | mean \|Δ\| | p99 \|Δ\| | Differing values / compared | Differing texels / texels |
+|---|---|---|---|---|---|---|---|---|---|
+| `tier0/defaults-templates/baking-defaults` | previous.r1~new.r1 | `baking/common` | effective_default_capture | — | — | — | — | differs | — |
+| `tier0/defaults-templates/baking-defaults` | previous.r2~new.r2 | `baking/common` | effective_default_capture | — | — | — | — | differs | — |
+| `tier0/defaults-templates/baking-defaults` | previous.r3~new.r3 | `baking/common` | effective_default_capture | — | — | — | — | differs | — |
+
+### canary: `painter-12.2.0+js-api.1.1.20` against `painter-12.1.5+js-api.1.1.20`
+
+`parity/reports/phase0/oracle-envelope-drift-canary-painter-12.2.0_js-api.1.1.20.json`, generated 2026-10-23; Painter build `12.2.0+js-api.1.1.20` against `12.1.5+js-api.1.1.20`; envelope SHA-256 `a981b586eae7042e`. Goldens: goldens 10, unchanged 9, changed 1, unstable 0, unavailable 0, new 0, missing 0, equal_pairs 18.
+
+- Divergence candidates (UzPainter verdicts to re-establish): `tier0/defaults-templates/baking-defaults`
+- New evaluator profile needed (a Tier 0 semantics golden changed): no
+- Stale Tier 3 references (never pass until re-recorded): `phase0/iray-references/base-light-grey`, `phase0/iray-references/base-saturated`, `phase0/iray-references/cube-mid-grey`, `phase0/iray-references/cube-saturated--ref-match-000`, `phase0/iray-references/cube-saturated--ref-match-180`, `phase0/iray-references/emission`, `phase0/iray-references/height-stripes`, `phase0/iray-references/metal0-rough010`, `phase0/iray-references/metal0-rough050`, `phase0/iray-references/metal0-rough090`, `phase0/iray-references/metal1-rough010`, `phase0/iray-references/metal1-rough050`, `phase0/iray-references/metal1-rough090`, `phase0/iray-references/neutral-grey-diffuse`, `phase0/iray-references/neutral-grey-diffuse--ref-match-000`, `phase0/iray-references/neutral-grey-diffuse--ref-match-180`, `phase0/iray-references/neutral-reflective`, `phase0/iray-references/neutral-reflective--ref-match-000`, `phase0/iray-references/neutral-reflective--ref-match-180`, `phase0/iray-references/normal-ridges`, `phase0/iray-references/opacity-stripes`, `phase0/iray-references/plane-mid-grey`, `phase0/iray-stability/cube-mid-grey--yaw-m1`, `phase0/iray-stability/cube-mid-grey--yaw-p1`, `phase0/iray-stability/cube-saturated--ref-match-180--repeat`, `phase0/iray-stability/plane-mid-grey--ref-match-000`, `phase0/iray-stability/plane-mid-grey--ref-match-180`, `phase0/iray-stability/plane-mid-grey--repeat`, `phase0/iray-stability/plane-mid-grey--same-session`, `phase0/iray-stability/plane-mid-grey--yaw-m1`, `phase0/iray-stability/plane-mid-grey--yaw-p1`, `tier3/render-procedure/qualification-sphere`
+- Fits to re-check: `parity/semantics/ao-mixed.json` (new_envelope), `parity/semantics/blend-kernels.json` (new_envelope), `parity/semantics/blend-modes.json` (new_envelope), `parity/semantics/colour-transfer.json` (new_envelope), `parity/semantics/evaluator-profile.json` (new_envelope), `parity/semantics/export-processing.json` (new_envelope), `parity/semantics/height-to-normal.json` (new_envelope), `parity/semantics/iray.json` (new_envelope), `parity/semantics/masks-levels.json` (new_envelope), `parity/semantics/polygon-triangulation.json` (new_envelope), `parity/semantics/procedural-feasibility.json` (new_envelope), `parity/semantics/quantisation-profile.json` (new_envelope), `parity/semantics/resampling.json` (new_envelope), `parity/semantics/srgb-transfer.json` (new_envelope), `parity/semantics/tangent-frame.json` (new_envelope), `parity/semantics/uv-sampling.json` (new_envelope), `parity/semantics/virtual-maps.json` (new_envelope)
+
+| Golden | Status | Previous record | New record | Changed recordings |
+|---|---|---|---|---|
+| `phase0/normal-convention/hemisphere/per-fragment` | unchanged | `9c9fe905933982b5` | `1619f91ec1afe60d` | — |
+| `tier0/api-probes/fill-layer-readback` | unchanged | `1830d45e63c10b60` | `e0bfaeced25d1c53` | — |
+| `tier0/defaults-templates/baking-defaults` | changed | `53d9cfc9d9d60554` | `b5e79cc1aa1ed580` | r1, r2, r3 |
+| `tier0/semantics/blend-basic` | unchanged | `a08e98a8a46fad5e` | `0b0cd1b0ab16be4b` | — |
+| `tier0/semantics/blend-component` | unchanged | `ca5f1cd5ecaa46f2` | `b6a926aa72ac827c` | — |
+| `tier0/semantics/colour-ramps-srgb` | unchanged | `ac241b7c0623e7c4` | `554d2cd11a1f90c2` | — |
+| `tier0/semantics/height-normal-sphere` | unchanged | `1a05c72b79b77abe` | `25fbd7dcd5ec61b8` | — |
+| `tier0/semantics/levels-clamp` | unchanged | `385ff8dd604e5fb0` | `5e3b982b6b15371c` | — |
+| `tier0/semantics/quantisation-thirds` | unchanged | `7cf9c35b8d633e61` | `6aeb8bfe963413be` | — |
+| `tier0/semantics/resample-uv` | unchanged | `367d491d7c52a165` | `b2966cf77e998f44` | — |
+
+| Golden | Pair | Output | Storage | Blob SHA-256 (left, right) | max \|Δ\| | mean \|Δ\| | p99 \|Δ\| | Differing values / compared | Differing texels / texels |
+|---|---|---|---|---|---|---|---|---|---|
+| `tier0/defaults-templates/baking-defaults` | previous.r1~new.r1 | `baking/common` | effective_default_capture | — | — | — | — | differs | — |
+| `tier0/defaults-templates/baking-defaults` | previous.r2~new.r2 | `baking/common` | effective_default_capture | — | — | — | — | differs | — |
+| `tier0/defaults-templates/baking-defaults` | previous.r3~new.r3 | `baking/common` | effective_default_capture | — | — | — | — | differs | — |
+
 ### corpus: `painter-12.1.5+js-api.1.1.20` against `painter-12.1.0+js-api.1.1.20`
 
 `parity/reports/phase0/oracle-envelope-drift-corpus-painter-12.1.5_js-api.1.1.20.json`, generated 2026-10-11; Painter build `12.1.5+js-api.1.1.20` against `12.1.0+js-api.1.1.20`; envelope SHA-256 `1497f6497fd984ca`. Goldens: goldens 81, unchanged 64, changed 5, unstable 12, unavailable 0, new 0, missing 0, equal_pairs 142.
@@ -346,6 +409,505 @@ Differing outputs:
 | `tier0/semantics/height-normal-sphere` | previous.r2~new.r2 | `uzp_sphere/Normal_DirectX` | png/uint16/3ch/linear | `85da1488180adaee`, `3393174f453fed96` | 21106 | 12.3139 | 12 | 2554 / 196608 | 1007 / 65536 |
 | `tier0/semantics/height-normal-sphere` | previous.r2~new.r2 | `uzp_sphere/Normal_OpenGL` | png/uint16/3ch/linear | `c9681bf694f7b618`, `86f31f854a74c8fe` | 21106 | 12.3135 | 12 | 2520 / 196608 | 1007 / 65536 |
 | `tier0/semantics/height-normal-sphere` | previous.r2~new.r2 | `uzp_sphere/height` | exr/float32/1ch/linear | `4185adcd17508243`, `e2f71c3f3e133b7e` | 0.878784 | 0.000398306 | 0 | 604 / 65536 | 604 / 65536 |
+
+### corpus: `painter-12.2.0+js-api.1.1.20-env-a981b586eae7` against `painter-12.1.5+js-api.1.1.20`
+
+`parity/reports/phase0/oracle-envelope-drift-corpus-painter-12.2.0_js-api.1.1.20-env-a981b586eae7.json`, generated 2026-10-23; Painter build `12.2.0+js-api.1.1.20` against `12.1.5+js-api.1.1.20`; envelope SHA-256 `a981b586eae7042e`. Goldens: goldens 301, unchanged 269, changed 32, unstable 0, unavailable 0, new 0, missing 0, equal_pairs 550.
+
+- Divergence candidates (UzPainter verdicts to re-establish): `phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults`, `phase0/procedural-feasibility/leather-damaged/sphere/defaults`, `tier0/api-probes/p22b-host-application`, `tier0/api-probes/p22b-host-events`, `tier0/api-probes/p22b-host-resources`, `tier0/api-probes/p22b-reload-order-mza`, `tier0/api-probes/p22b-reload-order-mza-all-origins`, `tier0/api-probes/p22b-reload-order-zam`, `tier0/api-probes/p22b-reload-order-zam-all-origins`, `tier0/api-probes/phase1-camera-coupling`, `tier0/api-probes/phase1-create-open-timing`, `tier0/api-probes/phase1-default-camera-bevelled-cube`, `tier0/api-probes/phase1-default-camera-plane`, `tier0/api-probes/phase1-default-camera-sphere`, `tier0/api-probes/phase1-display-ocio`, `tier0/api-probes/phase1-execute-when-not-busy`, `tier0/api-probes/phase1-fill-channel-defaults`, `tier0/api-probes/phase1-layer-stack-events`, `tier0/api-probes/phase1-reload-mesh`, `tier0/defaults-templates/baking-defaults`, `tier0/semantics-ui/export-probes-r091-renamed`, `tier0/semantics-ui/group-passthrough-masks`, `tier0/semantics-ui/height-normal-sharp-bevelled-cube`, `tier0/semantics-ui/height-normal-sharp-plane-strength`, `tier0/semantics-ui/height-normal-sharp-sphere`, `tier0/semantics-ui/height-normal-sobel-bevelled-cube`, `tier0/semantics-ui/height-normal-sobel-plane-strength`, `tier0/semantics-ui/height-normal-sobel-sphere`, `tier0/semantics/export-presets-legacy`, `tier0/semantics/export-presets-ocio`, `tier0/semantics/height-normal-mesh-map`, `tier0/semantics/height-normal-resolution-1024-sobel`
+- New evaluator profile needed (a Tier 0 semantics golden changed): yes
+- Stale Tier 3 references (never pass until re-recorded): `phase0/iray-references/base-light-grey`, `phase0/iray-references/base-saturated`, `phase0/iray-references/cube-mid-grey`, `phase0/iray-references/cube-saturated--ref-match-000`, `phase0/iray-references/cube-saturated--ref-match-180`, `phase0/iray-references/emission`, `phase0/iray-references/height-stripes`, `phase0/iray-references/metal0-rough010`, `phase0/iray-references/metal0-rough050`, `phase0/iray-references/metal0-rough090`, `phase0/iray-references/metal1-rough010`, `phase0/iray-references/metal1-rough050`, `phase0/iray-references/metal1-rough090`, `phase0/iray-references/neutral-grey-diffuse`, `phase0/iray-references/neutral-grey-diffuse--ref-match-000`, `phase0/iray-references/neutral-grey-diffuse--ref-match-180`, `phase0/iray-references/neutral-reflective`, `phase0/iray-references/neutral-reflective--ref-match-000`, `phase0/iray-references/neutral-reflective--ref-match-180`, `phase0/iray-references/normal-ridges`, `phase0/iray-references/opacity-stripes`, `phase0/iray-references/plane-mid-grey`, `phase0/iray-stability/cube-mid-grey--yaw-m1`, `phase0/iray-stability/cube-mid-grey--yaw-p1`, `phase0/iray-stability/cube-saturated--ref-match-180--repeat`, `phase0/iray-stability/plane-mid-grey--ref-match-000`, `phase0/iray-stability/plane-mid-grey--ref-match-180`, `phase0/iray-stability/plane-mid-grey--repeat`, `phase0/iray-stability/plane-mid-grey--same-session`, `phase0/iray-stability/plane-mid-grey--yaw-m1`, `phase0/iray-stability/plane-mid-grey--yaw-p1`, `tier3/render-procedure/qualification-sphere`
+- Fits to re-check: `parity/semantics/ao-mixed.json` (new_envelope), `parity/semantics/blend-kernels.json` (corpus_changed), `parity/semantics/blend-modes.json` (new_envelope), `parity/semantics/colour-transfer.json` (new_envelope), `parity/semantics/evaluator-profile.json` (new_envelope), `parity/semantics/export-processing.json` (corpus_changed), `parity/semantics/height-to-normal.json` (corpus_changed), `parity/semantics/iray.json` (new_envelope), `parity/semantics/masks-levels.json` (new_envelope), `parity/semantics/polygon-triangulation.json` (new_envelope), `parity/semantics/procedural-feasibility.json` (corpus_changed), `parity/semantics/quantisation-profile.json` (new_envelope), `parity/semantics/resampling.json` (new_envelope), `parity/semantics/srgb-transfer.json` (new_envelope), `parity/semantics/tangent-frame.json` (new_envelope), `parity/semantics/uv-sampling.json` (new_envelope), `parity/semantics/virtual-maps.json` (corpus_changed)
+
+| Golden | Status | Previous record | New record | Changed recordings |
+|---|---|---|---|---|
+| `phase0/normal-convention/hemisphere/per-fragment` | unchanged | `9c9fe905933982b5` | `a9e716b5faf03111` | — |
+| `phase0/normal-convention/hemisphere/per-vertex` | unchanged | `77215a4cb48e7144` | `f19c3d8e4e2899dd` | — |
+| `phase0/normal-convention/hemisphere/project-default` | unchanged | `1146b8296f8f1e38` | `8009bd34a9b4573a` | — |
+| `phase0/normal-convention/plane-dome/directx` | unchanged | `72548817765d2e84` | `b5ab71c718486b55` | — |
+| `phase0/normal-convention/plane-dome/opengl` | unchanged | `d370404f47eeb77a` | `d10d5692ff40bb24` | — |
+| `phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults` | changed | `05f013f0da2e2ad2` | `2a7dbfd03767a396` | r1, r2 |
+| `phase0/procedural-feasibility/leather-damaged/sphere/defaults` | changed | `c15c502f42a35a7c` | `b1ba8e427c135dd9` | r1, r2 |
+| `phase0/procedural-feasibility/metal-edge-wear/rounded-cube/boundary-a` | unchanged | `ebf2a0300dde1e1c` | `801a452a25d10f0b` | — |
+| `phase0/procedural-feasibility/metal-edge-wear/rounded-cube/boundary-b` | unchanged | `c08ff2a925ef1679` | `b0d0080436756082` | — |
+| `phase0/procedural-feasibility/metal-edge-wear/rounded-cube/defaults` | unchanged | `6980a59f475e702c` | `c328e59608227b91` | — |
+| `phase0/procedural-feasibility/metal-edge-wear/rounded-cube/seed-1` | unchanged | `a4685051768af0b2` | `e9b3522aa92e9b30` | — |
+| `phase0/procedural-feasibility/metal-edge-wear/sphere/boundary-a` | unchanged | `12e03958168a4d4b` | `091d92f104950a51` | — |
+| `phase0/procedural-feasibility/metal-edge-wear/sphere/boundary-b` | unchanged | `617e05eb2025aa15` | `6a07d94d148184aa` | — |
+| `phase0/procedural-feasibility/metal-edge-wear/sphere/defaults` | unchanged | `eaf9e487b96abe3a` | `f85cb09e5988031e` | — |
+| `phase0/procedural-feasibility/metal-edge-wear/sphere/seed-1` | unchanged | `d8ab7129009ffa8a` | `b59a80820303316e` | — |
+| `phase0/procedural-feasibility/position/rounded-cube/boundary-a` | unchanged | `bc976ef5f894a669` | `046b14a70b60cc67` | — |
+| `phase0/procedural-feasibility/position/rounded-cube/boundary-b` | unchanged | `e049bd5d95129c3c` | `8fac74acd943d1a5` | — |
+| `phase0/procedural-feasibility/position/rounded-cube/defaults` | unchanged | `e1dcf57c89b8c276` | `a900f041ba8072b3` | — |
+| `phase0/procedural-feasibility/position/sphere/boundary-a` | unchanged | `cac1fd0d2a469fda` | `8b66145789e39548` | — |
+| `phase0/procedural-feasibility/position/sphere/boundary-b` | unchanged | `685d543f33b8bc5a` | `a3623787b173d84f` | — |
+| `phase0/procedural-feasibility/position/sphere/defaults` | unchanged | `19fa2581a8f45413` | `d63ddc49f6fdfe23` | — |
+| `phase0/template-default-material/ocio-sphere` | unchanged | `f6ac6f70c43d0df1` | `8505bb25547a7668` | — |
+| `phase1/mesh-import/polygon-triangulation` | unchanged | `df9a5a91a311d505` | `44b5ab6ca1c40732` | — |
+| `phase1/tier1/wand-v1` | unchanged | `9ff068c77c2c9537` | `54fbcc2c259b578a` | — |
+| `phase1/tier1/wand-v1-float` | unchanged | `67a8f3e5b66717e6` | `4ad4c9e1f18b62e7` | — |
+| `phase1/tier1/wand-v1-normal-float` | unchanged | `29148b1ddb4b2e02` | `59bdd53c221097b2` | — |
+| `phase2/tier1/tunic-v10` | unchanged | `afa1309ace69d4a8` | `59ef801eaf67c748` | — |
+| `tier0/api-probes/active-channel-order-control` | unchanged | `4a2b40b8df7212a0` | `395258c3387e85ce` | — |
+| `tier0/api-probes/active-channel-reset` | unchanged | `f5d650579f980486` | `9b596a3f9c0625fe` | — |
+| `tier0/api-probes/active-channel-reset-superset` | unchanged | `1785d10be52f21fd` | `da0f4c6b5bfbde99` | — |
+| `tier0/api-probes/fill-layer-readback` | unchanged | `1830d45e63c10b60` | `46b6067aec4df939` | — |
+| `tier0/api-probes/insert-positions` | unchanged | `a7a937af4990aeb4` | `64d338d2baf7ce82` | — |
+| `tier0/api-probes/lifecycle-events` | unchanged | `a4a6c54892405410` | `c0745e6896f2d163` | — |
+| `tier0/api-probes/mask-stack` | unchanged | `c4bda3f5c086e56a` | `7b7c404606609966` | — |
+| `tier0/api-probes/p22b-export-error-status` | unchanged | `d9d3d301842e9598` | `7e77f710a2a2e7ca` | — |
+| `tier0/api-probes/p22b-host-application` | changed | `e89a802628786f5c` | `f6bff39e102abbf1` | r1, r2 |
+| `tier0/api-probes/p22b-host-events` | changed | `694ad61a418eac6e` | `6bcaeedaa985d6b3` | r1, r2 |
+| `tier0/api-probes/p22b-host-plugins` | unchanged | `c31cd44169342eaa` | `25eb0202291695ec` | — |
+| `tier0/api-probes/p22b-host-resources` | changed | `7a78a8762b0bdc34` | `3cb6ff7b5f61d2b9` | r1, r2 |
+| `tier0/api-probes/p22b-mesh-map-alias-update` | unchanged | `e31985fe07aa452f` | `04395bae5066f479` | — |
+| `tier0/api-probes/p22b-project-mesh-unit-scale` | unchanged | `87d9c10c4fadcf94` | `6fe01dc31a51cfbf` | — |
+| `tier0/api-probes/p22b-project-tangent-per-fragment` | unchanged | `94539c05f5e40a40` | `4793b12d135ba900` | — |
+| `tier0/api-probes/p22b-project-tangent-per-vertex` | unchanged | `e80d0cb5a98d27af` | `752f7b321f0a07ae` | — |
+| `tier0/api-probes/p22b-project-workflow-default` | unchanged | `1079f9ce59912594` | `f38d88d6d2af8f94` | — |
+| `tier0/api-probes/p22b-reload-order-mza` | changed | `d216816f24e3713f` | `9adf7949a667597d` | repeat2-r1, repeat2-r2, repeat3-r1, repeat3-r2 |
+| `tier0/api-probes/p22b-reload-order-mza-all-origins` | changed | `5083c70a939c0fcb` | `09e352a3f1ddba8d` | r1, r2, repeat2-r1, repeat2-r2, repeat3-r1, repeat3-r2 |
+| `tier0/api-probes/p22b-reload-order-zam` | changed | `42932780c021a0c5` | `9d99841e22ec403e` | repeat2-r1, repeat2-r2, repeat3-r1, repeat3-r2 |
+| `tier0/api-probes/p22b-reload-order-zam-all-origins` | changed | `5bde89e251f881e7` | `6392df77a43c5a9a` | r1, r2, repeat2-r1, repeat2-r2, repeat3-r1, repeat3-r2 |
+| `tier0/api-probes/p22b-textureset-channels` | unchanged | `525ab5dbf21c3ee5` | `ca2a38f753fdf625` | — |
+| `tier0/api-probes/p22b-textureset-texture-set` | unchanged | `3c3f9b0bf2c24c16` | `3225de00df1e35e9` | — |
+| `tier0/api-probes/p22b-textureset-user-channels` | unchanged | `1901f92cd8badc6c` | `cb07e454abb3e77d` | — |
+| `tier0/api-probes/phase1-blending-modes-layer` | unchanged | `b5c8909444e76963` | `4b201658d3c7693d` | — |
+| `tier0/api-probes/phase1-blending-modes-mask` | unchanged | `bca450598a1028b7` | `e1dc4f79710f11bb` | — |
+| `tier0/api-probes/phase1-camera-coupling` | changed | `bf0acda403a4c9fc` | `9778d0cab46c5866` | r1 |
+| `tier0/api-probes/phase1-close-without-saving` | unchanged | `c40252913d960628` | `470bc5e5dd7bc08d` | — |
+| `tier0/api-probes/phase1-color-srgb-value` | unchanged | `839ac68f2e901840` | `2b21ebbae3a18278` | — |
+| `tier0/api-probes/phase1-create-default-paths` | unchanged | `7956f1ee0ac0a46b` | `41ba01a2eab67aab` | — |
+| `tier0/api-probes/phase1-create-mesh-maps` | unchanged | `76e6606258927061` | `97cce7db7ae29e68` | — |
+| `tier0/api-probes/phase1-create-open-timing` | changed | `ef4c4453dec55434` | `d61208135acd8f4f` | r1, r2, r3, r4 |
+| `tier0/api-probes/phase1-create-settings` | unchanged | `23eea16fe663a4ac` | `9c990a5c970ac923` | — |
+| `tier0/api-probes/phase1-default-camera-bevelled-cube` | changed | `b853a436f8f92302` | `4bf0b591106e30f7` | r1, r2 |
+| `tier0/api-probes/phase1-default-camera-plane` | changed | `abc545251e7cfaaa` | `690c453cafc04b3b` | r1, r2 |
+| `tier0/api-probes/phase1-default-camera-sphere` | changed | `30d159f2a5c5551d` | `8cc41d05c264d13d` | r1, r2 |
+| `tier0/api-probes/phase1-delete-node` | unchanged | `85e06070610d3ae3` | `2f024f6b61039562` | — |
+| `tier0/api-probes/phase1-display-ocio` | changed | `f3e79d93fb59f0f2` | `d4024982d2ad1156` | r1, r2 |
+| `tier0/api-probes/phase1-engine-computations` | unchanged | `4acaba2821b078f6` | `176056de01965a28` | — |
+| `tier0/api-probes/phase1-execute-when-not-busy` | changed | `d3bedea4eb97f30a` | `def90ba88b00714b` | r1, r2 |
+| `tier0/api-probes/phase1-export-preset-search` | unchanged | `d6b9e35180b6f818` | `d3021c6d46aa67ca` | — |
+| `tier0/api-probes/phase1-fill-channel-defaults` | changed | `c766a53a0c7cebbf` | `b158d390326a9791` | r1 |
+| `tier0/api-probes/phase1-layer-navigation` | unchanged | `76870106c4103da4` | `3588fcb8e4fa3f98` | — |
+| `tier0/api-probes/phase1-layer-node-kinds` | unchanged | `5c8dba39ddba5e08` | `37dfb546327560a8` | — |
+| `tier0/api-probes/phase1-layer-stack-events` | changed | `996ce966726e231d` | `8b0044b2b59e6810` | r1, r2 |
+| `tier0/api-probes/phase1-levels-params` | unchanged | `4d1f2b28d455d6b3` | `d1ae88b13d08ffb6` | — |
+| `tier0/api-probes/phase1-mesh-map-update` | unchanged | `4dc94157bb11e546` | `4789cc705cf0f37e` | — |
+| `tier0/api-probes/phase1-reload-mesh` | changed | `ce7a4c2f59e36a6d` | `16c22ad1a13b7f05` | r1, r2 |
+| `tier0/api-probes/phase1-reload-resources` | unchanged | `4ea41f901841f58f` | `3380c72235a981aa` | — |
+| `tier0/api-probes/phase1-resource-update` | unchanged | `20cde05589edabdf` | `b4737da6cb10fdaa` | — |
+| `tier0/api-probes/phase1-restored-values` | unchanged | `0071a5c35e6e0bb9` | `847c02de78477fe4` | — |
+| `tier0/api-probes/phase1-save-as-existing` | unchanged | `618987c7114b385f` | `70fb9ea02648234d` | — |
+| `tier0/api-probes/phase1-save-modes` | unchanged | `56ec47a22951c82a` | `322a0f027350ef89` | — |
+| `tier0/api-probes/phase1-shelves` | unchanged | `9d2c9f236422c5cb` | `ab848640e529b091` | — |
+| `tier0/api-probes/phase1-srgb-uniform-decode-ocio-part1` | unchanged | `6e5c73840e206bba` | `502502e9b55e9d24` | — |
+| `tier0/api-probes/phase1-srgb-uniform-decode-ocio-part2` | unchanged | `fc562cc69f6448d5` | `cabb4e96964a01fa` | — |
+| `tier0/api-probes/phase1-srgb-uniform-decode-ocio-part3` | unchanged | `c6e968f8c717c93d` | `f70ff7e95fb68810` | — |
+| `tier0/api-probes/phase1-srgb-uniform-decode-ocio-part4` | unchanged | `f0fe7b217735f9bb` | `ab928c7d2e7ab97f` | — |
+| `tier0/api-probes/phase1-srgb-uniform-decode-part1` | unchanged | `9445717a57f68256` | `047ae6a6dd6c1418` | — |
+| `tier0/api-probes/phase1-srgb-uniform-decode-part2` | unchanged | `91c8c6432c565b62` | `e90379d624bda38d` | — |
+| `tier0/api-probes/phase1-srgb-uniform-decode-part3` | unchanged | `4fcc58963bd1d6db` | `2e55b71e7d9f4d6e` | — |
+| `tier0/api-probes/phase1-srgb-uniform-decode-part4` | unchanged | `a5d4864a2c82881b` | `56e60ff804c0c19b` | — |
+| `tier0/api-probes/phase1-texture-throttling` | unchanged | `37e499ad4702f3e0` | `9aa43ffcb9bdbeed` | — |
+| `tier0/api-probes/set-source-none-multichannel` | unchanged | `99954ec714f988af` | `e6025c4c83d72907` | — |
+| `tier0/api-probes/textureset-project-readback` | unchanged | `c0c41d3c6ded5b92` | `9de6a934cbfe46eb` | — |
+| `tier0/defaults-templates/baking-defaults` | changed | `53d9cfc9d9d60554` | `d9035d90c6952a6f` | r1, r2, r3 |
+| `tier0/defaults-templates/project-templates` | unchanged | `a2b3a5b2044ed8de` | `c520995d6696b66f` | — |
+| `tier0/recorder-sample/blend-multiply-plane` | unchanged | `caaf469bcbbce4d6` | `aa7b146390f0ec99` | — |
+| `tier0/semantics-ui/export-probes-r091-renamed` | changed | `44d2ded94a2a9ffd` | `1bd8117cac2c5192` | r1, r2 |
+| `tier0/semantics-ui/group-passthrough-masks` | changed | `a0de2aa898ec4f74` | `4ee89076adf608fb` | r1, r2 |
+| `tier0/semantics-ui/height-normal-sharp-bevelled-cube` | changed | `0d52e0c853818944` | `774ec320ad592376` | r1, r2 |
+| `tier0/semantics-ui/height-normal-sharp-plane-strength` | changed | `2fe57df3bd838b54` | `641fbe1866d64699` | r1, r2 |
+| `tier0/semantics-ui/height-normal-sharp-sphere` | changed | `28a1fbfc27030637` | `83c9c390d9b3e07b` | r1, r2 |
+| `tier0/semantics-ui/height-normal-sobel-bevelled-cube` | changed | `0836b799ac2138e3` | `ac588b9072a02ea9` | r1, r2 |
+| `tier0/semantics-ui/height-normal-sobel-plane-strength` | changed | `c427fce046ae6c0b` | `5cd2aa4d9b8dc691` | r1, r2 |
+| `tier0/semantics-ui/height-normal-sobel-sphere` | changed | `33cf373c58d97c9a` | `593e5e96a5b2289d` | r1, r2 |
+| `tier0/semantics/ao-mixed` | unchanged | `2a4f77805d0ce442` | `0592f4b920859240` | — |
+| `tier0/semantics/ao-mixed-grid` | unchanged | `9ac5894c7b01996f` | `220dcf00ca1050aa` | — |
+| `tier0/semantics/ao-mixed-isolation` | unchanged | `ea55579c6118e32f` | `9ec866fd93c7d615` | — |
+| `tier0/semantics/ao-mixed-isolation-8bit` | unchanged | `e4c03ede8f7340d9` | `2aef06c955db09f1` | — |
+| `tier0/semantics/ao-mixed-isolation-float` | unchanged | `b5022aa6544fcc64` | `7cfc58afaafd679f` | — |
+| `tier0/semantics/ao-mixed-opacity` | unchanged | `55ee183309f382fe` | `257d68b3308d5a98` | — |
+| `tier0/semantics/ao-mixed-opacity-float` | unchanged | `6bbebe93586be1a4` | `4a4fbbf4af7071f5` | — |
+| `tier0/semantics/base-values-asm-pbr-metallic-roughness` | unchanged | `2318d74099fde442` | `50aca878e0dd3c7b` | — |
+| `tier0/semantics/base-values-asm-pbr-metallic-roughness-anisotropy-angle` | unchanged | `2b6e023353227a7d` | `1472a52b6e00e1c1` | — |
+| `tier0/semantics/base-values-asm-pbr-metallic-roughness-coated` | unchanged | `1a04028bb03f2bc4` | `ff1707ced1c14790` | — |
+| `tier0/semantics/base-values-asm-pbr-metallic-roughness-sheen` | unchanged | `40d55228770df7de` | `1649921ae434e6bb` | — |
+| `tier0/semantics/base-values-asm-pbr-metallic-roughness-sss` | unchanged | `f9a3bc2892e36dae` | `d46c6af4f271cd17` | — |
+| `tier0/semantics/base-values-blender` | unchanged | `78018e8e03832132` | `a8f294e11a440fda` | — |
+| `tier0/semantics/base-values-default` | unchanged | `bfcde7de54ebe75e` | `54a6a6f120a3d26f` | — |
+| `tier0/semantics/base-values-dota-2` | unchanged | `303f5750c28ccce7` | `763109b2b9d64846` | — |
+| `tier0/semantics/base-values-keyshot` | unchanged | `9fd1efab554f5ad2` | `18a6b0c14c400510` | — |
+| `tier0/semantics/base-values-lens-studio` | unchanged | `41549fce73b5bd07` | `4a70e521a9c967dd` | — |
+| `tier0/semantics/base-values-maxwell-metallic-roughness` | unchanged | `c440cf2c35d93a36` | `d67736c68d04171e` | — |
+| `tier0/semantics/base-values-maxwell-specular-glossiness` | unchanged | `c0f0019032037418` | `0f87984e0e5589fc` | — |
+| `tier0/semantics/base-values-non-pbr-specular-glossiness` | unchanged | `7ccec9147feab217` | `a7c8e3ce320ed30b` | — |
+| `tier0/semantics/base-values-openpbr-anisotropy` | unchanged | `56c538f9dcbd9748` | `616d0d8e6dd86386` | — |
+| `tier0/semantics/base-values-openpbr-coat` | unchanged | `634c0322ad250d65` | `586b8477a7cf7b96` | — |
+| `tier0/semantics/base-values-openpbr-fuzz` | unchanged | `8d3da793be7de41f` | `1f35d7cd1c6500cb` | — |
+| `tier0/semantics/base-values-openpbr-subsurface-scattering` | unchanged | `db13ca9af0ae8621` | `010a044e21896607` | — |
+| `tier0/semantics/base-values-pbr-metallic-roughness-alpha-blend` | unchanged | `9b6cd76737b6b5e5` | `c7c34b80d6a37d5c` | — |
+| `tier0/semantics/base-values-pbr-metallic-roughness-alpha-test` | unchanged | `70868f67a43e0a91` | `7f122ee9d564c205` | — |
+| `tier0/semantics/base-values-pbr-specular-glossiness` | unchanged | `6428a61f3cf28adf` | `2e5e010ae1a9642b` | — |
+| `tier0/semantics/base-values-roblox-materialvariant` | unchanged | `019957ea83cd771c` | `a4e822d6cac7e1b2` | — |
+| `tier0/semantics/base-values-roblox-surfaceappearance` | unchanged | `0b4bb07a0e6959d1` | `5abe5c0f943d444e` | — |
+| `tier0/semantics/base-values-spark-ar-studio` | unchanged | `3bc482e84fdd1311` | `a3fb62e911122611` | — |
+| `tier0/semantics/base-values-unity-hd-render-pipeline-metallic-standard` | unchanged | `279971d2a0280422` | `db0c8caf4d862449` | — |
+| `tier0/semantics/base-values-unreal-engine` | unchanged | `a324372db9032e83` | `a33eb1f01284debb` | — |
+| `tier0/semantics/base-values-vraymtl-metallic-roughness` | unchanged | `5df3fcbef6d5a75d` | `b1cb4e62052029b2` | — |
+| `tier0/semantics/base-values-vraymtl-specular-glossiness` | unchanged | `1dc2b2acea6f88c3` | `b23da8a20d012efc` | — |
+| `tier0/semantics/blend-additive` | unchanged | `a46965d398323fe8` | `7a2fd9d964bd288e` | — |
+| `tier0/semantics/blend-basic` | unchanged | `a08e98a8a46fad5e` | `efaae7ff287b2347` | — |
+| `tier0/semantics/blend-component` | unchanged | `ca5f1cd5ecaa46f2` | `ac6dc60b321f5df8` | — |
+| `tier0/semantics/blend-component-hue` | unchanged | `d5faa211e79b4376` | `9d7c3330e16d4b02` | — |
+| `tier0/semantics/blend-contrast` | unchanged | `eb5592917501a662` | `78686c9a10396bf9` | — |
+| `tier0/semantics/blend-inputs` | unchanged | `e8f9ccdad8c44531` | `cc55c872186c35f0` | — |
+| `tier0/semantics/blend-normal-channel` | unchanged | `f73f5a5e8cdc6932` | `6bf93d519f08756c` | — |
+| `tier0/semantics/blend-normal-opacity` | unchanged | `2a4539ba565470b6` | `3cc04c9585954807` | — |
+| `tier0/semantics/blend-order` | unchanged | `14c64f1684445f4b` | `f024b24d30ac0cf6` | — |
+| `tier0/semantics/blend-subnormal-f32` | unchanged | `d0d9789ad3ae82b8` | `7eebdd9f99224f7a` | — |
+| `tier0/semantics/colour-ramps-raw` | unchanged | `7a429426a14da3fe` | `fd0615a6618fa808` | — |
+| `tier0/semantics/colour-ramps-srgb` | unchanged | `ac241b7c0623e7c4` | `acf1a8c2cc3e5f9e` | — |
+| `tier0/semantics/colour-ramps-working` | unchanged | `5aef5c6646ca45d7` | `972ad509894579e8` | — |
+| `tier0/semantics/coverage-srgb8-ties` | unchanged | `01127c451fde36c8` | `67c06ffaaa6af09c` | — |
+| `tier0/semantics/effect-order` | unchanged | `b9627242fdadc932` | `1f363a077d1ae735` | — |
+| `tier0/semantics/export-alpha-layouts` | unchanged | `1428d5769e8ad20a` | `aa23b0c7be298c52` | — |
+| `tier0/semantics/export-bit-depth` | unchanged | `a646339578936fe6` | `85ece104b2f0fdab` | — |
+| `tier0/semantics/export-dither` | unchanged | `3e4eec9fcd56624b` | `75efd4b5d0435bb5` | — |
+| `tier0/semantics/export-l8-material` | unchanged | `eddbad97c8be3151` | `43966fc12c3db547` | — |
+| `tier0/semantics/export-ocio-encode` | unchanged | `7f6acce36a4fbaf0` | `20e36255ea7282c4` | — |
+| `tier0/semantics/export-ocio-encode-legacy` | unchanged | `ce9a70b4272ca354` | `2e873aef762d9762` | — |
+| `tier0/semantics/export-padding` | unchanged | `8d39739552997b1e` | `9b843258ef282301` | — |
+| `tier0/semantics/export-padding-bevelled-cube` | unchanged | `2e317de7a153c60d` | `87da98b80958f4d7` | — |
+| `tier0/semantics/export-padding-concave-fine` | unchanged | `c43fe6893a39fd8e` | `ca4dccc5477be64b` | — |
+| `tier0/semantics/export-padding-concave-fold` | unchanged | `c1ffb88b6e9663d7` | `83cb75ef36f3ba38` | — |
+| `tier0/semantics/export-padding-concave-shape` | unchanged | `9e361df2ea39fd50` | `3058143cd6372578` | — |
+| `tier0/semantics/export-padding-corner-reach` | unchanged | `d7fec19101a0009f` | `6ad30cf202cae6b3` | — |
+| `tier0/semantics/export-padding-hinge-far` | unchanged | `6bfa39efd971ec37` | `0a16335d43438698` | — |
+| `tier0/semantics/export-padding-hinge-single` | unchanged | `caccb2f073191dc6` | `c6ac70c7d12a523a` | — |
+| `tier0/semantics/export-padding-hinge-vary` | unchanged | `07e54c6ea5868d6e` | `e97b62ed51b3f4c5` | — |
+| `tier0/semantics/export-padding-kernel-atlas-1024` | unchanged | `25e9f9622eb70f0a` | `00b21c1e718a2905` | — |
+| `tier0/semantics/export-padding-kernel-atlas-1024-moved` | unchanged | `e1ef54bb952a8fee` | `2fdebdea93ecf006` | — |
+| `tier0/semantics/export-padding-kernel-atlas-2048` | unchanged | `3d76b50ae2b7fee4` | `9fd9ec6bf9806f84` | — |
+| `tier0/semantics/export-padding-kernel-atlas-512` | unchanged | `22fa6f1d75c68418` | `ad572ed6b3419d0f` | — |
+| `tier0/semantics/export-padding-kernel-bevelled-cube-256` | unchanged | `f6a1619d4d13390e` | `4fe2cbf0b6836458` | — |
+| `tier0/semantics/export-padding-kernel-ramp-r1-p0` | unchanged | `9be4420810c2876b` | `c7c98df88933d654` | — |
+| `tier0/semantics/export-padding-kernel-ramp-r15-p0` | unchanged | `9e562371bfe84c92` | `0209531f4ecb0bde` | — |
+| `tier0/semantics/export-padding-kernel-ramp-r15-p25` | unchanged | `260289cad53916df` | `5d9004046a25d4fd` | — |
+| `tier0/semantics/export-padding-kernel-ramp-r2-p0` | unchanged | `332c87d54e26a37d` | `3343331d8a0e9e9d` | — |
+| `tier0/semantics/export-padding-kernel-ramp-r2-p25` | unchanged | `23fe376b3586989f` | `7e33e1ac91f4a142` | — |
+| `tier0/semantics/export-padding-kernel-sphere-256` | unchanged | `e40930601bbc878b` | `1a259bd3eabd4374` | — |
+| `tier0/semantics/export-padding-kernel-tie-2048` | unchanged | `76d77bc2d1635626` | `918bbbe97a2bd0cf` | — |
+| `tier0/semantics/export-padding-kernel-tie-512` | unchanged | `f3759d72de947f69` | `1b5e3d51f552b533` | — |
+| `tier0/semantics/export-padding-normal-combine` | unchanged | `f71daca10d417f12` | `cb2e776b4f248865` | — |
+| `tier0/semantics/export-padding-ramp-r1-p0` | unchanged | `9cbb706ab81f7e8e` | `da4c392762d3d092` | — |
+| `tier0/semantics/export-padding-ramp-r1-p0-box17` | unchanged | `9bf986ae2483a2ed` | `fd08050db699fbc1` | — |
+| `tier0/semantics/export-padding-ramp-r1-p0-v2` | unchanged | `e7f9f11e6030f061` | `a845f3f0664c8d33` | — |
+| `tier0/semantics/export-padding-ramp-r1-p25` | unchanged | `439e002c51c88466` | `028f5bbd3c2d689a` | — |
+| `tier0/semantics/export-padding-ramp-r1-p25-v2` | unchanged | `aa75838df1c2c7a9` | `5ade27e32fbf06df` | — |
+| `tier0/semantics/export-padding-ramp-r1-p75` | unchanged | `45e07a7dd915929d` | `495f417e975d23db` | — |
+| `tier0/semantics/export-padding-ramp-r1-p75-v2` | unchanged | `948a948e4714a002` | `b60e268cfb01b1c2` | — |
+| `tier0/semantics/export-padding-ramp-r15-p0` | unchanged | `591f9156893f6332` | `7aebf2a6084790a7` | — |
+| `tier0/semantics/export-padding-ramp-r15-p0-v2` | unchanged | `c0fd32d64deabc1b` | `7aac04cf70a0b674` | — |
+| `tier0/semantics/export-padding-ramp-r15-p25` | unchanged | `20b7eeb38e9c7ccf` | `8423d4a4d5458193` | — |
+| `tier0/semantics/export-padding-ramp-r15-p25-v2` | unchanged | `ad8834800ca50f9e` | `098d1129ab9d0fef` | — |
+| `tier0/semantics/export-padding-ramp-r15-p75` | unchanged | `ea9e8b72e2f25ccb` | `e8cfc12540b21c9b` | — |
+| `tier0/semantics/export-padding-ramp-r15-p75-v2` | unchanged | `47083cc009f26dc5` | `3531107f44a551b5` | — |
+| `tier0/semantics/export-padding-ramp-r2-p0` | unchanged | `b80e319f3d4151f4` | `c1a7d3f5fbc4ea1c` | — |
+| `tier0/semantics/export-padding-ramp-r2-p0-v2` | unchanged | `b474be90749e052e` | `e878091e95a2ceb9` | — |
+| `tier0/semantics/export-padding-ramp-r2-p25` | unchanged | `e62242d75d625702` | `71ab268a2c7d8361` | — |
+| `tier0/semantics/export-padding-ramp-r2-p25-v2` | unchanged | `23f80b3d595c1cbc` | `f6c967c276142521` | — |
+| `tier0/semantics/export-padding-ramp-r2-p75` | unchanged | `9433f290434de143` | `5391764808551712` | — |
+| `tier0/semantics/export-padding-ramp-r2-p75-v2` | unchanged | `54fa9ddf75853faa` | `b13d6701032db192` | — |
+| `tier0/semantics/export-padding-seam-1024` | unchanged | `73d3130654089f96` | `af51439685151325` | — |
+| `tier0/semantics/export-padding-seam-256` | unchanged | `46857629937dd9e2` | `4aba33e65c5380af` | — |
+| `tier0/semantics/export-padding-seam-field-1024` | unchanged | `70c399ad26bf4121` | `809d09ac54517578` | — |
+| `tier0/semantics/export-padding-seam-field-256` | unchanged | `0221d0ab100687ac` | `38c3a3ede9b32fff` | — |
+| `tier0/semantics/export-padding-seam-ramp-1024` | unchanged | `eb63dd315eecf735` | `764b8dadde78f04c` | — |
+| `tier0/semantics/export-padding-sphere` | unchanged | `615758a27598ae3f` | `32b8fb6f6ad2c134` | — |
+| `tier0/semantics/export-padding-tie-2048` | unchanged | `17a6935df3aa88f9` | `6e796d91891a2208` | — |
+| `tier0/semantics/export-padding-tie-2048-v2` | unchanged | `8c7931f1c563ceb1` | `cb8cfe5655354a9c` | — |
+| `tier0/semantics/export-padding-tie-512` | unchanged | `02e43d6a71fd17ca` | `14beed88aff5d251` | — |
+| `tier0/semantics/export-padding-tie-512-box16` | unchanged | `98cbb8fa212aa083` | `e3385118ee65d200` | — |
+| `tier0/semantics/export-padding-tie-sweep-seams-box320` | unchanged | `f4b9c64bfe3bd9b1` | `debb9409f5c8c22d` | — |
+| `tier0/semantics/export-padding-tie-sweep-seams-centred` | unchanged | `3b1f4bb7c4a4cb4e` | `26cc1f26bbcc5e41` | — |
+| `tier0/semantics/export-padding-tie-sweep-seams-offcentre` | unchanged | `7190c05a0d256684` | `5c5183889348cdad` | — |
+| `tier0/semantics/export-padding-tie-sweep-strips-box320` | unchanged | `158087402992d258` | `8d3fcc479d07ce56` | — |
+| `tier0/semantics/export-padding-tie-sweep-strips-centred` | unchanged | `7e83f811c9496f2b` | `68ec92e9abd1497c` | — |
+| `tier0/semantics/export-padding-tie-sweep-strips-offcentre` | unchanged | `95ffd83cbc21bde3` | `d307a4e250b5a25c` | — |
+| `tier0/semantics/export-padding-window-side` | unchanged | `5f07866d2672f7c9` | `067fd0ddf726a54f` | — |
+| `tier0/semantics/export-presets-legacy` | changed | `db235dd2cfedc0d9` | `4970d2b0c3619fba` | r1, r2 |
+| `tier0/semantics/export-presets-ocio` | changed | `9e84c5d35661be30` | `18ca9d7dbf8a82ab` | r1, r2 |
+| `tier0/semantics/export-probes-aliases-coat` | unchanged | `c592680acca97753` | `d305f630eb5a03c0` | — |
+| `tier0/semantics/export-probes-aliases-fuzz` | unchanged | `a8766bf19b634061` | `a5128c5696897ebd` | — |
+| `tier0/semantics/export-probes-aliases-subsurface` | unchanged | `28b0f2f44f256a6d` | `43d8ce06112d248e` | — |
+| `tier0/semantics/export-probes-channels` | unchanged | `a0e13b57528ca107` | `ea017a50b7a5f7b6` | — |
+| `tier0/semantics/export-probes-config` | unchanged | `2d52ac6714ce7563` | `452e95b288c5655f` | — |
+| `tier0/semantics/export-probes-naming` | unchanged | `abc8d949d437bd09` | `dbb61de55c8664c0` | — |
+| `tier0/semantics/export-probes-r091-alpha` | unchanged | `e3201cc07c7af358` | `c037a37a769ec73f` | — |
+| `tier0/semantics/export-probes-r091-dotted` | unchanged | `27aba56c882b5f44` | `beee0bd918920449` | — |
+| `tier0/semantics/export-probes-r091-keys` | unchanged | `7fce248a45d37e3b` | `d9a0c74c65185ae1` | — |
+| `tier0/semantics/export-probes-r091-mixes` | unchanged | `bc7a45a7f83366d0` | `3a59db6eca1b6cae` | — |
+| `tier0/semantics/export-probes-r091-naming` | unchanged | `c808f4163d521acd` | `5526d4837e5be845` | — |
+| `tier0/semantics/export-resize` | unchanged | `6c89b1095a61dc29` | `ebf3197979901fa6` | — |
+| `tier0/semantics/export-template-base-asm-pbr-metallic-roughness` | unchanged | `3f6347837a151386` | `73347648244db31a` | — |
+| `tier0/semantics/export-template-base-asm-pbr-metallic-roughness-anisotropy-angle` | unchanged | `ad68f1490ab03a82` | `a7566dbb98ac6b52` | — |
+| `tier0/semantics/export-template-base-asm-pbr-metallic-roughness-coated` | unchanged | `2e020a65cdbb577b` | `44017516197c495f` | — |
+| `tier0/semantics/export-template-base-asm-pbr-metallic-roughness-sheen` | unchanged | `73d59ba738a8b063` | `9999840362f84044` | — |
+| `tier0/semantics/export-template-base-asm-pbr-metallic-roughness-sss` | unchanged | `dd213dbbb8c9f1ca` | `61b8fa40b11df6fb` | — |
+| `tier0/semantics/export-template-base-blender` | unchanged | `b1e0a6560fa27e7f` | `1e7719837232be2f` | — |
+| `tier0/semantics/export-template-base-dota-2` | unchanged | `06399ec6a82c416f` | `f758630a5cbc7d66` | — |
+| `tier0/semantics/export-template-base-keyshot` | unchanged | `c11a88d78a02f61c` | `f8222afb30ab2d75` | — |
+| `tier0/semantics/export-template-base-lens-studio` | unchanged | `ea12b541d3c2ccc2` | `36dbddf4d952be04` | — |
+| `tier0/semantics/export-template-base-maxwell-metallic-roughness` | unchanged | `3f5b665b85571817` | `2be20c5cb6f495d5` | — |
+| `tier0/semantics/export-template-base-maxwell-specular-glossiness` | unchanged | `69661dd9829665ba` | `c77535d706132a6c` | — |
+| `tier0/semantics/export-template-base-non-pbr-specular-glossiness` | unchanged | `9949e55fd8ac267d` | `9c5852c66afdc17a` | — |
+| `tier0/semantics/export-template-base-openpbr-anisotropy` | unchanged | `ef8fc950fdcf90e3` | `115272c6d863a8d2` | — |
+| `tier0/semantics/export-template-base-openpbr-fuzz` | unchanged | `b3396a9b0e4fcdb8` | `8b47b912eeadd0d1` | — |
+| `tier0/semantics/export-template-base-openpbr-subsurface-scattering` | unchanged | `d3cdb2b2f796e33b` | `c82e2ec34db92e9d` | — |
+| `tier0/semantics/export-template-base-pbr-metallic-roughness-alpha-test` | unchanged | `cb71d2af57db5c10` | `92ae98a6c269a644` | — |
+| `tier0/semantics/export-template-base-pbr-specular-glossiness` | unchanged | `094ff0ecbe625a9d` | `9c0e487457eb271d` | — |
+| `tier0/semantics/export-template-base-roblox-materialvariant` | unchanged | `d2e31497eb503a9e` | `0e8bd651356998eb` | — |
+| `tier0/semantics/export-template-base-roblox-surfaceappearance` | unchanged | `12d4146819561c50` | `2f7f918758e6ab82` | — |
+| `tier0/semantics/export-template-base-spark-ar-studio` | unchanged | `4d44dc53928a9bfa` | `24eca668849abefa` | — |
+| `tier0/semantics/export-template-base-unity-hd-render-pipeline-metallic-standard` | unchanged | `0420f41373e5e387` | `6651a239c636d946` | — |
+| `tier0/semantics/export-template-base-unreal-engine` | unchanged | `3cd058dbd32342c4` | `7ea2b0e643aaa866` | — |
+| `tier0/semantics/export-template-base-vraymtl-metallic-roughness` | unchanged | `deba3cffba774e0e` | `1c77825aecfc7c4e` | — |
+| `tier0/semantics/export-template-base-vraymtl-specular-glossiness` | unchanged | `6f4b9c9a7bbf9cf3` | `c141e4f6a8f817d7` | — |
+| `tier0/semantics/group-coverage-order` | unchanged | `a58ea909846c403f` | `3199e3f2b998fedc` | — |
+| `tier0/semantics/group-masks` | unchanged | `0c709211d33a0b2b` | `0c036e8d37fa7cf0` | — |
+| `tier0/semantics/height-normal-bevelled-cube` | unchanged | `74fe1bb68527800c` | `5ca8a6e493fd859a` | — |
+| `tier0/semantics/height-normal-channel-coverage` | unchanged | `58fa28f33cdfefdb` | `8814003e06082d15` | — |
+| `tier0/semantics/height-normal-mesh-map` | changed | `245069a4495272c2` | `d79ae78ef568d336` | r1, r2 |
+| `tier0/semantics/height-normal-mesh-map-directx` | unchanged | `0571d1d45aba0b76` | `fac287855368c0f3` | — |
+| `tier0/semantics/height-normal-plane-amplitudes` | unchanged | `ffbdd78546998ce3` | `693b02812f460907` | — |
+| `tier0/semantics/height-normal-resolution-1024` | unchanged | `5a63f7eca7893785` | `fae0c2c9d638e8f5` | — |
+| `tier0/semantics/height-normal-resolution-1024-sobel` | changed | `6e51f5eccb47721b` | `d2e52a6bc42db426` | r1, r2 |
+| `tier0/semantics/height-normal-resolution-2048` | unchanged | `0f02c91260dac103` | `fb437233538a7079` | — |
+| `tier0/semantics/height-normal-resolution-512` | unchanged | `e52b103f64176ebf` | `20e202fc3adebc10` | — |
+| `tier0/semantics/height-normal-sphere` | unchanged | `1a05c72b79b77abe` | `3e56c39464d3aa3f` | — |
+| `tier0/semantics/height-signed-addition` | unchanged | `731b1e97ca020aaa` | `db5fdcd68393b308` | — |
+| `tier0/semantics/levels-clamp` | unchanged | `385ff8dd604e5fb0` | `1b3dab9786c5c2cb` | — |
+| `tier0/semantics/mask-precision` | unchanged | `e2d703c9d2872784` | `03af7c5170f767a1` | — |
+| `tier0/semantics/normal-channel-import` | unchanged | `eebb4246d50ec6d5` | `6a6b0b98eb84c048` | — |
+| `tier0/semantics/normal-channel-import-directx` | unchanged | `835b59789f332545` | `38dcdd36514a995d` | — |
+| `tier0/semantics/quantisation-thirds` | unchanged | `7cf9c35b8d633e61` | `f532f94579e5af83` | — |
+| `tier0/semantics/resample-uv` | unchanged | `367d491d7c52a165` | `2cfcc1a5dcb0667b` | — |
+| `tier0/semantics/resample-uv-anisotropic` | unchanged | `f9421359740f9701` | `9fa3ed3f78ce94d7` | — |
+| `tier0/semantics/resample-uv-anisotropic-impulse` | unchanged | `bc5a5096db686939` | `602126b70c5f6651` | — |
+| `tier0/semantics/resample-uv-heldout-128px` | unchanged | `3659e58521a49db8` | `52b7f58f70007831` | — |
+| `tier0/semantics/resample-uv-heldout-32px` | unchanged | `b767d687072413b7` | `b9e2d218025d4467` | — |
+| `tier0/semantics/resample-uv-impulse` | unchanged | `d4e0d8c2bef7d5e8` | `e1a22faa5001b93c` | — |
+| `tier0/semantics/resample-uv-lod` | unchanged | `80bf855316ed9059` | `628db9eed826feea` | — |
+| `tier0/semantics/resample-uv-lod-boundaries` | unchanged | `cbc19cbd97632759` | `56b0f8d52f45311a` | — |
+| `tier0/semantics/resample-uv-minify` | unchanged | `65e85020f81558fc` | `e4d3e55a9f961c73` | — |
+| `tier0/semantics/resample-uv-rotation` | unchanged | `8a7ee1e00f74e074` | `cd3abd91a022ac68` | — |
+| `tier0/semantics/srgb-bitmap-minification` | unchanged | `6fe1a6e02cd2f846` | `446c762e3e03e1f5` | — |
+| `tier0/semantics/srgb-bitmap-variants-v2` | unchanged | `6b39d103255a3d8b` | `0140c665bb3f2148` | — |
+| `tier0/semantics/view-2d-state-camera` | unchanged | `70bff4024ed135fd` | `6c99d1a916e2a0eb` | — |
+| `tier0/semantics/view-2d-state-default` | unchanged | `43f83cfd3d3b537f` | `0bca12fc237034ed` | — |
+| `tier0/semantics/view-2d-state-default-repeat` | unchanged | `53e250d8e55bd08c` | `dd7795fddb8f9f17` | — |
+| `tier0/semantics/view-2d-state-environment` | unchanged | `bb78cefdf5b01263` | `a47e5b407f51e295` | — |
+| `tier0/semantics/view-2d-state-tone-aces` | unchanged | `6f0e89798667be4e` | `db80590d6c8ef117` | — |
+| `tier0/semantics/view-2d-state-tone-linear` | unchanged | `1da6c49dd3a1c5bf` | `db68377c00ab7a6e` | — |
+| `tier0/semantics/virtual-maps-converted` | unchanged | `c9053b1c43bf7c87` | `c1a6f48c85f8f076` | — |
+| `tier0/semantics/virtual-maps-converted-float` | unchanged | `457341b312a96310` | `40254bee271177d0` | — |
+| `tier0/semantics/virtual-maps-coverage` | unchanged | `f9a45e3430ba8c19` | `24d8b6cfc1bbc027` | — |
+| `tier0/semantics/virtual-maps-coverage-float` | unchanged | `5efabbe70a3f72f0` | `44f369deec3b17e3` | — |
+| `tier0/semantics/virtual-maps-template-openpbr-coat` | unchanged | `07d438f1f6b8f7ae` | `355b0ce40e1ec825` | — |
+| `tier0/semantics/virtual-maps-template-openpbr-coat-float` | unchanged | `69d2641ef886073d` | `489462c32e4176e3` | — |
+| `tier0/semantics/virtual-maps-template-pbr-metallic-roughness-alpha-blend` | unchanged | `91b6016d933aa39f` | `b111a530576a8312` | — |
+| `tier0/semantics/virtual-maps-template-pbr-metallic-roughness-alpha-blend-float` | unchanged | `83b32f9cfd2f6994` | `f816156cdc3ac982` | — |
+| `tier0/semantics/virtual-maps-template-pbr-specular-glossiness` | unchanged | `22f30e2d9c1a9544` | `06f1bfa6370c8ac0` | — |
+| `tier0/semantics/virtual-maps-template-pbr-specular-glossiness-float` | unchanged | `69c11e5575479990` | `f13d6cfcad26614b` | — |
+
+| Golden | Pair | Output | Storage | Blob SHA-256 (left, right) | max \|Δ\| | mean \|Δ\| | p99 \|Δ\| | Differing values / compared | Differing texels / texels |
+|---|---|---|---|---|---|---|---|---|---|
+| `phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults` | previous.r1~new.r1 | `uzp_rounded_cube/basecolor` | png/uint16/3ch/srgb | `922118fe1388c18e`, `e4453186ca8648ac` | 277 | 0.00164223 | 0 | 20 / 3145728 | 20 / 1048576 |
+| `phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults` | previous.r1~new.r1 | `uzp_rounded_cube/height` | png/uint16/1ch/linear | `d0c06cfd9c0c72f9`, `ace1d7bbdddfea01` | 8 | 0.000248909 | 0 | 138 / 1048576 | 138 / 1048576 |
+| `phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults` | previous.r1~new.r1 | `uzp_rounded_cube/specularroughness` | png/uint16/1ch/linear | `48f7405b7c90d51c`, `51b0f48461c6fc3d` | 257 | 0.00784302 | 0 | 32 / 1048576 | 32 / 1048576 |
+| `phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults` | previous.r2~new.r2 | `uzp_rounded_cube/basecolor` | png/uint16/3ch/srgb | `46de53fc7badad75`, `45a1a6620c2cf141` | 277 | 0.00124741 | 0 | 15 / 3145728 | 15 / 1048576 |
+| `phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults` | previous.r2~new.r2 | `uzp_rounded_cube/height` | png/uint16/1ch/linear | `41de32f981c806b3`, `9820b11b3d95586f` | 8 | 0.000248909 | 0 | 138 / 1048576 | 138 / 1048576 |
+| `phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults` | previous.r2~new.r2 | `uzp_rounded_cube/specularroughness` | png/uint16/1ch/linear | `9c5ae7f9075bce29`, `66755d6033f981b1` | 257 | 0.00661755 | 0 | 27 / 1048576 | 27 / 1048576 |
+| `phase0/procedural-feasibility/leather-damaged/sphere/defaults` | previous.r1~new.r1 | `uzp_sphere/basecolor` | png/uint16/3ch/srgb | `d69e3371ded7f8e9`, `5ed3bbc81f8fde59` | 277 | 0.00106366 | 0 | 13 / 3145728 | 13 / 1048576 |
+| `phase0/procedural-feasibility/leather-damaged/sphere/defaults` | previous.r1~new.r1 | `uzp_sphere/height` | png/uint16/1ch/linear | `c1b556f5b1836de0`, `9ca8f886bf902d61` | 5 | 0.000250816 | 0 | 210 / 1048576 | 210 / 1048576 |
+| `phase0/procedural-feasibility/leather-damaged/sphere/defaults` | previous.r1~new.r1 | `uzp_sphere/specularroughness` | png/uint16/1ch/linear | `5cbda64b5a19d28d`, `c70df588d43babd7` | 257 | 0.00171566 | 0 | 7 / 1048576 | 7 / 1048576 |
+| `phase0/procedural-feasibility/leather-damaged/sphere/defaults` | previous.r2~new.r2 | `uzp_sphere/basecolor` | png/uint16/3ch/srgb | `c29d2961cbb03f90`, `1653e3f9cd0f527f` | 277 | 0.00106366 | 0 | 13 / 3145728 | 13 / 1048576 |
+| `phase0/procedural-feasibility/leather-damaged/sphere/defaults` | previous.r2~new.r2 | `uzp_sphere/height` | png/uint16/1ch/linear | `562b377759dc95a5`, `bf9f0ae819eb84e7` | 5 | 0.000256538 | 0 | 216 / 1048576 | 216 / 1048576 |
+| `phase0/procedural-feasibility/leather-damaged/sphere/defaults` | previous.r2~new.r2 | `uzp_sphere/specularroughness` | png/uint16/1ch/linear | `5e579d16fb2f6f59`, `b3caf8f315f65cfd` | 257 | 0.00171566 | 0 | 7 / 1048576 | 7 / 1048576 |
+| `tier0/api-probes/p22b-host-application` | previous.r1~new.r1 | `s20/evaluate` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/p22b-host-application` | previous.r1~new.r1 | `s27/states` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/p22b-host-application` | previous.r1~new.r1 | `s28/states` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/p22b-host-application` | previous.r1~new.r1 | `s3/version` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/p22b-host-application` | previous.r1~new.r1 | `s4/version_info` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/p22b-host-application` | previous.r2~new.r2 | `s20/evaluate` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/p22b-host-application` | previous.r2~new.r2 | `s27/states` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/p22b-host-application` | previous.r2~new.r2 | `s28/states` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/p22b-host-application` | previous.r2~new.r2 | `s3/version` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/p22b-host-application` | previous.r2~new.r2 | `s4/version_info` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/p22b-host-events` | previous.r1~new.r1 | `s20/events` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/p22b-host-events` | previous.r1~new.r1 | `s21/events` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/p22b-host-events` | previous.r1~new.r1 | `s8/events` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/p22b-host-events` | previous.r2~new.r2 | `s20/events` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/p22b-host-events` | previous.r2~new.r2 | `s21/events` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/p22b-host-events` | previous.r2~new.r2 | `s7/events` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/p22b-host-events` | previous.r2~new.r2 | `start/events` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/p22b-host-resources` | previous.r1~new.r1 | `s17/events` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/p22b-host-resources` | previous.r2~new.r2 | `s16/states` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/p22b-host-resources` | previous.r2~new.r2 | `s17/events` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/p22b-host-resources` | previous.r2~new.r2 | `s20/events` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/p22b-reload-order-mza-all-origins` | previous.r1~new.r1 | `s11/events` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/p22b-reload-order-mza-all-origins` | previous.r1~new.r1 | `s8/events` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/p22b-reload-order-mza-all-origins` | previous.r2~new.r2 | `s11/events` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/p22b-reload-order-mza-all-origins` | previous.r2~new.r2 | `s8/events` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/p22b-reload-order-zam-all-origins` | previous.r1~new.r1 | `s11/events` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/p22b-reload-order-zam-all-origins` | previous.r1~new.r1 | `s8/events` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/p22b-reload-order-zam-all-origins` | previous.r2~new.r2 | `s11/events` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/p22b-reload-order-zam-all-origins` | previous.r2~new.r2 | `s8/events` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s10/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s12/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s14/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s16/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s18/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s20/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s22/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s24/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s26/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s28/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s3/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s30/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s32/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s34/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s36/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s38/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s40/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s42/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s44/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s46/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s48/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s50/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s52/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s54/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s56/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s58/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s6/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s60/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s62/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s64/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-camera-coupling` | previous.r1~new.r1 | `s8/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-create-open-timing` | previous.r1~new.r1 | `create/thread_polls` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-create-open-timing` | previous.r2~new.r2 | `open/thread_polls` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-create-open-timing` | previous.r3~new.r3 | `create/thread_polls` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-create-open-timing` | previous.r4~new.r4 | `open/thread_polls` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-default-camera-bevelled-cube` | previous.r1~new.r1 | `s3/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-default-camera-bevelled-cube` | previous.r2~new.r2 | `s3/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-default-camera-plane` | previous.r1~new.r1 | `s3/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-default-camera-plane` | previous.r2~new.r2 | `s3/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-default-camera-sphere` | previous.r1~new.r1 | `s3/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-default-camera-sphere` | previous.r2~new.r2 | `s3/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-display-ocio` | previous.r1~new.r1 | `s23/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-display-ocio` | previous.r1~new.r1 | `s8/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-display-ocio` | previous.r2~new.r2 | `s11/get_environment_resource` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-display-ocio` | previous.r2~new.r2 | `s23/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-display-ocio` | previous.r2~new.r2 | `s8/get_default_camera` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-execute-when-not-busy` | previous.r1~new.r1 | `s10/events` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-execute-when-not-busy` | previous.r2~new.r2 | `s10/events` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-fill-channel-defaults` | previous.r1~new.r1 | `s49/states` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-fill-channel-defaults` | previous.r1~new.r1 | `s50/states` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-layer-stack-events` | previous.r1~new.r1 | `s30/set_parameters` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-layer-stack-events` | previous.r2~new.r2 | `s30/set_parameters` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-reload-mesh` | previous.r1~new.r1 | `s10/get_root_layer_nodes` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-reload-mesh` | previous.r1~new.r1 | `s10/states` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-reload-mesh` | previous.r1~new.r1 | `s11/events` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-reload-mesh` | previous.r1~new.r1 | `s11/states` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-reload-mesh` | previous.r1~new.r1 | `s9/events` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-reload-mesh` | previous.r1~new.r1 | `s9/states` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/phase1-reload-mesh` | previous.r2~new.r2 | `s8/states` | api_readback | — | — | — | — | differs | — |
+| `tier0/defaults-templates/baking-defaults` | previous.r1~new.r1 | `baking/common` | effective_default_capture | — | — | — | — | differs | — |
+| `tier0/defaults-templates/baking-defaults` | previous.r2~new.r2 | `baking/common` | effective_default_capture | — | — | — | — | differs | — |
+| `tier0/defaults-templates/baking-defaults` | previous.r3~new.r3 | `baking/common` | effective_default_capture | — | — | — | — | differs | — |
+| `tier0/semantics-ui/export-probes-r091-renamed` | previous.r1~new.r1 | `panel/00-texture-set-list-name-s0` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/export-probes-r091-renamed` | previous.r2~new.r2 | `panel/00-texture-set-list-name-s0` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/group-passthrough-masks` | previous.r1~new.r1 | `panel/00-layers-blending-mode-step-14-user0` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/group-passthrough-masks` | previous.r1~new.r1 | `panel/01-layers-blending-mode-step-14-user1` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/group-passthrough-masks` | previous.r1~new.r1 | `panel/02-layers-blending-mode-step-14-user2` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/group-passthrough-masks` | previous.r1~new.r1 | `panel/03-layers-blending-mode-step-45-user0` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/group-passthrough-masks` | previous.r1~new.r1 | `panel/04-layers-blending-mode-step-45-user1` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/group-passthrough-masks` | previous.r1~new.r1 | `panel/05-layers-blending-mode-step-45-user2` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/group-passthrough-masks` | previous.r1~new.r1 | `panel/06-layers-blending-mode-step-79-user0` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/group-passthrough-masks` | previous.r1~new.r1 | `panel/07-layers-blending-mode-step-79-user1` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/group-passthrough-masks` | previous.r1~new.r1 | `panel/08-layers-blending-mode-step-79-user2` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/group-passthrough-masks` | previous.r1~new.r1 | `panel/09-layers-blending-mode-step-113-user0` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/group-passthrough-masks` | previous.r1~new.r1 | `panel/10-layers-blending-mode-step-113-user1` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/group-passthrough-masks` | previous.r1~new.r1 | `panel/11-layers-blending-mode-step-113-user2` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/group-passthrough-masks` | previous.r2~new.r2 | `panel/00-layers-blending-mode-step-14-user0` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/group-passthrough-masks` | previous.r2~new.r2 | `panel/01-layers-blending-mode-step-14-user1` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/group-passthrough-masks` | previous.r2~new.r2 | `panel/02-layers-blending-mode-step-14-user2` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/group-passthrough-masks` | previous.r2~new.r2 | `panel/03-layers-blending-mode-step-45-user0` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/group-passthrough-masks` | previous.r2~new.r2 | `panel/04-layers-blending-mode-step-45-user1` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/group-passthrough-masks` | previous.r2~new.r2 | `panel/05-layers-blending-mode-step-45-user2` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/group-passthrough-masks` | previous.r2~new.r2 | `panel/06-layers-blending-mode-step-79-user0` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/group-passthrough-masks` | previous.r2~new.r2 | `panel/07-layers-blending-mode-step-79-user1` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/group-passthrough-masks` | previous.r2~new.r2 | `panel/08-layers-blending-mode-step-79-user2` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/group-passthrough-masks` | previous.r2~new.r2 | `panel/09-layers-blending-mode-step-113-user0` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/group-passthrough-masks` | previous.r2~new.r2 | `panel/10-layers-blending-mode-step-113-user1` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/group-passthrough-masks` | previous.r2~new.r2 | `panel/11-layers-blending-mode-step-113-user2` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sharp-bevelled-cube` | previous.r1~new.r1 | `panel/00-texture-set-settings-height-to-normal-method-uzp_bevelled_cube` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sharp-bevelled-cube` | previous.r2~new.r2 | `panel/00-texture-set-settings-height-to-normal-method-uzp_bevelled_cube` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sharp-plane-strength` | previous.r1~new.r1 | `panel/00-texture-set-settings-height-to-normal-method-s0` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sharp-plane-strength` | previous.r1~new.r1 | `panel/01-texture-set-settings-height-to-normal-method-s1` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sharp-plane-strength` | previous.r1~new.r1 | `panel/02-texture-set-settings-height-to-normal-method-s2` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sharp-plane-strength` | previous.r1~new.r1 | `panel/03-texture-set-settings-height-to-normal-method-s3` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sharp-plane-strength` | previous.r1~new.r1 | `panel/04-texture-set-settings-height-to-normal-method-s4` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sharp-plane-strength` | previous.r1~new.r1 | `panel/05-texture-set-settings-height-to-normal-method-s5` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sharp-plane-strength` | previous.r1~new.r1 | `panel/06-texture-set-settings-height-to-normal-method-s6` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sharp-plane-strength` | previous.r1~new.r1 | `panel/07-texture-set-settings-height-to-normal-method-s7` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sharp-plane-strength` | previous.r2~new.r2 | `panel/00-texture-set-settings-height-to-normal-method-s0` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sharp-plane-strength` | previous.r2~new.r2 | `panel/01-texture-set-settings-height-to-normal-method-s1` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sharp-plane-strength` | previous.r2~new.r2 | `panel/02-texture-set-settings-height-to-normal-method-s2` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sharp-plane-strength` | previous.r2~new.r2 | `panel/03-texture-set-settings-height-to-normal-method-s3` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sharp-plane-strength` | previous.r2~new.r2 | `panel/04-texture-set-settings-height-to-normal-method-s4` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sharp-plane-strength` | previous.r2~new.r2 | `panel/05-texture-set-settings-height-to-normal-method-s5` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sharp-plane-strength` | previous.r2~new.r2 | `panel/06-texture-set-settings-height-to-normal-method-s6` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sharp-plane-strength` | previous.r2~new.r2 | `panel/07-texture-set-settings-height-to-normal-method-s7` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sharp-sphere` | previous.r1~new.r1 | `panel/00-texture-set-settings-height-to-normal-method-uzp_sphere` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sharp-sphere` | previous.r2~new.r2 | `panel/00-texture-set-settings-height-to-normal-method-uzp_sphere` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sobel-bevelled-cube` | previous.r1~new.r1 | `panel/00-texture-set-settings-height-to-normal-method-uzp_bevelled_cube` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sobel-bevelled-cube` | previous.r2~new.r2 | `panel/00-texture-set-settings-height-to-normal-method-uzp_bevelled_cube` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sobel-plane-strength` | previous.r1~new.r1 | `panel/00-texture-set-settings-height-to-normal-method-s0` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sobel-plane-strength` | previous.r1~new.r1 | `panel/01-texture-set-settings-height-to-normal-method-s1` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sobel-plane-strength` | previous.r1~new.r1 | `panel/02-texture-set-settings-height-to-normal-method-s2` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sobel-plane-strength` | previous.r1~new.r1 | `panel/03-texture-set-settings-height-to-normal-method-s3` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sobel-plane-strength` | previous.r1~new.r1 | `panel/04-texture-set-settings-height-to-normal-method-s4` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sobel-plane-strength` | previous.r1~new.r1 | `panel/05-texture-set-settings-height-to-normal-method-s5` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sobel-plane-strength` | previous.r1~new.r1 | `panel/06-texture-set-settings-height-to-normal-method-s6` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sobel-plane-strength` | previous.r1~new.r1 | `panel/07-texture-set-settings-height-to-normal-method-s7` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sobel-plane-strength` | previous.r2~new.r2 | `panel/00-texture-set-settings-height-to-normal-method-s0` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sobel-plane-strength` | previous.r2~new.r2 | `panel/01-texture-set-settings-height-to-normal-method-s1` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sobel-plane-strength` | previous.r2~new.r2 | `panel/02-texture-set-settings-height-to-normal-method-s2` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sobel-plane-strength` | previous.r2~new.r2 | `panel/03-texture-set-settings-height-to-normal-method-s3` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sobel-plane-strength` | previous.r2~new.r2 | `panel/04-texture-set-settings-height-to-normal-method-s4` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sobel-plane-strength` | previous.r2~new.r2 | `panel/05-texture-set-settings-height-to-normal-method-s5` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sobel-plane-strength` | previous.r2~new.r2 | `panel/06-texture-set-settings-height-to-normal-method-s6` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sobel-plane-strength` | previous.r2~new.r2 | `panel/07-texture-set-settings-height-to-normal-method-s7` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sobel-sphere` | previous.r1~new.r1 | `panel/00-texture-set-settings-height-to-normal-method-uzp_sphere` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics-ui/height-normal-sobel-sphere` | previous.r2~new.r2 | `panel/00-texture-set-settings-height-to-normal-method-uzp_sphere` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics/export-presets-legacy` | previous.r1~new.r1 | `presets/s31` | api_readback | — | — | — | — | differs | — |
+| `tier0/semantics/export-presets-legacy` | previous.r2~new.r2 | `presets/s31` | api_readback | — | — | — | — | differs | — |
+| `tier0/semantics/export-presets-ocio` | previous.r1~new.r1 | `presets/s28` | api_readback | — | — | — | — | differs | — |
+| `tier0/semantics/export-presets-ocio` | previous.r2~new.r2 | `presets/s28` | api_readback | — | — | — | — | differs | — |
+| `tier0/semantics/height-normal-mesh-map` | previous.r1~new.r1 | `panel/00-texture-set-settings-height-to-normal-method-s4` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics/height-normal-mesh-map` | previous.r1~new.r1 | `panel/01-texture-set-settings-height-to-normal-method-s5` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics/height-normal-mesh-map` | previous.r1~new.r1 | `panel/02-texture-set-settings-height-to-normal-method-s6` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics/height-normal-mesh-map` | previous.r1~new.r1 | `panel/03-texture-set-settings-height-to-normal-method-s7` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics/height-normal-mesh-map` | previous.r2~new.r2 | `panel/00-texture-set-settings-height-to-normal-method-s4` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics/height-normal-mesh-map` | previous.r2~new.r2 | `panel/01-texture-set-settings-height-to-normal-method-s5` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics/height-normal-mesh-map` | previous.r2~new.r2 | `panel/02-texture-set-settings-height-to-normal-method-s6` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics/height-normal-mesh-map` | previous.r2~new.r2 | `panel/03-texture-set-settings-height-to-normal-method-s7` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics/height-normal-resolution-1024-sobel` | previous.r1~new.r1 | `panel/00-texture-set-settings-height-to-normal-method-s0` | settings_panel_evidence | — | — | — | — | differs | — |
+| `tier0/semantics/height-normal-resolution-1024-sobel` | previous.r2~new.r2 | `panel/00-texture-set-settings-height-to-normal-method-s0` | settings_panel_evidence | — | — | — | — | differs | — |
 
 ## 4. Prepared register entries (decisions 017, 034 (c))
 

@@ -1,0 +1,292 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/api-probes/p22b-host-application",
+  "tier": "0",
+  "domain": "tier0/api-probes/p22b-host-application",
+  "description": "API probe P22-B (decision 297): on the plane, application.version() and version_info(); the six logging severities INFO, WARNING, ERROR, DBG_INFO, DBG_WARNING and DBG_ERROR read back, logging.info, warning and error, and logging.log with each severity on the channel 'uzp_probe' (each returns or raises); js.evaluate of six read-only expressions of the JavaScript API (the Painter version, isOpen, the project name and the three map-export identifier lists); ui.get_current_mode, then switch_to_mode to the UIMode members Baking, Visualisation and Edition, each followed by get_current_mode; in the first session and after save and reopen.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.event.Dispatcher.connect",
+        "args": {
+          "events": [
+            "BusyStatusChanged",
+            "ProjectEditionEntered",
+            "ProjectEditionLeft"
+          ]
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.application.version",
+        "args": {}
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.application.version_info",
+        "args": {}
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.logging.INFO",
+        "args": {}
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.logging.WARNING",
+        "args": {}
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.logging.ERROR",
+        "args": {}
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.logging.DBG_INFO",
+        "args": {}
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.logging.DBG_WARNING",
+        "args": {}
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.logging.DBG_ERROR",
+        "args": {}
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.logging.info",
+        "args": {
+          "message": "uzp host probe: info",
+          "probe": true
+        }
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.logging.warning",
+        "args": {
+          "message": "uzp host probe: warning",
+          "probe": true
+        }
+      },
+      {
+        "step": 13,
+        "call": "substance_painter.logging.error",
+        "args": {
+          "message": "uzp host probe: error",
+          "probe": true
+        }
+      },
+      {
+        "step": 14,
+        "call": "substance_painter.logging.log",
+        "args": {
+          "severity": "INFO",
+          "channel": "uzp_probe",
+          "message": "uzp host probe: log INFO",
+          "probe": true
+        }
+      },
+      {
+        "step": 15,
+        "call": "substance_painter.logging.log",
+        "args": {
+          "severity": "WARNING",
+          "channel": "uzp_probe",
+          "message": "uzp host probe: log WARNING",
+          "probe": true
+        }
+      },
+      {
+        "step": 16,
+        "call": "substance_painter.logging.log",
+        "args": {
+          "severity": "ERROR",
+          "channel": "uzp_probe",
+          "message": "uzp host probe: log ERROR",
+          "probe": true
+        }
+      },
+      {
+        "step": 17,
+        "call": "substance_painter.logging.log",
+        "args": {
+          "severity": "DBG_INFO",
+          "channel": "uzp_probe",
+          "message": "uzp host probe: log DBG_INFO",
+          "probe": true
+        }
+      },
+      {
+        "step": 18,
+        "call": "substance_painter.logging.log",
+        "args": {
+          "severity": "DBG_WARNING",
+          "channel": "uzp_probe",
+          "message": "uzp host probe: log DBG_WARNING",
+          "probe": true
+        }
+      },
+      {
+        "step": 19,
+        "call": "substance_painter.logging.log",
+        "args": {
+          "severity": "DBG_ERROR",
+          "channel": "uzp_probe",
+          "message": "uzp host probe: log DBG_ERROR",
+          "probe": true
+        }
+      },
+      {
+        "step": 20,
+        "call": "substance_painter.js.evaluate",
+        "args": {
+          "code": "alg.version.painter"
+        }
+      },
+      {
+        "step": 21,
+        "call": "substance_painter.js.evaluate",
+        "args": {
+          "code": "alg.project.isOpen()"
+        }
+      },
+      {
+        "step": 22,
+        "call": "substance_painter.js.evaluate",
+        "args": {
+          "code": "alg.project.name()"
+        }
+      },
+      {
+        "step": 23,
+        "call": "substance_painter.js.evaluate",
+        "args": {
+          "code": "alg.mapexport.channelIdentifiers()"
+        }
+      },
+      {
+        "step": 24,
+        "call": "substance_painter.js.evaluate",
+        "args": {
+          "code": "alg.mapexport.convertedMapIdentifiers()"
+        }
+      },
+      {
+        "step": 25,
+        "call": "substance_painter.js.evaluate",
+        "args": {
+          "code": "alg.mapexport.meshMapIdentifiers()"
+        }
+      },
+      {
+        "step": 26,
+        "call": "substance_painter.ui.get_current_mode",
+        "args": {}
+      },
+      {
+        "step": 27,
+        "call": "substance_painter.ui.switch_to_mode",
+        "args": {
+          "mode": "Baking",
+          "probe": true
+        }
+      },
+      {
+        "step": 28,
+        "call": "substance_painter.ui.get_current_mode",
+        "args": {}
+      },
+      {
+        "step": 29,
+        "call": "substance_painter.ui.switch_to_mode",
+        "args": {
+          "mode": "Visualisation",
+          "probe": true
+        }
+      },
+      {
+        "step": 30,
+        "call": "substance_painter.ui.get_current_mode",
+        "args": {}
+      },
+      {
+        "step": 31,
+        "call": "substance_painter.ui.switch_to_mode",
+        "args": {
+          "mode": "Edition",
+          "probe": true
+        }
+      },
+      {
+        "step": 32,
+        "call": "substance_painter.ui.get_current_mode",
+        "args": {}
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "f6bff39e102abbf18878e0ceb49fba65ebfd476b4c9e7f0a30c09f9f6c2a7051",
+      "size_bytes": 34670
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "332ddce6024e25f9b84ec9ce03850aa0c52809a6ba64a43283ef0ef7cf1edd4b",
+      "size_bytes": 402
+    }
+  ]
+}

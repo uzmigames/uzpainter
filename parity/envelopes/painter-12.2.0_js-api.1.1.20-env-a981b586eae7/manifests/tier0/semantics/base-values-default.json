@@ -1,0 +1,395 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/semantics/base-values-default",
+  "tier": "0",
+  "domain": "tier0/stack/base-values",
+  "description": "Stack base values (04 section 2 step 1): empty project on the authored plane created with no template (Painter's default), one channel added per ChannelFormat member, every documented document map requested with no layer in the stack.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User0",
+          "format": "sRGB8"
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User1",
+          "format": "RGB8"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User2",
+          "format": "RGB16"
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User3",
+          "format": "RGB16F"
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User4",
+          "format": "RGB32F"
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User5",
+          "format": "L8"
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User6",
+          "format": "L16"
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User7",
+          "format": "L16F"
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "Scattering",
+          "format": "L32F"
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/basecolor:RGB",
+            "documentMap/height:RGB",
+            "documentMap/specular:RGB",
+            "documentMap/opacity:RGB",
+            "documentMap/emissive:RGB",
+            "documentMap/displacement:RGB",
+            "documentMap/glossiness:RGB",
+            "documentMap/roughness:RGB",
+            "documentMap/anisotropylevel:RGB",
+            "documentMap/anisotropyangle:RGB",
+            "documentMap/user0:RGB",
+            "documentMap/user1:RGB",
+            "documentMap/user2:RGB"
+          ],
+          "file_format": "png",
+          "bit_depth": 16,
+          "padding": "infinite",
+          "dithering": false
+        }
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/transmissive:RGB",
+            "documentMap/reflection:RGB",
+            "documentMap/ior:RGB",
+            "documentMap/metallic:RGB",
+            "documentMap/normal:RGB",
+            "documentMap/ambientOcclusion:RGB",
+            "documentMap/diffuse:RGB",
+            "documentMap/specularlevel:RGB",
+            "documentMap/blendingmask:RGB",
+            "documentMap/user5:L",
+            "documentMap/user6:L"
+          ],
+          "file_format": "png",
+          "bit_depth": 16,
+          "padding": "infinite",
+          "dithering": false
+        }
+      },
+      {
+        "step": 13,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/user3:RGB",
+            "documentMap/user4:RGB",
+            "documentMap/user7:L",
+            "documentMap/scattering:L"
+          ],
+          "file_format": "exr",
+          "bit_depth": "32f",
+          "padding": "infinite",
+          "dithering": false
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.exr.bit_depth",
+      "value": "32f",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.png.bit_depth",
+      "value": 16,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "infinite",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "54a6a6f120a3d26f73addb39bd9c59adcacd5155e19489994a315df3a06d90e3",
+      "size_bytes": 20007
+    },
+    {
+      "record_id": "r1-uzp_plane-basecolor",
+      "kind": "exported_map",
+      "sha256": "6ae3f30315b8fa556cd1989c4ecac6b817d1ba51b3961ed1aa19858e5cc032aa",
+      "size_bytes": 1008
+    },
+    {
+      "record_id": "r1-uzp_plane-height",
+      "kind": "exported_map",
+      "sha256": "466f2ab11bc13488afc0b702d3973a24760b507b3623b8a8f536142efa836c16",
+      "size_bytes": 1007
+    },
+    {
+      "record_id": "r1-uzp_plane-roughness",
+      "kind": "exported_map",
+      "sha256": "239f1897a3ca37cd5d4cfedd8c6d596905b7c184bb55ee04c615eab714e00bf5",
+      "size_bytes": 1007
+    },
+    {
+      "record_id": "r1-uzp_plane-user0",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r1-uzp_plane-user1",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r1-uzp_plane-user2",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r1-uzp_plane-metallic",
+      "kind": "exported_map",
+      "sha256": "af21f170dbaaac8060ee3f32aef093cf1783ad9dc278022e8e3cbf05d13d7344",
+      "size_bytes": 482
+    },
+    {
+      "record_id": "r1-uzp_plane-normal",
+      "kind": "exported_map",
+      "sha256": "d64c3da89845b1693514bf7f2304e8d476004d66c395a20d2367d30d3a7dcd3d",
+      "size_bytes": 1006
+    },
+    {
+      "record_id": "r1-uzp_plane-user5",
+      "kind": "exported_map",
+      "sha256": "e19c7af6a2512fff3ca76c48755ad80b2a4698702290a843aa4fbb3ac3c08773",
+      "size_bytes": 716
+    },
+    {
+      "record_id": "r1-uzp_plane-user6",
+      "kind": "exported_map",
+      "sha256": "e19c7af6a2512fff3ca76c48755ad80b2a4698702290a843aa4fbb3ac3c08773",
+      "size_bytes": 716
+    },
+    {
+      "record_id": "r1-uzp_plane-user3",
+      "kind": "exported_map",
+      "sha256": "51a6c5756527066beca438d98e7196d6968df6dc953f25711e27f93e9a3e465a",
+      "size_bytes": 3057
+    },
+    {
+      "record_id": "r1-uzp_plane-user4",
+      "kind": "exported_map",
+      "sha256": "51a6c5756527066beca438d98e7196d6968df6dc953f25711e27f93e9a3e465a",
+      "size_bytes": 3057
+    },
+    {
+      "record_id": "r1-uzp_plane-user7",
+      "kind": "exported_map",
+      "sha256": "a28f05b4a83bb11f5c5884ed250cb28983f61e67493b2ac563e49cb12f988ef2",
+      "size_bytes": 1453
+    },
+    {
+      "record_id": "r1-uzp_plane-scattering",
+      "kind": "exported_map",
+      "sha256": "a28f05b4a83bb11f5c5884ed250cb28983f61e67493b2ac563e49cb12f988ef2",
+      "size_bytes": 1453
+    },
+    {
+      "record_id": "r2-uzp_plane-basecolor",
+      "kind": "exported_map",
+      "sha256": "6ae3f30315b8fa556cd1989c4ecac6b817d1ba51b3961ed1aa19858e5cc032aa",
+      "size_bytes": 1008
+    },
+    {
+      "record_id": "r2-uzp_plane-height",
+      "kind": "exported_map",
+      "sha256": "466f2ab11bc13488afc0b702d3973a24760b507b3623b8a8f536142efa836c16",
+      "size_bytes": 1007
+    },
+    {
+      "record_id": "r2-uzp_plane-roughness",
+      "kind": "exported_map",
+      "sha256": "239f1897a3ca37cd5d4cfedd8c6d596905b7c184bb55ee04c615eab714e00bf5",
+      "size_bytes": 1007
+    },
+    {
+      "record_id": "r2-uzp_plane-user0",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r2-uzp_plane-user1",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r2-uzp_plane-user2",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r2-uzp_plane-metallic",
+      "kind": "exported_map",
+      "sha256": "af21f170dbaaac8060ee3f32aef093cf1783ad9dc278022e8e3cbf05d13d7344",
+      "size_bytes": 482
+    },
+    {
+      "record_id": "r2-uzp_plane-normal",
+      "kind": "exported_map",
+      "sha256": "d64c3da89845b1693514bf7f2304e8d476004d66c395a20d2367d30d3a7dcd3d",
+      "size_bytes": 1006
+    },
+    {
+      "record_id": "r2-uzp_plane-user5",
+      "kind": "exported_map",
+      "sha256": "e19c7af6a2512fff3ca76c48755ad80b2a4698702290a843aa4fbb3ac3c08773",
+      "size_bytes": 716
+    },
+    {
+      "record_id": "r2-uzp_plane-user6",
+      "kind": "exported_map",
+      "sha256": "e19c7af6a2512fff3ca76c48755ad80b2a4698702290a843aa4fbb3ac3c08773",
+      "size_bytes": 716
+    },
+    {
+      "record_id": "r2-uzp_plane-user3",
+      "kind": "exported_map",
+      "sha256": "51a6c5756527066beca438d98e7196d6968df6dc953f25711e27f93e9a3e465a",
+      "size_bytes": 3057
+    },
+    {
+      "record_id": "r2-uzp_plane-user4",
+      "kind": "exported_map",
+      "sha256": "51a6c5756527066beca438d98e7196d6968df6dc953f25711e27f93e9a3e465a",
+      "size_bytes": 3057
+    },
+    {
+      "record_id": "r2-uzp_plane-user7",
+      "kind": "exported_map",
+      "sha256": "a28f05b4a83bb11f5c5884ed250cb28983f61e67493b2ac563e49cb12f988ef2",
+      "size_bytes": 1453
+    },
+    {
+      "record_id": "r2-uzp_plane-scattering",
+      "kind": "exported_map",
+      "sha256": "a28f05b4a83bb11f5c5884ed250cb28983f61e67493b2ac563e49cb12f988ef2",
+      "size_bytes": 1453
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "332ddce6024e25f9b84ec9ce03850aa0c52809a6ba64a43283ef0ef7cf1edd4b",
+      "size_bytes": 402
+    }
+  ]
+}

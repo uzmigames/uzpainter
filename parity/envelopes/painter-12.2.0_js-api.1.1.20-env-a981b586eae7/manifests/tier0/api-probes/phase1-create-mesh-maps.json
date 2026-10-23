@@ -1,0 +1,234 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/api-probes/phase1-create-mesh-maps",
+  "tier": "0",
+  "domain": "tier0/api-probes/phase1-create-mesh-maps",
+  "description": "API probe P21-A (decision 110): project.create(plane, mesh_map_file_paths) with one file per mesh-map name the documented export configuration lists (ambient_occlusion, id, curvature, normal_base, world_space_normals, position, thickness), each named uzp_plane_<name> after the plane's texture set; get_mesh_map_resource of all ten MeshMapUsage members, in the first session and after save/reopen, with the events. BentNormals, Height and Opacity have no documented name and are read back only.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    },
+    {
+      "input_id": "uzp_plane_ambient_occlusion",
+      "kind": "image",
+      "path": "parity/fixtures/api-probes/ao-white.png",
+      "sha256": "c73222e9295248c64101f2de610f4bc02a512b5600fb7de720840d10bdb13c91",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0",
+        "note": "16x16 8-bit grey, all 255."
+      }
+    },
+    {
+      "input_id": "uzp_plane_id",
+      "kind": "image",
+      "path": "parity/fixtures/api-probes/checker-16.png",
+      "sha256": "4d1acf002ea180ad1af069b24c114ac41f58784b347174251b665673d7330126",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0",
+        "note": "16x16 8-bit RGB checker of 4x4 cells, (204,51,26) and (26,128,204)."
+      }
+    },
+    {
+      "input_id": "uzp_plane_curvature",
+      "kind": "image",
+      "path": "parity/fixtures/api-probes/mask-left-half.png",
+      "sha256": "f5d8e7f1c0bc3b577833422141afee43682f1b1fe28696e51de48e3031ccc724",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0",
+        "note": "16x16 8-bit grey: left half 255, right half 0."
+      }
+    },
+    {
+      "input_id": "uzp_plane_normal_base",
+      "kind": "image",
+      "path": "parity/fixtures/api-probes/normal-flat.png",
+      "sha256": "aa552c67f483c6ab010b10e50c81f3a6bdf3858c2d066901f6f0151e12ed2594",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    },
+    {
+      "input_id": "uzp_plane_world_space_normals",
+      "kind": "image",
+      "path": "parity/fixtures/api-probes/normal-flat.png",
+      "sha256": "aa552c67f483c6ab010b10e50c81f3a6bdf3858c2d066901f6f0151e12ed2594",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    },
+    {
+      "input_id": "uzp_plane_position",
+      "kind": "image",
+      "path": "parity/fixtures/api-probes/checker-16.png",
+      "sha256": "4d1acf002ea180ad1af069b24c114ac41f58784b347174251b665673d7330126",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0",
+        "note": "16x16 8-bit RGB checker of 4x4 cells, (204,51,26) and (26,128,204)."
+      }
+    },
+    {
+      "input_id": "uzp_plane_thickness",
+      "kind": "image",
+      "path": "parity/fixtures/api-probes/ao-white.png",
+      "sha256": "c73222e9295248c64101f2de610f4bc02a512b5600fb7de720840d10bdb13c91",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0",
+        "note": "16x16 8-bit grey, all 255."
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256,
+          "mesh_maps": [
+            "uzp_plane_ambient_occlusion",
+            "uzp_plane_id",
+            "uzp_plane_curvature",
+            "uzp_plane_normal_base",
+            "uzp_plane_world_space_normals",
+            "uzp_plane_position",
+            "uzp_plane_thickness"
+          ]
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.event.Dispatcher.connect",
+        "args": {
+          "events": [
+            "BusyStatusChanged"
+          ]
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.textureset.TextureSet.get_mesh_map_resource",
+        "args": {
+          "usage": "AO"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.textureset.TextureSet.get_mesh_map_resource",
+        "args": {
+          "usage": "BentNormals"
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.textureset.TextureSet.get_mesh_map_resource",
+        "args": {
+          "usage": "Curvature"
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.textureset.TextureSet.get_mesh_map_resource",
+        "args": {
+          "usage": "Height"
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.textureset.TextureSet.get_mesh_map_resource",
+        "args": {
+          "usage": "ID"
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.textureset.TextureSet.get_mesh_map_resource",
+        "args": {
+          "usage": "Normal"
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.textureset.TextureSet.get_mesh_map_resource",
+        "args": {
+          "usage": "Opacity"
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.textureset.TextureSet.get_mesh_map_resource",
+        "args": {
+          "usage": "Position"
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.textureset.TextureSet.get_mesh_map_resource",
+        "args": {
+          "usage": "Thickness"
+        }
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.textureset.TextureSet.get_mesh_map_resource",
+        "args": {
+          "usage": "WorldSpaceNormal"
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "97cce7db7ae29e688964c26ecdd67773876a78d68ab85339955452296148a808",
+      "size_bytes": 17338
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "332ddce6024e25f9b84ec9ce03850aa0c52809a6ba64a43283ef0ef7cf1edd4b",
+      "size_bytes": 402
+    }
+  ]
+}

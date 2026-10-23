@@ -1,0 +1,288 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/api-probes/insert-positions",
+  "tier": "0",
+  "domain": "tier0/api-probes/insert-positions",
+  "description": "API probe: insert_* position rules. Valid insertions build a fill layer with content and mask effects and a group; the probes repeat each insertion the documented table does not allow and record the error, and two undocumented cases (a mask effect into a layer without a mask, a content effect into a group) are applied once; the stack structure is read back.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "position": "top"
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.layerstack.insert_group",
+        "args": {
+          "position": "top"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "inside_step": 3,
+          "node_stack": "Substack"
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "inside_step": 2,
+          "node_stack": "Content"
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.layerstack.LayerNode.add_mask",
+        "args": {
+          "node_step": 2,
+          "background": "White"
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.layerstack.insert_levels_effect",
+        "args": {
+          "inside_step": 2,
+          "node_stack": "Mask"
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.layerstack.insert_compare_mask_effect",
+        "args": {
+          "above_step": 7
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.layerstack.insert_levels_effect",
+        "args": {
+          "above_step": 5
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.layerstack.insert_group",
+        "args": {
+          "below_step": 2
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "inside_step": 4,
+          "node_stack": "Mask"
+        }
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "inside_step": 3,
+          "node_stack": "Content"
+        }
+      },
+      {
+        "step": 13,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "inside_step": 2,
+          "node_stack": "Substack",
+          "probe": true
+        }
+      },
+      {
+        "step": 14,
+        "call": "substance_painter.layerstack.insert_group",
+        "args": {
+          "inside_step": 2,
+          "node_stack": "Content",
+          "probe": true
+        }
+      },
+      {
+        "step": 15,
+        "call": "substance_painter.layerstack.insert_group",
+        "args": {
+          "inside_step": 2,
+          "node_stack": "Mask",
+          "probe": true
+        }
+      },
+      {
+        "step": 16,
+        "call": "substance_painter.layerstack.insert_levels_effect",
+        "args": {
+          "position": "top",
+          "probe": true
+        }
+      },
+      {
+        "step": 17,
+        "call": "substance_painter.layerstack.insert_levels_effect",
+        "args": {
+          "above_step": 2,
+          "probe": true
+        }
+      },
+      {
+        "step": 18,
+        "call": "substance_painter.layerstack.insert_group",
+        "args": {
+          "above_step": 5,
+          "probe": true
+        }
+      },
+      {
+        "step": 19,
+        "call": "substance_painter.layerstack.insert_compare_mask_effect",
+        "args": {
+          "inside_step": 2,
+          "node_stack": "Content",
+          "probe": true
+        }
+      },
+      {
+        "step": 20,
+        "call": "substance_painter.layerstack.insert_color_selection_effect",
+        "args": {
+          "inside_step": 2,
+          "node_stack": "Content",
+          "probe": true
+        }
+      },
+      {
+        "step": 21,
+        "call": "substance_painter.layerstack.insert_compare_mask_effect",
+        "args": {
+          "above_step": 5,
+          "probe": true
+        }
+      },
+      {
+        "step": 22,
+        "call": "substance_painter.layerstack.insert_color_selection_effect",
+        "args": {
+          "position": "top",
+          "probe": true
+        }
+      },
+      {
+        "step": 23,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "inside_step": 5,
+          "node_stack": "Content",
+          "probe": true
+        }
+      },
+      {
+        "step": 24,
+        "call": "substance_painter.layerstack.get_root_layer_nodes",
+        "args": {}
+      },
+      {
+        "step": 25,
+        "call": "substance_painter.layerstack.LayerNode.content_effects",
+        "args": {
+          "node_step": 2
+        }
+      },
+      {
+        "step": 26,
+        "call": "substance_painter.layerstack.LayerNode.mask_effects",
+        "args": {
+          "node_step": 2
+        }
+      },
+      {
+        "step": 27,
+        "call": "substance_painter.layerstack.GroupLayerNode.sub_layers",
+        "args": {
+          "node_step": 3
+        }
+      },
+      {
+        "step": 28,
+        "call": "substance_painter.layerstack.Node.get_type",
+        "args": {
+          "node_step": 5
+        }
+      },
+      {
+        "step": 29,
+        "call": "substance_painter.layerstack.Node.get_type",
+        "args": {
+          "node_step": 8
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "64d338d2baf7ce82f0490153e5bda91ea6216f2374d2cd2e74fe046dc79ca5df",
+      "size_bytes": 23990
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "332ddce6024e25f9b84ec9ce03850aa0c52809a6ba64a43283ef0ef7cf1edd4b",
+      "size_bytes": 402
+    }
+  ]
+}

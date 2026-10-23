@@ -1,0 +1,407 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/api-probes/phase1-color-srgb-value",
+  "tier": "0",
+  "domain": "tier0/api-probes/phase1-color-srgb-value",
+  "description": "API probe P22-B, colour management (phase1.24 item 3.4, decision 296), Legacy session: on the plane, a fill layer with uniform working-space colours on BaseColor and Height; in the first session and after save/reopen: colormanagement.Color.sRGB and Color.value of each source colour (SourceUniformColor.get_color), Color.sRGB assigned on each and set back with SourceUniformColor.set_color, read back through get_source, Color.sRGB and Color.value; then Color.value and Color.sRGB of colours built with no colour space and with GenericColorSpace sRGB, Working and Raw, and Color.sRGB assigned on built colours of each space (the conversions read back). Exercises Color.sRGB (getter and setter) and Color.value.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.event.Dispatcher.connect",
+        "args": {
+          "events": [
+            "BusyStatusChanged"
+          ]
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "position": "top"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.layerstack.Node.set_name",
+        "args": {
+          "node_step": 3,
+          "name": "uzp fill"
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 3,
+          "channels": [
+            "BaseColor",
+            "Height"
+          ]
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.5,
+            0.25,
+            0.75
+          ],
+          "color_space": "Working"
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "Height",
+          "color": [
+            0.3,
+            0.3,
+            0.3
+          ],
+          "color_space": "Working"
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.colormanagement.Color.sRGB",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.colormanagement.Color.value",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.colormanagement.Color.sRGB",
+        "args": {
+          "node_step": 3,
+          "channel": "Height"
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.colormanagement.Color.value",
+        "args": {
+          "node_step": 3,
+          "channel": "Height"
+        }
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.colormanagement.Color.sRGB",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "value": [
+            0.2,
+            0.4,
+            0.6
+          ],
+          "probe": true
+        }
+      },
+      {
+        "step": 13,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 14,
+        "call": "substance_painter.colormanagement.Color.sRGB",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 15,
+        "call": "substance_painter.colormanagement.Color.value",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 16,
+        "call": "substance_painter.colormanagement.Color.sRGB",
+        "args": {
+          "node_step": 3,
+          "channel": "Height",
+          "value": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "probe": true
+        }
+      },
+      {
+        "step": 17,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "Height"
+        }
+      },
+      {
+        "step": 18,
+        "call": "substance_painter.colormanagement.Color.sRGB",
+        "args": {
+          "node_step": 3,
+          "channel": "Height"
+        }
+      },
+      {
+        "step": 19,
+        "call": "substance_painter.colormanagement.Color.value",
+        "args": {
+          "node_step": 3,
+          "channel": "Height"
+        }
+      },
+      {
+        "step": 20,
+        "call": "substance_painter.colormanagement.Color.value",
+        "args": {
+          "color": [
+            1.0,
+            0.54902,
+            0.0
+          ]
+        }
+      },
+      {
+        "step": 21,
+        "call": "substance_painter.colormanagement.Color.sRGB",
+        "args": {
+          "color": [
+            1.0,
+            0.54902,
+            0.0
+          ]
+        }
+      },
+      {
+        "step": 22,
+        "call": "substance_painter.colormanagement.Color.value",
+        "args": {
+          "color": [
+            1.0,
+            0.54902,
+            0.0
+          ],
+          "color_space": "sRGB"
+        }
+      },
+      {
+        "step": 23,
+        "call": "substance_painter.colormanagement.Color.sRGB",
+        "args": {
+          "color": [
+            1.0,
+            0.54902,
+            0.0
+          ],
+          "color_space": "sRGB"
+        }
+      },
+      {
+        "step": 24,
+        "call": "substance_painter.colormanagement.Color.value",
+        "args": {
+          "color": [
+            1.0,
+            0.54902,
+            0.0
+          ],
+          "color_space": "Working"
+        }
+      },
+      {
+        "step": 25,
+        "call": "substance_painter.colormanagement.Color.sRGB",
+        "args": {
+          "color": [
+            1.0,
+            0.54902,
+            0.0
+          ],
+          "color_space": "Working"
+        }
+      },
+      {
+        "step": 26,
+        "call": "substance_painter.colormanagement.Color.value",
+        "args": {
+          "color": [
+            1.0,
+            0.54902,
+            0.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 27,
+        "call": "substance_painter.colormanagement.Color.sRGB",
+        "args": {
+          "color": [
+            1.0,
+            0.54902,
+            0.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 28,
+        "call": "substance_painter.colormanagement.Color.sRGB",
+        "args": {
+          "color": [
+            0.25,
+            0.5,
+            0.75
+          ],
+          "value": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "color_space": "Working",
+          "probe": true
+        }
+      },
+      {
+        "step": 29,
+        "call": "substance_painter.colormanagement.Color.sRGB",
+        "args": {
+          "color": [
+            0.25,
+            0.5,
+            0.75
+          ],
+          "value": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 30,
+        "call": "substance_painter.colormanagement.Color.sRGB",
+        "args": {
+          "color": [
+            0.25,
+            0.5,
+            0.75
+          ],
+          "value": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "color_space": "Raw",
+          "probe": true
+        }
+      },
+      {
+        "step": 31,
+        "call": "substance_painter.colormanagement.Color.sRGB",
+        "args": {
+          "color": [
+            0.25,
+            0.5,
+            0.75
+          ],
+          "value": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "probe": true
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "2b21ebbae3a182785248f9e1da17068013187599a23ad0d97af88c1aeab2060f",
+      "size_bytes": 35142
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "332ddce6024e25f9b84ec9ce03850aa0c52809a6ba64a43283ef0ef7cf1edd4b",
+      "size_bytes": 402
+    }
+  ]
+}

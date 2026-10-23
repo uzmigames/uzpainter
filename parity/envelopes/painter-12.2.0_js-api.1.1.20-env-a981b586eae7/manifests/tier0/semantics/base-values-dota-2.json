@@ -1,0 +1,266 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/semantics/base-values-dota-2",
+  "tier": "0",
+  "domain": "tier0/stack/base-values",
+  "description": "Stack base values (04 section 2 step 1): empty project on the authored plane created with the shipped template templates/Dota 2.spt; every documented document map and user channel 0-7 requested with no layer in the stack (Painter writes the ones the template has), plus the constant white default map.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256,
+          "template": "templates/Dota 2.spt"
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/basecolor:RGB",
+            "documentMap/height:RGB",
+            "documentMap/specular:RGB",
+            "documentMap/opacity:RGB",
+            "documentMap/emissive:RGB",
+            "documentMap/displacement:RGB",
+            "documentMap/glossiness:RGB",
+            "documentMap/roughness:RGB",
+            "documentMap/anisotropylevel:RGB",
+            "documentMap/anisotropyangle:RGB",
+            "documentMap/transmissive:RGB",
+            "documentMap/scattering:RGB",
+            "documentMap/reflection:RGB",
+            "documentMap/ior:RGB",
+            "defaultMap/white:L"
+          ],
+          "file_format": "png",
+          "bit_depth": 16,
+          "padding": "infinite",
+          "dithering": false
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/metallic:RGB",
+            "documentMap/normal:RGB",
+            "documentMap/ambientOcclusion:RGB",
+            "documentMap/diffuse:RGB",
+            "documentMap/specularlevel:RGB",
+            "documentMap/blendingmask:RGB",
+            "documentMap/user0:RGB",
+            "documentMap/user1:RGB",
+            "documentMap/user2:RGB",
+            "documentMap/user3:RGB",
+            "documentMap/user4:RGB",
+            "documentMap/user5:RGB",
+            "documentMap/user6:RGB",
+            "documentMap/user7:RGB",
+            "defaultMap/white:L"
+          ],
+          "file_format": "png",
+          "bit_depth": 16,
+          "padding": "infinite",
+          "dithering": false
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "project.template",
+      "value": "templates/Dota 2.spt",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.png.bit_depth",
+      "value": 16,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "infinite",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "763109b2b9d648465a67c9cf591bd89cb546399703f768ff8359db9d81ceef11",
+      "size_bytes": 15734
+    },
+    {
+      "record_id": "r1-uzp_plane-basecolor",
+      "kind": "exported_map",
+      "sha256": "67e0c8a2c67533ecce1b06f50b9984edc4a510442a044b6830942e4ec4861bca",
+      "size_bytes": 1009
+    },
+    {
+      "record_id": "r1-uzp_plane-specular",
+      "kind": "exported_map",
+      "sha256": "de9d3688b9c487a60630aeb474c2f05cf351d2b522765e84419c75b615f5a9c3",
+      "size_bytes": 1009
+    },
+    {
+      "record_id": "r1-uzp_plane-opacity",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r1-uzp_plane-emissive",
+      "kind": "exported_map",
+      "sha256": "af21f170dbaaac8060ee3f32aef093cf1783ad9dc278022e8e3cbf05d13d7344",
+      "size_bytes": 482
+    },
+    {
+      "record_id": "r1-uzp_plane-glossiness",
+      "kind": "exported_map",
+      "sha256": "66be709054d52fdd23215ce4bc51c6aca229083e26085ac797713701b7331995",
+      "size_bytes": 1007
+    },
+    {
+      "record_id": "r1-uzp_plane-metallic",
+      "kind": "exported_map",
+      "sha256": "af21f170dbaaac8060ee3f32aef093cf1783ad9dc278022e8e3cbf05d13d7344",
+      "size_bytes": 482
+    },
+    {
+      "record_id": "r1-uzp_plane-user0",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r1-uzp_plane-user1",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r1-uzp_plane-user2",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r1-uzp_plane-user3",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r2-uzp_plane-basecolor",
+      "kind": "exported_map",
+      "sha256": "67e0c8a2c67533ecce1b06f50b9984edc4a510442a044b6830942e4ec4861bca",
+      "size_bytes": 1009
+    },
+    {
+      "record_id": "r2-uzp_plane-specular",
+      "kind": "exported_map",
+      "sha256": "de9d3688b9c487a60630aeb474c2f05cf351d2b522765e84419c75b615f5a9c3",
+      "size_bytes": 1009
+    },
+    {
+      "record_id": "r2-uzp_plane-opacity",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r2-uzp_plane-emissive",
+      "kind": "exported_map",
+      "sha256": "af21f170dbaaac8060ee3f32aef093cf1783ad9dc278022e8e3cbf05d13d7344",
+      "size_bytes": 482
+    },
+    {
+      "record_id": "r2-uzp_plane-glossiness",
+      "kind": "exported_map",
+      "sha256": "66be709054d52fdd23215ce4bc51c6aca229083e26085ac797713701b7331995",
+      "size_bytes": 1007
+    },
+    {
+      "record_id": "r2-uzp_plane-metallic",
+      "kind": "exported_map",
+      "sha256": "af21f170dbaaac8060ee3f32aef093cf1783ad9dc278022e8e3cbf05d13d7344",
+      "size_bytes": 482
+    },
+    {
+      "record_id": "r2-uzp_plane-user0",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r2-uzp_plane-user1",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r2-uzp_plane-user2",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r2-uzp_plane-user3",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "332ddce6024e25f9b84ec9ce03850aa0c52809a6ba64a43283ef0ef7cf1edd4b",
+      "size_bytes": 402
+    }
+  ]
+}

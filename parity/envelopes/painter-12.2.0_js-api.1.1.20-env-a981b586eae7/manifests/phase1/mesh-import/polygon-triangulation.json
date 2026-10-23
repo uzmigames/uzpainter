@@ -1,0 +1,162 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "phase1/mesh-import/polygon-triangulation",
+  "tier": "0",
+  "domain": "bake_map/position",
+  "description": "Polygon triangulation at mesh import (12-mesh-import.md section 3, Tier 0): four non-planar quads, a pentagon and two hexagons of an OBJ; the Position mesh map baked by Painter at 512 px with the low mesh as its own high mesh (LowAsHigh), other baking parameters at their defaults, exported at 16 bits; the triangulation of each polygon is read from the baked positions. Recorded twice (same session; after save and reopen).",
+  "inputs": [
+    {
+      "input_id": "polygons",
+      "kind": "mesh",
+      "path": "parity/fixtures/mesh-import/polygon-triangulation.obj",
+      "sha256": "d3af13b467dd45a3bc58683605cd3956f66dd2165c501cd0289535bb696ee222",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "polygons",
+          "default_texture_resolution": 512
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "OutputSize",
+          "value": [
+            9,
+            9
+          ]
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "LowAsHigh",
+          "value": true
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.baking.BakingParameters.set_enabled_bakers",
+        "args": {
+          "usages": [
+            "Position"
+          ]
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.baking.bake_async",
+        "args": {}
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "meshMap/position:RGB"
+          ],
+          "file_format": "png",
+          "bit_depth": 16,
+          "padding": "passthrough",
+          "dithering": false
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "texture_set.resolution",
+      "value": 512,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "baking.common.OutputSize",
+      "value": 9,
+      "unit": "log2 px",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "baking.common.LowAsHigh",
+      "value": true,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "baking.enabled_bakers",
+      "value": "Position",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.file_format",
+      "value": "png",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.bit_depth",
+      "value": 16,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "passthrough",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "uncontrolled_settings": [
+    "preferences.bake_backend"
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "44b5ab6ca1c40732008f9e050c2d46e62354555870923f66e5149b8b0997c26b",
+      "size_bytes": 6370
+    },
+    {
+      "record_id": "r1-uzp_polygons-position",
+      "kind": "exported_map",
+      "sha256": "89f8c2a134f9e28c9e133286ac8e8d412ec0d3fd864f3484066cd4ba9e850b36",
+      "size_bytes": 82246
+    },
+    {
+      "record_id": "r2-uzp_polygons-position",
+      "kind": "exported_map",
+      "sha256": "89f8c2a134f9e28c9e133286ac8e8d412ec0d3fd864f3484066cd4ba9e850b36",
+      "size_bytes": 82246
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "332ddce6024e25f9b84ec9ce03850aa0c52809a6ba64a43283ef0ef7cf1edd4b",
+      "size_bytes": 402
+    }
+  ]
+}

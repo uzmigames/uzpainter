@@ -1,0 +1,280 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/api-probes/phase1-delete-node",
+  "tier": "0",
+  "domain": "tier0/api-probes/phase1-delete-node",
+  "description": "API probe (R10): layerstack.delete_node of a fill layer and of a group holding a fill; the structure, the remaining uids and whether the deleted uids still resolve, after the delete and after save/reopen, with the events and the BaseColor export.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.event.Dispatcher.connect",
+        "args": {
+          "events": [
+            "LayerStacksModelDataChanged",
+            "BusyStatusChanged"
+          ]
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "position": "top"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 3,
+          "channels": [
+            "BaseColor"
+          ]
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.8,
+            0.2,
+            0.1
+          ],
+          "color_space": "sRGB"
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.layerstack.Node.set_name",
+        "args": {
+          "node_step": 3,
+          "name": "uzp fill A"
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "position": "top"
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 7,
+          "channels": [
+            "BaseColor"
+          ]
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 7,
+          "channel": "BaseColor",
+          "color": [
+            0.1,
+            0.3,
+            0.9
+          ],
+          "color_space": "sRGB"
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.layerstack.Node.set_name",
+        "args": {
+          "node_step": 7,
+          "name": "uzp fill B deleted"
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.layerstack.insert_group",
+        "args": {
+          "position": "top"
+        }
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "inside_step": 11,
+          "node_stack": "Substack"
+        }
+      },
+      {
+        "step": 13,
+        "call": "substance_painter.layerstack.Node.set_name",
+        "args": {
+          "node_step": 12,
+          "name": "uzp fill C in deleted group"
+        }
+      },
+      {
+        "step": 14,
+        "call": "substance_painter.layerstack.delete_node",
+        "args": {
+          "node_step": 7
+        }
+      },
+      {
+        "step": 15,
+        "call": "substance_painter.layerstack.delete_node",
+        "args": {
+          "node_step": 11
+        }
+      },
+      {
+        "step": 16,
+        "call": "substance_painter.layerstack.get_root_layer_nodes"
+      },
+      {
+        "step": 17,
+        "call": "substance_painter.layerstack.Node.uid",
+        "args": {
+          "node_step": 3
+        }
+      },
+      {
+        "step": 18,
+        "call": "substance_painter.layerstack.Node.get_name",
+        "args": {
+          "node_step": 3
+        }
+      },
+      {
+        "step": 19,
+        "call": "substance_painter.layerstack.get_node_by_uid",
+        "args": {
+          "node_step": 7
+        }
+      },
+      {
+        "step": 20,
+        "call": "substance_painter.layerstack.get_node_by_uid",
+        "args": {
+          "node_step": 11
+        }
+      },
+      {
+        "step": 21,
+        "call": "substance_painter.layerstack.get_node_by_uid",
+        "args": {
+          "node_step": 12
+        }
+      },
+      {
+        "step": 22,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/basecolor:RGB"
+          ],
+          "file_format": "png",
+          "bit_depth": 16,
+          "padding": "infinite",
+          "dithering": false
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.file_format",
+      "value": "png",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.bit_depth",
+      "value": 16,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "infinite",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "2f024f6b61039562d6955ab046e6dcc75e15e2d152f78fad905bacfd7e52166e",
+      "size_bytes": 23053
+    },
+    {
+      "record_id": "r1-uzp_plane-basecolor",
+      "kind": "exported_map",
+      "sha256": "3901718d3ecae40616f1aa3857ccc11dcd0bd382313bf4aac24ce12f1153110e",
+      "size_bytes": 1013
+    },
+    {
+      "record_id": "r2-uzp_plane-basecolor",
+      "kind": "exported_map",
+      "sha256": "3901718d3ecae40616f1aa3857ccc11dcd0bd382313bf4aac24ce12f1153110e",
+      "size_bytes": 1013
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "332ddce6024e25f9b84ec9ce03850aa0c52809a6ba64a43283ef0ef7cf1edd4b",
+      "size_bytes": 402
+    }
+  ]
+}

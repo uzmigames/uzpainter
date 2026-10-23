@@ -1,0 +1,330 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/api-probes/p22b-host-resources",
+  "tier": "0",
+  "domain": "tier0/api-probes/p22b-host-resources",
+  "description": "API probe P22-B (decision 297): on the plane, the checker imported as TEXTURE, a second copy as TEXTURE and the checker as COLOR_LUT, GENERATOR and SMART_MATERIAL (each import returns or raises), saved to a work file; then list_project_resources, ResourceID.from_project of the checker and of a missing name, ResourceID.from_url of the imported checker's URL and of a string that is not a resource URL, display.set_environment_resource of the missing resource (documented ResourceNotFoundError) and get_environment_resource; Shelves.add of a probe shelf, Shelves.refresh_all (every shelf's crawl followed), Shelves.remove while the project is open (documented ProjectError); reload_modified_resources_async with SessionFilter, ProjectFilter, ResourcesUsedByProjectFilter, ResourcesListFilter of the checker, ShelvesListFilter of the probe shelf, and ResourcesListFilter of the second copy after its staged file was overwritten with the mesh's bytes (ReloadedResourceError), each with its ReloadResourcesStarted and ReloadResourcesEnded (ReloadedResourceResult and ReloadedResourceError lists); then the project closed, list_project_resources (documented ProjectError), Shelves.remove and Shelves.exists with no project, the project opened again and list_project_resources; in the first session and after save and reopen. The errors are the documented ones of the exception module.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    },
+    {
+      "input_id": "checker",
+      "kind": "image",
+      "path": "parity/fixtures/api-probes/checker-16.png",
+      "sha256": "4d1acf002ea180ad1af069b24c114ac41f58784b347174251b665673d7330126",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0",
+        "note": "16x16 8-bit RGB checker of 4x4 cells, (204,51,26) and (26,128,204)."
+      }
+    },
+    {
+      "input_id": "checker-reload",
+      "kind": "image",
+      "path": "parity/fixtures/api-probes/checker-16.png",
+      "sha256": "4d1acf002ea180ad1af069b24c114ac41f58784b347174251b665673d7330126",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0",
+        "note": "16x16 8-bit RGB checker of 4x4 cells, (204,51,26) and (26,128,204). A second copy: its staged file is overwritten with the mesh's bytes before its reload."
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.event.Dispatcher.connect",
+        "args": {
+          "events": [
+            "BusyStatusChanged",
+            "ReloadResourcesStarted",
+            "ReloadResourcesEnded",
+            "ShelfCrawlingStarted",
+            "ShelfCrawlingEnded"
+          ]
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": {
+          "image": "checker",
+          "usage": "TEXTURE"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": {
+          "image": "checker-reload",
+          "usage": "TEXTURE"
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": {
+          "image": "checker",
+          "usage": "COLOR_LUT"
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": {
+          "image": "checker",
+          "usage": "GENERATOR"
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": {
+          "image": "checker",
+          "usage": "SMART_MATERIAL"
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.project.save_as",
+        "args": {
+          "work_file": "host-resources.spp",
+          "mode": "Full"
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.resource.list_project_resources",
+        "args": {}
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.resource.ResourceID.from_project",
+        "args": {
+          "name": "checker"
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.resource.ResourceID.from_project",
+        "args": {
+          "name": "uzp_missing_environment"
+        }
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.resource.ResourceID.from_url",
+        "args": {
+          "resource_step": 3
+        }
+      },
+      {
+        "step": 13,
+        "call": "substance_painter.resource.ResourceID.from_url",
+        "args": {
+          "url": "uzp-not-a-resource-url"
+        }
+      },
+      {
+        "step": 14,
+        "call": "substance_painter.display.set_environment_resource",
+        "args": {
+          "resource_step": 11,
+          "probe": true
+        }
+      },
+      {
+        "step": 15,
+        "call": "substance_painter.display.get_environment_resource",
+        "args": {}
+      },
+      {
+        "step": 16,
+        "call": "substance_painter.resource.Shelves.add",
+        "args": {
+          "name": "uzp_probe_host_shelf",
+          "folder": "host-shelf",
+          "inputs": [
+            "checker"
+          ],
+          "probe": true
+        }
+      },
+      {
+        "step": 17,
+        "call": "substance_painter.resource.Shelves.refresh_all",
+        "args": {
+          "probe": true
+        }
+      },
+      {
+        "step": 18,
+        "call": "substance_painter.resource.Shelves.remove",
+        "args": {
+          "name": "uzp_probe_host_shelf",
+          "probe": true
+        }
+      },
+      {
+        "step": 19,
+        "call": "substance_painter.resource.reload_modified_resources_async",
+        "args": {
+          "filter": "SessionFilter",
+          "probe": true
+        }
+      },
+      {
+        "step": 20,
+        "call": "substance_painter.resource.reload_modified_resources_async",
+        "args": {
+          "filter": "ProjectFilter",
+          "probe": true
+        }
+      },
+      {
+        "step": 21,
+        "call": "substance_painter.resource.reload_modified_resources_async",
+        "args": {
+          "filter": "ResourcesUsedByProjectFilter",
+          "probe": true
+        }
+      },
+      {
+        "step": 22,
+        "call": "substance_painter.resource.reload_modified_resources_async",
+        "args": {
+          "filter": "ResourcesListFilter",
+          "resource_steps": [
+            3
+          ],
+          "probe": true
+        }
+      },
+      {
+        "step": 23,
+        "call": "substance_painter.resource.reload_modified_resources_async",
+        "args": {
+          "filter": "ShelvesListFilter",
+          "shelves": [
+            "uzp_probe_host_shelf"
+          ],
+          "probe": true
+        }
+      },
+      {
+        "step": 24,
+        "call": "substance_painter.resource.reload_modified_resources_async",
+        "args": {
+          "filter": "ResourcesListFilter",
+          "resource_steps": [
+            4
+          ],
+          "rewrite_input": "checker-reload",
+          "with_input": "plane",
+          "probe": true
+        }
+      },
+      {
+        "step": 25,
+        "call": "substance_painter.resource.is_reload_modified_resources_running",
+        "args": {}
+      },
+      {
+        "step": 26,
+        "call": "substance_painter.project.close",
+        "args": {
+          "probe": true
+        }
+      },
+      {
+        "step": 27,
+        "call": "substance_painter.resource.list_project_resources",
+        "args": {}
+      },
+      {
+        "step": 28,
+        "call": "substance_painter.resource.Shelves.remove",
+        "args": {
+          "name": "uzp_probe_host_shelf",
+          "probe": true
+        }
+      },
+      {
+        "step": 29,
+        "call": "substance_painter.resource.Shelves.exists",
+        "args": {
+          "name": "uzp_probe_host_shelf"
+        }
+      },
+      {
+        "step": 30,
+        "call": "substance_painter.project.open",
+        "args": {
+          "probe": true
+        }
+      },
+      {
+        "step": 31,
+        "call": "substance_painter.resource.list_project_resources",
+        "args": {}
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "3cb6ff7b5f61d2b9baf2f41a98abe59d3a532d5ad24b7d2ad16669e9e6b86a11",
+      "size_bytes": 47106
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "332ddce6024e25f9b84ec9ce03850aa0c52809a6ba64a43283ef0ef7cf1edd4b",
+      "size_bytes": 402
+    }
+  ]
+}

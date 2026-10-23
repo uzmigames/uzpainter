@@ -1,0 +1,1987 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/api-probes/phase1-srgb-uniform-decode-ocio-part2",
+  "tier": "0",
+  "domain": "tier0/api-probes/phase1-srgb-uniform-decode-ocio",
+  "description": "The OCIO twin of API probe P20-B (decisions 107 and 190), recorded in a Session O project (Painter started with OCIO naming its substance config), part 2 of 4 (decision 180: the 320 colours of the single request did not fit a Painter window, so each part sets 80): set_source(BaseColor, Color(r, g, b, sRGB)) on one fill, each read back through get_source (its working-space colour): the greys c/255 for c = 80..159; in the first session and after save/reopen, with the BaseColor export.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.event.Dispatcher.connect",
+        "args": {
+          "events": [
+            "BusyStatusChanged"
+          ]
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "position": "top"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 3,
+          "channels": [
+            "BaseColor"
+          ]
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.3137254901960784,
+            0.3137254901960784,
+            0.3137254901960784
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.3176470588235294,
+            0.3176470588235294,
+            0.3176470588235294
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.3215686274509804,
+            0.3215686274509804,
+            0.3215686274509804
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.3254901960784314,
+            0.3254901960784314,
+            0.3254901960784314
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 13,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.32941176470588235,
+            0.32941176470588235,
+            0.32941176470588235
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 14,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 15,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.3333333333333333,
+            0.3333333333333333,
+            0.3333333333333333
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 16,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 17,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.33725490196078434,
+            0.33725490196078434,
+            0.33725490196078434
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 18,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 19,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.3411764705882353,
+            0.3411764705882353,
+            0.3411764705882353
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 20,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 21,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.34509803921568627,
+            0.34509803921568627,
+            0.34509803921568627
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 22,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 23,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.34901960784313724,
+            0.34901960784313724,
+            0.34901960784313724
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 24,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 25,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.35294117647058826,
+            0.35294117647058826,
+            0.35294117647058826
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 26,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 27,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.3568627450980392,
+            0.3568627450980392,
+            0.3568627450980392
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 28,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 29,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.3607843137254902,
+            0.3607843137254902,
+            0.3607843137254902
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 30,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 31,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.36470588235294116,
+            0.36470588235294116,
+            0.36470588235294116
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 32,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 33,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.3686274509803922,
+            0.3686274509803922,
+            0.3686274509803922
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 34,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 35,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.37254901960784315,
+            0.37254901960784315,
+            0.37254901960784315
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 36,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 37,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.3764705882352941,
+            0.3764705882352941,
+            0.3764705882352941
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 38,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 39,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.3803921568627451,
+            0.3803921568627451,
+            0.3803921568627451
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 40,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 41,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.3843137254901961,
+            0.3843137254901961,
+            0.3843137254901961
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 42,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 43,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.38823529411764707,
+            0.38823529411764707,
+            0.38823529411764707
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 44,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 45,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.39215686274509803,
+            0.39215686274509803,
+            0.39215686274509803
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 46,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 47,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.396078431372549,
+            0.396078431372549,
+            0.396078431372549
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 48,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 49,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.4,
+            0.4,
+            0.4
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 50,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 51,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.403921568627451,
+            0.403921568627451,
+            0.403921568627451
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 52,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 53,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.40784313725490196,
+            0.40784313725490196,
+            0.40784313725490196
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 54,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 55,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.4117647058823529,
+            0.4117647058823529,
+            0.4117647058823529
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 56,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 57,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.41568627450980394,
+            0.41568627450980394,
+            0.41568627450980394
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 58,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 59,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.4196078431372549,
+            0.4196078431372549,
+            0.4196078431372549
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 60,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 61,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.4235294117647059,
+            0.4235294117647059,
+            0.4235294117647059
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 62,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 63,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.42745098039215684,
+            0.42745098039215684,
+            0.42745098039215684
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 64,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 65,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.43137254901960786,
+            0.43137254901960786,
+            0.43137254901960786
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 66,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 67,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.43529411764705883,
+            0.43529411764705883,
+            0.43529411764705883
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 68,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 69,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.4392156862745098,
+            0.4392156862745098,
+            0.4392156862745098
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 70,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 71,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.44313725490196076,
+            0.44313725490196076,
+            0.44313725490196076
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 72,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 73,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.4470588235294118,
+            0.4470588235294118,
+            0.4470588235294118
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 74,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 75,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.45098039215686275,
+            0.45098039215686275,
+            0.45098039215686275
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 76,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 77,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.4549019607843137,
+            0.4549019607843137,
+            0.4549019607843137
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 78,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 79,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.4588235294117647,
+            0.4588235294117647,
+            0.4588235294117647
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 80,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 81,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.4627450980392157,
+            0.4627450980392157,
+            0.4627450980392157
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 82,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 83,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.4666666666666667,
+            0.4666666666666667,
+            0.4666666666666667
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 84,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 85,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.47058823529411764,
+            0.47058823529411764,
+            0.47058823529411764
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 86,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 87,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.4745098039215686,
+            0.4745098039215686,
+            0.4745098039215686
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 88,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 89,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.47843137254901963,
+            0.47843137254901963,
+            0.47843137254901963
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 90,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 91,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.4823529411764706,
+            0.4823529411764706,
+            0.4823529411764706
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 92,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 93,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.48627450980392156,
+            0.48627450980392156,
+            0.48627450980392156
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 94,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 95,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.49019607843137253,
+            0.49019607843137253,
+            0.49019607843137253
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 96,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 97,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.49411764705882355,
+            0.49411764705882355,
+            0.49411764705882355
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 98,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 99,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.4980392156862745,
+            0.4980392156862745,
+            0.4980392156862745
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 100,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 101,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.5019607843137255,
+            0.5019607843137255,
+            0.5019607843137255
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 102,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 103,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.5058823529411764,
+            0.5058823529411764,
+            0.5058823529411764
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 104,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 105,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.5098039215686274,
+            0.5098039215686274,
+            0.5098039215686274
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 106,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 107,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.5137254901960784,
+            0.5137254901960784,
+            0.5137254901960784
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 108,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 109,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.5176470588235295,
+            0.5176470588235295,
+            0.5176470588235295
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 110,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 111,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.5215686274509804,
+            0.5215686274509804,
+            0.5215686274509804
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 112,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 113,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.5254901960784314,
+            0.5254901960784314,
+            0.5254901960784314
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 114,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 115,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.5294117647058824,
+            0.5294117647058824,
+            0.5294117647058824
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 116,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 117,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.5333333333333333,
+            0.5333333333333333,
+            0.5333333333333333
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 118,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 119,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.5372549019607843,
+            0.5372549019607843,
+            0.5372549019607843
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 120,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 121,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.5411764705882353,
+            0.5411764705882353,
+            0.5411764705882353
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 122,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 123,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.5450980392156862,
+            0.5450980392156862,
+            0.5450980392156862
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 124,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 125,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.5490196078431373,
+            0.5490196078431373,
+            0.5490196078431373
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 126,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 127,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.5529411764705883,
+            0.5529411764705883,
+            0.5529411764705883
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 128,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 129,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.5568627450980392,
+            0.5568627450980392,
+            0.5568627450980392
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 130,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 131,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.5607843137254902,
+            0.5607843137254902,
+            0.5607843137254902
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 132,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 133,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.5647058823529412,
+            0.5647058823529412,
+            0.5647058823529412
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 134,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 135,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.5686274509803921,
+            0.5686274509803921,
+            0.5686274509803921
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 136,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 137,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.5725490196078431,
+            0.5725490196078431,
+            0.5725490196078431
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 138,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 139,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.5764705882352941,
+            0.5764705882352941,
+            0.5764705882352941
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 140,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 141,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.5803921568627451,
+            0.5803921568627451,
+            0.5803921568627451
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 142,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 143,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.5843137254901961,
+            0.5843137254901961,
+            0.5843137254901961
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 144,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 145,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.5882352941176471,
+            0.5882352941176471,
+            0.5882352941176471
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 146,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 147,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.592156862745098,
+            0.592156862745098,
+            0.592156862745098
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 148,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 149,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.596078431372549,
+            0.596078431372549,
+            0.596078431372549
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 150,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 151,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.6,
+            0.6,
+            0.6
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 152,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 153,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.6039215686274509,
+            0.6039215686274509,
+            0.6039215686274509
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 154,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 155,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.6078431372549019,
+            0.6078431372549019,
+            0.6078431372549019
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 156,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 157,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.611764705882353,
+            0.611764705882353,
+            0.611764705882353
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 158,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 159,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.615686274509804,
+            0.615686274509804,
+            0.615686274509804
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 160,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 161,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.6196078431372549,
+            0.6196078431372549,
+            0.6196078431372549
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 162,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 163,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.6235294117647059,
+            0.6235294117647059,
+            0.6235294117647059
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 164,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 165,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/basecolor:RGB"
+          ],
+          "file_format": "png",
+          "bit_depth": 16,
+          "padding": "infinite",
+          "dithering": false
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.file_format",
+      "value": "png",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.bit_depth",
+      "value": 16,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "infinite",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "OCIO",
+      "value": "resources/ocio/substance/config.ocio",
+      "applied_by": "environment_variable"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "cabb4e96964a01fab7741d3c248fbfadfc067f847299393c7ef23424c6a51c21",
+      "size_bytes": 212936
+    },
+    {
+      "record_id": "r1-uzp_plane-basecolor",
+      "kind": "exported_map",
+      "sha256": "b69bbb0dd169fffdbddefbabcd6e4e966b8fb75dbb80db3fb496396e3c8008d2",
+      "size_bytes": 1009
+    },
+    {
+      "record_id": "r2-uzp_plane-basecolor",
+      "kind": "exported_map",
+      "sha256": "b69bbb0dd169fffdbddefbabcd6e4e966b8fb75dbb80db3fb496396e3c8008d2",
+      "size_bytes": 1009
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "bcd2741110b945a443c69dbcbba5ffc09d281b1fa9ad74ad7e4fd4877db9d116",
+      "size_bytes": 402
+    }
+  ]
+}
