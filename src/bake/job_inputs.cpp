@@ -113,6 +113,9 @@ PreparedBakes PrepareBakes(const core::Project& project, std::int64_t revision, 
     if (!project.mesh) throw ValueError("the project has no mesh to bake");
     const mesh::ImportResult low = mesh::RederiveMesh(project, read);
     prepared.input_resources.insert(project.mesh->resource);
+    for (const mesh::ExternalFile& file : low.external_files) {
+        prepared.input_resources.insert(core::Sha256Hex(file.bytes));
+    }
     const BoundingBox bounds = SceneBounds(low.mesh);
     for (std::size_t s = 0; s < names.size(); ++s) {
         const core::TextureSet& set = *std::find_if(project.texture_sets.begin(), project.texture_sets.end(),

@@ -312,7 +312,7 @@ void CaseThicknessParameters() {
     // mapping always sets.
     EmbreeBaker baker;
     Bevel fixture;
-    BakeRequest base = fixture.Request(0.07f);
+    BakeRequest base = ParameterDistanceUnits(fixture.Request(0.07f));
     base.usages = {MeshMapUsage::Thickness};
     BakingParameters params("bevelled_cube");
     const auto common = params.common();
@@ -343,7 +343,7 @@ void CaseThicknessParameters() {
     ExpectThrow<NotYetSupported>([&] { baker.bake(mapped.request); });
     // The mapped request without its normalisation is the evidence request.
     mapped.request.thickness.normalization = std::nullopt;
-    BakeRequest expected = ThicknessRequest(fixture.Request(0.07f), 8, 1e-4f, 1.0f);
+    BakeRequest expected = ThicknessRequest(ParameterDistanceUnits(fixture.Request(0.07f)), 8, 1e-4f, 1.0f);
     expected.thickness.distribution = Distribution::Uniform;
     CHECK(SerializeResult(Bake(baker, mapped.request)) == SerializeResult(Bake(baker, expected)));
     // AO's refusals hold for Thickness's own Spread and Self occlusion.

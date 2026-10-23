@@ -46,6 +46,38 @@ const BakerDetail& Detail(const BakeJobReport& report, MeshMapUsage usage) {
 
 }  // namespace job_cases
 
+void CaseBakeInputResources() {
+    const std::string gltf = R"({"asset":{"version":"2.0"},"buffers":[{"uri":"mesh.bin","byteLength":96}],"bufferViews":[{"buffer":0,"byteLength":36},{"buffer":0,"byteOffset":36,"byteLength":36},{"buffer":0,"byteOffset":72,"byteLength":24}],"accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3","min":[0,0,0],"max":[1,1,0]},{"bufferView":1,"componentType":5126,"count":3,"type":"VEC3"},{"bufferView":2,"componentType":5126,"count":3,"type":"VEC2"}],"materials":[{"name":"fixture"}],"meshes":[{"primitives":[{"attributes":{"POSITION":0,"NORMAL":1,"TEXCOORD_0":2},"material":0}]}],"nodes":[{"mesh":0}],"scenes":[{"nodes":[0]}],"scene":0})";
+    const std::array<float, 24> data = {0,0,0, 1,0,0, 0,1,0, 0,0,1, 0,0,1, 0,0,1, 0,0, 1,0, 0,1};
+    const std::string bytes(reinterpret_cast<const char*>(data.data()), sizeof(data));
+    const auto imported = uzp::mesh::ImportMesh(gltf, "fixture.gltf", {},
+        [&](const std::string&, const std::filesystem::path&) { return bytes; });
+    auto project = receipt_cases::PublicationProject(128);
+    project.mesh = uzp::core::MeshReference{imported.sha256, imported.report, {}, {}};
+    auto session = LoadBakingSession(project);
+    const auto common = session.parameters("fixture").common();
+    BakingParameters::set({{common.at("LowAsHigh"), true}, {common.at("RelativeScale"), false},
+                          {common.at("OutputSize"), std::pair<std::int64_t, std::int64_t>{7, 7}},
+                          {common.at("CageMode"), EnumLabel{"Distance-based"}},
+                          {common.at("DilationWidth"), std::int64_t{0}},
+                          {common.at("SubSampling"), EnumLabel{"None"}}});
+    StoreBakingSession(session, project);
+    const std::string buffer_hash = uzp::core::Sha256Hex(bytes);
+    std::map<std::string, std::string> resources{{imported.sha256, gltf}, {buffer_hash, bytes}};
+    const auto read = [&](const std::string& hash) { return resources.at(hash); };
+    const auto prepared = PrepareBakes(project, 7, read, {}, {MeshMapUsage::Normal});
+    CHECK((prepared.input_resources == std::set<std::string>{imported.sha256, buffer_hash}));
+    CHECK_EQ(prepared.sets.size(), 1u);
+    EmbreeBaker baker;
+    const auto result = Bake(baker, prepared.sets[0].request);
+    auto context = receipt_cases::Context();
+    context.header.resource_hashes = prepared.input_resources;
+    const auto receipt = BuildReceipt(prepared.sets[0].request, result, baker.caps(), context);
+    CHECK(receipt.header.resource_hashes == prepared.input_resources);
+    resources[buffer_hash][0] ^= 1;
+    ExpectThrow<ValueError>([&] { PrepareBakes(project, 7, read, {}, {MeshMapUsage::Normal}); });
+}
+
 /// 2.5: a job bakes, reports progress, publishes at its one commit point and ends in `Success`,
 /// with every baker `published`; its id is unique and a late cancel is refused.
 void CaseBakeJobSuccess() {

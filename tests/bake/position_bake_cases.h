@@ -3,6 +3,15 @@
 // are analytic: the authored planes, the fixture's UV-to-position mapping, the sphere's radius and
 // the chamfer depth of the bevelled cube.
 
+BakeRequest ParameterDistanceUnits(BakeRequest request) {
+    // Current Painter metadata caps MaxDepth at 0.05. Keep the primary rays' mesh-unit
+    // distances unchanged while expressing this parameter fixture in half-size units.
+    request.scale_to_internal *= 0.5;
+    request.detail.max_height *= 0.5f;
+    request.detail.max_depth *= 0.5f;
+    return request;
+}
+
 BakeRequest PositionBevelRequest(const Bevel& fixture) {
     BakeRequest request = fixture.Request(0.07f);
     request.usages = {MeshMapUsage::Position};
@@ -196,7 +205,7 @@ void CasePositionParameters() {
     // mapped to the request; the baker refuses the labels it does not establish.
     EmbreeBaker baker;
     Bevel fixture;
-    BakeRequest base = PositionBevelRequest(fixture);
+    BakeRequest base = ParameterDistanceUnits(PositionBevelRequest(fixture));
     base.position = PositionSettings{};
     BakingParameters params("bevelled_cube");
     const auto common = params.common();
@@ -221,7 +230,7 @@ void CasePositionParameters() {
     mapped = RequestFromParameters(params, base);
     CHECK(mapped.request.position.mode == PositionMode::OneAxis && mapped.request.position.axis == PositionAxis::Z);
     CHECK(mapped.request.position.scale == PositionNormalizationScale::PerMaterial);
-    BakeRequest expected = PositionBevelRequest(fixture);
+    BakeRequest expected = ParameterDistanceUnits(PositionBevelRequest(fixture));
     expected.position = mapped.request.position;
     CHECK(SerializeResult(Bake(baker, mapped.request)) == SerializeResult(Bake(baker, expected)));
     // Saved and loaded with the texture set's other values; a wrong label refuses the whole load.

@@ -174,7 +174,7 @@ void CaseIdParameters() {
     // parameter-made ID bake is refused until a golden settles the palette.
     EmbreeBaker baker;
     Bevel fixture;
-    const BakeRequest base = IdLabelsRequest(fixture.Request(0.07f));
+    const BakeRequest base = ParameterDistanceUnits(IdLabelsRequest(fixture.Request(0.07f)));
     BakingParameters params("bevelled_cube");
     const auto common = params.common();
     const auto id = params.baker(MeshMapUsage::ID);

@@ -175,6 +175,7 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
 
 ### Fixed
 
+- Bake receipts include the hashes of consumed external buffers from the low glTF mesh. Changed buffer contents refuse preparation; parameter fixtures retain their mesh-space rays within the current recorded distance limits.
 - The current oracle request catalog classifies pending captures and retained authored sources without deleting or moving requests. It checks every retained copy against its admitted manifest and refuses missing, duplicated pending or changed entries. Promotion bookkeeping preserves all recorded manifests.
 - Shelf-crawl replay checks retain exact events and all other state fields while accepting the two observed polling paths of a completed asynchronous crawl.
 - The Python facade preserves the explicit engine-computation state in Baking mode, matching both current Painter 12.2 recordings. Visualisation still masks that state, and explicit pauses remain effective.

@@ -229,7 +229,7 @@ void CaseHeightParameters() {
     // to the request; the baker refuses every normalisation the mapping always sets.
     EmbreeBaker baker;
     Bevel fixture;
-    BakeRequest base = HeightRequest(fixture.Request(0.07f));
+    BakeRequest base = ParameterDistanceUnits(HeightRequest(fixture.Request(0.07f)));
     base.height = HeightSettings{};
     BakingParameters params("bevelled_cube");
     const auto common = params.common();
@@ -259,7 +259,7 @@ void CaseHeightParameters() {
     }
     // The mapped request without its normalisation is the evidence request.
     mapped.request.height.normalization = std::nullopt;
-    BakeRequest expected = HeightRequest(fixture.Request(0.07f));
+    BakeRequest expected = ParameterDistanceUnits(HeightRequest(fixture.Request(0.07f)));
     expected.height.divisor = 2.5f;
     CHECK(SerializeResult(Bake(baker, mapped.request)) == SerializeResult(Bake(baker, expected)));
     // Saved and loaded with the texture set's other values; a wrong label refuses the whole load.

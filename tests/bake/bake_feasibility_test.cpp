@@ -47,6 +47,8 @@
 #include "bake/height_baker.h"
 #include "bake/id_baker.h"
 #include "bake/job.h"
+#include "bake/job_inputs.h"
+#include "bake/baking_project.h"
 #include "bake/mesh_inputs.h"
 #include "bake/position_baker.h"
 #include "bake/sampling.h"
@@ -1820,6 +1822,7 @@ const std::vector<std::pair<std::string, std::function<void()>>>& Cases() {
         {"evidence_regenerated", CaseEvidenceRegenerated},
         {"publication_atomic", CasePublicationAtomic},
         {"bake_job_success", CaseBakeJobSuccess},
+        {"bake_input_resources", CaseBakeInputResources},
         {"bake_job_cancel_before_publication", CaseBakeJobCancelBeforePublication},
         {"bake_job_cancel_after_publication", CaseBakeJobCancelAfterPublication},
         {"bake_job_failures", CaseBakeJobFailures},

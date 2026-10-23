@@ -30,7 +30,7 @@ namespace uzp::bake {
 
 struct PreparedBakes {
     std::vector<SetBake> sets;
-    /// SHA-256 of every file the bakes read: the project mesh and the high and cage files.
+    /// SHA-256 of every file the bakes read: project/high/cage meshes and their external buffers.
     std::set<std::string> input_resources;
 };
 
