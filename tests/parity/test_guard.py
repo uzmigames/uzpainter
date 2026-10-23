@@ -380,6 +380,66 @@ def test_a_snapshot_entry_is_blocked_by_its_content(repo: Path, path: str, rules
     assert blocked(repo, None) == {path: rules}
 
 
+def test_snapshot_property_declarations_in_valid_schemas_pass(repo: Path) -> None:
+    receipt = REPO_ROOT / "src/export/schema/receipt.schema.json"
+    put(repo, "schemas/receipt.json", receipt.read_bytes())
+    nested = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$defs": {"entry": {"properties": {"procedural_snapshots": {"type": "array"}}}},
+        "allOf": [{"properties": {"child": {"$ref": "#/$defs/entry"}}}],
+    }
+    put(repo, "schemas/nested.json", json.dumps(nested).encode())
+    assert blocked(repo, None) == {}
+
+
+@pytest.mark.parametrize("keyword", ["examples", "default", "const", "unrecognised"])
+def test_schema_literal_snapshot_data_remains_blocked(repo: Path, keyword: str) -> None:
+    snapshot = {"procedural_snapshots": {"a" * 64: SNAPSHOT_ENTRY}}
+    document = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {"procedural_snapshots": {"type": "array"}},
+        keyword: [{"properties": snapshot}] if keyword == "examples" else {"properties": snapshot},
+    }
+    put(repo, "schemas/with-data.json", json.dumps(document).encode())
+    assert blocked(repo, None) == {"schemas/with-data.json": {"procedural-snapshot"}}
+
+
+@pytest.mark.parametrize("valid_schema", [True, False])
+def test_declaring_schema_does_not_exempt_snapshot_instances(
+    repo: Path, valid_schema: bool
+) -> None:
+    document = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object" if valid_schema else "invalid-type",
+        "procedural_snapshots": {"a" * 64: SNAPSHOT_ENTRY},
+    }
+    put(repo, "schemas/disguised.json", json.dumps(document).encode())
+    assert blocked(repo, None) == {"schemas/disguised.json": {"procedural-snapshot"}}
+
+
+@pytest.mark.parametrize("wrapper", ["properties", "examples", "default"])
+def test_schema_unknown_keywords_cannot_hide_snapshot_entries(repo: Path, wrapper: str) -> None:
+    declaration = {"procedural_snapshots": {"a" * 64: SNAPSHOT_ENTRY}}
+    document = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        wrapper: [declaration] if wrapper == "examples" else declaration,
+    }
+    put(repo, "schemas/wrapped-snapshot.json", json.dumps(document).encode())
+    assert blocked(repo, None) == {"schemas/wrapped-snapshot.json": {"procedural-snapshot"}}
+
+
+@pytest.mark.parametrize("wrapper", ["examples", "default"])
+def test_standalone_snapshot_entries_in_schema_literals_remain_private(
+    repo: Path, wrapper: str
+) -> None:
+    document = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        wrapper: [SNAPSHOT_ENTRY] if wrapper == "examples" else SNAPSHOT_ENTRY,
+    }
+    put(repo, "schemas/snapshot-entry.json", json.dumps(document).encode())
+    assert blocked(repo, None) == {"schemas/snapshot-entry.json": {"procedural-snapshot"}}
+
+
 def test_a_project_database_with_a_snapshot_plane_is_blocked(repo: Path, tmp_path: Path) -> None:
     """A snapshot's plane has no texture set, stack or channel (decision 327); a paint or mask
     plane belongs to a set and a stack and passes."""

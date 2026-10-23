@@ -18,6 +18,14 @@ A re-serialised readback no longer matches the index, so it is caught by its con
 
 ## 2. Schema of each JSON path under `parity/`
 
+A valid Draft 2020-12 schema may declare a `procedural_snapshots` property:
+the declaration describes data and does not contain a snapshot. This exception
+applies only to property-name maps reached through schema keywords. Literal
+examples, defaults and unknown keywords remain scanned; a native snapshot entry
+(`signature`, `project_uuid`, `plane`, `plane_versions`) is blocked at any depth,
+including inside a schema declaration. File hashes and private-record checks
+remain independent.
+
 First match wins; any other JSON under `parity/` is blocked until a rule for its area is added to `PATH_RULES` in `tools/parity/guard/guard.py` together with its schema.
 
 | Path | Must be |

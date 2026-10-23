@@ -403,6 +403,16 @@ private:
         render::Result<std::optional<TileHandle>> cached = Lookup(key);
         if (!cached) return render::Unexpected(cached.error());
         if (*cached) return Operand::Of(**cached);
+        if (source.kind == DagSource::Kind::Procedural) {
+            if (!source.procedural || !m_env.procedurals || !m_env.procedurals->Available(*source.procedural))
+                return EvalFail(EvalErrorKind::MissingResource, "procedural snapshot is unavailable", node);
+            auto tile = Allocate(key, format);
+            if (!tile) return render::Unexpected(tile.error());
+            auto uploaded = m_env.store.Upload(*tile, source.procedural->image, m_tx * kTileSize, m_ty * kTileSize);
+            if (!uploaded) return render::Unexpected(uploaded.error());
+            ++m_stats.uploads;
+            return Operand::Of(*tile);
+        }
         if (m_env.resources == nullptr) {
             return EvalFail(EvalErrorKind::MissingResource,
                             "no resource provider for bitmap " + source.sha256, node);
@@ -825,6 +835,9 @@ render::Result<ChannelResult> EvaluateLayerMask(const ChannelDag& frame, const D
 }
 
 render::Result<ChannelResult> EvaluateChannel(const ChannelDag& dag, EvalEnvironment& env) {
+    if (!ProceduralInputsAvailable(dag, env.procedurals))
+        return EvalFail(EvalErrorKind::MissingResource, "procedural snapshot is unavailable");
+
     ChannelResult result;
     result.channel = dag.channel;
     result.format = dag.format;

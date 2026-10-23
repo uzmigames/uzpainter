@@ -151,6 +151,7 @@ struct VirtualNormalRequest {
     bool withoutMesh = false;
     /// Internal diagnostic operand pass; raw Hn or C, independent of output convention.
     VirtualNormalComponent component = VirtualNormalComponent::Combined;
+    std::shared_ptr<const IProceduralSourceProvider> procedurals{};
 };
 
 struct VirtualNormalResult {

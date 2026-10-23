@@ -104,6 +104,7 @@ struct VirtualMapRequest {
     /// coverage (with its triangles) over which `Normal_OpenGL` and `Normal_DirectX` are computed
     /// and padded as Painter computes them (below). Null: the whole-tile evaluation.
     const Coverage* islandNormal = nullptr;
+    std::shared_ptr<const evaluator::IProceduralSourceProvider> procedurals{};
 };
 
 struct VirtualMapResult {

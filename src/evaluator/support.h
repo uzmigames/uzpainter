@@ -28,6 +28,7 @@
 #include <string_view>
 
 #include "evaluator/sources.h"
+#include "evaluator/procedural_source.h"
 #include "uzp_core/types/project.h"
 
 namespace uzp::evaluator {
@@ -50,8 +51,11 @@ using BitmapShapes = std::function<std::optional<BitmapShape>(std::string_view s
 /// The first release gap of the node `uid` of `project` (a layer, or an effect of a content or
 /// mask stack), or nullopt when the node lies inside the supported subset or does not exist. With
 /// `shapes`, under OCIO a bitmap whose image is not a use Session O records is a gap too.
+/// `deferProcedural` skips contextual snapshot admission in an intermediate native Transaction;
+/// its final commit must validate again with this flag false.
 [[nodiscard]] std::optional<SupportGap> NodeGap(const core::Project& project, core::Id uid,
-                                                const BitmapShapes& shapes = {});
+                                                const BitmapShapes& shapes = {},
+                                                const IProceduralSourceProvider* procedurals = nullptr, bool deferProcedural = false);
 
 /// The first release gap `after` introduces relative to `before`: a colour-management mode other
 /// than legacy, then every created or modified node in ascending id order, then, with `shapes`
@@ -59,13 +63,17 @@ using BitmapShapes = std::function<std::optional<BitmapShape>(std::string_view s
 /// unrecorded in a node the request does not touch (a use that was recorded before). Other nodes
 /// the request does not touch are not checked, so a project that already holds a gap stays
 /// editable elsewhere.
+/// Recorded procedural refs are also rechecked when an edit invalidates a previously admitted
+/// use or changes snapshot bindings. Preexisting unsupported refs permit unrelated edits.
 [[nodiscard]] std::optional<SupportGap> FirstNewGap(const core::Project& before, const core::Project& after,
-                                                    const BitmapShapes& shapes = {});
+                                                    const BitmapShapes& shapes = {},
+                                                const IProceduralSourceProvider* procedurals = nullptr, bool deferProcedural = false);
 
 /// Throws `core::NotYetSupported` with `FirstNewGap(before, after, shapes)` when there is one. An
 /// API call runs it on its transaction's working copy (`Edit::base()`, `Edit::project()`), so a
 /// refused request commits nothing; a native Transaction runs it with `shapes` once more on its
 /// final working copy before it commits.
-void RequireSupported(const core::Project& before, const core::Project& after, const BitmapShapes& shapes = {});
+void RequireSupported(const core::Project& before, const core::Project& after, const BitmapShapes& shapes = {},
+                                                const IProceduralSourceProvider* procedurals = nullptr, bool deferProcedural = false);
 
 }  // namespace uzp::evaluator

@@ -54,6 +54,7 @@
 #include "evaluator/projection_uv.h"
 #include "evaluator/templates.h"
 #include "render/backend.h"
+#include "evaluator/procedural_source.h"
 
 #include <array>
 #include <memory>
@@ -71,8 +72,9 @@ namespace uzp::evaluator {
 
 /// What a fill layer contributes to the channel (sources.h states the colour rules).
 struct DagSource {
-    enum class Kind : uint8_t { Uniform, Bitmap };
+    enum class Kind : uint8_t { Uniform, Bitmap, Procedural };
     Kind kind = Kind::Uniform;
+    std::shared_ptr<const ProceduralImage> procedural;
     /// Uniform: the colour as the channel stores it, read back as an operand (blend-modes.json
     /// `uniform_operand`; a grey channel takes the mean of the three components).
     std::array<float, 3> uniform{0.0f, 0.0f, 0.0f};
@@ -227,7 +229,8 @@ struct ChannelDag {
                                                   core::Id textureSet, core::Id stack,
                                                   core::ChannelType channel,
                                                   const TemplateLibrary& templates,
-                                                  std::string_view templateId);
+                                                  std::string_view templateId,
+                                                  const IProceduralSourceProvider* procedurals = nullptr);
 
 /// The mask of layer `uid` of `frame`'s stack (at any depth; an instance's is its source's, as the
 /// channel DAGs hold it) in a node with only `uid`, `mask` and `maskStack` set: the mask does not
@@ -237,6 +240,9 @@ struct ChannelDag {
 /// not in the stack, and with the failures of the mask's effects (`unsupported_*`).
 [[nodiscard]] render::Result<DagLayer> BuildLayerMask(const core::Project& project, const ChannelDag& frame,
                                                       core::Id uid);
+
+/// Checks authoritative procedural inputs before any memory or persistent cache hit.
+[[nodiscard]] bool ProceduralInputsAvailable(const ChannelDag& dag, const IProceduralSourceProvider* provider);
 
 /// The blending of `layer` on `channel`: its own entry, or Normal at opacity 1 when it has none.
 /// A group's entry is the blending of its composite on that channel; its `Height` entry is the

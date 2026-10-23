@@ -34,6 +34,7 @@ struct EvaluateRequest {
     std::shared_ptr<const IResourceProvider> resources;
     /// The rasters of `Mesh` geometry masks (geometry_mask.h); may be null when the stack has none.
     std::shared_ptr<const IGeometryMaskProvider> geometry;
+    std::shared_ptr<const IProceduralSourceProvider> procedurals{};
 };
 
 struct EvaluatorOptions {

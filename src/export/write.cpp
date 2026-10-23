@@ -297,6 +297,7 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
         // The diagnostic measure export computes a combined virtual normal on the file's islands as
         // Painter does (virtual_maps.h, decision 308).
         SourceInputs measured;
+        measured.procedurals = inputs.procedurals;
         if (diagnostic != nullptr && file.layout != FileLayout::Statistics) {
             measured = inputs;
             measured.islandNormal =

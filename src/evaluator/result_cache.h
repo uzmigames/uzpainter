@@ -44,7 +44,7 @@ inline constexpr uint64_t kResultCacheBytes = 4ull << 30;
 /// of `dag` is unavailable from `resources`, or `dag` has a geometry mask and `geometry` is null.
 [[nodiscard]] std::optional<ChannelResult> LoadReadout(render::DiskCache& disk, const ChannelDag& dag,
                                                        const IResourceProvider* resources,
-                                                       const IGeometryMaskProvider* geometry);
+                                                       const IGeometryMaskProvider* geometry, const IProceduralSourceProvider* procedurals = nullptr);
 /// Stores `result`, the evaluation of `dag`, when `dag` has an isolated root with layers.
 void StoreReadout(render::DiskCache& disk, const ChannelDag& dag, const ChannelResult& result);
 
@@ -55,7 +55,7 @@ void StoreReadout(render::DiskCache& disk, const ChannelDag& dag, const ChannelR
                                                                   uint32_t width, uint32_t height,
                                                                   std::span<const ChannelDag* const> dags,
                                                                   const IResourceProvider* resources,
-                                                                  const IGeometryMaskProvider* geometry);
+                                                                  const IGeometryMaskProvider* geometry, const IProceduralSourceProvider* procedurals = nullptr);
 /// Stores the texels of `result`, the combined virtual normal of digest `key`.
 void StoreVirtualNormal(render::DiskCache& disk, const Digest& key, const VirtualNormalResult& result);
 

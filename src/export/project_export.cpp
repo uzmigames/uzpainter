@@ -6,6 +6,7 @@
 #include "evaluator/templates.h"
 #include "export/plan.h"
 #include "mesh/reload.h"
+#include "procedural/snapshot_source.h"
 #include "store/project_store.h"
 #include "uzp_core/types/errors.h"
 
@@ -48,6 +49,7 @@ render::Result<Publication> ExportProject(const ProjectExportRequest& request) {
         request.templates.empty() ? evaluator::TemplateLibrary::DefaultDirectory() : request.templates));
     evaluator::CpuEvaluator cpu(templates, HostLimits());
     SourceInputs inputs;
+    inputs.procedurals = std::make_shared<procedural::SnapshotSourceProvider>(projectStore, project);
     inputs.templateId = project.settings.template_id;  // the base values the project records
     // A resource the file cannot give (absent, corrupt) is missing to the evaluator, which fails the
     // export with `evaluator:missing_resource` before anything is written.

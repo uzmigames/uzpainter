@@ -14,6 +14,7 @@
 #include "evaluator/sources.h"
 #include "evaluator/templates.h"
 #include "mesh/reload.h"
+#include "procedural/snapshot_source.h"
 #include "store/container.h"
 
 #ifndef NOMINMAX
@@ -59,6 +60,7 @@ std::shared_ptr<RevisionEvaluation> Build(const OpenProject& open, const core::S
                       evaluator::TemplateLibrary::Load(evaluator::TemplateLibrary::DefaultDirectory())));
     const core::Project& project = *snapshot.project;
     store::ProjectStore* store = open.store.get();
+    evaluation->inputs.procedurals = std::make_shared<procedural::SnapshotSourceProvider>(*store, project);
     evaluation->inputs.templateId = project.settings.template_id;  // the base values the project records
     // A resource the store does not hold is missing to the evaluator (`evaluator:missing_resource`);
     // a store failure is raised.

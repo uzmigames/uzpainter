@@ -35,11 +35,14 @@ bool CollectInputs(const DagList& list, std::set<std::string>& bitmaps) {
 /// `resources` and, when a layer has a geometry mask, `geometry` is given. Otherwise the stored
 /// result is not served and the evaluation fails as it would without it.
 bool InputsAvailable(std::span<const ChannelDag* const> dags, const IResourceProvider* resources,
-                     const IGeometryMaskProvider* geometry) {
+                     const IGeometryMaskProvider* geometry, const IProceduralSourceProvider* procedurals) {
     std::set<std::string> bitmaps;
     bool masks = false;
     for (const ChannelDag* dag : dags) {
-        if (dag != nullptr) masks = CollectInputs(dag->root, bitmaps) || masks;
+        if (dag != nullptr) {
+            if (!ProceduralInputsAvailable(*dag, procedurals)) return false;
+            masks = CollectInputs(dag->root, bitmaps) || masks;
+        }
     }
     if (masks && geometry == nullptr) return false;
     if (bitmaps.empty()) return true;
@@ -86,7 +89,7 @@ uint64_t TileBytes(const ChannelDag& dag, uint32_t tx, uint32_t ty) {
 render::DiskCache* PersistentResults() { return render::CacheArea("eval", kResultCacheBytes); }
 
 std::optional<ChannelResult> LoadReadout(render::DiskCache& disk, const ChannelDag& dag,
-                                         const IResourceProvider* resources, const IGeometryMaskProvider* geometry) {
+                                         const IResourceProvider* resources, const IGeometryMaskProvider* geometry, const IProceduralSourceProvider* procedurals) {
     if (!Persists(dag)) return std::nullopt;
     uint64_t size = 0;
     for (uint32_t ty = 0; ty < dag.grid.TilesY(); ++ty) {
@@ -95,7 +98,7 @@ std::optional<ChannelResult> LoadReadout(render::DiskCache& disk, const ChannelD
     std::optional<std::vector<std::byte>> payload = disk.Get(ReadoutKey(dag), size);
     if (!payload) return std::nullopt;
     const ChannelDag* dags[] = {&dag};
-    if (!InputsAvailable(dags, resources, geometry)) return std::nullopt;
+    if (!InputsAvailable(dags, resources, geometry, procedurals)) return std::nullopt;
     ChannelResult result;
     result.channel = dag.channel;
     result.format = dag.format;
@@ -140,11 +143,11 @@ void StoreReadout(render::DiskCache& disk, const ChannelDag& dag, const ChannelR
 std::optional<std::vector<float>> LoadVirtualNormal(render::DiskCache& disk, const Digest& key, uint32_t width,
                                                     uint32_t height, std::span<const ChannelDag* const> dags,
                                                     const IResourceProvider* resources,
-                                                    const IGeometryMaskProvider* geometry) {
+                                                    const IGeometryMaskProvider* geometry, const IProceduralSourceProvider* procedurals) {
     const uint64_t texels = uint64_t{width} * height * 3;
     std::optional<std::vector<std::byte>> payload =
         disk.Get(VirtualNormalKey(key, width, height), texels * sizeof(float));
-    if (!payload || !InputsAvailable(dags, resources, geometry)) return std::nullopt;
+    if (!payload || !InputsAvailable(dags, resources, geometry, procedurals)) return std::nullopt;
     std::vector<float> values(static_cast<size_t>(texels));
     std::memcpy(values.data(), payload->data(), payload->size());
     return values;

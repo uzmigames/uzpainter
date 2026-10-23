@@ -34,6 +34,7 @@ struct Context {
     bool float32UniformPlain = false;
     /// The profile's `uniformGreyUnrounded` (UniformOperand).
     bool uniformGreyUnrounded = false;
+    const IProceduralSourceProvider* procedurals = nullptr;
 };
 
 constexpr int kMaxInstanceDepth = 64;
@@ -195,9 +196,19 @@ render::Result<DagSource> ResolveSource(const Context& ctx, const core::FillCont
             }
             break;
         }
+        case core::SourceKind::procedural: {
+            if (!ctx.procedurals) return EvalFail(EvalErrorKind::MissingResource, "no procedural snapshot provider", uid);
+            const auto& ref = std::get<core::ProceduralSource>(source.value).ref;
+            auto image = ctx.procedurals->Resolve(ctx.project, ctx.set, ctx.channel, ctx.format, fill, ref, uid, mask);
+            if (!image) return render::Unexpected(image.error());
+            result.kind = DagSource::Kind::Procedural;
+            result.procedural = *image;
+            writer.Str("procedural-snapshot").Str((*image)->signature).Str((*image)->rasterDigest)
+                .Str(core::json::WriteCanonical((*image)->provenance));
+            break;
+        }
         case core::SourceKind::vector:
         case core::SourceKind::font:
-        case core::SourceKind::procedural:
         case core::SourceKind::reference:
             return EvalFail(EvalErrorKind::UnsupportedSource,
                             std::string(core::ToString(source.kind())) +
@@ -614,7 +625,7 @@ std::array<float, 3> UniformOperand(const std::array<double, 3>& colour, const T
 
 render::Result<ChannelDag> BuildDag(const core::Project& project, core::Id textureSet,
                                     core::Id stack, ChannelType channel,
-                                    const TemplateLibrary& templates, std::string_view templateId) {
+                                    const TemplateLibrary& templates, std::string_view templateId, const IProceduralSourceProvider* procedurals) {
     const core::TextureSet* set = nullptr;
     for (const core::TextureSet& candidate : project.texture_sets) {
         if (candidate.id == textureSet) set = &candidate;
@@ -657,6 +668,7 @@ render::Result<ChannelDag> BuildDag(const core::Project& project, core::Id textu
     dag.root.isolated = dag.profile.root == RootComposite::Isolated;
     Context ctx{project,        dag.profile.id, *set,     *stackPtr, channel,
                 dag.tileFormat, dag.format,     dag.base, dag.grid};
+    ctx.procedurals = procedurals;
     ctx.float32UniformPlain = dag.profile.float32UniformPlain;
     ctx.uniformGreyUnrounded = dag.profile.uniformGreyUnrounded;
     {
@@ -722,6 +734,26 @@ render::Result<DagLayer> BuildLayerMask(const core::Project& project, const Chan
     if (!mask) return render::Unexpected(mask.error());
     node.maskStack = std::move(*mask);
     return node;
+}
+
+namespace {
+bool ProceduralListAvailable(const DagList& list, const IProceduralSourceProvider* provider) {
+    const auto source = [provider](const std::optional<DagSource>& s) {
+        return !s || s->kind != DagSource::Kind::Procedural ||
+               (provider && s->procedural && provider->Available(*s->procedural));
+    };
+    for (const auto& layer : list.layers) {
+        if (!source(layer.source)) return false;
+        for (const auto& effect : layer.effects) if (!source(effect.source)) return false;
+        if (layer.maskStack) for (const auto& effect : layer.maskStack->effects) if (!source(effect.source)) return false;
+        if (layer.group && !ProceduralListAvailable(*layer.group, provider)) return false;
+    }
+    return true;
+}
+}  // namespace
+
+bool ProceduralInputsAvailable(const ChannelDag& dag, const IProceduralSourceProvider* provider) {
+    return ProceduralListAvailable(dag.root, provider);
 }
 
 }  // namespace uzp::evaluator

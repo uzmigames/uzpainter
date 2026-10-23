@@ -292,13 +292,13 @@ render::Result<VirtualNormalResult> EvaluateVirtualNormalOn(const core::Project&
     std::optional<ChannelDag> normalDag;
     if (hasHeight) {
         render::Result<ChannelDag> dag = BuildDag(project, set->id, stack->id, core::ChannelType::Height,
-                                                  templates, request.templateId);
+                                                  templates, request.templateId, request.procedurals.get());
         if (!dag) return render::Unexpected(dag.error());
         heightDag = std::move(*dag);
     }
     if (hasNormal) {
         render::Result<ChannelDag> dag = BuildDag(project, set->id, stack->id, core::ChannelType::Normal,
-                                                  templates, request.templateId);
+                                                  templates, request.templateId, request.procedurals.get());
         if (!dag) return render::Unexpected(dag.error());
         normalDag = std::move(*dag);
     }
@@ -338,7 +338,7 @@ render::Result<VirtualNormalResult> EvaluateVirtualNormalOn(const core::Project&
         const ChannelDag* dags[] = {heightDag ? &*heightDag : nullptr, normalDag ? &*normalDag : nullptr};
         if (std::optional<std::vector<float>> stored = LoadVirtualNormal(*persistent, key, width, height, dags,
                                                                          request.resources.get(),
-                                                                         request.geometry.get())) {
+                                                                         request.geometry.get(), request.procedurals.get())) {
             result.texels = std::move(*stored);
             result.stats.tiles = grid.Count();
             result.stats.cacheHits = grid.Count();
@@ -348,6 +348,7 @@ render::Result<VirtualNormalResult> EvaluateVirtualNormalOn(const core::Project&
     }
 
     EvalEnvironment env{store, cache, request.resources.get(), request.geometry.get()};
+    env.procedurals = request.procedurals.get();
     Pins pins(cache);
     // Every tile's height read-out first: the stencils read across tile edges.
     std::vector<Operand> heights(grid.Count(), Operand::Constant({heightConstant, heightConstant, heightConstant}, 1.0f));

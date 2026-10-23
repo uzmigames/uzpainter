@@ -195,12 +195,13 @@ render::Result<DiagnosticMap> EffectiveMask(const core::Project& project, const 
     }
     // The mask does not depend on the channel: any channel's DAG gives the grid and the profile.
     render::Result<ChannelDag> frame = BuildDag(project, request.textureSet, request.stack,
-                                                stack.channels.begin()->first, templates, request.templateId);
+                                                stack.channels.begin()->first, templates, request.templateId, request.procedurals.get());
     if (!frame) return render::Unexpected(frame.error());
     const core::TextureSet* set = FindSet(project, request.textureSet);
     render::Result<void> admitted = CheckTextureSet(cache.limits(), *set);
     if (!admitted) return render::Unexpected(admitted.error());
     EvalEnvironment env{store, cache, request.resources.get(), request.geometry.get()};
+    env.procedurals = request.procedurals.get();
     DiagnosticMap effective;
     for (auto it = path.rbegin(); it != path.rend(); ++it) {
         render::Result<DagLayer> layer = BuildLayerMask(project, *frame, (*it)->uid);
@@ -486,6 +487,7 @@ render::Result<DiagnosticMap> EvaluateMapOn(const core::Project& project, std::i
         normal.convention = map.convention;
         normal.templateId = request.templateId;
         normal.resources = request.resources;
+    normal.procedurals = request.procedurals;
         normal.geometry = request.geometry;
         render::Result<VirtualNormalResult> result =
             EvaluateVirtualNormalOn(project, revision, normal, templates, store, cache);
@@ -500,6 +502,7 @@ render::Result<DiagnosticMap> EvaluateMapOn(const core::Project& project, std::i
     channel.channel = map.channel;
     channel.templateId = request.templateId;
     channel.resources = request.resources;
+    channel.procedurals = request.procedurals;
     channel.geometry = request.geometry;
     render::Result<ChannelResult> result = EvaluateOn(project, channel, templates, store, cache);
     render::Result<void> ended = EndEvaluation(store, cache);

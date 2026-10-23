@@ -372,7 +372,8 @@ render::Result<Publication> PublishExport(const core::Project& project, std::int
         EncodeExport(project, revision, plan, inputs, templates, store, cache,
                      request.diagnostic ? &*request.diagnostic : nullptr);
     if (!encoded) return render::Unexpected(encoded.error());
-    render::Result<std::set<std::string>> resources = ReadResourceHashes(project, plan, templates, inputs.templateId);
+    core::json::Array proceduralSnapshots;
+    render::Result<std::set<std::string>> resources = ReadResourceHashes(project, plan, templates, inputs.templateId, inputs.procedurals.get(), &proceduralSnapshots);
     if (!resources) return render::Unexpected(resources.error());
 
     if (request.beforePublish) {
@@ -481,7 +482,7 @@ render::Result<Publication> PublishExport(const core::Project& project, std::int
 #endif
     const std::string receiptText = json::WriteCanonical(BuildReceipt({project, revision, plan, *encoded, id,
                                                                        MomentNow(), request.projectPath,
-                                                                       request.identity, std::move(*resources), *execution}));
+                                                                       request.identity, std::move(*resources), *execution, proceduralSnapshots}));
     render::Result<void> receiptWritten = WriteDurable(directory / "receipt.json", receiptText);
     if (!receiptWritten) return failed(receiptWritten.error());
 #if defined(UZP_EXPORT_FAULT_HOOKS)

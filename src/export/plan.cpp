@@ -1329,8 +1329,9 @@ render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int
     VirtualMapRequest request{file.textureSetId, file.stackId, inputs.templateId, inputs.resources,
                               inputs.geometry};
     request.islandNormal = inputs.islandNormal;
+    request.procedurals = inputs.procedurals;
     const evaluator::DiagnosticRequest diagnostic{file.textureSetId, file.stackId, inputs.templateId, inputs.resources,
-                                                  inputs.geometry, inputs.materialViews};
+                                                  inputs.geometry, inputs.materialViews, inputs.procedurals};
     FileRaster raster;
     std::map<std::string, DiagnosticMap> evaluated;  // by srcMapType/srcMapName
     std::map<std::string, core::ChannelFormat> stored;  // documentMap sources: the channel's format
@@ -1350,6 +1351,7 @@ render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int
                 r.channel = *s.channel;
                 r.templateId = inputs.templateId;
                 r.resources = inputs.resources;
+                r.procedurals = inputs.procedurals;
                 r.geometry = inputs.geometry;
                 render::Result<evaluator::ChannelResult> result = evaluator::EvaluateOn(project, r, templates, store, cache);
                 if (!result) return render::Unexpected(result.error());

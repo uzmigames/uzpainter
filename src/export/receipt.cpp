@@ -174,9 +174,14 @@ std::optional<std::string> MeshFileName(const core::Project& project) {
 struct ResourceWalk {
     std::set<std::string> hashes;
     bool geometry = false;
+    std::map<std::string, json::Object> snapshots;
 
     void Source(const std::optional<DagSource>& source) {
         if (source && source->kind == DagSource::Kind::Bitmap) hashes.insert(source->sha256);
+        if (source && source->kind == DagSource::Kind::Procedural && source->procedural) {
+            snapshots[source->procedural->signature] = source->procedural->provenance;
+            geometry = true;
+        }
     }
     void Effects(const std::vector<evaluator::DagEffect>& effects) {
         for (const evaluator::DagEffect& effect : effects) Source(effect.source);
@@ -224,13 +229,15 @@ bool IsDeliveryPath(std::string_view path) {
 
 render::Result<std::set<std::string>> ReadResourceHashes(const core::Project& project, const ExportPlan& plan,
                                                          const evaluator::TemplateLibrary& templates,
-                                                         std::string_view templateId) {
+                                                         std::string_view templateId,
+                                                                       const evaluator::IProceduralSourceProvider* procedurals,
+                                                                       core::json::Array* snapshots) {
     ResourceWalk walk;
     std::set<std::tuple<core::Id, core::Id, core::ChannelType>> walked;
     const auto channel = [&](const PlannedFile& file, core::ChannelType type) -> render::Result<void> {
         if (!walked.insert({file.textureSetId, file.stackId, type}).second) return {};
         render::Result<evaluator::ChannelDag> dag =
-            evaluator::BuildDag(project, file.textureSetId, file.stackId, type, templates, templateId);
+            evaluator::BuildDag(project, file.textureSetId, file.stackId, type, templates, templateId, procedurals);
         if (!dag) return render::Unexpected(dag.error());
         walk.List(dag->root);
         return {};
@@ -261,7 +268,7 @@ render::Result<std::set<std::string>> ReadResourceHashes(const core::Project& pr
         std::vector<core::Id> path;
         if (stack == nullptr || stack->channels.empty() || !PathTo(stack->root_layers, material, path)) return {};
         render::Result<evaluator::ChannelDag> frame = evaluator::BuildDag(
-            project, file.textureSetId, file.stackId, stack->channels.begin()->first, templates, templateId);
+            project, file.textureSetId, file.stackId, stack->channels.begin()->first, templates, templateId, procedurals);
         if (!frame) return render::Unexpected(frame.error());
         for (const core::Id uid : path) {
             render::Result<DagLayer> layer = evaluator::BuildLayerMask(project, *frame, uid);
@@ -312,6 +319,13 @@ render::Result<std::set<std::string>> ReadResourceHashes(const core::Project& pr
         // The texturing mesh: its file and the files it reads beside it (a glTF's buffers).
         for (const std::string& hash : core::MeshResourceHashes(project)) walk.hashes.insert(hash);
     }
+    if (snapshots) {
+        snapshots->clear();
+        for (const auto& [signature, provenance] : walk.snapshots) {
+            (void)signature;
+            snapshots->emplace_back(provenance);
+        }
+    }
     return std::move(walk.hashes);
 }
 
@@ -324,6 +338,7 @@ json::Object BuildReceipt(const ReceiptInputs& in) {
     header.app_version = in.identity.appVersion;
     header.resource_hashes = in.resourceHashes;
     json::Object receipt = core::HeaderToJson(header);
+    if (!in.proceduralSnapshots.empty()) receipt["procedural_snapshots"] = in.proceduralSnapshots;
 
     const std::string planText = json::WriteCanonical(PlanJson(plan));
     std::set<std::string> used{"project", "mesh", "export-plan"};

@@ -83,3 +83,34 @@ or committed to the repository. The raster itself is embedded in its destination
 Run `UzPainter.exe inspect <project.uzp> --verify` to inspect the stored entry and
 project integrity. The recording command requires no local GPU evaluation by
 UzPainter; Painter alone computes the captured source.
+
+## Explicit fill evaluation and export
+
+An explicit native `ProceduralRef` can bind the recorded asset pin, every effective
+parameter and a singleton output mapping to a User channel. The current evaluator
+admits only User L32F on the authored full-UV 128-square plane, tile 1001, with the
+recorded Legacy settings and identity UV projection. It never selects a snapshot
+implicitly, guesses an output, resizes its raster or invokes a procedural family.
+The public `SourceSubstance` facade is not enabled by this path.
+
+The provider loads the authoritative project-private plane and uploads its float32
+bits directly. Signature, raster digest and plane provenance participate in DAG
+hashes. Memory and persistent cache reads recheck the authoritative plane;
+missing, corrupt or foreign data cannot be served by a previously cached result.
+Mutations reject unsupported final states atomically. Native transactions may
+temporarily resize or rebind a source, provided their final state is supported.
+An unrelated edit remains possible when the project already contains an
+unsupported reference.
+
+Scalar EXR32f passthrough export retains the recorded values after original-project
+reopen and bundle import. Export receipts list `procedural_snapshots` with signature,
+project UUID, plane/version ids, chunk root and raster SHA-256; a plane is not
+misreported as an imported resource hash. Recipe rebuild explicitly refuses these
+project-private dependencies because recipes do not transport their planes. Reopen
+the original project or import its bundle instead.
+
+CPU integration evidence: `tests/python/test_snapshot_source_export.py` drives
+`tests/export/snapshot_source_test.cpp`, compares every exported float32 bit and
+checks receipt schema, transaction rollback, persistent hits, corrupted retained
+inputs and a foreign store UUID. This synthetic transport test establishes no new
+Painter parity or certified editable procedural domain.

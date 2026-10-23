@@ -182,7 +182,7 @@ Gap SourceGap(const core::Project& project, const core::Stack* stack, const core
     return std::nullopt;
 }
 
-Gap FillGap(const core::Project& project, const core::Stack* stack, const core::FillContent& fill, core::Id node) {
+Gap FillGap(const core::Project& project, const core::Stack* stack, const core::FillContent& fill, core::Id node, const IProceduralSourceProvider* procedurals, bool deferProcedural) {
     if (fill.source_mode == core::SourceMode::Material) {
         return Make(node, "the Material source mode", "phase3.2_proc-material-families");
     }
@@ -221,6 +221,19 @@ Gap FillGap(const core::Project& project, const core::Stack* stack, const core::
                     "phase1.15_compositor-colour-fits");
     }
     for (const auto& [channel, source] : fill.sources) {
+        if (source.kind() == SourceKind::procedural && deferProcedural) continue;
+        if (source.kind() == SourceKind::procedural && procedurals && stack) {
+            const core::TextureSet* set = nullptr;
+            for (const auto& candidate : project.texture_sets)
+                for (const auto& candidateStack : candidate.stacks)
+                    if (candidateStack.id == stack->id) set = &candidate;
+            const auto target = stack->channels.find(channel);
+            if (!set || target == stack->channels.end()) return Make(node, "procedural target channel is absent", "phase3.3_procedural-families");
+            auto admitted = procedurals->Resolve(project, *set, channel, target->second.format, fill,
+                                                 std::get<core::ProceduralSource>(source.value).ref, node, false);
+            if (!admitted) return Make(node, admitted.error().reason, "phase3.3_procedural-families");
+            continue;
+        }
         if (Gap gap = SourceGap(project, stack, source, channel, node)) return gap;
     }
     if (fill.mono_source) return SourceGap(project, stack, *fill.mono_source, std::nullopt, node);
@@ -257,7 +270,7 @@ Gap PaintLayerGap(const core::Layer& layer) {
     return std::nullopt;
 }
 
-Gap LayerGap(const core::Project& project, const core::Stack* stack, const core::Layer& layer) {
+Gap LayerGap(const core::Project& project, const core::Stack* stack, const core::Layer& layer, const IProceduralSourceProvider* procedurals, bool deferProcedural) {
     switch (layer.kind) {
         case LayerKind::paint:
             if (Gap gap = PaintLayerGap(layer)) return gap;
@@ -275,12 +288,12 @@ Gap LayerGap(const core::Project& project, const core::Stack* stack, const core:
         return Make(layer.uid, "a Mesh geometry mask", "phase4.2_remaining-nodes");
     }
     if (Gap gap = DirectXNormalGap(project, layer)) return gap;
-    if (layer.kind == LayerKind::fill && layer.fill) return FillGap(project, stack, *layer.fill, layer.uid);
+    if (layer.kind == LayerKind::fill && layer.fill) return FillGap(project, stack, *layer.fill, layer.uid, procedurals, deferProcedural);
     return std::nullopt;
 }
 
 Gap EffectGap(const core::Project& project, const core::Stack* layers, const core::Effect& effect,
-              core::NodeStack stack) {
+              core::NodeStack stack, const IProceduralSourceProvider* procedurals, bool deferProcedural) {
     switch (effect.kind) {
         case EffectKind::generator: return Make(effect.uid, "a generator effect", "phase3.2_proc-generator-families");
         case EffectKind::filter: return Make(effect.uid, "a filter effect", "phase3.2_proc-filter-families");
@@ -299,7 +312,7 @@ Gap EffectGap(const core::Project& project, const core::Stack* layers, const cor
                 // Every recorded content-effect order holds the Blur filter (decision 069).
                 return Make(effect.uid, "a fill effect in a content stack", "phase3.2_proc-filter-families");
             }
-            return effect.fill ? FillGap(project, layers, *effect.fill, effect.uid) : std::nullopt;
+            return effect.fill ? FillGap(project, layers, *effect.fill, effect.uid, procedurals, deferProcedural) : std::nullopt;
     }
     return std::nullopt;
 }
@@ -310,14 +323,14 @@ std::string SupportGap::Describe() const {
     return "node=" + std::to_string(node) + ": " + feature + " is a release gap (" + owner + ")";
 }
 
-std::optional<SupportGap> NodeGap(const core::Project& project, core::Id uid, const BitmapShapes& shapes) {
+std::optional<SupportGap> NodeGap(const core::Project& project, core::Id uid, const BitmapShapes& shapes, const IProceduralSourceProvider* procedurals, bool deferProcedural) {
     Gap found;
     bool seen = false;
     core::ForEachNode(project, [&](const core::NodeVisit& visit) {
         if (seen) return;
         if (visit.layer != nullptr && visit.layer->uid == uid) {
             seen = true;
-            found = LayerGap(project, core::FindStack(project, visit.texture_set, visit.stack), *visit.layer);
+            found = LayerGap(project, core::FindStack(project, visit.texture_set, visit.stack), *visit.layer, procedurals, deferProcedural);
         } else if (visit.effect != nullptr && visit.effect->uid == uid) {
             seen = true;
             const core::Layer* owner = core::FindLayer(project, visit.owner);
@@ -325,7 +338,7 @@ std::optional<SupportGap> NodeGap(const core::Project& project, core::Id uid, co
                 found = PaintLayerGap(*owner);
             } else {
                 found = EffectGap(project, core::FindStack(project, visit.texture_set, visit.stack), *visit.effect,
-                                  visit.owner_stack);
+                                  visit.owner_stack, procedurals, deferProcedural);
             }
         }
         if (seen && !found) found = OcioImageGap(project, visit, shapes);
@@ -334,7 +347,7 @@ std::optional<SupportGap> NodeGap(const core::Project& project, core::Id uid, co
 }
 
 std::optional<SupportGap> FirstNewGap(const core::Project& before, const core::Project& after,
-                                      const BitmapShapes& shapes) {
+                                      const BitmapShapes& shapes, const IProceduralSourceProvider* procedurals, bool deferProcedural) {
     if (!LegacyColour(after) && after.settings.color_management.mode != before.settings.color_management.mode) {
         return Make(core::kNoId, "colour management mode '" + after.settings.color_management.mode + "'",
                     "phase1.15_compositor-colour-fits");
@@ -344,8 +357,29 @@ std::optional<SupportGap> FirstNewGap(const core::Project& before, const core::P
     touched.insert(touched.end(), changes.modified.begin(), changes.modified.end());
     std::sort(touched.begin(), touched.end());
     for (const core::Id uid : touched) {
-        if (Gap gap = NodeGap(after, uid, shapes)) return gap;
+        if (Gap gap = NodeGap(after, uid, shapes, procedurals, deferProcedural)) return gap;
     }
+    const auto snapshots = [](const core::Project& project) -> core::json::Value {
+        const auto it = project.extra.find("procedural_snapshots");
+        return it == project.extra.end() ? core::json::Value{} : it->second;
+    };
+    // A settings/mesh/resize edit can invalidate an untouched exact-signature source.
+    Gap proceduralGap;
+    core::ForEachNode(after, [&](const core::NodeVisit& visit) {
+        if (proceduralGap || deferProcedural || std::binary_search(touched.begin(), touched.end(), UidOf(visit))) return;
+        const auto& fill = visit.layer ? visit.layer->fill : visit.effect->fill;
+        if (!fill) return;
+        bool uses = false;
+        for (const auto& [channel, source] : fill->sources) {
+            (void)channel;
+            uses = uses || source.kind() == SourceKind::procedural;
+        }
+        // Existing unsupported refs must not prevent unrelated edits. Contextual
+        // validation matters only when a formerly admitted source becomes invalid.
+        if (uses && (snapshots(before) != snapshots(after) || !NodeGap(before, UidOf(visit), shapes, procedurals)))
+            proceduralGap = NodeGap(after, UidOf(visit), shapes, procedurals);
+    });
+    if (proceduralGap) return proceduralGap;
     if (!shapes || !PainterOcio(after)) return std::nullopt;
     // Under OCIO a set's resolution and channels decide whether its bitmaps are a recorded use: a
     // change of them refuses a use it makes unrecorded in a node it does not touch.
@@ -375,8 +409,8 @@ std::optional<SupportGap> FirstNewGap(const core::Project& before, const core::P
     return found;
 }
 
-void RequireSupported(const core::Project& before, const core::Project& after, const BitmapShapes& shapes) {
-    if (const Gap gap = FirstNewGap(before, after, shapes)) throw core::NotYetSupported(gap->Describe());
+void RequireSupported(const core::Project& before, const core::Project& after, const BitmapShapes& shapes, const IProceduralSourceProvider* procedurals, bool deferProcedural) {
+    if (const Gap gap = FirstNewGap(before, after, shapes, procedurals, deferProcedural)) throw core::NotYetSupported(gap->Describe());
 }
 
 }  // namespace uzp::evaluator

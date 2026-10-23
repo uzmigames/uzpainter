@@ -87,6 +87,7 @@ struct ReceiptInputs {
     BuildIdentity identity;
     std::set<std::string> resourceHashes;
     evaluator::ExecutionIdentity execution{};
+    core::json::Array proceduralSnapshots{};
 };
 
 /// The receipt (see above).
@@ -97,7 +98,9 @@ struct ReceiptInputs {
 [[nodiscard]] render::Result<std::set<std::string>> ReadResourceHashes(const core::Project& project,
                                                                        const ExportPlan& plan,
                                                                        const evaluator::TemplateLibrary& templates,
-                                                                       std::string_view templateId);
+                                                                       std::string_view templateId,
+                                                                       const evaluator::IProceduralSourceProvider* procedurals = nullptr,
+                                                                       core::json::Array* snapshots = nullptr);
 
 /// A delivered file as a receipt lists it.
 struct ReceiptFile {

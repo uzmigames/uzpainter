@@ -276,6 +276,7 @@ render::Result<VirtualMapResult> EvaluateVirtualMapOn(const core::Project& proje
     normal.convention = map == VirtualMap::Normal_OpenGL ? core::NormalMapFormat::OpenGL : core::NormalMapFormat::DirectX;
     normal.templateId = request.templateId;
     normal.resources = request.resources;
+    normal.procedurals = request.procedurals;
     normal.geometry = request.geometry;
     if (request.islandNormal != nullptr && !request.islandNormal->Complete()) {
         return IslandNormalOn(project, revision, normal, *request.islandNormal, templates, store, cache);
@@ -301,6 +302,7 @@ render::Result<VirtualMapResult> EvaluateMeshMapOn(const core::Project& project,
     normal.convention = project.settings.normal_map_format;
     normal.templateId = request.templateId;
     normal.resources = request.resources;
+    normal.procedurals = request.procedurals;
     normal.geometry = request.geometry;
     render::Result<evaluator::VirtualNormalResult> evaluated =
         evaluator::EvaluateVirtualNormalOn(project, revision, normal, templates, store, cache);

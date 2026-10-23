@@ -268,12 +268,55 @@ def documented_names(prefix: str) -> frozenset[str]:
     )
 
 
-def _content_markers(node: Any, where: str = "") -> Iterator[tuple[str, str]]:
+def _schema_property_maps(node: Any) -> Iterator[int]:
+    """Property-name maps reached through Draft 2020-12 schema keywords only."""
+    if not isinstance(node, dict):
+        return
+    for keyword in ("properties", "patternProperties", "$defs", "dependentSchemas"):
+        children = node.get(keyword)
+        if isinstance(children, dict):
+            if keyword == "properties":
+                yield id(children)
+            for child in children.values():
+                yield from _schema_property_maps(child)
+    for keyword in (
+        "additionalProperties",
+        "unevaluatedProperties",
+        "propertyNames",
+        "items",
+        "unevaluatedItems",
+        "contains",
+        "not",
+        "if",
+        "then",
+        "else",
+        "contentSchema",
+    ):
+        yield from _schema_property_maps(node.get(keyword))
+    for keyword in ("allOf", "anyOf", "oneOf", "prefixItems"):
+        children = node.get(keyword)
+        if isinstance(children, list):
+            for child in children:
+                yield from _schema_property_maps(child)
+
+
+def _content_markers(
+    node: Any, where: str = "", property_maps: frozenset[int] = frozenset()
+) -> Iterator[tuple[str, str]]:
     """(rule, marker) for each snapshot entry and observed Painter structure in a document."""
     if isinstance(node, dict):
         at = where or "<root>"
-        if SNAPSHOT_KEY in node:
+        if SNAPSHOT_KEY in node and id(node) not in property_maps:
             yield SNAPSHOT_RULE, f"{at}: {SNAPSHOT_KEY} (a project's frozen snapshot entries)"
+        # StageSnapshot's entry shape stays private even when wrapped in schema
+        # keywords, whose unknown values Draft 2020-12 deliberately permits.
+        if (
+            isinstance(node.get("signature"), dict)
+            and isinstance(node.get("project_uuid"), str)
+            and type(node.get("plane")) is int
+            and isinstance(node.get("plane_versions"), dict)
+        ):
+            yield SNAPSHOT_RULE, f"{at}: a project's frozen snapshot entry"
         kind = node.get("node_type", node.get("type"))
         if isinstance(kind, str) and "name" in node and kind in documented_names(NODE_TYPE_PREFIX):
             yield OBSERVED_RULE, f"{at}: a Painter layer-stack node ({kind}) read back"
@@ -287,10 +330,14 @@ def _content_markers(node: Any, where: str = "") -> Iterator[tuple[str, str]]:
         if isinstance(kind, str) and kind in documented_names(LEVELS_PREFIX):
             yield OBSERVED_RULE, f"{at}: Painter levels parameters ({kind}) read back"
         for key, value in node.items():
-            yield from _content_markers(value, f"{where}/{key}" if where else str(key))
+            yield from _content_markers(
+                value, f"{where}/{key}" if where else str(key), property_maps
+            )
     elif isinstance(node, list):
         for index, value in enumerate(node):
-            yield from _content_markers(value, f"{where}/{index}" if where else str(index))
+            yield from _content_markers(
+                value, f"{where}/{index}" if where else str(index), property_maps
+            )
 
 
 def snapshot_planes(data: bytes) -> int | None:
@@ -349,9 +396,19 @@ _HOLDS = {
 
 def _content_findings(path: str, document: Any, member: str = "") -> list[Finding]:
     prefix = f"member {member}: " if member else ""
+    property_maps: frozenset[int] = frozenset()
+    if isinstance(document, dict) and document.get("$schema") == JSON_SCHEMA_DIALECT:
+        try:
+            Draft202012Validator.check_schema(document)
+        except SchemaError:
+            pass
+        else:
+            # Schema declarations are not instances. Defaults/examples/unknown keywords
+            # are still scanned as data, even inside a valid schema.
+            property_maps = frozenset(_schema_property_maps(document))
     return [
         Finding(path, rule, f"{prefix}holds {_HOLDS[rule]} ({marker})")
-        for rule, marker in _content_markers(document)
+        for rule, marker in _content_markers(document, property_maps=property_maps)
     ]
 
 

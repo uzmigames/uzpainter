@@ -35,8 +35,10 @@ render::Result<ChannelResult> EvaluateOn(const core::Project& project, const Eva
     render::Result<void> admitted = Admit(project, request.textureSet, cache.limits());
     if (!admitted) return render::Unexpected(admitted.error());
     render::Result<ChannelDag> dag = BuildDag(project, request.textureSet, request.stack,
-                                              request.channel, templates, request.templateId);
+                                              request.channel, templates, request.templateId, request.procedurals.get());
     if (!dag) return render::Unexpected(dag.error());
+    if (!ProceduralInputsAvailable(*dag, request.procedurals.get()))
+        return EvalFail(EvalErrorKind::MissingResource, "procedural snapshot is unavailable");
     // A read-out this tile cache holds (a later call of the process on the same stack) is read
     // there: it was stored when it was computed.
     render::DiskCache* persistent = cache.persistent();
@@ -45,11 +47,12 @@ render::Result<ChannelResult> EvaluateOn(const core::Project& project, const Eva
     }
     if (persistent != nullptr) {
         if (std::optional<ChannelResult> stored =
-                LoadReadout(*persistent, *dag, request.resources.get(), request.geometry.get())) {
+                LoadReadout(*persistent, *dag, request.resources.get(), request.geometry.get(), request.procedurals.get())) {
             return std::move(*stored);
         }
     }
     EvalEnvironment env{store, cache, request.resources.get(), request.geometry.get()};
+    env.procedurals = request.procedurals.get();
     render::Result<ChannelResult> result = EvaluateChannel(*dag, env);
     if (persistent != nullptr && result) StoreReadout(*persistent, *dag, *result);
     return result;

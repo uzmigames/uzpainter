@@ -98,7 +98,7 @@ evaluator::DiagnosticRequest DiagnosticRun::RequestFor(core::Id node) const {
     const exporter::SourceInputs& inputs = m_evaluation->inputs;
     // The diagnostics of a run compute their views; only its export reads them (`Export`).
     evaluator::DiagnosticRequest request{core::kNoId, core::kNoId, inputs.templateId, inputs.resources,
-                                         inputs.geometry, nullptr};
+                                         inputs.geometry, nullptr, inputs.procedurals};
     core::ForEachNode(*m_snapshot.project, [&](const core::NodeVisit& visit) {
         if ((visit.layer ? visit.layer->uid : visit.effect->uid) == node) {
             request.textureSet = visit.texture_set;

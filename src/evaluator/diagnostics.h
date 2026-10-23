@@ -112,6 +112,7 @@ struct DiagnosticRequest {
     /// MaterialLeaks of every view they hold, from them instead of computing them again (each is
     /// what a computation would give, bit for bit; B19, decision 246).
     std::shared_ptr<const MaterialViews> materialViews;
+    std::shared_ptr<const IProceduralSourceProvider> procedurals{};
 };
 
 /// A copy of `project` with every node of `nodes` (layers or effects of the stack, at any depth)

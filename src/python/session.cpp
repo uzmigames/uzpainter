@@ -22,6 +22,7 @@
 #include "evaluator/support.h"
 #include "evaluator/templates.h"
 #include "mesh/mesh_import.h"
+#include "procedural/snapshot_source.h"
 #include "mesh/reload.h"
 #include "python/display.h"
 #include "python/errors.h"
@@ -433,6 +434,15 @@ void Session::Open(const std::filesystem::path& path, bool untitled) {
 void Session::Rebuild(const core::json::Value& dump, const std::filesystem::path& resources_dir) {
     if (IsOpen()) ThrowProjectError("a project is already open");
     core::Project rebuilt = core::ProjectFromRecipe(dump, HostRecipe());
+    core::ForEachNode(rebuilt, [](const core::NodeVisit& visit) {
+        const auto& fill = visit.layer ? visit.layer->fill : visit.effect->fill;
+        if (!fill) return;
+        for (const auto& [channel, source] : fill->sources) {
+            (void)channel;
+            if (source.kind() == core::SourceKind::procedural)
+                throw core::NotYetSupported("recipe rebuild cannot transport project-private procedural snapshot planes; reopen the original project or import its bundle");
+        }
+    });
     RequireAdmission(rebuilt);
 
     std::error_code ec;
@@ -663,6 +673,7 @@ std::shared_ptr<const TextureStateSnapshot> Session::TextureSnapshot() const {
         }
         const evaluator::TemplateLibrary templates =
             evaluator::TemplateLibrary::Load(evaluator::TemplateLibrary::DefaultDirectory());
+        procedural::SnapshotSourceProvider procedurals(*open->store, project);
         for (const core::TextureSet& set : project.texture_sets) {
             for (const core::Stack& stack : set.stacks) {
                 for (const auto& [channel, unused] : stack.channels) {
@@ -672,7 +683,7 @@ std::shared_ptr<const TextureStateSnapshot> Session::TextureSnapshot() const {
                                          return MayHaveTextureContent(stack, layer, channel);
                                      })) continue;
                     const auto dag = evaluator::BuildDag(project, set.id, stack.id, channel, templates,
-                                                         project.settings.template_id);
+                                                         project.settings.template_id, &procedurals);
                     if (!dag) {
                         result->errors.push_back("unsupported texture DAG: " + std::to_string(stack.id) + "/" +
                                                  std::string(core::ToString(channel)));
@@ -817,7 +828,8 @@ CallResult Session::Mutate(const std::string& tool, core::json::Object arguments
     const evaluator::BitmapShapes shapes = thread.transaction ? evaluator::BitmapShapes{} : ShapesOf(*Current()->store);
     const auto checked = [this, &call, &shapes, deferred = bool(thread.transaction)](core::Edit& edit) {
         call(edit);
-        evaluator::RequireSupported(edit.base(), edit.project(), shapes);
+        procedural::SnapshotSourceProvider procedurals(*Current()->store, edit.project());
+        evaluator::RequireSupported(edit.base(), edit.project(), shapes, &procedurals, deferred);
         if (!deferred) RequireAdmission(edit.project());
     };
     if (thread.transaction) {
@@ -856,7 +868,8 @@ core::RequestOutcome Session::Submit(core::MutationRequest request, const std::f
     core::RequestOutcome outcome =
         project->store->Submit(*project->document, std::move(request), [this, &call, &shapes](core::Edit& edit) {
             call(edit);
-            evaluator::RequireSupported(edit.base(), edit.project(), shapes);
+            procedural::SnapshotSourceProvider procedurals(*Current()->store, edit.project());
+            evaluator::RequireSupported(edit.base(), edit.project(), shapes, &procedurals);
             RequireAdmission(edit.project());
         });
     if (outcome.result) Record(FromResult(*outcome.result), invalidated, project);
@@ -905,7 +918,8 @@ CallResult Session::CommitTransaction() {
         const evaluator::BitmapShapes shapes = ShapesOf(*project->store);
         try {
             transaction->Apply([this, &shapes](core::Edit& edit) {
-                evaluator::RequireSupported(edit.base(), edit.project(), shapes);
+                procedural::SnapshotSourceProvider procedurals(*Current()->store, edit.project());
+                evaluator::RequireSupported(edit.base(), edit.project(), shapes, &procedurals);
                 RequireAdmission(edit.project());
             });
         } catch (...) {

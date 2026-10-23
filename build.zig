@@ -432,6 +432,11 @@ const evaluator_sources = [_][]const u8{
 /// The export plan compiler (`src/export/`, P1-EXPORT, `08-export.md` §1, §2, §6), relative to
 /// `src/`: compiled with the evaluator into `UzPainter.exe` and into `uzp-export-tests.exe`.
 const export_sources = [_][]const u8{
+    "procedural/seam.cpp",
+    "procedural/asset_library.cpp",
+    "procedural/admission.cpp",
+    "procedural/snapshot_backend.cpp",
+    "procedural/snapshot_source.cpp",
     "export/cli.cpp",
     "export/config.cpp",
     "export/encode.cpp",
@@ -514,13 +519,6 @@ const procedural_grunge_sources = [_][]const u8{"procedural/grunges.cpp"};
 /// into `uzp-proc-material-tests.exe` with `procedural_sources`. `materials.cpp` embeds and includes
 /// `procedural/shaders/proc_materials.hlsli`, the kernel text both lanes compile.
 const procedural_material_sources = [_][]const u8{"procedural/materials.cpp"};
-/// The asset library and the seam vocabulary it uses (`src/procedural/asset_library.h`, decision
-/// 324), relative to `src/`: compiled into `UzPainter.exe` and into `uzp-pyapi-tests.exe`
-/// (`resource.search`), without the HlslBackend host.
-const asset_library_sources = [_][]const u8{
-    "procedural/seam.cpp",
-    "procedural/asset_library.cpp",
-};
 /// UzPainter's own procedural asset library (`src/procedural/asset_library.h`), installed beside
 /// the executables as `bin/assets/procedural/`.
 const procedural_assets_dir = "assets/procedural";
@@ -1509,9 +1507,8 @@ pub fn build(b: *std.Build) void {
         if (optimize == .Debug) "-DUZP_HOST_FAULT_HOOKS=1" else "-DUZP_HOST_FAULT_HOOKS=0",
     };
     app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &pyapi_sources, .flags = &pyapi_flags });
-    app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &asset_library_sources, .flags = &pyapi_flags });
     // `UzPainter.exe assets list [--parity]` (src/procedural/cli.h).
-    app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &.{ "procedural/cli.cpp", "procedural/snapshot_cli.cpp", "procedural/snapshot_recording.cpp", "procedural/admission.cpp", "procedural/snapshot_backend.cpp" }, .flags = &pyapi_flags });
+    app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &.{ "procedural/cli.cpp", "procedural/snapshot_cli.cpp", "procedural/snapshot_recording.cpp" }, .flags = &pyapi_flags });
     painter_step.dependOn(&b.addInstallBinFile(b.path("parity/fixtures/meshes/plane.obj"), "assets/snapshot/plane.obj").step);
     // The supervisor and worker roles (phase2.1). The worker's test-only fault hooks exist in a
     // Debug build only: ReleaseFast, ReleaseSafe and ReleaseSmall contain none of their code and
@@ -1816,7 +1813,7 @@ pub fn build(b: *std.Build) void {
     const export_hook_flags = evaluator_flags ++ [_][]const u8{"-DUZP_EXPORT_FAULT_HOOKS=1"};
     export_tests_mod.addCSourceFiles(.{
         .root = b.path("tests/export"),
-        .files = &.{"export_test.cpp"},
+        .files = &.{ "export_test.cpp", "snapshot_source_test.cpp" },
         .flags = &export_hook_flags,
     });
     export_tests_mod.addCSourceFiles(.{
@@ -1961,7 +1958,6 @@ pub fn build(b: *std.Build) void {
         .flags = &pyapi_flags,
     });
     pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &pyapi_sources, .flags = &pyapi_flags });
-    pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &asset_library_sources, .flags = &pyapi_flags });
     // `uzpainter.baking` binds the bake parameter model (`python/bind_baking.cpp`).
     pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &bake_parameter_sources, .flags = &uzp_core_flags });
     embed_inputs.add(pyapi_tests_mod, "src", &bake_catalog_sources, &uzp_core_flags);

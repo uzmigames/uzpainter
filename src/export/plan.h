@@ -320,6 +320,7 @@ struct SourceInputs {
     /// which its combined virtual normals are computed and padded as Painter computes them
     /// (virtual_maps.h `VirtualMapRequest::islandNormal`). Null in production.
     const Coverage* islandNormal = nullptr;
+    std::shared_ptr<const evaluator::IProceduralSourceProvider> procedurals{};
 };
 
 /// A planned file's content before processing: its channels in destination order, float32

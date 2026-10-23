@@ -12,6 +12,7 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
 
 ### Added
 
+- Explicit scalar procedural fills now consume project-private snapshots through CPU evaluation and export, preserving float32 values after reopen and bundle import. Receipts name plane provenance, caches recheck authoritative data, and transactions validate final states atomically. The repository guard distinguishes schema declarations from snapshot instances and rejects entries hidden in schema literals. The initial 128px User L32F domain remains narrow; SourceSubstance facade binding and recipe transport of snapshot planes remain unavailable.
 - Authored AO mesh controls compare integer and float inputs with a precomputed-product path. All four-set predictions are frozen before capture, with exact exported-operand preconditions; 58 CPU checks pass. AO_Mixed stays refused pending an exact operator.
 - Height-normal and mask-effects fits are reproduced against the current Painter 12.2.0 envelope. All 23 entries retain identical formulas and residuals; refreshed publication identities fix stale-envelope validation failures.
 - Native procedural references preserve legacy resolution objects and persist mode/value/offset overrides. Admission resolves Auto, fixed and explicit set/tile sizes before submission, refuses unsupported dimensions without clamping, and changes snapshot signatures when Auto follows a resize. Manifest, recipe and save/reopen tests cover the new contract; SourceSubstance facade wiring remains pending.
