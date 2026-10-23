@@ -152,3 +152,38 @@ and `precomposed-conversion.json`. Authored sources remain at their original pat
 and/or under `requests/admitted/tier0/semantics/`. The admission catalog excludes
 them from the pending queue and checks every copy against its admitted manifest,
 without deleting or moving files. Recorded pixels remain solely in the private store.
+
+### Scalar precomposed-source control (2026-10-23)
+
+The follow-up `ao-mixed-precomposed-half-y-l32f` is admitted under the same
+current envelope, private record
+`82e83932121173190e638a162fbf5978ba56e404c8f79ff6d7691b0cad040bef`.
+Its authored EXR has one Y/FLOAT channel, SHA-256
+`942bf2a6e1e809be059f4dcc8e0b36d4d6cb7e6c8dccd6773e9cf13cac0b431e`.
+It precomputes the same opacity-0.5 formula and changes only the precomposed
+resource in the original control's instruction sequence. The deterministic
+writer preserves float32 bits, including partial ZIP blocks and signed zero;
+the existing RGB fixture's bytes remain unchanged.
+
+The strict precondition now passes: all eight EXR comparisons (Nearest and
+BilinearHQ, immediate repeats, r1 and r2) have bit-identical exported channel
+and mesh operands across original-opacity and precomposed-opacity-1 paths.
+AO_Mixed also matches across every pair. All repeated and reopened exports
+are identical. This establishes agreement of those two composition paths for
+this control; it neither proves a general history-independent operator nor
+resolves the L16 reopen differences recorded above.
+
+The diagnostic `WriteUnorm8(float32(mesh_export * channel_export))` still
+differs at two texels per set in every EXR export, including the precomposed
+opacity-1 sets. Thus the residual does not require an opacity-0.5 blend in
+the captured stack. No arithmetic candidate is accepted, item 2.10 remains
+open, and the production refusal is unchanged.
+
+Aggregate report, outside the repository:
+`%LOCALAPPDATA%/UzPainter/parity-store/diagnostics/ao-precomposed-y-precondition.json`.
+The same equality-gated analyzer rejects all eight pairs of the earlier RGB
+control, with 17,408 channel differences per pair. Authorship validation:
+`test_authored_ao_scalar_fixture.py` and `test_authored_ao_fixture.py`, four
+tests passing; Ruff and mypy pass on the new test module. Capture uses the
+official recorder, current-envelope detection, session identity verification
+and private-store admission. Authored request and fixture remain in place.

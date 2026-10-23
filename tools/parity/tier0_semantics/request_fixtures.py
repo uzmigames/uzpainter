@@ -340,12 +340,21 @@ def tie(centres: tuple[float, ...] = TIE_CENTRES) -> bytes:
 def exr_float_rgb(rgb: npt.NDArray[np.float32]) -> bytes:
     """Scanline OpenEXR, channels B, G, R as FLOAT, ZIP compression (16 lines a block),
     increasing Y; `rgb` is (height, width, 3), row 0 the top row."""
-    height, width, _ = rgb.shape
+    return _exr_float(rgb[:, :, ::-1], (b"B", b"G", b"R"))
+
+
+def exr_float_y(image: npt.NDArray[np.float32]) -> bytes:
+    """Scanline OpenEXR with one full-resolution Y/FLOAT channel and ZIP compression."""
+    return _exr_float(image[:, :, None], (b"Y",))
+
+
+def _exr_float(image: npt.NDArray[np.float32], names: tuple[bytes, ...]) -> bytes:
+    height, width, _ = image.shape
 
     def attribute(name: str, kind: str, value: bytes) -> bytes:
         return name.encode() + b"\0" + kind.encode() + b"\0" + struct.pack("<i", len(value)) + value
 
-    channels = b"".join(c + b"\0" + struct.pack("<iB3xii", 2, 0, 1, 1) for c in (b"B", b"G", b"R"))
+    channels = b"".join(c + b"\0" + struct.pack("<iB3xii", 2, 0, 1, 1) for c in names)
     box = struct.pack("<iiii", 0, 0, width - 1, height - 1)
     header = (
         struct.pack("<ii", 20000630, 2)
@@ -359,12 +368,12 @@ def exr_float_rgb(rgb: npt.NDArray[np.float32]) -> bytes:
         + attribute("screenWindowWidth", "float", struct.pack("<f", 1.0))
         + b"\0"
     )
-    planes = rgb.astype("<f4")
+    planes = image.astype("<f4")
     blocks: list[bytes] = []
     for y in range(0, height, 16):
-        # Each line holds its B, G and R samples in turn; ZIP splits even and odd bytes, then
+        # Each line holds each channel's samples in turn; ZIP splits even and odd bytes, then
         # stores each byte as its difference from the previous one plus 128 before deflating.
-        raw = planes[y : y + 16, :, ::-1].transpose(0, 2, 1).tobytes()
+        raw = planes[y : y + 16].transpose(0, 2, 1).tobytes()
         codes = np.frombuffer(raw, dtype=np.uint8)
         split = np.concatenate([codes[0::2], codes[1::2]]).astype(np.int16)
         split[1:] = (split[1:] - split[:-1] + 128) & 0xFF
@@ -390,6 +399,14 @@ def ao_precomposed_half() -> bytes:
     rows = (delta.astype(np.float64) * 0.5 + 1).astype(np.float32)
     rgb = np.broadcast_to(rows[:, None, None], (256, 256, 3)).copy()
     return exr_float_rgb(rgb)
+
+
+def ao_precomposed_half_y() -> bytes:
+    """The same authored precomposed AO operand, stored as Y/FLOAT without RGB conversion."""
+    source = (np.arange(256, dtype=np.float64) / 255).astype(np.float32)
+    delta = source - np.float32(1)
+    rows = (delta.astype(np.float64) * 0.5 + 1).astype(np.float32)
+    return exr_float_y(np.broadcast_to(rows[:, None], (256, 256)).copy())
 
 
 def uv_ramp(size: int) -> bytes:
@@ -2404,7 +2421,9 @@ def preset_probes(root: str) -> dict[str, Config]:
 GLTF_PRESET = "resource://starter_assets/glTF PBR Metal Roughness"
 
 
-def gltf_preset_probes(root: str, *, predefined: bool = False) -> dict[str, Config]:
+def gltf_preset_probes(
+    root: str, *, predefined: bool = False, padding_only: bool = False
+) -> dict[str, Config]:
     """Decision 314 (recording R-314): the glTF PBR Metal Roughness preset with its own
     parameters and with the pipeline's overrides."""
     base: Config = {
@@ -2412,6 +2431,15 @@ def gltf_preset_probes(root: str, *, predefined: bool = False) -> dict[str, Conf
         "defaultExportPreset": "export-preset-generator://gltf" if predefined else GLTF_PRESET,
         "exportList": [{"rootPath": root}],
     }
+    if padding_only:
+        if not predefined:
+            raise ValueError("padding-only R-314 requires the observed predefined URL")
+        return {
+            "gltf-padding": {
+                **base,
+                "exportParameters": [{"parameters": {"paddingAlgorithm": "infinite"}}],
+            }
+        }
     return {
         "gltf-own": base,
         "gltf-pipeline": {**base, "exportParameters": [{"parameters": dict(PIPELINE_PARAMETERS)}]},

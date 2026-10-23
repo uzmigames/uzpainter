@@ -1,0 +1,16 @@
+{
+  "defaultExportPreset": "export-preset-generator://gltf",
+  "exportList": [
+    {
+      "rootPath": "uzp_bevelled_cube"
+    }
+  ],
+  "exportParameters": [
+    {
+      "parameters": {
+        "paddingAlgorithm": "infinite"
+      }
+    }
+  ],
+  "exportShaderParams": false
+}

@@ -12,7 +12,8 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
 
 ### Added
 
-- glTF recording preserves and hashes validated `.gltf`, `.glb` and local `.bin` sidecars separately from texture maps. Current Legacy/OCIO captures identify the predefined glTF URL and repeatable PNG16 maps; preset-default padding remains an explicit recording gap.
+- glTF recording preserves and hashes validated `.gltf`, `.glb` and local `.bin` sidecars separately from texture maps. Legacy/OCIO captures identify the predefined glTF URL and repeatable PNG16 maps; padding-only follow-ups confirm PNG8 defaults without overriding depth or dithering.
+- An authored scalar Y/FLOAT AO control produces bit-identical channel and mesh operands across eight paired exports. The virtual outputs also agree, but the two-texel arithmetic residual remains unresolved; AO_Mixed is still refused.
 - Project-private procedural snapshots can be recorded through the installed Painter using the shipped embedded-Python bridge. The initial full-UV scalar domain checks paired and repeated float32 exports, then verifies exact serving after saving and reopening the destination.
 - Recorded an AO_Mixed L32F precomposed-source control with pinned authored EXR bytes and paired Nearest/BilinearHQ paths. RGB-to-scalar conversion prevents equal channel operands; the failed control precondition and production refusal remain explicit.
 - Texture recording supports explicitly declared, bounded save/reopen cycles. New AO_Mixed L32F and L16 controls isolate float operands and persistence across three reopens; the default two-recording protocol is unchanged.

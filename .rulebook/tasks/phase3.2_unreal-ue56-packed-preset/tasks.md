@@ -169,3 +169,13 @@ RGB-to-scalar conversion at 68 rows, exactly explained by float32 sum times the
 float32 reciprocal of three. The paired AO_Mixed outputs agree, but their channel
 operands differ, so no operator conclusion follows. Decision 131 records the
 hashes, scope and failed precondition. Item 2.10 and the refusal remain unchanged.
+
+The scalar Y/FLOAT follow-up `ao-mixed-precomposed-half-y-l32f` is now admitted
+as private record `82e83932121173190e638a162fbf5978ba56e404c8f79ff6d7691b0cad040bef`.
+All eight EXR pairs satisfy exact channel and mesh operand equality, and
+AO_Mixed agrees across the two composition paths. Immediate repeats and r1/r2
+are identical. The exported-operand float32 product followed by WriteUnorm8
+still misses two texels per set/export, including precomposed opacity-1 sets.
+Decision 131 records the scoped conclusion and private aggregate report.
+The authored scalar fixture/request tests pass; no exact operator or acceptance
+is claimed, and item 2.10 remains open.

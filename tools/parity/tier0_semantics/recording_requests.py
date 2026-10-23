@@ -98,6 +98,9 @@ def probe_groups() -> dict[str, dict[str, Config]]:
         "presets-gltf-predefined-bevelled-cube": rf.gltf_preset_probes(
             "uzp_bevelled_cube", predefined=True
         ),
+        "presets-gltf-predefined-padding-bevelled-cube": rf.gltf_preset_probes(
+            "uzp_bevelled_cube", predefined=True, padding_only=True
+        ),
     }
 
 
@@ -111,6 +114,11 @@ REQUEST_FIXTURES: dict[str, tuple[str, str, Generate]] = {
         "image",
         f"{FIXTURE_DIR}/bitmaps/ao-precomposed-half.exr",
         rf.ao_precomposed_half,
+    ),
+    "ao-precomposed-half-y": (
+        "image",
+        f"{FIXTURE_DIR}/bitmaps/ao-precomposed-half-y.exr",
+        rf.ao_precomposed_half_y,
     ),
     "islands": ("mesh", f"{FIXTURE_DIR}/meshes/islands.obj", rf.islands),
     "seam": ("mesh", f"{FIXTURE_DIR}/meshes/seam.obj", rf.seam),
@@ -913,10 +921,14 @@ WAND_BASE = [75 / 255, 70 / 255, 65 / 255]
 # --- Decision 314: the glTF PBR Metal Roughness preset (recording R-314) ------------------
 
 
-def export_presets_gltf(ocio: bool, *, predefined: bool = False) -> Golden:
+def export_presets_gltf(
+    ocio: bool, *, predefined: bool = False, padding_only: bool = False
+) -> Golden:
     """Recording R-314 (phase3.1_unreal-gltf-pbr-preset item 2.1): Painter's files, dry run and
     `list_output_maps()` for its glTF PBR Metal Roughness preset, every channel the shipped preset
     reads filled with a distinct source."""
+    if padding_only and not predefined:
+        raise ValueError("padding-only R-314 requires the observed predefined URL")
     s = start("bevelled-cube", None if ocio else ALPHA_BLEND)
     added = (("AO", "L16"), ("SpecularWeight", "L8"))
     s.channels(((("Opacity", "L8"), ("EmissionColor", "sRGB8")) if ocio else ()) + added)
@@ -951,9 +963,10 @@ def export_presets_gltf(ocio: bool, *, predefined: bool = False) -> Golden:
     s.add(PREDEFINED_OUTPUT_MAPS, texture_set="uzp_bevelled_cube")
     if not predefined:
         s.add(RESOURCE_OUTPUT_MAPS, preset=rf.GLTF_PRESET)
-    inputs = probes(
-        s, "presets-gltf-predefined-bevelled-cube" if predefined else "presets-gltf-bevelled-cube"
-    )
+    group = "presets-gltf-predefined-bevelled-cube" if predefined else "presets-gltf-bevelled-cube"
+    if padding_only:
+        group = "presets-gltf-predefined-padding-bevelled-cube"
+    inputs = probes(s, group)
     template = (
         "no template (the pipeline's default OpenPBR channels) with Opacity, EmissionColor, AO "
         "and SpecularWeight added, under OCIO"
@@ -963,6 +976,7 @@ def export_presets_gltf(ocio: bool, *, predefined: bool = False) -> Golden:
     return Golden(
         "export-presets-gltf-"
         + ("predefined-" if predefined else "")
+        + ("padding-" if padding_only else "")
         + ("ocio" if ocio else "legacy"),
         "tier0/export/presets",
         f"Recording R-314 (decision 314, phase3.1_unreal-gltf-pbr-preset item 2.1) on the "
@@ -980,6 +994,14 @@ def export_presets_gltf(ocio: bool, *, predefined: bool = False) -> Golden:
             "R-314 preset-list capture; the starter-assets URL was undefined. The predefined "
             "output-map capture supplies the layout; no resource-preset capture is requested."
             if predefined
+            else ""
+        )
+        + (
+            " Padding-only follow-up supersedes the probe description: one export sets only "
+            "paddingAlgorithm=infinite, leaving bitDepth, fileFormat and dithering to the "
+            "predefined preset. Confirms PNG8 defaults after the no-parameters probe refused "
+            "unresolved padding."
+            if padding_only
             else ""
         ),
         "bevelled-cube",
@@ -1903,6 +1925,27 @@ def ao_mixed_precomposed_probe() -> Golden:
     )
 
 
+def ao_mixed_precomposed_scalar_probe() -> Golden:
+    """Repeat the composition-path control without a replicated-RGB source conversion."""
+    golden = ao_mixed_precomposed_probe()
+    golden.name = "ao-mixed-precomposed-half-y-l32f"
+    golden.inputs = [
+        "ao-precomposed-half-y" if name == "ao-precomposed-half" else name for name in golden.inputs
+    ]
+    for step in golden.sequence.steps:
+        if step["call"] == ps.IMPORT_RESOURCE and step["args"]["input"] == "ao-precomposed-half":
+            step["args"]["input"] = "ao-precomposed-half-y"
+    golden.description = golden.description.replace(
+        "authored EXR32F ao-precomposed-half",
+        "authored single-channel Y/FLOAT EXR ao-precomposed-half-y",
+    ).replace("Its RGB rows", "Its scalar Y rows") + (
+        " This separate control avoids replicated-RGB-to-scalar conversion. "
+        "Y/FLOAT import preservation is a measured precondition, not an assumption; "
+        "any channel or mesh operand difference makes the operator comparison inconclusive."
+    )
+    return golden
+
+
 def padding_normal_combine_probe() -> Golden:
     """Decision 276 item 5's recording: the float32 form (item 4 (b)) and the order (item 4 (c))
     of Painter's gutter combination of a bound Normal mesh map with the padded mesh-free normal,
@@ -2223,10 +2266,13 @@ def later_goldens() -> list[Golden]:
         export_presets_gltf(ocio=True),
         export_presets_gltf(ocio=False, predefined=True),
         export_presets_gltf(ocio=True, predefined=True),
+        export_presets_gltf(ocio=False, predefined=True, padding_only=True),
+        export_presets_gltf(ocio=True, predefined=True, padding_only=True),
         blend_subnormal(),
         ao_mixed_grid_probe(),
         *ao_mixed_stability_probes(),
         ao_mixed_precomposed_probe(),
+        ao_mixed_precomposed_scalar_probe(),
         *specularweight_base_probes(),
     ]
 
@@ -2240,7 +2286,10 @@ ADMITTED = frozenset(
         "export-presets-gltf-ocio",
         "export-presets-gltf-predefined-legacy",
         "export-presets-gltf-predefined-ocio",
+        "export-presets-gltf-predefined-padding-legacy",
+        "export-presets-gltf-predefined-padding-ocio",
         "ao-mixed-precomposed-half-l32f",
+        "ao-mixed-precomposed-half-y-l32f",
         "export-padding-tau-prism",
         "specularweight-empty-base-default-l8",
         "specularweight-empty-base-default-l16",
@@ -2348,10 +2397,13 @@ PRESERVED_REQUESTS = frozenset(
         "ao-mixed-grid-l32f",
         "ao-mixed-grid-l16-reopen3",
         "ao-mixed-precomposed-half-l32f",
+        "ao-mixed-precomposed-half-y-l32f",
         "export-presets-gltf-legacy",
         "export-presets-gltf-ocio",
         "export-presets-gltf-predefined-legacy",
         "export-presets-gltf-predefined-ocio",
+        "export-presets-gltf-predefined-padding-legacy",
+        "export-presets-gltf-predefined-padding-ocio",
     }
 )
 

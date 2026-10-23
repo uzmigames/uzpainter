@@ -57,6 +57,7 @@ def test_every_requested_golden_is_committed_once() -> None:
         "export-presets-ocio",
         "export-presets-gltf-ocio",
         "export-presets-gltf-predefined-ocio",
+        "export-presets-gltf-predefined-padding-ocio",
     }
 
 
