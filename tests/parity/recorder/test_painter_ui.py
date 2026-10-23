@@ -397,3 +397,80 @@ def test_a_simple_dialog_name_is_saved_inside_the_target(
     assert ui.export_resource("uzp_rq_x", tmp_path, {}) == "Export resource..."
     assert name.set_to == [str(tmp_path.resolve() / "uzp_rq_x.png")]
     assert save.invoked == 1 and cancelled == []
+
+
+def test_assets_tree_walker_survives_unrelated_viewport_findall_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    from tools.parity.recorder.painter_ui import PainterUi
+
+    class Node:
+        def __init__(self, name: str, children: list[Any], broken: bool = False) -> None:
+            self.name, self.nodes, self.broken = name, children, broken
+            self.element_info = SimpleNamespace(
+                class_name="Alg::PaintViewer" if broken else "QDockWidget",
+                control_type="Pane",
+                automation_id=name,
+            )
+
+        def window_text(self) -> str:
+            return self.name
+
+        def rectangle(self) -> Any:
+            return SimpleNamespace(left=0, top=0, right=20, bottom=20)
+
+        def is_enabled(self) -> bool:
+            return True
+
+        def descendants(self) -> list[Any]:
+            raise AssertionError("FindAll must not discard healthy sibling branches")
+
+        def children(self) -> list[Any]:
+            raise AssertionError("FindAll must not be used for the Assets locator")
+
+        def iter_children(self) -> Any:
+            if self.broken:
+                raise RuntimeError("viewport E_FAIL")
+            return iter(self.nodes)
+
+    assets = Node("Assets", [])
+    root = Node("Painter", [Node("viewport", [], broken=True), assets])
+    ui = PainterUi.__new__(PainterUi)
+    ui.window = root
+    monkeypatch.setattr(ui, "on_screen", lambda element: True)
+    assert ui.assets_dock() is assets
+    rows = ui.survey(root)
+    assert [row["text"] for row in rows] == ["Painter", "viewport", "Assets"]
+    assert rows[1]["children_error"] == "RuntimeError: viewport E_FAIL"
+    assert "children_error" not in rows[2]
+
+
+def test_assets_capture_failure_keeps_one_private_survey(tmp_path: Path) -> None:
+    import json
+
+    from tools.parity.recorder.painter_ui import UiOperator
+
+    class MissingAssets:
+        window_surveyed = False
+        window = object()
+
+        def panel_image(self, panel: str, path: Path) -> None:
+            raise RecorderError("Assets missing")
+
+        def survey(self, window: Any) -> list[dict[str, Any]]:
+            assert window is self.window
+            return [{"text": "Painter", "children_error": "viewport E_FAIL"}]
+
+    ui = MissingAssets()
+    operator = UiOperator(ui, tmp_path)  # type: ignore[arg-type]
+    for _ in range(2):
+        with pytest.raises(RecorderError, match="Assets missing"):
+            operator.panel_image("Assets")
+    files = list(tmp_path.glob("*.json"))
+    assert len(files) == 1
+    evidence = json.loads(files[0].read_text(encoding="utf-8"))
+    assert evidence["refused"] == "Assets missing"
+    assert evidence["window_survey"][0]["children_error"] == "viewport E_FAIL"
+    assert len(operator.log) == 1 and ui.window_surveyed

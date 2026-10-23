@@ -1,6 +1,6 @@
 # 300. Qualify the Assets window's Export resource on disposable project bitmaps before any pilot recovery; the pinned current round if it cannot be qualified
 
-**Status**: accepted (design); the qualification run is pending
+**Status**: accepted (design); first qualification run inconclusive
 **Date**: 2026-10-19
 **Related Tasks**: phase2.9_pilot-belt, phase2.10_pilot-tunic-recovery, phase2.11_gate-g2
 
@@ -132,7 +132,13 @@ Every condition is adopted below:
    - **What may be claimed.** Approved-v5 or v10 parity is claimed only if they are byte-identical. Otherwise the report names it a current reference, and it lists every historic missing input by name and known hash (or `unknown`).
 8. **Scope.** Recording and building the current round is a technical recovery step, taken jointly under the owner's delegation. It is reversible and records no parity exception. Using it as phase2.9 and phase2.10's changed baseline is a different matter: those tasks' item 2.8 and acceptance 4.1 require an explicitly owner-authorised changed baseline. So it is one plain-language yes/no question to the owner, asked once a run's verdict is known. It is never decided by the panel.
 
-## Run (pending)
+## Run (first attempt inconclusive, 2026-10-23)
+
+The first run on Painter `12.2.0+js-api.1.1.20` under Substance OCIO is `INCONCLUSIVE`; the derived aggregate report is `parity/reports/phase2/resource-export-qualification.md`. Every one of the 26 attempted exports stopped before export with `Painter's Assets window: 0 docks and 0 tabs found`. No file or format was qualified. Condition B did use a different process and all imported source paths were verified absent; all thirteen sources remain hash-verified in private preservation.
+
+The report's thirteen `Version = SHA-1 at import: no` results are literal metadata comparisons, not missing-export placeholders. All imported versions end in `.image`; twelve have exactly the authored file's SHA-1 before that suffix. The 2048 grey PNG differs even before the suffix: its pinned, generated and preserved file SHA-1 is `2cb6e295c061d472e092d465a98874ec4b7b151c`, while the imported version is `8e7fbcb94d4fe07884803ff686f737bd8e0d5604.image`. The same version is stable after reopen. No version-normalisation rule or identity exception is accepted here; the large-mask discrepancy is an independent unresolved qualification issue.
+
+Read-only follow-up on the same disposable project initially found no descendants through pywinauto's `FindAll` enumeration. Bringing the window forward, waiting, and requesting Qt accessibility did not change it. A Windows MSAA and UIA TreeWalker control then exposed the cause: `Alg::PaintViewer` raises `E_FAIL` during descendant traversal, making the global `FindAll` wrapper return an empty list. Traversing separate branches and recording that error recovers 928 controls, including the Window menu; a screen capture confirms that menu opens. DPI is 96, and the UIA rectangle excludes the frame/title area included by `GetWindowRect` and `PrintWindow`. Private images show Assets hidden. This is a locator/enumeration failure, not evidence that Export resource is absent, re-encoded or source-dependent. No retry has been consumed; fix and validate the locator without exporting before another qualification attempt. No pilot originals were opened and no baseline changed.
 
 The `rec-batch` agent runs it in its next Painter window, with the Assets3D lock held. No Painter may be running: `--launch` starts it, restarts it for B, and stops it. Painter must stay visible on screen. In PowerShell, from the repository root:
 

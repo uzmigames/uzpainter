@@ -902,7 +902,9 @@ class PainterUi:
         """Every element under `root` as UI Automation shows it (private evidence, read only):
         the record a re-run's locators are fixed from when a step cannot be completed."""
         rows = []
-        for element in [root, *root.descendants()]:
+        pending = [root]
+        while pending:
+            element = pending.pop()
             info = element.element_info
             box = element.rectangle()
             rows.append(
@@ -915,6 +917,13 @@ class PainterUi:
                     "box": [box.left, box.top, box.right, box.bottom],
                 }
             )
+            children = []
+            try:
+                for child in element.iter_children():
+                    children.append(child)
+            except Exception as error:
+                rows[-1]["children_error"] = f"{type(error).__name__}: {error}"
+            pending.extend(reversed(children))
         return rows
 
     def assets_dock(self) -> Any:
@@ -922,15 +931,17 @@ class PainterUi:
         hides it (UI Automation tab selection: navigation only)."""
         for _ in range(3):
             docks = [
-                c for c in self.window.children() if str(c.window_text()).strip() == ASSETS_TITLE
+                c
+                for c in self.window.iter_children()
+                if str(c.window_text()).strip() == ASSETS_TITLE
             ]
             if len(docks) == 1 and self.on_screen(docks[0]):
                 return docks[0]
             tabs = [
                 tab
-                for bar in self.window.children()
+                for bar in self.window.iter_children()
                 if bar.element_info.class_name == "QMainWindowTabBar"
-                for tab in bar.children()
+                for tab in bar.iter_children()
                 if str(tab.window_text()).strip() == ASSETS_TITLE
             ]
             if len(tabs) != 1:
@@ -944,7 +955,7 @@ class PainterUi:
     def asset_items(self, dock: Any, gui_name: str) -> list[Any]:
         return [
             e
-            for e in dock.descendants()
+            for e in dock.iter_descendants()
             if e.element_info.control_type in ASSET_ITEM_TYPES
             and str(e.window_text()).strip() == gui_name
             and self.on_screen(e)
@@ -959,7 +970,7 @@ class PainterUi:
         if not items:
             fields = [
                 e
-                for e in dock.descendants()
+                for e in dock.iter_descendants()
                 if e.element_info.control_type == "Edit" and self.on_screen(e)
             ]
             evidence["search_fields"] = len(fields)
@@ -1254,7 +1265,22 @@ class UiOperator:
     def panel_image(self, panel: str) -> Path:
         name = re.sub(r"[^a-z0-9]+", "-", panel.lower())
         path = self.images / f"panel-{len(self.log):03d}-{name}.png"
-        self.ui.panel_image(panel, path)
+        try:
+            self.ui.panel_image(panel, path)
+        except RecorderError as error:
+            if panel == ASSETS_TITLE and not self.ui.window_surveyed:
+                self.ui.window_surveyed = True
+                survey = path.with_suffix(".json")
+                survey.parent.mkdir(parents=True, exist_ok=True)
+                survey.write_text(
+                    json.dumps(
+                        {"refused": str(error), "window_survey": self.ui.survey(self.ui.window)},
+                        indent=1,
+                    ),
+                    encoding="utf-8",
+                )
+                self.note("panel_image_refused", panel=panel, file=survey.name)
+            raise
         self.note("panel_image", panel=panel, file=path.name)
         return path
 
