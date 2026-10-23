@@ -1,9 +1,11 @@
 #include <bit>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 
 #include "evaluator/evaluator.h"
@@ -25,7 +27,7 @@ void Check(bool okay, const char* message) {
 }
 }
 
-int RunSnapshotSource(const std::filesystem::path& path) {
+int RunSnapshotSource(const std::filesystem::path& path, std::optional<int64_t> seed) {
     using namespace uzp;
     auto opened = store::ProjectStore::Open(path);
     Check(opened.report.ok(), "initial project integrity");
@@ -35,6 +37,10 @@ int RunSnapshotSource(const std::filesystem::path& path) {
     procedural::ProceduralRequest request;
     request.asset = core::ParseAssetUrl("uzasset://snapshot/authored-test@1");
     request.params = {{"amount", 0.5}};
+    if (seed) {
+        request.params["$randomseed"] = *seed;
+        request.seed = static_cast<uint64_t>(*seed);
+    }
     request.meshClass = "quad";
     request.outputId = "scalar";
     request.output = {128, procedural::ChannelFormat::F32, "raw", 1};
@@ -67,6 +73,7 @@ int RunSnapshotSource(const std::filesystem::path& path) {
         core::ProceduralRef ref;
         ref.asset = core::FormatAssetUrl(request.asset);
         ref.params = {{"amount", 0.5}};
+        if (seed) ref.params["$randomseed"] = *seed;
         ref.output_mapping = {{"User0", "scalar"}};
         fill.fill->sources[core::ChannelType::User0].value = core::ProceduralSource{ref};
         stack.root_layers.insert(stack.root_layers.begin(), std::move(fill));
@@ -135,7 +142,7 @@ int RunSnapshotSource(const std::filesystem::path& path) {
     auto& entry = std::get<core::json::Object>(entries.begin()->second.data);
     entry["project_uuid"] = "00000000-0000-4000-8000-000000000000";
     Check(!cpu.Evaluate(foreign, evaluation), "warm cache refuses foreign snapshot provenance");
-    for (int scenario = 0; scenario < 5; ++scenario) {
+    for (int scenario = 0; scenario < 8; ++scenario) {
         const auto before = document.revision();
         auto refused = submit([&](core::Edit& edit) {
             auto& set = edit.project().texture_sets.front();
@@ -146,6 +153,9 @@ int RunSnapshotSource(const std::filesystem::path& path) {
             if (scenario == 2) ref.output_mapping["User0"] = "other";
             if (scenario == 3) fill.projection.uv.filtering_mode = core::FilteringMode::Nearest;
             if (scenario == 4) edit.project().mesh->resource = std::string(64, 'a');
+            if (scenario == 5) ref.params["$randomseed"] = seed == 7 ? int64_t{8} : int64_t{7};
+            if (scenario == 6) ref.params["$randomseed"] = 7.0;
+            if (scenario == 7) ref.params["$randomseed"] = true;
             procedural::SnapshotSourceProvider provider(store, edit.project());
             evaluator::RequireSupported(edit.base(), edit.project(), {}, &provider);
         });

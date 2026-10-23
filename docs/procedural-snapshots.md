@@ -93,6 +93,11 @@ recorded Legacy settings and identity UV projection. It never selects a snapshot
 implicitly, guesses an output, resizes its raster or invokes a procedural family.
 The public `SourceSubstance` facade is not enabled by this path.
 
+The signature seed comes from the effective `$randomseed` integer parameter;
+absence means zero. Signed int64 values retain the same uint64 bit representation
+used by snapshot ingestion. A different seed changes the signature, and floating
+or boolean seed values are refused before mutation or evaluation.
+
 The provider loads the authoritative project-private plane and uploads its float32
 bits directly. Signature, raster digest and plane provenance participate in DAG
 hashes. Memory and persistent cache reads recheck the authoritative plane;

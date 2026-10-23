@@ -1589,12 +1589,13 @@ int RunTga(const std::vector<std::string>& args) {
     return 0;
 }
 
-int RunSnapshotSource(const std::filesystem::path& path);
+int RunSnapshotSource(const std::filesystem::path& path, std::optional<int64_t> seed);
 
 int main(int argc, char** argv) {
     std::vector<std::string> args(argv + 1, argv + argc);
     try {
-        if (args.size() == 2 && args[0] == "snapshot-source") return RunSnapshotSource(args[1]);
+        if ((args.size() == 2 || args.size() == 3) && args[0] == "snapshot-source")
+            return RunSnapshotSource(args[1], args.size() == 3 ? std::optional<int64_t>(std::stoll(args[2])) : std::nullopt);
         if (args.size() == 6 && args[0] == "tga") return RunTga(args);
         if (args.size() >= 2 && args[0] == "--fault") {
             exporter::fault::Arm(args[1]);

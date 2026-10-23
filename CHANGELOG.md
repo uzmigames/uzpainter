@@ -12,6 +12,7 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
 
 ### Added
 
+- Snapshot fills preserve the effective signed integer `$randomseed` when resolving their signature, including negative values and int64 limits. Nonzero captured seeds now serve after reopen and bundle import; changed, floating or boolean seeds are refused atomically.
 - A documented SourceSubstance control records private getter metadata and effective-value roundtrips, including Custom128/Auto resolution and save/reopen. The transport preserves refusals and value types, waits for shelf readiness, and rebinds fresh node/source handles. Its authored CPU tests pass; Painter capture and facade implementation remain pending.
 - The AO operand diagnostic verifies frozen EXR inputs and capture protocol, effective L32F state, 96 exports, repeats/reopen and every conditional prediction. Duplicate private-record identities are refused before loading; reports preserve failures as hashes and counts. Missing captures remain unavailable, and AO_Mixed remains refused.
 - The endpoint-plane diagnostic now checks raw record identity, the frozen capture protocol, effective channels, authored coverage and every repeat/reopen before scoring all 1,280 ring texels. Reports contain hashes and counts; tap order remains unproved because the existing freeze holds mixtures only. Capture and analysis budgets are recorded before the next batch.

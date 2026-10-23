@@ -60,6 +60,11 @@ render::Result<std::shared_ptr<const evaluator::ProceduralImage>> SnapshotSource
     context.output = {128, ChannelFormat::F32, "raw", 1};
     context.outputId = output->second;
     context.settings = EvaluationSettings(project);
+    if (const auto seed = ref.params.find("$randomseed"); seed != ref.params.end()) {
+        if (!seed->second.IsInt()) return fail("effective random seed is not an integer");
+        // Match snapshot capture: signed JSON seeds preserve all uint64 bits.
+        context.seed = static_cast<uint64_t>(std::get<int64_t>(seed->second.data));
+    }
     context.textureSetResolution = set.resolution;
     context.uvTileResolution = set.resolution;
     const AssetLibrary library;

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import OpenEXR
+import pytest
 from jsonschema import Draft202012Validator
 
 from tests.export.conftest import export_tests as export_tests
@@ -15,16 +16,19 @@ from tests.python.conftest import REPO_ROOT, Run
 from tests.python.test_pyapi_native import EXPORT_CONFIG, ok
 
 
+@pytest.mark.parametrize("seed", [None, 0, 7, -7, -(1 << 63), (1 << 63) - 1])
 def test_snapshot_fill_exports_after_reopen_and_bundle(
     run: Run,
     export_tests: Path,  # noqa: F811
     tmp_path: Path,
+    seed: int | None,
 ) -> None:
     project_path = tmp_path / "snapshot.uzp"
     ok(run('create(128)\nproject.save_as(WORK + "/snapshot.uzp")\nproject.close()\nresult = True'))
     ok(run('create(128)\nproject.save_as(WORK + "/foreign.uzp")\nproject.close()\nresult = True'))
     native = subprocess.run(
-        [str(export_tests), "snapshot-source", str(project_path)],
+        [str(export_tests), "snapshot-source", str(project_path)]
+        + ([] if seed is None else [str(seed)]),
         capture_output=True,
         text=True,
         timeout=120,
