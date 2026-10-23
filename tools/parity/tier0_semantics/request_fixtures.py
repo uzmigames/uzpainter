@@ -379,6 +379,19 @@ def exr_float_rgb(rgb: npt.NDArray[np.float32]) -> bytes:
     return header + b"".join(offsets) + b"".join(blocks)
 
 
+def ao_precomposed_half() -> bytes:
+    """Authored AO operand: fma(float32(code / 255) - 1, 0.5, 1), rows 0..255.
+
+    The float32 subtraction precedes the fused operation. Float64 evaluates its
+    dyadic product and sum exactly before one float32 rounding; no oracle values.
+    """
+    source = (np.arange(256, dtype=np.float64) / 255).astype(np.float32)
+    delta = source - np.float32(1)
+    rows = (delta.astype(np.float64) * 0.5 + 1).astype(np.float32)
+    rgb = np.broadcast_to(rows[:, None, None], (256, 256, 3)).copy()
+    return exr_float_rgb(rgb)
+
+
 def uv_ramp(size: int) -> bytes:
     """`size` x `size` float32: R(x, y) = (x + 0.5) / size, G(x, y) = (y + 0.5) / size, B = 0.5
     (x the column, y the row from the top; decision 129)."""
