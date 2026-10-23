@@ -1810,6 +1810,29 @@ def ao_mixed_grid_probe() -> Golden:
     )
 
 
+def ao_mixed_stability_probes() -> list[Golden]:
+    """Expose float operands and observe L16 after three consecutive save/reopen cycles."""
+    floating = ao_mixed_grid_probe()
+    floating.name = "ao-mixed-grid-l32f"
+    for step in floating.sequence.steps:
+        if step["call"] == ps.ADD_CHANNEL:
+            step["args"]["format"] = "L32F"
+    floating.description = floating.description.replace("AO L16 fill", "AO L32F fill") + (
+        " Float32 channel control for decision 131: expose the stored AO operand at "
+        "opacity 0.5/0.75/1 with the same Nearest/BilinearHQ controls."
+    )
+    reopened = ao_mixed_grid_probe()
+    reopened.name = "ao-mixed-grid-l16-reopen3"
+    reopened.settings = [
+        {"name": "recorder.reopen_count", "value": 3, "applied_by": "recorder_api"}
+    ]
+    reopened.description += (
+        " Decision 131 stability control: repeat the full recording after each of three "
+        "consecutive Full save/close/reopen cycles (r2, r3, r4), retaining all outputs."
+    )
+    return [floating, reopened]
+
+
 def padding_normal_combine_probe() -> Golden:
     """Decision 276 item 5's recording: the float32 form (item 4 (b)) and the order (item 4 (c))
     of Painter's gutter combination of a bound Normal mesh map with the padded mesh-free normal,
@@ -2130,6 +2153,7 @@ def later_goldens() -> list[Golden]:
         export_presets_gltf(ocio=True),
         blend_subnormal(),
         ao_mixed_grid_probe(),
+        *ao_mixed_stability_probes(),
         *specularweight_base_probes(),
     ]
 

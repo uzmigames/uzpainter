@@ -1,4 +1,4 @@
-"""Texture goldens (Tiers 0-2b): state replay, readbacks, exports, two recordings (2.2, 2.3, 2.6).
+"""Texture goldens (Tiers 0-2b): state replay, readbacks, exports, repeat recordings.
 
 1. Replay the job's state steps once through the documented API, reading effective defaults as
    they appear (fresh fill layers, the channel set `project.create` produced).
@@ -11,6 +11,8 @@
    directory and verifies the exported files are current (`capture.py`).
 3. Save the project (Full), close it, reopen it, find the layers again at their recorded places.
 4. Recording `after_save_reopen`: the same captures; the operator re-reads the UI-set values.
+   Explicit `recorder.reopen_count` settings may request two or three reopen cycles instead
+   of the default one; each cycle retains its own recording and operator readback.
 5. Write the private record and the public manifest to the oracle inbox (`output.py`).
 
 The throwaway project and the exports live in the private work directory; the project is closed
@@ -83,6 +85,7 @@ URL_SAFE_PATH = re.compile(r"[A-Za-z0-9._~/:-]+")
 
 # A manifest setting naming the stem of r2's project file (`project_file_name`).
 PROJECT_FILE_NAME = "project.file_name"
+REOPEN_COUNT = "recorder.reopen_count"
 PROJECT_STEM = re.compile(r"[a-z0-9][a-z0-9_-]*(\.[a-z0-9_-]+)*")
 
 
@@ -490,6 +493,25 @@ def probe_outputs(
     return outputs, present
 
 
+def reopen_count(job: Job) -> int:
+    """Default to one reopen; requests may explicitly select up to three."""
+    settings = [s for s in job.manifest["applied_settings"] if s["name"] == REOPEN_COUNT]
+    if not settings:
+        return 1
+    setting = settings[0]
+    value = setting["value"]
+    if (
+        len(settings) != 1
+        or setting["applied_by"] != "recorder_api"
+        or type(value) is not int
+        or value not in (1, 2, 3)
+    ):
+        raise RecorderError(
+            f"{job.golden_id}: `{REOPEN_COUNT}` must be one recorder_api integer from 1 to 3"
+        )
+    return int(value)
+
+
 def project_file_name(job: Job) -> str:
     """The file name r2's project is saved under: `golden.spp`, or the stem a manifest names in
     its `project.file_name` setting (applied by the recorder; decision 093, a project name
@@ -599,7 +621,7 @@ def record_once(
 
 def save_and_reopen(session: PainterSession, project_file: Path) -> None:
     locations = session.call("node_locations")
-    project_file.parent.mkdir(parents=True)
+    project_file.parent.mkdir(parents=True, exist_ok=True)
     session.call("save_as", path=project_file.as_posix())
     saved = session.wait_ready()
     if saved.file_path is None or Path(saved.file_path).resolve() != project_file.resolve():
@@ -631,7 +653,7 @@ def record_texture_golden(
     record_prefix: str = "",
     operator: Operator | None = None,
 ) -> Path:
-    """Record one Tier 0-2b golden twice and write it to the inbox; returns the run directory.
+    """Record one Tier 0-2b golden and its declared reopens; return the inbox run directory.
 
     A golden whose sheet names UI-set values needs `operator` (`texture_sheet.py`); without one
     it is refused, so a default can never be recorded in place of the sheet's value."""
@@ -651,6 +673,7 @@ def record_texture_golden(
             "record it with an operator (--operator ui or console)"
         )
     project_name = project_file_name(job)
+    reopens = reopen_count(job)
     identity = session.connect()
     require_colour_management(job, identity)
     directory = ensure_outside_repository(work) / job.golden_id.replace("/", "__")
@@ -667,15 +690,30 @@ def record_texture_golden(
         first, first_blobs = record_once(
             session, job, identity, directory / "r1", "r1", "same_session", now, extra, applied
         )
-        save_and_reopen(session, directory / "project" / project_name)
-        reread = (
-            operate(session, operator, sheet, directory / "r2-operator", apply=False)
-            if sheet and operator is not None
-            else ([], [])
-        )
-        second, second_blobs = record_once(
-            session, job, identity, directory / "r2", "r2", "after_save_reopen", now, extra, reread
-        )
+        recordings, blobs = [first], list(first_blobs)
+        for index in range(2, reopens + 2):
+            recording_id = f"r{index}"
+            save_and_reopen(session, directory / "project" / project_name)
+            reread = (
+                operate(
+                    session, operator, sheet, directory / f"{recording_id}-operator", apply=False
+                )
+                if sheet and operator is not None
+                else ([], [])
+            )
+            recording, captured = record_once(
+                session,
+                job,
+                identity,
+                directory / recording_id,
+                recording_id,
+                "after_save_reopen",
+                now,
+                extra,
+                reread,
+            )
+            recordings.append(recording)
+            blobs.extend(captured)
     finally:
         close_quietly(session)
     record = {
@@ -696,12 +734,12 @@ def record_texture_golden(
             "bake_backend": None,
             "render_state": None,
         },
-        "recordings": [first, second],
+        "recordings": recordings,
     }
     return write_run(
         inbox,
         record,
-        first_blobs + second_blobs,
+        blobs,
         job.manifest,
         identity.session_id,
         environment=identity.environment,

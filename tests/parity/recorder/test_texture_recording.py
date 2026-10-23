@@ -19,7 +19,7 @@ from tools.parity.recorder.capture import StaleCaptureError
 from tools.parity.recorder.job import EXPORT, Job, job_from_manifest, parse_output_map
 from tools.parity.recorder.output import slug
 from tools.parity.recorder.session import PainterSession, RecorderError, bootstrap_code
-from tools.parity.recorder.texture import record_texture_golden
+from tools.parity.recorder.texture import REOPEN_COUNT, record_texture_golden
 from tools.parity.recorder.vocabulary import LIST_TEXTURES
 from tools.parity.schemas import REPO_ROOT
 
@@ -99,6 +99,97 @@ def test_sample_golden_is_recorded_twice(
     # The project was saved in the private work directory and closed afterwards.
     assert not world.project_open
     assert list(work.rglob("golden.spp"))
+
+
+@pytest.mark.parametrize("count", [1, 2, 3])
+def test_explicit_reopens_keep_all_recordings(
+    count: int,
+    fake: types.ModuleType,
+    make_session: MakeSession,
+    sample_job: Job,
+    work: Path,
+    inbox: Path,
+) -> None:
+    sample_job.manifest["applied_settings"].append(
+        {"name": REOPEN_COUNT, "value": count, "applied_by": "recorder_api"}
+    )
+    world = fake.FakeWorld()
+    record = record_of(record_texture_golden(make_session(world), sample_job, work, inbox))
+    recordings = record["recordings"]
+    assert [r["recording_id"] for r in recordings] == [f"r{i}" for i in range(1, count + 2)]
+    assert [r["condition"] for r in recordings] == ["same_session"] + ["after_save_reopen"] * count
+    assert all(outputs(record, i, "exported_map") for i in range(count + 1))
+    assert not world.project_open
+
+
+@pytest.mark.parametrize("value", [0, 4, -1, True, 2.0, "3", None])
+def test_bad_reopen_count_is_refused_before_connection(
+    value: Any,
+    fake: types.ModuleType,
+    make_session: MakeSession,
+    sample_job: Job,
+    work: Path,
+    inbox: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sample_job.manifest["applied_settings"].append(
+        {"name": REOPEN_COUNT, "value": value, "applied_by": "recorder_api"}
+    )
+    session = make_session(fake.FakeWorld())
+    monkeypatch.setattr(session, "connect", lambda: pytest.fail("must validate before connect"))
+    with pytest.raises(RecorderError, match=r"recorder\.reopen_count"):
+        record_texture_golden(session, sample_job, work, inbox)
+    assert not inbox.exists() and not work.exists()
+
+
+@pytest.mark.parametrize("duplicate", [False, True])
+def test_reopen_setting_requires_unique_recorder_declaration(
+    duplicate: bool,
+    fake: types.ModuleType,
+    make_session: MakeSession,
+    sample_job: Job,
+    work: Path,
+    inbox: Path,
+) -> None:
+    setting = {
+        "name": REOPEN_COUNT,
+        "value": 3,
+        "applied_by": "recorder_api" if duplicate else "painter_ui",
+    }
+    sample_job.manifest["applied_settings"].extend([setting] * (2 if duplicate else 1))
+    with pytest.raises(RecorderError, match=r"recorder\.reopen_count"):
+        record_texture_golden(make_session(fake.FakeWorld()), sample_job, work, inbox)
+    assert not inbox.exists() and not work.exists()
+
+
+def test_third_reopen_failure_does_not_publish_partial_record(
+    fake: types.ModuleType,
+    make_session: MakeSession,
+    sample_job: Job,
+    work: Path,
+    inbox: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sample_job.manifest["applied_settings"].append(
+        {"name": REOPEN_COUNT, "value": 3, "applied_by": "recorder_api"}
+    )
+    world = fake.FakeWorld()
+    session = make_session(world)
+    original = session.call
+    opens = 0
+
+    def call(operation: str, **kwargs: Any) -> Any:
+        nonlocal opens
+        if operation == "open_project":
+            opens += 1
+            if opens == 3:
+                raise RecorderError("third reopen failed")
+        return original(operation, **kwargs)
+
+    monkeypatch.setattr(session, "call", call)
+    with pytest.raises(RecorderError, match="third reopen failed"):
+        record_texture_golden(session, sample_job, work, inbox)
+    assert opens == 3 and not world.project_open and not inbox.exists()
 
 
 def test_effective_defaults_and_readbacks_are_recorded(

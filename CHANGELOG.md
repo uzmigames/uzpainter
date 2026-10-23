@@ -12,6 +12,7 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
 
 ### Added
 
+- Texture recording supports explicitly declared, bounded save/reopen cycles. New AO_Mixed L32F and L16 controls isolate float operands and persistence across three reopens; the default two-recording protocol is unchanged.
 - Empty SpecularWeight channels export their recorded base on default and Alpha-blend projects at L8, L16 and L32F. The UzEngine preset publishes the PNG16 canonical map and BC4 derivative with its consumer gap and no binding; other template/format combinations remain refused.
 - Authored SpecularWeight empty-channel base probes for the default and Alpha-blend project templates, each at L8, L16 and L32F, with repeated EXR32F/PNG16 exports and recorder save/reopen. These requests support the open UzEngine preset evidence; recording, defaults and acceptance remain pending.
 - Export receipts now identify the actual CPU or GPU execution backend, adapter and driver. Missing GPU identity refuses publication before evaluation or filesystem changes; historical receipts remain readable. Capture uses the active device's driver identity.

@@ -1,7 +1,19 @@
 """R-131 state contract: bind each comparison to its intended texture set."""
 
+import hashlib
+
+from tools.parity.envelope.registry import current_envelope
 from tools.parity.recorder import vocabulary as ps
-from tools.parity.tier0_semantics.recording_requests import ao_mixed_grid_probe
+from tools.parity.recorder.job import job_from_manifest
+from tools.parity.recorder.texture import reopen_count
+from tools.parity.schemas import REPO_ROOT, Schema, validation_errors
+from tools.parity.tier0_semantics.corpus import FIXTURES
+from tools.parity.tier0_semantics.recording_requests import (
+    ADMITTED,
+    ao_mixed_grid_probe,
+    ao_mixed_stability_probes,
+    request_manifest,
+)
 
 
 def test_ao_mixed_request_pins_operand_state_before_export() -> None:
@@ -38,3 +50,28 @@ def test_ao_mixed_request_pins_operand_state_before_export() -> None:
             ps.SET_BLENDING_MODE: {"blending_mode": "Normal", "channel": "AO"},
             ps.SET_OPACITY: {"opacity": opacity, "channel": "AO"},
         }
+
+
+def test_stability_requests_preserve_grid_and_validate_as_jobs() -> None:
+    base = ao_mixed_grid_probe()
+    floating, reopened = ao_mixed_stability_probes()
+    assert reopened.sequence.steps == base.sequence.steps
+    assert reopened.name == "ao-mixed-grid-l16-reopen3"
+    assert floating.name == "ao-mixed-grid-l32f"
+    for original, changed in zip(base.sequence.steps, floating.sequence.steps, strict=True):
+        if original["call"] == ps.ADD_CHANNEL:
+            assert changed == {**original, "args": {"channel": "AO", "format": "L32F"}}
+        else:
+            assert changed == original
+    for golden, count in ((floating, 1), (reopened, 3)):
+        assert golden.name not in ADMITTED
+        hashes = {
+            name: hashlib.sha256((REPO_ROOT / FIXTURES[name][1]).read_bytes()).hexdigest()
+            for name in golden.inputs
+        }
+        manifest = request_manifest(golden, hashes, current_envelope(REPO_ROOT))
+        assert not validation_errors(manifest, Schema.GOLDEN_PUBLIC)
+        assert manifest["private_records"] == []
+        assert reopen_count(job_from_manifest(manifest)) == count
+    assert ao_mixed_grid_probe().sequence.steps == base.sequence.steps
+    assert base.settings == []
