@@ -195,10 +195,10 @@ void BindMisc(py::module_& m) {
     }, py::arg("token"), py::arg("timeout") = 0.0);
 
     py::module_ properties = submodule(m, "properties", "uzpainter.properties", "Parameters (the bake parameters' keys).");
-    py::module_ baking = submodule(m, "baking", "uzpainter.baking", "Mesh-map baking: the bake parameters.");
+    py::module_ baking = submodule(m, "baking", "uzpainter.baking", "Mesh-map baking: the bake parameters and the bake jobs.");
     BindBaking(baking, properties);
     Gaps(baking, "uzpainter.baking",
-         {"bake_async", "bake_selected_textures_async", "set_linked_group",
+         {"set_linked_group",
           "set_linked_group_common_parameters", "unlink_all", "unlink_all_common_parameters", "get_link_group",
           "get_link_group_common_parameters", "get_linked_texture_sets", "get_linked_texture_sets_common_parameters"},
          "phase3.5_embree-bakers");

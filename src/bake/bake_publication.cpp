@@ -88,102 +88,107 @@ core::ChannelFormat PublishedFormat(MeshMapUsage usage) {
                           UsageOwnerTask(usage) + ")");
 }
 
+PublishedSet PublishInto(core::Edit& edit, std::int64_t revision, const BakeRequest& request,
+                         const BakeResult& result, const Capabilities& caps, const PublicationContext& context,
+                         const StageResource& stage) {
+    // Every check before any change.
+    if (request.input_revision != std::to_string(revision)) {
+        throw ValueError("the bake read input revision '" + request.input_revision + "', the document is at " +
+                         std::to_string(revision) + ": a stale bake is not published (" + kOwner + ")");
+    }
+    if (result.diagnostic_unqualified) {
+        throw ValueError("a bake on the diagnostic path of an unqualified BVH build is never evidence and is not "
+                         "published (decision 306)");
+    }
+    if (context.published_at.empty()) throw ValueError("publication needs the time of the new resource entries");
+    core::Project& project = edit.project();
+    const auto set = std::find_if(project.texture_sets.begin(), project.texture_sets.end(),
+                                  [&](const core::TextureSet& s) { return s.name == request.texture_set; });
+    if (set == project.texture_sets.end()) {
+        throw ValueError("the project has no texture set '" + request.texture_set + "'");
+    }
+    if (set->resolution.width != static_cast<int>(result.width) ||
+        set->resolution.height != static_cast<int>(result.height)) {
+        throw NotYetSupported("publishing a " + std::to_string(result.width) + "x" + std::to_string(result.height) +
+                              " bake into texture set '" + set->name + "' of " +
+                              std::to_string(set->resolution.width) + "x" + std::to_string(set->resolution.height) +
+                              ": resampling a mesh map is not established (" + kOwner + ")");
+    }
+    std::vector<core::ChannelFormat> formats;
+    for (MeshMapUsage usage : request.usages) formats.push_back(PublishedFormat(usage));
+    if (std::find(request.usages.begin(), request.usages.end(), MeshMapUsage::Normal) != request.usages.end()) {
+        if (result.normal_format != project.settings.normal_map_format ||
+            result.tangent_space != project.settings.tangent_space) {
+            throw ValueError("the Normal bake's format or tangent space is not the project's");
+        }
+    }
+    core::ResultRecordHeader header;
+    header.revision = revision;
+    header.evaluator_profile = project.versions.evaluator_profile;
+    header.compat_profile = project.versions.compat_profile;
+    header.app_version = project.versions.app_version;
+    header.resource_hashes = context.input_resources;
+    BakeReceipt receipt = BuildReceipt(request, result, caps, ReceiptContext{context.job_id, header, context.build_hash});
+
+    // The maps, the receipt, then the bindings.
+    const std::string origin = "bake job " + std::to_string(context.job_id);
+    std::vector<std::string> maps;
+    for (MeshMapUsage usage : request.usages) {
+        std::string bytes = EncodeMapFile(*CompatibleMap(result, usage));
+        maps.push_back(AddResource(edit, stage, std::move(bytes), "image/png",
+                                   set->name + "." + UsageName(usage) + ".baked.png", "mesh_map", origin,
+                                   context.published_at));
+        if (maps.back() != receipt.usages[maps.size() - 1].map_sha256) {
+            throw std::logic_error("the published map is not the receipt's");
+        }
+    }
+    std::string receipt_sha = AddResource(edit, stage, ReceiptBytes(receipt), "application/json",
+                                          set->name + ".bake-receipt." + std::to_string(context.job_id) + ".json",
+                                          "bake_receipt", origin, context.published_at);
+    const std::optional<std::string> cage = CageDigest(receipt);
+    const core::MeshHashes mesh_hashes = LowMeshHashes(request);
+    const std::vector<const BakeMesh*>& high = request.detail.low_as_high ? request.low : request.high;
+    for (std::size_t u = 0; u < request.usages.size(); ++u) {
+        const ReceiptUsage& entry = receipt.usages[u];
+        core::BakedProvenance baked;
+        baked.baker_version = receipt.tools.baker_version;
+        baked.backend = receipt.tools.backend;
+        baked.settings_hash = receipt.settings_hash;
+        for (const BakeMesh* mesh : high) baked.high_meshes.push_back(MeshContentHash(*mesh));
+        baked.cage = cage;
+        baked.mesh_hashes = mesh_hashes;
+        baked.effective_normalization = entry.effective_normalization;
+        baked.extra = core::json::Object{
+            {"receipt", receipt_sha},
+            {"job_id", core::json::Value(context.job_id)},
+            {"fidelity_evidence", FidelityEvidenceName(entry.account.fidelity_evidence)},
+            {"parity_status", receipt.parity_status},
+        };
+        core::MeshMapBinding binding;
+        binding.resource = maps[u];
+        binding.format = formats[u];
+        binding.color_space = "Raw";
+        binding.provenance = std::move(baked);
+        set->mesh_maps[CoreUsage(request.usages[u])] = std::move(binding);
+    }
+    return {std::move(receipt), std::move(receipt_sha)};
+}
+
 PublicationOutcome PublishBake(core::Document& document, core::MutationRequest mutation, const BakeRequest& request,
                                const BakeResult& result, const Capabilities& caps, const PublicationContext& context,
                                const StageResource& stage) {
     PublicationOutcome publication;
-    std::optional<BakeReceipt> receipt;
-    std::string receipt_sha;
+    std::optional<PublishedSet> published;
     publication.outcome = core::Execute(document, std::move(mutation), [&](core::Edit& edit) {
-        // Every check before any change.
-        const std::int64_t revision = document.revision();
-        if (request.input_revision != std::to_string(revision)) {
-            throw ValueError("the bake read input revision '" + request.input_revision + "', the document is at " +
-                             std::to_string(revision) + ": a stale bake is not published (" + kOwner + ")");
-        }
-        if (result.diagnostic_unqualified) {
-            throw ValueError("a bake on the diagnostic path of an unqualified BVH build is never evidence and is not "
-                             "published (decision 306)");
-        }
-        if (context.published_at.empty()) throw ValueError("publication needs the time of the new resource entries");
-        core::Project& project = edit.project();
-        const auto set = std::find_if(project.texture_sets.begin(), project.texture_sets.end(),
-                                      [&](const core::TextureSet& s) { return s.name == request.texture_set; });
-        if (set == project.texture_sets.end()) {
-            throw ValueError("the project has no texture set '" + request.texture_set + "'");
-        }
-        if (set->resolution.width != static_cast<int>(result.width) ||
-            set->resolution.height != static_cast<int>(result.height)) {
-            throw NotYetSupported("publishing a " + std::to_string(result.width) + "x" + std::to_string(result.height) +
-                                  " bake into texture set '" + set->name + "' of " +
-                                  std::to_string(set->resolution.width) + "x" + std::to_string(set->resolution.height) +
-                                  ": resampling a mesh map is not established (" + kOwner + ")");
-        }
-        std::vector<core::ChannelFormat> formats;
-        for (MeshMapUsage usage : request.usages) formats.push_back(PublishedFormat(usage));
-        if (std::find(request.usages.begin(), request.usages.end(), MeshMapUsage::Normal) != request.usages.end()) {
-            if (result.normal_format != project.settings.normal_map_format ||
-                result.tangent_space != project.settings.tangent_space) {
-                throw ValueError("the Normal bake's format or tangent space is not the project's");
-            }
-        }
-        core::ResultRecordHeader header;
-        header.revision = revision;
-        header.evaluator_profile = project.versions.evaluator_profile;
-        header.compat_profile = project.versions.compat_profile;
-        header.app_version = project.versions.app_version;
-        header.resource_hashes = context.input_resources;
-        receipt = BuildReceipt(request, result, caps, ReceiptContext{context.job_id, header, context.build_hash});
-
-        // The maps, the receipt, then the bindings.
-        const std::string origin = "bake job " + std::to_string(context.job_id);
-        std::vector<std::string> maps;
-        for (MeshMapUsage usage : request.usages) {
-            std::string bytes = EncodeMapFile(*CompatibleMap(result, usage));
-            maps.push_back(AddResource(edit, stage, std::move(bytes), "image/png",
-                                       set->name + "." + UsageName(usage) + ".baked.png", "mesh_map", origin,
-                                       context.published_at));
-            if (maps.back() != receipt->usages[maps.size() - 1].map_sha256) {
-                throw std::logic_error("the published map is not the receipt's");
-            }
-        }
-        receipt_sha = AddResource(edit, stage, ReceiptBytes(*receipt), "application/json",
-                                  set->name + ".bake-receipt." + std::to_string(context.job_id) + ".json",
-                                  "bake_receipt", origin, context.published_at);
-        const std::optional<std::string> cage = CageDigest(*receipt);
-        const core::MeshHashes mesh_hashes = LowMeshHashes(request);
-        const std::vector<const BakeMesh*>& high = request.detail.low_as_high ? request.low : request.high;
-        for (std::size_t u = 0; u < request.usages.size(); ++u) {
-            const ReceiptUsage& entry = receipt->usages[u];
-            core::BakedProvenance baked;
-            baked.baker_version = receipt->tools.baker_version;
-            baked.backend = receipt->tools.backend;
-            baked.settings_hash = receipt->settings_hash;
-            for (const BakeMesh* mesh : high) baked.high_meshes.push_back(MeshContentHash(*mesh));
-            baked.cage = cage;
-            baked.mesh_hashes = mesh_hashes;
-            baked.effective_normalization = entry.effective_normalization;
-            baked.extra = core::json::Object{
-                {"receipt", receipt_sha},
-                {"job_id", core::json::Value(context.job_id)},
-                {"fidelity_evidence", FidelityEvidenceName(entry.account.fidelity_evidence)},
-                {"parity_status", receipt->parity_status},
-            };
-            core::MeshMapBinding binding;
-            binding.resource = maps[u];
-            binding.format = formats[u];
-            binding.color_space = "Raw";
-            binding.provenance = std::move(baked);
-            set->mesh_maps[CoreUsage(request.usages[u])] = std::move(binding);
-        }
-        edit.returned()["bake"] = core::json::Object{{"receipt", receipt_sha},
-                                                     {"texture_set", set->name},
+        published = PublishInto(edit, document.revision(), request, result, caps, context, stage);
+        edit.returned()["bake"] = core::json::Object{{"receipt", published->receipt_sha256},
+                                                     {"texture_set", request.texture_set},
                                                      {"input_revision", request.input_revision}};
     });
     const core::RequestOutcome& outcome = publication.outcome;
     if (outcome.result && outcome.result->status == core::ResultStatus::committed) {
-        publication.receipt = std::move(receipt);
-        publication.receipt_sha256 = receipt_sha;
+        publication.receipt = std::move(published->receipt);
+        publication.receipt_sha256 = std::move(published->receipt_sha256);
     }
     return publication;
 }

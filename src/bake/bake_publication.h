@@ -16,8 +16,9 @@
 // Bound today: AO (L16) and Normal (RGB16), the usages whose 16-bit codes the baker writes. The float
 // maps (WorldSpaceNormal, Position, Opacity, Height) have no established channel format (decisions
 // 337 and 341), ID has no colour map and Thickness no per-texel value: a bake with any of them is
-// refused before mutation, naming its owner task. This is native only: Python and MCP do not
-// reach it, and a binding's `extra.parity_status` is the baker's (`pending-evidence`).
+// refused before mutation, naming its owner task. A binding's `extra.parity_status` is the baker's
+// (`pending-evidence`). Python and MCP reach publication only through a bake job's session publisher
+// (`job_session.h`, decision 355), which refuses every usage whose parity is not `supported`.
 
 #include <cstdint>
 #include <functional>
@@ -52,6 +53,17 @@ struct PublicationOutcome {
 /// The ChannelFormat a binding of `usage` declares; raises `uzp::core::NotYetSupported` (naming the
 /// owner task) for a usage whose map no binding can hold yet.
 core::ChannelFormat PublishedFormat(MeshMapUsage usage);
+
+struct PublishedSet {
+    BakeReceipt receipt;
+    std::string receipt_sha256;
+};
+
+/// `PublishBake`'s body inside a running transaction whose base is at `revision`: every check, then
+/// the staged maps and receipt and the bindings of `request.texture_set`. A bake job publishes all
+/// its texture sets in one transaction this way (`job.h`); a throw fails the transaction whole.
+PublishedSet PublishInto(core::Edit& edit, std::int64_t revision, const BakeRequest& request, const BakeResult& result,
+                         const Capabilities& caps, const PublicationContext& context, const StageResource& stage);
 
 /// Publishes `result` (a `Success` bake of `request` on a baker with `caps`) into `document`.
 PublicationOutcome PublishBake(core::Document& document, core::MutationRequest mutation, const BakeRequest& request,

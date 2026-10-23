@@ -362,13 +362,15 @@ const uzp_core_flags = cxx_flags ++ [_][]const u8{ "-Wall", "-Wextra", "-Werror"
 /// bake: `RTC_DEVICE_PROPERTY_VERSION`, the device's `isa=` and `RTC_DEVICE_PROPERTY_TASKING_SYSTEM`
 /// (1 = TBB). No fast-math and no contraction, so every float operation of the baker is one IEEE
 /// operation whatever the target CPU.
-const bake_flags = uzp_core_flags ++ [_][]const u8{
-    "-fno-fast-math",
-    "-ffp-contract=off",
+const bake_pins = [_][]const u8{
     "-DUZP_EMBREE_PINNED_VERSION=40401",
     "-DUZP_EMBREE_PINNED_ISA=\"avx2\"",
     "-DUZP_EMBREE_PINNED_TASKING=1",
 };
+const bake_flags = uzp_core_flags ++ [_][]const u8{
+    "-fno-fast-math",
+    "-ffp-contract=off",
+} ++ bake_pins;
 /// The embedder of the authored baking table `assets/defaults/baking.json` (decision 323): every
 /// module that compiles `bake/baking_parameters.cpp` adds it through `EmbedInputs` (decision 147).
 const bake_catalog_sources = [_][]const u8{"bake/baking_catalog.cpp"};
@@ -376,6 +378,29 @@ const bake_catalog_sources = [_][]const u8{"bake/baking_catalog.cpp"};
 /// decision 323) and `uzpainter.baking` (`src/python/bind_baking.cpp`), relative to `src/`: compiled
 /// into `UzPainter.exe` and `uzp-pyapi-tests.exe` without Embree or the CPU baker.
 const bake_parameter_sources = [_][]const u8{ "bake/bake_request.cpp", "bake/baking_parameters.cpp", "bake/baking_project.cpp" };
+/// The CPU baker, its evidence, receipt and publication and the bake job (phase3.3_baker-evidence-
+/// publication items 2.5-2.7, decisions 347 and 355), relative to `src/`: compiled with `bake_flags`
+/// into `UzPainter.exe` and `uzp-pyapi-tests.exe` beside the parameter model, with
+/// `bake/job_session.cpp` (the session's bake job, which `bake_async` and MCP `bake_start` run) and
+/// Embree's run-time files beside each. The export's PNG encoder writes the map files.
+const bake_job_sources = [_][]const u8{
+    "bake/baker.cpp",
+    "bake/embree_api.cpp",
+    "bake/embree_baker.cpp",
+    "bake/mesh_inputs.cpp",
+    "bake/sampling.cpp",
+    "bake/id_baker.cpp",
+    "bake/position_baker.cpp",
+    "bake/world_normal_baker.cpp",
+    "bake/opacity_baker.cpp",
+    "bake/height_baker.cpp",
+    "bake/thickness_baker.cpp",
+    "bake/bake_accounting.cpp",
+    "bake/bake_receipt.cpp",
+    "bake/bake_publication.cpp",
+    "bake/job.cpp",
+    "bake/job_inputs.cpp",
+};
 /// The compositor (`src/evaluator/`, P1-COMPOSITOR, `04-layer-stack-and-compositing.md` §7),
 /// relative to `src/`: compiled into `UzPainter.exe` and into `uzp-evaluator-tests.exe` over the
 /// render layer and the document model. Contraction is off so that every float operation of its
@@ -1217,7 +1242,7 @@ pub fn build(b: *std.Build) void {
     // over the zlib `uzp_mesh` compiles.
     bake_tests_mod.addCSourceFiles(.{
         .root = b.path("src"),
-        .files = &.{ "bake/bake_accounting.cpp", "bake/bake_receipt.cpp", "bake/bake_publication.cpp", "export/png_writer.cpp" },
+        .files = &.{ "bake/bake_accounting.cpp", "bake/bake_receipt.cpp", "bake/bake_publication.cpp", "bake/job.cpp", "bake/job_inputs.cpp", "bake/baking_project.cpp", "export/png_writer.cpp" },
         .flags = &bake_flags,
     });
     bake_tests_mod.addIncludePath(b.path("thirdparty/zlib"));
@@ -1491,6 +1516,9 @@ pub fn build(b: *std.Build) void {
     // The bake parameter model the MCP Baking tools serve (decision 323).
     app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &bake_parameter_sources, .flags = &uzp_core_flags });
     embed_inputs.add(app_mod, "src", &bake_catalog_sources, &uzp_core_flags);
+    // The CPU baker and the bake job (`bake_start`, decision 355).
+    app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &bake_job_sources, .flags = &bake_flags });
+    app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &.{"bake/job_session.cpp"}, .flags = &(pyapi_flags ++ bake_pins) });
     // The preview viewport and window (phase2.1_preview-viewport-window).
     embed_inputs.add(app_mod, "src", &(preview_sources ++ preview_host_sources), &pyapi_flags);
     app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &preview_scene_sources, .flags = &pyapi_flags });
@@ -1919,6 +1947,9 @@ pub fn build(b: *std.Build) void {
     // `uzpainter.baking` binds the bake parameter model (`python/bind_baking.cpp`).
     pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &bake_parameter_sources, .flags = &uzp_core_flags });
     embed_inputs.add(pyapi_tests_mod, "src", &bake_catalog_sources, &uzp_core_flags);
+    // `uzpainter.baking.start` runs the bake job on the CPU baker (decision 355).
+    pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &bake_job_sources, .flags = &bake_flags });
+    pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &.{"bake/job_session.cpp"}, .flags = &(pyapi_flags ++ bake_pins) });
     // The capture (`python/capture.cpp`) builds the preview's scene and pass.
     embed_inputs.add(pyapi_tests_mod, "src", &preview_sources, &evaluator_flags);
     pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &preview_scene_sources, .flags = &pyapi_flags });
@@ -1950,6 +1981,9 @@ pub fn build(b: *std.Build) void {
     });
     const pyapi_tests_step = b.step("pyapi-tests", "Build the native Python API script runner with its interpreter");
     pyapi_tests_step.dependOn(&b.addInstallArtifact(pyapi_tests_exe, .{}).step);
+    for (embree_runtime_files) |file| {
+        pyapi_tests_step.dependOn(&b.addInstallBinFile(b.path(file[0]), file[1]).step);
+    }
     pyapi_tests_step.dependOn(&b.addInstallDirectory(.{
         .source_dir = b.path(cpython_package_dir),
         .install_dir = .bin,

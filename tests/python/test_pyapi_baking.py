@@ -231,6 +231,101 @@ def test_baking_refusals_raise_before_any_change(facade: Run) -> None:
     assert result["after"] == [64, 32, 0, True]
 
 
+# ── The bake job through the facade (phase3.3_baker-evidence-publication items 2.6, 3.4) ──────
+
+BAKE_EVENTS = """
+import threading
+from substance_painter import baking, event
+from uzpainter_facade import baking as fb
+create()
+t = ts.all_texture_sets()[0]
+b = baking.BakingParameters.from_texture_set(t)
+common, ao = b.common(), b.baker(ts.MeshMapUsage.AO)
+log, stops = [], []
+
+def on(e):
+    log.append({"event": type(e).__name__, "thread": threading.get_ident(),
+                "busy": sp.project.is_busy(), "progress": getattr(e, "progress", None),
+                "status": getattr(getattr(e, "status", None), "name", None),
+                "busy_arg": getattr(e, "busy", None)})
+    if isinstance(e, event.BakingProcessAboutToStart):
+        stops.append(e.stop_source)
+
+for cls in (event.BakingProcessAboutToStart, event.BakingProcessProgress,
+            event.BakingProcessEnded, event.BusyStatusChanged):
+    event.DISPATCHER.connect_strong(cls, on)
+# Painter's default configuration enables bakers no binding holds yet: refused before any event.
+result = {"default": raises(baking.bake_async, t), "default_events": len(log),
+          "type": raises(baking.bake_async, "not a texture set")}
+baking.BakingParameters.set({common["OutputSize"]: (8, 8), common["LowAsHigh"]: True,
+                             common["RelativeScale"]: False, ao["Attenuation"]: 0,
+                             ao["MaxDistanceRelativeScale"]: False})
+revision = uzpainter.project.revision()
+
+stop = fb.start(t, [ts.MeshMapUsage.AO])
+result["busy_after_call"] = sp.project.is_busy()
+uzpainter.event.drain()
+result["run"] = log[:]
+result["same_stop"] = len(stops) == 1 and stops[0] == stop
+result["late_stop"] = stop.request_stop()
+result["busy_after"] = sp.project.is_busy()
+result["dispatcher"] = uzpainter.event.dispatcher_thread_id()
+
+# A stop request cancels a running bake at once; another bake meanwhile is refused (busy).
+del log[:]
+baking.BakingParameters.set({common["OutputSize"]: (12, 12)})
+big = fb.start(t, [ts.MeshMapUsage.AO])
+result["busy_refusal"] = raises(fb.start, t, [ts.MeshMapUsage.AO])
+result["stop"] = big.request_stop()
+uzpainter.event.drain()
+result["cancelled"] = log[:]
+result["late_cancel"] = big.request_stop()
+
+# The native job: kind bake, stopped before its commit point by the parity refusal.
+baking.BakingParameters.set({common["OutputSize"]: (8, 8)})
+before = uzpainter.project.revision()
+job = uzpainter.baking.bake_async(t.name(), [ts.MeshMapUsage.AO])
+result["native"] = [job.kind, raises(job.wait), job.receipt()["stopped"],
+                    job.receipt()["committed"]]
+result["revision"] = [revision, before, uzpainter.project.revision()]
+"""
+
+
+def test_bake_async_events_busy_and_cancel(facade: Run) -> None:
+    """2.6, 3.4 (decision 355): a refused configuration raises before any event; a bake delivers
+    BakingProcessAboutToStart (its StopSource), BusyStatusChanged(1), progress events in [0, 1],
+    BakingProcessEnded and BusyStatusChanged(0), all on the dispatcher thread, is_busy() true only
+    in between. Every usage is pending-evidence, so the bake ends Fail with nothing bound (decision
+    001). A stop request cancels a running bake (Ended(Cancel)) and fails once it ended."""
+    result = ok(facade(BAKE_EVENTS))
+    assert result["default"].startswith("NotYetSupported: publishing Curvature"), result["default"]
+    assert result["default_events"] == 0
+    assert result["type"] == "TypeError: bake_async takes a TextureSet"
+    run = result["run"]
+    names = [entry["event"] for entry in run]
+    assert names[0] == "BakingProcessAboutToStart" and names[1] == "BusyStatusChanged"
+    assert names[-2:] == ["BakingProcessEnded", "BusyStatusChanged"]
+    progress = [entry["progress"] for entry in run if entry["event"] == "BakingProcessProgress"]
+    assert progress and progress == sorted(progress) and all(0.0 <= p <= 1.0 for p in progress)
+    assert set(names[2:-2]) == {"BakingProcessProgress"}
+    assert [run[1]["busy_arg"], run[-1]["busy_arg"]] == [True, False]
+    assert run[0]["busy"] is False and all(entry["busy"] for entry in run[1:-1])
+    assert run[-2]["status"] == "Fail"
+    assert {entry["thread"] for entry in run} == {result["dispatcher"]}
+    assert result["busy_after_call"] is True and result["busy_after"] is False
+    assert result["same_stop"] is True and result["late_stop"] is False
+    assert result["busy_refusal"].startswith("BusyError"), result["busy_refusal"]
+    assert result["stop"] is True and result["late_cancel"] is False
+    cancelled = [entry for entry in result["cancelled"] if entry["event"] == "BakingProcessEnded"]
+    assert [entry["status"] for entry in cancelled] == ["Cancel"]
+    kind, error, stopped, committed = result["native"]
+    assert kind == "bake" and stopped == "before_commit" and committed is None
+    assert error.startswith("NotYetSupported: publishing AO of texture set"), error
+    assert "pending-evidence (decision 001)" in error
+    revision, before, after = result["revision"]
+    assert after == before == revision + 2  # the two set() calls; no bake committed
+
+
 # ── Item 3.1 on the owner's machine: the Tier 0 golden ─────────────────────────────────────────
 
 REPLAY = """

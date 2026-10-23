@@ -277,6 +277,28 @@ def recipes() -> dict[Any, tuple[str, str]]:
         facade_params,
         "sp.baking.BakingParameters.set({b.baker(ts.MeshMapUsage.Curvature)['AutoMinMax']: False})",
     )
+    # The bake's release-gap contexts (decision 355): an AO bake, otherwise bakeable, through the
+    # facade's launch behind bake_async, with the value that selects the context.
+    bake_setup = (
+        "from uzpainter_facade import baking as fb\n"
+        f"{facade_params}\n"
+        "c, ao = b.common(), b.baker(ts.MeshMapUsage.AO)\n"
+        "sp.baking.BakingParameters.set({c['OutputSize']: (8, 8), c['LowAsHigh']: True, "
+        "c['RelativeScale']: False, ao['Attenuation']: 0, ao['MaxDistanceRelativeScale']: False})\n"
+        "sp.baking.BakingParameters.set({__VALUE__})"
+    )
+    for context, value in (
+        ("apply-diffusion", "c['ApplyDiffusion']: True"),
+        (
+            "cage-mode:automatic",
+            "c['CageMode']: c['CageMode'].enum_value('Automatic (experimental)')",
+        ),
+        ("relative-to-bounding-box", "c['RelativeScale']: True"),
+    ):
+        r[("substance_painter.baking.bake_async", context)] = (
+            bake_setup.replace("__VALUE__", value),
+            "fb.start(ts.all_texture_sets()[0], [ts.MeshMapUsage.AO])",
+        )
     r["substance_painter.resource.Resource.show_in_ui"] = (
         f"r = resource.import_project_resource(IMAGES + '/checker-16.png', {TEXTURE}, 'a')",
         "r.show_in_ui()",

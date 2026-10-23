@@ -18,17 +18,29 @@
 // of a key whose default is not established, a value outside a key's range, a value for a baker
 // other than AO, and the texture set's baking state setters and UV-tile members (owner
 // phase3.5_embree-bakers).
+//
+// `bake_async(texture_set, usages=None)` and `bake_selected_textures_async(usages=None)` start a bake
+// job of the open project (`bake/job_session.h`, decision 355) on the native job pool and return its
+// `jobs.Job` (kind `bake`): the named texture set, or every texture set, with `usages` or each
+// set's enabled bakers. Every refusal raises before any work; `BusyError` while another job runs.
+// The facade's `substance_painter.baking` wraps them with Painter's `StopSource` and events.
 
 #include <cstdint>
+#include <functional>
 #include <map>
+#include <optional>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "bake/baking_parameters.h"
 #include "bake/baking_project.h"
+#include "bake/job_session.h"
 #include "python/bindings.h"
 #include "python/errors.h"
+#include "python/jobs.h"
+#include "python/session.h"
 #include "uzp_core/types/errors.h"
 
 namespace uzp::python {
@@ -142,6 +154,33 @@ bake::PropertyValue FromPython(const bake::PropertySpec& spec, py::handle value)
 const bake::TextureSetBakeState& State(const BakingParametersHandle& handle) {
     ResolveSet(*Read(), handle.texture_set);
     return bake::DefaultTextureSetState();
+}
+
+/// Starts a bake job (see above) and returns its `uzpainter.jobs.Job`.
+py::object StartBake(const std::vector<std::string>& texture_sets,
+                     const std::optional<std::vector<core::MeshMapUsage>>& usages) {
+    if (const std::optional<std::string> busy = JobEngine::Get().Busy()) {
+        ThrowBusy(*busy, "a bake is refused while job " + *busy + " is running");
+    }
+    std::vector<bake::MeshMapUsage> chosen;
+    core::json::Array names;
+    for (const std::string& name : texture_sets) names.push_back(name);
+    core::json::Array usage_names;
+    if (usages) {
+        for (core::MeshMapUsage usage : *usages) {
+            chosen.push_back(BakeUsage(usage));
+            usage_names.push_back(std::string(core::ToString(usage)));
+        }
+    }
+    const core::json::Object arguments{{"texture_sets", std::move(names)}, {"usages", std::move(usage_names)}};
+    JobBody body = bake::StartSessionBake(texture_sets, chosen, [arguments](const std::function<void(core::Edit&)>& call) {
+        return Session::Get().Mutate("baking.bake_async", arguments, call).revision;
+    });
+    const std::string id = JobEngine::Get().Start("bake", std::move(body), {}, true)->id();
+    for (const py::handle job : py::module_::import("uzpainter").attr("jobs").attr("list")()) {
+        if (job.attr("id").cast<std::string>() == id) return py::reinterpret_borrow<py::object>(job);
+    }
+    throw std::logic_error("the bake job " + id + " is not listed");
 }
 
 }  // namespace
@@ -282,6 +321,21 @@ void BindBaking(py::module_& baking, py::module_& properties) {
         });
     }
     SealClass(parameters);
+
+    baking.def(
+        "bake_async",
+        [](const std::string& texture_set, const std::optional<std::vector<core::MeshMapUsage>>& usages) {
+            return StartBake({texture_set}, usages);
+        },
+        py::arg("texture_set"), py::arg("usages") = py::none(),
+        "Starts the bake of texture set `texture_set` (its name) with `usages`, or its enabled bakers; "
+        "returns the bake's jobs.Job (decision 355).");
+    baking.def(
+        "bake_selected_textures_async",
+        [](const std::optional<std::vector<core::MeshMapUsage>>& usages) { return StartBake({}, usages); },
+        py::arg("usages") = py::none(),
+        "Starts the bake of every texture set with `usages`, or each set's enabled bakers; returns the "
+        "bake's jobs.Job (decision 355).");
 }
 
 }  // namespace uzp::python

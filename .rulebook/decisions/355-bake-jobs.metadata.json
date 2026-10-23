@@ -1,0 +1,12 @@
+{
+  "id": 355,
+  "slug": "355-bake-jobs",
+  "title": "Bake jobs: one native job per launch bakes every set and publishes them in one transaction; Python's bake_async and MCP bake_start start it with every refusal before any event, and decision 001 refuses each pending-evidence usage at the publication",
+  "status": "accepted",
+  "date": "2026-10-22",
+  "relatedTasks": [
+    "phase3.3_baker-evidence-publication",
+    "phase3.5_embree-bakers"
+  ],
+  "supersededBy": null
+}

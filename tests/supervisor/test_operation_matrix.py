@@ -131,9 +131,10 @@ def test_the_matrix_is_published_in_uzpainter_capabilities(
     assert published == shipped["operation_matrix"]
     rows = {row["operation"]: row for row in published}
     assert len(rows) == len(published)
-    for operation in ("bake.start", "stack.smart_material", "stack.procedural", "anchor.list"):
+    for operation in ("stack.smart_material", "stack.procedural", "anchor.list"):
         assert rows[operation]["status"] == "capability gap", operation
     assert rows["mesh.reload"]["status"] == "available"
+    assert rows["bake.start"]["status"] == "available"  # the native bake job (decision 355)
     assert rows["capture.painter_iray"]["gaps"] == [
         {
             "symbol": "uzpainter.render.capture",

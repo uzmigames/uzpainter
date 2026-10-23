@@ -108,7 +108,6 @@ GAP_CALLS: dict[str, dict[str, Any]] = {
     "smart_mask_insert": {"uid": 1, "asset": "uzasset://smart/edges@1"},
     "smart_export": {"uid": 1, "kind": "material", "path": "smart.spsm"},
     "apply_smart": {"config_json": {"layers": []}},
-    "bake_start": {},
 }
 
 
@@ -1233,9 +1232,10 @@ def test_paint_layer_insert_through_mcp(painter: Path, tmp_path: Path, sessions:
 def test_a_direct_pipe_client_gets_the_same_gaps(
     painter: Path, tmp_path: Path, pipes: list[Pipe]
 ) -> None:
-    """3.5, 2.10 (decision 164): without the supervisor's gate, the worker itself refuses a gap
-    family and a release gap its native code meets (a paint effect, here in Painter's default
-    paint layer "Layer 1", decision 348) with `capability_gap`, and nothing is committed."""
+    """3.5, 2.10 (decision 164): without the supervisor's gate, the worker itself refuses release
+    gaps its native code meets (a paint effect, here in Painter's default paint layer "Layer 1",
+    decision 348; a bake of a baker it cannot publish, decision 355) with `capability_gap`, and
+    nothing is committed."""
     project = make_project(painter, tmp_path)
     pipe = Pipe(painter, tmp_path, *BASE)
     pipes.append(pipe)
@@ -1248,9 +1248,10 @@ def test_a_direct_pipe_client_gets_the_same_gaps(
     assert paint["error"]["code"] == "capability_gap", paint
     assert paint["error"]["details"]["type"] == "NotYetSupported"
     bake = pipe.call("bake_start", {}, idempotency_key="pipe-2", expected_revision=revision)
-    assert bake["error"]["code"] == "capability_gap"
-    [operation] = bake["error"]["details"]["operations"]
-    assert operation["symbol"] == "substance_painter.baking.bake_async"
+    # The default configuration's Curvature baker, refused by the native bake job (decision 355).
+    assert bake["error"]["code"] == "capability_gap", bake
+    assert bake["error"]["details"]["type"] == "NotYetSupported"
+    assert "Curvature" in bake["error"]["message"]
     assert pipe.call("project_inspect")["result"]["revision"] == revision
 
 

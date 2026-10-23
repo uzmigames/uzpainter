@@ -70,7 +70,6 @@ GAP_TOOLS = {
     "smart_mask_insert",
     "smart_export",
     "apply_smart",
-    "bake_start",
 }
 
 
@@ -257,6 +256,7 @@ def test_families_not_in_the_build_are_capability_gaps(matrix: list[dict[str, An
     ]
     assert rows["layer.insert_fill"]["status"] == rows["export.format.png"]["status"] == "available"
     assert rows["layer.insert_paint"]["status"] == "available"  # empty paint layers (decision 348)
+    assert rows["bake.start"]["status"] == "available"  # the native bake job (decision 355)
 
 
 def test_a_python_only_operation_needs_python(tmp_path: Path) -> None:

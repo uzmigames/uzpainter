@@ -6,16 +6,16 @@
 - [x] 2.2 Compute used-surface accounting: seven disjoint classes (straight hit, cage hit, centre miss, hidden, ring extended, ring without hit neighbour, repaired), `fallback_texels`, `padding_texels`, `changed_used_texels`, per-part hits/misses/Z<0 texels - section 6
 - [x] 2.3 Write `BakeReceipt` with every field of `06-baking.md` §4 plus `{revision, evaluator_profile, compat_profile, app_version, resource_hashes}` - section 6
 - [x] 2.4 Implement atomic publication per `(texture set, input revision)`: bind all enabled usages with `baked {…}` provenance and store the receipt, or bind nothing - section 6
-- [ ] 2.5 Implement the native bake `Job` (id, progress, `cancel()`, terminal `Success | Cancel | Fail`, per-baker error detail) with cancellation checked at tile boundaries and acknowledged immediately
-- [ ] 2.6 Implement `bake_async(texture_set) → StopSource`, `bake_selected_textures_async()`, `project.is_busy()` and the `BakingProcessAboutToStart/Progress/Ended` events on the Python dispatcher thread
-- [ ] 2.7 Register MCP `bake_start {sets[], wait?}` on the job ledger with `job_status`, `job_result` and `job_cancel`; the receipt states stopped before or after publication
+- [x] 2.5 Implement the native bake `Job` (id, progress, `cancel()`, terminal `Success | Cancel | Fail`, per-baker error detail) with cancellation checked at tile boundaries and acknowledged immediately
+- [x] 2.6 Implement `bake_async(texture_set) → StopSource`, `bake_selected_textures_async()`, `project.is_busy()` and the `BakingProcessAboutToStart/Progress/Ended` events on the Python dispatcher thread
+- [x] 2.7 Register MCP `bake_start {sets[], wait?}` on the job ledger with `job_status`, `job_result` and `job_cancel`; the receipt states stopped before or after publication
 
 ## 3. Tests
 - [x] 3.1 Accounting tests on plane, sphere, bevelled cube with highs and a part with a buried face: exact expected counts per class and the conservation identity (classes sum to `coverage.conservative_texels`) - section 6
 - [x] 3.2 Receipt schema and content test: every field present, hashes match stored maps, `fidelity_evidence` set correctly with and without an enabled fallback - section 6
-- [ ] 3.3 Failure injection: cancel mid-bake, a baker failing on one usage, and worker kill during a bake (bake version of the P2-SUPERVISOR kill check, which Phase 2 ran on a long export) — no partial authoritative bake, last committed revision intact
-- [ ] 3.4 Event-order test: `BakingProcessAboutToStart`, progress events, `BakingProcessEnded(status)` dispatched on the dispatcher thread; `is_busy()` true only while running
-- [ ] 3.5 MCP native-bake cancellation fixture with Python disabled: `bake_start` then `job_cancel`; `cancelled` terminal state and receipt says before or after commit
+- [x] 3.3 Failure injection: cancel mid-bake, a baker failing on one usage, and worker kill during a bake (bake version of the P2-SUPERVISOR kill check, which Phase 2 ran on a long export) — no partial authoritative bake, last committed revision intact
+- [x] 3.4 Event-order test: `BakingProcessAboutToStart`, progress events, `BakingProcessEnded(status)` dispatched on the dispatcher thread; `is_busy()` true only while running
+- [x] 3.5 MCP native-bake cancellation fixture with Python disabled: `bake_start` then `job_cancel`; `cancelled` terminal state and receipt says before or after commit
 - [ ] 3.6 Unavailable GPU backend (bake version of the P2-SUPERVISOR check, `02-…` §7): worker started with an unavailable backend returns `gpu_backend_unavailable` for GPU operations while an Embree CPU bake still runs and publishes
 
 ## 4. Acceptance
@@ -34,3 +34,14 @@
 - 3.1: `accounting_plane`, `accounting_sphere` (cube-sphere), `accounting_bevel`, `accounting_buried_face`: exact per-class counts from the fixtures' geometry and the conservation identity.
 - 3.2: `receipt_content`: field sets, map/raw hashes against the evidence files, settings hash, cage and mask hashes, `fidelity_evidence` without fallback, with fallback and on the diagnostic path. `publication_atomic` covers 2.4.
 - CPU only (Embree): `tests/bake/test_bake_feasibility.py` and `tests/bake/test_baking_project.py`; ruff and mypy on the touched Python. Logs: `tmp/scratch/bake-receipt/`. Items 2.5-2.7, 3.3-3.6, 4.1 and the tails stay open; every usage stays `pending-evidence`.
+
+## 7. Bake jobs, facade events and MCP bake_start (2026-10-22, decision 355)
+- 2.5: `src/bake/job.*` `BakeJob`: every set's baker job started at once (every refusal before any work), unique id, progress (mean of the sets' tile fractions), `cancel()` acknowledged at once and checked at tile boundaries, terminal `Success | Cancel | Fail`, `stopped` before or after publication, one `BakerDetail` per (set, usage). The publisher runs once: every set in one transaction (`PublishInto`, decision 347) or nothing.
+- 2.6: `uzpainter.baking.bake_async(name, usages=None)` / `bake_selected_textures_async(usages=None)` (`bind_baking.cpp` over `job_inputs.*` and `job_session.*`) return the `jobs.Job` (kind `bake`); the facade's `bake_async` / `bake_selected_textures_async` return Painter's `StopSource` and deliver `BakingProcessAboutToStart` → `BusyStatusChanged(1)` → `BakingProcessProgress`… → `BakingProcessEnded(status)` → `BusyStatusChanged(0)` on the dispatcher thread; `BakingStatus` added. The busy order follows the recorded export, pending the bake probe.
+- 2.7: MCP `bake_start {sets?, usages?, wait?}` is a job tool (commit point `revision`) on the ledger with `job_status`, `job_result`, `job_cancel`; the job report states `stopped`. Decision 001: each usage whose receipt `parity_status` is not `supported` is refused at the publication, so a session bake today bakes and fails with every baker `refused`, nothing bound.
+- 3.3: native `bake_job_cancel_before_publication`, `bake_job_cancel_after_publication`, `bake_job_failures` (a baker failing on one usage, a cast failure, a refused publication); `test_supervisor_bake.py::test_worker_killed_during_a_bake` (interrupted, resolved not committed from the operation rows, revision intact).
+- 3.4: `test_pyapi_baking.py::test_bake_async_events_busy_and_cancel`.
+- 3.5: `test_supervisor_bake.py::test_bake_start_cancelled_by_job_cancel` (Python disabled).
+- 3.6 stays open: `test_supervisor_bake.py::test_bake_start_refusals_and_a_bake_refused_at_publication` shows `gpu_backend_unavailable` for `evaluate_channel` on the worker without a device while the Embree bake runs to its publication, but "and publishes" cannot hold while every usage is `pending-evidence` (decision 001); it closes when a usage's Tier 2b evidence makes it `supported` (phase3.5_embree-bakers).
+- Capabilities: `substance_painter.baking.bake_async`, `bake_selected_textures_async`, `BakingStatus` and its members, `uzpainter.baking.bake_async` and `bake_selected_textures_async` are `pending-evidence` (without Tier 0 evidence; owner phase3.5_embree-bakers, the bake probe); the three bake contexts stay `release-gap`; MCP `bake.start` is available.
+- Tests (CPU and Embree only): native `publication_atomic` and `bake_job_*`; `tests/python/test_pyapi_baking.py -k bake_async`; `tests/supervisor/test_supervisor_bake.py`; the affected `test_operation_matrix.py` and `test_typed_tools.py` cases; `tests/capabilities` and `tests/python/test_capability_conformance.py`. Logs: `tmp/scratch/bake-jobs/`. Item 4.1 and the tails stay open.

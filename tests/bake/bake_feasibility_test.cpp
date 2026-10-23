@@ -13,6 +13,7 @@
 // Errors print "<ErrorClass>: <message>" on stderr and exit 3.
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <cstring>
@@ -24,6 +25,7 @@
 #include <future>
 #include <limits>
 #include <map>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <stdexcept>
@@ -44,6 +46,7 @@
 #include "bake/embree_baker.h"
 #include "bake/height_baker.h"
 #include "bake/id_baker.h"
+#include "bake/job.h"
 #include "bake/mesh_inputs.h"
 #include "bake/position_baker.h"
 #include "bake/sampling.h"
@@ -1670,6 +1673,7 @@ void CaseCageFileThreadsInProcess() {
 #include "height_bake_cases.h"
 #include "thickness_bake_cases.h"
 #include "receipt_bake_cases.h"
+#include "job_bake_cases.h"
 
 const std::vector<std::pair<std::string, std::function<void()>>>& Cases() {
     static const std::vector<std::pair<std::string, std::function<void()>>> cases = {
@@ -1765,6 +1769,10 @@ const std::vector<std::pair<std::string, std::function<void()>>>& Cases() {
         {"receipt_content", CaseReceiptContent},
         {"evidence_regenerated", CaseEvidenceRegenerated},
         {"publication_atomic", CasePublicationAtomic},
+        {"bake_job_success", CaseBakeJobSuccess},
+        {"bake_job_cancel_before_publication", CaseBakeJobCancelBeforePublication},
+        {"bake_job_cancel_after_publication", CaseBakeJobCancelAfterPublication},
+        {"bake_job_failures", CaseBakeJobFailures},
     };
     return cases;
 }

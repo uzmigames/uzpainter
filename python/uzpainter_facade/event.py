@@ -14,9 +14,9 @@ error and the other handlers still run.
 
 `TextureStateEvent` follows committed native document-texture invalidations, with lifecycle,
 engine suspension and per-texture throttling handled by `texture_state.py`.
-Events whose operations arrive in later phases are connectable and emitted by their owners:
-`BakingProcessAboutToStart/Progress/Ended` (phase3.5_embree-bakers) and
-`CameraPropertiesChanged` (phase2.3_realtime-preview). `GraphicalUserInterfaceStarted` is
+`BakingProcessAboutToStart/Progress/Ended` are emitted by `baking.bake_async` and
+`bake_selected_textures_async` (decision 355). `CameraPropertiesChanged` is connectable and emitted
+by its owner, phase2.3_realtime-preview. `GraphicalUserInterfaceStarted` is
 desktop-only: connectable, never emitted, and creating it raises.
 """
 

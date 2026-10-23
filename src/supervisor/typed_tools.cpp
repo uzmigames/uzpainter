@@ -12,6 +12,7 @@
 #include <variant>
 
 #include "bake/baking_project.h"
+#include "bake/job_session.h"
 #include "python/edits.h"
 #include "python/errors.h"
 #include "python/recipe.h"
@@ -1716,13 +1717,41 @@ void BakingFamily(const ToolContext& context, std::vector<ToolDefinition>& tools
             });
         }));
 
-    const std::string reason = "native baking is a release gap (phase3.5_embree-bakers)";
-    tools.push_back(GapTool({"bake_start", "Bakes the mesh maps of texture sets (a long job).",
-                             Schema({{"sets", ArrayProperty(json::Object{{"type", "string"}}, "The texture sets; every enabled one when omitted.")},
-                                     {"wait", BoolProperty("Wait for the job's end.")}},
-                                    {}),
-                             true, false, true, Operation("substance_painter.baking.bake_async")},
-                            reason));
+    // A bake job on the CPU baker (decision 355, `bake/job_session.h`): refused before the job, or a
+    // job whose commit point is the publication of every set in one transaction.
+    tools.push_back(DefineJob(
+        {"bake_start",
+         "Bakes the mesh maps of texture sets on the CPU baker (a long job): each set's enabled bakers, or "
+         "`usages`, with its bake parameters; every refusal comes before the job. The commit point is the "
+         "publication, every set bound in one transaction or none; a usage whose parity is pending-evidence is "
+         "refused there (decision 001), so the job bakes, fails with each baker `refused` and binds nothing. "
+         "The result is the job report: each baker's outcome, `stopped` (before or after publication) and the "
+         "receipts.",
+         Schema({{"sets", ArrayProperty(json::Object{{"type", "string"}}, "The texture sets; every texture set when omitted.")},
+                 {"usages", ArrayProperty(EnumProperty<core::MeshMapUsage>("A mesh map usage."),
+                                          "The usages to bake; each set's enabled bakers when omitted.")}},
+                {}),
+         true, false, true, Operation("substance_painter.baking.bake_async")},
+        "revision", [context](const json::Object& arguments) -> python::JobBody {
+            std::vector<std::string> sets;
+            if (const json::Value* given = Given(arguments, "sets")) {
+                for (const json::Value& name : ArrayOf(*given, "sets")) sets.push_back(Text(name, "sets"));
+            }
+            std::vector<bake::MeshMapUsage> usages;
+            if (const json::Value* given = Given(arguments, "usages")) {
+                for (const json::Value& name : ArrayOf(*given, "usages")) usages.push_back(UsageNamed(Text(name, "usages"), "usages"));
+            }
+            try {
+                return bake::StartSessionBake(sets, usages, [context](const std::function<void(core::Edit&)>& call) {
+                    const json::Object result = context.submit(call);
+                    const json::Value* committed = Field(result, "committed_revision");
+                    if (!committed || !committed->IsInt()) throw std::logic_error("the bake publication committed no revision");
+                    return std::get<std::int64_t>(committed->data);
+                });
+            } catch (const core::ValueError& error) {
+                throw CallError{"invalid_arguments", error.what(), json::Object{{"type", "ValueError"}}};
+            }
+        }));
 
     tools.push_back(Define(
         {"bake_capture_preset",
