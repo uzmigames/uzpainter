@@ -115,3 +115,44 @@ result = errors
     assert "phase3.2_proc-generator-families" in errors["generator resolution"], errors
     assert "phase3.2_proc-filter-families" in errors["filter parameters"], errors
     assert "active_output requires" in errors["active output"], errors
+
+
+@pytest.mark.parametrize("api", ["run", "facade"])
+def test_effect_source_transactions_roll_back_and_handles_go_stale(
+    api: str, request: pytest.FixtureRequest, effects_project: None
+) -> None:
+    execute: Run = request.getfixturevalue(api)
+    script = """
+uzpainter.project.open(WORK + "/effects.uzp")
+host = ls.get_root_layer_nodes(ts.get_active_stack())[0]
+generator_node, filter_node, _ = host.content_effects()
+generator, filter_ = generator_node.get_source(), filter_node.get_source()
+parameters = {"amount": 0.25, "$randomseed": 3, "label": "a"}
+
+def edit_in_transaction():
+    with uzpainter.Transaction("supported rename with an unsupported effect edit"):
+        host.set_name("renamed host")
+        generator.set_parameters({"amount": 0.5})
+
+revision = uzpainter.project.revision()
+errors = {"transaction": raises(edit_in_transaction)}
+assert errors["transaction"] is not None
+assert uzpainter.project.revision() == revision
+assert host.get_name() == "procedural host"
+assert generator.get_parameters() == parameters
+
+ls.delete_node(generator_node)
+assert uzpainter.project.revision() == revision + 1
+errors["stale read"] = raises(generator.get_parameters)
+errors["stale edit"] = raises(generator.set_parameters, {"amount": 0.5})
+errors["stale resolution"] = raises(getattr, generator, "resolution")
+assert uzpainter.project.revision() == revision + 1
+assert filter_.get_parameters() == {"radius": 2.0}
+uzpainter.project.close()
+result = errors
+"""
+    errors = ok(execute(script))
+    # The whole transaction rolls back, including its supported rename.
+    assert "phase3.2_proc-generator-families" in errors["transaction"], errors
+    for name in ("stale read", "stale edit", "stale resolution"):
+        assert errors[name] is not None and errors[name].startswith("ValueError:"), errors
