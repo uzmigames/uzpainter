@@ -79,3 +79,22 @@ must expose four 256px AO L32F sets and all 96 exports. The report retains every
 operand/product precondition, repeat/reopen comparison and prediction residual,
 using hashes and counts only. Twenty-eight CPU checks, Ruff and mypy pass;
 missing oracle data remains unavailable rather than a pass.
+
+## Bounded capture outcome (2026-10-23 local / 2026-10-24 UTC)
+
+The four-control batch completed in 118.067 seconds. Initial CPU analysis of all
+three control families took 4.885 seconds, once, without retry or fitting. Both
+budgets were respected. This AO capture was admitted under the current Painter
+12.2.0 envelope; its private record SHA-256 is
+`18413b900363f8304cb2e38e8f0585820521614328c043e2f7ab9055a027cd5b`.
+
+All 32 operand/product preconditions and all 96 repeat/reopen stability checks
+pass. All 16 frozen PNG predictions fail with two differing samples each;
+16 of 24 cross-set comparisons also fail with two differing samples each.
+The verifier exits 1. Exact exported operands therefore do not validate the
+frozen common-quantizer prediction. No inputs, predictions or production
+refusals changed after observation; AO_Mixed remains unavailable.
+
+The private batch-analysis summary SHA-256 is
+`265a22d60713317f709b52ff593c8612dcb9bb07674c6964de8a13b12920856f`.
+Only counts and identities are published; pixel values remain private.

@@ -256,3 +256,32 @@ timeout, identity/precondition failure or completed repeats/reopen ends the
 batch. The AO prediction and R-322 processing controls stay unchanged after
 observation; failed preconditions and residuals are published before another
 experiment. These limits grant no tolerance or acceptance.
+
+## 14. Bounded capture outcome (2026-10-23 local / 2026-10-24 UTC)
+
+Both R-322 colour-session controls and the AO product control are admitted.
+The four-control live batch took 118.067 seconds; initial CPU analysis took
+4.885 seconds, including 3.148 seconds for R-322, with no retries or fitting.
+Shared Painter lock recovery was operator-authorized; owned processes ended
+and lock release committed after the separate SourceSubstance session.
+
+Per Legacy/OCIO session, matched PNG8/TGA8 compares 16 maps, reopen compares
+32 maps and immediate repeats compare 32 maps, all with zero differing samples.
+Own-default configuration `unreal-own` fails four dry-run probes per session
+with `ValueError: when evaluating export parameters, padding algorithm could not be resolved`.
+No fallback export ran; eight comparisons per session remain unavailable.
+Successful explicit settings do not supply missing own defaults or consumer acceptance.
+The whole-corpus stability report classifies each complete control as unstable:
+all 32 exported maps agree, but two own-default dry-run readbacks per session
+differ after reopen. Its exact-golden gate remains closed despite equal pixels.
+
+Private record hashes: Legacy
+`313c261b65d68c511404e3b24a99df6f223d3110b9db6ba1d32e1f7a56f8d599`,
+OCIO `fd227d2a18fec4daac9b919c4e482dc77cf2365cbce237f1f0c021c885107dc7`.
+Private R-322 analysis hash:
+`b963ee84cf10be871477fad66267afc498487aa43dcdac4683c2c64802e44e01`.
+
+AO's 32 operand/product preconditions and 96 stability checks pass, but all
+16 frozen predictions and 16 of 24 cross-set comparisons fail with two samples
+each (`parity/reports/phase1/ao-mesh-product-control.md`). AO_Mixed remains
+refused. No task acceptance or capability promotion follows from admission.

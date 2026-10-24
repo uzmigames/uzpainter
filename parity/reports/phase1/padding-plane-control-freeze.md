@@ -90,3 +90,27 @@ cover all 1,280 ring texels by policy, hinge count and aspect group. Uncovered
 passthrough changes are separate. The freeze does not contain ordered tap lists,
 so the report explicitly declines to certify tap order. Its 21 authored tests,
 Ruff and mypy pass; this is verification tooling, not a new observation.
+
+## Bounded capture outcome (2026-10-23 local / 2026-10-24 UTC)
+
+The four-control batch completed in 118.067 seconds; its one initial CPU analysis
+pass took 4.885 seconds across all three families. The plane capture is admitted,
+with private record SHA-256
+`7fa688f3e632174bf9e472426d2fc05d103165b1f3f01a45f66da054297e335e`.
+
+The frozen validator exits 2 with `invalid_control`, before geometric scoring.
+Metadata-only diagnosis identifies `control export configuration mismatch`:
+all 64 exported maps report `encoding_basis="file"`, while the validator requires
+`"source_channel_format"`. Protocol, prediction, reference, environment and all
+nine authored-input hashes agree with the frozen control; output counts,
+resolution, channels and export steps also agree. This does not validate covered
+pixels, infinite padding, stability or any of the three geometric policies.
+
+No validator predicate, prediction or production policy changed, and neither
+capture nor scoring was retried. A separately documented validation correction
+must precede any later scoring; the current outcome remains invalid.
+
+The separately regenerated whole-corpus stability report compares 32 maps
+across reopen and finds 16 differences, all at steps 47/48; all 27 normalized
+readbacks agree. This raw recording comparison does not score frozen geometric
+predictions or relax the validator's failed metadata precondition.

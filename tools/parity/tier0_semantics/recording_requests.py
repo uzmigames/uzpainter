@@ -2307,6 +2307,10 @@ def later_goldens() -> list[Golden]:
 # live under the envelope's `manifests/`; retained sources are excluded from the pending queue.
 ADMITTED = frozenset(
     {
+        "ao-mixed-mesh-float-product",
+        "export-padding-plane-control",
+        "export-presets-unreal-packed-legacy",
+        "export-presets-unreal-packed-ocio",
         "export-presets-gltf-legacy",
         "export-presets-gltf-ocio",
         "export-presets-gltf-predefined-legacy",
@@ -2419,6 +2423,10 @@ def all_goldens() -> list[Golden]:
 
 PRESERVED_REQUESTS = frozenset(
     {
+        "ao-mixed-mesh-float-product",
+        "export-padding-plane-control",
+        "export-presets-unreal-packed-legacy",
+        "export-presets-unreal-packed-ocio",
         "ao-mixed-grid-l32f",
         "ao-mixed-grid-l16-reopen3",
         "ao-mixed-precomposed-half-l32f",
