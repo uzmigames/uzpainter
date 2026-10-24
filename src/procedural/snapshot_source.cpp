@@ -14,14 +14,12 @@ namespace uzp::procedural {
 SnapshotSourceProvider::SnapshotSourceProvider(store::ProjectStore& store, const core::Project& project)
     : store_(store), project_(project) {}
 
-render::Result<std::shared_ptr<const evaluator::ProceduralImage>> SnapshotSourceProvider::Resolve(
+std::expected<std::pair<ProceduralRequest, SnapshotBackend>, std::string> SnapshotSourceProvider::Admitted(
     const core::Project& project, const core::TextureSet& set, core::ChannelType channel,
     core::ChannelFormat format, const core::FillContent& fill, const core::ProceduralRef& ref,
     core::Id node, bool mask) const {
-    const auto fail = [node](std::string reason) {
-        return evaluator::EvalFail(evaluator::EvalErrorKind::UnsupportedSource,
-                                   "procedural snapshot: " + reason, node);
-    };
+    using Result = std::expected<std::pair<ProceduralRequest, SnapshotBackend>, std::string>;
+    const auto fail = [](std::string reason) { return Result(std::unexpect, std::move(reason)); };
     // This is the recorder's authored full-UV plane, not a geometry-class guess.
     constexpr std::string_view plane = "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe";
     const auto& settings = project.settings;
@@ -76,6 +74,33 @@ render::Result<std::shared_ptr<const evaluator::ProceduralImage>> SnapshotSource
     ProceduralSeam seam(&*backend, nullptr);
     auto admitted = Admit(*request, library, seam);
     if (!admitted) return fail(admitted.error().Describe());
+    return std::pair<ProceduralRequest, SnapshotBackend>{std::move(*request), std::move(*backend)};
+}
+
+std::expected<std::vector<std::string>, std::string> SnapshotSourceProvider::ImageOutputs(
+    const core::Project& project, const core::TextureSet& set, core::ChannelType channel,
+    core::ChannelFormat format, const core::FillContent& fill, const core::ProceduralRef& ref,
+    core::Id node, bool mask) const {
+    using Result = std::expected<std::vector<std::string>, std::string>;
+    auto admitted = Admitted(project, set, channel, format, fill, ref, node, mask);
+    if (!admitted) return Result(std::unexpect, "procedural snapshot: " + admitted.error());
+    auto outputs = admitted->second.ImageOutputs(admitted->first);
+    if (!outputs) return Result(std::unexpect, "procedural snapshot: " + outputs.error().Describe());
+    return std::move(*outputs);
+}
+
+render::Result<std::shared_ptr<const evaluator::ProceduralImage>> SnapshotSourceProvider::Resolve(
+    const core::Project& project, const core::TextureSet& set, core::ChannelType channel,
+    core::ChannelFormat format, const core::FillContent& fill, const core::ProceduralRef& ref,
+    core::Id node, bool mask) const {
+    const auto fail = [node](std::string reason) {
+        return evaluator::EvalFail(evaluator::EvalErrorKind::UnsupportedSource,
+                                   "procedural snapshot: " + reason, node);
+    };
+    auto admittedSource = Admitted(project, set, channel, format, fill, ref, node, mask);
+    if (!admittedSource) return fail(admittedSource.error());
+    const ProceduralRequest* request = &admittedSource->first;
+    const SnapshotBackend* backend = &admittedSource->second;
     auto stored = backend->Stored(*request);
     if (!stored) return fail(stored.error().Describe());
     auto image = std::make_shared<evaluator::ProceduralImage>();

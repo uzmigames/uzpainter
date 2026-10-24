@@ -56,6 +56,7 @@
 #include "store/project_store.h"
 #include "store/snapshots.h"
 #include "uzp_core/document/document.h"
+#include "uzp_core/operation/operation.h"
 #include "uzp_core/manifest/sha256.h"
 #include "uzp_core/types/project.h"
 #include "uzp_core/types/errors.h"
@@ -2148,6 +2149,7 @@ int main(int argc, char** argv) {
     if (mode == "typed-params") return RunTypedParams();
     if (mode == "resolution") return RunResolution(dir);
     if (mode == "snapshot-recording") return RunSnapshotRecording(dir);
+    if (mode == "snapshot-metadata") return RunSnapshotSourceMetadata(dir);
     if (mode == "primitives") return RunPrimitives();
     if (mode == "kernels") return RunKernels(dir);
     if (mode == "gpu") return RunGpu(dir);

@@ -16,7 +16,9 @@
 
 #include "python/bindings.h"
 #include "python/edits.h"
+#include "procedural/snapshot_source.h"
 #include "python/errors.h"
+#include "python/session.h"
 #include "python/stack_sync.h"
 #include "uzp_core/naming/naming.h"
 #include "uzp_core/types/errors.h"
@@ -629,6 +631,34 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
         .def("resource_id", [read_procedural](const SourceSubstance& s) {
             const auto asset = core::ParseAssetUrl(read_procedural(s).asset);
             return ResourceIdHandle{"uzasset", asset.family + "/" + asset.id, asset.version};
+        })
+        // The outputs the recording observed for the snapshot of this source's current exact
+        // signature (store/snapshots.h `source_metadata`); never inferred from the output mapping.
+        .def_property_readonly("image_outputs", [read_procedural](const SourceSubstance& s) {
+            const core::ProceduralRef ref = read_procedural(s);  // a stale handle keeps its error
+            if (s.effect) {
+                throw ApiError("UnsupportedProcedural",
+                               "image_outputs: a generator or filter effect source has no recorded output metadata");
+            }
+            const std::shared_ptr<OpenProject> open = Session::Get().Current();
+            const auto project = Read();
+            const NodeInfo info = Resolve(*project, s.node);
+            const core::TextureSet* set = nullptr;
+            for (const core::TextureSet& candidate : project->texture_sets) {
+                if (candidate.id == info.texture_set) set = &candidate;
+            }
+            const core::Stack* stack = core::FindStack(*project, info.texture_set, info.stack);
+            const auto channel = stack && s.channel ? stack->channels.find(*s.channel) : decltype(stack->channels)::const_iterator{};
+            if (set == nullptr || stack == nullptr || !s.channel || channel == stack->channels.end()) {
+                throw ApiError("UnsupportedProcedural", "image_outputs: the source is not a channel source of a stack");
+            }
+            const procedural::SnapshotSourceProvider provider(*open->store, *project);
+            const auto outputs = provider.ImageOutputs(*project, *set, *s.channel, channel->second.format,
+                                                       FillOf(info, s.node), ref, s.node, info.in_mask());
+            if (!outputs) throw ApiError("UnsupportedProcedural", "image_outputs: " + outputs.error());
+            py::list result;
+            for (const std::string& name : *outputs) result.append(name);
+            return result;
         })
         .def_property("active_output", [read_procedural, output_key](const SourceSubstance& s) {
             const auto ref = read_procedural(s);

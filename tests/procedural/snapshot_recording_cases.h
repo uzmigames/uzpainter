@@ -184,3 +184,236 @@ int RunSnapshotRecording(const fs::path& work) {
     }
     return Finish();
 }
+
+
+// `source_metadata` (store/snapshots.h): the image outputs a recording observed, beside the
+// signature. Synthetic CPU evidence; no Painter is involved.
+int RunSnapshotSourceMetadata(const fs::path& work) {
+    namespace core = uzp::core;
+    namespace store = uzp::store;
+    namespace json = uzp::core::json;
+    core::Id generator = core::kNoId;
+    core::DocumentState initial;
+    initial.project_uuid = "6f1c2a3e-0000-4000-8000-0000000a3281";
+    initial.project = GeneratorProject(generator);
+    ProceduralRequest capture;
+    capture.asset = core::ParseAssetUrl("uzasset://test/noise@1");
+    capture.params = {{"gain", 0.5}};
+    capture.meshClass = "quad";
+    capture.output = {8, ChannelFormat::U16, "raw", 1};
+    capture.outputId = "grey";
+    capture.settings = EvaluationSettings(initial.project);
+    store::PlaneImage image;
+    image.width = image.height = 8;
+    image.format = core::ChannelFormat::L16;
+    for (int i = 0; i < 128; ++i) image.texels.push_back(static_cast<char>(i * 29));
+    const std::string exportFile = store::codec::EncodePng(image);
+    const std::string signatureKey = SignatureHash(capture);
+    const std::string exportHash = core::Sha256Hex(exportFile);
+    const std::vector<std::string> outputs{"grey", "mask"};
+    const json::Value expectedMetadata = store::SourceMetadataJson(SignatureJson(capture), outputs);
+    const auto entryOf = [&](const core::Project& project) -> const json::Object* {
+        const auto member = project.extra.find(std::string(store::kSnapshotsKey));
+        if (member == project.extra.end()) return nullptr;
+        const auto& entries = std::get<json::Object>(member->second.data);
+        const auto it = entries.find(signatureKey);
+        return it == entries.end() ? nullptr : &std::get<json::Object>(it->second.data);
+    };
+    const auto committed = [](const auto& outcome) {
+        return outcome && outcome->result && outcome->result->status == core::ResultStatus::committed;
+    };
+    const auto reason = [](const auto& refused, std::string_view expected) {
+        return !refused && refused.error().reason == expected;
+    };
+
+    {
+        auto legacy = store::ProjectStore::Create(work / "legacy-metadata.uzp", initial);
+        core::Document document(initial);
+        legacy->Attach(document);
+        const auto outcome = RecordSnapshotExport(*legacy, document, capture, exportFile, initial.project_uuid, 0);
+        Check(committed(outcome), "metadata: a recording without metadata commits");
+        const json::Object* entry = entryOf(*document.snapshot().project);
+        Check(entry && entry->size() == 4 && !entry->contains(store::kSourceMetadataKey),
+              "metadata: an entry recorded without metadata keeps exactly its four members");
+        // The authored pre-metadata entry: the signature, this project, and the store's own plane binding.
+        const json::Object legacyEntry =
+            entry ? json::Object{{"signature", SignatureJson(capture)},
+                                 {"project_uuid", initial.project_uuid},
+                                 {"plane", entry->at("plane")},
+                                 {"plane_versions", entry->at("plane_versions")}}
+                  : json::Object{};
+        Check(entry && json::WriteCanonical(json::Value(*entry)) == json::WriteCanonical(json::Value(legacyEntry)),
+              "metadata: an entry recorded without metadata has exactly the pre-metadata canonical bytes");
+        Check(outcome && outcome->committed &&
+                  outcome->committed->idempotency_key == "snapshot-" + signatureKey + "-" + exportHash &&
+                  outcome->committed->request_hash ==
+                      core::RequestHash("procedural_snapshot",
+                                        {{"signature_sha256", signatureKey}, {"export_sha256", exportHash}}),
+              "metadata: without metadata the operation key and arguments are unchanged");
+        legacy->Save(document);
+        legacy->Close();
+        auto reopened = store::ProjectStore::Open(work / "legacy-metadata.uzp");
+        const auto backend = SnapshotBackend::Load(*reopened.store, reopened.state.project);
+        Check(backend && reason(backend->ImageOutputs(capture), kNoImageOutputs),
+              "metadata: a snapshot recorded without metadata reports its outputs as unknown");
+        reopened.store->Close();
+    }
+
+    const fs::path path = work / "source-metadata.uzp";
+    auto metadataStore = store::ProjectStore::Create(path, initial);
+    core::Document document(initial);
+    metadataStore->Attach(document);
+    const std::vector<std::pair<std::string, std::vector<std::string>>> invalid{
+        {"empty", {}}, {"absent output", {"mask"}}, {"repeated", {"grey", "grey"}}, {"empty name", {"grey", ""}}};
+    for (const auto& [name, bad] : invalid) {
+        const auto refused = RecordSnapshotExport(*metadataStore, document, capture, exportFile, initial.project_uuid, 0, bad);
+        Check(!refused && document.revision() == 0 && store::ReadCurrentRevision(metadataStore->container()) == 0,
+              "metadata: " + name + " image outputs are refused before a transaction");
+    }
+    const auto recorded = RecordSnapshotExport(*metadataStore, document, capture, exportFile, initial.project_uuid, 0, outputs);
+    Check(committed(recorded) && document.revision() == 1, "metadata: recorded image outputs commit with the snapshot");
+    const std::string metadataHash = core::Sha256Hex(json::WriteCanonical(expectedMetadata));
+    Check(recorded && recorded->committed &&
+              recorded->committed->idempotency_key == "snapshot-" + signatureKey + "-" + exportHash + "-" + metadataHash &&
+              recorded->committed->request_hash ==
+                  core::RequestHash("procedural_snapshot", {{"signature_sha256", signatureKey},
+                                                            {"export_sha256", exportHash},
+                                                            {"source_metadata_sha256", metadataHash}}),
+          "metadata: the metadata hash joins the operation key and arguments");
+    const json::Object* entry = entryOf(*document.snapshot().project);
+    Check(entry && entry->size() == 5 && entry->at(std::string(store::kSourceMetadataKey)) == expectedMetadata &&
+              std::get<std::string>(std::get<json::Object>(expectedMetadata.data).at("asset").data) ==
+                  "uzasset://test/noise@1",
+          "metadata: the entry stores the schema, the exact pin and the ordered outputs under the unchanged signature hash");
+
+    const auto replay = RecordSnapshotExport(*metadataStore, document, capture, exportFile, initial.project_uuid, 1, outputs);
+    Check(replay && replay->decision.admission == core::Admission::stored_outcome && document.revision() == 1,
+          "metadata: the identical recording replays its stored outcome");
+    bool otherReplayed = true;
+    try {
+        const std::vector<std::string> other{"mask", "grey"};
+        const auto changed = RecordSnapshotExport(*metadataStore, document, capture, exportFile, initial.project_uuid, 1, other);
+        otherReplayed = changed && (changed->decision.admission == core::Admission::stored_outcome || committed(changed));
+    } catch (const std::exception&) {
+        otherReplayed = false;
+    }
+    Check(!otherReplayed && document.revision() == 1 &&
+              entryOf(*document.snapshot().project)->at(std::string(store::kSourceMetadataKey)) == expectedMetadata,
+          "metadata: other metadata neither replays the recording nor changes the immutable snapshot");
+    bool bareReplayed = true;
+    try {
+        const auto bare = RecordSnapshotExport(*metadataStore, document, capture, exportFile, initial.project_uuid, 1);
+        bareReplayed = bare && (bare->decision.admission == core::Admission::stored_outcome || committed(bare));
+    } catch (const std::exception&) {
+        bareReplayed = false;
+    }
+    Check(!bareReplayed && document.revision() == 1, "metadata: a recording without metadata does not replay one with it");
+
+    const std::vector<std::pair<std::string, std::function<void(json::Object&)>>> edits{
+        {"schema", [](json::Object& e) { std::get<json::Object>(e.at("source_metadata").data)["schema"] = std::string("other/1"); }},
+        {"pin", [](json::Object& e) { std::get<json::Object>(e.at("source_metadata").data)["asset"] = std::string("uzasset://test/noise@2"); }},
+        {"duplicate", [](json::Object& e) {
+             std::get<json::Object>(e.at("source_metadata").data)["image_outputs"] = json::Array{std::string("grey"), std::string("grey")};
+         }},
+        {"absent output", [](json::Object& e) {
+             std::get<json::Object>(e.at("source_metadata").data)["image_outputs"] = json::Array{std::string("mask")};
+         }},
+        {"non-string output", [](json::Object& e) {
+             std::get<json::Object>(e.at("source_metadata").data)["image_outputs"] = json::Array{std::string("grey"), int64_t{1}};
+         }},
+        {"extra member", [](json::Object& e) { std::get<json::Object>(e.at("source_metadata").data)["extra"] = int64_t{1}; }},
+        {"null", [](json::Object& e) { e["source_metadata"] = nullptr; }},
+    };
+    for (const auto& [name, mutate] : edits) {
+        json::Value member = document.snapshot().project->extra.at(std::string(store::kSnapshotsKey));
+        mutate(std::get<json::Object>(std::get<json::Object>(member.data).at(signatureKey).data));
+        const auto parsed = store::SnapshotEntries(member);
+        Check(parsed.size() == 1 && !parsed[0].error.empty() && !parsed[0].image_outputs &&
+                  !store::SnapshotProblem(parsed[0], initial.project_uuid).empty(),
+              "metadata: an entry with a bad " + name + " is malformed");
+        bool refused = false;
+        try {
+            const auto edited = metadataStore->Submit(
+                document, {"metadata-test", json::Object{}, "bad-metadata-" + name, document.revision()},
+                [&](core::Edit& edit) { edit.project().extra[std::string(store::kSnapshotsKey)] = member; });
+            refused = !committed(std::optional<core::RequestOutcome>(edited));
+        } catch (const std::exception&) {
+            refused = true;
+        }
+        Check(refused && document.revision() == 1 &&
+                  entryOf(*document.snapshot().project)->at(std::string(store::kSourceMetadataKey)) == expectedMetadata,
+              "metadata: a bad " + name + " is refused at commit without mutation");
+    }
+
+    metadataStore->Save(document);
+    metadataStore->Close();
+    const auto bundle = work / "source-metadata-bundle";
+    store::ExportBundle(path, bundle);
+    store::ImportBundle(bundle, work / "source-metadata-imported.uzp");
+    for (const fs::path& file : {path, work / "source-metadata-imported.uzp"}) {
+        const std::string where = file == path ? "reopen" : "bundle import";
+        auto reopened = store::ProjectStore::Open(file);
+        const auto backend = SnapshotBackend::Load(*reopened.store, reopened.state.project);
+        auto read = backend ? backend->ImageOutputs(capture) : std::expected<std::vector<std::string>, UnsupportedProcedural>(std::unexpect, Refuse("test", "load failed"));
+        Check(read && *read == outputs, "metadata: recorded image outputs survive " + where);
+        if (read) read->push_back("changed");
+        const auto again = backend ? backend->ImageOutputs(capture) : read;
+        Check(again && *again == outputs, "metadata: a returned list is a copy (" + where + ")");
+        const auto stored = backend ? backend->Stored(capture) : std::expected<const SnapshotRaster*, UnsupportedProcedural>(std::unexpect, Refuse("test", "load failed"));
+        Check(stored && (*stored)->bytes == image.texels, "metadata: the stored raster is unchanged (" + where + ")");
+        ProceduralRequest neighbour = capture;
+        neighbour.params["gain"] = 0.75;
+        Check(backend && reason(backend->ImageOutputs(neighbour), kNoSnapshot),
+              "metadata: another signature never borrows the recorded outputs (" + where + ")");
+        reopened.store->Close();
+    }
+
+    const std::vector<std::string> reordered{"mask", "grey"};
+    Check(json::WriteCanonical(store::SourceMetadataJson(SignatureJson(capture), reordered)) !=
+              json::WriteCanonical(expectedMetadata),
+          "metadata: the order of the outputs changes the canonical metadata and its hash");
+
+    // A capture receipt only ever names the singleton output of its signature.
+    const std::string resource = "resource://shelf/noise?version=1";
+    const json::Array single{std::string("grey")};
+    const auto source = [&](const std::string& name, const json::Array& list, const std::string& active) {
+        return json::Object{{"resource", name}, {"outputs", list}, {"active_output", active}};
+    };
+    const auto receipt = [](const json::Object& first, const json::Object& second) {
+        return json::Value(json::Object{{"readback", json::Object{{"sources", json::Array{first, second}}}}});
+    };
+    const auto read = ReceiptImageOutputs(receipt(source(resource, single, "grey"), source(resource, single, "grey")),
+                                          resource, capture);
+    Check(read && *read == std::vector<std::string>{"grey"}, "metadata: a receipt's paired readback gives its singleton output");
+    const json::Array extra{std::string("grey"), std::string("mask")};
+    Check(!ReceiptImageOutputs(receipt(source(resource, extra, "grey"), source(resource, extra, "grey")), resource, capture),
+          "metadata: a receipt with an extra output refuses (no capture domain widening)");
+    Check(!ReceiptImageOutputs(receipt(source(resource, single, "mask"), source(resource, single, "mask")), resource, capture),
+          "metadata: a receipt whose active output differs from the signature refuses");
+    Check(!ReceiptImageOutputs(receipt(source(resource, single, "grey"), source(resource, single, "mask")), resource, capture),
+          "metadata: paired sources with different active outputs refuse");
+    Check(!ReceiptImageOutputs(receipt(source(resource, single, "grey"), source(resource, extra, "grey")), resource, capture),
+          "metadata: paired sources with different outputs refuse");
+    Check(!ReceiptImageOutputs(receipt(source(resource, single, "grey"), source("resource://shelf/other?version=1", single, "grey")),
+                               resource, capture),
+          "metadata: a paired source of another resource refuses");
+    const json::Array other{std::string("mask")};
+    Check(!ReceiptImageOutputs(receipt(source(resource, other, "grey"), source(resource, other, "grey")), resource, capture),
+          "metadata: outputs without the signature's output refuse");
+    const json::Array numbers{int64_t{1}};
+    Check(!ReceiptImageOutputs(receipt(source(resource, numbers, "grey"), source(resource, numbers, "grey")), resource, capture),
+          "metadata: non-string outputs refuse");
+    Check(!ReceiptImageOutputs(json::Object{{"readback", json::Object{{"sources", json::Array{source(resource, single, "grey")}}}}},
+                               resource, capture),
+          "metadata: a receipt without both paired sources refuses");
+    Check(!ReceiptImageOutputs(receipt(json::Object{{"resource", resource}, {"active_output", std::string("grey")}},
+                                       json::Object{{"resource", resource}, {"active_output", std::string("grey")}}),
+                               resource, capture),
+          "metadata: sources without outputs refuse");
+    Check(!ReceiptImageOutputs(receipt(json::Object{{"resource", resource}, {"outputs", single}},
+                                       json::Object{{"resource", resource}, {"outputs", single}}),
+                               resource, capture),
+          "metadata: sources without an active output refuse");
+    Check(!ReceiptImageOutputs(json::Object{}, resource, capture), "metadata: a receipt without readback refuses");
+    return Finish();
+}

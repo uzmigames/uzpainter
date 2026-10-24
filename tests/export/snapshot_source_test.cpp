@@ -170,7 +170,8 @@ int RunSnapshotSource(const std::filesystem::path& path, std::optional<int64_t> 
         std::memcpy(alternateBytes.data() + i * 4, &bits, 4);
     }
     auto alternate = submit([&](core::Edit& edit) {
-        procedural::RecordSnapshot(store, edit, alternateRequest, alternateBytes);
+        procedural::RecordSnapshot(store, edit, alternateRequest, alternateBytes,
+                                   std::vector<std::string>{"scalar", "aux"});
     });
     Check(alternate.result && alternate.result->status == core::ResultStatus::committed,
           "record editable synthetic plane after refusal checks");

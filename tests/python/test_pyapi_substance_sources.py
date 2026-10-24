@@ -94,6 +94,8 @@ invalid_url = "resource://project/image?version=1"
 assert raises(uzpainter.resource.ResourceID.from_url, invalid_url) is not None
 assert value.active_output == "scalar"
 assert value.get_parameters() == {"amount": 0.5, "$randomseed": 7}
+# The original snapshot was recorded without metadata: its outputs are unknown, not guessed.
+assert raises(getattr, value, "image_outputs").startswith("UnsupportedProcedural:")
 copied = value.get_parameters()
 copied["amount"] = 0.75
 assert value.get_parameters()["amount"] == 0.5
@@ -120,6 +122,10 @@ def capture(name):
 capture("original")
 value.set_parameters({"amount": 0.625})
 assert node.get_source(CT.User0).get_parameters() == {"amount": 0.625, "$randomseed": 7}
+outputs = value.image_outputs
+assert outputs == ["scalar", "aux"]
+outputs.append("changed")
+assert value.image_outputs == ["scalar", "aux"]
 capture("alternate")
 uzpainter.project.save()
 uzpainter.project.close()
@@ -128,9 +134,12 @@ node = ls.get_root_layer_nodes(ts.get_active_stack())[0]
 value = node.get_source(CT.User0)
 assert value.get_parameters() == {"amount": 0.625, "$randomseed": 7}
 assert value.resolution.mode == modes.Auto
+assert value.image_outputs == ["scalar", "aux"]
 capture("reopened")
 value.set_parameters({"amount": 0.5})
 capture("reverted")
+# The same handle never keeps the alternate snapshot's metadata after reverting the signature.
+assert raises(getattr, value, "image_outputs").startswith("UnsupportedProcedural:")
 def invalid_transaction():
     with uzpainter.Transaction("invalid procedural final state"):
         value.set_parameters({"amount": 0.625})
@@ -164,6 +173,7 @@ for name, replacement in (("active_output", "missing"),
 capture("refused")
 node.set_source(CT.User0, cm.Color(0.25, 0.25, 0.25, "Raw"))
 assert raises(value.get_parameters) is not None
+assert raises(getattr, value, "image_outputs").startswith("ValueError:")
 assert raises(value.set_parameters, {"amount": 0.5}) is not None
 uzpainter.project.close()
 uzpainter.project.open(WORK + "/snapshot-imported.uzp")

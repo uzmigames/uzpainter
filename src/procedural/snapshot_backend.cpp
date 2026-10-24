@@ -180,13 +180,15 @@ std::expected<SnapshotBackend, std::string> SnapshotBackend::Load(store::Project
                                    std::string(core::ToString(image.format)) +
                                    ") is not the raster the signature's output names");
         }
-        backend.m_snapshots[entry.key] = Entry{entry.signature, SnapshotRaster{*spec, std::move(image.texels)}};
+        backend.m_snapshots[entry.key] =
+            Entry{entry.signature, SnapshotRaster{*spec, std::move(image.texels)}, entry.image_outputs};
     }
     return backend;
 }
 
-void SnapshotBackend::Add(const ProceduralRequest& request, SnapshotRaster raster) {
-    m_snapshots[SignatureHash(request)] = Entry{SignatureJson(request), std::move(raster)};
+void SnapshotBackend::Add(const ProceduralRequest& request, SnapshotRaster raster,
+                          std::optional<std::vector<std::string>> imageOutputs) {
+    m_snapshots[SignatureHash(request)] = Entry{SignatureJson(request), std::move(raster), std::move(imageOutputs)};
 }
 
 ParityStatus SnapshotBackend::Status(const core::AssetUrl&) const {
@@ -225,6 +227,14 @@ std::expected<const SnapshotRaster*, UnsupportedProcedural> SnapshotBackend::Sto
     return &found->second.raster;
 }
 
+std::expected<std::vector<std::string>, UnsupportedProcedural> SnapshotBackend::ImageOutputs(
+    const ProceduralRequest& request) const {
+    const auto found = m_snapshots.find(SignatureHash(request));
+    if (found == m_snapshots.end()) return Refused(*Refusal(request));
+    if (!found->second.imageOutputs) return Refused(Refuse(AssetName(request), kNoImageOutputs));
+    return *found->second.imageOutputs;
+}
+
 RasterFuture SnapshotBackend::Evaluate(const ProceduralRequest& request, const InputImages&) {
     std::promise<render::Result<Raster>> promise;
     const std::optional<UnsupportedProcedural> refusal = Refusal(request);
@@ -252,7 +262,7 @@ RasterFuture SnapshotBackend::Evaluate(const ProceduralRequest& request, const I
 }
 
 core::Id RecordSnapshot(store::ProjectStore& store, core::Edit& edit, const ProceduralRequest& request,
-                        std::string bytes) {
+                        std::string bytes, const std::optional<std::vector<std::string>>& imageOutputs) {
     const std::string asset = AssetName(request);
     if (request.tile.x != 0 || request.tile.y != 0 || request.tile.width != 0 || request.tile.height != 0) {
         throw core::ValueError("snapshot of " + asset + ": a snapshot is a whole texture; the request names a tile");
@@ -271,7 +281,8 @@ core::Id RecordSnapshot(store::ProjectStore& store, core::Edit& edit, const Proc
                                std::to_string(RasterBytes(request.output)));
     }
     const int edge = static_cast<int>(request.output.resolution);
-    return store.RecordSnapshot(edit, SignatureJson(request), store::PlaneImage{edge, edge, *format, std::move(bytes)});
+    return store.RecordSnapshot(edit, SignatureJson(request), store::PlaneImage{edge, edge, *format, std::move(bytes)},
+                                imageOutputs);
 }
 
 }  // namespace uzp::procedural

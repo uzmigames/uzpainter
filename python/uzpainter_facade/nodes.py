@@ -354,6 +354,10 @@ class SourceSubstance:
         native = self._native().resource_id()
         return resource.ResourceID(native.context, native.name, native.version)
 
+    @property
+    def image_outputs(self) -> list[str]:
+        return [str(name) for name in self._native().image_outputs]
+
     def get_parameters(self) -> dict[str, int | float | str]:
         return dict(self._native().get_parameters())
 

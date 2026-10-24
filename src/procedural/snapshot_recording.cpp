@@ -5,6 +5,7 @@
 #include "procedural/snapshot_backend.h"
 #include "procedural/admission.h"
 #include "store/bundle_codec.h"
+#include "store/snapshots.h"
 #include "uzp_core/types/errors.h"
 #include "uzp_core/manifest/sha256.h"
 
@@ -164,7 +165,8 @@ std::expected<std::string, std::string> SnapshotExportTexels(std::string_view fi
 
 std::expected<core::RequestOutcome, std::string> RecordSnapshotExport(
     store::ProjectStore& store, core::Document& document, const ProceduralRequest& request,
-    std::string_view exportFile, std::string_view projectUuid, int64_t revision) {
+    std::string_view exportFile, std::string_view projectUuid, int64_t revision,
+    const std::optional<std::vector<std::string>>& imageOutputs) {
     using Result = std::expected<core::RequestOutcome, std::string>;
     const core::Snapshot snapshot = document.snapshot();
     if (projectUuid != store.project_uuid() || document.project_uuid() != store.project_uuid() ||
@@ -190,12 +192,60 @@ std::expected<core::RequestOutcome, std::string> RecordSnapshotExport(
     if (!texels) return Result(std::unexpect, texels.error());
     const std::string key = SignatureHash(request);
     const std::string exportHash = core::Sha256Hex(exportFile);
-    return store.Submit(
-        document,
-        core::MutationRequest{"procedural_snapshot",
-                              core::json::Object{{"signature_sha256", key}, {"export_sha256", exportHash}},
-                              "snapshot-" + key + "-" + exportHash, revision},
-        [&](core::Edit& edit) { RecordSnapshot(store, edit, request, *texels); });
+    core::json::Object args{{"signature_sha256", key}, {"export_sha256", exportHash}};
+    std::string operation = "snapshot-" + key + "-" + exportHash;
+    if (imageOutputs) {
+        const json::Value signature = SignatureJson(request);
+        const json::Value metadata = store::SourceMetadataJson(signature, *imageOutputs);
+        const std::string problem = store::SourceMetadataProblem(signature, metadata);
+        if (!problem.empty()) return Result(std::unexpect, problem);
+        const std::string metadataHash = core::Sha256Hex(json::WriteCanonical(metadata));
+        args["source_metadata_sha256"] = metadataHash;
+        operation += "-" + metadataHash;
+    }
+    return store.Submit(document, core::MutationRequest{"procedural_snapshot", std::move(args), operation, revision},
+                        [&](core::Edit& edit) { RecordSnapshot(store, edit, request, *texels, imageOutputs); });
+}
+
+std::expected<std::vector<std::string>, std::string> ReceiptImageOutputs(
+    const core::json::Value& receipt, std::string_view resource, const ProceduralRequest& request) {
+    using Result = std::expected<std::vector<std::string>, std::string>;
+    try {
+        const auto& readback = Object(Object(receipt, "receipt").at("readback"), "readback");
+        const auto sources = readback.find("sources");
+        const auto* list = sources == readback.end() ? nullptr : std::get_if<json::Array>(&sources->second.data);
+        if (list == nullptr || list->size() != 2) {
+            throw std::invalid_argument("readback.sources must hold exactly the two paired sources");
+        }
+        std::optional<std::vector<std::string>> observed;
+        for (const json::Value& item : *list) {
+            const auto& source = Object(item, "readback source");
+            if (String(source.at("resource"), "source resource") != resource) {
+                throw std::invalid_argument("a paired source names another resource");
+            }
+            const auto* outputs = std::get_if<json::Array>(&source.at("outputs").data);
+            if (outputs == nullptr) throw std::invalid_argument("source outputs must be an array");
+            std::vector<std::string> names;
+            for (const json::Value& output : *outputs) names.push_back(String(output, "source output"));
+            if (observed && *observed != names) throw std::invalid_argument("paired sources observed different outputs");
+            // The capture domain is a singleton output source (bridge.validate_readback); the
+            // stored metadata may hold more outputs, but a capture never widens its domain.
+            if (String(source.at("active_output"), "source active_output") != request.outputId ||
+                names != std::vector<std::string>{request.outputId}) {
+                throw std::invalid_argument("a paired source is not the singleton output " + request.outputId +
+                                            " the capture signature names");
+            }
+            observed = std::move(names);
+        }
+        const json::Value signature = SignatureJson(request);
+        const std::string problem = store::SourceMetadataProblem(signature, store::SourceMetadataJson(signature, *observed));
+        if (!problem.empty()) throw std::invalid_argument(problem);
+        return *observed;
+    } catch (const std::out_of_range&) {
+        return Result(std::unexpect, "readback source lacks resource, outputs or active_output");
+    } catch (const std::exception& error) {
+        return Result(std::unexpect, error.what());
+    }
 }
 
 }  // namespace uzp::procedural

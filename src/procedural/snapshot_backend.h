@@ -24,12 +24,16 @@
 
 #include <expected>
 #include <map>
+#include <optional>
 #include <string>
+#include <vector>
 
 namespace uzp::procedural {
 
 /// Why a snapshot backend does not serve a request whose signature it does not hold.
 inline constexpr std::string_view kNoSnapshot = "no snapshot with this signature";
+/// Why the snapshot of a request's signature gives no `image_outputs`.
+inline constexpr std::string_view kNoImageOutputs = "the snapshot's recording observed no image outputs";
 /// `SnapshotBackend::Status` of every asset.
 inline constexpr std::string_view kSnapshotStatus =
     "snapshots are exact-signature migration data and certify no asset";
@@ -59,8 +63,9 @@ public:
     [[nodiscard]] static std::expected<SnapshotBackend, std::string> Load(store::ProjectStore& store,
                                                                          const core::Project& project);
 
-    /// Adds a snapshot (`Load` and tests).
-    void Add(const ProceduralRequest& request, SnapshotRaster raster);
+    /// Adds a snapshot (`Load` and tests), with its recorded `image_outputs` when known.
+    void Add(const ProceduralRequest& request, SnapshotRaster raster,
+             std::optional<std::vector<std::string>> imageOutputs = std::nullopt);
 
     [[nodiscard]] std::string_view Name() const override { return "snapshot"; }
     /// `unavailable` for every asset (`kSnapshotStatus`): a snapshot certifies nothing.
@@ -79,6 +84,11 @@ public:
     /// The stored raster of the request's exact signature, byte for byte, or the refusal.
     [[nodiscard]] std::expected<const SnapshotRaster*, UnsupportedProcedural> Stored(
         const ProceduralRequest& request) const;
+    /// A copy of the `image_outputs` the snapshot of the request's exact signature recorded
+    /// (store/snapshots.h `source_metadata`); the refusal when no snapshot has that signature, or
+    /// `kNoImageOutputs` when its recording observed none. No other snapshot is consulted.
+    [[nodiscard]] std::expected<std::vector<std::string>, UnsupportedProcedural> ImageOutputs(
+        const ProceduralRequest& request) const;
 
     [[nodiscard]] size_t size() const { return m_snapshots.size(); }
 
@@ -86,6 +96,7 @@ private:
     struct Entry {
         core::json::Value signature;
         SnapshotRaster raster;
+        std::optional<std::vector<std::string>> imageOutputs;
     };
     std::map<std::string, Entry> m_snapshots;  ///< By signature SHA-256.
 };
@@ -95,8 +106,10 @@ private:
 /// `SnapshotPlaneFormat(request.output)` and the request's signature in the manifest. Call it
 /// from the transaction's call; returns the plane id. Throws `core::ValueError` for a request
 /// that names a tile (a snapshot is a whole texture), an output of 2 or 4 channels, bytes of
-/// another size, and what `RecordSnapshot` throws.
+/// another size, and what `RecordSnapshot` throws. `imageOutputs`, when given, is stored as the
+/// entry's `source_metadata`.
 core::Id RecordSnapshot(store::ProjectStore& store, core::Edit& edit, const ProceduralRequest& request,
-                        std::string bytes);
+                        std::string bytes,
+                        const std::optional<std::vector<std::string>>& imageOutputs = std::nullopt);
 
 }  // namespace uzp::procedural

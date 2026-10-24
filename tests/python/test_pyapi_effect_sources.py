@@ -84,6 +84,7 @@ if FACADE:
 else:
     assert filter_.resolution is None
 assert "active_output requires" in raises(getattr, generator, "active_output")
+assert raises(getattr, generator, "image_outputs").startswith("UnsupportedProcedural:")
 
 errors = {}
 errors["generator parameters"] = unchanged(generator.set_parameters, {"amount": 0.5})

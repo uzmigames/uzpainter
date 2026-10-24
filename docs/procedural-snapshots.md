@@ -151,6 +151,39 @@ unsupported values may be restored before commit. Source replacement or deletion
 existing handles fail. Stored defaults, properties, presets, image-input editing and
 multioutput source binding still require their own metadata and implementation.
 
+## Recorded source metadata
+
+A snapshot entry may carry an optional `source_metadata` member beside its signature:
+`{"schema": "uzpainter/procedural-source-metadata/1", "asset": "<asset>@<version>",
+"image_outputs": [...]}`. `asset` is the signature's exact pin. `image_outputs` is the
+source's complete ordered list of output identifiers (A-PYDOC `SourceSubstance.image_outputs`),
+which must include the signature's output id, with no repeats or empty names. The metadata is
+not part of the signature, so `SignatureJson`, `SignatureHash` and `RequestFromSignature` are
+unchanged. An absent member means "not recorded" and is never written as empty or null.
+Entries recorded without it, and their transactions' idempotency keys and arguments, keep
+their bytes. A malformed member, a pin of another asset or version, a repeated name or a list
+without the signature's output makes the entry malformed. That is refused at commit and
+before staging, without mutation. A snapshot stays immutable, so other metadata for an already
+recorded signature is refused rather than merged.
+
+`UzPainter.exe assets snapshot` takes the metadata only from the capture receipt's paired
+readback. Both sources must name the requested resource, report the signature's output as
+`active_output`, and list exactly that output, because the capture domain is a singleton output
+source. Anything else is refused before the transaction. When metadata is recorded, its
+canonical SHA-256 joins the operation's arguments and idempotency key, so a recording with other
+metadata never replays an earlier receipt. The command verifies the stored list after reopen.
+The member travels with save, reopen and bundle import. Like the snapshot itself, it is
+project-private and stays out of recipes and public fixtures.
+
+`SourceSubstance.image_outputs` (both APIs) resolves the source again and returns a copy of the
+list recorded with the snapshot that serves the source's current exact signature. Another
+signature's snapshot is never consulted, and nothing is inferred from the output mapping. A
+snapshot recorded without metadata, and a generator or filter effect source, raise
+`UnsupportedProcedural`. A stale handle keeps its `ValueError`. Native evidence:
+`uzp-procedural-tests snapshot-metadata` (`tests/procedural/test_proc_snapshot_recording.py`);
+API evidence: `tests/python/test_pyapi_substance_sources.py`, whose alternate synthetic
+snapshot records `["scalar", "aux"]`. Exports are unchanged.
+
 ## Generator and filter effect sources
 
 A stored generator or filter effect returns its procedural from `get_source()` as a fresh
