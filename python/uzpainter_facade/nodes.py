@@ -334,16 +334,19 @@ class SourceBitmap:
 class SourceSubstance:
     """A stored procedural source; edits must match an admitted project snapshot."""
 
-    __slots__ = ("_channel", "_node")
+    __slots__ = ("_channel", "_effect", "_node")
 
-    def __init__(self, node: int, channel: Any) -> None:
+    def __init__(self, node: int, channel: Any, effect: bool = False) -> None:
         self._node = node
         self._channel = channel
+        self._effect = effect
 
     def _native(self) -> Any:
-        source = _ls.get_node_by_uid(self._node).get_source(self._channel)
+        node = _ls.get_node_by_uid(self._node)
+        # A generator or filter effect's get_source() takes no channel.
+        source = node.get_source() if self._effect else node.get_source(self._channel)
         if not isinstance(source, uzpainter.source.SourceSubstance):
-            raise ValueError("stale source: the fill no longer has this procedural source")
+            raise ValueError("stale source: the node no longer has this procedural source")
         return source
 
     @property
@@ -796,9 +799,19 @@ class PaintEffectNode(EffectNode):
 class GeneratorEffectNode(EffectNode):
     __slots__ = ()
 
+    def get_source(self) -> SourceSubstance | None:
+        if self._native().get_source() is None:
+            return None
+        return SourceSubstance(self.uid(), None, effect=True)
+
 
 class FilterEffectNode(EffectNode):
     __slots__ = ()
+
+    def get_source(self) -> SourceSubstance | None:
+        if self._native().get_source() is None:
+            return None
+        return SourceSubstance(self.uid(), None, effect=True)
 
 
 class CompareMaskEffectNode(EffectNode):

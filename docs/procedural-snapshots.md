@@ -151,6 +151,29 @@ unsupported values may be restored before commit. Source replacement or deletion
 existing handles fail. Stored defaults, properties, presets, image-input editing and
 multioutput source binding still require their own metadata and implementation.
 
+## Generator and filter effect sources
+
+A stored generator or filter effect returns its procedural from `get_source()` as a fresh
+`SourceSubstance`, or `None` when the effect has none, as documented. The handle reads
+the effect's parameters, its pinned UzPainter identity and its explicit resolution
+override through the same accessors as a fill source. `active_output` is refused because
+an effect handle has no channel, and inferring one from the output mapping would be a guess.
+
+Setting the resolution of a filter's source raises `ValueError` before any other check
+(A-PYDOC: the setter raises for a source used in a `FilterEffectNode`). The stored document
+already rejects a filter resolution override. No backend evaluates generator or filter effects yet. Every
+other edit therefore fails the transaction's final-state support check with
+`NotYetSupported`, naming `phase3.2_proc-generator-families` or
+`phase3.2_proc-filter-families`. The revision is unchanged, and nothing is clamped or
+substituted. When those owners evaluate these effects, generators bind their mesh maps
+by usage from the owning texture set through the native `BindMeshMaps`, which fails loudly
+on a missing or invalid map. Inserting these effects and `set_source`/`remove_source` stay
+release gaps (`phase3.3_procedural-families`).
+
+`tests/python/test_pyapi_effect_sources.py` stores one fill with a generator, a filter and an
+empty generator through `uzp-export-tests procedural-effects`. It checks both APIs for reads,
+None, refusals before mutation and save/reopen. Its pins are synthetic test references.
+
 `tests/python/test_pyapi_substance_sources.py` exercises both APIs with two authored
 snapshots whose float32 rasters differ. It verifies exact exports after edits, save/reopen,
 reversion and failed transactions against an independent float32 readout calculation,

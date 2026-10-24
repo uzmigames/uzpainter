@@ -12,6 +12,7 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
 
 ### Added
 
+- Stored generator and filter effects return their procedural from `get_source()` in both Python APIs, or None. Parameters, pinned identity and resolution read back. Setting a filter source's resolution raises the documented `ValueError`; other edits are refused before mutation until the phase3.2 families evaluate these effects. Entries remain `pending-evidence`.
 - Stored procedural fill sources now expose scalar parameters, explicit output and resolution edits through both Python APIs. Changes select an exact project-private snapshot or roll back; resource identities preserve UzPainter asset pins, including versions containing `+`. The subset remains pending Painter evidence; default metadata, general binding, presets and image inputs remain unavailable.
 - Capability tracing records individual instance-only dataclass field accesses without changing their public contract or crediting constructor assignments, including inherited constructors. `ResolutionOverride.mode`, `.value` and `.log2_offset` now have compared Tier 0 evidence; procedural source binding remains pending.
 - Snapshot fills preserve the effective signed integer `$randomseed` when resolving their signature, including negative values and int64 limits. Nonzero captured seeds now serve after reopen and bundle import; changed, floating or boolean seeds are refused atomically.

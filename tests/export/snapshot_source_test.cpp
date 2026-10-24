@@ -191,3 +191,57 @@ int RunSnapshotSource(const std::filesystem::path& path, std::optional<int64_t> 
     std::cout << "snapshot source: exact CPU readout, warm cache refusals, atomic edits, save and bundle passed\n";
     return 0;
 }
+
+// Stores one fill layer whose content effects are a generator and a filter with authored
+// procedural references, and a generator without one: the Python get_source() fixture
+// (synthetic pins, not Painter evidence; neither effect can be inserted through the API yet).
+int RunProceduralEffects(const std::filesystem::path& path) {
+    using namespace uzp;
+    auto opened = store::ProjectStore::Open(path);
+    Check(opened.report.ok(), "initial project integrity");
+    core::Document document(std::move(opened.state));
+    opened.store->Attach(document);
+    auto& store = *opened.store;
+    const core::Blending normal{core::BlendingMode::Normal, 1.0, {}};
+    const auto effect = [&](core::Edit& edit, core::EffectKind kind, std::string name) {
+        core::Effect e;
+        e.uid = edit.AllocateId();
+        e.kind = kind;
+        e.name = std::move(name);
+        e.blending[core::ChannelType::BaseColor] = normal;
+        e.active_channels = {core::ChannelType::BaseColor};
+        return e;
+    };
+    auto stored = store.Submit(document, {"procedural-effects-test", core::json::Object{}, "procedural-effects-1",
+                                          document.revision()}, [&](core::Edit& edit) {
+        auto& stack = edit.project().texture_sets.front().stacks.front();
+        core::Layer host;
+        host.uid = edit.AllocateId();
+        host.name = "procedural host";
+        host.kind = core::LayerKind::fill;
+        host.blending[core::ChannelType::BaseColor] = normal;
+        host.fill.emplace();
+        host.fill->active_channels = {core::ChannelType::BaseColor};
+        host.fill->sources[core::ChannelType::BaseColor] =
+            core::Source{core::UniformColorSource{{0.5, 0.5, 0.5}, "sRGB", {}}};
+        core::Effect generator = effect(edit, core::EffectKind::generator, "authored generator");
+        generator.procedural.emplace();
+        generator.procedural->asset = "uzasset://test-generator/ridge@2";
+        generator.procedural->params = {{"amount", 0.25}, {"$randomseed", std::int64_t{3}}, {"label", std::string("a")}};
+        generator.procedural->output_mapping = {{"BaseColor", "mask"}};
+        generator.procedural->resolution_override =
+            core::ProceduralResolutionOverride{core::ProceduralResolutionMode::Manual, {256, 256}, 0, {}};
+        core::Effect filter = effect(edit, core::EffectKind::filter, "authored filter");
+        filter.procedural.emplace();
+        filter.procedural->asset = "uzasset://test-filter/blur@1";
+        filter.procedural->params = {{"radius", 2.0}};
+        filter.procedural->output_mapping = {{"BaseColor", "output"}};
+        host.content_effects = {generator, filter, effect(edit, core::EffectKind::generator, "empty generator")};
+        stack.root_layers.insert(stack.root_layers.begin(), std::move(host));
+    });
+    Check(stored.result && stored.result->status == core::ResultStatus::committed, "store procedural effects");
+    store.Save(document);
+    store.Close();
+    std::cout << "procedural effects stored\n";
+    return 0;
+}

@@ -43,6 +43,8 @@ struct SourceBitmap {
 struct SourceSubstance {
     Id node = core::kNoId;
     ChannelArg channel;
+    /// The source of a generator or filter effect (`get_source()` takes no channel there).
+    bool effect = false;
 };
 
 enum class SourceResolutionMode { Auto, Document, Manual, TextureSet, UVTile };
@@ -136,6 +138,49 @@ py::object SourceObject(const core::Source* source, Id uid, const ChannelArg& ch
             ThrowNotYetSupported("anchor reference sources are release gaps (phase4.1_nodes-instances-anchors)");
     }
     return py::none();
+}
+
+/// The generator or filter effect `uid` (handles of opened projects; neither can be inserted yet).
+const core::Effect& ProceduralEffectOf(const NodeInfo& info, Id uid) {
+    if (info.effect == nullptr ||
+        (info.effect->kind != core::EffectKind::generator && info.effect->kind != core::EffectKind::filter)) {
+        throw core::ValueError("node " + std::to_string(uid) + " is not a generator or filter effect");
+    }
+    return *info.effect;
+}
+
+/// The stored procedural of a source handle, read through a freshly resolved node.
+core::ProceduralRef ReadProcedural(const SourceSubstance& s) {
+    const auto project = Read();
+    const NodeInfo info = Resolve(*project, s.node);
+    if (s.effect) {
+        const core::Effect& effect = ProceduralEffectOf(info, s.node);
+        if (!effect.procedural) throw core::ValueError("stale handle: the effect no longer has a procedural source");
+        return *effect.procedural;
+    }
+    const core::Source* src = SourceOf(info, s.node, s.channel);
+    if (src == nullptr || src->kind() != core::SourceKind::procedural) {
+        throw core::ValueError("stale handle: the node no longer has this procedural source");
+    }
+    return std::get<core::ProceduralSource>(src->value).ref;
+}
+
+core::ProceduralRef& EditProcedural(core::Edit& edit, const SourceSubstance& s) {
+    if (!s.effect) {
+        return std::get<core::ProceduralSource>(EditSource(edit, s.node, s.channel, core::SourceKind::procedural).value).ref;
+    }
+    core::Effect& effect = EditEffect(edit, s.node);
+    if (effect.kind != core::EffectKind::generator && effect.kind != core::EffectKind::filter) {
+        throw core::ValueError("node " + std::to_string(s.node) + " is not a generator or filter effect");
+    }
+    if (!effect.procedural) throw core::ValueError("stale handle: the effect no longer has a procedural source");
+    return *effect.procedural;
+}
+
+core::json::Object SourceArgs(const SourceSubstance& s) {
+    core::json::Object args = s.effect ? NodeArgs(s.node) : NodeArgs(s.node, s.channel);
+    if (s.effect) args["effect"] = true;
+    return args;
 }
 
 // ── Blending ────────────────────────────────────────────────────────────────────────────────────
@@ -532,14 +577,7 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
         .def_readonly("log2_offset", &SourceResolutionOverride::log2_offset);
     SealClass(resolution);
 
-    const auto read_procedural = [](const SourceSubstance& s) {
-        const auto project = Read();
-        const core::Source* src = SourceOf(Resolve(*project, s.node), s.node, s.channel);
-        if (src == nullptr || src->kind() != core::SourceKind::procedural) {
-            throw core::ValueError("stale handle: the node no longer has this procedural source");
-        }
-        return std::get<core::ProceduralSource>(src->value).ref;
-    };
+    const auto read_procedural = [](const SourceSubstance& s) { return ReadProcedural(s); };
     const auto output_key = [](const SourceSubstance& s, const core::ProceduralRef& ref) {
         if (!s.channel || ref.output_mapping.size() != 1) {
             ThrowNotYetSupported("active_output requires an explicit single-channel procedural source");
@@ -581,11 +619,10 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
                     throw py::type_error("procedural parameter type mismatch: " + name);
                 }
             }
-            auto args = NodeArgs(s.node, s.channel);
+            auto args = SourceArgs(s);
             args["parameters"] = updates;
             return Mutate("source.SourceSubstance.set_parameters", args, [&](core::Edit& edit) {
-                auto& target = std::get<core::ProceduralSource>(
-                    EditSource(edit, s.node, s.channel, core::SourceKind::procedural).value).ref;
+                auto& target = EditProcedural(edit, s);
                 for (const auto& [name, value] : updates) target.params[name] = value;
             });
         })
@@ -599,11 +636,10 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
         }, [read_procedural, output_key](const SourceSubstance& s, const std::string& output) {
             const auto key = output_key(s, read_procedural(s));
             if (output.empty()) throw core::ValueError("active_output must not be empty");
-            auto args = NodeArgs(s.node, s.channel);
+            auto args = SourceArgs(s);
             args["output"] = output;
             Mutate("source.SourceSubstance.active_output", args, [&](core::Edit& edit) {
-                auto& ref = std::get<core::ProceduralSource>(
-                    EditSource(edit, s.node, s.channel, core::SourceKind::procedural).value).ref;
+                auto& ref = EditProcedural(edit, s);
                 ref.output_mapping.at(key) = output;
             });
         })
@@ -631,14 +667,17 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
             return py::cast(result);
         }, [read_procedural](const SourceSubstance& s, const SourceResolutionOverride& value) {
             read_procedural(s);
+            // python-doc: the setter raises ValueError for a source used in a FilterEffectNode.
+            if (s.effect && ProceduralEffectOf(Resolve(*Read(), s.node), s.node).kind == core::EffectKind::filter) {
+                throw core::ValueError("the resolution of a source used in a FilterEffectNode cannot be set");
+            }
             CheckSourceResolution(value);
-            auto args = NodeArgs(s.node, s.channel);
+            auto args = SourceArgs(s);
             args["mode"] = static_cast<int>(value.mode);
             args["value"] = core::json::Array{value.value[0], value.value[1]};
             args["log2_offset"] = value.log2_offset;
             Mutate("source.SourceSubstance.resolution", args, [&](core::Edit& edit) {
-                auto& ref = std::get<core::ProceduralSource>(
-                    EditSource(edit, s.node, s.channel, core::SourceKind::procedural).value).ref;
+                auto& ref = EditProcedural(edit, s);
                 core::ProceduralResolutionOverride stored;
                 if (ref.resolution_override) {
                     if (const auto* current = std::get_if<core::ProceduralResolutionOverride>(&*ref.resolution_override)) {
@@ -961,8 +1000,15 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
     // The node kinds outside the Phase 1 subset keep their classes (handles of opened projects).
     SealClass(py::class_<PaintLayerNode, LayerNode>(m, "PaintLayerNode"));
     SealClass(py::class_<PaintEffectNode, EffectNode>(m, "PaintEffectNode"));
-    SealClass(py::class_<GeneratorEffectNode, EffectNode>(m, "GeneratorEffectNode"));
-    SealClass(py::class_<FilterEffectNode, EffectNode>(m, "FilterEffectNode"));
+    // get_source() of a stored generator or filter effect: the procedural, or None (python-doc).
+    // Their insertion and set_source/remove_source stay release gaps (phase3.3_procedural-families).
+    const auto effect_source = [](const Node& n) -> py::object {
+        const auto project = Read();
+        if (!ProceduralEffectOf(Resolve(*project, n.uid), n.uid).procedural) return py::none();
+        return py::cast(SourceSubstance{n.uid, std::nullopt, true});
+    };
+    SealClass(py::class_<GeneratorEffectNode, EffectNode>(m, "GeneratorEffectNode").def("get_source", effect_source));
+    SealClass(py::class_<FilterEffectNode, EffectNode>(m, "FilterEffectNode").def("get_source", effect_source));
     SealClass(py::class_<CompareMaskEffectNode, EffectNode>(m, "CompareMaskEffectNode"));
     SealClass(py::class_<ColorSelectionEffectNode, EffectNode>(m, "ColorSelectionEffectNode"));
     SealClass(py::class_<AnchorPointEffectNode, EffectNode>(m, "AnchorPointEffectNode"));
