@@ -8,10 +8,132 @@ import sys
 import threading
 import types
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pytest
+
+
+def test_required_dataclass_fields_trace_real_access_and_restore(trace: Any) -> None:
+    class NotYetSupported(Exception):
+        pass
+
+    @dataclass
+    class Value:
+        left: int
+        right: int
+
+        def __setattr__(self, name: str, value: Any) -> None:
+            if value == "refused":
+                raise NotYetSupported("authored refusal")
+            if value == "invalid":
+                raise ValueError("authored validation error")
+            object.__setattr__(self, name, value)
+
+    original = dict(vars(Value))
+    trace._index_class("api.Value", Value, 0)
+    trace.start()
+    value = Value(1, 2)
+    trace.mark("instance-only")
+    trace._scan(value)
+    trace.mark("read")
+    assert value.left == 1
+    trace.mark("write")
+    value.right = 3
+    trace.mark("invalid")
+    # Deliberately invalid assignments distinguish public errors from unsupported refusals.
+    with pytest.raises(ValueError):
+        value.left = "invalid"  # type: ignore[assignment]
+    trace.mark("refused")
+    with pytest.raises(NotYetSupported):
+        value.right = "refused"  # type: ignore[assignment]
+    trace.mark("delete")
+    del value.left
+    trace.mark("missing")
+    with pytest.raises(AttributeError):
+        _ = value.left
+    found = trace.stop()
+    field_names = {"api.Value.left", "api.Value.right"}
+    assert not set(found.get("setup", [])) & field_names
+    assert not set(found.get("instance-only", [])) & field_names
+    assert set(found["read"]) & field_names == {"api.Value.left"}
+    assert set(found["write"]) & field_names == {"api.Value.right"}
+    assert set(found["invalid"]) & field_names == {"api.Value.left"}
+    assert not set(found.get("refused", [])) & field_names
+    assert set(found["missing"]) & field_names == {"api.Value.left"}
+    assert vars(Value) == original
+    assert vars(value) == {"right": 3}
+    del value.right
+    assert vars(value) == {}
+
+
+def test_dataclass_field_ownership_public_private_and_unindexed_child(
+    trace: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    @dataclass
+    class Parent:
+        inherited: int
+
+    @dataclass
+    class Child(Parent):
+        own: int
+
+    class Unindexed(Parent):
+        def __init__(self, inherited: int) -> None:
+            self.inherited = inherited
+
+    @dataclass
+    class _Private:
+        hidden_owner: int
+
+    class Public(_Private):
+        pass
+
+    originals = {cls: dict(vars(cls)) for cls in (Parent, Child, Public, Unindexed, _Private)}
+    for qualified, cls in (
+        ("api.Parent", Parent),
+        ("api.Child", Child),
+        ("api.Public", Public),
+        ("api.Alias", Public),
+    ):
+        trace._index_class(qualified, cls, 0)
+    assert "api.Child.inherited" not in trace._names
+    notes: list[set[str]] = []
+    note = trace._note
+
+    def count(names: set[str]) -> None:
+        if any(name.endswith((".inherited", ".own", ".hidden_owner")) for name in names):
+            notes.append(set(names))
+        note(names)
+
+    monkeypatch.setattr(trace, "_note", count)
+    trace.start()
+    child, unindexed, public = Child(1, 2), Unindexed(3), Public(4)
+    notes.clear()
+    trace.mark("inherited")
+    assert child.inherited == 1
+    assert notes == [{"api.Parent.inherited"}]
+    trace.mark("own")
+    child.own = 5
+    trace.mark("unindexed")
+    assert unindexed.inherited == 3
+    trace.mark("private")
+    assert public.hidden_owner == 4
+    found = trace.stop()
+    assert not {
+        name
+        for name in found.get("setup", [])
+        if name.endswith((".inherited", ".own", ".hidden_owner"))
+    }
+    assert "api.Parent.inherited" in found["inherited"]
+    assert "api.Child.own" in found["own"]
+    assert "api.Parent.inherited" in found["unindexed"]
+    assert {name for name in found["private"] if name.endswith(".hidden_owner")} == {
+        "api.Public.hidden_owner",
+        "api.Alias.hidden_owner",
+    }
+    assert all(vars(cls) == original for cls, original in originals.items())
 
 
 @pytest.fixture

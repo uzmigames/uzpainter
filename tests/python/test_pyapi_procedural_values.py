@@ -111,3 +111,46 @@ result = {
         "aliases": True,
         "revision_unchanged": True,
     }
+
+
+def test_resolution_dataclass_contract_and_individual_field_trace(facade: Run) -> None:
+    report = facade(
+        traced("""
+import dataclasses
+import inspect
+value = source.ResolutionOverride(source.ResolutionMode.Auto, (128, 256), 0)
+fields = dataclasses.fields(value)
+assert [field.name for field in fields] == ['mode', 'value', 'log2_offset']
+assert all(field.default is dataclasses.MISSING and field.default_factory is dataclasses.MISSING
+           for field in fields)
+assert all(parameter.default is inspect.Parameter.empty
+           for parameter in inspect.signature(source.ResolutionOverride).parameters.values())
+assert vars(value) == {'mode': source.ResolutionMode.Auto, 'value': (128, 256), 'log2_offset': 0}
+assert dataclasses.asdict(value) == vars(value)
+assert repr(value) == ('ResolutionOverride(mode=' + repr(source.ResolutionMode.Auto)
+                       + ', value=(128, 256), log2_offset=0)')
+for name, replacement in [('mode', 'unvalidated'), ('value', [256, 512]), ('log2_offset', 1.5)]:
+    _TRACE['mark']('write/' + name)
+    setattr(value, name, replacement)
+    _TRACE['mark']('read/' + name)
+    assert getattr(value, name) == replacement
+_TRACE['mark']('contract')
+before = vars(value).copy()
+error = raises(setattr, value, 'value', [257, 512])
+assert vars(value) == before
+assert error.startswith('ValueError:')
+for name in ('mode', 'value', 'log2_offset'):
+    delattr(value, name)
+assert vars(value) == {}
+result = True
+""")
+    )
+    assert report["status"] == "ok", report
+    result, trace = report["result"]
+    assert result is True
+    prefix = "substance_painter.source.ResolutionOverride."
+    for name in ("mode", "value", "log2_offset"):
+        for action in ("read", "write"):
+            assert {
+                symbol for symbol in trace[action + "/" + name] if symbol.startswith(prefix)
+            } == {prefix + name}

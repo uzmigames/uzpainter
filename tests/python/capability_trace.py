@@ -12,6 +12,8 @@ exercised when
   a UzPainter refusal (`NotYetSupported`, its subclasses, `UnsupportedInUzPainter`): a refused call
   proves nothing;
 - a native (pybind11) function or method of it returned;
+- an instance-only dataclass field was read or assigned, including a public validation error
+  but excluding UzPainter refusals and constructor assignments;
 - an enum member of it was passed to, or returned by, such a call; an instance of a public class
   was returned by one, or an exception of a public class left one.
 
@@ -34,6 +36,7 @@ embedded interpreter, where `tests` is not importable.
 
 from __future__ import annotations
 
+import dataclasses
 import enum
 import functools
 import importlib
@@ -58,6 +61,8 @@ _receivers: dict[types.CodeType, dict[str, type]] = {}  # the class owning each 
 _native: dict[int, set[str]] = {}  # native callables by id (kept alive by their modules)
 _classes: dict[type, set[str]] = {}
 _fields: dict[type, set[str]] = {}  # data attributes of a class, exercised with it
+_instance_fields: dict[type, dict[str, set[str]]] = {}  # instance-only dataclass fields, by access
+_ABSENT = object()
 # Enum members and module-level objects: by id, or by (class, value) for a native enum, whose
 # members the bindings create anew on every return.
 _members: dict[Any, set[str]] = {}
@@ -103,6 +108,25 @@ def _index_class(qualified: str, cls: type, depth: int) -> None:
     _add(_classes, cls, qualified)
     _add(_native, id(cls), qualified)  # a constructor call returning (native classes included)
     _keep.append(cls)
+    if dataclasses.is_dataclass(cls):
+        for field in dataclasses.fields(cls):
+            owner = next(
+                (
+                    base
+                    for base in cls.__mro__
+                    if field.name in vars(base).get("__annotations__", {})
+                ),
+                None,
+            )
+            if (
+                not field.name.startswith("_")
+                and field.name not in dir(cls)
+                and owner is not None
+                and (owner is cls or owner.__name__.startswith("_"))
+            ):
+                names = _instance_fields.setdefault(cls, {}).setdefault(field.name, set())
+                names.add(f"{qualified}.{field.name}")
+                _names.add(f"{qualified}.{field.name}")
     init = cls.__dict__.get("__init__")
     if isinstance(init, types.FunctionType):
         _index_python(init, qualified, cls)
@@ -238,12 +262,37 @@ def _patch(owner: Any, attribute: str, wrapper: Any) -> None:
     """Replaces `owner.attribute` with `wrapper(original, ...)` (a function, so that a method
     stays one) until `stop()`."""
     original = getattr(owner, attribute)
-    _patched.append((owner, attribute, original))
+    _patched.append((owner, attribute, vars(owner).get(attribute, _ABSENT)))
 
     def patched(*args: Any) -> Any:
         return wrapper(original, *args)
 
     setattr(owner, attribute, patched)
+
+
+def _field_access(original: Any, instance: Any, name: str, *args: Any) -> Any:
+    """Record the named field only when its real read/write returns or raises a public error."""
+    names: set[str] = set()
+    for cls in type(instance).__mro__:
+        names = _instance_fields.get(cls, {}).get(name, set())
+        if names or name in vars(cls).get("__annotations__", {}):
+            break
+    # Inherited and unindexed constructors also assign fields as implementation details.
+    # The intervening frame is _patch's wrapper.
+    caller = sys._getframe(2).f_code
+    if names and any(
+        getattr(vars(cls).get("__init__"), "__code__", None) is caller
+        for cls in type(instance).__mro__
+    ):
+        names = set()
+    try:
+        result = original(instance, name, *args)
+    except BaseException as error:
+        if not any(cls.__name__ in REFUSALS for cls in type(error).__mro__):
+            _note(names)
+        raise
+    _note(names)
+    return result
 
 
 def _given_fields(value: Any) -> set[str]:
@@ -383,6 +432,10 @@ def public_symbols() -> list[str]:
 def start() -> None:
     """Indexes the public symbols of the three packages and starts recording."""
     public_symbols()
+    # Patch descendants first: inherited originals must not capture a patched base wrapper.
+    for cls in sorted(_instance_fields, key=lambda cls: len(cls.__mro__), reverse=True):
+        _patch(cls, "__getattribute__", _field_access)
+        _patch(cls, "__setattr__", _field_access)
     _patch(threading.Thread, "start", _start_thread)
     event = getattr(sys.modules.get("uzpainter"), "event", None)
     if callable(getattr(event, "post", None)):
@@ -418,7 +471,10 @@ def stop() -> dict[str, list[str]]:
     sys.monitoring.free_tool_id(TOOL)
     while _patched:
         owner, attribute, original = _patched.pop()
-        setattr(owner, attribute, original)
+        if original is _ABSENT:
+            delattr(owner, attribute)
+        else:
+            setattr(owner, attribute, original)
     with _lock:
         for (token, marked), names in _deferred.items():
             started, thread = _workers[token]

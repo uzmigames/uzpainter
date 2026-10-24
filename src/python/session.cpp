@@ -57,7 +57,8 @@ ThreadState& Thread() {
 
 std::vector<TextureInvalidation> SourceInvalidation(const std::string& tool, const core::json::Object& args) {
     if (tool != "layerstack.FillLayerNode.set_source" && tool != "source.SourceUniformColor.set_color" &&
-        tool != "source_set") return {};
+        tool != "source.SourceSubstance.set_parameters" && tool != "source.SourceSubstance.active_output" &&
+        tool != "source.SourceSubstance.resolution" && tool != "source_set") return {};
     const auto node = args.find(tool == "source_set" ? "uid" : "node");
     if (node == args.end() || !node->second.IsInt()) return {};
     TextureInvalidation target;

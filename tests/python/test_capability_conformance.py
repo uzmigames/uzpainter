@@ -305,6 +305,10 @@ def recipes() -> dict[Any, tuple[str, str]]:
         f"r = resource.import_project_resource(IMAGES + '/checker-16.png', {TEXTURE}, 'a')",
         "r.show_in_ui()",
     )
+    r[("substance_painter.source.SourceSubstance", "arbitrary-sbsar")] = (
+        "",
+        "resource.import_project_resource(WORK + '/absent.sbsar', resource.Usage.TEXTURE)",
+    )
     return r
 
 

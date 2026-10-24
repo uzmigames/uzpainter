@@ -47,6 +47,7 @@ from typing import Any
 import uzpainter
 
 from uzpainter_facade import colour, event, levels, resource
+from uzpainter_facade.procedural import ResolutionMode, ResolutionOverride
 from uzpainter_facade.state import SESSION, edits, one_transaction, value_edit
 from uzpainter_facade.textureset import Stack, TextureSet, native_of
 
@@ -331,15 +332,64 @@ class SourceBitmap:
 
 
 class SourceSubstance:
-    """A procedural (Substance) source: a release gap, so no fill holds one and none can be made
-    (phase3.3_procedural-families)."""
+    """A stored procedural source; edits must match an admitted project snapshot."""
 
-    __slots__ = ()
+    __slots__ = ("_channel", "_node")
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        raise uzpainter.UnsupportedProcedural(
-            "procedural sources are release gaps (phase3.3_procedural-families)"
+    def __init__(self, node: int, channel: Any) -> None:
+        self._node = node
+        self._channel = channel
+
+    def _native(self) -> Any:
+        source = _ls.get_node_by_uid(self._node).get_source(self._channel)
+        if not isinstance(source, uzpainter.source.SourceSubstance):
+            raise ValueError("stale source: the fill no longer has this procedural source")
+        return source
+
+    @property
+    def resource_id(self) -> resource.ResourceID:
+        native = self._native().resource_id()
+        return resource.ResourceID(native.context, native.name, native.version)
+
+    def get_parameters(self) -> dict[str, int | float | str]:
+        return dict(self._native().get_parameters())
+
+    @edits
+    def set_parameters(self, parameters: dict[str, int | float | str]) -> None:
+        self._native().set_parameters(parameters)
+
+    @property
+    def active_output(self) -> str:
+        return str(self._native().active_output)
+
+    @active_output.setter
+    @edits
+    def active_output(self, output: str) -> None:
+        self._native().active_output = output
+
+    @property
+    def resolution(self) -> ResolutionOverride:
+        value = self._native().resolution
+        if value is None:
+            raise uzpainter.UnsupportedProcedural(
+                "default source resolution requires recorded asset metadata "
+                "(phase3.1_proc-backend-seam)"
+            )
+        return ResolutionOverride(ResolutionMode(value.mode), tuple(value.value), value.log2_offset)
+
+    @resolution.setter
+    @edits
+    def resolution(self, value: ResolutionOverride) -> None:
+        if not isinstance(value, ResolutionOverride):
+            raise TypeError("resolution requires a ResolutionOverride")
+        if not isinstance(value.mode, ResolutionMode):
+            raise TypeError("resolution mode requires a ResolutionMode")
+        self._native().resolution = uzpainter.source._ResolutionOverride(
+            value.mode.value, value.value, value.log2_offset
         )
+
+    def __repr__(self) -> str:
+        return f"SourceSubstance({self._node}, {self._channel})"
 
 
 for _source in (SourceUniformColor, SourceBitmap, SourceSubstance):
@@ -354,6 +404,8 @@ def wrap_source(node: int, channel: Any, native: Any) -> Any:
         return SourceUniformColor(node, channel)
     if isinstance(native, uzpainter.source.SourceBitmap):
         return SourceBitmap(node, channel)
+    if isinstance(native, uzpainter.source.SourceSubstance):
+        return SourceSubstance(node, channel)
     raise TypeError(f"unexpected native source {native!r}")
 
 

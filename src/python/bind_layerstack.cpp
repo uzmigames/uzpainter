@@ -9,6 +9,8 @@
 // mask stack takes None (a channel raises `ValueError`).
 
 #include <algorithm>
+#include <bit>
+#include <cmath>
 #include <fstream>
 #include <iterator>
 
@@ -18,6 +20,7 @@
 #include "python/stack_sync.h"
 #include "uzp_core/naming/naming.h"
 #include "uzp_core/types/errors.h"
+#include "uzp_core/types/resource_url.h"
 #include "uzp_core/types/validation.h"
 
 namespace uzp::python {
@@ -37,8 +40,41 @@ struct SourceBitmap {
     Id node = core::kNoId;
     ChannelArg channel;
 };
+struct SourceSubstance {
+    Id node = core::kNoId;
+    ChannelArg channel;
+};
 
 enum class SourceResolutionMode { Auto, Document, Manual, TextureSet, UVTile };
+struct SourceResolutionOverride {
+    SourceResolutionMode mode;
+    std::array<int, 2> value;
+    int log2_offset;
+};
+
+void CheckProceduralParameters(const core::json::Object& params) {
+    for (const auto& [name, value] : params) {
+        if (!value.IsInt() && !value.IsDouble() && !value.IsString()) {
+            ThrowNotYetSupported("procedural parameter " + name + " is outside the scalar snapshot domain");
+        }
+    }
+}
+
+void CheckSourceResolution(const SourceResolutionOverride& resolution) {
+    switch (resolution.mode) {
+        case SourceResolutionMode::Auto:
+        case SourceResolutionMode::Document:
+        case SourceResolutionMode::Manual:
+        case SourceResolutionMode::TextureSet:
+        case SourceResolutionMode::UVTile: break;
+        default: throw core::ValueError("unknown procedural resolution mode");
+    }
+    for (int size : resolution.value) {
+        if (size < 128 || size > 4096 || !std::has_single_bit(static_cast<unsigned>(size))) {
+            throw core::ValueError("resolution value must contain powers of two between 128 and 4096");
+        }
+    }
+}
 
 struct LevelsParamsMono {
     double input_min = 0.0, input_max = 1.0, gamma = 1.0, output_min = 0.0, output_max = 1.0;
@@ -95,7 +131,7 @@ py::object SourceObject(const core::Source* source, Id uid, const ChannelArg& ch
         case core::SourceKind::font:
             ThrowNotYetSupported("vector and font sources are release gaps (phase4.1_nodes-vector-font-sources)");
         case core::SourceKind::procedural:
-            throw ApiError("UnsupportedProcedural", "procedural sources are release gaps (phase3.3_procedural-families)");
+            return py::cast(SourceSubstance{uid, channel});
         case core::SourceKind::reference:
             ThrowNotYetSupported("anchor reference sources are release gaps (phase4.1_nodes-instances-anchors)");
     }
@@ -484,6 +520,151 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
             });
         });
     SealClass(bitmap);
+
+    py::class_<SourceResolutionOverride> resolution(source, "_ResolutionOverride");
+    resolution.def(py::init([](SourceResolutionMode mode, std::array<int, 2> value, int offset) {
+                      SourceResolutionOverride result{mode, value, offset};
+                      CheckSourceResolution(result);
+                      return result;
+                  }), py::arg("mode"), py::arg("value"), py::arg("log2_offset"))
+        .def_readonly("mode", &SourceResolutionOverride::mode)
+        .def_readonly("value", &SourceResolutionOverride::value)
+        .def_readonly("log2_offset", &SourceResolutionOverride::log2_offset);
+    SealClass(resolution);
+
+    const auto read_procedural = [](const SourceSubstance& s) {
+        const auto project = Read();
+        const core::Source* src = SourceOf(Resolve(*project, s.node), s.node, s.channel);
+        if (src == nullptr || src->kind() != core::SourceKind::procedural) {
+            throw core::ValueError("stale handle: the node no longer has this procedural source");
+        }
+        return std::get<core::ProceduralSource>(src->value).ref;
+    };
+    const auto output_key = [](const SourceSubstance& s, const core::ProceduralRef& ref) {
+        if (!s.channel || ref.output_mapping.size() != 1) {
+            ThrowNotYetSupported("active_output requires an explicit single-channel procedural source");
+        }
+        const std::string key(core::ToString(*s.channel));
+        const auto output = ref.output_mapping.find(key);
+        if (output == ref.output_mapping.end() || output->second.empty()) {
+            throw core::ValueError("procedural source has no explicit active output for this channel");
+        }
+        return key;
+    };
+    py::class_<SourceSubstance> substance(source, "SourceSubstance");
+    substance
+        .def("get_parameters", [read_procedural](const SourceSubstance& s) {
+            const auto ref = read_procedural(s);
+            CheckProceduralParameters(ref.params);
+            return FromJson(ref.params);
+        })
+        .def("set_parameters", [read_procedural](const SourceSubstance& s, const py::dict& values) {
+            const auto ref = read_procedural(s);
+            CheckProceduralParameters(ref.params);
+            core::json::Object updates;
+            for (const auto& item : values) {
+                if (!py::isinstance<py::str>(item.first)) throw py::type_error("parameter names must be strings");
+                const std::string name = item.first.cast<std::string>();
+                const auto existing = ref.params.find(name);
+                if (existing == ref.params.end()) throw core::ValueError("unknown procedural parameter: " + name);
+                const auto value = item.second;
+                if (py::isinstance<py::bool_>(value)) throw py::type_error("boolean procedural parameters require integer values");
+                if (existing->second.IsInt() && py::isinstance<py::int_>(value)) {
+                    updates[name] = value.cast<std::int64_t>();
+                } else if (existing->second.IsDouble() && py::isinstance<py::float_>(value)) {
+                    const double number = value.cast<double>();
+                    if (!std::isfinite(number)) throw core::ValueError("procedural parameters must be finite");
+                    updates[name] = number;
+                } else if (existing->second.IsString() && py::isinstance<py::str>(value)) {
+                    updates[name] = value.cast<std::string>();
+                } else {
+                    throw py::type_error("procedural parameter type mismatch: " + name);
+                }
+            }
+            auto args = NodeArgs(s.node, s.channel);
+            args["parameters"] = updates;
+            return Mutate("source.SourceSubstance.set_parameters", args, [&](core::Edit& edit) {
+                auto& target = std::get<core::ProceduralSource>(
+                    EditSource(edit, s.node, s.channel, core::SourceKind::procedural).value).ref;
+                for (const auto& [name, value] : updates) target.params[name] = value;
+            });
+        })
+        .def("resource_id", [read_procedural](const SourceSubstance& s) {
+            const auto asset = core::ParseAssetUrl(read_procedural(s).asset);
+            return ResourceIdHandle{"uzasset", asset.family + "/" + asset.id, asset.version};
+        })
+        .def_property("active_output", [read_procedural, output_key](const SourceSubstance& s) {
+            const auto ref = read_procedural(s);
+            return ref.output_mapping.at(output_key(s, ref));
+        }, [read_procedural, output_key](const SourceSubstance& s, const std::string& output) {
+            const auto key = output_key(s, read_procedural(s));
+            if (output.empty()) throw core::ValueError("active_output must not be empty");
+            auto args = NodeArgs(s.node, s.channel);
+            args["output"] = output;
+            Mutate("source.SourceSubstance.active_output", args, [&](core::Edit& edit) {
+                auto& ref = std::get<core::ProceduralSource>(
+                    EditSource(edit, s.node, s.channel, core::SourceKind::procedural).value).ref;
+                ref.output_mapping.at(key) = output;
+            });
+        })
+        .def_property("resolution", [read_procedural](const SourceSubstance& s) -> py::object {
+            const auto ref = read_procedural(s);
+            if (!ref.resolution_override) return py::none();
+            SourceResolutionOverride result{SourceResolutionMode::Auto, {128, 128}, 0};
+            if (const auto* legacy = std::get_if<core::Resolution>(&*ref.resolution_override)) {
+                result.mode = SourceResolutionMode::Manual;
+                result.value = {legacy->width, legacy->height};
+            } else {
+                const auto& stored = std::get<core::ProceduralResolutionOverride>(*ref.resolution_override);
+                using Mode = core::ProceduralResolutionMode;
+                switch (stored.mode) {
+                    case Mode::Auto: result.mode = SourceResolutionMode::Auto; break;
+                    case Mode::Asset: case Mode::Document: result.mode = SourceResolutionMode::Document; break;
+                    case Mode::Custom: case Mode::Manual: result.mode = SourceResolutionMode::Manual; break;
+                    case Mode::TextureSet: result.mode = SourceResolutionMode::TextureSet; break;
+                    case Mode::UVTile: result.mode = SourceResolutionMode::UVTile; break;
+                }
+                result.value = stored.value;
+                result.log2_offset = stored.log2_offset;
+            }
+            CheckSourceResolution(result);
+            return py::cast(result);
+        }, [read_procedural](const SourceSubstance& s, const SourceResolutionOverride& value) {
+            read_procedural(s);
+            CheckSourceResolution(value);
+            auto args = NodeArgs(s.node, s.channel);
+            args["mode"] = static_cast<int>(value.mode);
+            args["value"] = core::json::Array{value.value[0], value.value[1]};
+            args["log2_offset"] = value.log2_offset;
+            Mutate("source.SourceSubstance.resolution", args, [&](core::Edit& edit) {
+                auto& ref = std::get<core::ProceduralSource>(
+                    EditSource(edit, s.node, s.channel, core::SourceKind::procedural).value).ref;
+                core::ProceduralResolutionOverride stored;
+                if (ref.resolution_override) {
+                    if (const auto* current = std::get_if<core::ProceduralResolutionOverride>(&*ref.resolution_override)) {
+                        stored = *current;
+                    } else {
+                        stored.extra = std::get<core::Resolution>(*ref.resolution_override).extra;
+                    }
+                }
+                using Mode = core::ProceduralResolutionMode;
+                switch (value.mode) {
+                    case SourceResolutionMode::Auto: stored.mode = Mode::Auto; break;
+                    case SourceResolutionMode::Document:
+                        if (stored.mode != Mode::Asset) stored.mode = Mode::Document;
+                        break;
+                    case SourceResolutionMode::Manual:
+                        if (stored.mode != Mode::Custom) stored.mode = Mode::Manual;
+                        break;
+                    case SourceResolutionMode::TextureSet: stored.mode = Mode::TextureSet; break;
+                    case SourceResolutionMode::UVTile: stored.mode = Mode::UVTile; break;
+                }
+                stored.value = value.value;
+                stored.log2_offset = value.log2_offset;
+                ref.resolution_override = stored;
+            });
+        });
+    SealClass(substance);
 
     // ── Positions ───────────────────────────────────────────────────────────────────────────────
     py::class_<core::InsertPosition> position(m, "InsertPosition");

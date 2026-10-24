@@ -57,15 +57,13 @@ BAKING_JOB_ROUTES = {
         "bake_selected_textures_async",
     )
 }
-RESOLUTION_FIELD_ROUTES = {
-    f"substance_painter.source.ResolutionOverride.{name}": "phase3.1_proc-backend-seam"
+RESOLUTION_FIELDS = {
+    f"substance_painter.source.ResolutionOverride.{name}"
     for name in ("log2_offset", "mode", "value")
 }
 ROUTED = {
     # Decision 355 implemented the job surface; decision 297's bake probe owns its evidence.
     **BAKING_JOB_ROUTES,
-    # The compared dataclass replay does not trace its individual fields (decision 112).
-    **RESOLUTION_FIELD_ROUTES,
     # The module is supported since 8fa4f517 (baking-defaults replay); these members still wait
     # for a recorded baking probe, owned by phase3.5_embree-bakers (their inventory notes).
     **{
@@ -211,14 +209,21 @@ def test_baking_job_routes_match_the_inventory_evidence_owner() -> None:
         assert (REPO_ROOT / ".rulebook" / "tasks" / owner / "tasks.md").is_file()
 
 
-def test_resolution_field_routes_match_the_inventory_evidence_owner() -> None:
+def test_resolution_fields_have_compared_individual_trace_evidence() -> None:
     entries = {e["symbol"]: e for e in load_json(INVENTORY)["entries"] if e["context"] == "any"}
-    for symbol, owner in RESOLUTION_FIELD_ROUTES.items():
+    golden = "tier0/api-probes/source-resolution-values"
+    trace = load_json(INVENTORY.with_name("tier0-trace.json"))
+    exercised_fields = {
+        symbol
+        for replay in trace.values()
+        if replay["golden"] == golden
+        for symbol in replay["symbols"]
+    }
+    for symbol in RESOLUTION_FIELDS:
         entry = entries[symbol]
-        assert entry["status"] == "pending-evidence"
-        assert not entry.get("tier_evidence")
-        assert owner in entry["notes"]
-        assert (REPO_ROOT / ".rulebook" / "tasks" / owner / "tasks.md").is_file()
+        assert entry["status"] == "supported"
+        assert entry["tier_evidence"] == [golden]
+        assert symbol in exercised_fields
 
 
 def test_a_blocked_export_path_is_only_an_export_probe_argument() -> None:

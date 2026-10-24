@@ -80,6 +80,14 @@ refuses is a `release-gap`; an absent one is a `release-gap`; any other implemen
 `UZP_UPDATE_TIER0_TRACE=1` and updates the entries `tests/python/test_capability_conformance.py`
 names.
 
+Instance-only dataclass fields are traced individually on reads and assignments, including
+public validation errors but excluding unsupported refusals. Construction or returning an
+instance alone does not prove these fields, including constructors inherited from private
+bases or defined on unindexed subclasses. Tracing restores the class's original methods.
+The compared `source-resolution-values` replay supplies this evidence for
+`ResolutionOverride.mode`, `.value` and `.log2_offset`; it does not prove procedural-source
+binding or evaluation.
+
 ## Operation matrix
 
 `capabilities.json` also carries `operation_matrix` (decision 182), which `uzpainter://capabilities`

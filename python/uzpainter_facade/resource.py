@@ -90,11 +90,16 @@ class ResourceID:
             raise ValueError(
                 f"Invalid resource URL scheme {parts.scheme}. Only 'resource' scheme is allowed."
             )
+        if parts.netloc == "uzasset":
+            native = uzpainter.resource.ResourceID.from_url(url)
+            return cls(native.context, native.name, native.version)
         versions = parse_qs(parts.query).get("version")
         return cls(parts.netloc, parts.path.lstrip("/"), versions[0] if versions else None)
 
     def url(self) -> str:
         """The resource URL."""
+        if self.context == "uzasset":
+            return str(uzpainter.resource.ResourceID(self.context, self.name, self.version).url())
         query = f"?version={self.version}" if self.version else ""
         return f"resource://{self.context}/{self.name}{query}"
 

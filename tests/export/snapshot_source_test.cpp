@@ -162,6 +162,25 @@ int RunSnapshotSource(const std::filesystem::path& path, std::optional<int64_t> 
         Check(refused.result && refused.result->status != core::ResultStatus::committed &&
                   document.revision() == before, "unsupported edit is atomic");
     }
+    auto alternateRequest = request;
+    alternateRequest.params["amount"] = 0.625;
+    std::string alternateBytes = bytes;
+    for (size_t i = 0; i < 128 * 128; ++i) {
+        const uint32_t bits = 0x3E000000u + static_cast<uint32_t>((i * 65537) & 0x7FFFFF);
+        std::memcpy(alternateBytes.data() + i * 4, &bits, 4);
+    }
+    auto alternate = submit([&](core::Edit& edit) {
+        procedural::RecordSnapshot(store, edit, alternateRequest, alternateBytes);
+    });
+    Check(alternate.result && alternate.result->status == core::ResultStatus::committed,
+          "record editable synthetic plane after refusal checks");
+    const auto alternateBackend = procedural::SnapshotBackend::Load(store, *document.snapshot().project);
+    Check(bool(alternateBackend), "reload editable snapshot backend");
+    const auto alternateStored = alternateBackend->Stored(alternateRequest);
+    Check(alternateStored && (*alternateStored)->bytes == alternateBytes,
+          "alternate snapshot serves authored bytes exactly before compositing");
+    std::ofstream alternateExpected(path.parent_path() / "snapshot-alternate.raw", std::ios::binary);
+    alternateExpected.write(alternateBytes.data(), static_cast<std::streamsize>(alternateBytes.size()));
     store.Save(document);
     store.Close();
     std::ofstream expected(path.parent_path() / "snapshot-expected.raw", std::ios::binary);

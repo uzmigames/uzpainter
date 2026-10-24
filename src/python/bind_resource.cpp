@@ -73,6 +73,19 @@ void BindResource(py::module_& m) {
            py::arg("context"), py::arg("name"), py::arg("version") = py::none())
         .def_static("from_url",
                     [](const std::string& url) {
+                        constexpr std::string_view prefix = "resource://uzasset/";
+                        constexpr std::string_view query = "?version=";
+                        if (url.starts_with(prefix)) {
+                            const std::string_view rest = std::string_view(url).substr(prefix.size());
+                            const auto split = rest.find(query);
+                            if (split == std::string_view::npos) {
+                                throw core::ValueError("an asset resource URL needs an explicit version");
+                            }
+                            const auto asset = core::ParseAssetUrl(
+                                "uzasset://" + std::string(rest.substr(0, split)) + "@" +
+                                std::string(rest.substr(split + query.size())));
+                            return ResourceIdHandle{"uzasset", asset.family + "/" + asset.id, asset.version};
+                        }
                         const core::ProjectResourceUrl parsed = core::ParseResourceUrl(url);
                         return ResourceIdHandle{"project", parsed.name, parsed.sha256};
                     })
@@ -89,6 +102,14 @@ void BindResource(py::module_& m) {
         })
         .def("url",
              [](const ResourceIdHandle& r) {
+                 if (r.context == "uzasset") {
+                     const auto asset = core::ParseAssetUrl("uzasset://" + r.name + "@" + r.version);
+                     const auto pin = core::FormatAssetUrl(asset);
+                     const auto name = pin.substr(std::string_view("uzasset://").size(),
+                                                  asset.family.size() + 1 + asset.id.size());
+                     return "resource://uzasset/" + name + "?version=" + asset.version;
+                 }
+                 if (r.context != "project") throw core::ValueError("unsupported native resource context: " + r.context);
                  if (r.version.empty()) throw core::ValueError("a resource URL needs the version (the content hash)");
                  return core::FormatResourceUrl({r.name, r.version});
              })

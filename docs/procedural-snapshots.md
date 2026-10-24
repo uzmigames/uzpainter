@@ -91,7 +91,8 @@ parameter and a singleton output mapping to a User channel. The current evaluato
 admits only User L32F on the authored full-UV 128-square plane, tile 1001, with the
 recorded Legacy settings and identity UV projection. It never selects a snapshot
 implicitly, guesses an output, resizes its raster or invokes a procedural family.
-The public `SourceSubstance` facade is not enabled by this path.
+Both Python packages expose these stored fill sources through `get_source()` as
+`SourceSubstance` handles, resolved again on every call.
 
 The signature seed comes from the effective `$randomseed` integer parameter;
 absence means zero. Signed int64 values retain the same uint64 bit representation
@@ -107,9 +108,12 @@ temporarily resize or rebind a source, provided their final state is supported.
 An unrelated edit remains possible when the project already contains an
 unsupported reference.
 
-Scalar EXR32f passthrough export retains the recorded values after original-project
-reopen and bundle import. Export receipts list `procedural_snapshots` with signature,
-project UUID, plane/version ids, chunk root and raster SHA-256; a plane is not
+Source serving preserves the stored float32 bits after original-project reopen and
+bundle import. Final channel output still follows the compositor's recorded readout
+arithmetic; EXR32f passthrough encoding preserves that final output. For this User
+channel, full-coverage readout is `float32(1 + float32(v - 1))`, which can change low
+bits of an arbitrary authored source raster. Export receipts list `procedural_snapshots`
+with signature, project UUID, plane/version ids, chunk root and raster SHA-256; a plane is not
 misreported as an imported resource hash. Recipe rebuild explicitly refuses these
 project-private dependencies because recipes do not transport their planes. Reopen
 the original project or import its bundle instead.
@@ -119,3 +123,41 @@ CPU integration evidence: `tests/python/test_snapshot_source_export.py` drives
 checks receipt schema, transaction rollback, persistent hits, corrupted retained
 inputs and a foreign store UUID. This synthetic transport test establishes no new
 Painter parity or certified editable procedural domain.
+
+## Editing a stored source
+
+`get_parameters()` returns a copy of the stored scalar parameters. `set_parameters()`
+merges the supplied keys, preserving omitted values and exact integer precision.
+Unknown keys, booleans, non-finite numbers, structured values and scalar type changes
+are refused. An effective change succeeds only when the destination project already
+holds a snapshot with the resulting complete signature. This selects recorded data;
+it does not interpolate values or execute the procedural asset.
+
+`active_output` reads and edits the explicit singleton output mapping. `resource_id`
+identifies the stored UzPainter pin as `resource://uzasset/<family>/<id>?version=<version>`;
+it does not reconstruct the original Adobe identifier from its hash. The native API
+exposes this as a method, and the Painter facade as a property.
+
+Explicit `resolution` overrides read and write mode, value and offset through the
+existing resolution admission rules. The native API uses `_ResolutionOverride` and
+returns `None` for an absent override; the facade uses the public `ResolutionOverride`
+dataclass and refuses that absent case because the snapshot contains no recorded
+asset-default resolution metadata. Legacy fixed dimensions read as Manual with offset
+zero. Dimensions outside the public 128..4096 value domain are refused without clamping.
+
+Every setter validates before durable mutation, invalidates the affected texture and
+participates in native transactions. Unsupported final states roll back, while temporary
+unsupported values may be restored before commit. Source replacement or deletion makes
+existing handles fail. Stored defaults, properties, presets, image-input editing and
+multioutput source binding still require their own metadata and implementation.
+
+`tests/python/test_pyapi_substance_sources.py` exercises both APIs with two authored
+snapshots whose float32 rasters differ. It verifies exact exports after edits, save/reopen,
+reversion and failed transactions against an independent float32 readout calculation,
+and verifies the alternate source's stored bytes separately. These API entries remain
+`pending-evidence` until an exact compared replay establishes their behavior.
+The admitted `source-substance-single-output` capture supplies observations only:
+49 of 53 source operations match across save/reopen, with four differences in
+`resolution.value`. General binding by the observed Painter ResourceID and
+project-private source metadata are still missing from the replay path; skipped
+getters or substituted UzPainter identities cannot count as matching evidence.
