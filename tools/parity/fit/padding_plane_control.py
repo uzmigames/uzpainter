@@ -173,7 +173,7 @@ def captured_samples(golden: Golden) -> dict[str, dict[str, list[Bits]]]:
                 "step": step,
                 "map_type": "documentMap",
                 "map_channels": "RGB",
-                "encoding_basis": "source_channel_format",
+                "encoding_basis": "file",
                 "fileFormat": "exr",
                 "bitDepth": "32f",
                 "dithering": False,

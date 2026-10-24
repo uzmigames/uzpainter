@@ -14,10 +14,14 @@ import pytest
 
 from tools.parity.envelope.registry import current_envelope
 from tools.parity.fit import padding_plane_control as control
-from tools.parity.fit.decode import Decoded
+from tools.parity.fit.decode import Decoded, decode
 from tools.parity.fit.oracle import Golden, Recording
+from tools.parity.recorder.job import ExportStep, OutputMap
+from tools.parity.recorder.session import PainterSession
+from tools.parity.recorder.texture import export_outputs
 from tools.parity.tier0_semantics import padding_plane_control as authored
 from tools.parity.tier0_semantics import recording_requests as requests
+from tools.parity.tier0_semantics.request_fixtures import exr_float_rgb
 
 
 def golden() -> Golden:
@@ -63,7 +67,7 @@ def golden() -> Golden:
                         "paddingAlgorithm": mode,
                         "map_type": "documentMap",
                         "map_channels": "RGB",
-                        "encoding_basis": "source_channel_format",
+                        "encoding_basis": "file",
                         "fileFormat": "exr",
                         "bitDepth": "32f",
                         "dithering": False,
@@ -88,7 +92,58 @@ def test_capture_requires_complete_repeated_reopened_domain() -> None:
     assert samples["r2"]["infinite"][1].shape == (512, 512, 24)
 
 
-@pytest.mark.parametrize("failure", ["missing", "condition", "format", "channel", "integer"])
+def test_capture_accepts_measured_exr_recorder_metadata(tmp_path: Path) -> None:
+    record = golden()
+    template = record.recordings["r1"].outputs["template/texture-sets"]["values"]
+    session = Mock(spec=PainterSession)
+
+    def export(call: str, *, config: dict[str, Any]) -> dict[str, Any]:
+        assert call == "export_textures"
+        path = Path(config["exportPath"]) / f"{control.MATERIAL}_user0.exr"
+        path.write_bytes(exr_float_rgb(np.zeros((512, 512, 3), dtype=np.float32)))
+        return {
+            "status": "Success",
+            "textures": [{"texture_set": control.MATERIAL, "stack": "", "files": [str(path)]}],
+        }
+
+    session.call.side_effect = export
+    outputs, blobs = export_outputs(
+        session,
+        ExportStep(
+            45,
+            (OutputMap("documentMap", "user0", "RGB"),),
+            {
+                "paddingAlgorithm": "infinite",
+                "fileFormat": "exr",
+                "bitDepth": "32f",
+                "dithering": False,
+            },
+        ),
+        template,
+        tmp_path,
+    )
+    assert outputs[0]["export_settings"]["encoding_basis"] == "file"
+    record.recordings["r1"].outputs["0/0"] = outputs[0]
+    record.map.return_value = decode(blobs[0].read_bytes())  # type: ignore[attr-defined]
+    samples = control.captured_samples(record)
+    assert not samples["r1"]["infinite"][0].any()
+
+
+@pytest.mark.parametrize("basis", ["source_channel_format", "unknown", None])
+def test_capture_refuses_unmeasured_exr_encoding_basis(basis: str | None) -> None:
+    record = golden()
+    settings = record.recordings["r1"].outputs["0/0"]["export_settings"]
+    if basis is None:
+        del settings["encoding_basis"]
+    else:
+        settings["encoding_basis"] = basis
+    with pytest.raises(ValueError, match="control export configuration mismatch"):
+        control.captured_samples(record)
+
+
+@pytest.mark.parametrize(
+    "failure", ["missing", "condition", "format", "encoding", "layout", "channel", "integer"]
+)
 def test_capture_refuses_wrong_or_partial_domain(failure: str) -> None:
     record = golden()
     if failure == "missing":
@@ -97,6 +152,10 @@ def test_capture_refuses_wrong_or_partial_domain(failure: str) -> None:
         record.recordings["r2"].condition = "same_session"
     elif failure == "format":
         record.recordings["r1"].outputs["0/0"]["storage_format"]["bits_per_channel"] = 16
+    elif failure == "encoding":
+        record.recordings["r1"].outputs["0/0"]["storage_format"]["encoding"] = "srgb"
+    elif failure == "layout":
+        record.recordings["r1"].outputs["0/0"]["storage_format"]["channels"] = 4
     elif failure == "channel":
         record.recordings["r1"].outputs["template/texture-sets"]["values"]["texture_sets"][
             control.MATERIAL

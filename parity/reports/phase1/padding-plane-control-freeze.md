@@ -114,3 +114,62 @@ The separately regenerated whole-corpus stability report compares 32 maps
 across reopen and finds 16 differences, all at steps 47/48; all 27 normalized
 readbacks agree. This raw recording comparison does not score frozen geometric
 predictions or relax the validator's failed metadata precondition.
+
+## Validator metadata correction (2026-10-24, before rescoring)
+
+The invalid result above is retained. The verifier's encoding-basis expectation
+was inconsistent with the recorder implementation, independently of the captured
+samples: `recorder/capture.py::exr_channel_format` returns `encoding="linear"`
+for EXR, and `recorder/texture.py::export_outputs` selects `encoding_basis="file"`
+whenever the file measurement supplies an encoding. Its source-channel fallback
+is not reached for this frozen EXR domain.
+
+The corrected verifier requires only `"file"`; it does not accept both labels.
+RGB32F/linear storage, effective channel precision, decoded dimensions, finite
+samples, all export settings and steps, authored inputs, protocol, frozen
+prediction and reference hashes remain unchanged. Synthetic regression coverage
+passes an authored EXR through the real recorder metadata path, then the verifier;
+alternate or missing basis labels, sRGB and incorrect channel counts are refused.
+
+This correction is documented before any second scoring of the admitted capture.
+No hypothesis is regenerated or fitted. The follow-up must report every frozen
+policy, coverage failures and repeat/reopen differences, including uncovered
+passthrough changes. No result alone lifts production refusals 245/259 or closes
+Wand item 2.7.
+
+## Corrected frozen scoring (2026-10-24)
+
+The corrected verifier passes the capture domain (`domain_pass=1`): all 1,024
+covered texels equal the authored inputs in all eight exports, with zero coverage
+mismatches. Infinite repeats and both save/reopen comparisons are bit-identical.
+The three policies retain their pre-capture hashes and are scored on all 1,280
+ring texels, across all four infinite exports; counts below are identical in each.
+
+| Policy | All ring differences | One hinge, width 4 | One hinge, width 16 | Two hinges, either width |
+| --- | ---: | ---: | ---: | ---: |
+| Baseline | 80 | 48 | 32 | 0 |
+| Generic J/tau | 0 | 0 | 0 | 0 |
+| Conservative J/tau | 80 | 48 | 32 | 0 |
+
+Discovery and verification components agree on these counts. No support-class
+difference is detected; ordered tap lists remain absent and are not certified.
+Of the baseline/conservative differences, 16 have two frozen taps and 64 have
+four. The fresh one-hinge controls distinguish the generic prediction from the
+conservative cutoff; no parameters were fitted after observation.
+
+Uncovered passthrough differs at all 261,120 uncovered texels across reopen, in
+both repeats. Its immediate repeats are stable in each session. This remains
+reported separately and is not an exact cross-session passthrough contract.
+
+Aggregate report SHA-256:
+`a08e60ed47dffa33191934266de681f6b97dcf5f648ac36c4e338572602247cd`
+(`tmp/scratch/padding-plane-corrected-20261024.json`). The admitted record hash
+is unchanged from the invalid first attempt. Validation: mypy and Ruff pass;
+27 focused tests pass, with the two `tmp_path` cases rerun after sandbox access
+denial (the other 25 were not rerun). No Painter session, native build or GPU run.
+
+This result rejects the conservative cutoff on this control, not the known
+residuals elsewhere: decision 358's generic rule still adds one hinge-far
+quantization mismatch in the earlier corpus. No production padding rule changes;
+that mismatch, the remaining corpus residuals and Wand parity must be resolved
+before lifting refusals or closing item 2.7.

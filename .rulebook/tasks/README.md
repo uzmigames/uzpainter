@@ -16,15 +16,15 @@
 | ⬚ | phase2.9_pilot-belt | 1/17 | phase2.9_pilot belt |
 | ⬚ | phase3.1_assets3d-cutover | 0/19 | phase3.1_assets3d cutover |
 | 🔄 | phase3.1_baker-request-model | 19/21 | phase3.1_baker request model |
-| 🔄 | phase3.1_proc-backend-seam | 11/18 | phase3.1_proc backend seam |
-| 🔄 | phase3.1_unreal-gltf-pbr-preset | 11/16 | phase3.1_unreal gltf pbr preset |
+| 🔄 | phase3.1_proc-backend-seam | 14/21 | phase3.1_proc backend seam |
+| 🔄 | phase3.1_unreal-gltf-pbr-preset | 12/16 | phase3.1_unreal gltf pbr preset |
 | 🔄 | phase3.1_vulkan-compute-parity | 17/23 | phase3.1_vulkan compute parity |
 | ⬚ | phase3.2_baker-normal | 2/13 | phase3.2_baker normal |
 | ⬚ | phase3.2_proc-filter-families | 10/16 | phase3.2_proc filter families |
 | ⬚ | phase3.2_proc-generator-families | 9/16 | phase3.2_proc generator families |
 | ⬚ | phase3.2_proc-grunge-families | 7/15 | phase3.2_proc grunge families |
 | ⬚ | phase3.2_proc-material-families | 8/15 | phase3.2_proc material families |
-| 🔄 | phase3.2_proc-snapshot-backend | 7/14 | phase3.2_proc snapshot backend |
+| 🔄 | phase3.2_proc-snapshot-backend | 12/14 | phase3.2_proc snapshot backend |
 | 🔄 | phase3.2_unreal-ue56-packed-preset | 3/21 | phase3.2_unreal ue56 packed preset |
 | 🔄 | phase3.2_uze-uzmat-preset | 12/20 | phase3.2_uze uzmat preset |
 | ⬚ | phase3.2_vulkan-ray-tracing | 0/23 | phase3.2_vulkan ray tracing |
