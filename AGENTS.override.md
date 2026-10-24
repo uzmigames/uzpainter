@@ -29,4 +29,26 @@ This file is never overwritten by `rulebook init` or `rulebook update`.
 ## Task ids (overrides the `phase<N>_<kebab-name>` example in `.rulebook/specs/rulebook.md`)
 
 Task ids are `phase<N>.<M>_<kebab-name>`, where `<M>` is the dependency level inside phase `<N>` (1 + the highest level of its same-phase prerequisites); tasks with the same `<N>.<M>` can run in parallel; children come before their parent; the phase gate is the last level. Example: `phase0.1_approved-source-index`. Index: `docs/task-index.md`; rule source: `docs/dag.md` (Task decomposition rule).
+
+## No worktrees, no temporary directories (owner, 2026-10-24 — Claude and Codex)
+
+Worktrees and temporary folders filled the owner's SSDs with leftovers. This rule wins over
+`CLAUDE.md`, `AGENTS.md`, `.rulebook/specs/`, decisions (including 041) and task notes that
+say otherwise.
+
+- **Never create a git worktree.** No `git worktree add`, no `isolation: "worktree"`, no
+  `EnterWorktree`, no copies of the repository. All work happens in this checkout
+  (`E:\UzmiGames\UzPainter`), on `main` or a branch switched in place.
+- **Never create a temporary directory**: not in `E:\tmp`, `%TEMP%`, the agent scratchpad,
+  sibling folders such as `E:\UzmiGames\UzPainter-wt`, nor new folders inside the repo
+  (`scripts/tmp`, per-task or per-run subfolders).
+- Throwaway files (logs, JUnit XML, diagnostic dumps, scratch scripts) go **directly** in the
+  existing `tmp/scratch/` folder, with no subfolders. Delete your own files there once the
+  work is committed. Pytest's own `tmp_path` is allowed; do not pass a new `--basetemp`.
+- Parallel agents share this checkout and own disjoint files. Because editing a header or
+  `.cpp` during a `zig build` poisons `.zig-cache` (decision 041), only one `zig build`
+  runs at a time, and nobody edits native sources while it runs. Work that cannot meet
+  this runs sequentially.
+- Existing worktrees and temporary folders are removed only with the owner's OK, via
+  `git worktree remove` for worktrees.
 <!-- OVERRIDE:END -->
