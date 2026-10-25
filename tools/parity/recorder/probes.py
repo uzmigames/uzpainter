@@ -291,6 +291,16 @@ def is_plain_name(value: Any) -> bool:
     return isinstance(value, str) and value not in ("", ".", "..") and Path(value).name == value
 
 
+def input_arg_key(call: str, args: dict[str, Any]) -> str | None:
+    """The API and semantics recorders author different import input keys."""
+    if call == IMPORT_RESOURCE:
+        keys = [key for key in ("image", "input") if key in args]
+        if len(keys) != 1:
+            raise RecorderError("an import requires exactly one of `image` or `input`")
+        return keys[0]
+    return INPUT_ARGS.get(call)
+
+
 def check_input_arg(step: Step, inputs: dict[str, Path]) -> None:
     work_file = step.args.get(WORK_FILE)
     if work_file is not None and not is_plain_name(work_file):
@@ -325,7 +335,7 @@ def check_input_arg(step: Step, inputs: dict[str, Path]) -> None:
             f"step {step.step}: `{REWRITE_ARGS[0]}` and `{REWRITE_ARGS[1]}` must both name "
             "inputs with a path"
         )
-    key = INPUT_ARGS.get(step.call)
+    key = input_arg_key(step.call, step.args)
     if step.call == RELOAD_MESH and work_file is not None and key not in step.args:
         return  # a reload of a file that does not exist (the failing path)
     if key is not None and step.args.get(key) not in inputs:
@@ -533,9 +543,10 @@ def run_step(
     session: PainterSession, step: ProbeStep, staged: dict[str, Path], work_dir: Path
 ) -> dict[str, Any]:
     resolved: dict[str, str] = {}
-    key = INPUT_ARGS.get(step.call)
+    key = input_arg_key(step.call, step.args)
     if key is not None and key in step.args:
-        resolved[key] = staged[step.args[key]].as_posix()
+        transport_key = "image" if step.call == IMPORT_RESOURCE else key
+        resolved[transport_key] = staged[step.args[key]].as_posix()
     if WORK_FILE in step.args:
         work_dir.mkdir(parents=True, exist_ok=True)
         resolved[WORK_FILE] = (work_dir / step.args[WORK_FILE]).as_posix()

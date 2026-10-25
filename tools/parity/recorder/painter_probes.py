@@ -57,6 +57,7 @@ if TYPE_CHECKING:
         UI_MODES,
         channel_type,
         color_of,
+        colour_space_value,
         create_project,
         describe_property,
         levels_field,
@@ -1812,7 +1813,8 @@ def read(call: str, args: dict[str, Any]) -> Any:
     if call == GET_PROJECTION_PARAMETERS:
         return node.get_projection_parameters()
     if call == GET_BITMAP_COLOR_SPACE:
-        return node.get_source(channel_arg(args)).get_color_space()
+        space = node.get_source(channel_arg(args)).get_color_space()
+        return colour_space_value(space) if args.get("typed") is True else space
     if call == LIST_BITMAP_COLOR_SPACES:
         return node.get_source(channel_arg(args)).list_available_color_spaces()
     if call == HAS_MASK:

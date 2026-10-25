@@ -59,6 +59,16 @@ A job is the golden's public manifest (`golden-public.json`) with `private_recor
 
 Enum arguments accept only the documented member names listed in `painter_side.py`.
 
+The API-probe `SourceBitmap.get_color_space` accepts optional `typed: true`, using the
+same `{class, name}` serializer as the colour-space capture above. Without that flag,
+its existing enum-name/string readback is unchanged. The standalone
+`source-bitmap-defaults-unreal-{legacy,ocio}` requests reuse R-322's authored setup,
+read all nine fresh source identities and typed default spaces, then repeat after
+Full save/reopen. They perform no export, preset lookup or colour-space mutation.
+Observed getters and effective defaults remain private; requests contain no expected defaults.
+API-probe imports accept exactly one input key: legacy `image` or the semantics recorder's
+`input`. Both resolve to the same import transport; supplying both keys is rejected.
+
 ## 3. Texture goldens (Tiers 0–2b)
 
 `python -m tools.parity.recorder record <manifest.json>`
