@@ -45,6 +45,11 @@ say otherwise.
 - Throwaway files (logs, JUnit XML, diagnostic dumps, scratch scripts) go **directly** in the
   existing `tmp/scratch/` folder, with no subfolders. Delete your own files there once the
   work is committed. Pytest's own `tmp_path` is allowed; do not pass a new `--basetemp`.
+- **Helper scripts live in the repository** (owner, 2026-10-24). A script used more than once, or
+  cited by a report, task, decision or coordination note, goes into `tools/` or `scripts/` and is
+  committed with its first use. Only one-shot scripts may sit in `tmp/scratch/`. Before any
+  cleanup, grep the task notes, decisions and `tmp/claude-supervision*.json` for the paths to be
+  deleted.
 - Parallel agents share this checkout and own disjoint files. Because editing a header or
   `.cpp` during a `zig build` poisons `.zig-cache` (decision 041), only one `zig build`
   runs at a time, and nobody edits native sources while it runs. Work that cannot meet
