@@ -16,6 +16,9 @@ to `painter-last-response.json` in `SP_MCP_CLIENT_OUTPUT_DIR` when that is set, 
 writes its response there.
 
 Environment:
+- `UZP_ASSETS3D_PRODUCTION_REQUEST`: pinned request, exclusive with diagnostic import;
+- `UZP_ASSETS3D_DIAGNOSTIC_IMPORT`: exactly `1` explicitly selects generic diagnostic execution;
+- `UZP_ASSETS3D_SCRATCH`: existing transport directory (default: checkout `tmp/scratch`);
 - `UZPAINTER_EXE`: `UzPainter.exe` (default: the one on PATH);
 - `UZP_ASSETS3D_SESSION`: the session file carrying the open project between calls (default:
   `%LOCALAPPDATA%/UzPainter/assets3d-adapter/session.json`);
@@ -42,12 +45,21 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from adapters.assets3d import gate_contract
+
 RUNNER = Path(__file__).resolve().with_name("runner.py")
 JSON_PREFIX = "UZP_JSON:"
 PAINTER_ENV = "UZPAINTER_EXE"
 SESSION_ENV = "UZP_ASSETS3D_SESSION"
 DIAGNOSTIC_ENV = "UZP_ASSETS3D_DIAGNOSTIC_MEASURE_EXPORT"
 DIAGNOSTIC_FLAG = "--diagnostic-measure-export"
+PRODUCTION_ENV = "UZP_ASSETS3D_PRODUCTION_REQUEST"
+IMPORT_DIAGNOSTIC_ENV = "UZP_ASSETS3D_DIAGNOSTIC_IMPORT"
+SCRATCH_ENV = "UZP_ASSETS3D_SCRATCH"
+PRODUCTION_FLAG = "--assets3d-production-required"
 OK, FAILED, USAGE, HOST_ERROR = 0, 1, 2, 3
 TOOL = "execute_python"
 # SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX
@@ -56,6 +68,65 @@ NO_ERROR_DIALOGS = 0x8003
 
 class HostError(RuntimeError):
     """UzPainter could not run the code (exit status 3)."""
+
+
+class ProductionContextRequired(HostError):
+    """Execution needs one explicit production or diagnostic context."""
+
+
+def execution_policy() -> dict[str, Any] | None:
+    request = os.environ.get(PRODUCTION_ENV, "")
+    diagnostic = os.environ.get(IMPORT_DIAGNOSTIC_ENV, "")
+    if diagnostic not in ("", "1") or bool(request) == bool(diagnostic):
+        raise ProductionContextRequired(
+            "select exactly one --production-round REQUEST or --diagnostic-import"
+        )
+    if not request:
+        return None
+    if diagnostic_flags():
+        raise HostError("production cannot use diagnostic measure exports")
+    try:
+        return gate_contract.production_policy(Path(request))
+    except (OSError, ValueError) as error:
+        raise HostError(f"production prerequisites refused: {error}") from error
+
+
+def require_production_runtime(painter: Path) -> None:
+    process = run_painter([str(painter), "capabilities", "--runtime"])
+    try:
+        capability = report_line(process.stdout)
+    except (ValueError, TypeError) as error:
+        raise HostError("invalid production runtime capability response") from error
+    if (
+        process.returncode != OK
+        or not isinstance(capability, dict)
+        or capability.get("schema") != "uzpainter/runtime-capabilities/1"
+        or type(capability.get("assets3d_production_guard")) is not int
+        or capability.get("assets3d_production_guard") != 1
+    ):
+        raise HostError("host does not support the required Assets3D production guard")
+
+
+@contextlib.contextmanager
+def request_files() -> Iterator[list[Path]]:
+    """Use unique files in an existing directory; never allocate a temporary directory."""
+    scratch = Path(os.environ.get(SCRATCH_ENV) or RUNNER.parents[2] / "tmp" / "scratch")
+    if not scratch.is_dir():
+        raise HostError(f"set {SCRATCH_ENV} to an existing scratch directory: {scratch}")
+    with contextlib.ExitStack() as stack:
+        paths = []
+        for suffix in (".py", ".report.json", ".policy.json"):
+            handle = stack.enter_context(
+                tempfile.NamedTemporaryFile(
+                    dir=scratch,
+                    prefix="uzp-a3d-",
+                    suffix=suffix,
+                    delete_on_close=False,
+                )
+            )
+            paths.append(Path(handle.name))
+            handle.close()
+        yield paths
 
 
 def painter_exe() -> Path:
@@ -169,20 +240,26 @@ def report_line(stdout: str) -> dict[str, Any] | None:
 
 def execute_python(code: str) -> tuple[dict[str, Any], int]:
     """Run `code` in UzPainter as the bridge runs it; the reply and the exit status."""
+    policy = execution_policy()
     painter, session, diagnostic = painter_exe(), session_file(), diagnostic_flags()
-    with session_lock(session), tempfile.TemporaryDirectory(prefix="uzp-a3d-") as tmp:
-        code_file, report_file = Path(tmp) / "code.py", Path(tmp) / "report.json"
+    if policy is not None:
+        require_production_runtime(painter)
+    with session_lock(session), request_files() as files:
+        code_file, report_file, policy_file = files
         code_file.write_bytes(code.encode("utf-8"))
+        policy_file.write_text(json.dumps(policy), encoding="utf-8")
         process = run_painter(
             [
                 str(painter),
                 "run",
                 str(RUNNER),
                 *diagnostic,
+                *([PRODUCTION_FLAG] if policy is not None else []),
                 "--",
                 str(code_file),
                 str(session),
                 str(report_file),
+                str(policy_file),
             ]
         )
         host = report_line(process.stdout)
@@ -196,8 +273,20 @@ def execute_python(code: str) -> tuple[dict[str, Any], int]:
                 f"{(host or {}).get('error') or process.stderr.strip() or process.stdout.strip()}"
             )
         extra: dict[str, Any] = (
-            json.loads(report_file.read_text(encoding="utf-8")) if report_file.is_file() else {}
+            json.loads(report_file.read_text(encoding="utf-8"))
+            if report_file.stat().st_size
+            else {}
         )
+        if policy is not None:
+            guard = extra.get("production_guard")
+            if not isinstance(guard, dict) or (
+                guard.get("schema") != "uzpainter/assets3d-production-status/1"
+                or guard.get("mode") != "armed"
+                or guard.get("policy_installed") is not True
+                or guard.get("request_sha256") != policy["request_sha256"]
+                or guard.get("source_sha256") != policy["source_sha256"]
+            ):
+                raise HostError("host did not acknowledge the required production policy")
     success = host["status"] == "ok"
     reply = {
         "success": success,
@@ -213,6 +302,10 @@ def execute_python(code: str) -> tuple[dict[str, Any], int]:
     }
     if "diagnostic" in host:  # `UzPainter.exe run --diagnostic-measure-export`: not conformant
         reply["diagnostic"] = host["diagnostic"]
+    elif policy is None:
+        reply["diagnostic"] = "diagnostic-import"
+    if policy is not None:
+        reply["production_guard"] = extra["production_guard"]
     return reply, OK if success else FAILED
 
 
@@ -233,7 +326,7 @@ def main(argv: list[str]) -> int:
         reply = {
             "success": False,
             "data": None,
-            "error": {"type": "HostError", "message": str(error)},
+            "error": {"type": type(error).__name__, "message": str(error)},
         }
         status = HOST_ERROR
     text = json.dumps(reply)  # ASCII: the caller decodes the pipe with its locale's encoding

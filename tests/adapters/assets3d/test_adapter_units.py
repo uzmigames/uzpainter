@@ -191,7 +191,12 @@ def test_the_entry_refuses_before_running_a_changed_script(
 ) -> None:
     script = tmp_path / "painter_layer_stack.py"
     script.write_text("raise SystemExit('must not run')\n", encoding="utf-8")
-    assert layer_stack.main(["--pin", f"{script}={'0' * 64}", str(script), "run", "x.py"]) == 1
+    assert (
+        layer_stack.main(
+            ["--diagnostic-import", "--pin", f"{script}={'0' * 64}", str(script), "run", "x.py"]
+        )
+        == 1
+    )
     assert json.loads(capsys.readouterr().out)["error"]["type"] == "PinMismatch"
 
 
@@ -249,6 +254,8 @@ def test_a_missing_uzpainter_is_a_host_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setenv(client.PAINTER_ENV, str(tmp_path / "absent" / "UzPainter.exe"))
+    monkeypatch.setenv(client.IMPORT_DIAGNOSTIC_ENV, "1")
+    monkeypatch.delenv(client.PRODUCTION_ENV, raising=False)
     monkeypatch.setenv("SP_MCP_CLIENT_OUTPUT_DIR", str(tmp_path / "out"))
     args = tmp_path / "args.json"
     args.write_text(json.dumps({"code": "result = 1"}), encoding="utf-8")
@@ -494,9 +501,12 @@ def test_the_diagnostic_measure_export_is_passed_only_when_asked(
     monkeypatch.setattr(client, "run_painter", fake_run)
     monkeypatch.setattr(client, "painter_exe", lambda: tmp_path / "UzPainter.exe")
     monkeypatch.setenv(client.SESSION_ENV, str(tmp_path / "session.json"))
+    monkeypatch.setenv(client.SCRATCH_ENV, str(tmp_path))
+    monkeypatch.setenv(client.IMPORT_DIAGNOSTIC_ENV, "1")
+    monkeypatch.delenv(client.PRODUCTION_ENV, raising=False)
     monkeypatch.delenv(client.DIAGNOSTIC_ENV, raising=False)
     reply, status = client.execute_python("result = None")
-    assert status == client.OK and "diagnostic" not in reply
+    assert status == client.OK and reply["diagnostic"] == "diagnostic-import"
     assert client.DIAGNOSTIC_FLAG not in calls[-1]
     monkeypatch.setenv(client.DIAGNOSTIC_ENV, "1")
     reply, status = client.execute_python("result = None")

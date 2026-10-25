@@ -72,7 +72,14 @@ def created(wand: Wand) -> Wand:
 @pytest.fixture
 def adapter_env(wand: Wand, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """The wand's environment for in-process client calls."""
-    for key in ("UZPAINTER_EXE", "UZP_ASSETS3D_SESSION", "UZP_ASSETS3D_ROOT"):
+    for key in (
+        "UZPAINTER_EXE",
+        "UZP_ASSETS3D_SESSION",
+        "UZP_ASSETS3D_ROOT",
+        "UZP_ASSETS3D_DIAGNOSTIC_IMPORT",
+        "UZP_ASSETS3D_PRODUCTION_REQUEST",
+        "UZP_ASSETS3D_SCRATCH",
+    ):
         monkeypatch.setenv(key, wand.env[key])
     monkeypatch.delenv("UZP_ASSETS3D_OPEN_REDIRECTS", raising=False)
     yield

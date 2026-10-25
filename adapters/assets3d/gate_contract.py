@@ -120,7 +120,7 @@ def moment(value: Any, context: str) -> datetime:
 class Evidence:
     def __init__(self, root: Path) -> None:
         self.root = root.resolve(strict=True)
-        self.pins: dict[Path, str] = {}
+        self.pins: dict[Path, tuple[str, int]] = {}
         self.manifest: dict[str, Any] = {}
 
     def read(self, relative: Any, expected: Any) -> bytes:
@@ -128,16 +128,17 @@ class Evidence:
         parts = PurePosixPath(name)
         if parts.is_absolute() or ".." in parts.parts or "\\" in name or ":" in name:
             raise EvidenceError(f"{name}: path must stay relative to the Assets3D root")
-        path = (self.root / name).resolve(strict=True)
-        if not path.is_relative_to(self.root) or not path.is_file():
+        path = self.root / name
+        resolved = path.resolve(strict=True)
+        if not resolved.is_relative_to(self.root) or not resolved.is_file():
             raise EvidenceError(f"{name}: file escapes the Assets3D root")
         wanted = digest(expected, name)
         raw = path.read_bytes()
         if hashlib.sha256(raw).hexdigest() != wanted:
             raise EvidenceError(f"{name}: bytes differ from pinned SHA-256")
-        if path in self.pins and self.pins[path] != wanted:
+        if path in self.pins and self.pins[path] != (wanted, len(raw)):
             raise EvidenceError(f"{name}: conflicting snapshots")
-        self.pins[path] = wanted
+        self.pins[path] = (wanted, len(raw))
         return raw
 
     def file(self, key: Any) -> bytes:
@@ -159,6 +160,8 @@ class Evidence:
         for item in refs:
             ref = object_of(item, context)
             raw = self.file(ref.get("file"))
+            if not raw:
+                raise EvidenceError(f"{context}: evidence file is empty")
             if "selector" in ref:
                 selector = text(ref["selector"], context)
                 selected = pointer(load_json(raw), selector)
@@ -199,12 +202,18 @@ class Evidence:
         return target
 
     def unchanged(self) -> None:
-        for path, expected in self.pins.items():
-            if hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+        for path, (expected, size) in self.pins.items():
+            raw = path.read_bytes()
+            if len(raw) != size or hashlib.sha256(raw).hexdigest() != expected:
                 raise EvidenceError(f"{path.name}: input changed during preflight")
 
 
-def assess(request: dict[str, Any], *, diagnostic: bool = False) -> Assessment:
+def assess(
+    request: dict[str, Any],
+    *,
+    diagnostic: bool = False,
+    _policies: list[dict[str, Any]] | None = None,
+) -> Assessment:
     """Check a pinned request without modifying assets, projects, sessions or approvals."""
     manifest_hash = mesh_hash = status = None
     try:
@@ -315,6 +324,19 @@ def assess(request: dict[str, Any], *, diagnostic: bool = False) -> Assessment:
                     if first["agent"] == second["agent"] or first["session"] == second["session"]:
                         raise EvidenceError(f"{role}: independent reviewer is the producer")
         evidence.unchanged()
+        if _policies is not None:
+            _policies.append(
+                {
+                    "schema": "uzpainter/assets3d-native-policy/1",
+                    "source_sha256": mesh_hash,
+                    "source_size": len(mesh_bytes),
+                    "import_report": report,
+                    "pins": [
+                        {"path": str(path), "sha256": sha, "size": size}
+                        for path, (sha, size) in evidence.pins.items()
+                    ],
+                }
+            )
         return Assessment(True, diagnostic, (), manifest_hash, mesh_hash, status)
     except (EvidenceError, OSError, ValueError, KeyError, TypeError) as error:
         return Assessment(False, diagnostic, (str(error),), manifest_hash, mesh_hash, status)
@@ -326,6 +348,24 @@ def assess_file(path: Path, *, diagnostic: bool = False) -> Assessment:
     except (OSError, ValueError) as error:
         return Assessment(False, diagnostic, (str(error),))
     return assess(request, diagnostic=diagnostic)
+
+
+def production_policy(path: Path) -> dict[str, Any]:
+    """Collect verified bytes for native rechecking; this grants no approval or ticket."""
+    path = path.absolute()
+    raw = path.read_bytes()
+    request = object_of(load_json(raw), "request")
+    policies: list[dict[str, Any]] = []
+    result = assess(request, _policies=policies)
+    if not result.eligible:
+        raise EvidenceError("; ".join(result.problems))
+    if path.read_bytes() != raw:
+        raise EvidenceError("request changed during preflight")
+    policy = policies[0]
+    sha = hashlib.sha256(raw).hexdigest()
+    policy["request_sha256"] = sha
+    policy["pins"].append({"path": str(path), "sha256": sha, "size": len(raw)})
+    return policy
 
 
 def main(argv: list[str]) -> int:

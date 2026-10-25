@@ -159,13 +159,64 @@ match the manifest's low mesh, and its hashes must match the certificate. A fail
 or unknown status refuses; warn is retained in the assessment. External mesh
 files currently refuse because their import-boundary binding is not implemented.
 
-**Execution remains unguarded by this preflight.** The existing generic script
-route and M8's route-token gap are unchanged. Item 2.5 of
-`phase3.1_assets3d-cutover` stays open until the real selection/import boundary
-checks the consumed mesh, certificate and evidence before mutation. A successful
-preflight is not a reusable ticket: a later execution must check again and bind
-its actual import. Synthetic CPU tests establish the checker's behavior, not
-approval of any real pilot.
+The read-only check never authorizes execution. The explicit production route
+below repeats the check and supplies the native guard with the consumed bytes'
+pins. Item 2.5's software enforcement is verified by the CPU adapter checks and
+the real client/runner/host integration using a genuine native import report and
+authored prerequisite gates. Create/save and carried same-mesh reload/save pass;
+a wrong-mesh reload refuses without changing revision or store bytes. Broader
+pilot acceptance tests remain open; these fixtures approve no real pilot. M8's
+route-token gap remains separate.
+
+## M12 -- Explicit execution context and native production guard
+
+Adapter execution now requires exactly one mode before the script and its pins:
+
+```text
+python -m adapters.assets3d --production-round REQUEST.json [--pin FILE=SHA256]... SCRIPT ARGS
+python -m adapters.assets3d --diagnostic-import [--pin FILE=SHA256]... SCRIPT ARGS
+```
+
+No mode refuses with `ProductionContextRequired` before script loading or host
+execution. Generic legacy fixtures use `--diagnostic-import`; their replies are
+marked `diagnostic-import` (or `diagnostic-measure` for the separate measure-export
+mode). This is an intentional adapter contract change. Native `UzPainter.exe run`
+outside this adapter keeps its existing behavior.
+
+The wrapper temporarily sets `UZP_ASSETS3D_PRODUCTION_REQUEST` or
+`UZP_ASSETS3D_DIAGNOSTIC_IMPORT=1`, restoring both and `UZP_ASSETS3D_ROOT` even on
+failure. External Assets3D scripts stay byte-unchanged. Direct client callers
+must supply exactly one of these contexts. Production rejects diagnostic measure
+exports. Each production call rechecks prerequisites and probes the executable
+with `capabilities --runtime`, requiring the compiled response
+`{"schema":"uzpainter/runtime-capabilities/1","assets3d_production_guard":1}`.
+Older hosts refuse this read-only probe without executing Python.
+
+The client starts `run --assets3d-production-required` and passes a private policy
+file to the runner. Policy schema `uzpainter/assets3d-native-policy/1` contains
+the current source SHA-256 and size, the full import report, the request SHA-256,
+and absolute-path SHA-256/size pins for the request, manifest, report and every
+file actually consumed as evidence or a dependency. These are freshly checked
+inputs, not approval labels or transferable tickets. The native guard must rehash
+them before persistence and compare the actual import against the full report.
+
+Before restoring a session, the runner requires native status schema
+`uzpainter/assets3d-production-status/1`, mode `required`, and no installed policy.
+It calls `_assets3d_install_production_policy(policy_json)` once, then requires
+`_assets3d_production_status()` to report `armed`, `policy_installed: true`, and
+the exact request/source hashes. The client also requires this acknowledgment
+in the runner report. Missing bindings, wrong modes or wrong hashes refuse.
+The supported route launches one local process per call; no already-running API
+server route was found in this adapter. No unrelated environment variable
+silently switches its execution route.
+
+Scratch transport now uses unique files directly in an existing directory and
+cleans them on exit; it creates no temporary directory. The checkout defaults to
+`tmp/scratch/`. Installed callers can set `UZP_ASSETS3D_SCRATCH` to an existing
+scratch directory; tests use their permitted pytest `tmp_path`. Production
+project/session paths retain their existing contract. This guard protects the
+official adapter route against unverified input data; it does not sandbox hostile
+Python or arbitrary system calls, replace M8 governance, or grant G2/cutover.
 
 ## Not adapted (UzPainter differs; owners named)
 

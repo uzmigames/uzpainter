@@ -97,6 +97,9 @@ class Wand:
             "UZPAINTER_EXE": str(painter),
             "UZP_ASSETS3D_SESSION": str(self.session),
             "UZP_ASSETS3D_ROOT": str(self.root),
+            "UZP_ASSETS3D_DIAGNOSTIC_IMPORT": "1",
+            "UZP_ASSETS3D_PRODUCTION_REQUEST": "",
+            "UZP_ASSETS3D_SCRATCH": str(self.work),
             "UZP_ASSETS3D_OPEN_REDIRECTS": json.dumps(redirects),
             "PYTHONIOENCODING": "utf-8",  # the test decodes the scripts' output as UTF-8
         }
@@ -122,6 +125,7 @@ class Wand:
             [
                 sys.executable,
                 str(ENTRY),
+                "--diagnostic-import",
                 *(self.pins() if pins is None else pins),
                 str(self.script("painter-layer-stack-py")),
                 *arguments,

@@ -1,4 +1,4 @@
-"""`python -m adapters.assets3d [--pin FILE=SHA256]... <painter_layer_stack.py> <its arguments>`."""
+"""Run the Assets3D adapter with --production-round REQUEST or --diagnostic-import."""
 
 import sys
 

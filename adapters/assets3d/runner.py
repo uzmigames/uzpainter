@@ -1,6 +1,6 @@
 """The adapter's runner: executed by `UzPainter.exe run` for every Assets3D call (`MIGRATIONS.md`).
 
-    UzPainter.exe run runner.py -- <code file> <session file> <report file>
+    UzPainter.exe run runner.py [--assets3d-production-required] -- CODE SESSION REPORT POLICY
 
 It is the `__main__` script of the run; the Assets3D code it executes is given as a file, and its
 `result` becomes this script's `result`, so the host's `UZP_JSON:` report carries it. In order:
@@ -60,6 +60,42 @@ class AdapterSessionError(RuntimeError):
 
 class AdapterExportError(RuntimeError):
     """An export's fixed-name copy does not verify against its receipt."""
+
+
+def install_production_policy(uzpainter: Any, path: Path) -> dict[str, Any] | None:
+    """Require the native latch before restoring a session or evaluating external Python."""
+    raw = path.read_text(encoding="utf-8")
+    policy = json.loads(raw)
+    if policy is None:
+        if os.environ.get("UZP_ASSETS3D_DIAGNOSTIC_IMPORT") != "1" or os.environ.get(
+            "UZP_ASSETS3D_PRODUCTION_REQUEST"
+        ):
+            raise AdapterSessionError("diagnostic import requires explicit diagnostic context")
+        return None
+    if not isinstance(policy, dict):
+        raise AdapterSessionError("invalid production policy")
+    status = uzpainter._assets3d_production_status()
+    if (
+        not isinstance(status, dict)
+        or status.get("schema") != "uzpainter/assets3d-production-status/1"
+        or status.get("mode") != "required"
+        or status.get("policy_installed") is not False
+        or status.get("request_sha256") is not None
+        or status.get("source_sha256") is not None
+    ):
+        raise AdapterSessionError("host production guard was not REQUIRED before Python")
+    uzpainter._assets3d_install_production_policy(raw)
+    status = uzpainter._assets3d_production_status()
+    if (
+        not isinstance(status, dict)
+        or status.get("schema") != "uzpainter/assets3d-production-status/1"
+        or status.get("mode") != "armed"
+        or status.get("policy_installed") is not True
+        or status.get("request_sha256") != policy.get("request_sha256")
+        or status.get("source_sha256") != policy.get("source_sha256")
+    ):
+        raise AdapterSessionError("host did not arm the required production policy")
+    return status
 
 
 # ── Pure helpers (host-side tests import these) ─────────────────────────────────────────────────
@@ -317,7 +353,7 @@ def exports_of_run(uzpainter: Any) -> list[dict[str, Any]]:
 
 
 def main(argv: list[str]) -> Any:
-    code_file, session_file, report_file = (Path(a) for a in argv[1:4])
+    code_file, session_file, report_file, policy_file = (Path(a) for a in argv[1:5])
     import uzpainter
 
     report: dict[str, Any] = {"session": None, "exports": [], "script_result": None}
@@ -325,6 +361,11 @@ def main(argv: list[str]) -> Any:
     report["code_sha256"] = hashlib.sha256(data).hexdigest()
     session: dict[str, Any] | None = None
     try:
+        guard = install_production_policy(uzpainter, policy_file)
+        if guard is not None:
+            report["production_guard"] = guard
+        else:
+            report["diagnostic"] = "diagnostic-import"
         report["carried"] = restore_session(session_file)
         install_shim(uzpainter)
         code = data.decode("utf-8")

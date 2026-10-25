@@ -1,7 +1,7 @@
 """The adapter's entry: Assets3D's `painter_layer_stack.py`, byte-unchanged, over UzPainter.
 
-    python -m adapters.assets3d [--pin FILE=SHA256]... <painter_layer_stack.py> <its arguments>
-    python <UzPainter>/adapters/assets3d/layer_stack.py [--pin FILE=SHA256]... <...> <...>
+    python -m adapters.assets3d --production-round REQUEST [--pin FILE=SHA256]... SCRIPT ARGS
+    python -m adapters.assets3d --diagnostic-import [--pin FILE=SHA256]... SCRIPT ARGS
 
 replaces `"$MCP" "$LS" <its arguments>` (`MIGRATIONS.md` M1, M2). The script's bytes are read once
 and compiled with their real path under a module name other than `__main__`; only its two
@@ -122,7 +122,7 @@ def check_gate(arguments: list[str]) -> None:
         )
 
 
-def run(argv: list[str]) -> int:
+def run_script(argv: list[str]) -> int:
     pins, script, arguments = parse(argv)
     data = script.read_bytes()
     check_pins(pins, script, data)
@@ -145,6 +145,33 @@ def run(argv: list[str]) -> int:
     finally:
         sys.argv = saved
     return 0
+
+
+def run(argv: list[str]) -> int:
+    if argv[:1] == ["--production-round"] and len(argv) >= 3:
+        request, diagnostic, rest = str(Path(argv[1]).absolute()), "", argv[2:]
+    elif argv[:1] == ["--diagnostic-import"]:
+        request, diagnostic, rest = "", "1", argv[1:]
+    else:
+        raise Refused(
+            "ProductionContextRequired",
+            "select --production-round REQUEST or --diagnostic-import before SCRIPT",
+        )
+    names = (client.PRODUCTION_ENV, client.IMPORT_DIAGNOSTIC_ENV, ROOT_ENV)
+    previous = {name: os.environ.get(name) for name in names}
+    try:
+        os.environ[client.PRODUCTION_ENV] = request
+        os.environ[client.IMPORT_DIAGNOSTIC_ENV] = diagnostic
+        client.execution_policy()  # Refuse invalid prerequisites before loading external Python.
+        if request:
+            client.require_production_runtime(client.painter_exe())
+        return run_script(rest)
+    finally:
+        for name, value in previous.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
 
 
 def main(argv: list[str] | None = None) -> int:
