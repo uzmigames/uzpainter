@@ -38,6 +38,9 @@ AssetUrl ParseAssetUrl(std::string_view text);
 /// The reserved asset family of Filter source observations (decision 362): an immutable
 /// provenance descriptor, never an executable asset or an alias of the observed resource.
 inline constexpr std::string_view kObservationFamily = "observation";
+/// The manifest's top-level key of those observations (store/filter_observations.h owns its
+/// content; the core recipe refuses to dump or rebuild it).
+inline constexpr std::string_view kFilterObservationsKey = "filter_source_observations";
 
 /// True when `text` is a `uzasset://` URL whose family is `observation`, whatever its id and
 /// version, valid or not: execution refuses the whole family without a registry or a lookup.

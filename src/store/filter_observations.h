@@ -28,11 +28,12 @@
 
 #include "uzp_core/manifest/json.h"
 #include "uzp_core/types/project.h"
+#include "uzp_core/types/resource_url.h"
 
 namespace uzp::store {
 
-/// The manifest's top-level key of the namespace, and the schemas of its parts.
-inline constexpr std::string_view kFilterObservationsKey = "filter_source_observations";
+/// The manifest's top-level key of the namespace (core/resource_url.h), and the schemas of its parts.
+using core::kFilterObservationsKey;
 inline constexpr std::string_view kFilterObservationsSchema = "uzpainter/filter-source-observations/1";
 inline constexpr std::string_view kObservationDescriptorSchema = "uzpainter/filter-observation-descriptor/1";
 inline constexpr std::string_view kObservationEntrySchema = "uzpainter/filter-source-observation/1";

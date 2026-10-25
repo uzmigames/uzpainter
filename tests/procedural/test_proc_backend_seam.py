@@ -63,6 +63,22 @@ def test_reserved_observation_family_is_refused_everywhere(
     assert "admission refuses a malformed member of the family before parsing it" in passed
 
 
+def test_filter_observation_source_context_and_raw_values(
+    procedural_tests: Path, tmp_path: Path
+) -> None:
+    """Decision 362: strict, non-executable lookup against authored state and mesh bytes only."""
+    passed = run_case(procedural_tests, "observation-source", tmp_path)
+    assert "context reads staged mesh bytes inside Submit without another snapshot" in passed
+    assert "restored context matches the immutable observation" in passed
+    assert "absent observations remain absent rather than empty" in passed
+    assert "numeric mismatch refuses after context resealing" in passed
+    assert "V1 refuses empty inclusion geometry mask before entry lookup" in passed
+    assert "V1 refuses nonempty exclusion geometry mask before entry lookup" in passed
+    assert (
+        "save reopen preserves entry key and raw double and signed zero for fresh lookup" in passed
+    )
+
+
 def test_domain_refusals_name_field_value_and_range(procedural_tests: Path, tmp_path: Path) -> None:
     """2.1 / decision 222: refusal outside the certified domain, nothing clamped."""
     passed = run_case(procedural_tests, "domain", tmp_path)

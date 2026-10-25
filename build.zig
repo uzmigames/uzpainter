@@ -438,6 +438,7 @@ const export_sources = [_][]const u8{
     "procedural/admission.cpp",
     "procedural/snapshot_backend.cpp",
     "procedural/snapshot_source.cpp",
+    "procedural/filter_observation_source.cpp",
     "export/cli.cpp",
     "export/config.cpp",
     "export/encode.cpp",
@@ -497,6 +498,7 @@ const procedural_sources = [_][]const u8{
     "procedural/cli.cpp",
     "procedural/admission.cpp",
     "procedural/snapshot_backend.cpp",
+    "procedural/filter_observation_source.cpp",
 };
 /// The filter families (`src/procedural/filters.h`, decision 328), relative to `src/`: compiled
 /// into `uzp-proc-filter-tests.exe` with `procedural_sources`, with the evaluator's arithmetic

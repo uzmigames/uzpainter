@@ -39,6 +39,7 @@
 
 #include "procedural/admission.h"
 #include "procedural/asset_library.h"
+#include "procedural/filter_observation_source.h"
 #include "procedural/cli.h"
 #include "procedural/hlsl_backend.h"
 #include "procedural/primitives.h"
@@ -55,9 +56,11 @@
 #include "store/inspect.h"
 #include "store/project_store.h"
 #include "store/snapshots.h"
+#include "store/filter_observations.h"
 #include "uzp_core/document/document.h"
 #include "uzp_core/operation/operation.h"
 #include "uzp_core/manifest/sha256.h"
+#include "uzp_core/manifest/manifest.h"
 #include "uzp_core/types/project.h"
 #include "uzp_core/types/errors.h"
 
@@ -2216,6 +2219,270 @@ int RunObservations() {
     return Finish();
 }
 
+/// Authored observations only: no captured identity, parameters or pixels enter this fixture.
+int RunObservationSource(const fs::path& work) {
+    namespace core = uzp::core;
+    namespace json = core::json;
+    namespace store = uzp::store;
+    using json::Object;
+    using json::Array;
+    using json::Value;
+    core::Id filterId = core::kNoId;
+    core::DocumentState initial;
+    initial.project_uuid = "6f1c2a3e-0000-4000-8000-0000000a3620";
+    initial.project = GeneratorProject(filterId);
+    auto backing = store::ProjectStore::Create(work / "observation-source.uzp", initial);
+    core::Document document(initial);
+    backing->Attach(document);
+    const std::string meshBytes = "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n";
+    const std::string meshHash = core::Sha256Hex(meshBytes);
+    const auto descriptor = [](const char* role, Object parameters) {
+        return Object{{"schema", std::string(store::kObservationDescriptorSchema)}, {"role", std::string(role)},
+                      {"resource_id", Object{{"url", std::string("resource://authored/") + role + "?version=1"},
+                                             {"context", std::string("authored")}, {"name", std::string(role)},
+                                             {"version", std::string("1")}}},
+                      {"parameters", std::move(parameters)}};
+    };
+    const Object hostDescriptor = descriptor("host", {{"amount", 1.0}});
+    const Object filterDescriptor = descriptor("filter", {{"radius", 1.0}, {"zero", -0.0}});
+    const std::string hostKey = store::ObservationKey(hostDescriptor);
+    const std::string filterKey = store::ObservationKey(filterDescriptor);
+    bool prospectiveRead = false;
+    auto created = backing->Submit(document, {"observation-source-test", Object{}, "setup", document.revision()},
+                                   [&](core::Edit& edit) {
+        auto& project = edit.project();
+        backing->StageResource(meshBytes, "model/obj");
+        core::ResourceMeta meta;
+        meta.id = edit.AllocateId();
+        meta.name = "authored.obj";
+        meta.mime = "model/obj";
+        meta.usage = "MESH";
+        meta.size = static_cast<std::int64_t>(meshBytes.size());
+        project.resources[meshHash] = {meta};
+        project.mesh.emplace();
+        project.mesh->resource = meshHash;
+        auto& host = project.texture_sets[0].stacks[0].root_layers[0];
+        host.fill->active_channels = {core::ChannelType::BaseColor};
+        core::ProceduralSource source;
+        source.ref.asset = store::ObservationPin(hostKey);
+        source.ref.params = {{"amount", std::int64_t{1}}};
+        host.fill->sources[core::ChannelType::BaseColor] = core::Source{source};
+        auto& filter = host.content_effects[0];
+        filter.kind = core::EffectKind::filter;
+        filter.procedural.emplace();
+        filter.procedural->asset = store::ObservationPin(filterKey);
+        filter.procedural->params = {{"radius", std::int64_t{1}}, {"zero", 0.0}};
+        prospectiveRead = CurrentFilterObservationContext(*backing, project).has_value();
+    });
+    Check(created.result && created.result->status == core::ResultStatus::committed && prospectiveRead,
+          "context reads staged mesh bytes inside Submit without another snapshot");
+    if (!created.result || created.result->status != core::ResultStatus::committed) return Finish();
+    core::Project base = *document.snapshot().project;
+    const auto seal = [&](core::Project& project, Object rawFilter, bool includeObservations = true) {
+        const std::string rawKey = store::ObservationKey(rawFilter);
+        auto& host = project.texture_sets[0].stacks[0].root_layers[0];
+        auto& filter = host.content_effects[0];
+        filter.procedural->asset = store::ObservationPin(rawKey);
+        const auto context = CurrentFilterObservationContext(*backing, project);
+        Check(context.has_value(), "authored observation context constructs");
+        if (!context) return;
+        Object observed;
+        if (includeObservations) {
+            observed = {{"parameters", rawFilter.at("parameters")}, {"resource_id", rawFilter.at("resource_id")},
+                        {"image_outputs", Array{}}};
+        }
+        const auto& set = project.texture_sets[0];
+        const auto& stack = set.stacks[0];
+        Object entry{
+            {"schema", std::string(store::kObservationEntrySchema)}, {"project_uuid", backing->project_uuid()},
+            {"role", std::string("filter")}, {"host_descriptor", hostKey}, {"filter_descriptor", rawKey},
+            {"binding", Object{{"texture_set", set.id}, {"stack", stack.id}, {"host_uid", host.uid},
+                               {"filter_uid", filter.uid}, {"node_stack", std::string("Content")},
+                               {"effect_index", 0}, {"host_channel", std::string("BaseColor")},
+                               {"host_reference", core::ProceduralRefToJson(
+                                   std::get<core::ProceduralSource>(host.fill->sources.at(core::ChannelType::BaseColor).value).ref)},
+                               {"filter_reference", core::ProceduralRefToJson(*filter.procedural)}}},
+            {"context", *context}, {"context_sha256", store::ObservationKey(*context)},
+            {"capture", Object{{"recorder", std::string("authored")}, {"envelope_id", std::string("authored")},
+                               {"painter_build_id", std::string("authored")}, {"recipe_sha256", core::Sha256Hex("recipe")},
+                               {"resource_query", std::string("authored")}, {"authored_inputs", Array{}},
+                               {"receipts", Array{Object{{"condition", std::string("same_session")},
+                                                         {"sha256", core::Sha256Hex("r1")}},
+                                                  Object{{"condition", std::string("after_save_reopen")},
+                                                         {"sha256", core::Sha256Hex("r2")}}}}}},
+            {"observations", observed}};
+        const std::string key = store::ObservationKey(entry);
+        project.extra[std::string(store::kFilterObservationsKey)] = Object{
+            {"schema", std::string(store::kFilterObservationsSchema)},
+            {"descriptors", Object{{hostKey, hostDescriptor}, {rawKey, rawFilter}}},
+            {"entries", Object{{key, entry}}},
+            {"host_bindings", Object{{std::to_string(host.uid), Object{{"channel", std::string("BaseColor")},
+                                                                       {"descriptor", hostKey}}}}},
+            {"bindings", Object{{std::to_string(filter.uid), key}}}};
+    };
+    seal(base, filterDescriptor);
+    const auto original = ObservedFilter(*backing, base, filterId);
+    Check(original && original->parameters && original->resource_id && original->image_outputs &&
+              original->image_outputs->empty() &&
+              json::WriteCanonical(original->parameters->at("radius")) == json::WriteCanonical(Value(1.0)) &&
+              std::signbit(std::get<double>(original->parameters->at("zero").data)),
+          "raw parameter types and signed zero survive numeric core matching and empty output observation");
+    const auto refused = [&](const char* name, const std::function<void(core::Project&)>& change) {
+        core::Project altered = base;
+        change(altered);
+        Check(!ObservedFilter(*backing, altered, filterId), name);
+    };
+    refused("upstream content change makes observation stale", [](core::Project& p) {
+        std::get<core::ProceduralSource>(p.texture_sets[0].stacks[0].root_layers[0].fill->sources.begin()->second.value)
+            .ref.params["amount"] = 2;
+    });
+    Check(ObservedFilter(*backing, base, filterId).has_value(), "restored context matches the immutable observation");
+    refused("complete reference extras are part of the binding", [](core::Project& p) {
+        p.texture_sets[0].stacks[0].root_layers[0].content_effects[0].procedural->extra["changed"] = true;
+    });
+    refused("channel format changes invalidate context", [](core::Project& p) {
+        p.texture_sets[0].stacks[0].channels.begin()->second.format = core::ChannelFormat::RGB16;
+    });
+    refused("position changes invalidate context", [](core::Project& p) {
+        ++p.texture_sets[0].stacks[0].root_layers[0].uid;
+    });
+    refused("mesh identity changes invalidate context", [](core::Project& p) { p.mesh->resource = core::Sha256Hex("other"); });
+    refused("mesh MIME changes invalidate context", [](core::Project& p) { p.resources.begin()->second[0].mime = "changed"; });
+    refused("mesh size must match bytes", [](core::Project& p) { ++p.resources.begin()->second[0].size; });
+    refused("conflicting mesh metadata refuses", [](core::Project& p) {
+        auto meta = p.resources.begin()->second.front();
+        meta.mime = "different";
+        p.resources.begin()->second.push_back(meta);
+    });
+    refused("additional resource catalog entries refuse", [](core::Project& p) { p.resources[core::Sha256Hex("extra")] = {}; });
+    refused("environment reference refuses", [&](core::Project& p) { p.display.environment.resource = meshHash; });
+    refused("LUT reference refuses", [&](core::Project& p) { p.display.color_lut = meshHash; });
+    refused("external mesh buffers refuse", [&](core::Project& p) {
+        p.mesh->import_report["external_files"] = Array{Object{{"sha256", meshHash}}};
+    });
+    refused("mask refuses", [](core::Project& p) { p.texture_sets[0].stacks[0].root_layers[0].mask.emplace(); });
+    refused("additional effects refuse", [](core::Project& p) {
+        auto& effects = p.texture_sets[0].stacks[0].root_layers[0].content_effects;
+        effects.push_back(effects.front());
+    });
+    refused("preset references refuse", [](core::Project& p) {
+        p.texture_sets[0].stacks[0].root_layers[0].content_effects[0].procedural->preset = "authored";
+    });
+    refused("core boolean parameters refuse", [](core::Project& p) {
+        p.texture_sets[0].stacks[0].root_layers[0].content_effects[0].procedural->params["radius"] = true;
+    });
+    refused("snapshot namespace must be validly empty", [](core::Project& p) { p.extra[std::string(store::kSnapshotsKey)] = nullptr; });
+    refused("missing observation binding never falls back", [](core::Project& p) {
+        std::get<Object>(std::get<Object>(p.extra.at(std::string(store::kFilterObservationsKey)).data).at("bindings").data).clear();
+    });
+    refused("absent namespace never falls back", [](core::Project& p) { p.extra.erase(std::string(store::kFilterObservationsKey)); });
+    core::Project absent = base;
+    seal(absent, filterDescriptor, false);
+    const auto unobserved = ObservedFilter(*backing, absent, filterId);
+    Check(unobserved && !unobserved->parameters && !unobserved->resource_id && !unobserved->image_outputs,
+          "absent observations remain absent rather than empty");
+    core::Project invalidRaw = base;
+    Object badDescriptor = filterDescriptor;
+    std::get<Object>(badDescriptor.at("parameters").data)["radius"] = true;
+    seal(invalidRaw, badDescriptor);
+    Check(!ObservedFilter(*backing, invalidRaw, filterId), "raw boolean observations refuse without coercion");
+    core::Project numericMismatch = base;
+    Object different = filterDescriptor;
+    std::get<Object>(different.at("parameters").data)["radius"] = 2.0;
+    seal(numericMismatch, different);
+    Check(!ObservedFilter(*backing, numericMismatch, filterId), "numeric mismatch refuses after context resealing");
+    core::Project emptySnapshots = base;
+    emptySnapshots.extra[std::string(store::kSnapshotsKey)] = Object{};
+    Check(CurrentFilterObservationContext(*backing, emptySnapshots).has_value(), "validly empty snapshots are permitted");
+    Check(!ObservedFilter(*backing, base, filterId + 100), "another UID cannot borrow an observation");
+    // Domain checks must refuse even before an entry exists, not merely because an old hash differs.
+    const auto outsideDomain = [&](const char* name, const std::function<void(core::Project&)>& change) {
+        core::Project altered = base;
+        altered.extra.erase(std::string(store::kFilterObservationsKey));
+        change(altered);
+        Check(!CurrentFilterObservationContext(*backing, altered), name);
+    };
+    outsideDomain("V1 refuses masks before entry lookup", [](core::Project& p) {
+        p.texture_sets[0].stacks[0].root_layers[0].mask.emplace();
+    });
+    outsideDomain("V1 refuses empty inclusion geometry mask before entry lookup", [](core::Project& p) {
+        p.texture_sets[0].stacks[0].root_layers[0].geometry_mask.inclusion_list = true;
+    });
+    outsideDomain("V1 refuses nonempty exclusion geometry mask before entry lookup", [](core::Project& p) {
+        p.texture_sets[0].stacks[0].root_layers[0].geometry_mask.items = {"authored"};
+    });
+    outsideDomain("V1 refuses instances before entry lookup", [](core::Project& p) {
+        p.texture_sets[0].stacks[0].root_layers[0].instance_source = 99;
+    });
+    outsideDomain("V1 refuses anchor effects before entry lookup", [](core::Project& p) {
+        p.texture_sets[0].stacks[0].root_layers[0].content_effects[0].anchor_name = "anchor";
+    });
+    outsideDomain("V1 refuses paint planes before entry lookup", [](core::Project& p) {
+        auto& host = p.texture_sets[0].stacks[0].root_layers[0];
+        host.kind = core::LayerKind::paint;
+        host.paint.emplace();
+        host.paint->planes[core::ChannelType::BaseColor] = 999;
+    });
+    outsideDomain("V1 refuses mono source before entry lookup", [](core::Project& p) {
+        auto& fill = *p.texture_sets[0].stacks[0].root_layers[0].fill;
+        fill.mono_source = fill.sources.begin()->second;
+    });
+    outsideDomain("V1 refuses material source before entry lookup", [](core::Project& p) {
+        auto& fill = *p.texture_sets[0].stacks[0].root_layers[0].fill;
+        fill.material_source = fill.sources.begin()->second;
+    });
+    outsideDomain("V1 refuses alternate source kinds before entry lookup", [](core::Project& p) {
+        p.texture_sets[0].stacks[0].root_layers[0].fill->sources.begin()->second = core::Source{core::BitmapSource{}};
+    });
+    outsideDomain("V1 refuses external procedural inputs before entry lookup", [&](core::Project& p) {
+        p.texture_sets[0].stacks[0].root_layers[0].content_effects[0].procedural->image_inputs["input"].sha256 = meshHash;
+    });
+    outsideDomain("V1 refuses mesh maps before entry lookup", [&](core::Project& p) {
+        p.texture_sets[0].mesh_maps[core::MeshMapUsage::AO].resource = meshHash;
+    });
+    outsideDomain("V1 refuses extra resources before entry lookup", [](core::Project& p) {
+        p.resources[core::Sha256Hex("extra")] = {};
+    });
+    outsideDomain("V1 refuses missing mesh bytes", [](core::Project& p) {
+        auto metadata = p.resources.begin()->second;
+        p.resources.clear();
+        p.mesh->resource = core::Sha256Hex("not stored");
+        p.resources[p.mesh->resource] = std::move(metadata);
+    });
+    outsideDomain("V1 refuses empty metadata", [](core::Project& p) { p.resources.begin()->second.clear(); });
+    outsideDomain("V1 refuses empty MIME", [](core::Project& p) { p.resources.begin()->second[0].mime.clear(); });
+    outsideDomain("V1 independently checks mesh size", [](core::Project& p) { ++p.resources.begin()->second[0].size; });
+    outsideDomain("V1 requires metadata MIME consensus", [](core::Project& p) {
+        auto meta = p.resources.begin()->second[0];
+        meta.mime = "different";
+        p.resources.begin()->second.push_back(meta);
+    });
+    outsideDomain("V1 refuses invalid core parameter types before entry lookup", [](core::Project& p) {
+        p.texture_sets[0].stacks[0].root_layers[0].content_effects[0].procedural->params["radius"] = Array{};
+    });
+    bool prospectiveLookup = false;
+    auto persisted = backing->Submit(document, {"observation-source-test", Object{}, "persist", document.revision()},
+                                     [&](core::Edit& edit) {
+        edit.project() = base;
+        prospectiveLookup = ObservedFilter(*backing, edit.project(), filterId).has_value();
+    });
+    Check(persisted.result && persisted.result->status == core::ResultStatus::committed && prospectiveLookup,
+          "sealed observation persists after prospective lookup inside Submit");
+    backing->Save(document);
+    backing->Close();
+    auto reopened = store::ProjectStore::Open(work / "observation-source.uzp");
+    core::Document reopenedDocument(std::move(reopened.state));
+    const auto reopenedSnapshot = reopenedDocument.snapshot();
+    const auto fresh = ObservedFilter(*reopened.store, *reopenedSnapshot.project, filterId);
+    Check(reopened.report.ok() && fresh && original && fresh->entry_key == original->entry_key &&
+              fresh->parameters &&
+              json::WriteCanonical(fresh->parameters->at("radius")) == json::WriteCanonical(Value(1.0)) &&
+              std::signbit(std::get<double>(fresh->parameters->at("zero").data)),
+          "save reopen preserves entry key and raw double and signed zero for fresh lookup");
+    reopened.store->Close();
+    return Finish();
+}
+
 int main(int argc, char** argv) {
     if (argc < 3) {
         std::fprintf(stderr, "usage: uzp-procedural-tests seam | domain | primitives | kernels | gpu | library | library-load <work-dir> [...]\n");
@@ -2225,6 +2492,7 @@ int main(int argc, char** argv) {
     const fs::path dir = argv[2];
     if (mode == "seam") return RunSeam();
     if (mode == "observations") return RunObservations();
+    if (mode == "observation-source") return RunObservationSource(dir);
     if (mode == "domain") return RunDomain();
     if (mode == "typed-params") return RunTypedParams();
     if (mode == "resolution") return RunResolution(dir);
