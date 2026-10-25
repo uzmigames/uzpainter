@@ -94,6 +94,53 @@ save/reopen, and verify covered-source invariance. A skew-axis extension is a
 follow-up only if this first set cannot distinguish the hypotheses. No new
 recording is claimed here.
 
+## Householder arithmetic control (2026-10-25)
+
+The CPU-only follow-up replaces the solved intersection-origin Rodrigues
+construction with two Householder reflections: first in source plane J, then
+in the J/tau angle-bisector plane. This preserves the mathematical rigid
+rotation while avoiding the intersection solve. The original construction
+already uses no trigonometric functions. Eligibility, normals, gate, tap policy,
+distance evaluation and mixture arithmetic remain unchanged.
+
+Permanent helper commit `70f12d26` passes 47 authored mathematical tests.
+Loader commit `57bed108` passes 24 metadata, topology, historical-baseline and
+execution-stop tests, type/lint/format checks and a standalone import smoke.
+The loader pins both public manifests and the reference, validates private
+record identity and export metadata, and requires the historical hinge-far
+395/7/389/1 baseline/intersection/fixed/new counts before evaluating Householder.
+The reviewed run completed in 52.898 seconds with an external 900-second
+timeout, exit code 1 and empty stderr.
+
+| Hinge-far, all 5,920 ring coordinates | Differing coordinates |
+| --- | ---: |
+| Existing per-hinge baseline | 395 |
+| Generic J/tau intersection | 7 |
+| Generic J/tau Householder | 7 |
+| Householder new differences versus intersection | 0 |
+| Intersection's new regression still differing under Householder | 1 |
+
+Every count holds separately for r1/r2, steps 45/46. Infinite exports are
+bit-identical across repetitions and reopen; covered source values match in
+all exports. Passthrough comparisons against r1 step 47 are 0 for r1 steps
+47/48 and 257,408 for r2 steps 47/48. These uncovered passthrough differences
+remain a separate stability observation, not an exact cross-session contract.
+
+Householder does not eliminate the new regression. The predeclared stop rule
+therefore prevented the tau-prism run; no new tau-prism result is claimed.
+This experiment does not support intersection-origin cancellation as a remedy
+for the observed mismatch, but does not certify either numerical construction
+outside this measured domain. No production policy, tolerance, exception,
+task checkbox or refusal changed.
+
+| Follow-up artifact | SHA-256 |
+| --- | --- |
+| Committed `plane_transform_diagnostic.py` | `7a8248844466b6a2d90630b4d2e9027d83ffae022fdb166ad239ccd683f3dc58` |
+| Hinge-far public manifest | `0cd290499261ad3e10b3519b536cfc93a217ca36bd312daf7e120d5ed6ad24aa` |
+| Hinge-far golden record | `0a16335d434386984bd815aa220b89455ae5b93ae547c6580c48ab3918e745bb` |
+| Pinned tau-prism public manifest (not executed) | `b7f91cb30b7e9d62e5ff42f79dee2df062ae3ff752f28fbec32b848724574937` |
+| Reference | `c36795882a04c6ee6ff956f4280e4e58a5e605451039dc4f3b0df732e82e546a` |
+
 ## Evidence identities
 
 Public evidence contains aggregates and hashes only. Coordinates, weights,
