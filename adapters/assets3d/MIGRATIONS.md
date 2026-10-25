@@ -106,6 +106,67 @@ Any Python 3.13 runs it; the script needs only the standard library. Environment
 - **Painter:** `project.save_as(path)` replaces an existing, closed project without raising (P23-A, decision 180).
 - **UzPainter:** the facade now replaces that destination through an explicit store policy; the adapter makes no change to the script. The compared `phase1-save-as-existing` replay verifies the result, events and reopened content. A locked destination, the current project or its alias, and a destination with SQLite recovery companions are refused before replacement. Native `save_as` and facade `save_as_copy` retain their create-only policy.
 
+### M11. Read-only upstream gate preflight (decision 360)
+
+`python -m adapters.assets3d check-production REQUEST.json [--diagnostic]` checks
+pinned Assets3D v2 prerequisite evidence without importing a mesh or executing a
+pipeline script. Exit 0 means the recorded prerequisites checked; exit 1 reports
+missing, stale, failed or unsupported proof. `production_authorized` is always
+false: this command does not grant G2, the owner-signed amendment or production
+execution. `--diagnostic` labels the report; it does not turn a failure into a pass.
+
+The request is a JSON object with these fields:
+
+```json
+{
+  "schema": "uzpainter/assets3d-admission/1",
+  "root": "E:/UzmiGames/Assets3D",
+  "manifest": {"path": "piece/manifest.json", "sha256": "<64 lowercase hex>"},
+  "import_report": {"path": "piece/import.json", "sha256": "<64 lowercase hex>"},
+  "requirements": {
+    "geometry_fit": ["/gates/visual/geometry-producer", "/gates/visual/geometry-review"],
+    "low_uv": ["/gates/technical/uv-producer", "/gates/technical/uv-review"],
+    "bake": ["/gates/technical/bake-producer", "/gates/technical/bake-review"],
+    "low_high_fidelity": ["/gates/visual/fidelity-producer", "/gates/visual/fidelity-review"]
+  }
+}
+```
+
+The gate names are examples, not required names. `geometry_fit` is the combined
+geometry/fit obligation: both producer and independent evidence must cover both
+stages. The same independent pair may review several requirements. Each reviewer
+has a nonempty agent/session/model; the independent agent and session differ from
+the producer's for that requirement. Fidelity must explicitly reference the
+`/low_high_fidelity` evidence selector as well as cover the bake stage; a generic
+bake tag cannot silently discharge it.
+
+The manifest is schema-v2's `type: piece-manifest, schema: 1` document. All declared
+upstream gates covering geometry, fit, coverage, low_uv or bake are checked, not
+only the requested bindings. A parallel pending/fail or unverified/reopened gate
+cannot be hidden by another pass. A confirmed `not_applicable` gate requires a
+justification and never satisfies a required role. Evidence and dependency file
+references must resolve inside the root with verified SHA-256 and byte counts.
+Only JSON Pointer selectors into JSON files are supported; other selector formats
+refuse explicitly. Dependencies must be current equal/equivalent records and bind
+the same current low mesh. Invalidations at or after the gate's recorded moment
+refuse; input bytes are checked again before the report is returned. This is a
+validator of the consumed prerequisite fields, not a replacement for Assets3D's
+complete manifest schema or its visual review process.
+
+`import_report` is the native mesh import report (`mesh_import.cpp`), including
+`source.{sha256,size}`, `hashes` and `certificate.{status,hashes}`. Its source must
+match the manifest's low mesh, and its hashes must match the certificate. A fail
+or unknown status refuses; warn is retained in the assessment. External mesh
+files currently refuse because their import-boundary binding is not implemented.
+
+**Execution remains unguarded by this preflight.** The existing generic script
+route and M8's route-token gap are unchanged. Item 2.5 of
+`phase3.1_assets3d-cutover` stays open until the real selection/import boundary
+checks the consumed mesh, certificate and evidence before mutation. A successful
+preflight is not a reusable ticket: a later execution must check again and bind
+its actual import. Synthetic CPU tests establish the checker's behavior, not
+approval of any real pilot.
+
 ## Not adapted (UzPainter differs; owners named)
 
 - **The wand's five-map export:** its BaseColor is written exactly (decision 126), but `infinite` padding on the wand's UV islands is refused before writing, naming recording R-090 (decision 127). Owner: `phase1.25_pilot-wand` item 2.7.

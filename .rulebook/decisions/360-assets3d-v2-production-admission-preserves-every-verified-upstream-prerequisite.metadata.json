@@ -1,0 +1,11 @@
+{
+  "id": 360,
+  "slug": "assets3d-v2-production-admission-preserves-every-verified-upstream-prerequisite",
+  "title": "Assets3D v2 production admission preserves every verified upstream prerequisite",
+  "status": "accepted",
+  "date": "2026-10-25",
+  "relatedTasks": [
+    "phase3.1_assets3d-cutover"
+  ],
+  "supersededBy": null
+}

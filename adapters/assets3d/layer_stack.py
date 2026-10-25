@@ -33,7 +33,7 @@ from typing import Any
 if not __package__:  # run as a file: `python <UzPainter>/adapters/assets3d/layer_stack.py ...`
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from adapters.assets3d import client
+from adapters.assets3d import client, gate_contract
 
 ROOT_ENV = "UZP_ASSETS3D_ROOT"
 MODULE_NAME = "uzp_assets3d_painter_layer_stack"
@@ -148,8 +148,11 @@ def run(argv: list[str]) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    arguments = sys.argv[1:] if argv is None else argv
+    if arguments[:1] == ["check-production"]:
+        return gate_contract.main(arguments[1:])
     try:
-        return run(sys.argv[1:] if argv is None else argv)
+        return run(arguments)
     except Refused as refused:
         print(json.dumps(refused.reply))
         return client.FAILED
