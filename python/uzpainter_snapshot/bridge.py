@@ -98,6 +98,11 @@ class Remote:
             time.sleep(0.2)
 
 
+def canonical_state(value: Any) -> str:
+    """Compare observations without conflating integers, doubles or signed zero."""
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+
 def validate_readback(readback: Any, request: dict[str, Any]) -> dict[str, Any]:
     """Every capture assumption is checked against the actual source and layer."""
     if readback["channel_formats"] != {"User0": "L32F", "User1": "RGB32F"}:
@@ -130,7 +135,7 @@ def validate_readback(readback: Any, request: dict[str, Any]) -> dict[str, Any]:
     if readback["sets"] != [{"name": "uzp_plane", "resolution": [128, 128], "has_uv_tiles": False}]:
         raise ValueError("capture texture set or resolution changed")
     sources = readback["sources"]
-    if len(sources) != 2 or sources[0] != sources[1]:
+    if len(sources) != 2 or canonical_state(sources[0]) != canonical_state(sources[1]):
         raise ValueError("paired source state differs")
     source: dict[str, Any] = sources[0]
     if (
@@ -144,7 +149,20 @@ def validate_readback(readback: Any, request: dict[str, Any]) -> dict[str, Any]:
         or source["resolution"]["log2_offset"] != 0
     ):
         raise ValueError("source lies outside the input-free scalar capture domain")
+    if "resource_id" in source:
+        identifier = source["resource_id"]
+        if (
+            not isinstance(identifier, dict)
+            or set(identifier) != {"url", "context", "name", "version"}
+            or any(not isinstance(value, str) or not value for value in identifier.values())
+            or identifier["url"] != source["resource"]
+        ):
+            raise ValueError(
+                "observed ResourceID must be complete and match the requested resource"
+            )
     effective = scalar_parameters(source["parameters"])
+    if canonical_state(effective) != canonical_state(source["parameters"]):
+        raise ValueError("effective parameters must retain observed scalar types")
     if any(effective.get(key) != value for key, value in request["parameters"].items()):
         raise ValueError("effective parameters differ from requested overrides")
     source["parameters"] = effective
@@ -239,7 +257,9 @@ def record(context: dict[str, Any], request: dict[str, Any], root: Path) -> dict
             if any(p.is_symlink() or not p.is_file() for p in expected):
                 raise RuntimeError("Painter export is not a regular private file")
             exports.append({"config": config, "result": status})
-        if not still_owned() or remote.call("readback") != readback:
+        if not still_owned() or canonical_state(remote.call("readback")) != canonical_state(
+            readback
+        ):
             raise RuntimeError("source state changed during capture")
         seed = source["parameters"].get("$randomseed", 0)
         if not isinstance(seed, int):

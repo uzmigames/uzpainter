@@ -9,6 +9,7 @@ from copy import deepcopy
 from pathlib import Path
 from types import ModuleType
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -96,6 +97,81 @@ def test_effective_defaults_are_retained_and_overrides_checked() -> None:
         bridge.validate_readback(readback(), request)
 
 
+def observed_readback() -> dict[str, Any]:
+    observed = readback()
+    for source in observed["sources"]:
+        source["resource_id"] = {
+            "url": RESOURCE,
+            "context": "authored",
+            "name": "test",
+            "version": "123",
+        }
+        source["parameters"].update({"integer": 1, "double": 1.0, "negative_zero": -0.0})
+    return observed
+
+
+def test_complete_observation_retains_identity_and_scalar_types() -> None:
+    observed = observed_readback()
+    before = bridge.canonical_state(observed)
+    source = bridge.validate_readback(observed, {"resource": RESOURCE, "parameters": {}})
+    assert source["resource_id"] == observed["sources"][1]["resource_id"]
+    assert bridge.canonical_state(observed) == before
+    legacy = bridge.validate_readback(readback(), {"resource": RESOURCE, "parameters": {}})
+    assert "resource_id" not in legacy
+
+
+@pytest.mark.parametrize("field", ["url", "context", "name", "version"])
+@pytest.mark.parametrize("value", [None, "", 1, True, [], {}])
+def test_invalid_observed_identity_refuses(field: str, value: Any) -> None:
+    observed = observed_readback()
+    for source in observed["sources"]:
+        source["resource_id"][field] = value
+    with pytest.raises(ValueError, match="observed ResourceID"):
+        bridge.validate_readback(observed, {"resource": RESOURCE, "parameters": {}})
+
+
+@pytest.mark.parametrize("field", ["url", "context", "name", "version"])
+def test_incomplete_observed_identity_refuses(field: str) -> None:
+    observed = observed_readback()
+    for source in observed["sources"]:
+        del source["resource_id"][field]
+    with pytest.raises(ValueError, match="observed ResourceID"):
+        bridge.validate_readback(observed, {"resource": RESOURCE, "parameters": {}})
+
+
+@pytest.mark.parametrize("field,value", [("extra", "unexpected"), ("url", RESOURCE + "changed")])
+def test_closed_observed_identity_and_matching_url_required(field: str, value: str) -> None:
+    observed = observed_readback()
+    for source in observed["sources"]:
+        source["resource_id"][field] = value
+    with pytest.raises(ValueError, match="observed ResourceID"):
+        bridge.validate_readback(observed, {"resource": RESOURCE, "parameters": {}})
+
+
+@pytest.mark.parametrize("left,right", [(1, 1.0), (0.0, -0.0), (True, 1)])
+def test_paired_parameter_types_must_match(left: Any, right: Any) -> None:
+    observed = observed_readback()
+    observed["sources"][0]["parameters"]["gain"] = left
+    observed["sources"][1]["parameters"]["gain"] = right
+    with pytest.raises(ValueError, match="paired source state differs"):
+        bridge.validate_readback(observed, {"resource": RESOURCE, "parameters": {}})
+
+
+def test_observed_bool_cannot_be_coerced_to_integer() -> None:
+    observed = observed_readback()
+    for source in observed["sources"]:
+        source["parameters"]["gain"] = True
+    with pytest.raises(ValueError, match="retain observed scalar types"):
+        bridge.validate_readback(observed, {"resource": RESOURCE, "parameters": {}})
+
+
+def test_paired_observed_identities_must_match() -> None:
+    observed = observed_readback()
+    observed["sources"][1]["resource_id"]["name"] = "other"
+    with pytest.raises(ValueError, match="paired source state differs"):
+        bridge.validate_readback(observed, {"resource": RESOURCE, "parameters": {}})
+
+
 @pytest.mark.parametrize(
     "field,value",
     [
@@ -148,11 +224,7 @@ def test_lower_precision_channel_refuses() -> None:
         bridge.validate_readback(observed, {"resource": RESOURCE, "parameters": {}})
 
 
-@pytest.mark.parametrize("operation", ["configure", "readback", "export", "close", "ready", "idle"])
-def test_painter_dispatch_refuses_lost_ownership_before_operation(
-    monkeypatch: pytest.MonkeyPatch,
-    operation: str,
-) -> None:
+def painter_module(monkeypatch: pytest.MonkeyPatch) -> tuple[dict[str, Any], dict[str, Any]]:
     package = ModuleType("substance_painter")
     monkeypatch.setitem(sys.modules, "substance_painter", package)
     modules: dict[str, Any] = {}
@@ -174,9 +246,48 @@ def test_painter_dispatch_refuses_lost_ownership_before_operation(
     modules["project"].is_open = lambda: True
     modules["project"].last_imported_mesh_path = lambda: "foreign.obj"
     module_globals = runpy.run_path(str(Path(bridge.__file__).with_name("painter_side.py")))
+    return module_globals, modules
+
+
+@pytest.mark.parametrize("operation", ["configure", "readback", "export", "close", "ready", "idle"])
+def test_painter_dispatch_refuses_lost_ownership_before_operation(
+    monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+) -> None:
+    module_globals, _ = painter_module(monkeypatch)
     module_globals["STATE"]["owner"] = {"pid": os.getpid(), "mesh": "owned.obj"}
     with pytest.raises(RuntimeError, match="ownership"):
         module_globals["dispatch"](operation, {})
+
+
+def test_painter_readback_observes_resource_fields_without_reconstruction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module_globals, modules = painter_module(monkeypatch)
+    fill = MagicMock()
+    source = fill.get_source.return_value
+    identifier = source.resource_id
+    identifier.url.return_value = RESOURCE
+    identifier.context = "documented context"
+    identifier.name = "documented name"
+    identifier.version = "documented version"
+    parameters = {"integer": 1, "double": 1.0, "negative_zero": -0.0}
+    source.get_parameters.return_value = parameters
+    source.get_properties.return_value = {}
+    channel = MagicMock()
+    channel.name = "User0"
+    module_globals["STATE"].update(fill=fill, channels=[channel], stack=MagicMock())
+    modules["layerstack"].get_root_layer_nodes = lambda stack: []
+    modules["textureset"].all_texture_sets = lambda: []
+    captured = module_globals["readback"]()["sources"][0]
+    assert captured["resource"] == RESOURCE
+    assert captured["resource_id"] == {
+        "url": RESOURCE,
+        "context": "documented context",
+        "name": "documented name",
+        "version": "documented version",
+    }
+    assert captured["parameters"] is parameters
 
 
 class FakeRemote:
@@ -245,6 +356,31 @@ def test_foreign_project_is_never_closed(monkeypatch: pytest.MonkeyPatch, tmp_pa
             {"mesh_path": remote.mesh}, {"resource": RESOURCE, "parameters": {}}, tmp_path
         )
     assert not remote.closed
+
+
+@pytest.mark.parametrize("left,right", [(1, 1.0), (0.0, -0.0)])
+def test_capture_refuses_parameter_type_drift(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, left: Any, right: Any
+) -> None:
+    class DriftingRemote(FakeRemote):
+        observations = 0
+
+        def call(self, operation: str, args: dict[str, Any] | None = None) -> Any:
+            if operation == "readback":
+                observed = observed_readback()
+                for source in observed["sources"]:
+                    source["parameters"]["gain"] = left if self.observations == 0 else right
+                self.observations += 1
+                return observed
+            return super().call(operation, args)
+
+    remote = DriftingRemote(str(tmp_path / "mesh.obj"))
+    monkeypatch.setattr(bridge, "Remote", lambda: remote)
+    with pytest.raises(RuntimeError, match="source state changed"):
+        bridge.record(
+            {"mesh_path": remote.mesh}, {"resource": RESOURCE, "parameters": {}}, tmp_path
+        )
+    assert remote.closed
 
 
 def test_existing_project_refuses_before_create(

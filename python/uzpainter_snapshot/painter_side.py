@@ -114,10 +114,17 @@ def readback() -> dict[str, Any]:
     sources = []
     for channel in STATE["channels"]:
         source = fill.get_source(channel)
+        identifier = source.resource_id
         properties = source.get_properties()
         sources.append(
             {
-                "resource": source.resource_id.url(),
+                "resource": identifier.url(),
+                "resource_id": {
+                    "url": identifier.url(),
+                    "context": identifier.context,
+                    "name": identifier.name,
+                    "version": identifier.version,
+                },
                 "parameters": source.get_parameters(),
                 "inputs": list(source.image_inputs),
                 "outputs": list(source.image_outputs),
