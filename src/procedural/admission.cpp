@@ -69,6 +69,7 @@ std::expected<uint32_t, UnsupportedProcedural> EffectiveResolution(const core::P
 std::expected<ProceduralRequest, UnsupportedProcedural> RequestFor(const core::ProceduralRef& ref,
                                                                    const UseContext& context,
                                                                    const AssetLibrary& library) {
+    if (std::optional<UnsupportedProcedural> reserved = ObservationRefusal(ref.asset)) return Refused(*reserved);
     ProceduralRequest request;
     try {
         request.asset = core::ParseAssetUrl(ref.asset);
@@ -153,6 +154,7 @@ Params EvaluationSettings(const core::Project& project) {
 std::expected<IProceduralBackend*, UnsupportedProcedural> Admit(const ProceduralRequest& request,
                                                                const AssetLibrary& library,
                                                                const ProceduralSeam& seam) {
+    if (std::optional<UnsupportedProcedural> reserved = ObservationRefusal(request.asset)) return Refused(*reserved);
     std::expected<IProceduralBackend*, UnsupportedProcedural> selected = seam.Select(request);
     if (selected) return selected;
     if (library.Find(request.asset) == nullptr) return Refused(library.Resolve(request.asset).error());

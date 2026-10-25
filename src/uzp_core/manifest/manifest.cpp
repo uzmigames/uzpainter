@@ -818,6 +818,13 @@ json::Value LayerToJson(const Layer& layer) { return Write(layer); }
 
 json::Value EffectToJson(const Effect& effect, bool mask) { return Write(effect, mask); }
 
+json::Value ProceduralRefToJson(const ProceduralRef& ref) { return Write(ref); }
+
+ProceduralRef ProceduralRefFromJson(const json::Value& value, const std::string& path) {
+    ObjectReader r(value, path);
+    return ReadProcedural(r);
+}
+
 json::Value ProjectToJson(const Project& project) {
     json::Object o = project.extra;
     o["schema"] = std::string(kManifestSchema);

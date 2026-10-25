@@ -17,6 +17,7 @@
 #include "store/inspect.h"
 #include "store/integrity.h"
 #include "store/lock.h"
+#include "store/filter_observations.h"
 #include "store/snapshots.h"
 #include "store/planes.h"
 #include "store/versioning.h"
@@ -356,6 +357,9 @@ void ImportBundle(const fs::path& bundle, const fs::path& target) {
         // The import is the bundle's own project (its uuid): a snapshot of another one is refused.
         const std::string problem = SnapshotProblem(entry, uuid);
         if (!problem.empty()) Corrupt("manifest.json: " + entry.path + ": " + problem);
+    }
+    if (const std::string problem = ProjectFilterObservationsProblem(project, uuid); !problem.empty()) {
+        Corrupt("manifest.json: " + problem);
     }
 
     PendingContent pending;

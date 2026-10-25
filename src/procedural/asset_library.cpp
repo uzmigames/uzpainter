@@ -308,6 +308,7 @@ AssetRecord RecordOf(const fs::path& file) {
     } catch (const core::ValueError& error) {
         Fail(file, error.what());
     }
+    if (ObservationRefusal(record.asset)) Fail(file, std::string(kObservationNotExecutable));
     record.name = StringOf(Required(object, "name", file, "the record"), file, "name");
     record.usage = StringOf(Required(object, "usage", file, "the record"), file, "usage");
     const std::vector<std::string>& usages = AssetUsages();
@@ -444,6 +445,7 @@ std::vector<AssetAlias> AliasesOf(const fs::path& file) {
         } catch (const core::ValueError& error) {
             Fail(file, error.what());
         }
+        if (ObservationRefusal(alias.asset)) Fail(file, std::string(kObservationNotExecutable));
         if (alias.shelf == kLibraryShelf) Fail(file, "an alias names a Painter shelf, not " + std::string(kLibraryShelf));
         aliases.push_back(std::move(alias));
     }
@@ -609,6 +611,7 @@ std::expected<AssetLibrary, std::string> AssetLibrary::Load(const fs::path& root
 }
 
 const AssetRecord* AssetLibrary::Find(const core::AssetUrl& asset) const {
+    if (ObservationRefusal(asset)) return nullptr;
     for (const AssetRecord& record : m_records) {
         if (record.asset == asset) return &record;
     }
@@ -616,6 +619,7 @@ const AssetRecord* AssetLibrary::Find(const core::AssetUrl& asset) const {
 }
 
 std::expected<const AssetRecord*, UnsupportedProcedural> AssetLibrary::Resolve(const core::AssetUrl& asset) const {
+    if (std::optional<UnsupportedProcedural> reserved = ObservationRefusal(asset)) return ResolveError(std::move(*reserved));
     if (const AssetRecord* record = Find(asset)) return record;
     std::string held;
     for (const AssetRecord& record : m_records) {

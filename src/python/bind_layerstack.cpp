@@ -152,19 +152,31 @@ const core::Effect& ProceduralEffectOf(const NodeInfo& info, Id uid) {
 }
 
 /// The stored procedural of a source handle, read through a freshly resolved node.
+/// Every SourceSubstance getter and setter reads its reference here first. A reference of the
+/// reserved observation family (decision 362) has no legacy reading: its pin, parameters and
+/// outputs would be fabricated, so every call refuses before any mutation. Its observed getters
+/// are not implemented yet (phase3.1 item 2.6h).
+core::ProceduralRef DenyObservation(core::ProceduralRef ref) {
+    if (core::IsObservationAsset(ref.asset)) {
+        throw ApiError("UnsupportedProcedural",
+                       "a source of the reserved observation family has no legacy reading (decision 362)");
+    }
+    return ref;
+}
+
 core::ProceduralRef ReadProcedural(const SourceSubstance& s) {
     const auto project = Read();
     const NodeInfo info = Resolve(*project, s.node);
     if (s.effect) {
         const core::Effect& effect = ProceduralEffectOf(info, s.node);
         if (!effect.procedural) throw core::ValueError("stale handle: the effect no longer has a procedural source");
-        return *effect.procedural;
+        return DenyObservation(*effect.procedural);
     }
     const core::Source* src = SourceOf(info, s.node, s.channel);
     if (src == nullptr || src->kind() != core::SourceKind::procedural) {
         throw core::ValueError("stale handle: the node no longer has this procedural source");
     }
-    return std::get<core::ProceduralSource>(src->value).ref;
+    return DenyObservation(std::get<core::ProceduralSource>(src->value).ref);
 }
 
 core::ProceduralRef& EditProcedural(core::Edit& edit, const SourceSubstance& s) {

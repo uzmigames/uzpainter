@@ -35,4 +35,16 @@ std::string FormatAssetUrl(const AssetUrl& url);
 /// Throws `ValueError` when `text` is not a valid pinned asset URL.
 AssetUrl ParseAssetUrl(std::string_view text);
 
+/// The reserved asset family of Filter source observations (decision 362): an immutable
+/// provenance descriptor, never an executable asset or an alias of the observed resource.
+inline constexpr std::string_view kObservationFamily = "observation";
+
+/// True when `text` is a `uzasset://` URL whose family is `observation`, whatever its id and
+/// version, valid or not: execution refuses the whole family without a registry or a lookup.
+bool IsObservationAsset(std::string_view text);
+
+/// True when `text` is exactly `uzasset://observation/<64 lowercase hex>@1`, the only form an
+/// observation getter accepts.
+bool IsObservationPin(std::string_view text);
+
 }  // namespace uzp::core

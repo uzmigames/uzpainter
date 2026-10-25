@@ -119,4 +119,17 @@ AssetUrl ParseAssetUrl(std::string_view text) {
     return url;
 }
 
+bool IsObservationAsset(std::string_view text) {
+    if (!text.starts_with(kAssetPrefix)) return false;
+    const std::string_view rest = text.substr(kAssetPrefix.size());
+    return rest.substr(0, rest.find_first_of("/@")) == kObservationFamily;
+}
+
+bool IsObservationPin(std::string_view text) {
+    if (!IsObservationAsset(text)) return false;
+    const std::string_view rest = text.substr(kAssetPrefix.size() + kObservationFamily.size());
+    if (rest.size() != 1 + 64 + 2 || rest.front() != '/' || !rest.ends_with("@1")) return false;
+    return AllOf(rest.substr(1, 64), [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); });
+}
+
 }  // namespace uzp::core

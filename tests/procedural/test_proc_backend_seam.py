@@ -51,6 +51,18 @@ def test_seam_order_refusal_and_no_substitution(procedural_tests: Path, tmp_path
     assert "a missing mesh map fails the evaluation loudly" in passed
 
 
+def test_reserved_observation_family_is_refused_everywhere(
+    procedural_tests: Path, tmp_path: Path
+) -> None:
+    """Decision 362 (phase3.1 item 2.6g): the observation family is refused by the HLSL backend
+    (registration, refusal, kernels, reference and candidate lanes), the snapshot backend, the
+    seam, the asset library and admission, whatever its id and version."""
+    passed = run_case(procedural_tests, "observations", tmp_path)
+    assert "the seam selects no backend" in passed
+    assert "the reference and candidate lanes evaluate nothing for the family" in passed
+    assert "admission refuses a malformed member of the family before parsing it" in passed
+
+
 def test_domain_refusals_name_field_value_and_range(procedural_tests: Path, tmp_path: Path) -> None:
     """2.1 / decision 222: refusal outside the certified domain, nothing clamped."""
     passed = run_case(procedural_tests, "domain", tmp_path)

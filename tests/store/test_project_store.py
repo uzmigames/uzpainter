@@ -41,6 +41,7 @@ NATIVE_CASES = (
     "planes_interrupted_commit",  # planes 3.6
     "planes_corruption",  # planes 3.7
     "planes_binding_rules",  # planes 2.1, 2.5, 2.7
+    "filter_observations",  # decision 362, phase3.1 2.6g
 )
 
 

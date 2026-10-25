@@ -332,6 +332,7 @@ std::optional<std::string> CheckInputs(const ProceduralRequest& request,
 std::expected<void, std::string> HlslBackend::Register(std::shared_ptr<const IHlslFamily> family) {
     if (!family) return NotRegistered(std::string("no family"));
     const FamilyRecord& record = family->Record();
+    if (ObservationRefusal(record.asset)) return NotRegistered(std::string(kObservationNotExecutable));
     const std::string name = core::FormatAssetUrl(record.asset);
     if (m_families.contains(name)) return NotRegistered(name + " is already registered");
     const RasterRule& output = record.domain.output;
@@ -350,6 +351,7 @@ std::expected<void, std::string> HlslBackend::Register(std::shared_ptr<const IHl
 }
 
 const IHlslFamily* HlslBackend::Find(const core::AssetUrl& asset) const {
+    if (ObservationRefusal(asset)) return nullptr;
     const auto it = m_families.find(core::FormatAssetUrl(asset));
     return it == m_families.end() ? nullptr : it->second.get();
 }
@@ -361,6 +363,9 @@ ParityStatus HlslBackend::Status(const core::AssetUrl& asset) const {
 
 std::optional<UnsupportedProcedural> HlslBackend::CandidateRefusal(
     const ProceduralRequest& request) const {
+    // The reserved observation family first: Refusal, Kernels, EvaluateCandidate and
+    // EvaluateReference all pass through here, and JointRefusal is never reached for it.
+    if (std::optional<UnsupportedProcedural> reserved = ObservationRefusal(request.asset)) return reserved;
     const IHlslFamily* family = Find(request.asset);
     if (family == nullptr) return Refuse(AssetName(request), kNoFamily);
     if (std::optional<UnsupportedProcedural> refusal = CheckDomain(request, family->Record().domain)) {

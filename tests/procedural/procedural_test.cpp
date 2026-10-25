@@ -2137,6 +2137,85 @@ int RunSnapshot(const fs::path& work) {
 
 }  // namespace
 
+// ── observations (decision 362, phase3.1 item 2.6g) ──────────────────────────────────────────
+
+/// The reserved observation family is refused on every procedural path, independently of any
+/// registry or lookup and whatever its id and version.
+int RunObservations() {
+    const std::string hex(64, 'a');
+    const std::string pin = "uzasset://observation/" + hex + "@1";
+    Check(uzp::core::IsObservationPin(pin) && uzp::core::IsObservationAsset(pin), "a descriptor pin is recognized");
+    const std::vector<std::string> malformedAssets = {
+        "uzasset://observation/" + hex + "@2", "uzasset://observation/" + std::string(64, 'A') + "@1",
+        "uzasset://observation/short@1", "uzasset://observation", "uzasset://observation@1"};
+    for (const std::string& malformed : malformedAssets) {
+        Check(uzp::core::IsObservationAsset(malformed) && !uzp::core::IsObservationPin(malformed),
+              "a malformed member of the family is still of the family, and no pin", malformed);
+        Check(ObservationRefusal(malformed).has_value(), "a malformed member of the family is refused", malformed);
+    }
+    Check(!uzp::core::IsObservationAsset("uzasset://observations/" + hex + "@1") &&
+              !uzp::core::IsObservationAsset("uzasset://test-synthetic/observation@1") &&
+              !ObservationRefusal(std::string("uzasset://test-synthetic/ridge@2")).has_value(),
+          "only the family itself is reserved");
+
+    ProceduralRequest reserved = SyntheticRequest();
+    reserved.asset = Url("observation", hex, "1");
+    const auto isReserved = [](const std::optional<UnsupportedProcedural>& refusal) {
+        return refusal && refusal->reason == kObservationNotExecutable;
+    };
+
+    // HLSL: never registered, found, planned or evaluated (reference and candidate lanes).
+    HlslBackend hlsl(nullptr);
+    const auto registered = hlsl.Register(std::make_shared<SyntheticExact>(reserved.asset));
+    Check(!registered && registered.error().find("reserved observation family") != std::string::npos,
+          "a family pinned in the reserved family is not registered");
+    auto synthetic = std::make_shared<SyntheticExact>();
+    Check(hlsl.Register(synthetic).has_value(), "an ordinary family still registers");
+    Check(isReserved(hlsl.Refusal(reserved)) && !hlsl.CanEvaluate(reserved), "the HLSL backend refuses the family");
+    const auto kernels = hlsl.Kernels(reserved);
+    Check(!kernels && kernels.error().reason == kObservationNotExecutable, "no kernel is planned for the family");
+    const render::Result<Raster> reference = hlsl.EvaluateReference(reserved, {{"Curvature", Curvature()}});
+    const render::Result<Raster> candidate =
+        hlsl.EvaluateCandidate(reserved, {{"Curvature", Curvature()}}).get();
+    Check(!reference && !candidate && synthetic->plans == 0 && synthetic->references == 0,
+          "the reference and candidate lanes evaluate nothing for the family");
+
+    // Snapshots: never added, served or described.
+    SnapshotBackend snapshots;
+    bool added = true;
+    try {
+        snapshots.Add(reserved, SnapshotRaster{RasterSpec{64, ChannelFormat::F32, "linear", 1}, std::string(64 * 64 * 4, '\0')});
+    } catch (const uzp::core::ValueError&) {
+        added = false;
+    }
+    Check(!added, "the snapshot backend does not add the family");
+    Check(isReserved(snapshots.Refusal(reserved)) && !snapshots.CanEvaluate(reserved),
+          "the snapshot backend refuses the family");
+    const auto stored = snapshots.Stored(reserved);
+    const auto metadata = snapshots.Metadata(reserved);
+    Check(!stored && stored.error().reason == kObservationNotExecutable && !metadata &&
+              metadata.error().reason == kObservationNotExecutable,
+          "the snapshot backend serves no raster or metadata for the family");
+    Check(!snapshots.Evaluate(reserved, {}).get(), "the snapshot backend evaluates nothing for the family");
+
+    // The seam, the library and admission.
+    ProceduralSeam seam(&snapshots, &hlsl);
+    const auto selected = seam.Select(reserved);
+    Check(!selected && selected.error().reason == kObservationNotExecutable, "the seam selects no backend", Describe(selected));
+    const AssetLibrary library;
+    const auto resolved = library.Resolve(reserved.asset);
+    Check(library.Find(reserved.asset) == nullptr && !resolved && resolved.error().reason == kObservationNotExecutable,
+          "the library neither finds nor resolves the family");
+    uzp::core::ProceduralRef ref;
+    ref.asset = "uzasset://observation/not-a-pin@x";
+    const auto request = RequestFor(ref, UseContext{}, library);
+    Check(!request && request.error().reason == kObservationNotExecutable,
+          "admission refuses a malformed member of the family before parsing it");
+    const auto admitted = Admit(reserved, library, seam);
+    Check(!admitted && admitted.error().reason == kObservationNotExecutable, "admission refuses the family");
+    return Finish();
+}
+
 int main(int argc, char** argv) {
     if (argc < 3) {
         std::fprintf(stderr, "usage: uzp-procedural-tests seam | domain | primitives | kernels | gpu | library | library-load <work-dir> [...]\n");
@@ -2145,6 +2224,7 @@ int main(int argc, char** argv) {
     const std::string_view mode = argv[1];
     const fs::path dir = argv[2];
     if (mode == "seam") return RunSeam();
+    if (mode == "observations") return RunObservations();
     if (mode == "domain") return RunDomain();
     if (mode == "typed-params") return RunTypedParams();
     if (mode == "resolution") return RunResolution(dir);

@@ -180,6 +180,14 @@ struct UnsupportedProcedural {
 /// A refusal without a field (`asset` and `reason` only).
 [[nodiscard]] UnsupportedProcedural Refuse(std::string asset, std::string_view reason);
 
+/// The reason every procedural path gives an asset of the reserved observation family.
+inline constexpr std::string_view kObservationNotExecutable =
+    "reserved observation family: provenance only, never registered, resolved or evaluated (decision 362)";
+/// The refusal of an asset of the reserved observation family (core `IsObservationAsset`), whatever
+/// its id and version and whether or not any library holds it; empty for any other asset.
+[[nodiscard]] std::optional<UnsupportedProcedural> ObservationRefusal(std::string_view asset);
+[[nodiscard]] std::optional<UnsupportedProcedural> ObservationRefusal(const core::AssetUrl& asset);
+
 /// `std::unexpected<UnsupportedProcedural>`, named through `std::expected` (Zig's libc++ also
 /// declares the pre-C++17 `std::unexpected()`, which makes the bare name ambiguous).
 using Refused = std::expected<void, UnsupportedProcedural>::unexpected_type;

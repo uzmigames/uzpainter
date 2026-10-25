@@ -232,8 +232,13 @@ int RunSnapshotSource(const std::filesystem::path& path, std::optional<int64_t> 
 // Stores one fill layer whose content effects are a generator and a filter with authored
 // procedural references, and a generator without one: the Python get_source() fixture
 // (synthetic pins, not Painter evidence; neither effect can be inserted through the API yet).
-int RunProceduralEffects(const std::filesystem::path& path) {
+int RunProceduralEffects(const std::filesystem::path& path, bool observation) {
     using namespace uzp;
+    // `observation`: the same layout with every procedural reference pinned in the reserved
+    // observation family (decision 362) and no observation namespace, so nothing binds them.
+    const auto pin = [&](const char* asset, char digit) {
+        return observation ? "uzasset://observation/" + std::string(64, digit) + "@1" : std::string(asset);
+    };
     auto opened = store::ProjectStore::Open(path);
     Check(opened.report.ok(), "initial project integrity");
     core::Document document(std::move(opened.state));
@@ -259,18 +264,26 @@ int RunProceduralEffects(const std::filesystem::path& path) {
         host.blending[core::ChannelType::BaseColor] = normal;
         host.fill.emplace();
         host.fill->active_channels = {core::ChannelType::BaseColor};
-        host.fill->sources[core::ChannelType::BaseColor] =
-            core::Source{core::UniformColorSource{{0.5, 0.5, 0.5}, "sRGB", {}}};
+        if (observation) {
+            core::ProceduralSource source;
+            source.ref.asset = pin("", 'c');
+            source.ref.params = {{"amount", 0.5}};
+            source.ref.output_mapping = {{"BaseColor", "output"}};
+            host.fill->sources[core::ChannelType::BaseColor] = core::Source{source};
+        } else {
+            host.fill->sources[core::ChannelType::BaseColor] =
+                core::Source{core::UniformColorSource{{0.5, 0.5, 0.5}, "sRGB", {}}};
+        }
         core::Effect generator = effect(edit, core::EffectKind::generator, "authored generator");
         generator.procedural.emplace();
-        generator.procedural->asset = "uzasset://test-generator/ridge@2";
+        generator.procedural->asset = pin("uzasset://test-generator/ridge@2", 'a');
         generator.procedural->params = {{"amount", 0.25}, {"$randomseed", std::int64_t{3}}, {"label", std::string("a")}};
         generator.procedural->output_mapping = {{"BaseColor", "mask"}};
         generator.procedural->resolution_override =
             core::ProceduralResolutionOverride{core::ProceduralResolutionMode::Manual, {256, 256}, 0, {}};
         core::Effect filter = effect(edit, core::EffectKind::filter, "authored filter");
         filter.procedural.emplace();
-        filter.procedural->asset = "uzasset://test-filter/blur@1";
+        filter.procedural->asset = pin("uzasset://test-filter/blur@1", 'b');
         filter.procedural->params = {{"radius", 2.0}};
         filter.procedural->output_mapping = {{"BaseColor", "output"}};
         host.content_effects = {generator, filter, effect(edit, core::EffectKind::generator, "empty generator")};

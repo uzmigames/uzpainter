@@ -144,6 +144,20 @@ REFUSALS: list[tuple[str, str, Callable[[Any], None], str]] = [
     ("no-report", RIDGE2, drop_report, "names the report that gives it"),
     ("no-default", RIDGE2, drop_default, "parameter bias has no default"),
     ("usage", SOFTEN, set_field("usage", "TEXTURE"), "is not a procedural resource.Usage member"),
+    # Decision 362: the reserved observation family is never registered or aliased, whatever its
+    # id and version (a well-formed pin, or an id and version that are not one).
+    (
+        "observation-record",
+        RIDGE2,
+        set_field("asset", "uzasset://observation/" + "0" * 64 + "@1"),
+        "reserved observation family",
+    ),
+    (
+        "observation-alias",
+        "aliases.json",
+        alias_to("uzasset://observation/not-a-descriptor@2"),
+        "reserved observation family",
+    ),
     ("repeated-record", "library.json", repeat_record, "is pinned by two records"),
     ("record-outside", "library.json", escape_record, "is not inside the library"),
 ]

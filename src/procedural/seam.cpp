@@ -369,6 +369,16 @@ UnsupportedProcedural Refuse(std::string asset, std::string_view reason) {
     return UnsupportedProcedural{std::move(asset), std::string(reason), {}, {}, {}};
 }
 
+std::optional<UnsupportedProcedural> ObservationRefusal(std::string_view asset) {
+    if (!core::IsObservationAsset(asset)) return std::nullopt;
+    return Refuse(std::string(asset), kObservationNotExecutable);
+}
+
+std::optional<UnsupportedProcedural> ObservationRefusal(const core::AssetUrl& asset) {
+    if (asset.family != core::kObservationFamily) return std::nullopt;
+    return Refuse("uzasset://" + asset.family + "/" + asset.id + "@" + asset.version, kObservationNotExecutable);
+}
+
 std::string UnsupportedProcedural::Describe() const {
     std::string out = "UnsupportedProcedural{asset: " + asset + ", reason: " + reason;
     if (!field.empty()) {
@@ -470,6 +480,7 @@ std::optional<UnsupportedProcedural> CheckDomain(const ProceduralRequest& reques
 
 std::expected<IProceduralBackend*, UnsupportedProcedural> ProceduralSeam::Select(
     const ProceduralRequest& request) const {
+    if (std::optional<UnsupportedProcedural> reserved = ObservationRefusal(request.asset)) return Refused(*reserved);
     if (m_snapshot != nullptr && m_snapshot->CanEvaluate(request)) return m_snapshot;
     if (m_hlsl != nullptr && m_hlsl->CanEvaluate(request)) return m_hlsl;
     if (m_hlsl != nullptr) {

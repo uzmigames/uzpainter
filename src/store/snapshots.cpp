@@ -2,6 +2,7 @@
 
 #include "uzp_core/manifest/sha256.h"
 #include "uzp_core/types/errors.h"
+#include "uzp_core/types/resource_url.h"
 
 #include <algorithm>
 #include <array>
@@ -29,6 +30,14 @@ std::pair<std::string, std::string> PinAndOutput(const Value& signature) {
     const auto* out = output == object->end() ? nullptr : std::get_if<Object>(&output->second.data);
     return {asset.empty() || version.empty() ? std::string() : asset + "@" + version,
             out ? text(*out, "id") : std::string()};
+}
+
+/// True when the signature's `asset` is of the reserved observation family, whatever else it holds.
+bool ReservedAsset(const Value& signature) {
+    const auto* object = std::get_if<Object>(&signature.data);
+    const auto asset = object == nullptr ? Object::const_iterator{} : object->find("asset");
+    return object != nullptr && asset != object->end() && asset->second.IsString() &&
+           core::IsObservationAsset(std::get<std::string>(asset->second.data));
 }
 
 }  // namespace
@@ -338,6 +347,10 @@ std::vector<SnapshotEntry> ProjectSnapshots(const core::Project& project) {
 
 std::string SnapshotProblem(const SnapshotEntry& entry, std::string_view project_uuid) {
     if (!entry.error.empty()) return entry.error;
+    if (ReservedAsset(entry.signature)) {
+        return "the snapshot's asset is of the reserved observation family, which is never stored as a snapshot "
+               "(decision 362)";
+    }
     const std::string hash = core::Sha256Hex(core::json::WriteCanonical(entry.signature));
     if (hash != entry.key) {
         return "the entry is stored under " + entry.key + ", its signature hashes to " + hash;
@@ -360,6 +373,10 @@ Id StageSnapshot(Container& container, PendingPlanes& pending, core::Edit& edit,
                  const Value& signature, const PlaneImage& image,
                  const std::optional<SourceMetadata>& observed) {
     if (!signature.IsObject()) throw core::ValueError("snapshot: the signature is not a JSON object");
+    // Before any allocation or plane write: the reserved observation family is never a snapshot.
+    if (ReservedAsset(signature)) {
+        throw core::ValueError("snapshot: the asset is of the reserved observation family (decision 362)");
+    }
     std::optional<Value> metadata;
     if (observed) {
         metadata = SourceMetadataJson(signature, *observed);

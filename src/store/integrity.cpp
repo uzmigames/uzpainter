@@ -6,6 +6,7 @@
 
 #include "store/blobs.h"
 #include "store/plane_integrity.h"
+#include "store/filter_observations.h"
 #include "store/snapshots.h"
 #include "uzp_core/manifest/sha256.h"
 
@@ -214,6 +215,16 @@ IntegrityReport CheckIntegrity(Container& container, const Value& current_manife
                 if (problem.empty() || !reported.insert(entry.path + ": " + problem).second) continue;
                 report.corrupt.push_back(CorruptItem{"snapshot", entry.key, problem, {AffectedNode{std::nullopt, entry.path}}});
             }
+            // The Filter source observations' structure (filter_observations.h), never their
+            // staleness: a stale entry is not corrupt.
+            const auto* top = std::get_if<core::json::Object>(&manifest.data);
+            if (top == nullptr) continue;
+            const auto member = top->find(kFilterObservationsKey);
+            if (member == top->end()) continue;
+            const std::string problem = FilterObservationsProblem(member->second, uuid);
+            const std::string path(kFilterObservationsKey);
+            if (problem.empty() || !reported.insert(path + ": " + problem).second) continue;
+            report.corrupt.push_back(CorruptItem{"filter_observations", path, problem, {AffectedNode{std::nullopt, path}}});
         }
     }
     PlaneIntegrity planes = CheckPlaneIntegrity(container, current_manifest, level);

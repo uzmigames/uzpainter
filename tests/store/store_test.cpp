@@ -30,6 +30,7 @@
 #include "store/commit.h"
 #include "store/container.h"
 #include "store/fault.h"
+#include "store/filter_observations.h"
 #include "store/integrity.h"
 #include "store/planes.h"
 #include "store/project_store.h"
@@ -1295,6 +1296,227 @@ int Child(const std::string& fault_name, const fs::path& path) {
     return 1;
 }
 
+// ── Filter source observations (decision 362): structure only ───────────────────────────────
+
+/// A structurally valid `filter_source_observations` namespace for project `uuid`, every key its
+/// body's hash. `edit_descriptors` changes the two descriptors and `edit_entry` the entry before
+/// their keys (and the entry's context hash) are computed. Placeholder values, no Painter record.
+json::Value Observations(const std::string& uuid,
+                         const std::function<void(json::Object& host, json::Object& filter)>& edit_descriptors = {},
+                         const std::function<void(json::Object& entry)>& edit_entry = {}) {
+    const auto descriptor = [](const char* role, json::Object parameters) {
+        return json::Object{{"schema", std::string(kObservationDescriptorSchema)},
+                            {"role", std::string(role)},
+                            {"resource_id", json::Object{{"url", std::string("resource://test/") + role + "?version=1"},
+                                                         {"context", std::string("test")},
+                                                         {"name", std::string(role)},
+                                                         {"version", std::string("1")}}},
+                            {"parameters", std::move(parameters)}};
+    };
+    json::Object host = descriptor("host", {{"amount", 0.5}});
+    json::Object filter = descriptor("filter", {{"radius", 2.0}, {"zero", 0.0}});
+    if (edit_descriptors) edit_descriptors(host, filter);
+    const std::string hostKey = ObservationKey(host);
+    const std::string filterKey = ObservationKey(filter);
+    const auto reference = [](const std::string& key, json::Object params) {
+        ProceduralRef ref;
+        ref.asset = ObservationPin(key);
+        ref.params = std::move(params);
+        ref.extra = {{"x-kept", std::string("an unknown key the manifest keeps")}};
+        return ProceduralRefToJson(ref);
+    };
+    const std::string mesh = Sha256Hex("mesh bytes");
+    // The historical projection: the canonical manifest of a real project with that mesh.
+    Project observed = BaseProject();
+    MeshReference reference_mesh;
+    reference_mesh.resource = mesh;
+    observed.mesh = reference_mesh;
+    json::Object context{
+        {"schema", std::string(kObservationContextSchema)},
+        {"project", ProjectToJson(observed)},
+        {"store_uuid", uuid},
+        {"resources", json::Array{json::Object{{"binding_path", std::string("/mesh/resource")},
+                                               {"kind", std::string("mesh")},
+                                               {"identity", mesh},
+                                               {"mime", std::string("model/obj")},
+                                               {"sha256", mesh},
+                                               {"size_bytes", 10}}}}};
+    json::Object entry{
+        {"schema", std::string(kObservationEntrySchema)},
+        {"project_uuid", uuid},
+        {"role", std::string("filter")},
+        {"host_descriptor", hostKey},
+        {"filter_descriptor", filterKey},
+        {"binding", json::Object{{"texture_set", 1}, {"stack", 2}, {"host_uid", 10}, {"filter_uid", 11},
+                                 {"node_stack", std::string("Content")}, {"effect_index", 0},
+                                 {"host_channel", std::string("User0")},
+                                 {"host_reference", reference(hostKey, {{"amount", 0.5}})},
+                                 {"filter_reference", reference(filterKey, {{"radius", 2.0}})}}},
+        {"context", context},
+        {"capture", json::Object{{"recorder", std::string("test")}, {"envelope_id", std::string("test")},
+                                 {"painter_build_id", std::string("test")}, {"recipe_sha256", Sha256Hex("recipe")},
+                                 {"resource_query", std::string("test")},
+                                 {"authored_inputs", json::Array{json::Object{{"input_id", std::string("plane")},
+                                                                              {"sha256", Sha256Hex("plane")}}}},
+                                 {"receipts", json::Array{json::Object{{"condition", std::string("same_session")},
+                                                                       {"sha256", Sha256Hex("r1")}},
+                                                          json::Object{{"condition", std::string("after_save_reopen")},
+                                                                       {"sha256", Sha256Hex("r2")}}}}}},
+        {"observations", json::Object{{"parameters", filter.at("parameters")},
+                                      {"resource_id", filter.at("resource_id")},
+                                      {"image_outputs", json::Array{}}}}};
+    if (edit_entry) edit_entry(entry);
+    entry["context_sha256"] = ObservationKey(entry.at("context"));
+    const std::string entryKey = ObservationKey(entry);
+    return json::Object{{"schema", std::string(kFilterObservationsSchema)},
+                        {"descriptors", json::Object{{hostKey, host}, {filterKey, filter}}},
+                        {"entries", json::Object{{entryKey, entry}}},
+                        {"host_bindings", json::Object{{"10", json::Object{{"channel", std::string("User0")},
+                                                                            {"descriptor", hostKey}}}}},
+                        {"bindings", json::Object{{"11", entryKey}}}};
+}
+
+json::Object& At(json::Value& value, const std::string& key) { return std::get<json::Object>(std::get<json::Object>(value.data).at(key).data); }
+
+void FilterObservations() {
+    const std::string uuid = "11111111-2222-4333-8444-555555555555";
+    const auto problem = [&](const json::Value& space) { return FilterObservationsProblem(space, uuid); };
+    CHECK(problem(Observations(uuid)).empty());
+
+    // Foreign, unknown members, recomputed keys.
+    CHECK(Contains(FilterObservationsProblem(Observations(uuid), "another-project"), "project-private"));
+    json::Value unknown = Observations(uuid);
+    std::get<json::Object>(unknown.data)["extra"] = 1;
+    CHECK(Contains(problem(unknown), "unknown member 'extra'"));
+    json::Value rehashed = Observations(uuid);
+    for (auto& [key, descriptor] : At(rehashed, "descriptors")) {
+        std::get<json::Object>(descriptor.data)["parameters"] = json::Object{{"changed", 1}};
+        break;
+    }
+    CHECK(Contains(problem(rehashed), "hashes to"));
+
+    // Typed equality: a different zero sign between the observation and its descriptor refuses,
+    // although both hashes are recomputed (json::Value's == would call them equal).
+    const json::Value zeroSign = Observations(uuid, {}, [](json::Object& entry) {
+        std::get<json::Object>(std::get<json::Object>(entry.at("observations").data).at("parameters").data)["zero"] = -0.0;
+    });
+    CHECK(Contains(problem(zeroSign), "differs from the Filter descriptor's parameters"));
+
+    // A reference is the core codec's complete serialization; unknown keys survive, an asset-only
+    // object or a mistyped member refuses.
+    const auto filterReference = [](json::Object& entry) -> json::Object& {
+        return std::get<json::Object>(std::get<json::Object>(entry.at("binding").data).at("filter_reference").data);
+    };
+    const json::Value assetOnly = Observations(uuid, {}, [&](json::Object& entry) {
+        json::Object& reference = filterReference(entry);
+        reference = json::Object{{"asset", reference.at("asset")}};
+    });
+    CHECK(Contains(problem(assetOnly), "filter_reference"));
+    const json::Value mistyped =
+        Observations(uuid, {}, [&](json::Object& entry) { filterReference(entry)["params"] = std::string("x"); });
+    CHECK(Contains(problem(mistyped), "filter_reference"));
+    const json::Value nullPreset =
+        Observations(uuid, {}, [&](json::Object& entry) { filterReference(entry).erase("preset"); });
+    CHECK(Contains(problem(nullPreset), "filter_reference"));
+
+    // The stored context: no namespace inside its projection, and a census naming that projection's
+    // own mesh (contradiction refused although both hashes are recomputed).
+    const auto contextProject = [](json::Object& entry) -> json::Object& {
+        return std::get<json::Object>(std::get<json::Object>(entry.at("context").data).at("project").data);
+    };
+    const json::Value nested = Observations(uuid, {}, [&](json::Object& entry) {
+        contextProject(entry)[std::string(kFilterObservationsKey)] = json::Object{};
+    });
+    CHECK(Contains(problem(nested), "must exclude"));
+    const json::Value contradiction = Observations(uuid, {}, [&](json::Object& entry) {
+        std::get<json::Object>(contextProject(entry).at("mesh").data)["resource"] = Sha256Hex("other mesh");
+    });
+    CHECK(Contains(problem(contradiction), "mesh.resource"));
+    // The projection is a complete historical manifest: a missing core member, another schema or a
+    // non-canonical form refuses, although both hashes are recomputed; unknown keys are kept.
+    const json::Value missingCore =
+        Observations(uuid, {}, [&](json::Object& entry) { contextProject(entry).erase("texture_sets"); });
+    CHECK(Contains(problem(missingCore), "context.project"));
+    const json::Value otherSchema = Observations(
+        uuid, {}, [&](json::Object& entry) { contextProject(entry)["schema"] = std::string("uzpainter/other/1"); });
+    CHECK(Contains(problem(otherSchema), "context.project"));
+    const json::Value keptExtra = Observations(
+        uuid, {}, [&](json::Object& entry) { contextProject(entry)["x-future"] = std::string("kept"); });
+    CHECK(problem(keptExtra).empty());
+
+    // Decision 361's codec: a bool or an array parameter refuses, never coerced.
+    for (const json::Value& bad : {json::Value(true), json::Value(json::Array{1, 2})}) {
+        const json::Value coded =
+            Observations(uuid, [&](json::Object&, json::Object& filter) { std::get<json::Object>(filter.at("parameters").data)["bad"] = bad; });
+        CHECK(Contains(problem(coded), "expected an int64, finite double or string"));
+    }
+
+    // Links: a binding names its own entry and Filter UID; one context holds one entry.
+    json::Value rebound = Observations(uuid);
+    json::Object& bindings = At(rebound, "bindings");
+    bindings["12"] = bindings.at("11");
+    CHECK(Contains(problem(rebound), "bound to another Filter UID"));
+    json::Value dangling = Observations(uuid);
+    At(dangling, "bindings")["11"] = Sha256Hex("no entry");
+    CHECK(Contains(problem(dangling), "names no entry"));
+    json::Value twice = Observations(uuid);
+    json::Value other = Observations(uuid, {}, [](json::Object& entry) {
+        std::get<json::Object>(entry.at("observations").data)["image_outputs"] = json::Array{std::string("out")};
+    });
+    for (const auto& [key, entry] : At(other, "entries")) At(twice, "entries")[key] = entry;
+    CHECK(Contains(problem(twice), "conflicting observations"));
+
+    // The store: a stale entry (its UIDs name no node of the project) commits, saves and reopens;
+    // a foreign one is refused at commit; the reserved family is never a snapshot.
+    const fs::path path = CreateProject(WorkDir("filter-observations"));
+    {
+        Session s = OpenSession(path);
+        const std::string own = s.store->project_uuid();
+        const RequestOutcome foreign = s.store->Submit(*s.doc, Req("foreign", 0), [&](Edit& e) {
+            e.project().extra[std::string(kFilterObservationsKey)] = Observations("another-project");
+        });
+        CHECK(foreign.result && foreign.result->status == ResultStatus::failed);
+        CHECK(Contains(foreign.result->error, "project-private") && s.doc->revision() == 0);
+        const RequestOutcome stale = s.store->Submit(*s.doc, Req("stale", 0), [&](Edit& e) {
+            e.project().extra[std::string(kFilterObservationsKey)] = Observations(own);
+        });
+        CHECK(Committed(stale) && s.doc->revision() == 1);
+        const std::string reserved = "uzasset://observation/" + Sha256Hex("descriptor");
+        const RequestOutcome snapshot = s.store->Submit(*s.doc, Req("snapshot", 1), [&](Edit& e) {
+            s.store->RecordSnapshot(e, json::Object{{"asset", reserved}, {"version", std::string("1")}},
+                                    PlaneImage{1, 1, ChannelFormat::L32F, std::string(4, '\0')});
+        });
+        CHECK(snapshot.result && snapshot.result->status == ResultStatus::failed);
+        CHECK(Contains(snapshot.result->error, "reserved observation family") && s.doc->revision() == 1);
+        SnapshotEntry entry;
+        entry.signature = json::Object{{"asset", reserved}, {"version", std::string("1")}};
+        entry.key = Sha256Hex(json::WriteCanonical(entry.signature));
+        entry.project_uuid = own;
+        CHECK(Contains(SnapshotProblem(entry, own), "reserved observation family"));
+        CHECK(Committed(AddLayer(s, "after", 1)) && s.doc->revision() == 2);
+    }
+    {
+        Session reopened = OpenSession(path, OpenOptions{VerifyLevel::full, VersionPolicy::Current()});
+        CHECK(reopened.report.ok() && reopened.doc->revision() == 2);
+        CHECK(ProjectFilterObservationsProblem(*reopened.doc->snapshot().project, reopened.store->project_uuid())
+                  .empty());
+    }
+    // An older revision whose namespace is corrupt (its manifest hash kept coherent): the current
+    // revision still opens, and the full verification names the structural problem.
+    {
+        Container c = Container::Open(path);
+        json::Value manifest = json::Parse(StoredManifest(c, 1));
+        At(manifest, std::string(kFilterObservationsKey))["schema"] = std::string("uzpainter/other/1");
+        const std::string text = json::WriteCanonical(manifest);
+        Statement q(c, "UPDATE revision SET manifest = ?, manifest_sha256 = ? WHERE revision = 1");
+        q.BindBlob(1, Compress(text)).Bind(2, Sha256Hex(text)).Run();
+    }
+    Session tampered = OpenSession(path, OpenOptions{VerifyLevel::full, VersionPolicy::Current()});
+    CHECK(tampered.doc->revision() == 2 && tampered.report.corrupt.size() == 1);
+    CHECK(!tampered.report.corrupt.empty() && tampered.report.corrupt[0].kind == "filter_observations" &&
+          Contains(tampered.report.corrupt[0].detail, "schema"));
+}
+
 int Run(const std::string& only) {
     const std::vector<std::pair<const char*, std::function<void()>>> cases = {
         {"schema_and_pragmas", SchemaAndPragmas},     // 2.2
@@ -1318,6 +1540,7 @@ int Run(const std::string& only) {
         {"planes_interrupted_commit", PlanesInterruptedCommit},  // planes 3.6
         {"planes_corruption", PlanesCorruption},               // planes 3.7
         {"planes_binding_rules", PlanesBindingRules},          // planes 2.1, 2.5, 2.7
+        {"filter_observations", FilterObservations},           // decision 362, phase3.1 2.6g
     };
     int failed = 0;
     int ran = 0;

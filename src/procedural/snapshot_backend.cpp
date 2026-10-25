@@ -188,6 +188,9 @@ std::expected<SnapshotBackend, std::string> SnapshotBackend::Load(store::Project
 
 void SnapshotBackend::Add(const ProceduralRequest& request, SnapshotRaster raster,
                           std::optional<store::SourceMetadata> metadata) {
+    if (std::optional<UnsupportedProcedural> reserved = ObservationRefusal(request.asset)) {
+        throw core::ValueError("snapshot: " + reserved->Describe());
+    }
     m_snapshots[SignatureHash(request)] = Entry{SignatureJson(request), std::move(raster), std::move(metadata)};
 }
 
@@ -196,10 +199,11 @@ ParityStatus SnapshotBackend::Status(const core::AssetUrl&) const {
 }
 
 bool SnapshotBackend::CanEvaluate(const ProceduralRequest& request) const {
-    return !TileRefusal(request) && m_snapshots.contains(SignatureHash(request));
+    return !ObservationRefusal(request.asset) && !TileRefusal(request) && m_snapshots.contains(SignatureHash(request));
 }
 
 std::optional<UnsupportedProcedural> SnapshotBackend::Refusal(const ProceduralRequest& request) const {
+    if (auto reserved = ObservationRefusal(request.asset)) return reserved;
     if (auto tile = TileRefusal(request)) return tile;
     if (m_snapshots.contains(SignatureHash(request))) return std::nullopt;
     UnsupportedProcedural refusal = Refuse(AssetName(request), kNoSnapshot);
@@ -222,6 +226,7 @@ std::optional<UnsupportedProcedural> SnapshotBackend::Refusal(const ProceduralRe
 
 std::expected<const SnapshotRaster*, UnsupportedProcedural> SnapshotBackend::Stored(
     const ProceduralRequest& request) const {
+    if (auto reserved = ObservationRefusal(request.asset)) return Refused(*reserved);
     const auto found = m_snapshots.find(SignatureHash(request));
     if (found == m_snapshots.end()) return Refused(*Refusal(request));
     return &found->second.raster;
@@ -229,6 +234,7 @@ std::expected<const SnapshotRaster*, UnsupportedProcedural> SnapshotBackend::Sto
 
 std::expected<store::SourceMetadata, UnsupportedProcedural> SnapshotBackend::Metadata(
     const ProceduralRequest& request) const {
+    if (auto reserved = ObservationRefusal(request.asset)) return Refused(*reserved);
     const auto found = m_snapshots.find(SignatureHash(request));
     if (found == m_snapshots.end()) return Refused(*Refusal(request));
     if (!found->second.metadata) return Refused(Refuse(AssetName(request), kNoImageOutputs));

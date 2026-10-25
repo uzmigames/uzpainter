@@ -8,6 +8,7 @@
 #include "store/blobs.h"
 #include "store/bundle_codec.h"
 #include "store/integrity.h"
+#include "store/filter_observations.h"
 #include "store/snapshots.h"
 #include "uzp_core/document/nodes.h"
 #include "uzp_core/manifest/manifest.h"
@@ -135,12 +136,16 @@ void WalkPaint(const Value& value, const std::string& path, std::optional<Id> ow
 
 /// The paint objects of the manifest's nodes and the procedural snapshot entries (`snapshots.h`:
 /// each entry holds one `plane` and its `plane_versions`, as a mask-stack paint object does), in
-/// document order. The snapshot signatures are not walked for paint objects.
+/// document order. The snapshot signatures and the top-level Filter source observations are not
+/// walked for paint objects.
 std::vector<PaintPlanes> ManifestPaintPlanes(const Value& manifest) {
     std::vector<PaintPlanes> out;
     const auto* top = std::get_if<Object>(&manifest.data);
     if (top == nullptr) return out;
     for (const auto& [key, member] : *top) {
+        // The top-level Filter source observations hold a project projection, never live paint
+        // objects (filter_observations.h); only that top-level key is skipped.
+        if (key == kFilterObservationsKey) continue;
         if (key != kSnapshotsKey) {
             WalkPaint(member, key, std::nullopt, out);
             continue;

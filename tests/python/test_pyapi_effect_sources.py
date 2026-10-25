@@ -125,6 +125,67 @@ result = errors
     assert "active_output requires" in errors["active output"], errors
 
 
+@pytest.fixture
+def observations_project(run: Run, export_tests: Path, tmp_path: Path) -> None:  # noqa: F811
+    """The effects layout with every procedural reference pinned in the reserved observation family
+    (decision 362) and no observation namespace: nothing binds them."""
+    ok(
+        run("""
+create(128)
+project.save_as(WORK + "/observations.uzp")
+project.close()
+result = True
+""")
+    )
+    process = subprocess.run(
+        [str(export_tests), "procedural-observations", str(tmp_path / "observations.uzp")],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert process.returncode == 0, process.stdout + process.stderr
+
+
+@pytest.mark.parametrize("api", ["run", "facade"])
+def test_reserved_observation_sources_have_no_legacy_reading(
+    api: str, request: pytest.FixtureRequest, observations_project: None
+) -> None:
+    """Phase3.1 item 2.6g: a host fill source, a generator and a Filter pinned in the reserved
+    observation family, without a binding, refuse the three getters and a valid no-op
+    `set_parameters` with UnsupportedProcedural, leaving the revision unchanged: no pin,
+    parameters or outputs are fabricated (the observed getters are item 2.6h)."""
+    execute: Run = request.getfixturevalue(api)
+    script = """
+uzpainter.project.open(WORK + "/observations.uzp")
+host = ls.get_root_layer_nodes(ts.get_active_stack())[0]
+generator, filter_, empty = host.content_effects()
+
+def refusals(handle, parameters):
+    revision = uzpainter.project.revision()
+    errors = [
+        raises(handle.get_parameters),
+        raises(lambda: handle.resource_id if FACADE else handle.resource_id()),
+        raises(lambda: handle.image_outputs),
+        raises(handle.set_parameters, parameters),
+    ]
+    return {"errors": errors, "unchanged": uzpainter.project.revision() == revision}
+
+result = {
+    "filter": refusals(filter_.get_source(), {"radius": 2.0}),
+    "generator": refusals(generator.get_source(), {"amount": 0.25}),
+    "host": refusals(host.get_source(ts.ChannelType.BaseColor), {"amount": 0.5}),
+}
+uzpainter.project.close()
+"""
+    outcome = ok(execute(f"FACADE = {api == 'facade'!r}\n" + script))
+    for source, observed in outcome.items():
+        assert observed["unchanged"] is True, source
+        for error in observed["errors"]:
+            assert error is not None and error.startswith("UnsupportedProcedural:"), (source, error)
+            assert "reserved observation family" in error, (source, error)
+
+
 @pytest.mark.parametrize("api", ["run", "facade"])
 def test_effect_source_transactions_roll_back_and_handles_go_stale(
     api: str, request: pytest.FixtureRequest, effects_project: None

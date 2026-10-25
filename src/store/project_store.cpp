@@ -6,6 +6,7 @@
 
 #include "store/blobs.h"
 #include "store/bundle.h"
+#include "store/filter_observations.h"
 #include "uzp_core/manifest/manifest.h"
 #include "uzp_core/manifest/sha256.h"
 #include "uzp_core/types/errors.h"
@@ -289,6 +290,7 @@ void ProjectStore::Commit(const core::Snapshot& snapshot, const core::OperationR
     planes_.clear();
     std::vector<CommitExtension> extensions{[&planes, this](Container& container, const core::Snapshot& committed) {
         CheckSnapshots(*committed.project, project_uuid_);
+        CheckFilterObservations(*committed.project, project_uuid_);
         WritePlaneRows(container, planes, committed);
     }};
     extensions.insert(extensions.end(), extensions_.begin(), extensions_.end());
