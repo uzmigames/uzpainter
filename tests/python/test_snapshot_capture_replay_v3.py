@@ -5,8 +5,9 @@ The project is a private derived artifact like the legacy /2 one
 toggle 1 snapshots whose metadata keeps the typed effective parameters and the observed
 ResourceID, with the initial signature bound by `assets bind-snapshot` (fill uid 6, User0). It is
 resolved from the private oracle store by hash and size, verified after the copy and only then
-opened; without it the test skips as `oracle_unavailable`. The legacy module's replay (recorder
-serializers by AST, recording 1, save/close/reopen, recording 2) runs unchanged. Here no known
+opened; without it the test skips as `oracle_unavailable`. The replay (recorder serializers by
+AST, recording 1, save/close/reopen, recording 2) runs under the capability trace
+(`snapshot_replay_trace.py`), one output mark per recording and step. Here no known
 difference is allowed: every step, `resource_id` and parameter types included, must equal its
 recording. Messages name only the condition, step, call and digests.
 """
@@ -22,12 +23,12 @@ from typing import Any
 import pytest
 
 from tests.python.conftest import Run
+from tests.python.snapshot_replay_trace import finalize_trace, replay_traced
 from tests.python.test_snapshot_capture_replay import (
     PROBES,
     digest,
     expected,
     private_dir,
-    replay,
     typed,
 )
 from tools.parity.store.store import Status, locate, resolve_oracle
@@ -79,7 +80,7 @@ def captured_project(tmp_path: Path) -> Path:
 def test_recorded_source_steps_replay_exactly(
     private_facade: Run, captured_project: Path, name: str
 ) -> None:
-    observed, steps = replay(private_facade, name)
+    observed, steps, trace = replay_traced(private_facade, name)
     calls = {f"s{s['step']}": str(s["call"]).rsplit(".", 2)[-2:] for s in steps}
     mismatches: list[str] = []
     details: dict[str, Any] = {}
@@ -101,3 +102,6 @@ def test_recorded_source_steps_replay_exactly(
     if mismatches:
         summary = [f"{len(mismatches)} replay differences:", *mismatches]
         pytest.fail("\n".join(summary), pytrace=False)
+    # Decision 112: only after every compared output is equal are the traced symbols of those
+    # outputs (bookkeeping and setup excluded) checked against tools/capabilities/tier0-trace.json.
+    finalize_trace(name, steps, expected(name, steps), observed, trace)

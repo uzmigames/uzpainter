@@ -317,8 +317,13 @@ None, refusals before mutation and save/reopen. Its pins are synthetic test refe
 `tests/python/test_pyapi_substance_sources.py` exercises both APIs with two authored
 snapshots whose float32 rasters differ. It verifies exact exports after edits, save/reopen,
 reversion and failed transactions against an independent float32 readout calculation,
-and verifies the alternate source's stored bytes separately. These API entries remain
-`pending-evidence` until a traced compared replay promotes them (decision 112).
+and verifies the alternate source's stored bytes separately. The `SourceSubstance` symbols the
+strict replay exercises are `supported` (decision 112, `facade/snapshot-v3/*` in
+`tools/capabilities/tier0-trace.json`): the class and its `active_output`, `get_parameters`,
+`get_preset_list`, `get_properties`, `image_inputs`, `image_outputs`, `resolution`,
+`resource_id` and `set_parameters`, with `Property.properties` for recorded sources. Every
+other source entry keeps its own status: effect-source reads stay `pending-evidence`, and
+insertion, `set_source`/`remove_source`, presets and arbitrary `.sbsar` stay release gaps.
 The current compared evidence is the strict replay of the own-Painter `/3` capture described
 under "Recorded source metadata": 138 fill-source operations of three admitted probes, all exact
 in both recordings, including `resolution.value` (a list) and `resource_id`. That

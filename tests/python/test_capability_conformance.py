@@ -263,7 +263,9 @@ def recipes() -> dict[Any, tuple[str, str]]:
         ):
             r[f"{root}.baking.BakingParameters.{name}"] = (params, call)
         meta = "b.common()['CageMode'].properties()"
-        r[f"{root}.properties.Property.properties"] = (params, meta)
+        # A baking parameter's meta properties stay a release gap (decision 323); a recorded
+        # snapshot source's Property returns the observed ones (supported, context any).
+        r[(f"{root}.properties.Property.properties", "baking-parameter")] = (params, meta)
     facade_params = "b = sp.baking.BakingParameters.from_texture_set(ts.all_texture_sets()[0])"
     r[("substance_painter.properties.Property.value", "default-unestablished")] = (
         "sp.project.close()\n"
