@@ -25,6 +25,12 @@
 //       (decisions 286, 308) As `export`, through the diagnostic measure export (`EncodeExport`
 //       with `DiagnosticMeasure`): prints {"written": [{relativePath, path, bypassed: [refusal],
 //       undecided: texels}]} or {"error": class, "message": text}. Not conformant.
+//   uzp-export-tests tga-processing-candidate <templates dir> <spec.json> <candidate-png8.json> <out.tga>
+//       TEST-ONLY diagnostic candidate: the spec's one planned PNG 8 file through the diagnostic
+//       measure export, its native PNG codes written unchanged as RLE TGA8; prints {"model":
+//       "native-png8-processing-candidate", "non_conformant": true, "planned", "png8_sha256",
+//       "tga": {sha256, size, width, height, channels}, "bypassed", "undecided"} or the same
+//       model fields with {"error": class, "message"}. Never conformity; TGA stays refused.
 //   uzp-export-tests export-backend <cpu|dx12|vulkan> <templates> <spec.json> <config.json>
 //       Normal WriteExport using the requested tile store; Vulkan uses the qualified native
 //       test seam only. Reports backend/adapter and real file hashes; unavailable GPU exits 77.
@@ -120,6 +126,8 @@
 #include "evaluator/arith.h"
 #include "evaluator/cpu_store.h"
 #include "evaluator/evaluator.h"
+#include "evaluator/error.h"
+#include "python/stack_sync.h"
 #include "evaluator/formats.h"
 #include "evaluator/gpu_store.h"
 #include "evaluator/profile.h"
@@ -801,6 +809,175 @@ exporter::PngImage DecodePng(const std::string& data) {
         std::memcpy(image.samples.data(), bytes.data(), size);
     }
     return image;
+}
+
+/// `tga-processing-candidate`: a TEST-ONLY diagnostic candidate, never a product route (TGA stays
+/// refused by the plan compiler). The spec's single planned PNG 8 file is encoded in memory by
+/// the diagnostic measure export (`EncodeExport` with `DiagnosticMeasure`, decisions 286 and 308,
+/// not conformant), its native PNG bytes are decoded, and their 8-bit codes are written unchanged
+/// as RLE TGA8. No oracle is read. Every report carries `model` and `non_conformant: true`; a
+/// refusal keeps its class and reason (a blocked map, e.g. AO_Mixed, is never a success).
+int RunTgaProcessingCandidate(const fs::path& templatesDir, const fs::path& specPath, const fs::path& configPath,
+                              const fs::path& outPath) {
+    json::Object result{{"model", "native-png8-processing-candidate"}, {"non_conformant", true}};
+    // Where a refusal happened: parse_spec, compile_plan, encode_export, decode_png, encode_tga or
+    // write_tga. A Setup refusal is this harness's own validation of its inputs.
+    std::string stage = "parse_spec";
+    const auto refuse = [&](std::string error, std::string message) {
+        // Blocked only for the typed plan refusal (`reason_code`); any other error is a failure.
+        result["blocked"] = result.contains("reason_code");
+        result["error"] = std::move(error);
+        result["stage"] = stage;
+        result["message"] = std::move(message);
+        std::cout << json::WriteCanonical(result) << "\n";
+        return 0;
+    };
+    // Context of a plan refusal: the virtual maps the configuration names that the plan compiler's
+    // own table marks as release gaps (virtual_maps.h `Support`, e.g. AO_Mixed, decision 131).
+    std::vector<std::string> releaseGapMaps;
+    try {
+        Spec spec = ParseSpec(specPath);
+        // The base values the evaluation reads are the spec's template, as a project records them.
+        spec.project.settings.template_id = spec.templateId;
+        // Painter's insert defaults first (python/stack_sync.h `ApplyDefaultBlending`, decision 115),
+        // then the authored per-channel blending of the spec over them; ParseSpec stays unchanged.
+        const std::function<void(std::vector<core::Layer>&, const std::map<ChannelType, core::Channel>&)> hydrate =
+            [&](std::vector<core::Layer>& layers, const std::map<ChannelType, core::Channel>& channels) {
+                for (core::Layer& layer : layers) {
+                    if (layer.kind == core::LayerKind::fill) {
+                        const core::ChannelBlending authored = layer.blending;
+                        layer.blending.clear();
+                        python::ApplyDefaultBlending(layer.blending, channels);
+                        for (const auto& [channel, blend] : authored) layer.blending.insert_or_assign(channel, blend);
+                    }
+                    hydrate(layer.children, channels);
+                }
+            };
+        for (core::TextureSet& set : spec.project.texture_sets) {
+            for (core::Stack& stack : set.stacks) hydrate(stack.root_layers, stack.channels);
+        }
+        // The hydrated blending of every fill (authored-spec metadata, no oracle value).
+        json::Array blendings;
+        const std::function<void(const std::vector<core::Layer>&)> report = [&](const std::vector<core::Layer>& layers) {
+            for (const core::Layer& layer : layers) {
+                if (layer.kind == core::LayerKind::fill) {
+                    json::Object channels;
+                    for (const auto& [channel, blend] : layer.blending) {
+                        channels[std::string(core::ToString(channel))] =
+                            json::Array{std::string(core::ToString(blend.mode)), blend.opacity};
+                    }
+                    blendings.push_back(json::Object{{"layer", static_cast<std::int64_t>(layer.uid)},
+                                                     {"blending", std::move(channels)}});
+                }
+                report(layer.children);
+            }
+        };
+        for (const core::TextureSet& set : spec.project.texture_sets) {
+            for (const core::Stack& stack : set.stacks) report(stack.root_layers);
+        }
+        result["fill_blending"] = std::move(blendings);
+        if (!spec.mesh || !spec.geometry) return refuse("Setup", "the spec needs a texturing mesh (\"mesh\")");
+        stage = "compile_plan";
+        const std::string configText = ReadText(configPath);
+        // Classified only by the exception this call raises: any NotYetSupported of the plan
+        // compiler (a release-gap map, colour management, workflow or preset alike). The
+        // release-gap virtual maps the configuration names are context, never the cause.
+        std::optional<exporter::ExportPlan> compiled;
+        try {
+            compiled = exporter::CompilePlan(spec.project, configText);
+        } catch (const core::NotYetSupported& e) {
+            result["reason_code"] = "compile_plan_not_yet_supported";
+            try {
+                for (const exporter::PresetSpec& preset : exporter::ParseConfig(std::string_view(configText)).exportPresets) {
+                    for (const exporter::MapSpec& map : preset.maps) {
+                        for (const exporter::ChannelSpec& channel : map.channels) {
+                            const auto virtualMap = channel.type == exporter::SourceType::virtualMap
+                                                        ? exporter::ParseVirtualMap(channel.name)
+                                                        : std::nullopt;
+                            if (virtualMap && !exporter::Support(*virtualMap).supported &&
+                                std::find(releaseGapMaps.begin(), releaseGapMaps.end(), channel.name) ==
+                                    releaseGapMaps.end()) {
+                                releaseGapMaps.push_back(channel.name);
+                            }
+                        }
+                    }
+                }
+            } catch (const std::exception&) {
+                // Context only: a configuration the parser itself refuses names no maps here.
+                releaseGapMaps.clear();
+            }
+            if (!releaseGapMaps.empty()) {
+                result["release_gap_virtual_maps"] = json::Array(releaseGapMaps.begin(), releaseGapMaps.end());
+            }
+            return refuse("NotYetSupported", e.what());
+        }
+        const exporter::ExportPlan& plan = *compiled;
+        if (plan.files.size() != 1) return refuse("Setup", "the configuration must plan exactly one file");
+        const json::Value planned = json::Value(std::get<json::Array>(
+            std::get<json::Object>(exporter::PlanJson(plan).data).at("files").data).front());
+        const exporter::PlannedFile& file = plan.files.front();
+        if (!file.parameters || file.parameters->fileFormat != exporter::FileFormat::png ||
+            file.parameters->bitDepth != exporter::BitDepth::u8) {
+            return refuse("Setup", "the planned file must be a PNG at bit depth 8");
+        }
+        auto templates = std::make_shared<const evaluator::TemplateLibrary>(evaluator::TemplateLibrary::Load(templatesDir));
+        evaluator::CpuEvaluator cpu(templates, evaluator::AdmissionLimits{64ull << 30, 1 << 20});
+        exporter::SourceInputs inputs;
+        inputs.templateId = spec.templateId;
+        inputs.resources = spec.resources;
+        inputs.geometry = spec.geometry;
+        const exporter::DiagnosticMeasure diagnostic{spec.mesh};
+        stage = "encode_export";
+        const render::Result<std::vector<exporter::EncodedFile>> encoded = exporter::EncodeExport(
+            spec.project, 1, plan, inputs, *templates, cpu.store(), cpu.cache(), &diagnostic);
+        if (!encoded) {
+            // The genuine error identities only: the render code and, for an evaluator failure,
+            // its kind and the class the API raises for it. An encoder fault is never a gap.
+            result["code"] = std::string(render::ErrorCodeName(encoded.error().code));
+            if (const auto kind = evaluator::EvalErrorKindOf(encoded.error())) {
+                result["eval_kind"] = std::string(evaluator::EvalErrorKindName(*kind));
+                result["eval_class"] = std::string(evaluator::ErrorClassName(*kind));
+            }
+            return refuse("Failure", encoded.error().reason);
+        }
+        const exporter::EncodedFile& png = encoded->front();
+        stage = "decode_png";
+        const exporter::PngImage decoded = DecodePng(png.bytes);
+        if (decoded.bitDepth != 8) return refuse("Setup", "the native file is not an 8-bit PNG");
+        // The native codes, unchanged: no colour conversion, quantization or alpha removal.
+        exporter::TgaImage image{decoded.width, decoded.height, decoded.channels,
+                                 std::vector<uint8_t>(decoded.samples.begin(), decoded.samples.end())};
+        stage = "encode_tga";
+        const std::string tga = exporter::EncodeTga(image);
+        if (tga != exporter::EncodeTga(image)) return refuse("Failure", "TGA8: nondeterministic encoding");
+        stage = "write_tga";
+        std::ofstream output(outPath, std::ios::binary);
+        output.write(tga.data(), static_cast<std::streamsize>(tga.size()));
+        output.close();
+        if (!output) return refuse("Failure", "TGA8: candidate output write failed");
+        json::Array bypassed;
+        for (const std::string& refusal : png.bypassed) bypassed.push_back(refusal);
+        const json::Object& plannedFile = std::get<json::Object>(planned.data);
+        result["planned"] = json::Object{{"parameters", plannedFile.at("parameters")}, {"width", plannedFile.at("width")}};
+        result["png8_sha256"] = core::Sha256Hex(png.bytes);
+        result["tga"] = json::Object{{"sha256", core::Sha256Hex(tga)},
+                                     {"size", static_cast<std::int64_t>(tga.size())},
+                                     {"width", static_cast<std::int64_t>(image.width)},
+                                     {"height", static_cast<std::int64_t>(image.height)},
+                                     {"channels", static_cast<std::int64_t>(image.channels)}};
+        result["bypassed"] = std::move(bypassed);
+        result["undecided"] = static_cast<std::int64_t>(png.undecided);
+    } catch (const core::ValueError& e) {
+        return refuse("ValueError", e.what());
+    } catch (const core::NotYetSupported& e) {
+        // Raised outside the plan compiler's call: no reason code.
+        return refuse("NotYetSupported", e.what());
+    } catch (const std::exception& e) {
+        // Malformed inputs, manifests or encoder faults: never a blocked map, never a success.
+        return refuse("InternalError", e.what());
+    }
+    std::cout << json::WriteCanonical(result) << "\n";
+    return 0;
 }
 
 int RunReencode(const fs::path& listPath) {
@@ -1648,6 +1825,9 @@ int main(int argc, char** argv) {
             return RunExport(args[1], args[2], args[3], fs::path(args[5]));
         }
         if (args.size() == 4 && args[0] == "export-diagnostic") return RunExportDiagnostic(args[1], args[2], args[3]);
+        if (args.size() == 5 && args[0] == "tga-processing-candidate") {
+            return RunTgaProcessingCandidate(args[1], args[2], args[3], args[4]);
+        }
         if (args.size() == 2 && args[0] == "reencode") return RunReencode(args[1]);
         if (args.size() == 2 && args[0] == "roundtrip") return RunRoundtrip(args[1]);
         if (args.size() == 2 && args[0] == "process") return RunProcess(args[1]);
@@ -1661,7 +1841,9 @@ int main(int argc, char** argv) {
     }
     std::cerr << "usage: uzp-export-tests plan <cases.json> | files <templates> <spec.json> <config.json> <out> | "
                  "export <templates> <spec.json> <config.json> | "
-                 "export-diagnostic <templates> <spec.json> <config.json> | reencode <list.txt> | roundtrip <out> | "
+                 "export-diagnostic <templates> <spec.json> <config.json> | "
+                 "tga-processing-candidate <templates> <spec.json> <candidate-png8.json> <out.tga> | "
+                 "reencode <list.txt> | roundtrip <out> | "
                  "[--fault <point>[:<n>]] publish <templates> <spec.json> <config.json> "
                  "[--uztexture <relativePath>[:fail|:rgb]] [--presets <dir>] [--dds <requests.json>] "
                  "[--execution-error <reason>] [--publication-checkpoint <call>] | "

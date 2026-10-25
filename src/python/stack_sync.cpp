@@ -111,15 +111,6 @@ bool Erase(std::vector<core::Layer>& layers, core::Id uid) {
 
 }  // namespace
 
-void ApplyDefaultBlending(core::ChannelBlending& blending, const std::map<core::ChannelType, core::Channel>& channels) {
-    if (channels.contains(core::ChannelType::Height)) {
-        blending[core::ChannelType::Height] = core::Blending{core::BlendingMode::LinearDodge, 1.0, {}};
-    }
-    if (channels.contains(core::ChannelType::Normal)) {
-        blending[core::ChannelType::Normal] = core::Blending{core::BlendingMode::NormalMapDetail, 1.0, {}};
-    }
-}
-
 void ApplyDefaultSources(core::FillContent& fill, const std::map<core::ChannelType, core::Channel>& channels) {
     const auto set = [&](core::ChannelType channel, double value) {
         if (channels.contains(channel)) fill.sources[channel] = Uniform({value, value, value}, "Working");

@@ -53,8 +53,17 @@ void RemoveNode(core::Project& project, core::Id uid);
 /// Painter's per-channel blending of a new fill, fill effect or group in a content stack (the
 /// effective defaults of every inserted node in the Tier 0 api-probes; decision 115): Height blends
 /// LinearDodge and Normal NormalMapDetail where the stack has the channel; every other channel
-/// keeps the default `core::Blending`, Normal at opacity 1.
-void ApplyDefaultBlending(core::ChannelBlending& blending, const std::map<core::ChannelType, core::Channel>& channels);
+/// keeps the default `core::Blending`, Normal at opacity 1. Inline so that test harnesses outside
+/// the Python API (`uzp-export-tests tga-processing-candidate`) apply the same rule.
+inline void ApplyDefaultBlending(core::ChannelBlending& blending,
+                                 const std::map<core::ChannelType, core::Channel>& channels) {
+    if (channels.contains(core::ChannelType::Height)) {
+        blending[core::ChannelType::Height] = core::Blending{core::BlendingMode::LinearDodge, 1.0, {}};
+    }
+    if (channels.contains(core::ChannelType::Normal)) {
+        blending[core::ChannelType::Normal] = core::Blending{core::BlendingMode::NormalMapDetail, 1.0, {}};
+    }
+}
 
 /// The sources Painter's new fill in a content stack holds, its active channels empty (decision
 /// 115): BaseColor uniform 0.8 and Height 0, working-space values, where the stack has the

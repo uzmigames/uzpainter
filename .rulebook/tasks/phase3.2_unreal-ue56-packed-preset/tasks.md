@@ -285,3 +285,34 @@ AO's 32 operand/product preconditions and 96 stability checks pass, but all
 16 frozen predictions and 16 of 24 cross-set comparisons fail with two samples
 each (`parity/reports/phase1/ao-mesh-product-control.md`). AO_Mixed remains
 refused. No task acceptance or capability promotion follows from admission.
+
+## 15. Diagnostic TGA8 processing candidate, test-only (2026-10-25)
+
+`uzp-export-tests tga-processing-candidate <templates> <spec.json> <candidate-png8.json> <out.tga>`
+(tests/export/export_test.cpp) is a diagnostic route in the test binary only. After `ParseSpec`
+it sets the project's template to the spec's. It then hydrates every fill's blending with Painter's
+insert defaults (`ApplyDefaultBlending`, decision 115; now inline in `python/stack_sync.h`, with the
+same rule and callers) and applies the authored blending over them. It encodes the
+spec's single planned PNG 8 file in memory through the diagnostic measure export (`EncodeExport`
+with `DiagnosticMeasure`, decisions 286 and 308; not conformant), decodes those native PNG bytes
+and writes their 8-bit codes unchanged as RLE TGA8 (`EncodeTga`). It reads no oracle. `ParseFormat`,
+`FormatOwner`, the plan, provenance, presets and capabilities are unchanged: the product still
+refuses TGA (R-322). No bypass or padding change.
+
+Report: always `model: native-png8-processing-candidate` and `non_conformant: true`. Success adds
+`planned` (parameters, width), `png8_sha256`, `tga` (sha256, size, width, height, channels),
+`bypassed`, `undecided` and `fill_blending`. A refusal adds `error` (Setup, ValueError,
+NotYetSupported, Failure or InternalError), `stage`, `message` and `blocked`. `blocked` is true only
+for a NotYetSupported raised by the `CompilePlan` call (`reason_code: compile_plan_not_yet_supported`,
+with any release-gap virtual maps the configuration names as context). Failure adds the render
+`code` and, for an evaluator failure, `eval_kind` and `eval_class`. A diagnostic success is never
+conformity.
+
+Authored CPU evidence (`tests/export/test_tga_processing_candidate.py`, 3 tests, final run 3 passed;
+earlier runs predate the error contract and the hydration): RGBA and grey candidates match the
+PNG 8 bytes `export-diagnostic` writes to disk. Pillow decodes the TGA and that PNG to the same
+size, layout, alpha and orientation, code for code, and reruns are deterministic. Refusals keep the
+model fields and stages (Setup, AO_Mixed and TGA as typed blocked plan refusals, malformed
+configuration as ValueError). Default and authored blending are hydrated. The API default-blending
+test passed after the extraction. The comparison with the admitted Painter TGA8 oracles is the
+router's separate replay. Channel, alias and blending hydration are resolved; it waits on the documented `SourceBitmap` colour-space defaults (a probe the router is outlining), so no oracle replay has run. Item 2.5 stays open.
