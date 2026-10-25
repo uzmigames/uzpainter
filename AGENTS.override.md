@@ -44,7 +44,12 @@ say otherwise.
   (`scripts/tmp`, per-task or per-run subfolders).
 - Throwaway files (logs, JUnit XML, diagnostic dumps, scratch scripts) go **directly** in the
   existing `tmp/scratch/` folder, with no subfolders. Delete your own files there once the
-  work is committed. Pytest's own `tmp_path` is allowed; do not pass a new `--basetemp`.
+  work is committed.
+- Two exceptions live outside the repository because `parity/CONTRACT.md` §6.4 forbids private
+  stores, test stores included, inside its tree: the private Painter oracle (store and inbox
+  under `%LOCALAPPDATA%\UzPainter`; delete an inbox run once it is admitted), and pytest's own
+  `tmp_path` folder, which keeps only the latest run (`tmp_path_retention_count = 1`). Do not
+  pass `--basetemp`, and do not set `PYTEST_DEBUG_TEMPROOT`.
 - **Helper scripts live in the repository** (owner, 2026-10-24). A script used more than once, or
   cited by a report, task, decision or coordination note, goes into `tools/` or `scripts/` and is
   committed with its first use. Only one-shot scripts may sit in `tmp/scratch/`. Before any

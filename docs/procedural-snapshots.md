@@ -189,12 +189,14 @@ snapshot records `["scalar", "aux"]`. Exports are unchanged.
 A stored generator or filter effect returns its procedural from `get_source()` as a fresh
 `SourceSubstance`, or `None` when the effect has none, as documented. The handle reads
 the effect's parameters, its pinned UzPainter identity and its explicit resolution
-override through the same accessors as a fill source. `active_output` is refused because
-an effect handle has no channel, and inferring one from the output mapping would be a guess.
+override through the same accessors as a fill source. On a filter source, `active_output`
+raises `EditionContextException` ("Only valid in single channel context"), as Painter does.
+On a generator source, whose Painter behaviour is unrecorded, it stays refused.
 
-Setting the resolution of a filter's source raises `ValueError` before any other check
-(A-PYDOC: the setter raises for a source used in a `FilterEffectNode`). The stored document
-already rejects a filter resolution override. No backend evaluates generator or filter effects yet. Every
+Reading or setting the resolution of a filter's source raises `ValueError` ("Resolution
+property is not available on a FilterEffectNode.") before any other check. This is what
+Painter does in `tier0/api-probes/source-substance-booleans-filter`, r1 and r2; A-PYDOC
+documents only the setter. The stored document already rejects a filter resolution override. No backend evaluates generator or filter effects yet. Every
 other edit therefore fails the transaction's final-state support check with
 `NotYetSupported`, naming `phase3.2_proc-generator-families` or
 `phase3.2_proc-filter-families`. The revision is unchanged, and nothing is clamped or

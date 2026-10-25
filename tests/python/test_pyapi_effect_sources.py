@@ -79,10 +79,11 @@ assert generator.get_parameters() == parameters
 assert filter_.get_parameters() == {"radius": 2.0}
 read = generator.resolution
 assert read.mode == custom and tuple(read.value) == (256, 256) and read.log2_offset == 0
-if FACADE:
-    assert raises(getattr, filter_, "resolution").startswith("UnsupportedProcedural:")
-else:
-    assert filter_.resolution is None
+# Recorded in Painter (tier0/api-probes/source-substance-booleans-filter, r1 and r2).
+unavailable = "ValueError: Resolution property is not available on a FilterEffectNode."
+assert raises(getattr, filter_, "resolution") == unavailable
+single = "EditionContextException: Only valid in single channel context"
+assert raises(getattr, filter_, "active_output") == single
 assert "active_output requires" in raises(getattr, generator, "active_output")
 assert raises(getattr, generator, "image_outputs").startswith("UnsupportedProcedural:")
 
@@ -107,9 +108,10 @@ uzpainter.project.close()
 result = errors
 """
     errors = ok(execute(f"FACADE = {api == 'facade'!r}\n" + script))
-    # The documented ValueError precedes every other check of a filter's resolution.
-    assert errors["filter resolution"].startswith("ValueError:"), errors
-    assert "FilterEffectNode" in errors["filter resolution"], errors
+    # Painter's ValueError precedes every other check of a filter's resolution.
+    assert errors["filter resolution"] == (
+        "ValueError: Resolution property is not available on a FilterEffectNode."
+    ), errors
     # No backend evaluates generator or filter effects yet: edits are refused, naming the owner.
     assert errors["generator parameters"].startswith("NotYetSupported:"), errors
     assert "phase3.2_proc-generator-families" in errors["generator parameters"], errors

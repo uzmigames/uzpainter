@@ -179,6 +179,17 @@ core::ProceduralRef& EditProcedural(core::Edit& edit, const SourceSubstance& s) 
     return *effect.procedural;
 }
 
+/// True for the source of a filter effect.
+bool FilterSource(const SourceSubstance& s) {
+    return s.effect && ProceduralEffectOf(Resolve(*Read(), s.node), s.node).kind == core::EffectKind::filter;
+}
+
+/// Painter raises this ValueError from both the getter and the setter of a filter source's
+/// resolution (python-doc; `tier0/api-probes/source-substance-booleans-filter`, r1 and r2).
+void CheckResolutionAvailable(const SourceSubstance& s) {
+    if (FilterSource(s)) throw core::ValueError("Resolution property is not available on a FilterEffectNode.");
+}
+
 core::json::Object SourceArgs(const SourceSubstance& s) {
     core::json::Object args = s.effect ? NodeArgs(s.node) : NodeArgs(s.node, s.channel);
     if (s.effect) args["effect"] = true;
@@ -581,6 +592,9 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
 
     const auto read_procedural = [](const SourceSubstance& s) { return ReadProcedural(s); };
     const auto output_key = [](const SourceSubstance& s, const core::ProceduralRef& ref) {
+        // Observed on a filter source (`source-substance-booleans-filter`); a generator source's
+        // behaviour is unrecorded and stays refused below.
+        if (FilterSource(s)) ThrowEditionContext("Only valid in single channel context");
         if (!s.channel || ref.output_mapping.size() != 1) {
             ThrowNotYetSupported("active_output requires an explicit single-channel procedural source");
         }
@@ -675,6 +689,7 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
         })
         .def_property("resolution", [read_procedural](const SourceSubstance& s) -> py::object {
             const auto ref = read_procedural(s);
+            CheckResolutionAvailable(s);
             if (!ref.resolution_override) return py::none();
             SourceResolutionOverride result{SourceResolutionMode::Auto, {128, 128}, 0};
             if (const auto* legacy = std::get_if<core::Resolution>(&*ref.resolution_override)) {
@@ -697,10 +712,7 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
             return py::cast(result);
         }, [read_procedural](const SourceSubstance& s, const SourceResolutionOverride& value) {
             read_procedural(s);
-            // python-doc: the setter raises ValueError for a source used in a FilterEffectNode.
-            if (s.effect && ProceduralEffectOf(Resolve(*Read(), s.node), s.node).kind == core::EffectKind::filter) {
-                throw core::ValueError("the resolution of a source used in a FilterEffectNode cannot be set");
-            }
+            CheckResolutionAvailable(s);
             CheckSourceResolution(value);
             auto args = SourceArgs(s);
             args["mode"] = static_cast<int>(value.mode);

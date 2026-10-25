@@ -1,0 +1,271 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/api-probes/source-substance-booleans-filter",
+  "tier": "0",
+  "domain": "tier0/api-probes/source-substance-booleans-filter",
+  "description": "SourceSubstance booleans and FilterEffectNode restriction: the fill source's first Togglebutton property set to 1, True, 0 and False with get_parameters after each, then a starter Blur filter's source getters and Custom128/Auto resolution assignments, repeated after save/reopen. The parameter is chosen in Painter; no asset parameter name, default or value is authored.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 128
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User0",
+          "format": "L32F"
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "position": "top"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 3,
+          "channels": [
+            "User0"
+          ]
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "User0",
+          "resource_url": "resource://starter_assets/grunge_brushed/grunge_brushed?version=b4e81c7b2005b2ec89569eb7106831557ec530a1.sbsar"
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.layerstack.insert_filter_effect",
+        "args": {
+          "inside_step": 3,
+          "node_stack": "Content",
+          "search": "s:starterassets u:filter n:Blur="
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.source.SourceSubstance.get_parameters",
+        "args": {
+          "node_step": 3,
+          "channel": "User0"
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.source.SourceSubstance.set_parameters",
+        "args": {
+          "node_step": 3,
+          "channel": "User0",
+          "roundtrip": false,
+          "toggle": 1,
+          "probe": true
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.source.SourceSubstance.get_parameters",
+        "args": {
+          "node_step": 3,
+          "channel": "User0"
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.source.SourceSubstance.set_parameters",
+        "args": {
+          "node_step": 3,
+          "channel": "User0",
+          "roundtrip": false,
+          "toggle": true,
+          "probe": true
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.source.SourceSubstance.get_parameters",
+        "args": {
+          "node_step": 3,
+          "channel": "User0"
+        }
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.source.SourceSubstance.set_parameters",
+        "args": {
+          "node_step": 3,
+          "channel": "User0",
+          "roundtrip": false,
+          "toggle": 0,
+          "probe": true
+        }
+      },
+      {
+        "step": 13,
+        "call": "substance_painter.source.SourceSubstance.get_parameters",
+        "args": {
+          "node_step": 3,
+          "channel": "User0"
+        }
+      },
+      {
+        "step": 14,
+        "call": "substance_painter.source.SourceSubstance.set_parameters",
+        "args": {
+          "node_step": 3,
+          "channel": "User0",
+          "roundtrip": false,
+          "toggle": false,
+          "probe": true
+        }
+      },
+      {
+        "step": 15,
+        "call": "substance_painter.source.SourceSubstance.get_parameters",
+        "args": {
+          "node_step": 3,
+          "channel": "User0"
+        }
+      },
+      {
+        "step": 16,
+        "call": "substance_painter.source.SourceSubstance.get_parameters",
+        "args": {
+          "node_step": 6,
+          "effect": true
+        }
+      },
+      {
+        "step": 17,
+        "call": "substance_painter.source.SourceSubstance.resource_id",
+        "args": {
+          "node_step": 6,
+          "effect": true
+        }
+      },
+      {
+        "step": 18,
+        "call": "substance_painter.source.SourceSubstance.image_outputs",
+        "args": {
+          "node_step": 6,
+          "effect": true
+        }
+      },
+      {
+        "step": 19,
+        "call": "substance_painter.source.SourceSubstance.active_output",
+        "args": {
+          "node_step": 6,
+          "effect": true
+        }
+      },
+      {
+        "step": 20,
+        "call": "substance_painter.source.SourceSubstance.resolution",
+        "args": {
+          "node_step": 6,
+          "effect": true
+        }
+      },
+      {
+        "step": 21,
+        "call": "substance_painter.source.SourceSubstance.resolution",
+        "args": {
+          "node_step": 6,
+          "effect": true,
+          "roundtrip": false,
+          "mode": "Custom",
+          "probe": true
+        }
+      },
+      {
+        "step": 22,
+        "call": "substance_painter.source.SourceSubstance.resolution",
+        "args": {
+          "node_step": 6,
+          "effect": true
+        }
+      },
+      {
+        "step": 23,
+        "call": "substance_painter.source.SourceSubstance.resolution",
+        "args": {
+          "node_step": 6,
+          "effect": true,
+          "roundtrip": false,
+          "mode": "Auto",
+          "probe": true
+        }
+      },
+      {
+        "step": 24,
+        "call": "substance_painter.source.SourceSubstance.resolution",
+        "args": {
+          "node_step": 6,
+          "effect": true
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "texture_set.resolution",
+      "value": 128,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "2bfc2e59bdaec30e2960afef1bef7cf52ee313d622fee5d1191220ada7722c81",
+      "size_bytes": 17423
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "ccea384ef443dbd9a772239c8d2a193facd20448cfa4b5d83a3662d8bd27d869",
+      "size_bytes": 402
+    }
+  ]
+}

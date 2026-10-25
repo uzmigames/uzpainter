@@ -79,3 +79,6 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "--import-mode=importlib"
+# Owner rule (AGENTS.override.md): pytest keeps only its latest run's temporary folders. They
+# stay outside the repository because test stores must (parity/CONTRACT.md §6.4).
+tmp_path_retention_count = 1
