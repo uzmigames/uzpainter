@@ -36,7 +36,7 @@ bool LegacyColour(const core::Project& project) {
 Gap OcioBitmapGap(const core::Project& project, const core::Stack* stack, const core::BitmapSource& bitmap,
                   std::optional<ChannelType> channel, core::Id node) {
     if (!PainterOcio(project)) return std::nullopt;
-    const BitmapColourSpace space = BitmapColourSpaceOf(bitmap.color_space);
+    const BitmapColourSpace space = BitmapColourSpaceIn(project, bitmap.color_space);
     if (!channel) {
         if (space == BitmapColourSpace::Linear) return std::nullopt;
     } else if (stack != nullptr) {
@@ -129,9 +129,9 @@ Gap OcioGap(const core::Project& project, const core::NodeVisit& visit, const Bi
 /// channel in any other format and on a mask's mono source (decision 174); on any other channel,
 /// and for tags outside sources.h, it is not recorded. A channel the stack lacks is never
 /// evaluated.
-Gap BitmapColourSpaceGap(const core::Stack* stack, const core::BitmapSource& bitmap, std::optional<ChannelType> channel,
-                         core::Id node) {
-    switch (BitmapColourSpaceOf(bitmap.color_space)) {
+Gap BitmapColourSpaceGap(const core::Project& project, const core::Stack* stack, const core::BitmapSource& bitmap,
+                         std::optional<ChannelType> channel, core::Id node) {
+    switch (BitmapColourSpaceIn(project, bitmap.color_space)) {
         case BitmapColourSpace::Linear: return std::nullopt;
         case BitmapColourSpace::Srgb: {
             if (!channel) return Make(node, "an sRGB bitmap as a mask source (Painter refuses it)", "decision 174");
@@ -170,7 +170,7 @@ Gap SourceGap(const core::Project& project, const core::Stack* stack, const core
             return std::nullopt;
         case SourceKind::bitmap: {
             const auto& bitmap = std::get<core::BitmapSource>(source.value);
-            if (Gap gap = BitmapColourSpaceGap(stack, bitmap, channel, node)) return gap;
+            if (Gap gap = BitmapColourSpaceGap(project, stack, bitmap, channel, node)) return gap;
             return OcioBitmapGap(project, stack, bitmap, channel, node);
         }
         case SourceKind::vector: return Make(node, "a vector source", "phase4.1_nodes-vector-font-sources");

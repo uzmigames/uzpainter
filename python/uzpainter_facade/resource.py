@@ -41,6 +41,7 @@ Resource reload and shelves (phase1.21, decision 110):
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import hashlib
 import os
 import re
@@ -52,7 +53,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import uzpainter
 
-from uzpainter_facade import event
+from uzpainter_facade import bitmap_defaults, event
 from uzpainter_facade.state import (
     RESOURCE_KEY,
     RESOURCE_METADATA,
@@ -190,6 +191,51 @@ def version_of(sha256: str) -> str | None:
     return f"{fact[0]}.image" if fact else None
 
 
+# `{sha256: PNG descriptor}` of the bitmaps the facade imported (bitmap_defaults.describe_png of
+# the imported bytes); a resource without one is unknown to the observed default domain.
+DESCRIPTOR_KEY = "bitmap_descriptors"
+
+
+_DESCRIPTOR_FIELDS = tuple(f.name for f in dataclasses.fields(bitmap_defaults.PngDescriptor))
+
+
+def _descriptor(sha256: str, record: Any) -> bitmap_defaults.PngDescriptor:
+    """The descriptor a stored record holds; `ValueError` for anything malformed (a corrupt record
+    is an error, never a miss that would select another default)."""
+    malformed = ValueError(f"the bitmap descriptor recorded for {sha256} is malformed")
+    if not isinstance(record, dict) or tuple(sorted(record)) != tuple(sorted(_DESCRIPTOR_FIELDS)):
+        raise malformed
+    chunks = record["chunks"]
+    if not isinstance(chunks, list) or not all(type(c) is str for c in chunks):
+        raise malformed
+    numbers = [record[k] for k in _DESCRIPTOR_FIELDS if k not in ("chunks", "scanlines_verified")]
+    if not all(type(v) is int for v in numbers) or type(record["scanlines_verified"]) is not bool:
+        raise malformed
+    return bitmap_defaults.PngDescriptor(**{**record, "chunks": tuple(chunks)})
+
+
+def bitmap_descriptors() -> dict[str, dict[str, Any]]:
+    """The stored descriptor map, every record validated: empty when the project holds none
+    (legitimate absence); `ValueError` when the stored value or any record is malformed."""
+    value = uzpainter.project.Metadata(RESOURCE_METADATA).get(DESCRIPTOR_KEY)
+    if value is None:
+        return {}
+    if not isinstance(value, dict) or not all(isinstance(k, str) for k in value):
+        raise ValueError("the stored bitmap descriptor map is malformed")
+    for sha256, record in value.items():
+        _descriptor(sha256, record)
+    return dict(value)
+
+
+def descriptor_of(sha256: str) -> bitmap_defaults.PngDescriptor | None:
+    """The recorded PNG descriptor of the resource stored under `sha256`, or None when none was
+    recorded; `ValueError` when the stored map or that record is malformed."""
+    descriptors = bitmap_descriptors()
+    if sha256 not in descriptors:
+        return None
+    return _descriptor(sha256, descriptors[sha256])
+
+
 def is_colour_image(sha256: str) -> bool:
     """Whether the resource stored under `sha256` is an RGB or RGBA image."""
     fact = facts().get(sha256)
@@ -268,13 +314,28 @@ def import_project_resource(
     sha256 = hashlib.sha256(data).hexdigest()
     colour = len(data) > 25 and data[25] in (2, 6)  # PNG IHDR colour type: RGB or RGBA
     held = {(n.name, n.version) for n in uzpainter.resource.list_project_resources()}
+    descriptor = bitmap_defaults.describe_png(data)
+    # Read and validated before anything changes: a malformed stored map refuses the import before
+    # the native import, so a caught refusal leaves no committed resource.
+    descriptors = bitmap_descriptors()
     with one_transaction("resource.import_project_resource"):
         native = uzpainter.resource.import_project_resource(file_path, resource_usage, name, group)
+        # The native import reads the file again: a descriptor is recorded only when the bytes it
+        # stored are the bytes described (same SHA-256), never stamped on other bytes.
+        same_bytes = native.identifier().version == sha256
         metadata = uzpainter.project.Metadata(RESOURCE_METADATA)
         known = facts()
         if known.get(sha256) != [sha1, colour]:
             known[sha256] = [sha1, colour]
             metadata.set(RESOURCE_KEY, known)
+        if descriptor is not None and same_bytes:
+            # The PNG descriptor of exactly these bytes (bitmap_defaults.describe_png), by their
+            # SHA-256, beside the older facts it leaves unchanged.
+            record = dataclasses.asdict(descriptor)
+            record["chunks"] = list(descriptor.chunks)
+            if descriptors.get(sha256) != record:
+                descriptors[sha256] = record
+                metadata.set(DESCRIPTOR_KEY, descriptors)
         identifier = native.identifier()
         if (identifier.name, identifier.version) not in held:
             order = import_order()

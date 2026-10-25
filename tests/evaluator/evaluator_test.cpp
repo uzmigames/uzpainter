@@ -3989,6 +3989,26 @@ int RunSources(const fs::path& assets) {
               "after a legacy evaluation an OCIO evaluation of a Raw bitmap at 1:1 stores the OCIO codes of a fresh "
               "evaluator, not the legacy ones",
               Describe(legacyRaw) + " / " + Describe(warmRaw) + " / " + Describe(freshRaw));
+        // The qualified OCIO configuration tag (sources.h `BitmapColourSpaceIn`): exactly the plain sRGB tag's
+        // evaluation under the pinned OCIO profile, refused in a legacy project; no other qualified name.
+        Builder plain = bitmap("sRGB", core::FilteringMode::BilinearHQ, 1.0);
+        Builder qualified = bitmap("OcioColorSpace.sRGB", core::FilteringMode::BilinearHQ, 1.0);
+        CpuEvaluator legacyTags(templates, kWideLimits);
+        Check(!evaluate(qualified, ChannelType::User0, legacyTags),
+              "the qualified OCIO sRGB tag is refused in a legacy project");
+        ocio(plain);
+        ocio(qualified);
+        CpuEvaluator ocioTags(templates, kWideLimits);
+        render::Result<ChannelResult> plainResult = evaluate(plain, ChannelType::User0, ocioTags);
+        render::Result<ChannelResult> qualifiedResult = evaluate(qualified, ChannelType::User0, ocioTags);
+        Check(plainResult && qualifiedResult && Samples(*plainResult) == Samples(*qualifiedResult),
+              "under the pinned OCIO profile the qualified sRGB tag evaluates exactly as the plain sRGB tag",
+              Describe(plainResult) + " / " + Describe(qualifiedResult));
+        Check(BitmapColourSpaceIn(qualified.project, "OcioColorSpace.sRGB") == BitmapColourSpace::Srgb &&
+                  BitmapColourSpaceIn(qualified.project, "OcioColorSpace.Linear") == BitmapColourSpace::Unrecorded &&
+                  BitmapColourSpaceIn(qualified.project, "OcioColorSpace") == BitmapColourSpace::Unrecorded &&
+                  BitmapColourSpaceIn(raw.project, "sRGB") == BitmapColourSpaceOf("sRGB"),
+              "only the one qualified OCIO tag is classified; every other tag keeps its plain classification");
     }
     return Finish();
 }

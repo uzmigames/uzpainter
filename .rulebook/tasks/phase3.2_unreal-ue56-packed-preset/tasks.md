@@ -316,3 +316,40 @@ model fields and stages (Setup, AO_Mixed and TGA as typed blocked plan refusals,
 configuration as ValueError). Default and authored blending are hydrated. The API default-blending
 test passed after the extraction. The comparison with the admitted Painter TGA8 oracles is the
 router's separate replay. Channel, alias and blending hydration are resolved; it waits on the documented `SourceBitmap` colour-space defaults (a probe the router is outlining), so no oracle replay has run. Item 2.5 stays open.
+
+## 16. Observed bitmap default colour spaces for the R-322 setup (2026-10-25)
+
+Evidence: `tier0/api-probes/source-bitmap-defaults-unreal-legacy` and `-ocio` (85ba83ae requests,
+4c8171da admitted), recorded in UzPainter's own sessions. `get_color_space` is stable in r1 and r2
+(9/9 per session); `get_source` differs only in the reopened resource context.
+
+`python/uzpainter_facade/bitmap_defaults.py` (standard library only, shared with host replays):
+`describe_png` parses exactly the imported bytes strictly. It checks the signature, chunk lengths and
+CRCs, IHDR first and IEND last and empty. For the observed shape only, the IDAT stream must inflate,
+within a bound, to exactly the expected scanlines (filter bytes 0..4) with nothing trailing.
+`lookup(DefaultContext(profile, config_sha256, template_id, canonical channel, channel format),
+descriptor)` answers only the exact observed entries (16-bit grey or RGB, 256 x 256, chunks IHDR,
+IDAT, IEND, the two R-322 contexts), and `native_tag` serializes the result. The facade records
+the descriptor at import only when the native import stored the same bytes, and a malformed
+record raises. So does a malformed stored map: a present value that is no map, or a record whose
+chunks are not a list of strings, refuses `set_source` before its channel activation and an import
+before the native import, with no new revision or resource. `set_source` and `reset_color_space` resolve the exact entry first and bind its
+native tag (a LegacyColorSpace member keeps its class). A mask source, an unknown bitmap or one of
+another kind goes straight to the older rules, which are unchanged.
+
+Tests (`tests/python/test_bitmap_defaults.py`): strict parsing and zlib negatives, exact lookup
+and misses, and the Legacy facade replay, which is typed-exact against both recordings after save
+and reopen. The OCIO replay is a reported xfail: 16-bit colour bitmaps under OCIO remain a
+release gap (decision 190), and the OCIO rows are recorded facts, not a capability. The
+configuration string reads back as itself through one qualified native tag,
+`OcioColorSpace.sRGB`: `BitmapColourSpaceIn` (sources.h) evaluates it as the plain `sRGB` tag only
+under the pinned OCIO profile, on the support and DAG paths alike, and refuses it elsewhere. No
+other qualified name is accepted. The evaluator `sources` case checks equal samples and the
+refusals; the facade OCIO 8-bit round trip checks string and enum identity across save and reopen;
+a regression checks three corrupt descriptor maps refuse before any change.
+
+Tier 0 traces: five facade replays already differed at HEAD (mask-stack, fill-layer-readback,
+p22b-host-resources, export-ocio-encode and its Legacy twin). Each passed its complete comparison
+before its trace was updated (decision 112). The capability files take 10 facade promotions and 2
+native evidence corrections, committed separately, and the 5 capability conformance tests pass.
+Item 2.5, parity and the OCIO 16-bit bitmap gap stay open.

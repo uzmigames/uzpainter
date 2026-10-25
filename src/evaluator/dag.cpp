@@ -131,7 +131,7 @@ render::Result<DagSource> ResolveSource(const Context& ctx, const core::FillCont
                 result.p20aNormal = ctx.format == core::ChannelFormat::RGB16F &&
                                     ctx.project.settings.normal_map_format == core::NormalMapFormat::OpenGL;
             }
-            switch (BitmapColourSpaceOf(bitmap.color_space)) {
+            switch (BitmapColourSpaceIn(ctx.project, bitmap.color_space)) {
                 case BitmapColourSpace::Linear: break;
                 case BitmapColourSpace::Srgb:
                     // sRGB8 channels, and an L8 BaseColor, Specular or Emissive (its image checked at

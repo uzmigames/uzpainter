@@ -174,6 +174,28 @@ def colour_managed(native_node: Any, channel: Any) -> bool:
     return bool(stack.get_channel(channel).format() == uzpainter.textureset.ChannelFormat.sRGB8)
 
 
+def channel_format_name(native_node: Any, channel: Any) -> str | None:
+    """The format name of `channel` in the node's stack, or None (a mask's mono source, or a
+    channel the stack lacks)."""
+    if channel is None:
+        return None
+    stack = native_node.get_stack()
+    if not stack.has_channel(channel):
+        return None
+    return str(stack.get_channel(channel).format().name)
+
+
+def bitmap_default(native_node: Any, channel: Any, sha256: str) -> Any:
+    """The default colour space of the bitmap `sha256` bound on `channel` of the node's stack
+    (colour.bitmap_default_space); resolved before any mutation."""
+    return colour.bitmap_default_space(
+        None if channel is None else channel.name,
+        channel_format_name(native_node, channel),
+        resource.descriptor_of(sha256),
+        resource.is_colour_image(sha256),
+    )
+
+
 def decodes_colour(native_node: Any, channel: Any) -> bool:
     """Whether Painter decodes an sRGB uniform colour set on `channel` to the working space: a
     colour-managed channel other than a user channel. A user channel takes a uniform colour as
@@ -314,11 +336,8 @@ class SourceBitmap:
     def reset_color_space(self) -> None:
         native = self._native()
         sha256 = native.resource_id().version
-        space = colour.default_bitmap_space(
-            None if self._channel is None else self._channel.name,
-            resource.is_colour_image(sha256),
-        )
-        native.set_color_space(colour.space_name(space))
+        space = bitmap_default(_ls.get_node_by_uid(self._node), self._channel, sha256)
+        native.set_color_space(colour.bitmap_space_tag(space))
 
     def list_available_color_spaces(self) -> list[Any]:
         node = _ls.get_node_by_uid(self._node)
@@ -654,13 +673,11 @@ class _Fill(Node):
         elif isinstance(source, (resource.ResourceID, resource.Resource)):
             identifier = source.identifier() if isinstance(source, resource.Resource) else source
             target = resource.to_native(identifier)
-            space = colour.default_bitmap_space(
-                None if channeltype is None else channeltype.name,
-                resource.is_colour_image(target.version),
-            )
-            # Bound in its default space in one native call: under OCIO a bitmap without a space
-            # on BaseColor is unrecorded, and the support check runs per call.
-            args = (channeltype, target, colour.space_name(space))
+            space = bitmap_default(native, channeltype, target.version)
+            # Bound in its default space in one native call, by its native tag (a LegacyColorSpace
+            # member keeps its class): under OCIO a bitmap without a space on BaseColor is
+            # unrecorded, and the support check runs per call.
+            args = (channeltype, target, colour.bitmap_space_tag(space))
             context = identifier.context
         elif isinstance(source, AnchorPointEffectNode):
             raise uzpainter.NotYetSupported(

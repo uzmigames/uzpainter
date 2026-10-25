@@ -60,6 +60,8 @@ from typing import Any
 
 import uzpainter
 
+from uzpainter_facade import bitmap_defaults
+
 MODULE = "substance_painter.colormanagement"
 
 
@@ -386,6 +388,49 @@ CHANNEL_DEFAULTS_PROBE = (
 )
 
 
+def bitmap_default_space(
+    channel: str | None,
+    channel_format: str | None,
+    descriptor: bitmap_defaults.PngDescriptor | None,
+    colour_image: bool,
+) -> Any:
+    """Painter's colour space of a bitmap bound on `channel` (canonical name; None: a mask's mono
+    source) of format `channel_format`, for a bitmap of `descriptor`. An exact observed entry
+    (bitmap_defaults.lookup: profile, OCIO configuration, template, channel, format and PNG
+    descriptor) answers first; a miss applies the older rules (`default_bitmap_space`) unchanged,
+    which still refuse a channel they do not support."""
+    # A mask source, an unknown bitmap or one of another kind never reads the project context.
+    if (
+        channel is not None
+        and channel_format is not None
+        and bitmap_defaults.in_domain(descriptor)
+        and uzpainter.project.is_open()
+    ):
+        profile = active_profile()
+        context = bitmap_defaults.DefaultContext(
+            profile,
+            PAINTER_OCIO_CONFIG_SHA256 if profile == OCIO_PROFILE else None,
+            str(uzpainter.project.template()),
+            channel,
+            channel_format,
+        )
+        identity = bitmap_defaults.lookup(context, descriptor)
+        if identity is not None:
+            return observed_space(identity)
+    return default_bitmap_space(channel, colour_image)
+
+
+def observed_space(identity: bitmap_defaults.SpaceIdentity) -> Any:
+    """The documented member (or configuration string) of an observed space identity, exactly:
+    the class is matched by name, never guessed from the member name alone."""
+    if identity.kind == "str":
+        return identity.name
+    for kind in SPACE_ENUMS:
+        if kind.__name__ == identity.kind and identity.name in kind.__members__:
+            return kind[identity.name]
+    raise TypeError(f"{identity} is not a documented colour space")
+
+
 def default_bitmap_space(channel: str | None, colour_image: bool) -> Any:
     """Painter's colour space of a bitmap bound on `channel` (None: a mask's mono source). In
     Legacy mode a grey bitmap takes the same space as a colour one (P20-A)."""
@@ -414,20 +459,33 @@ def default_bitmap_space(channel: str | None, colour_image: bool) -> Any:
 SRGB_REFUSAL = "Invalid colorspace 'standard sRGB'"
 
 
+# The OCIO configuration space Painter reports as the string "sRGB": its native tag is qualified so
+# that it is not the generic member's "sRGB" (src/evaluator/sources.h `BitmapColourSpaceIn`, which
+# evaluates it as that same space under the pinned OCIO profile only).
+OCIO_STRING_TAGS = {"sRGB": "OcioColorSpace.sRGB"}
+
+
 def bitmap_space_tag(space: Any) -> str:
     """The native tag of a bitmap colour space: a `LegacyColorSpace` member by qualified name (its
     `sRGB` is not the generic one; the evaluator reads both tags, `src/evaluator/sources.h`), any
-    other member by name, a string as given."""
+    other member by name, a string as given except an OCIO configuration string of
+    `OCIO_STRING_TAGS` under the pinned OCIO profile, which is qualified."""
     if isinstance(space, LegacyColorSpace):
         return f"LegacyColorSpace.{space.name}"
+    if isinstance(space, str) and space in OCIO_STRING_TAGS and active_profile() == OCIO_PROFILE:
+        return OCIO_STRING_TAGS[space]
     return space_name(space)
 
 
 def bitmap_space_member(tag: str) -> Any:
-    """The documented member of a native bitmap colour-space tag (`bitmap_space_tag`)."""
+    """The documented member, or configuration string, of a native bitmap colour-space tag
+    (`bitmap_space_tag`)."""
     kind, _, name = tag.partition(".")
     if kind == "LegacyColorSpace" and name in LegacyColorSpace.__members__:
         return LegacyColorSpace[name]
+    for string, qualified in OCIO_STRING_TAGS.items():
+        if tag == qualified:
+            return string
     return space_member(tag)
 
 

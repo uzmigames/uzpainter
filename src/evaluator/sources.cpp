@@ -23,6 +23,13 @@ BitmapColourSpace BitmapColourSpaceOf(std::string_view tag) {
     return BitmapColourSpace::Unrecorded;
 }
 
+BitmapColourSpace BitmapColourSpaceIn(const core::Project& project, std::string_view tag) {
+    if (tag == "OcioColorSpace.sRGB") {
+        return PainterOcio(project) ? BitmapColourSpaceOf("sRGB") : BitmapColourSpace::Unrecorded;
+    }
+    return BitmapColourSpaceOf(tag);
+}
+
 bool SrgbL8MaterialChannel(core::ChannelType channel, core::ChannelFormat format) {
     return format == core::ChannelFormat::L8 &&
            (channel == core::ChannelType::BaseColor || channel == core::ChannelType::Specular ||

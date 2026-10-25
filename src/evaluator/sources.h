@@ -145,6 +145,11 @@ namespace uzp::evaluator {
 /// LegacyColorSpace.sRGB: decoded) or `Unrecorded` (any other tag: no golden).
 enum class BitmapColourSpace : uint8_t { Linear, Srgb, Unrecorded };
 [[nodiscard]] BitmapColourSpace BitmapColourSpaceOf(std::string_view tag);
+/// The colour space of `tag` in `project`: `BitmapColourSpaceOf`, plus the one qualified OCIO tag
+/// "OcioColorSpace.sRGB" (the configuration space "sRGB" Painter reports as a string; the
+/// tier0/api-probes/source-bitmap-defaults-unreal-* probes, phase3.2_unreal-ue56-packed-preset §16). Under the pinned OCIO profile (`PainterOcio`) it is exactly the plain "sRGB" tag's
+/// space; in any other project, and for any other "OcioColorSpace.*" name, it is `Unrecorded`.
+[[nodiscard]] BitmapColourSpace BitmapColourSpaceIn(const core::Project& project, std::string_view tag);
 
 /// True for BaseColor, Specular and Emissive in L8, where Painter reads an sRGB bitmap decoded
 /// (above, decision 208).
