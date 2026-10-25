@@ -7,6 +7,7 @@ import hashlib
 import json
 import struct
 import zlib
+from copy import deepcopy
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,10 +16,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from python.uzpainter_facade.bitmap_defaults import PAINTER_OCIO_CONFIG_SHA256
 from tools.parity.recorder import probes as recorder
 from tools.parity.recorder import texture
+from tools.parity.recorder import vocabulary as ps
 from tools.parity.recorder.capture import StorageFormat
-from tools.parity.recorder.job import Step
+from tools.parity.recorder.job import EXPORT, Step
 from tools.parity.recorder.output import write_run
 from tools.parity.recorder.probes import (
     PAINTER_PROBES,
@@ -355,3 +358,61 @@ def test_marker_cannot_bypass_preflight(marker: str, location: str) -> None:
     step["args"][marker] = "str" if marker == "color_space_type" else 1
     with pytest.raises(RecorderError, match=marker):
         probe_job_from_manifest(data)
+
+
+@pytest.mark.parametrize("source", control.NATIVE_BASELINES)
+def test_native_plan_preserves_source_and_authored_request(source: str) -> None:
+    authored = control.request(source)
+    before = deepcopy(authored)
+    plan = control.native_baseline(
+        authored, source, configuration_sha256=PAINTER_OCIO_CONFIG_SHA256
+    )
+    assert authored == before
+    assert len(plan.exports) == 3
+    steps = plan.manifest["instruction_sequence"]["steps"]
+    assert not any(
+        s["call"] in (control.SET_SPACE, control.GET_SPACE, control.GET_SOURCE, EXPORT)
+        for s in steps
+    )
+    args = next(s["args"] for s in steps if s["call"] == ps.SET_SOURCE)
+    if source == "uniform":
+        assert args["color_space"] == "Working"
+        assert args["color"] == [0.0, 0.5, 1.0]
+    else:
+        assert args["color_space"] == "OcioColorSpace.sRGB"
+
+
+@pytest.mark.parametrize("source", ["field-a", "field-a-brg", "field-a-gbr"])
+def test_native_plan_refuses_rgb16(source: str) -> None:
+    with pytest.raises(ValueError, match="outside"):
+        control.native_baseline(
+            control.request(source), source, configuration_sha256=PAINTER_OCIO_CONFIG_SHA256
+        )
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "golden_id",
+        "inputs",
+        "instruction_sequence",
+        "applied_settings",
+        "software",
+        "private_records",
+        "expectations",
+    ],
+)
+def test_native_plan_refuses_contract_tampering(field: str) -> None:
+    authored = control.request("uniform")
+    authored[field] = None
+    with pytest.raises(ValueError):
+        control.native_baseline(
+            authored, "uniform", configuration_sha256=PAINTER_OCIO_CONFIG_SHA256
+        )
+
+
+def test_native_plan_refuses_profile() -> None:
+    with pytest.raises(ValueError, match="outside"):
+        control.native_baseline(
+            control.request("uniform"), "uniform", configuration_sha256="0" * 64
+        )

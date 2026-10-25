@@ -410,3 +410,18 @@ primary getter pairs match exactly, preserving types and signed zero; setup and
 bookkeeping readbacks are not counted as primary getters. The admitted instruction
 sequences match the authored requests. This establishes capture stability only,
 not UzPainter parity. No fit, domain, checklist, capability or acceptance gate changes.
+
+Native RGB8/uniform baselines passed on 2026-10-25. The six candidates are built
+only from the authored requests and inputs, before any oracle read: RGB8 sRGB into
+BaseColor/sRGB8 and uniform Working, each exported as PNG8, PNG16 and EXR32f.
+All six exports completed and all 12 comparisons against r1/reopen-r2 have
+identical encoded bytes, establishing exact decoded pixels as well. The general
+verdict compares decoded values exactly when encodings differ; signed pixel zeros
+are numerically equal and NaN matches only NaN. Typed API observations retain
+their separate signed-zero contract. The private count-only report hashes to
+`140523b9ab2924b871e8f84b15e8a9481f20f542ffecd1d60ab45072890f2d2e`;
+the explicitly supplied export-test binary hashes to
+`a96968baeaa2e561bb34bc9b4b8f130d8ca7b85f803520eb07b74dfbaa2f478c`.
+The replay never builds implicitly. CPU reconstruction/comparison checks and
+Ruff/mypy passed; the real replay passed after the coordinated export build.
+RGB16 decoding, fits, padding, item 2.5 and broader gates remain unchanged.
