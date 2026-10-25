@@ -1,0 +1,11 @@
+{
+  "id": 362,
+  "slug": "project-private-filter-source-observations-through-a-test-only-diagnostic-fixture",
+  "title": "Project-private Filter source observations through a test-only diagnostic fixture",
+  "status": "proposed",
+  "date": "2026-10-25",
+  "relatedTasks": [
+    "phase3.1_proc-backend-seam"
+  ],
+  "supersededBy": null
+}
