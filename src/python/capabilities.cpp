@@ -20,7 +20,10 @@ namespace {
 
 namespace json = core::json;
 
-constexpr const char* kUsage = "usage: UzPainter.exe capabilities\n";
+constexpr const char* kUsage = "usage: UzPainter.exe capabilities [--runtime]\n";
+/// `capabilities --runtime`: what this build's native host enforces, compiled in (decision 360).
+/// A host without it refuses the extra argument (usage, exit 2), so a client probes before a script.
+constexpr const char* kRuntimeSchema = "uzpainter/runtime-capabilities/1";
 
 /// The module body: the manifest is read once, on first use, and handed out as copies.
 constexpr const char* kModule = R"PY(
@@ -75,6 +78,13 @@ std::filesystem::path CapabilitiesPath() {
 bool IsCapabilitiesCommand(std::string_view verb) { return verb == "capabilities"; }
 
 int RunCapabilitiesCommand(const std::vector<std::string>& args, std::FILE* out, std::FILE* err) {
+    if (args.size() == 2 && args[1] == "--runtime") {
+        std::fprintf(out, "%.*s%s\n", static_cast<int>(kJsonPrefix.size()), kJsonPrefix.data(),
+                     json::WriteCanonical(json::Object{{"schema", kRuntimeSchema},
+                                                       {"assets3d_production_guard", std::int64_t{1}}})
+                         .c_str());
+        return kRunOk;
+    }
     if (args.size() != 1) {
         std::fprintf(err, "%s", kUsage);
         return kRunUsage;

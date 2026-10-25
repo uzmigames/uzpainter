@@ -24,6 +24,7 @@
 #include "mesh/mesh_import.h"
 #include "procedural/snapshot_source.h"
 #include "mesh/reload.h"
+#include "python/assets3d_guard.h"
 #include "python/display.h"
 #include "python/errors.h"
 #include "python/evaluation.h"
@@ -296,6 +297,8 @@ core::TransactionResult Session::Create(const std::filesystem::path& mesh_path, 
     import.mesh_unit_scale = settings.mesh_unit_scale;
     const mesh::ImportResult imported =
         mesh::ImportMesh(bytes, Utf8(mesh_path.filename()), import, mesh_path.parent_path());
+    // Assets3D production (decision 360): before any directory or store exists.
+    assets3d::CheckImport(imported);
 
     const evaluator::TemplateLibrary templates =
         evaluator::TemplateLibrary::Load(evaluator::TemplateLibrary::DefaultDirectory());
@@ -379,6 +382,7 @@ core::TransactionResult Session::Create(const std::filesystem::path& mesh_path, 
             for (const core::InsertPosition& position : stacks) edit.Insert(position, core::NodeType::PaintLayer, "Layer 1");
             if (call.extra) call.extra(edit, store);
             RequireAdmission(edit.project());
+            assets3d::RequireAdmittedProject(edit.project());
         } catch (...) {
             error = std::current_exception();
             throw;
@@ -400,10 +404,20 @@ core::TransactionResult Session::Create(const std::filesystem::path& mesh_path, 
 void Session::Open(const std::filesystem::path& path, bool untitled) {
     if (IsOpen()) ThrowProjectError("a project is already open");
     if (!std::filesystem::exists(path)) ThrowProjectError("cannot open " + Utf8(path) + ": no such file");
+    // Assets3D production: a bundle directory's import writes a whole project before any check.
+    assets3d::CheckOpenPath(path);
     // The session never reads the integrity report: building it hashed every retained manifest on
     // every open (decision 253). `inspect --verify`, `export` and the census still build it.
     store::OpenOptions options;
     options.report = false;
+    if (assets3d::CurrentMode() != assets3d::Mode::absent) {
+        // Assets3D production: under the lock, read-only, before the store can write to the file.
+        // Never trust the persisted report alone: the stored mesh is re-derived from its bytes.
+        options.preflight = [](const core::Project& stored, const std::function<std::string(const std::string&)>& read) {
+            assets3d::RequireAdmittedProject(stored);
+            assets3d::CheckImport(mesh::RederiveMesh(stored, read, false));
+        };
+    }
     store::ProjectStore::Opened opened = store::ProjectStore::Open(path, options);
     auto project = std::make_shared<OpenProject>();
     project->store = std::move(opened.store);
@@ -474,7 +488,7 @@ void Session::Rebuild(const core::json::Value& dump, const std::filesystem::path
     // The mesh, its external files included, re-derives from what the recipe stores alone, never
     // from files beside an origin.
     if (rebuilt.mesh) {
-        mesh::RederiveMesh(
+        const mesh::ImportResult rederived = mesh::RederiveMesh(
             rebuilt,
             [&bytes](const std::string& sha256) -> std::string {
                 const auto it = bytes.find(sha256);
@@ -484,7 +498,10 @@ void Session::Rebuild(const core::json::Value& dump, const std::filesystem::path
                 return it->second;
             },
             false);
+        assets3d::CheckImport(rederived);
     }
+    // Assets3D production: before any directory or store exists.
+    assets3d::RequireAdmittedProject(rebuilt);
     evaluator::RequireSupported(core::Project{}, rebuilt, [&bytes](std::string_view sha256) {
         const auto it = bytes.find(std::string(sha256));
         return it == bytes.end() ? std::nullopt : evaluator::BitmapShapeOf(it->second);
@@ -554,6 +571,7 @@ core::Checkpoints Session::Save(store::SaveMode mode) {
         ThrowProjectError("the project has never been saved: save_as(path) gives it a file path");
     }
     RequireNotBusy("save()");
+    assets3d::RequireAdmittedProject(*project->document->snapshot().project);  // before persistence
     return project->store->Save(*project->document, {}, mode);
 }
 
@@ -561,6 +579,7 @@ core::Checkpoints Session::SaveAs(const std::filesystem::path& path, store::Save
                                 store::SaveTargetPolicy policy) {
     const std::shared_ptr<OpenProject> project = Current();
     RequireNotBusy("save_as()");
+    assets3d::RequireAdmittedProject(*project->document->snapshot().project);  // before any directory
     if (path.has_parent_path()) std::filesystem::create_directories(path.parent_path());
     core::Checkpoints checkpoints = project->store->SaveAs(*project->document, path, {}, policy);
     project->project_source = std::filesystem::absolute(project->store->path());
@@ -577,6 +596,7 @@ core::Checkpoints Session::SaveAs(const std::filesystem::path& path, store::Save
 void Session::SaveAsCopy(const std::filesystem::path& path) {
     const std::shared_ptr<OpenProject> project = Current();
     RequireNotBusy("save_as_copy()");
+    assets3d::RequireAdmittedProject(*project->document->snapshot().project);  // before any directory
     if (path.has_parent_path()) std::filesystem::create_directories(path.parent_path());
     project->store->SaveAsCopy(path);
 }
@@ -584,6 +604,7 @@ void Session::SaveAsCopy(const std::filesystem::path& path) {
 CallResult Session::Revert(std::optional<std::int64_t> revision, const std::string& checkpoint) {
     const std::shared_ptr<OpenProject> project = Current();
     if (Thread().transaction) throw ApiError("RuntimeError", "revert() inside an open Transaction");
+    assets3d::RefuseRestore("revert()");
     core::json::Object arguments;
     if (revision) arguments["revision"] = *revision;
     else arguments["checkpoint"] = checkpoint;
@@ -599,6 +620,7 @@ core::RequestOutcome Session::RevertRequest(core::MutationRequest request, std::
                                             const std::string& checkpoint) {
     const std::shared_ptr<OpenProject> project = Current();
     if (Thread().transaction) throw ApiError("RuntimeError", "a typed tool call inside an open Transaction");
+    assets3d::RefuseRestore("project_revert");
     core::RequestOutcome outcome = revision ? project->store->Revert(*project->document, request, *revision)
                                             : project->store->Revert(*project->document, request, checkpoint);
     if (outcome.result) Record(FromResult(*outcome.result), {}, project);
@@ -832,6 +854,7 @@ CallResult Session::Mutate(const std::string& tool, core::json::Object arguments
         procedural::SnapshotSourceProvider procedurals(*Current()->store, edit.project());
         evaluator::RequireSupported(edit.base(), edit.project(), shapes, &procedurals, deferred);
         if (!deferred) RequireAdmission(edit.project());
+        assets3d::RequireAdmittedProject(edit.project());
     };
     if (thread.transaction) {
         const core::Project before = thread.edit->project();
@@ -872,6 +895,7 @@ core::RequestOutcome Session::Submit(core::MutationRequest request, const std::f
             procedural::SnapshotSourceProvider procedurals(*Current()->store, edit.project());
             evaluator::RequireSupported(edit.base(), edit.project(), shapes, &procedurals);
             RequireAdmission(edit.project());
+            assets3d::RequireAdmittedProject(edit.project());
         });
     if (outcome.result) Record(FromResult(*outcome.result), invalidated, project);
     return outcome;
@@ -922,6 +946,7 @@ CallResult Session::CommitTransaction() {
                 procedural::SnapshotSourceProvider procedurals(*Current()->store, edit.project());
                 evaluator::RequireSupported(edit.base(), edit.project(), shapes, &procedurals);
                 RequireAdmission(edit.project());
+                assets3d::RequireAdmittedProject(edit.project());
             });
         } catch (...) {
             error = std::current_exception();

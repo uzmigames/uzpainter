@@ -27,6 +27,11 @@
 // generation's receipt `non_conformant`. The report then holds `diagnostic: "diagnostic-measure"`.
 // No other verb, no MCP or worker process and no Python call can turn it on.
 //
+// `--assets3d-production-required`, anywhere before `--`, sets the Assets3D production guard to
+// required before the interpreter starts (assets3d_guard.h, decision 360): every import, restore
+// and mutation refuses until the script installs the one policy of the process. It is a usage
+// error together with `--diagnostic-measure-export`. `capabilities --runtime` reports the guard.
+//
 // The arguments are UTF-8 (src/main.cpp): the script's path and `sys.argv` keep every character.
 // Ctrl+C or Ctrl+Break raises KeyboardInterrupt in the script, a structured failure; the host then
 // reports it and closes a project left open, as after any run.

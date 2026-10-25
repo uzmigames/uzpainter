@@ -11,6 +11,7 @@
 // session.h; `uzpainter._selftest` holds the boundary checks of the CPython stages of `selftest`
 // (src/selftest/cpython_stages.cpp).
 
+#include "python/assets3d_guard.h"
 #include "python/bindings.h"
 #include "python/errors.h"
 #include "python/interpreter.h"
@@ -61,7 +62,7 @@ size_t CountRampMismatches(const py::buffer& buffer) {
 constexpr const char* kTopLevelErrors[] = {
     "ProjectError",       "ServiceNotFoundError", "ResourceNotFoundError", "EditionContextException",
     "UnsupportedInUzPainter", "NotYetSupported",  "UnsupportedProcedural", "BusyError",
-    "StaleRevisionError", "AmbiguousNameError",
+    "StaleRevisionError", "AmbiguousNameError", "Assets3DProductionError",
 };
 
 }  // namespace
@@ -96,6 +97,17 @@ PYBIND11_EMBEDDED_MODULE(uzpainter, m) {
     py::module_ jobs = submodule("jobs", "Worker jobs.");
     uzp::python::BindExport(export_module, jobs);
     uzp::python::BindMisc(m);
+
+    // The Assets3D production guard's private entry points (decision 360, assets3d_guard.h).
+    m.def(
+        "_assets3d_install_production_policy",
+        [](const std::string& policy_json) { uzp::python::assets3d::InstallPolicy(policy_json); },
+        py::arg("policy_json"),
+        "Install the one production policy of a run started with --assets3d-production-required.");
+    m.def(
+        "_assets3d_production_status",
+        [] { return uzp::python::FromJson(uzp::python::assets3d::Status()); },
+        "The guard state: uzpainter/assets3d-production-status/1.");
 
     py::module_ selftest = m.def_submodule(
         "_selftest", "Boundary checks of `UzPainter.exe selftest` (not a public API).");

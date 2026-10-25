@@ -35,6 +35,10 @@ class EditionContextException(Exception):
     """The channel argument is not valid in the node's context (a multichannel node given None)."""
 
 
+class Assets3DProductionError(Exception):
+    """A production paint round refused by the native Assets3D guard (decision 360)."""
+
+
 class UnsupportedInUzPainter(Exception):
     """A desktop-only Painter symbol: it changes no texture, render or script-visible state."""
 

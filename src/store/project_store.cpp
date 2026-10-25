@@ -103,6 +103,26 @@ ProjectStore::Opened ProjectStore::Open(const std::filesystem::path& path, const
         return Open(target, options);
     }
     ProjectLock lock = ProjectLock::Acquire(path);
+    if (options.preflight) {
+        // Read-only, under the lock, before the cleanup and the read-write connection below.
+        Container reader = Container::OpenReadOnly(path);
+        const std::optional<std::string> version = reader.Meta("format_version");
+        if (!version) throw StoreError(StoreError::Code::not_a_project, Utf8(path) + " has no format_version");
+        const FormatVersion file_version = FormatVersion::Parse(*version);
+        CheckReadable(file_version, options.policy);
+        bool migrated = false;
+        const std::int64_t revision = ReadCurrentRevision(reader);
+        const core::Project project = core::LoadManifest(core::json::WriteCanonical(MigrateManifest(
+            core::json::Parse(ReadManifestText(reader, revision)), file_version, options.policy, migrated)));
+        options.preflight(project, [&reader](const std::string& sha256) -> std::string {
+            if (HasBlob(reader, sha256)) return ReadBlob(reader, sha256);
+            if (const std::optional<std::filesystem::path> locator = FindLocator(reader, sha256)) {
+                const std::optional<std::string> bytes = ReadFile(*locator);
+                if (bytes && core::Sha256Hex(*bytes) == sha256) return *bytes;
+            }
+            throw StoreError(StoreError::Code::missing_dependency, "resource " + sha256 + " is not readable");
+        });
+    }
     RemoveTemporaryFiles(path);  // left by a worker killed during compact
     Container container = Container::Open(path);
     // A damaged b-tree is refused before anything reads the project or writes to the file: a

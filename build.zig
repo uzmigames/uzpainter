@@ -210,6 +210,7 @@ const app_sources = [_][]const u8{
 /// `interpreter.cpp` are in `app_sources`), relative to `src/`: compiled with `-Werror` into
 /// `UzPainter.exe` and into `uzp-pyapi-tests.exe`.
 const pyapi_sources = [_][]const u8{
+    "python/assets3d_guard.cpp",
     "python/bind_baking.cpp",
     "python/bind_color.cpp",
     "python/bind_core.cpp",

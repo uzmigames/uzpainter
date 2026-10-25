@@ -58,6 +58,12 @@ struct OpenOptions {
     /// session's open, decision 253) skips its history and locator scan; the current manifest is
     /// verified either way.
     bool report = true;
+    /// Called once the project lock is held and before anything can write to the file (temporary
+    /// file cleanup, the read-write connection, the journal mode): the current revision's project,
+    /// read through a read-only connection, and a reader of its resources (blobs or locators).
+    /// A throw refuses the open with the file untouched. A file a killed worker left with a hot
+    /// journal cannot be read read-only and is refused rather than recovered (decision 360).
+    std::function<void(const core::Project&, const std::function<std::string(const std::string&)>&)> preflight;
 };
 
 class ProjectStore {

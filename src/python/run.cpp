@@ -11,6 +11,7 @@
 #include <pybind11/embed.h>
 
 #include "export/receipt.h"
+#include "python/assets3d_guard.h"
 #include "python/capture.h"
 #include "python/dispatcher.h"
 #include "python/jobs.h"
@@ -29,9 +30,11 @@ namespace json = core::json;
 
 constexpr const char* kUsage =
     "usage: UzPainter.exe run <script.py> [args...] [--gpu-backend dx12|vulkan] [--diagnostic-measure-export] "
-    "[--test-gpu-unavailable] "
+    "[--assets3d-production-required] [--test-gpu-unavailable] "
     "[-- args...]\n";
 constexpr std::string_view kDiagnosticFlag = "--diagnostic-measure-export";
+/// Requires an Assets3D production policy before any import, restore or mutation (decision 360).
+constexpr std::string_view kProductionFlag = "--assets3d-production-required";
 
 /// Set once, before the script runs, by `--diagnostic-measure-export` (decision 286).
 bool g_diagnosticMeasureExport = false;
@@ -61,6 +64,7 @@ bool DiagnosticMeasureExport() { return g_diagnosticMeasureExport; }
 int RunRunCommand(const std::vector<std::string>& args, std::FILE* out, std::FILE* err) {
     std::optional<render::Backend> backend;
     bool diagnostic = false;
+    bool production = false;
     bool test_gpu_unavailable = false;
     std::vector<std::string> positional;
     for (size_t i = 1; i < args.size(); ++i) {
@@ -74,6 +78,14 @@ int RunRunCommand(const std::vector<std::string>& args, std::FILE* out, std::FIL
                 return kRunUsage;
             }
             diagnostic = true;
+            continue;
+        }
+        if (args[i] == kProductionFlag) {
+            if (production) {
+                std::fprintf(err, "%s", kUsage);
+                return kRunUsage;
+            }
+            production = true;
             continue;
         }
         if (args[i] == "--test-gpu-unavailable") {
@@ -105,7 +117,13 @@ int RunRunCommand(const std::vector<std::string>& args, std::FILE* out, std::FIL
         std::fprintf(err, "%s", kUsage);
         return kRunUsage;
     }
+    if (production && diagnostic) {
+        std::fprintf(err, "UzPainter.exe run: --assets3d-production-required and --diagnostic-measure-export are incompatible\n");
+        return kRunUsage;
+    }
     g_diagnosticMeasureExport = diagnostic;
+    // Before the interpreter starts: no script code runs outside the required mode.
+    if (production) assets3d::Require();
     const std::string backend_name(render::BackendName(backend.value_or(render::Backend::Dx12)));
     // Export and viewport calls acquire their devices lazily on the selected backend.
     std::unique_ptr<render::Engine> unavailable_engine;

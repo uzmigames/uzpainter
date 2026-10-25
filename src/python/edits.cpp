@@ -9,6 +9,7 @@
 #include "evaluator/sources.h"
 #include "evaluator/templates.h"
 #include "mesh/mesh_import.h"
+#include "python/assets3d_guard.h"
 #include "python/display.h"
 #include "python/errors.h"
 #include "uzp_core/types/errors.h"
@@ -499,6 +500,11 @@ MeshReloadCall::MeshReloadCall(const std::string& mesh_file_path, std::optional<
     const evaluator::ProjectTemplate* fresh = templates.Find(template_id);
     if (fresh == nullptr) throw ApiError("RuntimeError", "the project template '" + template_id + "' is not installed");
     settings_.import.mesh_unit_scale = project_->document->snapshot().project->settings.mesh_unit_scale;
+    if (assets3d::CurrentMode() != assets3d::Mode::absent) {
+        // Assets3D production: reload_mesh takes no import options, so a reload repeats the admitted
+        // import's own request (no explicit scale stays none); the complete report can then equal it.
+        settings_.import.mesh_unit_scale = assets3d::RequestedMeshUnitScale(*project_->document->snapshot().project);
+    }
     settings_.material_mapping = std::move(material_mapping);
     settings_.new_set_channels = fresh->StackChannels();
 
@@ -520,6 +526,7 @@ void MeshReloadCall::Apply(core::Edit& edit) const {
         unavailable = missing.what();
     }
     const mesh::ImportResult next = mesh::ImportMesh(bytes_, Utf8(path_.filename()), settings_.import, path_.parent_path());
+    assets3d::CheckImport(next);  // Assets3D production (decision 360): before StageResource
     store::ProjectStore& store = *project_->store;
     store.StageResource(bytes_, std::string(mesh::MimeOf(next.format)));
     for (const mesh::ExternalFile& external : next.external_files) {
