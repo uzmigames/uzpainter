@@ -303,13 +303,32 @@ def input_arg_key(call: str, args: dict[str, Any]) -> str | None:
 
 
 def check_input_arg(step: Step, inputs: dict[str, Path]) -> None:
-    unique_keys = {"require_unique", "resource_context", "resource_name"}
+    unique_keys = {
+        "require_unique",
+        "resource_context",
+        "resource_name",
+        "resource_selection",
+        "resource_gui_name",
+        "resource_usage",
+    }
     if unique_keys.intersection(step.args):
         args = step.args
+        gui_mode = "resource_selection" in args
+        selection_keys = (
+            {
+                "require_unique",
+                "resource_context",
+                "resource_selection",
+                "resource_gui_name",
+                "resource_usage",
+            }
+            if gui_mode
+            else {"require_unique", "resource_context", "resource_name"}
+        )
         expected = (
-            {"node_step", "channel", "search", *unique_keys}
+            {"node_step", "channel", "search", *selection_keys}
             if step.call == ps.SET_SOURCE
-            else {"inside_step", "node_stack", "search", *unique_keys}
+            else {"inside_step", "node_stack", "search", *selection_keys}
             if step.call == ps.INSERT_FILTER
             else set()
         )
@@ -320,7 +339,13 @@ def check_input_arg(step: Step, inputs: dict[str, Path]) -> None:
             or args.get("require_unique") is not True
             or any(
                 type(args.get(k)) is not str or not args[k]
-                for k in ("search", "resource_context", "resource_name")
+                for k in {"search", *selection_keys} - {"require_unique"}
+            )
+            or (gui_mode and args.get("resource_selection") != "gui_name")
+            or (
+                gui_mode
+                and args.get("resource_usage")
+                != ("PROCEDURAL" if step.call == ps.SET_SOURCE else "FILTER")
             )
             or type(args.get(node_key)) is not int
             or args[node_key] < 1
@@ -443,7 +468,14 @@ def probe_job_from_manifest(manifest: dict[str, Any], repo_root: Path = REPO_ROO
     if [s.step for s in steps] != list(range(1, len(steps) + 1)):
         raise RecorderError("instruction steps must be numbered 1..n in order")
     for step in steps:
-        if {"require_unique", "resource_context", "resource_name"}.intersection(step.args):
+        if {
+            "require_unique",
+            "resource_context",
+            "resource_name",
+            "resource_selection",
+            "resource_gui_name",
+            "resource_usage",
+        }.intersection(step.args):
             check_input_arg(step, inputs)
         if "color_space_type" in step.args and step.call != CONSTANTS["SET_BITMAP_COLOR_SPACE"]:
             raise RecorderError("color_space_type is only valid on the bitmap colour-space setter")

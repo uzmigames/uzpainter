@@ -18,7 +18,7 @@ LAYER = "substance_painter.layerstack.LayerNode."
 SOURCE = "substance_painter.source.SourceSubstance."
 CHANNEL = "User0"
 HOST_QUERY = {
-    "search": "s:starterassets u:procedural n:grunge_brushed=",
+    "search": "s:starterassets u:substance",
     "require_unique": True,
     "resource_context": "starter_assets",
     "resource_name": "grunge_brushed/grunge_brushed",
@@ -26,8 +26,10 @@ HOST_QUERY = {
 FILTER_QUERY = {
     "search": "s:starterassets u:filter n:Blur=",
     "require_unique": True,
+    "resource_selection": "gui_name",
     "resource_context": "starter_assets",
-    "resource_name": "Blur",
+    "resource_gui_name": "Blur",
+    "resource_usage": "FILTER",
 }
 UV = {
     "filtering_mode": "Nearest",

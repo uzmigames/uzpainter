@@ -308,7 +308,7 @@ def test_observed_filter_getters_return_the_receipt_and_refuse_everything_else(
     assert first["parameters"] == {"gain": ["float", "-0.0"], "seed": ["int", "3"]}, first
     assert first["resource_id"][1:] == [
         "starter_assets",
-        "Blur",
+        "synthetic/internal/filter",
         "synthetic-v1",
         "resource://synthetic/filter?version=synthetic-v1",
     ], first

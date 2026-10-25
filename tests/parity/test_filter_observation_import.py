@@ -130,7 +130,7 @@ def synthetic_inputs() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
                     "resource_id": {
                         "resource": {
                             "context": query["resource_context"],
-                            "name": query["resource_name"],
+                            "name": query.get("resource_name", "synthetic/internal/" + role),
                             "version": "synthetic-v1",
                         }
                     },
@@ -348,3 +348,98 @@ def test_json_refuses_underflow_without_changing_signed_zero() -> None:
     with pytest.raises(ImportRefused, match="underflow"):
         parse(b'{"p":1e-9999}')
     assert typed_json(parse(b'{"p":-0.0}')) == b'{"p":-0.0}'
+
+
+@pytest.fixture
+def gui_queries(monkeypatch: pytest.MonkeyPatch) -> None:
+    for role, usage in (("host", "PROCEDURAL"), ("filter", "FILTER")):
+        monkeypatch.setattr(
+            control,
+            role.upper() + "_QUERY",
+            {
+                "search": "n:Synthetic " + role + "=",
+                "require_unique": True,
+                "resource_selection": "gui_name",
+                "resource_context": "synthetic",
+                "resource_gui_name": "Synthetic " + role,
+                "resource_usage": usage,
+            },
+        )
+
+
+def test_gui_builder_keeps_complete_observed_identity(gui_queries: None) -> None:
+    manifest, record, base = synthetic_inputs()
+    payload = build_payload(manifest, receipt(manifest, record), base, texture_set=1, stack=2)
+    for role in ("host", "filter"):
+        assert payload["descriptors"][role]["resource_id"] == {
+            "context": "synthetic",
+            "name": "synthetic/internal/" + role,
+            "version": "synthetic-v1",
+            "url": "resource://synthetic/" + role + "?version=synthetic-v1",
+        }
+
+
+@pytest.mark.parametrize("field", ["url", "context", "name", "version"])
+def test_gui_builder_refuses_identity_drift(gui_queries: None, field: str) -> None:
+    manifest, record, base = synthetic_inputs()
+    output = next(
+        o for o in record["recordings"][1]["outputs"] if o["call"].endswith(".resource_id")
+    )["value"]
+    target = output if field == "url" else output["resource_id"]["resource"]
+    target[field] += "-changed"
+    with pytest.raises(ImportRefused, match="paired readbacks differ"):
+        build_payload(manifest, receipt(manifest, record), base, texture_set=1, stack=2)
+
+
+@pytest.mark.parametrize("field", ["url", "context", "name", "version"])
+def test_gui_selection_refuses_empty_identity(gui_queries: None, field: str) -> None:
+    value: dict[str, Any] = {
+        "resource_id": {"resource": {"context": "synthetic", "name": "internal", "version": "v1"}},
+        "url": "resource://synthetic/internal?version=v1",
+    }
+    target: Any = value if field == "url" else value["resource_id"]["resource"]
+    target[field] = ""
+    with pytest.raises(ImportRefused, match="identity incomplete"):
+        importer.selected_resource_identity(value, control.FILTER_QUERY, "filter")
+
+
+@pytest.mark.parametrize(
+    "mutation", ["mixed", "unknown", "usage", "not_unique", "empty_gui", "no_mode", "context"]
+)
+def test_gui_selection_refuses_wrong_contract(gui_queries: None, mutation: str) -> None:
+    query = deepcopy(control.FILTER_QUERY)
+    value = {
+        "resource_id": {"resource": {"context": "synthetic", "name": "internal", "version": "v1"}},
+        "url": "resource://synthetic/internal?version=v1",
+    }
+    if mutation == "mixed":
+        query["resource_name"] = "internal"
+    elif mutation == "unknown":
+        query["resource_selection"] = "other"
+    elif mutation == "usage":
+        query["resource_usage"] = "PROCEDURAL"
+    elif mutation == "not_unique":
+        query["require_unique"] = False
+    elif mutation == "empty_gui":
+        query["resource_gui_name"] = ""
+    elif mutation == "no_mode":
+        del query["resource_selection"]
+    elif mutation == "context":
+        query["resource_context"] = "other"
+    with pytest.raises(ImportRefused):
+        importer.selected_resource_identity(value, query, "filter")
+
+
+def test_exact_selection_still_requires_internal_name() -> None:
+    query = {
+        "search": "synthetic query",
+        "require_unique": True,
+        "resource_context": "synthetic",
+        "resource_name": "authored-name",
+    }
+    value = {
+        "resource_id": {"resource": {"context": "synthetic", "name": "other", "version": "v1"}},
+        "url": "resource://synthetic/other?version=v1",
+    }
+    with pytest.raises(ImportRefused, match="selected resource differs"):
+        importer.selected_resource_identity(value, query, "host")

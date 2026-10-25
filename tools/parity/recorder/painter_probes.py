@@ -1296,6 +1296,71 @@ def uniquely_searched_resource(args: dict[str, Any]) -> Any:
     return next(iter(matches))
 
 
+def complete_resource_identity(identifier: Any) -> dict[str, Any]:
+    """Keep the observed identity intact, with no guessed fields or private error text."""
+    try:
+        identity: dict[str, Any] = resource_id_value(identifier)
+    except Exception:
+        raise ValueError("gui_resource_selection:invalid_identity") from None
+    if set(identity) != {"url", "context", "name", "version"} or any(
+        type(value) is not str or not value for value in identity.values()
+    ):
+        raise ValueError("gui_resource_selection:invalid_identity")
+    return identity
+
+
+def uniquely_gui_searched_resource(args: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
+    """Resolve one total search result by authored GUI metadata, retaining its private ID."""
+    query_keys = {
+        "search",
+        "require_unique",
+        "resource_selection",
+        "resource_context",
+        "resource_gui_name",
+        "resource_usage",
+    }
+    source_keys = {"node_step", "channel"}
+    filter_keys = {"inside_step", "node_stack"}
+    node_key = "node_step" if "node_step" in args else "inside_step"
+    if (
+        set(args) not in (query_keys | source_keys, query_keys | filter_keys)
+        or args.get("require_unique") is not True
+        or args.get("resource_selection") != "gui_name"
+        or any(
+            type(args.get(key)) is not str or not args[key]
+            for key in query_keys - {"require_unique"}
+        )
+        or args.get("resource_usage") != ("PROCEDURAL" if "node_step" in args else "FILTER")
+        or type(args.get(node_key)) is not int
+        or args[node_key] < 1
+        or ("node_step" in args and (type(args.get("channel")) is not str or not args["channel"]))
+        or ("inside_step" in args and args.get("node_stack") != "Content")
+    ):
+        raise ValueError("gui_resource_selection:invalid_recipe")
+    found = substance_painter.resource.search(args["search"])
+    if len(found) != 1:
+        raise ValueError(f"gui_resource_selection:search_count={len(found)}")
+    resource = next(iter(found))
+    identifier = resource.identifier()
+    identity = complete_resource_identity(identifier)
+    usage = {
+        "PROCEDURAL": substance_painter.resource.Usage.PROCEDURAL,
+        "FILTER": substance_painter.resource.Usage.FILTER,
+    }[args["resource_usage"]]
+    if (
+        identity["context"] != args["resource_context"]
+        or resource.gui_name() != args["resource_gui_name"]
+        or usage not in resource.usages()
+    ):
+        raise ValueError("gui_resource_selection:metadata_mismatch")
+    return identifier, identity
+
+
+def verify_resource_binding(identifier: Any, selected: dict[str, Any]) -> None:
+    if complete_resource_identity(identifier) != selected:
+        raise ValueError("gui_resource_selection:bound_identity_mismatch")
+
+
 def triple(value: Any) -> tuple[float, float, float]:
     r, g, b = (float(component) for component in value)
     return (r, g, b)
@@ -1394,12 +1459,21 @@ def p22b_edit(call: str, args: dict[str, Any]) -> Any:
     if call == INSTANTIATE:
         return layerstack.instantiate(insert_position(args), fresh(args["layer_step"]))
     if call == INSERT_FILTER_EFFECT:
+        if "resource_selection" in args:
+            found, selected = uniquely_gui_searched_resource(args)
+            effect = layerstack.insert_filter_effect(insert_position(args), found)
+            verify_resource_binding(effect.get_source().resource_id, selected)
+            return effect
         found = (
             uniquely_searched_resource(args)
             if "require_unique" in args
             else searched_resource(str(args["search"]))
         )
-        return layerstack.insert_filter_effect(insert_position(args), found)
+        legacy_selected = complete_resource_identity(found) if "require_unique" in args else None
+        effect = layerstack.insert_filter_effect(insert_position(args), found)
+        if legacy_selected is not None:
+            verify_resource_binding(effect.get_source().resource_id, legacy_selected)
+        return effect
     if call == INSERT_GENERATOR_EFFECT:
         found = searched_resource(str(args["search"]))
         return layerstack.insert_generator_effect(insert_position(args), found)
@@ -1705,6 +1779,11 @@ def edit(step: int, call: str, args: dict[str, Any], resolved: dict[str, Any]) -
         node.active_channels = {channel_type(c) for c in args["channels"]}
         return None
     if call == SET_SOURCE:
+        if "resource_selection" in args:
+            source, selected = uniquely_gui_searched_resource(args)
+            result = node.set_source(channel_arg(args), source)
+            verify_resource_binding(node.get_source(channel_arg(args)).resource_id, selected)
+            return result
         if "require_unique" in args:
             source = uniquely_searched_resource(args)
         elif "resource_step" in args:
@@ -1713,7 +1792,11 @@ def edit(step: int, call: str, args: dict[str, Any], resolved: dict[str, Any]) -
             source = substance_painter.resource.ResourceID.from_url(str(args["resource_url"]))
         else:
             source = color_of(args["color"], args.get("color_space"))
-        return node.set_source(channel_arg(args), source)
+        legacy_selected = complete_resource_identity(source) if "require_unique" in args else None
+        result = node.set_source(channel_arg(args), source)
+        if legacy_selected is not None:
+            verify_resource_binding(node.get_source(channel_arg(args)).resource_id, legacy_selected)
+        return result
     if call == SET_PROJECTION_MODE:
         mode = member(PROJECTION_MODES, "ProjectionMode", args["projection_mode"])
         return node.set_projection_mode(mode)

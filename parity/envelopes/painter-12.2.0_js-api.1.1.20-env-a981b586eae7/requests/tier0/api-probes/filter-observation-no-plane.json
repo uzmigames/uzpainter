@@ -98,7 +98,7 @@
         "args": {
           "node_step": 3,
           "channel": "User0",
-          "search": "s:starterassets u:procedural n:grunge_brushed=",
+          "search": "s:starterassets u:substance",
           "require_unique": true,
           "resource_context": "starter_assets",
           "resource_name": "grunge_brushed/grunge_brushed"
@@ -112,8 +112,10 @@
           "node_stack": "Content",
           "search": "s:starterassets u:filter n:Blur=",
           "require_unique": true,
+          "resource_selection": "gui_name",
           "resource_context": "starter_assets",
-          "resource_name": "Blur"
+          "resource_gui_name": "Blur",
+          "resource_usage": "FILTER"
         }
       },
       {

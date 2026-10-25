@@ -1755,6 +1755,10 @@
       "documented_as": "substance_painter.resource.Usage",
       "page": "substance_painter/resource.html"
     },
+    "substance_painter.resource.Usage.FILTER": {
+      "documented_as": "substance_painter.resource.Usage",
+      "page": "substance_painter/resource.html"
+    },
     "substance_painter.resource.Usage.GENERATOR": {
       "documented_as": "substance_painter.resource.Usage",
       "page": "substance_painter/resource.html"

@@ -107,6 +107,35 @@ def resource_id(value: Any) -> dict[str, str]:
     return result
 
 
+def selected_resource_identity(value: Any, query: dict[str, Any], role: str) -> dict[str, str]:
+    """Keep observed internal names private for explicitly authored GUI selections."""
+    common = {"search", "require_unique", "resource_context"}
+    if "resource_selection" in query:
+        closed(
+            query,
+            common | {"resource_selection", "resource_gui_name", "resource_usage"},
+            "resource selection fields",
+        )
+        require(query["resource_selection"] == "gui_name", "unknown resource selection")
+        require(
+            role in ("host", "filter")
+            and query["resource_usage"] == {"host": "PROCEDURAL", "filter": "FILTER"}[role],
+            "resource selection usage",
+        )
+    else:
+        closed(query, common | {"resource_name"}, "resource selection fields")
+    require(query["require_unique"] is True, "unique resource selection required")
+    require(
+        all(type(v) is str and bool(v) for k, v in query.items() if k != "require_unique"),
+        "resource selection strings",
+    )
+    identity = resource_id(value)
+    require(identity["context"] == query["resource_context"], "selected resource differs")
+    if "resource_selection" not in query:
+        require(identity["name"] == query["resource_name"], "selected resource differs")
+    return identity
+
+
 def recipe_body(manifest: dict[str, Any]) -> dict[str, Any]:
     return {
         "schema": "uzpainter/filter-observation-recipe/1",
@@ -380,11 +409,8 @@ def build_payload(
         ("filter", filter_step, control.FILTER_QUERY),
     ):
         params = parameters(observed(control.SOURCE + "get_parameters", node))
-        identity = resource_id(observed(control.SOURCE + "resource_id", node))
-        require(
-            identity["context"] == query["resource_context"]
-            and identity["name"] == query["resource_name"],
-            "selected resource differs",
+        identity = selected_resource_identity(
+            observed(control.SOURCE + "resource_id", node), query, role
         )
         outputs = observed(control.SOURCE + "image_outputs", node)
         require(
