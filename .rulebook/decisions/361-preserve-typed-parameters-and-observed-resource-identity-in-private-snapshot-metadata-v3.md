@@ -1,6 +1,6 @@
 # 361. Preserve typed parameters and observed resource identity in private snapshot metadata v3
 
-**Status**: proposed
+**Status**: accepted
 **Date**: 2026-10-25
 **Related Tasks**: phase3.1_proc-backend-seam
 

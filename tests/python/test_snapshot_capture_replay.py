@@ -28,8 +28,28 @@ from tests.python.recorded_probe import ENVELOPE, recorded_readbacks
 from tools.parity.schemas import REPO_ROOT
 from tools.parity.store.store import Status, locate, resolve_oracle
 
-# Public references of the private capture (hashes only; tmp/claude-supervision-reply.json
-# CAPTURE_RUN): exe built at d72fa634, signatures toggle 0 fe9a9756..., toggle 1 190f21ca....
+# Public references of the private /2 capture, hashes only (2026-10-25, Painter lock seq
+# 1267/1268, UzPainter's own Legacy Painter; UzPainter.exe built at d72fa634). Receipts and
+# requests stay private.
+# `request_sha256` hashes the request file given to `assets snapshot` (the command keeps a
+# canonical copy beside its receipt, whose bytes differ).
+CAPTURE: dict[str, Any] = {
+    "exe_sha256": "096f751cd6ff896d4e7f47e45db8c1814734bf4f8e7798dce9dbf6fce539c156",
+    "bridge_sha256": "c941fe3a46b49bd1a0a691d9395e6750a71963a38868c4378d6b2023ca1612c3",
+    "painter_side_sha256": "14cb8e44b284363c10a1d6affbbf9388d3993e8f4938f0e0b27342fa3204fecc",
+    "toggle_0": {
+        "signature_sha256": "fe9a975644a85ede1e1f5f3a127b08f040f795ad6b3cd6f7a52c5b350185bf4b",
+        "request_sha256": "cf647c2c69d210039036bdf65e124bb7edf73f89ee02f7b66a2b0e9262c09a78",
+        "receipt_sha256": "4cccf05525d9dcfd2b792d54eb898b8b9554f956b187723f952121e54ccb617b",
+    },
+    "toggle_1": {
+        "signature_sha256": "190f21cad9c59752e66165ceeb64dcac63a64dc49783135da0aecc59138f9501",
+        "request_sha256": "4cb69ff87970a007753e7b2de216952d7f056c64bb15b83adf3a8b37222aff53",
+        "receipt_sha256": "346353fbf4ab8ac725be9b6d15bae4524c118ad3fc6dff57c56df9cce97a3a1a",
+    },
+    # The bound initial state: toggle 0, fill uid 6, User0, the receipt's nominal override.
+    "bind_request_sha256": "f0c3126bd180db8ec09a009a0ec089ea0a95474498ea02bb21768d567cb927d8",
+}
 PROJECT_BLOB = {
     "record_id": "source-substance-0-1-project",
     "sha256": "bab09b8b950dadfb4c719bf9030029b0a4f22a33abe818802250a257677d59e5",
@@ -226,6 +246,13 @@ def replay(facade: Run, name: str) -> tuple[list[dict[str, Any]], list[dict[str,
         error = report.get("error") or {}
         pytest.fail(f"replay script failed: {error.get('type')} (details kept privately)", False)
     observed: list[dict[str, Any]] = report["result"]
+    keys = {f"s{s['step']}" for s in steps}
+    if not (
+        isinstance(observed, list)
+        and len(observed) == 2
+        and all(isinstance(r, dict) and set(r) == keys for r in observed)
+    ):
+        pytest.fail("replay result is not two recordings of the probe's steps", pytrace=False)
     return observed, steps
 
 
@@ -257,13 +284,13 @@ def internal_pin_readback(name: str) -> dict[str, Any]:
 
 @pytest.mark.parametrize("name", sorted(PROBES))
 def test_recorded_source_steps_replay_exactly_except_known_differences(
-    facade: Run, captured_project: Path, name: str
+    private_facade: Run, captured_project: Path, name: str
 ) -> None:
     """Recording 1 is replayed on the captured project, which is then saved, closed and reopened
     before recording 2 is replayed, as the recorder did. Values compare with their JSON types.
     Messages name only the condition, step, call and digests; the full differences go to a
     private file beside the oracle store."""
-    observed, steps = replay(facade, name)
+    observed, steps = replay(private_facade, name)
     calls = {f"s{s['step']}": str(s["call"]).rsplit(".", 2)[-2:] for s in steps}
     excluded = resource_id_steps(steps)
     pin = typed(internal_pin_readback(name)) if excluded else None

@@ -192,8 +192,10 @@ zero. Dimensions outside the public 128..4096 value domain are refused without c
 Every setter validates before durable mutation, invalidates the affected texture and
 participates in native transactions. Unsupported final states roll back, while temporary
 unsupported values may be restored before commit. Source replacement or deletion makes
-existing handles fail. Stored defaults, properties, presets, image-input editing and
-multioutput source binding still require their own metadata and implementation.
+existing handles fail. Reading recorded presets, properties, image inputs and outputs,
+typed parameters and the observed ResourceID is covered under "Recorded source metadata"
+below. Stored asset defaults, preset application, image-input editing and multioutput source
+binding still require their own metadata and implementation.
 
 ## Recorded source metadata
 
@@ -275,6 +277,18 @@ Evidence: `uzp-procedural-tests snapshot-metadata` (`/3` codec, receipt, refusal
 save and reopen), and `tests/python/test_bind_snapshot_cli.py` (typed bind, observed and pinned
 identities, provenance-only refusals).
 
+Painter evidence is limited to fill sources: the strict replay of three admitted api probes over
+an own-Painter `/3` capture (`tests/python/test_snapshot_capture_replay_v3.py`, private derived
+project resolved by hash). It covers `source-substance-single-output` (53 steps),
+`source-substance-booleans-filter` fill steps (9) and `source-substance-held-property` (7). Each
+is compared in both recordings, the second after a real save, close and reopen: 138 operations,
+all exact, types and `resource_id` included. The booleans probe's filter steps 19-24 have their
+own replay (`tests/python/test_pyapi_effect_sources.py`). Its filter steps 16-18 have no compared
+replay, because effect sources hold no recorded observations. No other capture domain, family or
+parity is established. The legacy `/2` capture's replay
+(`tests/python/test_snapshot_capture_replay.py`) keeps its two reported differences (internal pin,
+integral float read as an integer).
+
 ## Generator and filter effect sources
 
 A stored generator or filter effect returns its procedural from `get_source()` as a fresh
@@ -304,9 +318,11 @@ None, refusals before mutation and save/reopen. Its pins are synthetic test refe
 snapshots whose float32 rasters differ. It verifies exact exports after edits, save/reopen,
 reversion and failed transactions against an independent float32 readout calculation,
 and verifies the alternate source's stored bytes separately. These API entries remain
-`pending-evidence` until an exact compared replay establishes their behavior.
-The admitted `source-substance-single-output` capture supplies observations only:
-49 of 53 source operations match across save/reopen, with four differences in
-`resolution.value`. General binding by the observed Painter ResourceID and
-project-private source metadata are still missing from the replay path; skipped
-getters or substituted UzPainter identities cannot count as matching evidence.
+`pending-evidence` until a traced compared replay promotes them (decision 112).
+The current compared evidence is the strict replay of the own-Painter `/3` capture described
+under "Recorded source metadata": 138 fill-source operations of three admitted probes, all exact
+in both recordings, including `resolution.value` (a list) and `resource_id`. That
+`resource_id` is the observed Painter ResourceID, which is provenance only: binding,
+resolving, importing or searching by it is deliberately unavailable, and the source stays
+bound to its UzPainter snapshot pin. Skipped getters or substituted identities never count
+as matching evidence.
