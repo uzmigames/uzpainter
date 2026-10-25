@@ -6,6 +6,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -37,6 +38,23 @@ def test_header_and_done_are_not_completion() -> None:
         [b'data: {"model":"grok-4.5","choices":[]}\n', b"data: [DONE]\n"], "xai/grok-4.5"
     )
     assert reply.status == "incomplete" and reply.model == "grok-4.5"
+
+
+@pytest.mark.parametrize("finish", ["stop", "length", None])
+def test_done_ends_stream_without_waiting_for_connection_close(finish: str | None) -> None:
+    def lines() -> Iterator[bytes]:
+        value = {
+            "model": "actual",
+            "choices": [{"delta": {"content": "review"}, "finish_reason": finish}],
+        }
+        yield b"data: " + json.dumps(value).encode() + b"\n"
+        yield b"data: [DONE]\n"
+        raise AssertionError("parser read past the terminal SSE event")
+
+    reply = model_panel.parse_response(lines(), "requested")
+    assert reply.status == ("completed" if finish == "stop" else "incomplete")
+    assert reply.model == "actual" and reply.content == "review"
+    assert reply.finish_reason == finish
 
 
 def test_deadline_is_total_not_reset_by_worker_activity(monkeypatch: pytest.MonkeyPatch) -> None:

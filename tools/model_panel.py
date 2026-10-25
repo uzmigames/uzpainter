@@ -66,8 +66,9 @@ def parse_response(lines: Iterable[bytes], requested_model: str) -> Reply:
         if line.startswith("data:"):
             streamed = True
             data = line[5:].strip()
-            if data != "[DONE]":
-                accept(json.loads(data), True)
+            if data == "[DONE]":
+                break
+            accept(json.loads(data), True)
         elif not streamed and line and not line.startswith((":", "event:", "id:")):
             plain.append(line)
     if not streamed:
