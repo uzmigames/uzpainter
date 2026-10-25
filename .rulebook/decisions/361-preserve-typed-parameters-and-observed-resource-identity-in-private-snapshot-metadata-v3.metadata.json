@@ -1,0 +1,11 @@
+{
+  "id": 361,
+  "slug": "preserve-typed-parameters-and-observed-resource-identity-in-private-snapshot-metadata-v3",
+  "title": "Preserve typed parameters and observed resource identity in private snapshot metadata v3",
+  "status": "accepted",
+  "date": "2026-10-25",
+  "relatedTasks": [
+    "phase3.1_proc-backend-seam"
+  ],
+  "supersededBy": null
+}
