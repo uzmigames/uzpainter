@@ -34,14 +34,36 @@ def selection_args() -> dict[str, Any]:
     }
 
 
+def selection_functions(search: Mock) -> dict[str, Any]:
+    tree = ast.parse(PAINTER_PROBES.read_text())
+    names = {
+        "unique_resource_candidates",
+        "unique_resource_status",
+        "unique_resource_selection_diagnostic",
+        "uniquely_searched_resource",
+    }
+    functions: list[ast.stmt] = [
+        n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in names
+    ]
+    assert len(functions) == 4
+    namespace: dict[str, Any] = {
+        "Any": Any,
+        "substance_painter": SimpleNamespace(resource=SimpleNamespace(search=search)),
+        "resource_id_value": lambda identifier: {
+            "context": identifier.context,
+            "name": identifier.name,
+            "version": identifier.version,
+            "url": identifier.url(),
+        },
+    }
+    exec(
+        compile(ast.Module(body=functions, type_ignores=[]), str(PAINTER_PROBES), "exec"), namespace
+    )
+    return namespace
+
+
 @pytest.mark.parametrize("count", [0, 1, 2])
 def test_resource_requires_one_fresh_exact_identity(count: int) -> None:
-    tree = ast.parse(PAINTER_PROBES.read_text())
-    function = next(
-        n
-        for n in tree.body
-        if isinstance(n, ast.FunctionDef) and n.name == "uniquely_searched_resource"
-    )
     identifier = SimpleNamespace(
         context="synthetic",
         name="filter",
@@ -55,19 +77,56 @@ def test_resource_requires_one_fresh_exact_identity(count: int) -> None:
         return_value=[SimpleNamespace(identifier=lambda: identifier)] * count
         + [SimpleNamespace(identifier=lambda: irrelevant)]
     )
-    namespace: dict[str, Any] = {
-        "Any": Any,
-        "substance_painter": SimpleNamespace(resource=SimpleNamespace(search=search)),
-    }
-    exec(
-        compile(ast.Module(body=[function], type_ignores=[]), str(PAINTER_PROBES), "exec"),
-        namespace,
-    )
+    namespace = selection_functions(search)
     if count == 1:
-        assert namespace[function.name](selection_args()) is identifier
+        assert namespace["uniquely_searched_resource"](selection_args()) is identifier
     else:
-        with pytest.raises(ValueError, match="one versioned exact match"):
-            namespace[function.name](selection_args())
+        with pytest.raises(ValueError, match=f"^unique_resource_selection:match_count={count}$"):
+            namespace["uniquely_searched_resource"](selection_args())
+    search.assert_called_once_with(selection_args()["search"])
+
+
+@pytest.mark.parametrize(
+    "version,url,reason",
+    [
+        (None, "private-url-marker", "missing_version"),
+        ("", "private-url-marker", "missing_version"),
+        ("private-version-marker", "", "missing_url"),
+    ],
+)
+def test_unique_selection_refusals_never_include_identity(
+    version: Any, url: str, reason: str
+) -> None:
+    identifier = SimpleNamespace(
+        context="synthetic", name="filter", version=version, url=lambda: url
+    )
+    search = Mock(return_value=[SimpleNamespace(identifier=lambda: identifier)])
+    functions = selection_functions(search)
+    with pytest.raises(ValueError) as caught:
+        functions["uniquely_searched_resource"](selection_args())
+    assert str(caught.value) == "unique_resource_selection:" + reason
+    assert "private-" not in str(caught.value)
+
+
+@pytest.mark.parametrize("count", [0, 1, 2])
+def test_read_only_resource_diagnostic_returns_counts_only(count: int) -> None:
+    identifier = SimpleNamespace(
+        context="synthetic",
+        name="filter",
+        version="private-version-marker",
+        url=lambda: "private-url-marker",
+    )
+    search = Mock(return_value=[SimpleNamespace(identifier=lambda: identifier)] * count)
+    functions = selection_functions(search)
+    result = functions["unique_resource_selection_diagnostic"](selection_args())
+    assert result == {
+        "search_count": count,
+        "match_count": count,
+        "missing_version": False if count == 1 else None,
+        "missing_url": False if count == 1 else None,
+        "refusal": None if count == 1 else "match_count",
+    }
+    assert "private-" not in str(result)
     search.assert_called_once_with(selection_args()["search"])
 
 

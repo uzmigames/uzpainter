@@ -62,6 +62,7 @@ if TYPE_CHECKING:
         describe_property,
         levels_field,
         member,
+        resource_id_value,
         scene_bounding_box,
         set_camera,
         source_value,
@@ -1235,8 +1236,8 @@ def searched_resource(query: str) -> Any:
     return found[0].identifier()
 
 
-def uniquely_searched_resource(args: dict[str, Any]) -> Any:
-    """Resolve one exact fresh identity, preserving its returned version in the binding."""
+def unique_resource_candidates(args: dict[str, Any]) -> tuple[list[Any], int]:
+    """One documented search, with exact context/name selection and no binding."""
     if args.get("require_unique") is not True or not all(
         type(args.get(key)) is str and args[key]
         for key in ("search", "resource_context", "resource_name")
@@ -1251,9 +1252,48 @@ def uniquely_searched_resource(args: dict[str, Any]) -> Any:
         if identifier.context == args["resource_context"]
         and identifier.name == args["resource_name"]
     ]
-    if len(matches) != 1 or not matches[0].version or not matches[0].url():
-        raise ValueError("unique resource selection requires one versioned exact match")
-    return matches[0]
+    return matches, len(found)
+
+
+def unique_resource_status(matches: list[Any], search_count: int) -> dict[str, Any]:
+    """Counts and refusal classes only; never a resource identity or URL."""
+    result: dict[str, Any] = {
+        "search_count": search_count,
+        "match_count": len(matches),
+        "missing_version": None,
+        "missing_url": None,
+        "refusal": "match_count",
+    }
+    if len(matches) != 1:
+        return result
+    identity = resource_id_value(next(iter(matches)))
+    result["missing_version"] = type(identity["version"]) is not str or not identity["version"]
+    result["missing_url"] = type(identity["url"]) is not str or not identity["url"]
+    result["refusal"] = (
+        "missing_version"
+        if result["missing_version"]
+        else "missing_url"
+        if result["missing_url"]
+        else None
+    )
+    return result
+
+
+def unique_resource_selection_diagnostic(args: dict[str, Any]) -> dict[str, Any]:
+    """Read-only public-API diagnostic: exactly one search, no insertion or setter."""
+    matches, count = unique_resource_candidates(args)
+    return unique_resource_status(matches, count)
+
+
+def uniquely_searched_resource(args: dict[str, Any]) -> Any:
+    """Resolve one exact fresh versioned identity; never choose among several matches."""
+    matches, count = unique_resource_candidates(args)
+    status = unique_resource_status(matches, count)
+    if status["refusal"] == "match_count":
+        raise ValueError(f"unique_resource_selection:match_count={status['match_count']}")
+    if status["refusal"] is not None:
+        raise ValueError("unique_resource_selection:" + status["refusal"])
+    return next(iter(matches))
 
 
 def triple(value: Any) -> tuple[float, float, float]:
