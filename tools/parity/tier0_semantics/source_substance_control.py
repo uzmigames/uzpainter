@@ -61,6 +61,10 @@ def request() -> dict[str, Any]:
         {"plane": PLANE_SHA256},
     )
     result["golden_id"] = "tier0/api-probes/" + NAME
+    return _pin(result)
+
+
+def _pin(result: dict[str, Any]) -> dict[str, Any]:
     result["applied_settings"] = [
         {
             "name": "texture_set.resolution",
@@ -74,3 +78,50 @@ def request() -> dict[str, Any]:
         version=envelope["painter_version"], build_id=envelope["painter_build"]
     )
     return result
+
+
+BOOLEANS_FILTER_NAME = "source-substance-booleans-filter"
+# Public starter-asset query already recorded by the layer-node-kinds probe (P22-B).
+FILTER_SEARCH = "s:starterassets u:filter n:Blur="
+EFFECT_GETTERS = ("get_parameters", "resource_id", "image_outputs", "active_output", "resolution")
+# Integer and boolean values for the source's first Togglebutton, chosen in Painter.
+TOGGLES: tuple[bool | int, ...] = (1, True, 0, False)
+
+
+def booleans_filter_request() -> dict[str, Any]:
+    """Booleans as integers and the FilterEffectNode resolution restriction (python-doc)."""
+    sequence = start("plane", resolution=128)
+    sequence.channels((("User0", "L32F"),))
+    node = sequence.fill(["User0"])
+    args = {"node_step": node, "channel": "User0"}
+    sequence.add(ps.SET_SOURCE, **args, resource_url=RESOURCE_URL)
+    blur = sequence.add(
+        ps.INSERT_FILTER, inside_step=node, node_stack="Content", search=FILTER_SEARCH
+    )
+    sequence.add(PREFIX + "get_parameters", **args)
+    for toggle in TOGGLES:
+        sequence.add(PREFIX + "set_parameters", **args, roundtrip=False, toggle=toggle, probe=True)
+        sequence.add(PREFIX + "get_parameters", **args)
+    effect = {"node_step": blur, "effect": True}
+    for getter in EFFECT_GETTERS:
+        sequence.add(PREFIX + getter, **effect)
+    for mode in ("Custom", "Auto"):
+        sequence.add(PREFIX + "resolution", **effect, roundtrip=False, mode=mode, probe=True)
+        sequence.add(PREFIX + "resolution", **effect)
+    result = manifest(
+        Golden(
+            BOOLEANS_FILTER_NAME,
+            "tier0/api-probes/" + BOOLEANS_FILTER_NAME,
+            "SourceSubstance booleans and FilterEffectNode restriction: the fill source's first "
+            "Togglebutton property set to 1, True, 0 and False with get_parameters after each, "
+            "then a starter Blur filter's source getters and Custom128/Auto resolution "
+            "assignments, repeated after save/reopen. The parameter is chosen in Painter; no "
+            "asset parameter name, default or value is authored.",
+            "plane",
+            ["plane"],
+            sequence,
+        ),
+        {"plane": PLANE_SHA256},
+    )
+    result["golden_id"] = "tier0/api-probes/" + BOOLEANS_FILTER_NAME
+    return _pin(result)

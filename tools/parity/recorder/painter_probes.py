@@ -1404,10 +1404,22 @@ SUBSTANCE_VALUE_ARGS = {
 
 
 def substance_source(args: dict[str, Any]) -> Any:
-    source = fresh(args["node_step"]).get_source(channel_arg(args))
+    node = fresh(args["node_step"])
+    # A generator or filter effect's get_source() takes no channel (python-doc).
+    source = node.get_source() if args.get("effect") is True else node.get_source(channel_arg(args))
     if not isinstance(source, substance_painter.source.SourceSubstance):
-        raise ValueError("the selected fill source is not SourceSubstance")
+        raise ValueError("the selected source is not SourceSubstance")
     return source
+
+
+def first_toggle(source: Any) -> str:
+    """The first property, by name, whose widget is a Togglebutton (a documented boolean)."""
+    properties = source.get_properties()
+    for name in sorted(properties):
+        # python-doc: Property.widget_type() -> str, one of which is 'Togglebutton'.
+        if properties[name].widget_type() == "Togglebutton":
+            return str(name)
+    raise ValueError("the source has no Togglebutton property")
 
 
 def substance_read(call: str, args: dict[str, Any]) -> Any:
@@ -1459,6 +1471,17 @@ def substance_edit(call: str, args: dict[str, Any]) -> Any:
         else:
             raise ValueError("this control supports Custom128 and Auto resolution only")
         return None
+    if (
+        call == "substance_painter.source.SourceSubstance.set_parameters"
+        and args.get("roundtrip") is False
+    ):
+        # The boolean is chosen in Painter, so no asset parameter name is authored. JSON true and
+        # false arrive as Python bools and integers stay integers: nothing is coerced.
+        value = args.get("toggle")
+        if not isinstance(value, (bool, int)):
+            raise ValueError("an explicit set_parameters control needs a boolean or integer toggle")
+        source = substance_source(args)
+        return source.set_parameters({first_toggle(source): value})
     if args.get("roundtrip") is not True:
         raise ValueError("this control requires an explicit effective-value roundtrip")
     source = substance_source(args)

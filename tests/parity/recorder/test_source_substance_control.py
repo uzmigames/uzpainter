@@ -23,10 +23,15 @@ from tools.parity.recorder.probes import (
 )
 from tools.parity.schemas import REPO_ROOT, Schema, record_problems, validation_errors
 from tools.parity.tier0_semantics.source_substance_control import (
+    BOOLEANS_FILTER_NAME,
+    EFFECT_GETTERS,
+    FILTER_SEARCH,
     GETTERS,
     NAME,
     PREFIX,
     RESOURCE_URL,
+    TOGGLES,
+    booleans_filter_request,
     request,
 )
 
@@ -181,3 +186,43 @@ def test_source_roundtrips_replay_after_reopen(
         "value_kind": "tuple",
         "log2_offset": 0,
     }
+
+
+def test_booleans_filter_request_authors_no_asset_parameter() -> None:
+    manifest = booleans_filter_request()
+    assert validation_errors(manifest, Schema.GOLDEN_PUBLIC) == []
+    assert manifest_symbol_problems(manifest) == []
+    job = probe_job_from_manifest(manifest)
+    assert [step.call.rsplit(".", 1)[-1] for step in job.state_steps] == [
+        "add_channel",
+        "insert_fill",
+        "active_channels",
+        "set_source",
+        "insert_filter_effect",
+    ]
+    assert job.state_steps[-1].args["search"] == FILTER_SEARCH
+    edits = [step for step in job.probe_steps if step.call == PREFIX + "set_parameters"]
+    # Integers stay integers and booleans stay booleans in the public request.
+    assert [(type(step.args["toggle"]), step.args["toggle"]) for step in edits] == [
+        (type(value), value) for value in TOGGLES
+    ]
+    assert all(set(step.args) == {"node_step", "channel", "roundtrip", "toggle"} for step in edits)
+    filter_step = job.state_steps[-1].step
+    effect = [step for step in job.probe_steps if step.args.get("effect") is True]
+    assert {step.args["node_step"] for step in effect} == {filter_step}
+    assert [step.call for step in effect][: len(EFFECT_GETTERS)] == [
+        PREFIX + getter for getter in EFFECT_GETTERS
+    ]
+    assignments = [step.args["mode"] for step in effect if "mode" in step.args]
+    assert assignments == ["Custom", "Auto"]
+
+
+def test_committed_booleans_filter_request_matches_its_generator() -> None:
+    manifest = booleans_filter_request()
+    entry = current_envelope()
+    path = (
+        manifest_root(entry).parent / "requests/tier0/api-probes" / f"{BOOLEANS_FILTER_NAME}.json"
+    )
+    assert json.loads(path.read_text(encoding="utf-8")) == manifest
+    assert manifest["private_records"] == []
+    assert manifest["software"]["painter"]["build_id"] == entry["painter_build"]
