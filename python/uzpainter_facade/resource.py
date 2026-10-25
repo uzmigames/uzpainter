@@ -117,6 +117,30 @@ class ResourceID:
         return f"ResourceID(context={self.context!r}, name={self.name!r}, version={self.version!r})"
 
 
+class ObservedResourceID(ResourceID):
+    """The ResourceID a Painter recording observed for a snapshot source (decision 361): its
+    parts and URL exactly as recorded. Provenance only: no call that resolves, imports, binds,
+    searches or replaces a resource accepts it (`to_native` refuses it)."""
+
+    __slots__ = ("_url",)
+
+    def __init__(self, native: Any) -> None:
+        super().__init__(str(native.context), str(native.name), str(native.version))
+        self._url = str(native.url())
+
+    def url(self) -> str:
+        """The URL the recording observed, never rebuilt from the parts."""
+        return self._url
+
+
+def refuse_observed(identifier: Any) -> None:
+    if isinstance(identifier, ObservedResourceID):
+        raise ValueError(
+            "an observed Painter ResourceID is provenance only: it cannot resolve, import, bind, "
+            "search or replace a resource"
+        )
+
+
 class Resource:
     """A resource of the project."""
 
@@ -185,6 +209,7 @@ def to_native(identifier: Any) -> Any:
         identifier = identifier.identifier()
     if not isinstance(identifier, ResourceID):
         raise TypeError("the resource must be a resource.ResourceID")
+    refuse_observed(identifier)
     known = facts()
     for native in uzpainter.resource.list_project_resources():
         if native.name != identifier.name:

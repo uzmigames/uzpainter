@@ -404,7 +404,12 @@ int RunBindSnapshotCommand(const std::vector<std::string>& args, std::FILE* out,
         // The complete selected signature, an explicit channel mapping and the supplied override.
         core::ProceduralRef ref;
         ref.asset = core::FormatAssetUrl(snapshot.request.asset);
-        ref.params = Object(Object(snapshot.entry.signature).at("params"));
+        // Decision 361: the parameters exactly as the recording observed them (an integral float
+        // stays a double) when recorded; otherwise the signature's, which encode numbers by value.
+        const auto& observed = snapshot.entry.source_metadata;
+        ref.params = observed && observed->typed_effective_parameters
+                         ? *observed->typed_effective_parameters
+                         : Object(Object(snapshot.entry.signature).at("params"));
         ref.output_mapping = {{channelName, snapshot.request.outputId}};
         ref.resolution_override = bind.override;
         // The context is the target's own: its set, settings, dimensions and the ref's seed.

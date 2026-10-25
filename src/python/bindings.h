@@ -100,6 +100,16 @@ struct ResourceIdHandle {
     std::string name;
     std::string version;
 };
+/// `uzpainter.resource._ObservedResourceID` (decision 361): the ResourceID a Painter recording
+/// observed for a snapshot source, its parts and URL exactly as recorded. Provenance only: it is
+/// not a `ResourceIdHandle`, so no call that resolves, imports, binds, searches or replaces a
+/// resource accepts it, and its URL is never parsed or resolved.
+struct ObservedResourceIdHandle {
+    std::string context;
+    std::string name;
+    std::string version;
+    std::string url;
+};
 /// The SHA-256 a project resource id names; `ResourceNotFoundError` when the project holds no
 /// such entry (or, without a version, several hashes under the name).
 std::string ResolveResource(const core::Project& project, const ResourceIdHandle& id);

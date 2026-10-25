@@ -6,6 +6,7 @@
 #include "store/project_store.h"
 
 #include <expected>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -43,12 +44,24 @@ public:
         core::ChannelFormat format, const core::FillContent& fill, const core::ProceduralRef& ref,
         core::Id node, bool mask) const;
 
-private:
-    /// The admitted request of a fill source and the snapshots that admitted it, or why not.
-    std::expected<std::pair<ProceduralRequest, SnapshotBackend>, std::string> Admitted(
+    /// The observations recorded with the snapshot serving this fill source's current exact
+    /// signature (decision 361). Empty only when legitimately absent: the source names no snapshot
+    /// asset, no snapshot holds its exact signature, or that snapshot recorded no metadata. Any
+    /// other failure (a corrupt, foreign or unloadable store, a use outside the admitted domain,
+    /// an invalid reference) is an error, never an absence.
+    std::expected<std::optional<store::SourceMetadata>, std::string> Observations(
         const core::Project& project, const core::TextureSet& set, core::ChannelType channel,
         core::ChannelFormat format, const core::FillContent& fill, const core::ProceduralRef& ref,
         core::Id node, bool mask) const;
+
+private:
+    /// The admitted request of a fill source and the snapshots that admitted it, or why not.
+    /// `unrecorded`, when given, is set when the loaded snapshots hold no entry of the request's
+    /// exact signature.
+    std::expected<std::pair<ProceduralRequest, SnapshotBackend>, std::string> Admitted(
+        const core::Project& project, const core::TextureSet& set, core::ChannelType channel,
+        core::ChannelFormat format, const core::FillContent& fill, const core::ProceduralRef& ref,
+        core::Id node, bool mask, bool* unrecorded = nullptr) const;
 
     store::ProjectStore& store_;
     core::Project project_;

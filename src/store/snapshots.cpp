@@ -102,21 +102,87 @@ std::string PropertyProblem(const std::string& key, const Value& description) {
     return {};
 }
 
+/// Why `typed` is not the typed parameter map of a snapshot of `signature` (decision 361): an
+/// object whose keys are exactly the signature's `params` and whose int64, finite double or
+/// string values equal them by value. The raw values are kept; nothing is converted.
+std::string TypedParametersProblem(const Value& signature, const Value& typed) {
+    const auto* map = std::get_if<Object>(&typed.data);
+    if (map == nullptr) return "typed_effective_parameters must be an object";
+    const auto* object = std::get_if<Object>(&signature.data);
+    const auto params = object ? object->find("params") : Object::const_iterator{};
+    const auto* expected = object && params != object->end() ? std::get_if<Object>(&params->second.data) : nullptr;
+    if (expected == nullptr) return "typed_effective_parameters needs a signature with params";
+    if (map->size() != expected->size()) return "typed_effective_parameters keys must be exactly the signature's parameters";
+    for (const auto& [name, value] : *map) {
+        const auto it = expected->find(name);
+        if (it == expected->end()) return "typed_effective_parameters keys must be exactly the signature's parameters";
+        const std::optional<Value> byValue = ParamByValue(value);
+        if (!byValue) return "typed_effective_parameters." + name + " must be an int64, finite double or string";
+        if (core::json::WriteCanonical(*byValue) != core::json::WriteCanonical(it->second)) {
+            return "typed_effective_parameters." + name + " is not the signature's value";
+        }
+    }
+    return {};
+}
+
+/// `value` read as an observed ResourceID of the snapshot pinned as `pin`, or why not: exactly
+/// four nonempty strings, and `pin` the snapshot asset of `url` (`uzasset://snapshot/<sha256>@1`).
+std::expected<ObservedResourceId, std::string> ParseObservedResourceId(const Value& value, const std::string& pin) {
+    using Result = std::expected<ObservedResourceId, std::string>;
+    static constexpr std::array<std::string_view, 4> kParts = {"url", "context", "name", "version"};
+    const auto* object = std::get_if<Object>(&value.data);
+    const auto part = [&](std::string_view name) -> const std::string* {
+        const auto it = object->find(name);
+        return it != object->end() && it->second.IsString() && !std::get<std::string>(it->second.data).empty()
+                   ? &std::get<std::string>(it->second.data)
+                   : nullptr;
+    };
+    if (object == nullptr || object->size() != kParts.size() ||
+        !std::all_of(kParts.begin(), kParts.end(), [&](std::string_view name) { return part(name) != nullptr; })) {
+        return Result(std::unexpect, "observed_resource_id must be exactly the nonempty strings url, context, name and version");
+    }
+    ObservedResourceId id{*part("url"), *part("context"), *part("name"), *part("version")};
+    if (pin != "uzasset://snapshot/" + core::Sha256Hex(id.url) + "@1") {
+        return Result(std::unexpect, "observed_resource_id url is not the resource the snapshot pin " + pin + " names");
+    }
+    return id;
+}
+
 }  // namespace
 
+std::optional<Value> ParamByValue(const Value& value) {
+    if (value.IsInt() || value.IsString()) return value;
+    if (!value.IsDouble()) return std::nullopt;
+    const double number = std::get<double>(value.data);
+    if (!std::isfinite(number)) return std::nullopt;
+    // ParamJson: an integral double inside the int64 range is that integer. Both bounds are exact
+    // doubles, so the comparison decides before the cast, which then cannot overflow.
+    if (std::trunc(number) == number && number >= -9223372036854775808.0 && number < 9223372036854775808.0) {
+        return Value(static_cast<std::int64_t>(number));
+    }
+    return value;
+}
+
 Value SourceMetadataJson(const Value& signature, const SourceMetadata& metadata) {
+    const bool v3 = metadata.typed_effective_parameters || metadata.observed_resource_id;
     const bool v2 = metadata.image_inputs || metadata.presets || metadata.properties;
-    Object object{{"schema", std::string(v2 ? kSourceMetadataSchemaV2 : kSourceMetadataSchema)},
+    const std::string_view schema = v3 ? kSourceMetadataSchemaV3 : v2 ? kSourceMetadataSchemaV2 : kSourceMetadataSchema;
+    Object object{{"schema", std::string(schema)},
                   {"asset", PinAndOutput(signature).first},
                   {"image_outputs", Strings(metadata.image_outputs)}};
     if (metadata.image_inputs) object["image_inputs"] = Strings(*metadata.image_inputs);
     if (metadata.presets) object["presets"] = Strings(*metadata.presets);
     if (metadata.properties) object["properties"] = *metadata.properties;
+    if (metadata.typed_effective_parameters) object["typed_effective_parameters"] = *metadata.typed_effective_parameters;
+    if (const auto& id = metadata.observed_resource_id) {
+        object["observed_resource_id"] =
+            Object{{"url", id->url}, {"context", id->context}, {"name", id->name}, {"version", id->version}};
+    }
     return object;
 }
 
 Value SourceMetadataJson(const Value& signature, const std::vector<std::string>& image_outputs) {
-    return SourceMetadataJson(signature, SourceMetadata{image_outputs, std::nullopt, std::nullopt, std::nullopt});
+    return SourceMetadataJson(signature, SourceMetadata{image_outputs, std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt});
 }
 
 std::expected<SourceMetadata, std::string> ParseSourceMetadata(const Value& signature, const Value& metadata) {
@@ -125,20 +191,27 @@ std::expected<SourceMetadata, std::string> ParseSourceMetadata(const Value& sign
     const Value* schema = object ? (object->contains("schema") ? &object->at("schema") : nullptr) : nullptr;
     const bool v1 = schema && schema->IsString() && std::get<std::string>(schema->data) == kSourceMetadataSchema;
     const bool v2 = schema && schema->IsString() && std::get<std::string>(schema->data) == kSourceMetadataSchemaV2;
+    const bool v3 = schema && schema->IsString() && std::get<std::string>(schema->data) == kSourceMetadataSchemaV3;
     if (object == nullptr || !object->contains("asset") || !object->contains("image_outputs") || schema == nullptr) {
         return Result(std::unexpect, "source_metadata must be an object of schema, asset and image_outputs");
     }
-    if (!v1 && !v2) {
-        return Result(std::unexpect, "source_metadata schema must be " + std::string(kSourceMetadataSchema) + " or " +
-                                         std::string(kSourceMetadataSchemaV2));
+    if (!v1 && !v2 && !v3) {
+        return Result(std::unexpect, "source_metadata schema must be " + std::string(kSourceMetadataSchema) + ", " +
+                                         std::string(kSourceMetadataSchemaV2) + " or " +
+                                         std::string(kSourceMetadataSchemaV3));
     }
     for (const auto& [name, ignored] : *object) {
         const bool required = name == "schema" || name == "asset" || name == "image_outputs";
         const bool optional = name == "image_inputs" || name == "presets" || name == "properties";
-        if (!required && !(v2 && optional)) {
+        const bool observed = name == "typed_effective_parameters" || name == "observed_resource_id";
+        if (!required && !((v2 || v3) && optional) && !(v3 && observed)) {
             return Result(std::unexpect, v1 ? "source_metadata must be an object of exactly schema, asset and image_outputs"
                                             : "source_metadata has the unknown member " + name);
         }
+    }
+    // One encoding per observation set: /3 exists only for its own members.
+    if (v3 && !object->contains("typed_effective_parameters") && !object->contains("observed_resource_id")) {
+        return Result(std::unexpect, "source_metadata /3 needs typed_effective_parameters or observed_resource_id");
     }
     const auto [pin, output] = PinAndOutput(signature);
     if (pin.empty() || output.empty()) {
@@ -169,6 +242,16 @@ std::expected<SourceMetadata, std::string> ParseSourceMetadata(const Value& sign
             if (!problem.empty()) return Result(std::unexpect, "source_metadata properties." + name + ": " + problem);
         }
         parsed.properties = *properties;
+    }
+    if (const auto typed = object->find("typed_effective_parameters"); typed != object->end()) {
+        const std::string problem = TypedParametersProblem(signature, typed->second);
+        if (!problem.empty()) return Result(std::unexpect, "source_metadata " + problem);
+        parsed.typed_effective_parameters = std::get<Object>(typed->second.data);
+    }
+    if (const auto id = object->find("observed_resource_id"); id != object->end()) {
+        auto observed = ParseObservedResourceId(id->second, pin);
+        if (!observed) return Result(std::unexpect, "source_metadata " + observed.error());
+        parsed.observed_resource_id = std::move(*observed);
     }
     return parsed;
 }

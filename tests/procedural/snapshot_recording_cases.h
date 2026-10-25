@@ -264,7 +264,7 @@ int RunSnapshotSourceMetadata(const fs::path& work) {
     core::Document document(initial);
     metadataStore->Attach(document);
     const auto outputsOnly = [](std::vector<std::string> names) {
-        return store::SourceMetadata{std::move(names), std::nullopt, std::nullopt, std::nullopt};
+        return store::SourceMetadata{std::move(names), std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt};
     };
     const std::vector<std::pair<std::string, std::vector<std::string>>> invalid{
         {"empty", {}}, {"absent output", {"mask"}}, {"repeated", {"grey", "grey"}}, {"empty name", {"grey", ""}}};
@@ -434,7 +434,8 @@ int RunSnapshotSourceMetadata(const fs::path& work) {
                             {"enum_values", json::Object{}},
                             {"properties", json::Object{{"min", int64_t{0}}, {"max", int64_t{1}}}}};
     const store::SourceMetadata observed{{"grey", "mask"}, std::vector<std::string>{},
-                                         std::vector<std::string>{"authored preset"}, json::Object{{"gain", gain}}};
+                                         std::vector<std::string>{"authored preset"}, json::Object{{"gain", gain}},
+                                         std::nullopt, std::nullopt};
     const json::Value v2 = store::SourceMetadataJson(signature, observed);
     const auto reread = store::ParseSourceMetadata(signature, v2);
     Check(std::get<std::string>(std::get<json::Object>(v2.data).at("schema").data) == store::kSourceMetadataSchemaV2 &&
@@ -581,5 +582,130 @@ int RunSnapshotSourceMetadata(const fs::path& work) {
     badDescriptor["properties"] = json::Object{{"gain", renamedGain}};
     Check(!ReceiptSourceMetadata(receipt(badDescriptor, badDescriptor), resource, capture),
           "metadata receipt: a malformed property descriptor refuses");
+
+    // Schema /3 (decision 361): typed effective parameters and the observed ResourceID.
+    // store::ParamByValue is the store's scalar mirror of ParamJson; both must agree exactly,
+    // including above 2^53, at the int64 limits and on the sign of zero.
+    const std::vector<json::Value> scalars{
+        15.0, -0.0, 0.0, 0.5, -2.5, 9007199254740992.0, 9007199254740994.0, -9223372036854775808.0,
+        9223372036854775808.0, 1e300, -1e-300, int64_t{9007199254740993}, std::numeric_limits<int64_t>::min(),
+        std::numeric_limits<int64_t>::max(), int64_t{0}, std::string("text")};
+    for (const json::Value& number : scalars) {
+        const auto mirrored = store::ParamByValue(number);
+        const auto parameter = ParamFromJson(number);
+        Check(mirrored && parameter && json::WriteCanonical(*mirrored) == json::WriteCanonical(ParamJson(*parameter)),
+              "metadata v3: ParamByValue equals ParamJson for " + json::WriteCanonical(number));
+    }
+    for (const json::Value& other : {json::Value(true), json::Value(nullptr), json::Value(json::Array{0.5, 0.5}),
+                                     json::Value(json::Object{{"a", int64_t{1}}})}) {
+        Check(!store::ParamByValue(other), "metadata v3: ParamByValue refuses " + json::WriteCanonical(other));
+    }
+    Check(fullRead && fullRead->typed_effective_parameters == parameters && !fullRead->observed_resource_id,
+          "metadata v3: a receipt keeps its raw parameters; an unobserved ResourceID stays absent");
+    Check(integralRead && integralRead->typed_effective_parameters &&
+              json::WriteCanonical(integralRead->typed_effective_parameters->at("gain")) == "15.0",
+          "metadata v3: an integral float parameter keeps its double type");
+    // An observed ResourceID belongs to the snapshot pin of its URL.
+    ProceduralRequest pinned = integral;
+    pinned.asset = core::ParseAssetUrl("uzasset://snapshot/" + core::Sha256Hex(resource) + "@1");
+    const json::Object observedId{{"url", resource}, {"context", std::string("shelf")},
+                                  {"name", std::string("noise")}, {"version", std::string("1")}};
+    json::Object identified = integralSource;
+    identified["resource_id"] = observedId;
+    const auto identifiedRead = ReceiptSourceMetadata(receipt(identified, identified), resource, pinned);
+    Check(identifiedRead && identifiedRead->observed_resource_id &&
+              *identifiedRead->observed_resource_id == store::ObservedResourceId{resource, "shelf", "noise", "1"},
+          "metadata v3: the paired observed ResourceID is kept with every part",
+          identifiedRead ? std::string() : identifiedRead.error());
+    if (!identifiedRead) return Finish();
+    Check(!ReceiptSourceMetadata(receipt(identified, identified), resource, integral),
+          "metadata v3: an observed ResourceID whose URL is not the signature's pin refuses");
+    json::Object foreignId = identified;
+    std::get<json::Object>(foreignId["resource_id"].data)["url"] = std::string("resource://shelf/other?version=1");
+    Check(!ReceiptSourceMetadata(receipt(foreignId, foreignId), resource, pinned),
+          "metadata v3: an observed ResourceID of another URL than the request refuses");
+    json::Object partialId = identified;
+    std::get<json::Object>(partialId["resource_id"].data).erase("version");
+    Check(!ReceiptSourceMetadata(receipt(partialId, partialId), resource, pinned),
+          "metadata v3: an observed ResourceID missing a part refuses");
+    json::Object boolParameter = integralSource;
+    std::get<json::Object>(boolParameter["parameters"].data)["gain"] = true;
+    Check(!ReceiptSourceMetadata(receipt(boolParameter, boolParameter), resource, integral),
+          "metadata v3: a boolean parameter refuses the capture rather than losing its type");
+
+    const json::Value pinnedSignature = SignatureJson(pinned);
+    const json::Value v3 = store::SourceMetadataJson(pinnedSignature, *identifiedRead);
+    const auto v3Read = store::ParseSourceMetadata(pinnedSignature, v3);
+    Check(std::get<std::string>(std::get<json::Object>(v3.data).at("schema").data) == store::kSourceMetadataSchemaV3 &&
+              v3Read && *v3Read == *identifiedRead,
+          "metadata v3: typed parameters and the observed ResourceID roundtrip under /3");
+    store::SourceMetadata typedOnly = *identifiedRead;
+    typedOnly.observed_resource_id.reset();
+    store::SourceMetadata idOnly = *identifiedRead;
+    idOnly.typed_effective_parameters.reset();
+    for (const auto& [label, alone] : {std::pair{"typed parameters", typedOnly}, std::pair{"observed id", idOnly}}) {
+        const json::Value written = store::SourceMetadataJson(pinnedSignature, alone);
+        const auto reread = store::ParseSourceMetadata(pinnedSignature, written);
+        Check(reread && *reread == alone, std::string("metadata v3: ") + label + " alone roundtrip under /3");
+    }
+    const std::vector<std::pair<std::string, std::function<void(json::Object&)>>> invalidV3{
+        {"/3 without either observation", [](json::Object& m) {
+             m.erase("typed_effective_parameters");
+             m.erase("observed_resource_id");
+         }},
+        {"/2 with a /3 member", [](json::Object& m) { m["schema"] = std::string(store::kSourceMetadataSchemaV2); }},
+        {"boolean typed parameter", [](json::Object& m) {
+             std::get<json::Object>(m["typed_effective_parameters"].data)["gain"] = true;
+         }},
+        {"vector typed parameter", [](json::Object& m) {
+             std::get<json::Object>(m["typed_effective_parameters"].data)["gain"] = json::Array{15.0, 15.0};
+         }},
+        {"typed parameter of another value", [](json::Object& m) {
+             std::get<json::Object>(m["typed_effective_parameters"].data)["gain"] = 15.5;
+         }},
+        {"typed parameter as a string", [](json::Object& m) {
+             std::get<json::Object>(m["typed_effective_parameters"].data)["gain"] = std::string("15");
+         }},
+        {"missing typed parameter", [](json::Object& m) {
+             std::get<json::Object>(m["typed_effective_parameters"].data).erase("gain");
+         }},
+        {"extra typed parameter", [](json::Object& m) {
+             std::get<json::Object>(m["typed_effective_parameters"].data)["extra"] = int64_t{1};
+         }},
+        {"observed id with an empty part", [](json::Object& m) {
+             std::get<json::Object>(m["observed_resource_id"].data)["context"] = std::string();
+         }},
+        {"observed id with an extra part", [](json::Object& m) {
+             std::get<json::Object>(m["observed_resource_id"].data)["alias"] = std::string("x");
+         }},
+        {"observed id of another URL", [](json::Object& m) {
+             std::get<json::Object>(m["observed_resource_id"].data)["url"] = std::string("resource://shelf/other?version=1");
+         }},
+    };
+    for (const auto& [name, mutate] : invalidV3) {
+        json::Object broken = std::get<json::Object>(v3.data);
+        mutate(broken);
+        Check(!store::ParseSourceMetadata(pinnedSignature, broken), "metadata v3: a " + name + " is refused");
+    }
+    {
+        auto v3Store = store::ProjectStore::Create(work / "source-metadata-v3.uzp", initial);
+        core::Document v3Document(initial);
+        v3Store->Attach(v3Document);
+        const auto stored =
+            RecordSnapshotExport(*v3Store, v3Document, pinned, exportFile, initial.project_uuid, 0, *identifiedRead);
+        Check(committed(stored), "metadata v3: observations commit with the snapshot");
+        // Entries are immutable: the same signature with other observations never replaces them.
+        const auto conflicting = RecordSnapshotExport(*v3Store, v3Document, pinned, exportFile, initial.project_uuid,
+                                                      v3Document.revision(), typedOnly);
+        Check(!committed(conflicting), "metadata v3: the same signature with other observations is refused");
+        v3Store->Save(v3Document);
+        v3Store->Close();
+    }
+    auto v3Reopened = store::ProjectStore::Open(work / "source-metadata-v3.uzp");
+    const auto v3Backend = SnapshotBackend::Load(*v3Reopened.store, v3Reopened.state.project);
+    const auto v3Metadata = v3Backend ? v3Backend->Metadata(pinned)
+                                      : std::expected<store::SourceMetadata, UnsupportedProcedural>(std::unexpect, Refuse("test", "load failed"));
+    Check(v3Metadata && *v3Metadata == *identifiedRead, "metadata v3: observations survive save and reopen");
+    v3Reopened.store->Close();
     return Finish();
 }

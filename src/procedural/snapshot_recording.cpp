@@ -278,7 +278,7 @@ std::expected<store::SourceMetadata, std::string> ReceiptSourceMetadata(
                 throw std::invalid_argument("the paired sources' parameter " + name + " differs from the capture signature");
             }
         }
-        store::SourceMetadata metadata{std::move(*outputs), std::nullopt, std::nullopt, std::nullopt};
+        store::SourceMetadata metadata{std::move(*outputs), std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt};
         const auto names = [&](std::string_view key) {
             std::vector<std::string> list;
             for (const json::Value& item : std::get<json::Array>(source.at(std::string(key)).data)) {
@@ -295,6 +295,29 @@ std::expected<store::SourceMetadata, std::string> ReceiptSourceMetadata(
         if (const auto properties = source.find("properties"); properties != source.end()) {
             if (!properties->second.IsObject()) throw std::invalid_argument("source properties must be an object");
             metadata.properties = std::get<json::Object>(properties->second.data);
+        }
+        // Decision 361: the raw parameter map as get_parameters returned it, JSON types kept (the
+        // paired sources are canonically identical above). A value outside the typed domain refuses
+        // the capture rather than losing its type.
+        for (const auto& [name, value] : recorded) {
+            if (!store::ParamByValue(value)) {
+                throw std::invalid_argument("the paired sources' parameter " + name +
+                                            " is not an int64, finite double or string");
+            }
+        }
+        metadata.typed_effective_parameters = recorded;
+        // The ResourceID parts, only when the bridge observed them through the documented getters.
+        if (const auto id = source.find("resource_id"); id != source.end()) {
+            const auto& parts = Object(id->second, "source resource_id");
+            if (parts.size() != 4) throw std::invalid_argument("source resource_id must hold exactly url, context, name and version");
+            store::ObservedResourceId observed{String(parts.at("url"), "resource_id url"),
+                                               String(parts.at("context"), "resource_id context"),
+                                               String(parts.at("name"), "resource_id name"),
+                                               String(parts.at("version"), "resource_id version")};
+            if (observed.url != resource || observed.url != String(source.at("resource"), "source resource")) {
+                throw std::invalid_argument("source resource_id url is not the requested resource");
+            }
+            metadata.observed_resource_id = std::move(observed);
         }
         const json::Value signature = SignatureJson(request);
         const std::string problem = store::SourceMetadataProblem(signature, store::SourceMetadataJson(signature, metadata));

@@ -177,8 +177,10 @@ it does not interpolate values or execute the procedural asset.
 
 `active_output` reads and edits the explicit singleton output mapping. `resource_id`
 identifies the stored UzPainter pin as `resource://uzasset/<family>/<id>?version=<version>`;
-it does not reconstruct the original Adobe identifier from its hash. The native API
-exposes this as a method, and the Painter facade as a property.
+it does not reconstruct the original Adobe identifier from its hash. When the snapshot of the
+source's current exact signature recorded an observed ResourceID (schema `/3`, below), it
+returns that observation instead. The native API exposes this as a method, and the Painter
+facade as a property.
 
 Explicit `resolution` overrides read and write mode, value and offset through the
 existing resolution admission rules. The native API uses `_ResolutionOverride` and
@@ -238,6 +240,40 @@ snapshot recorded without metadata, and a generator or filter effect source, rai
 `uzp-procedural-tests snapshot-metadata` (`tests/procedural/test_proc_snapshot_recording.py`);
 API evidence: `tests/python/test_pyapi_substance_sources.py`, whose alternate synthetic
 snapshot records `["scalar", "aux"]`. Exports are unchanged.
+
+Schema `/3` (decision 361) adds two observations, each optional on its own:
+
+- `typed_effective_parameters`: the complete raw map `get_parameters()` returned, JSON types
+  kept, so an integral float stays a double (`2.0`, where the signature, which encodes numbers by
+  value, writes `2`). Values are int64, finite double or string only. Its keys must be exactly
+  the signature's parameters, and each value must equal the signature's by value
+  (`store::ParamByValue`, the store's mirror of `ParamJson` for scalars). Nothing is converted,
+  and no parameter is ever inferred from `properties`.
+- `observed_resource_id`: `{url, context, name, version}`, exactly as the documented ResourceID
+  getters returned them, every part nonempty. The URL must be the requested resource of the
+  capture and the resource whose SHA-256 the snapshot pin names (`uzasset://snapshot/<sha256(url)>@1`).
+
+`/3` is written only when one of them is present, so `/1` and `/2` entries keep their bytes. A
+`/3` without either member, and either member under `/1` or `/2`, are refused. The receipt reader
+takes the typed map from the paired sources' raw parameters, which must be canonically identical.
+It refuses a capture with a parameter outside the typed domain rather than drop its type. The
+observed ResourceID is read only when the bridge reported `source.resource_id`. An existing entry
+is never enriched: a new observation needs a new capture of a new fixture.
+
+`assets bind-snapshot` binds the typed map when it is recorded, and otherwise the signature's
+parameters. `SignatureJson` and `SignatureHash` are unchanged, because they encode by value.
+`SourceSubstance.resource_id` returns the observed ResourceID for the exact current admitted
+snapshot when it was recorded: native `uzpainter.resource._ObservedResourceID`, facade
+`resource.ObservedResourceID`. Both are provenance only. They return the recorded parts, and
+`url()` returns the recorded URL, never one rebuilt from the parts. They are not resource IDs any
+call resolves, imports, binds, searches or replaces with. The native calls refuse them by type
+and the facade's `to_native` raises `ValueError`, before any change. The internal pin is returned
+only when the observation is legitimately absent: no snapshot holds the exact signature, or it
+recorded no observed ResourceID. A corrupt, foreign or unloadable store, or a use outside the
+admitted domain, raises `UnsupportedProcedural`. Effect and mono mask sources keep their pin.
+Evidence: `uzp-procedural-tests snapshot-metadata` (`/3` codec, receipt, refusals, immutability,
+save and reopen), and `tests/python/test_bind_snapshot_cli.py` (typed bind, observed and pinned
+identities, provenance-only refusals).
 
 ## Generator and filter effect sources
 

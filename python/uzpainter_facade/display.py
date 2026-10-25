@@ -54,6 +54,7 @@ def set_color_lut_resource(new_color_lut: Any) -> None:
         return
     if not isinstance(new_color_lut, resource.ResourceID):
         raise TypeError("new_color_lut must be a resource.ResourceID")
+    resource.refuse_observed(new_color_lut)
     # Any LUT is outside the fixed pipeline: the native call refuses it before any change.
     uzpainter.display.set_color_lut_resource(
         uzpainter.resource.ResourceID("project", new_color_lut.name, None)

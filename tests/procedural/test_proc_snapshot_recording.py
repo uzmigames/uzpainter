@@ -50,5 +50,18 @@ def test_snapshot_source_metadata(procedural_tests: Path, tmp_path: Path) -> Non
         "metadata receipt: an integral double parameter matches the signature's value encoding",
         "metadata receipt: a parameter's signed zero is one signature identity and is accepted",
         "metadata receipt: paired observations that differ only in the sign of zero refuse",
+        "metadata v3: ParamByValue equals ParamJson for 9007199254740993",
+        "metadata v3: ParamByValue equals ParamJson for -9223372036854775808",
+        "metadata v3: ParamByValue refuses true",
+        "metadata v3: an integral float parameter keeps its double type",
+        "metadata v3: the paired observed ResourceID is kept with every part",
+        "metadata v3: an observed ResourceID whose URL is not the signature's pin refuses",
+        "metadata v3: a boolean parameter refuses the capture rather than losing its type",
+        "metadata v3: typed parameters and the observed ResourceID roundtrip under /3",
+        "metadata v3: a /3 without either observation is refused",
+        "metadata v3: a /2 with a /3 member is refused",
+        "metadata v3: a typed parameter of another value is refused",
+        "metadata v3: the same signature with other observations is refused",
+        "metadata v3: observations survive save and reopen",
     ):
         assert "PASS " + name in result.stdout, name

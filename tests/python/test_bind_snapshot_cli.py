@@ -112,14 +112,32 @@ try:
     outputs = value.image_outputs
 except Exception as error:
     outputs = type(error).__name__
+identity = value.resource_id
+parameters = value.get_parameters()
 result = {
-    "parameters": value.get_parameters(),
+    "parameters": parameters,
+    "types": {name: type(item).__name__ for name, item in parameters.items()},
+    "resource_id": [type(identity).__name__, identity.url(), identity.context, identity.name,
+                    identity.version],
     "active_output": value.active_output,
     "outputs": outputs,
     "resolution": resolution,
 }
 project.close()
 """
+
+# The fixture's authored URL (uzp-export-tests snapshot-bind) and the snapshot pin it names.
+AUTHORED_URL = "resource://authored_shelf/authored_noise?version=authored-1"
+PIN = hashlib.sha256(AUTHORED_URL.encode("utf-8")).hexdigest()
+OBSERVED = ["ObservedResourceID", AUTHORED_URL, "authored_shelf", "authored_noise", "authored-1"]
+PINNED = [
+    "ResourceID",
+    f"resource://uzasset/snapshot/{PIN}?version=1",
+    "uzasset",
+    f"snapshot/{PIN}",
+    "1",
+]
+TYPED = {"amount": "float", "flag": "int", "scale": "float"}
 
 
 def test_usage(painter: Path) -> None:  # noqa: F811
@@ -139,8 +157,12 @@ def test_bind_reopen_getters_and_rebinding(painter: Path, fixture: Fixture) -> N
     code, first = bind(painter, fixture, request(fixture, 0))
     assert code == 0, first
     assert first["status"] == "ok" and first["verified_after_reopen"] is True
+    # Decision 361: the /3 snapshot binds its typed parameters (scale stays the float 2.0) and
+    # reports the ResourceID its recording observed.
     assert run_script(painter, work, READ_SOURCE) == {
-        "parameters": {"amount": 0.5, "flag": 0},
+        "parameters": {"amount": 0.5, "flag": 0, "scale": 2.0},
+        "types": TYPED,
+        "resource_id": OBSERVED,
         "active_output": "scalar",
         "outputs": ["scalar", "aux"],
         # Without an override the facade does not guess the asset's default resolution.
@@ -155,12 +177,16 @@ def test_bind_reopen_getters_and_rebinding(painter: Path, fixture: Fixture) -> N
     code, second = bind(painter, fixture, request(fixture, 1))
     assert code == 0 and second["revision"] > first["revision"], second
     read = run_script(painter, work, READ_SOURCE)
-    assert read["parameters"] == {"amount": 0.5, "flag": 1}
-    # The second snapshot is a legacy entry without recorded metadata: it still binds.
+    assert read["parameters"] == {"amount": 0.5, "flag": 1, "scale": 2}
+    # The second snapshot is a legacy entry without recorded metadata: it still binds, with the
+    # signature's parameters (scale is the integer 2) and the internal pin.
+    assert read["types"] == {"amount": "float", "flag": "int", "scale": "int"}
+    assert read["resource_id"] == PINNED
     assert read["outputs"] == "UnsupportedProcedural"
     code, third = bind(painter, fixture, request(fixture, 0))
     assert code == 0 and third["status"] == "ok" and third["revision"] > second["revision"], third
-    assert run_script(painter, work, READ_SOURCE)["parameters"] == {"amount": 0.5, "flag": 0}
+    read = run_script(painter, work, READ_SOURCE)
+    assert (read["types"], read["resource_id"]) == (TYPED, OBSERVED)
 
     # An explicit Auto override whose nominal value is not 128 but whose effective size is the
     # set's 128 is a different complete reference: it binds and is kept as given.
@@ -237,3 +263,58 @@ def test_refusals_leave_the_project_untouched(painter: Path, fixture: Fixture) -
         assert hashlib.sha256(fixture["project"].read_bytes()).hexdigest() == before, name
     code, unchanged = bind(painter, fixture, request(fixture, 0))
     assert (code, unchanged["status"], unchanged["revision"]) == (0, "unchanged", bound["revision"])
+
+
+PROVENANCE_ONLY = """
+import uzpainter
+from substance_painter import display
+project.open(WORK + '/bind.uzp')
+node = ls.get_root_layer_nodes(ts.get_active_stack())[0]
+identity = node.get_source(CT.User0).resource_id
+native_node = uzpainter.layerstack.get_root_layer_nodes(uzpainter.textureset.get_active_stack())[0]
+native = native_node.get_source(CT.User0).resource_id()
+revision = uzpainter.project.revision()
+
+def raised(call, *args):
+    try:
+        call(*args)
+    except Exception as error:
+        return type(error).__name__
+    return None
+
+channels = sorted(channel.name for channel in node.active_channels)
+# User1 is inactive: a caught refusal inside an enclosing transaction must not activate it.
+with uzpainter.Transaction("observed id inside a transaction"):
+    in_transaction = raised(node.set_source, CT.User1, identity)
+
+result = {
+    "in_transaction": in_transaction,
+    "channels_kept": sorted(channel.name for channel in node.active_channels) == channels,
+    "native_class": type(native).__name__,
+    "facade_set_source": raised(node.set_source, CT.User0, identity),
+    "facade_color_lut": raised(display.set_color_lut_resource, identity),
+    "native_set_source": raised(native_node.set_source, CT.User0, native),
+    "native_origin": raised(uzpainter.resource.resource_origin, native),
+    "native_replace": raised(uzpainter.resource.update_layer_stack_resource, native, native),
+    "unchanged": uzpainter.project.revision() == revision,
+}
+project.close()
+"""
+
+
+def test_observed_resource_id_is_provenance_only(painter: Path, fixture: Fixture) -> None:  # noqa: F811
+    """Decision 361: an observed ResourceID never resolves, binds or replaces a resource; every
+    such use is refused before any change."""
+    code, bound = bind(painter, fixture, request(fixture, 0))
+    assert code == 0, bound
+    assert run_script(painter, fixture["project"].parent, PROVENANCE_ONLY) == {
+        "in_transaction": "ValueError",
+        "channels_kept": True,
+        "native_class": "_ObservedResourceID",
+        "facade_set_source": "ValueError",
+        "facade_color_lut": "ValueError",
+        "native_set_source": "TypeError",
+        "native_origin": "TypeError",
+        "native_replace": "TypeError",
+        "unchanged": True,
+    }

@@ -352,6 +352,8 @@ class SourceSubstance:
     @property
     def resource_id(self) -> resource.ResourceID:
         native = self._native().resource_id()
+        if isinstance(native, uzpainter.resource._ObservedResourceID):
+            return resource.ObservedResourceID(native)
         return resource.ResourceID(native.context, native.name, native.version)
 
     @property
@@ -393,7 +395,9 @@ class SourceSubstance:
                 "default source resolution requires recorded asset metadata "
                 "(phase3.1_proc-backend-seam)"
             )
-        return ResolutionOverride(ResolutionMode(value.mode), tuple(value.value), value.log2_offset)
+        # Painter's getter returns `value` as a list, not the tuple a constructor takes
+        # (tier0/api-probes/source-substance-single-output, r1 and r2).
+        return ResolutionOverride(ResolutionMode(value.mode), list(value.value), value.log2_offset)
 
     @resolution.setter
     @edits
@@ -639,6 +643,12 @@ class _Fill(Node):
         native = self._context(channeltype)
         uid = self.uid()
         context: str | None = None
+        # Refused before anything changes, including the implicit activation below, which an
+        # enclosing transaction would otherwise commit after a caught refusal (decision 361).
+        if isinstance(source, (resource.ResourceID, resource.Resource)):
+            resource.refuse_observed(
+                source.identifier() if isinstance(source, resource.Resource) else source
+            )
         with one_transaction("layerstack.FillLayerNode.set_source"):
             if channeltype is not None and channeltype not in native.active_channels:
                 # Implicit activation, without the reset of an assignment (set-source-none-

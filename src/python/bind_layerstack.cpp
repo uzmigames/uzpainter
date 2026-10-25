@@ -216,6 +216,30 @@ store::SourceMetadata RecordedMetadata(const SourceSubstance& s, const std::stri
     return std::move(*metadata);
 }
 
+/// The observations recorded with the snapshot serving this fill channel source's current exact
+/// signature (decision 361), or none when legitimately absent (`Observations`); any other failure
+/// raises `UnsupportedProcedural`, never an absence.
+std::optional<store::SourceMetadata> RecordedObservations(const SourceSubstance& s, const std::string& what) {
+    const core::ProceduralRef ref = ReadProcedural(s);  // a stale handle keeps its error
+    const std::shared_ptr<OpenProject> open = Session::Get().Current();
+    const auto project = Read();
+    const NodeInfo info = Resolve(*project, s.node);
+    const core::TextureSet* set = nullptr;
+    for (const core::TextureSet& candidate : project->texture_sets) {
+        if (candidate.id == info.texture_set) set = &candidate;
+    }
+    const core::Stack* stack = core::FindStack(*project, info.texture_set, info.stack);
+    const auto channel = stack && s.channel ? stack->channels.find(*s.channel) : decltype(stack->channels)::const_iterator{};
+    if (set == nullptr || stack == nullptr || !s.channel || channel == stack->channels.end()) {
+        throw ApiError("UnsupportedProcedural", what + ": the source is not a channel source of a stack");
+    }
+    const procedural::SnapshotSourceProvider provider(*open->store, *project);
+    auto observed = provider.Observations(*project, *set, *s.channel, channel->second.format, FillOf(info, s.node), ref,
+                                          s.node, info.in_mask());
+    if (!observed) throw ApiError("UnsupportedProcedural", what + ": " + observed.error());
+    return std::move(*observed);
+}
+
 py::list Names(const std::vector<std::string>& names) {
     py::list result;
     for (const std::string& name : names) result.append(name);
@@ -682,9 +706,17 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
                 for (const auto& [name, value] : updates) target.params[name] = value;
             });
         })
-        .def("resource_id", [read_procedural](const SourceSubstance& s) {
+        .def("resource_id", [read_procedural](const SourceSubstance& s) -> py::object {
             const auto asset = core::ParseAssetUrl(read_procedural(s).asset);
-            return ResourceIdHandle{"uzasset", asset.family + "/" + asset.id, asset.version};
+            const ResourceIdHandle pin{"uzasset", asset.family + "/" + asset.id, asset.version};
+            // Effect and mono mask sources hold no recorded observations: their pin, as before.
+            if (s.effect || !s.channel) return py::cast(pin);
+            // Decision 361: the ResourceID the recording of this exact signature observed, when it
+            // did; the internal pin when legitimately absent. Errors propagate.
+            const auto observed = RecordedObservations(s, "resource_id");
+            if (!observed || !observed->observed_resource_id) return py::cast(pin);
+            const store::ObservedResourceId& id = *observed->observed_resource_id;
+            return py::cast(ObservedResourceIdHandle{id.context, id.name, id.version, id.url});
         })
         // The outputs the recording observed for the snapshot of this source's current exact
         // signature (store/snapshots.h `source_metadata`); never inferred from the output mapping.

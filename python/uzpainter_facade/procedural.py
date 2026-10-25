@@ -47,7 +47,7 @@ def _check_resolution(value: Any) -> None:
 @dataclass
 class ResolutionOverride:
     mode: ResolutionMode
-    value: tuple[int, int]
+    value: tuple[int, int] | list[int]  # constructors take either; the getter returns a list
     log2_offset: int
 
     def __setattr__(self, name: str, value: Any) -> None:

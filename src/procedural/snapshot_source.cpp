@@ -8,6 +8,8 @@
 #include "store/snapshots.h"
 #include "uzp_core/document/nodes.h"
 #include "uzp_core/manifest/sha256.h"
+#include "uzp_core/types/errors.h"
+#include "uzp_core/types/resource_url.h"
 
 namespace uzp::procedural {
 
@@ -39,7 +41,7 @@ SnapshotSourceProvider::SnapshotSourceProvider(store::ProjectStore& store, const
 std::expected<std::pair<ProceduralRequest, SnapshotBackend>, std::string> SnapshotSourceProvider::Admitted(
     const core::Project& project, const core::TextureSet& set, core::ChannelType channel,
     core::ChannelFormat format, const core::FillContent& fill, const core::ProceduralRef& ref,
-    core::Id node, bool mask) const {
+    core::Id node, bool mask, bool* unrecorded) const {
     using Result = std::expected<std::pair<ProceduralRequest, SnapshotBackend>, std::string>;
     const auto fail = [](std::string reason) { return Result(std::unexpect, std::move(reason)); };
     // This is the recorder's authored full-UV plane, not a geometry-class guess.
@@ -83,6 +85,8 @@ std::expected<std::pair<ProceduralRequest, SnapshotBackend>, std::string> Snapsh
     if (request->output.resolution != 128) return fail("effective source resolution must equal the 128px target");
     auto backend = SnapshotBackend::Load(store_, project);
     if (!backend) return fail(backend.error());
+    // Only this refusal is a legitimate absence (`Observations`): no snapshot holds the signature.
+    if (unrecorded != nullptr && !backend->Stored(*request)) *unrecorded = true;
     ProceduralSeam seam(&*backend, nullptr);
     auto admitted = Admit(*request, library, seam);
     if (!admitted) return fail(admitted.error().Describe());
@@ -109,6 +113,34 @@ std::expected<store::SourceMetadata, std::string> SnapshotSourceProvider::Metada
     auto metadata = admitted->second.Metadata(admitted->first);
     if (!metadata) return Result(std::unexpect, "procedural snapshot: " + metadata.error().Describe());
     return std::move(*metadata);
+}
+
+std::expected<std::optional<store::SourceMetadata>, std::string> SnapshotSourceProvider::Observations(
+    const core::Project& project, const core::TextureSet& set, core::ChannelType channel,
+    core::ChannelFormat format, const core::FillContent& fill, const core::ProceduralRef& ref,
+    core::Id node, bool mask) const {
+    using Result = std::expected<std::optional<store::SourceMetadata>, std::string>;
+    try {
+        if (core::ParseAssetUrl(ref.asset).family != "snapshot") return std::optional<store::SourceMetadata>();
+    } catch (const core::ValueError& error) {
+        return Result(std::unexpect, "procedural snapshot: " + std::string(error.what()));
+    }
+    // A project holding no snapshots at all, on both sides, records no observation; a map present on
+    // one side only, unequal maps or malformed entries remain errors (Admitted, Load).
+    const std::string key(store::kSnapshotsKey);
+    if (!project.extra.contains(key) && !project_.extra.contains(key)) return std::optional<store::SourceMetadata>();
+    bool unrecorded = false;
+    auto admitted = Admitted(project, set, channel, format, fill, ref, node, mask, &unrecorded);
+    if (!admitted) {
+        if (unrecorded) return std::optional<store::SourceMetadata>();
+        return Result(std::unexpect, "procedural snapshot: " + admitted.error());
+    }
+    auto metadata = admitted->second.Metadata(admitted->first);
+    if (!metadata) {
+        if (metadata.error().reason == kNoImageOutputs) return std::optional<store::SourceMetadata>();
+        return Result(std::unexpect, "procedural snapshot: " + metadata.error().Describe());
+    }
+    return std::optional<store::SourceMetadata>(std::move(*metadata));
 }
 
 render::Result<std::shared_ptr<const evaluator::ProceduralImage>> SnapshotSourceProvider::Resolve(

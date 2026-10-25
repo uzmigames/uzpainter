@@ -122,6 +122,27 @@ void BindResource(py::module_& m) {
         });
     SealClass(id);
 
+    py::class_<ObservedResourceIdHandle> observed(
+        m, "_ObservedResourceID",
+        "A ResourceID a Painter recording observed (decision 361): provenance only, never resolved.");
+    observed.def_readonly("context", &ObservedResourceIdHandle::context)
+        .def_readonly("name", &ObservedResourceIdHandle::name)
+        .def_readonly("version", &ObservedResourceIdHandle::version)
+        .def("url", [](const ObservedResourceIdHandle& r) { return r.url; })
+        .def("__eq__", [](const ObservedResourceIdHandle& a, const py::object& b) {
+            if (!py::isinstance<ObservedResourceIdHandle>(b)) return false;
+            const auto& other = b.cast<const ObservedResourceIdHandle&>();
+            return a.context == other.context && a.name == other.name && a.version == other.version &&
+                   a.url == other.url;
+        })
+        .def("__hash__", [](const ObservedResourceIdHandle& r) {
+            return py::hash(py::make_tuple(r.context, r.name, r.version, r.url));
+        })
+        .def("__repr__", [](const ObservedResourceIdHandle& r) {
+            return "_ObservedResourceID(" + r.context + ", " + r.name + ", " + r.version + ")";
+        });
+    SealClass(observed);
+
     py::class_<ResourceHandle> resource(m, "Resource", "A project resource entry.");
     resource.def("identifier", [](const ResourceHandle& r) { return r.id; })
         .def("gui_name", [](const ResourceHandle& r) { return r.id.name; })

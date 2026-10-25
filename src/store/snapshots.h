@@ -57,6 +57,18 @@ inline constexpr std::string_view kSnapshotsKey = "procedural_snapshots";
 inline constexpr std::string_view kSourceMetadataKey = "source_metadata";
 inline constexpr std::string_view kSourceMetadataSchema = "uzpainter/procedural-source-metadata/1";
 inline constexpr std::string_view kSourceMetadataSchemaV2 = "uzpainter/procedural-source-metadata/2";
+inline constexpr std::string_view kSourceMetadataSchemaV3 = "uzpainter/procedural-source-metadata/3";
+
+/// The ResourceID a recording observed through its documented getters (decision 361): every part
+/// as Painter returned it. Provenance only: it never resolves, imports, binds or searches.
+struct ObservedResourceId {
+    std::string url;
+    std::string context;
+    std::string name;
+    std::string version;
+
+    bool operator==(const ObservedResourceId&) const = default;
+};
 
 /// The observations of a recording beside its signature (`source_metadata`, above).
 struct SourceMetadata {
@@ -64,6 +76,10 @@ struct SourceMetadata {
     std::optional<std::vector<std::string>> image_inputs;
     std::optional<std::vector<std::string>> presets;
     std::optional<core::json::Object> properties;
+    /// `/3` (decision 361): the complete raw parameter map `get_parameters` returned, JSON types
+    /// kept (an integral float stays a double), and the observed ResourceID.
+    std::optional<core::json::Object> typed_effective_parameters;
+    std::optional<ObservedResourceId> observed_resource_id;
 
     bool operator==(const SourceMetadata&) const = default;
 };
@@ -81,18 +97,30 @@ struct SnapshotEntry {
     std::string error;  ///< Why the entry is malformed; empty when it is well-formed.
 };
 
-/// The `source_metadata` of a snapshot of `signature`: `/1` when only `image_outputs` is given,
-/// `/2` with the optional members that are present otherwise.
+/// The `source_metadata` of a snapshot of `signature`: `/3` when `typed_effective_parameters` or
+/// `observed_resource_id` is given, else `/1` when only `image_outputs` is given and `/2` with the
+/// optional members that are present otherwise (so `/1` and `/2` bytes are unchanged).
 core::json::Value SourceMetadataJson(const core::json::Value& signature, const SourceMetadata& metadata);
 core::json::Value SourceMetadataJson(const core::json::Value& signature, const std::vector<std::string>& image_outputs);
 /// `metadata` read as the `source_metadata` of a snapshot of `signature`, or why it may not be:
-/// it is not an object of `schema`, `asset` and `image_outputs` (plus, under `/2` only, the
-/// optional `image_inputs`, `presets` and `properties`); its schema is neither `/1` nor `/2`;
+/// it is not an object of `schema`, `asset` and `image_outputs` (plus, under `/2` and `/3`, the
+/// optional `image_inputs`, `presets` and `properties`, and under `/3` only the optional
+/// `typed_effective_parameters` and `observed_resource_id`, at least one of which `/3` holds); its
+/// schema is not `/1`, `/2` or `/3`;
 /// `asset` is not the signature's `<asset>@<version>`; `image_outputs` is not a nonempty array of
 /// distinct nonempty strings that holds the signature's `output.id`; `image_inputs` or `presets`
-/// is not an array of distinct nonempty strings; or `properties` is not an object of objects.
+/// is not an array of distinct nonempty strings; `properties` is not an object of objects;
+/// `typed_effective_parameters` is not an object of int64, finite double or string values whose
+/// keys are exactly the signature's `params` and whose values equal them by value
+/// (`ParamByValue`); or `observed_resource_id` is not exactly four nonempty strings `url`,
+/// `context`, `name` and `version` with the signature's pin `uzasset://snapshot/<sha256(url)>@1`.
 std::expected<SourceMetadata, std::string> ParseSourceMetadata(const core::json::Value& signature,
                                                                const core::json::Value& metadata);
+/// A scalar parameter as the signature encodes it, by value (procedural/seam.h `ParamJson` for
+/// scalars): an integral double inside the int64 range is that integer (-0.0 is 0), any other
+/// double stays a double, integers and strings are unchanged; empty for any other value (bool,
+/// null, array, object), which a typed parameter map refuses.
+std::optional<core::json::Value> ParamByValue(const core::json::Value& value);
 /// The error of `ParseSourceMetadata`, or empty.
 std::string SourceMetadataProblem(const core::json::Value& signature, const core::json::Value& metadata);
 

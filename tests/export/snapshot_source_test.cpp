@@ -42,7 +42,8 @@ uzp::store::SourceMetadata AuthoredObservations() {
         {"scalar", "aux"}, std::vector<std::string>{}, std::vector<std::string>{"authored preset"},
         json::Object{{"$randomseed", property("$randomseed", std::int64_t{7}, "RandomSeed")},
                      {"amount", property("amount", 0.625, "Slider")},
-                     {"mode", std::move(mode)}}};
+                     {"mode", std::move(mode)}},
+        std::nullopt, std::nullopt};
 }
 }
 
@@ -161,6 +162,22 @@ int RunSnapshotSource(const std::filesystem::path& path, std::optional<int64_t> 
     auto& entry = std::get<core::json::Object>(entries.begin()->second.data);
     entry["project_uuid"] = "00000000-0000-4000-8000-000000000000";
     Check(!cpu.Evaluate(foreign, evaluation), "warm cache refuses foreign snapshot provenance");
+    {
+        // Decision 361 getters: only a legitimate absence falls back; anything else is an error.
+        const auto observe = [&](const core::Project& state, const core::Project& owner) {
+            const auto& fill = *core::FindLayer(state, layer)->fill;
+            const auto& ref = std::get<core::ProceduralSource>(fill.sources.at(core::ChannelType::User0).value).ref;
+            return procedural::SnapshotSourceProvider(store, owner)
+                .Observations(state, state.texture_sets.front(), core::ChannelType::User0, core::ChannelFormat::L32F,
+                              fill, ref, layer, false);
+        };
+        const auto none = observe(missing, missing);
+        Check(none && !*none, "observations: a project holding no snapshots is a legitimate absence");
+        Check(!observe(missing, project), "observations: snapshots missing on one side are an error");
+        Check(!observe(foreign, foreign), "observations: a foreign entry is an error, never an absence");
+        const auto present = observe(project, project);
+        Check(present && !*present, "observations: a snapshot recorded without metadata is a legitimate absence");
+    }
     for (int scenario = 0; scenario < 8; ++scenario) {
         const auto before = document.revision();
         auto refused = submit([&](core::Edit& edit) {
@@ -267,7 +284,8 @@ int RunProceduralEffects(const std::filesystem::path& path) {
 }
 
 /// The `assets bind-snapshot` fixture: two authored synthetic snapshots of one asset (toggle
-/// `flag` 0 and 1; the first with recorded `/1` metadata, the second without, as a legacy entry),
+/// `flag` 0 and 1; the first with recorded `/3` metadata: outputs, typed parameters and an
+/// authored observed ResourceID; the second without, as a legacy entry),
 /// nothing bound, and a bottom fill layer `effect host` holding a content fill effect and a mask
 /// fill effect (the refused targets). The positive target and the channels are created by the
 /// test through the public API. Prints one `BIND_FIXTURE:` JSON line with the hashes and uids.
@@ -289,10 +307,13 @@ int RunSnapshotBindFixture(const std::filesystem::path& path) {
         }
     };
     core::json::Object hashes;
+    // An authored resource URL (not a Painter resource): the snapshot pin names its SHA-256.
+    const std::string url = "resource://authored_shelf/authored_noise?version=authored-1";
     for (const int64_t flag : {0, 1}) {
         procedural::ProceduralRequest request;
-        request.asset = core::ParseAssetUrl("uzasset://snapshot/authored-bind@1");
-        request.params = {{"amount", 0.5}, {"flag", flag}};
+        request.asset = core::ParseAssetUrl("uzasset://snapshot/" + core::Sha256Hex(url) + "@1");
+        // `scale` is an integral float: the signature encodes it as 2, the typed map keeps 2.0.
+        request.params = {{"amount", 0.5}, {"flag", flag}, {"scale", 2.0}};
         request.meshClass = "quad";
         request.outputId = "scalar";
         request.output = {128, procedural::ChannelFormat::F32, "raw", 1};
@@ -303,7 +324,13 @@ int RunSnapshotBindFixture(const std::filesystem::path& path) {
             std::memcpy(bytes.data() + i * 4, &value, 4);
         }
         std::optional<store::SourceMetadata> metadata;
-        if (flag == 0) metadata = store::SourceMetadata{{"scalar", "aux"}, std::nullopt, std::nullopt, std::nullopt};
+        // flag 0: schema /3 with typed parameters and an authored observed ResourceID; flag 1: none.
+        if (flag == 0) {
+            metadata = store::SourceMetadata{
+                {"scalar", "aux"}, std::nullopt, std::nullopt, std::nullopt,
+                core::json::Object{{"amount", 0.5}, {"flag", flag}, {"scale", 2.0}},
+                store::ObservedResourceId{url, "authored_shelf", "authored_noise", "authored-1"}};
+        }
         submit([&](core::Edit& edit) { procedural::RecordSnapshot(store, edit, request, bytes, metadata); });
         hashes["flag" + std::to_string(flag)] = procedural::SignatureHash(request);
     }
