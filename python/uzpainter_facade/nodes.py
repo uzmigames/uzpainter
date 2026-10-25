@@ -643,40 +643,37 @@ class _Fill(Node):
         native = self._context(channeltype)
         uid = self.uid()
         context: str | None = None
-        # Refused before anything changes, including the implicit activation below, which an
-        # enclosing transaction would otherwise commit after a caught refusal (decision 361).
-        if isinstance(source, (resource.ResourceID, resource.Resource)):
-            resource.refuse_observed(
-                source.identifier() if isinstance(source, resource.Resource) else source
+        # Every facade refusal and the native payload come before anything changes, including the
+        # implicit activation below, which an enclosing transaction would otherwise commit after a
+        # caught refusal (an observed ResourceID, decision 361; an unrecorded default space).
+        if isinstance(source, colour.Color):
+            args: tuple[Any, ...] = (
+                channeltype,
+                colour.stored_color(source, decodes_colour(native, channeltype)),
             )
+        elif isinstance(source, (resource.ResourceID, resource.Resource)):
+            identifier = source.identifier() if isinstance(source, resource.Resource) else source
+            target = resource.to_native(identifier)
+            space = colour.default_bitmap_space(
+                None if channeltype is None else channeltype.name,
+                resource.is_colour_image(target.version),
+            )
+            # Bound in its default space in one native call: under OCIO a bitmap without a space
+            # on BaseColor is unrecorded, and the support check runs per call.
+            args = (channeltype, target, colour.space_name(space))
+            context = identifier.context
+        elif isinstance(source, AnchorPointEffectNode):
+            raise uzpainter.NotYetSupported(
+                "anchor reference sources are release gaps (phase4.1_nodes-instances-anchors)"
+            )
+        else:
+            raise ValueError(f"{source!r} is not a valid source (a Color or a ResourceID)")
         with one_transaction("layerstack.FillLayerNode.set_source"):
             if channeltype is not None and channeltype not in native.active_channels:
                 # Implicit activation, without the reset of an assignment (set-source-none-
                 # multichannel s17-s19).
                 native.active_channels = set(native.active_channels) | {channeltype}
-            if isinstance(source, colour.Color):
-                native.set_source(
-                    channeltype, colour.stored_color(source, decodes_colour(native, channeltype))
-                )
-            elif isinstance(source, (resource.ResourceID, resource.Resource)):
-                identifier = (
-                    source.identifier() if isinstance(source, resource.Resource) else source
-                )
-                target = resource.to_native(identifier)
-                space = colour.default_bitmap_space(
-                    None if channeltype is None else channeltype.name,
-                    resource.is_colour_image(target.version),
-                )
-                # Bound in its default space in one native call: under OCIO a bitmap without a
-                # space on BaseColor is unrecorded, and the support check runs per call.
-                native.set_source(channeltype, target, colour.space_name(space))
-                context = identifier.context
-            elif isinstance(source, AnchorPointEffectNode):
-                raise uzpainter.NotYetSupported(
-                    "anchor reference sources are release gaps (phase4.1_nodes-instances-anchors)"
-                )
-            else:
-                raise ValueError(f"{source!r} is not a valid source (a Color or a ResourceID)")
+            native.set_source(*args)
         if context is not None:
             # Once committed: the transaction's commit checks the bitmap's image (decision 240).
             key = ("source", uid, None if channeltype is None else channeltype.name)
