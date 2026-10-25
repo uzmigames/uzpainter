@@ -1395,8 +1395,12 @@ SUBSTANCE_GETTER_CALLS = (
     "substance_painter.source.SourceSubstance.image_inputs",
     "substance_painter.source.SourceSubstance.image_outputs",
     "substance_painter.source.SourceSubstance.resource_id",
+    # The first Togglebutton's value through a held or a freshly fetched Property.
+    "substance_painter.properties.Property.value",
 )
 SUBSTANCE_EDIT_CALLS = ("substance_painter.source.SourceSubstance.set_parameters",)
+# `get_properties` with `hold` keeps the first Togglebutton's Property here for later reads.
+HELD_PROPERTIES: dict[str, Any] = {}
 SUBSTANCE_VALUE_ARGS = {
     "substance_painter.source.SourceSubstance.active_output": "roundtrip",
     "substance_painter.source.SourceSubstance.resolution": "roundtrip",
@@ -1423,11 +1427,21 @@ def first_toggle(source: Any) -> str:
 
 
 def substance_read(call: str, args: dict[str, Any]) -> Any:
+    if call == "substance_painter.properties.Property.value" and args.get("held") is True:
+        # The Property kept by an earlier `hold`; no source is resolved again.
+        return HELD_PROPERTIES["first_toggle"].value()
     source = substance_source(args)
+    if call == "substance_painter.properties.Property.value":
+        if args.get("fresh") is not True:
+            raise ValueError("Property.value reads a held or a fresh first Togglebutton")
+        return source.get_properties()[first_toggle(source)].value()
     if call == "substance_painter.source.SourceSubstance.get_parameters":
         return source.get_parameters()
     if call == "substance_painter.source.SourceSubstance.get_properties":
-        return {name: describe_property(value) for name, value in source.get_properties().items()}
+        properties = source.get_properties()
+        if args.get("hold") is True:
+            HELD_PROPERTIES["first_toggle"] = properties[first_toggle(source)]
+        return {name: describe_property(value) for name, value in properties.items()}
     if call == "substance_painter.source.SourceSubstance.get_preset_list":
         return source.get_preset_list()
     if call == "substance_painter.source.SourceSubstance.image_inputs":

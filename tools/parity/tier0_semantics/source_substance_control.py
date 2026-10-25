@@ -88,6 +88,42 @@ EFFECT_GETTERS = ("get_parameters", "resource_id", "image_outputs", "active_outp
 TOGGLES: tuple[bool | int, ...] = (1, True, 0, False)
 
 
+HELD_PROPERTY_NAME = "source-substance-held-property"
+PROPERTY_VALUE = "substance_painter.properties.Property.value"
+
+
+def held_property_request() -> dict[str, Any]:
+    """A held versus a freshly fetched Property of the fill source's first Togglebutton across
+    parameter edits, within each recording; every recording (after save/reopen too) holds a new
+    handle first. Lifetime across reopen is not modelled: the documentation does not define it."""
+    sequence = start("plane", resolution=128)
+    sequence.channels((("User0", "L32F"),))
+    node = sequence.fill(["User0"])
+    args = {"node_step": node, "channel": "User0"}
+    sequence.add(ps.SET_SOURCE, **args, resource_url=RESOURCE_URL)
+    sequence.add(PREFIX + "get_properties", **args, hold=True)
+    for toggle in (1, 0):
+        sequence.add(PREFIX + "set_parameters", **args, roundtrip=False, toggle=toggle, probe=True)
+        sequence.add(PROPERTY_VALUE, held=True)
+        sequence.add(PROPERTY_VALUE, **args, fresh=True)
+    result = manifest(
+        Golden(
+            HELD_PROPERTY_NAME,
+            "tier0/api-probes/" + HELD_PROPERTY_NAME,
+            "A Property held from get_properties() versus one fetched again, for the fill "
+            "source's first Togglebutton (chosen in Painter), after setting it to 1 and to 0, "
+            "with a new held handle in each recording, repeated after save/reopen. No lifetime "
+            "across reopen is claimed. No asset parameter name, default or value is authored.",
+            "plane",
+            ["plane"],
+            sequence,
+        ),
+        {"plane": PLANE_SHA256},
+    )
+    result["golden_id"] = "tier0/api-probes/" + HELD_PROPERTY_NAME
+    return _pin(result)
+
+
 def booleans_filter_request() -> dict[str, Any]:
     """Booleans as integers and the FilterEffectNode resolution restriction (python-doc)."""
     sequence = start("plane", resolution=128)

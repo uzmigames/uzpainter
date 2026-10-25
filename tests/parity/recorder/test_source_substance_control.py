@@ -27,11 +27,14 @@ from tools.parity.tier0_semantics.source_substance_control import (
     EFFECT_GETTERS,
     FILTER_SEARCH,
     GETTERS,
+    HELD_PROPERTY_NAME,
     NAME,
     PREFIX,
+    PROPERTY_VALUE,
     RESOURCE_URL,
     TOGGLES,
     booleans_filter_request,
+    held_property_request,
     request,
 )
 
@@ -226,3 +229,118 @@ def test_committed_booleans_filter_request_matches_its_generator() -> None:
     assert json.loads(path.read_text(encoding="utf-8")) == manifest
     assert manifest["private_records"] == []
     assert manifest["software"]["painter"]["build_id"] == entry["painter_build"]
+
+
+def test_held_property_request_authors_no_asset_parameter() -> None:
+    manifest = held_property_request()
+    assert validation_errors(manifest, Schema.GOLDEN_PUBLIC) == []
+    assert manifest_symbol_problems(manifest) == []
+    job = probe_job_from_manifest(manifest)
+    reads = [step for step in job.probe_steps if step.call == PROPERTY_VALUE]
+    assert [("held" in step.args, "fresh" in step.args) for step in reads] == [
+        (True, False),
+        (False, True),
+        (True, False),
+        (False, True),
+    ]
+    # The held handle is always taken first, in every recording: no unheld read is authored.
+    holds = [step for step in job.probe_steps if step.args.get("hold") is True]
+    assert len(holds) == 1 and holds[0].step < min(step.step for step in reads)
+    assert all(set(step.args) <= {"node_step", "channel", "held", "fresh"} for step in reads)
+    entry = current_envelope()
+    path = manifest_root(entry).parent / "requests/tier0/api-probes" / f"{HELD_PROPERTY_NAME}.json"
+    assert json.loads(path.read_text(encoding="utf-8")) == manifest
+
+
+def test_held_property_reads_go_through_the_recorder(
+    fake: types.ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Authored transport fake: a held Property and a fresh one read the first Togglebutton
+    after each edit, with a new held handle in each recording (after save/reopen too)."""
+    monkeypatch.setattr(fake.ChannelType, "User0", fake.ChannelType.User8, raising=False)
+    name = "uzp_recorder_fake_probe_painter"
+    if name not in sys.modules:
+        spec = importlib.util.spec_from_file_location(
+            name, Path(__file__).with_name("fake_probe_painter.py")
+        )
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+    world = sys.modules[name].ProbeWorld()
+    world.version, world.version_info = "12.2.0", (12, 2, 0)
+    source = world.modules["substance_painter.source"]
+
+    class AuthoredProperty:
+        def __init__(self, owner: Any, key: str) -> None:
+            self.owner, self.key = owner, key
+
+        def value(self) -> Any:
+            return self.owner.values[self.key]
+
+        def name(self) -> str:
+            return self.key
+
+        def short_name(self) -> str:
+            return self.key
+
+        def label(self) -> str:
+            return "Authored " + self.key
+
+        def widget_type(self) -> str:
+            return "Togglebutton" if self.key == "authored_flag" else "Slider"
+
+        def enum_values(self) -> dict[str, int]:
+            return {}
+
+        def properties(self) -> dict[str, Any]:
+            return {}
+
+    class Substance:
+        def __init__(self, rid: Any) -> None:
+            self.rid = self.resource_id = rid
+            self.values: dict[str, Any] = {"authored_amount": 0.5, "authored_flag": 0}
+
+        def get_parameters(self) -> dict[str, Any]:
+            return dict(self.values)
+
+        def set_parameters(self, values: dict[str, Any]) -> None:
+            self.values.update(values)
+
+        def get_properties(self) -> dict[str, Any]:
+            return {key: AuthoredProperty(self, key) for key in self.values}
+
+    source.SourceSubstance = Substance
+    node_class = world.modules["substance_painter.layerstack"].FillLayerNode
+    original_get = node_class.get_source
+    original_set = node_class.set_source
+
+    def get_source(node: Any, channel: Any = None) -> Any:
+        value = original_get(node, channel)
+        if isinstance(value, source.SourceBitmap) and value.rid.url() == RESOURCE_URL:
+            value = Substance(value.rid)
+            node.data.sources[node.source_key(channel)] = value
+        return value
+
+    def set_source(node: Any, channel: Any, value: Any) -> Any:
+        original_set(node, channel, value)
+        return get_source(node, channel)
+
+    node_class.get_source = get_source
+    node_class.set_source = set_source
+    session = ProbeSession(
+        fake.LocalTransport(world),
+        sleep=lambda _: world.modules["substance_painter.project"].is_busy(),
+        allowed_builds=lambda: frozenset({"12.2.0+js-api.1.1.20"}),
+    )
+    job = probe_job_from_manifest(held_property_request())
+    run = record_probe_golden(session, job, tmp_path / "work", tmp_path / "inbox")
+    record = json.loads((run / "record.json").read_text())
+    assert record_problems(record) == []
+    first, second = (
+        {o["output_id"]: o for o in recording["outputs"] if o["kind"] == "api_readback"}
+        for recording in record["recordings"]
+    )
+    for recording in (first, second):
+        assert not any("raised" in output for output in recording.values())
+        assert [recording[f"s{step}/value"]["value"] for step in (8, 9, 11, 12)] == [1, 1, 0, 0]
