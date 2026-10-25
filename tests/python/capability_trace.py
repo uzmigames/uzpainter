@@ -172,6 +172,9 @@ def _index_value(qualified: str, value: Any, depth: int, receiver: type | None =
         for accessor in (value.fget, value.fset, value.fdel):
             if isinstance(accessor, types.FunctionType):
                 _index_python(accessor, qualified, receiver)
+            elif callable(accessor):
+                # Native descriptor access has no CALL event; explicit accessor calls do.
+                _index_value(qualified, accessor, depth, receiver)
         return True
     if inspect.isclass(value):
         if depth < 4:

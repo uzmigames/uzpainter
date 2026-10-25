@@ -15,6 +15,42 @@ from typing import Any
 import pytest
 
 
+def test_native_property_accessor_requires_real_successful_call(trace: Any) -> None:
+    class NotYetSupported(Exception):
+        pass
+
+    class Value(list[int]):
+        image_outputs = property(len)
+        refused = False
+
+        def __len__(self) -> int:
+            if self.refused:
+                raise NotYetSupported("authored refusal")
+            return super().__len__()
+
+    value = Value([1, 2, 3])
+    symbol = "api.Value.image_outputs"
+    trace._index_value(symbol, Value.image_outputs, 0, Value)
+    getter = Value.image_outputs.fget
+    assert getter is not None
+    trace.start()
+    trace.mark("indexed_only")
+    assert symbol in trace._names
+    trace.mark("implicit")
+    assert value.image_outputs == 3
+    trace.mark("explicit")
+    assert getter(value) == value.image_outputs == 3
+    trace.mark("refused")
+    value.refused = True
+    with pytest.raises(NotYetSupported):
+        getter(value)
+    found = trace.stop()
+    assert symbol not in found.get("indexed_only", [])
+    assert symbol not in found.get("implicit", [])
+    assert symbol in found["explicit"]
+    assert symbol not in found.get("refused", [])
+
+
 def test_required_dataclass_fields_trace_real_access_and_restore(trace: Any) -> None:
     class NotYetSupported(Exception):
         pass
