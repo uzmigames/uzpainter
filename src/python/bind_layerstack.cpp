@@ -622,7 +622,15 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
                 const auto existing = ref.params.find(name);
                 if (existing == ref.params.end()) throw core::ValueError("unknown procedural parameter: " + name);
                 const auto value = item.second;
-                if (py::isinstance<py::bool_>(value)) throw py::type_error("boolean procedural parameters require integer values");
+                if (py::isinstance<py::bool_>(value)) {
+                    // Painter's refusal of a bool for an integer parameter, value unchanged
+                    // (`tier0/api-probes/source-substance-booleans-filter`); other types are unrecorded.
+                    if (existing->second.IsInt()) {
+                        throw py::type_error("Bad value for property '" + name +
+                                             "': expected value of type <int32> but got <bool>.");
+                    }
+                    throw py::type_error("boolean procedural parameters require integer values");
+                }
                 if (existing->second.IsInt() && py::isinstance<py::int_>(value)) {
                     updates[name] = value.cast<std::int64_t>();
                 } else if (existing->second.IsDouble() && py::isinstance<py::float_>(value)) {

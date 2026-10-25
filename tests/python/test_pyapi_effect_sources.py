@@ -10,6 +10,7 @@ import pytest
 
 from tests.export.conftest import export_tests as export_tests
 from tests.python.conftest import Run
+from tests.python.recorded_probe import recorded_readbacks
 from tests.python.test_pyapi_native import ok
 
 
@@ -159,3 +160,48 @@ result = errors
     assert "phase3.2_proc-generator-families" in errors["transaction"], errors
     for name in ("stale read", "stale edit", "stale resolution"):
         assert errors[name] is not None and errors[name].startswith("ValueError:"), errors
+
+
+@pytest.mark.parametrize("api", ["run", "facade"])
+def test_filter_source_errors_equal_the_recorded_painter_errors(
+    api: str, request: pytest.FixtureRequest, effects_project: None
+) -> None:
+    """Compared with `tier0/api-probes/source-substance-booleans-filter` (both recordings)."""
+    recordings = recorded_readbacks("source-substance-booleans-filter")
+    expected = [
+        {
+            "active_output": recording["s19/active_output"]["raised"],
+            "resolution get": recording["s20/resolution"]["raised"],
+            "resolution set": recording["s21/resolution"]["raised"],
+        }
+        for recording in recordings
+    ]
+    assert len(expected) == 2 and expected[0] == expected[1]
+    execute: Run = request.getfixturevalue(api)
+    script = """
+if FACADE:
+    modes, override = source.ResolutionMode, source.ResolutionOverride
+else:
+    modes, override = source._ResolutionMode, source._ResolutionOverride
+
+def raised(call, *args):
+    try:
+        call(*args)
+    except Exception as error:
+        return {"type": type(error).__name__, "message": str(error)}
+    return None
+
+uzpainter.project.open(WORK + "/effects.uzp")
+host = ls.get_root_layer_nodes(ts.get_active_stack())[0]
+filter_ = host.content_effects()[1].get_source()
+custom128 = override(modes.Custom if FACADE else modes.Manual, (128, 128), 0)
+revision = uzpainter.project.revision()
+result = {
+    "active_output": raised(getattr, filter_, "active_output"),
+    "resolution get": raised(getattr, filter_, "resolution"),
+    "resolution set": raised(setattr, filter_, "resolution", custom128),
+}
+assert uzpainter.project.revision() == revision
+uzpainter.project.close()
+"""
+    assert ok(execute(f"FACADE = {api == 'facade'!r}\n" + script)) == expected[0]

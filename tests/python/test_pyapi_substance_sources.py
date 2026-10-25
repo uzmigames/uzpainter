@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -12,6 +13,7 @@ import pytest
 
 from tests.export.conftest import export_tests as export_tests
 from tests.python.conftest import Run
+from tests.python.recorded_probe import recorded_readbacks
 from tests.python.test_pyapi_native import EXPORT_CONFIG, ok
 
 
@@ -215,3 +217,46 @@ result = files
             assert len(channels) == 1
             actual = next(iter(channels.values())).pixels.view(np.uint32).ravel()
             np.testing.assert_array_equal(actual, expected)
+
+
+@pytest.mark.parametrize("api", ["run", "facade"])
+def test_boolean_refusal_equals_the_recorded_painter_error(
+    api: str, request: pytest.FixtureRequest, snapshot_project: None
+) -> None:
+    """Compared with `tier0/api-probes/source-substance-booleans-filter`: a bool for an integer
+    parameter raises Painter's TypeError and leaves the value unchanged (both recordings). The
+    recorded property name stays private; only the message's template is compared."""
+    recordings = recorded_readbacks("source-substance-booleans-filter")
+
+    def template(error: dict[str, str]) -> dict[str, str]:
+        return {
+            **error,
+            "message": re.sub(r"property '[^']*'", "property '<name>'", error["message"]),
+        }
+
+    expected = []
+    for recording in recordings:
+        for step, before in (("s10", "s9"), ("s14", "s13")):
+            assert (
+                recording[f"s{int(step[1:]) + 1}/get_parameters"]
+                == recording[f"{before}/get_parameters"]
+            )
+            expected.append(template(recording[f"{step}/set_parameters"]["raised"]))
+    assert len(expected) == 4 and all(entry == expected[0] for entry in expected)
+    execute: Run = request.getfixturevalue(api)
+    script = """
+uzpainter.project.open(WORK + "/snapshot.uzp")
+value = ls.get_root_layer_nodes(ts.get_active_stack())[0].get_source(CT.User0)
+before, revision = value.get_parameters(), uzpainter.project.revision()
+result = []
+for flag in (True, False):
+    try:
+        value.set_parameters({"$randomseed": flag})
+        result.append(None)
+    except Exception as error:
+        result.append({"type": type(error).__name__, "message": str(error)})
+assert value.get_parameters() == before and uzpainter.project.revision() == revision
+uzpainter.project.close()
+"""
+    observed = ok(execute(script))
+    assert [template(entry) for entry in observed] == expected[:2]
