@@ -163,6 +163,8 @@ def write_authored() -> None:
 
 
 NATIVE_BASELINES = ("srgb8-ramp", "uniform")
+RGB16_CANDIDATES = ("field-a", "field-a-brg", "field-a-gbr")
+RGB16_CANDIDATE_MODEL = "legacy-rgb16-to-srgb8-with-ocio-export"
 
 
 @dataclass(frozen=True)
@@ -182,15 +184,31 @@ def native_baseline(
     """Translate only the frozen RGB8/uniform recipes; no oracle or default-space lookup."""
     if source not in NATIVE_BASELINES or configuration_sha256 != PAINTER_OCIO_CONFIG_SHA256:
         raise ValueError("native baseline source or OCIO profile is outside the authored domain")
+    return _native_plan(authored, source)
+
+
+def native_rgb16_candidate(
+    authored: dict[str, Any],
+    source: str,
+    *,
+    configuration_sha256: str,
+) -> NativeBaseline:
+    """Authored input to the test-only RGB16 hypothesis, never the ordinary export route."""
+    if source not in RGB16_CANDIDATES or configuration_sha256 != PAINTER_OCIO_CONFIG_SHA256:
+        raise ValueError("RGB16 candidate source or OCIO profile is outside the authored domain")
+    return _native_plan(authored, source)
+
+
+def _native_plan(authored: dict[str, Any], source: str) -> NativeBaseline:
     expected = request(source)
     for key in ("golden_id", "inputs", "instruction_sequence", "applied_settings", "software"):
         if canonical_json(authored.get(key)) != canonical_json(expected[key]):
-            raise ValueError("native baseline authored contract changed")
+            raise ValueError("native authored contract changed")
     if authored.get("private_records") != [] or authored.get("expectations") != []:
-        raise ValueError("native baseline requires an authored request, not oracle inputs")
+        raise ValueError("native plan requires an authored request, not oracle inputs")
     job = probe_job_from_manifest(authored)
     if len(job.exports) != 3 or len(job.probe_steps) != 1:
-        raise ValueError("native baseline capture contract changed")
+        raise ValueError("native capture contract changed")
     steps = []
     for original in authored["instruction_sequence"]["steps"]:
         step = deepcopy(original)

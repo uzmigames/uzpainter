@@ -425,3 +425,36 @@ the explicitly supplied export-test binary hashes to
 The replay never builds implicitly. CPU reconstruction/comparison checks and
 Ruff/mypy passed; the real replay passed after the coordinated export build.
 RGB16 decoding, fits, padding, item 2.5 and broader gates remain unchanged.
+
+The test-only RGB16 candidate completed on 2026-10-25 and its hypothesis was
+rejected. `ocio16-input-candidate` tests the explicitly non-conformant model
+`legacy-rgb16-to-srgb8-with-ocio-export`: a validated clone changes only colour
+mode and the bitmap tag, requires an identical export plan, evaluates through
+the existing provider and encoder, and keeps production guards unchanged.
+Its domain is the three authored RGB16 sources, full UV plane, one visible
+Normal/1 Fill, identity UV Nearest/Repeat and PNG8/PNG16/EXR32f, with no extra
+content, inactive source, effect, mask, padding, dither or resize. All nine
+candidates are produced before reading any oracle; receipt, admission,
+configuration and input identities are checked before exact comparison.
+
+One coordinated export build and 28-node batch produced 27 passes and one
+diagnostic failure, with no skips. The RGB8/uniform baseline remains exact in
+all 12 comparisons; both affected synthetic Filter getters pass. RGB16
+returned nine candidates and nine provider fetches. All 18 image comparisons
+against r1/reopen-r2 differ in both encoded bytes and decoded values; neither
+side contains non-finite pixels. Eighteen counts differing images, not differing
+pixels. All 24 native outside-domain cases refuse as required. No fit or
+output-dependent adjustment follows this rejected hypothesis.
+
+The export-test binary hashes to
+`fd1635de0d9a288b632d3acfd237c84f0f2c535b1f48971b2cc8b7c40e23cdd0`;
+the private RGB16 report hashes to
+`d607a2eb8f516578f5dc7375d48cd5adc7a7be699b4b9f8365dfbc1e41a48a6d`.
+Nine candidate images and 30 input/configuration/log texts were preserved
+privately with verified hashes before pytest retention could remove them;
+the private evidence index hashes to
+`c15da6d45a5fe8237256607a2828c84062639da7101f7d5ae3c0e80c816669f4`.
+The aggregate batch JUnit hashes to
+`97d8f103b7aa58a15208690f48d7324e0a43065f627fba538c86b1eff33fa913`.
+The diagnostic failure remains explicit. Production RGB16, item 2.5/R-322,
+padding, fits and all broader acceptance gates remain open.

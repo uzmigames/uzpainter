@@ -416,3 +416,46 @@ def test_native_plan_refuses_profile() -> None:
         control.native_baseline(
             control.request("uniform"), "uniform", configuration_sha256="0" * 64
         )
+
+
+@pytest.mark.parametrize("source", control.RGB16_CANDIDATES)
+def test_rgb16_candidate_keeps_ocio_authored_input(source: str) -> None:
+    authored = control.request(source)
+    before = deepcopy(authored)
+    plan = control.native_rgb16_candidate(
+        authored, source, configuration_sha256=PAINTER_OCIO_CONFIG_SHA256
+    )
+    assert authored == before and len(plan.exports) == 3
+    steps = plan.manifest["instruction_sequence"]["steps"]
+    bitmap = next(s["args"] for s in steps if s["call"] == ps.SET_SOURCE)
+    assert bitmap["color_space"] == "OcioColorSpace.sRGB"
+    assert bitmap["resource_step"] > 0 and "color" not in bitmap
+    assert png_samples(plan.inputs[source].read_bytes())[0] == 16
+    with pytest.raises(ValueError, match="outside"):
+        control.native_baseline(authored, source, configuration_sha256=PAINTER_OCIO_CONFIG_SHA256)
+
+
+@pytest.mark.parametrize("source", control.NATIVE_BASELINES)
+def test_rgb16_candidate_refuses_baselines(source: str) -> None:
+    with pytest.raises(ValueError, match="outside"):
+        control.native_rgb16_candidate(
+            control.request(source), source, configuration_sha256=PAINTER_OCIO_CONFIG_SHA256
+        )
+
+
+@pytest.mark.parametrize("change", ["profile", "raw", "depth", "private"])
+def test_rgb16_candidate_refuses_changed_contract(change: str) -> None:
+    authored = control.request("field-a")
+    profile = PAINTER_OCIO_CONFIG_SHA256
+    if change == "profile":
+        profile = "0" * 64
+    elif change == "private":
+        authored["private_records"] = [{"unexpected": True}]
+    else:
+        steps = authored["instruction_sequence"]["steps"]
+        if change == "raw":
+            next(s for s in steps if s["call"] == control.SET_SPACE)["args"]["color_space"] = "Raw"
+        else:
+            steps[-1]["args"]["bit_depth"] = "16f"
+    with pytest.raises(ValueError):
+        control.native_rgb16_candidate(authored, "field-a", configuration_sha256=profile)

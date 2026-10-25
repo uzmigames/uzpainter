@@ -7,10 +7,12 @@ import json
 import os
 import struct
 import zlib
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import Mock
 
 import numpy as np
 import pytest
@@ -18,11 +20,17 @@ import pytest
 from python.uzpainter_facade.bitmap_defaults import PAINTER_OCIO_CONFIG_SHA256
 from tests.export.encoders_tier0 import write_export
 from tests.export.tier0 import export_spec
+from tools.parity.envelope import ocio
+from tools.parity.envelope.ocio import recorded_request_environment_matches
 from tools.parity.envelope.registry import current_envelope, manifest_root
 from tools.parity.fit.decode import decode
+from tools.parity.recorder.environment import ENVELOPE_FIELDS, envelope_sha256
+from tools.parity.recorder.job import canonical_json
 from tools.parity.recorder.output import GOLDEN_RECORD_ID, ensure_outside_repository, slug
+from tools.parity.recorder.probes import probe_job_from_manifest
+from tools.parity.recorder.session import RecorderError
 from tools.parity.schemas import REPO_ROOT, record_problems
-from tools.parity.store.store import load_oracle, locate
+from tools.parity.store.store import OracleStore, load_oracle, locate
 from tools.parity.tier0_semantics import ocio16_bitmap_control as control
 from tools.parity.tier0_semantics import recording_requests as rr
 
@@ -129,6 +137,58 @@ def replay(exe: Path, work: Path, report: dict[str, Any]) -> None:
             raise ValueError("native baseline output hash")
         produced.append((candidate, data))
         report["candidates"] += 1
+    compare_produced(produced, report)
+
+
+def require_admitted_refs(store: OracleStore, manifest: dict[str, Any]) -> None:
+    build = manifest["software"]["painter"]["build_id"]
+    for ref in manifest["private_records"]:
+        entry = store.entry(build, manifest["golden_id"], ref["record_id"])
+        if entry is None or canonical_json(
+            [entry.kind, entry.sha256, entry.size_bytes]
+        ) != canonical_json([ref["kind"], ref["sha256"], ref["size_bytes"]]):
+            raise ValueError("oracle reference not admitted")
+
+
+def validate_receipt_context(
+    record: dict[str, Any], authored: dict[str, Any], store: OracleStore
+) -> None:
+    job = probe_job_from_manifest(authored)
+    key = record["key"]
+    settings = key["project_settings"]
+    if (
+        key["instruction_sequence_sha256"] != job.instruction_sequence_sha256
+        or canonical_json(key["inputs"]) != canonical_json(job.input_hashes())
+        or canonical_json(key["painter_build"]) != canonical_json(authored["software"]["painter"])
+        or set(settings) != {"create", "colour_management"}
+        or canonical_json(settings["create"]) != canonical_json(job.project_settings())
+    ):
+        raise ValueError("oracle receipt recipe differs")
+    colour = settings["colour_management"]
+    if (
+        set(colour) != {"mode", "OCIO", "PAINTER_ACE_CONFIG"}
+        or colour["mode"] != "ocio"
+        or type(colour["OCIO"]) is not str
+        or not colour["OCIO"].replace("\\", "/").endswith("resources/ocio/substance/config.ocio")
+        or colour["PAINTER_ACE_CONFIG"] is not None
+        or canonical_json(key["effective_defaults"].get("colour_management"))
+        != canonical_json(colour)
+    ):
+        raise ValueError("oracle receipt colour context differs")
+    environment = record.get("environment")
+    envelope = current_envelope()
+    if (
+        type(environment) is not dict
+        or environment.get("basis") != "recorded"
+        or any(environment.get(field) in (None, "", "unknown") for field in ENVELOPE_FIELDS)
+        or canonical_json(environment["painter_build"]) != canonical_json(envelope["painter_build"])
+        or not recorded_request_environment_matches(environment, authored, envelope, store)
+    ):
+        raise ValueError("oracle receipt envelope differs")
+
+
+def compare_produced(produced: list[tuple[Candidate, bytes]], report: dict[str, Any]) -> None:
+    """Compare completed authored candidates against the same admitted export identities."""
     # Reference bytes cannot reach setup or any native invocation.
     report["stage"] = "oracle_comparison"
     store = locate()
@@ -142,20 +202,28 @@ def replay(exe: Path, work: Path, report: dict[str, Any]) -> None:
                 (base / f"{control.request_name(candidate.source)}.json").read_text()
             )
             if any(
-                manifest[k] != candidate.authored[k]
-                for k in ("inputs", "instruction_sequence", "applied_settings", "software")
+                canonical_json(manifest[k]) != canonical_json(candidate.authored[k])
+                for k in (
+                    "golden_id",
+                    "inputs",
+                    "instruction_sequence",
+                    "applied_settings",
+                    "software",
+                )
             ):
                 raise ValueError("oracle authored context differs")
             refs = manifest["private_records"]
             records = [r for r in refs if r["kind"] == "private_oracle_record"]
             if len(records) != 1 or not records[0]["record_id"].endswith(GOLDEN_RECORD_ID):
                 raise ValueError("oracle record identity")
+            require_admitted_refs(store, manifest)
             raw = load_oracle(store, records[0])
             if raw is None:
                 raise ValueError("oracle record unavailable")
             record = json.loads(raw)
             if record_problems(record) or record["golden_id"] != manifest["golden_id"]:
                 raise ValueError("oracle record schema")
+            validate_receipt_context(record, candidate.authored, store)
             if len(record["recordings"]) != 2 or [r["condition"] for r in record["recordings"]] != [
                 "same_session",
                 "after_save_reopen",
@@ -179,8 +247,11 @@ def replay(exe: Path, work: Path, report: dict[str, Any]) -> None:
             parameters = candidate.config["exportParameters"][0]["parameters"]
             settings = output["export_settings"]
             if (
-                any(settings.get(k) != v for k, v in parameters.items())
-                or settings.get("step") != candidate.step
+                any(
+                    canonical_json(settings.get(k)) != canonical_json(v)
+                    for k, v in parameters.items()
+                )
+                or canonical_json(settings.get("step")) != canonical_json(candidate.step)
                 or settings.get("map_type") != "documentMap"
                 or settings.get("map_channels") != "RGB"
                 or output["texture_set"] != "uzp_plane"
@@ -388,3 +459,165 @@ def test_native_failure_report_is_sanitized(
     assert "PRIVATE_SENTINEL" not in raw
     report = json.loads(raw)
     assert report["status"] == "failed" and report["attempted"] == 2
+
+
+@pytest.fixture
+def authored_receipt(monkeypatch: pytest.MonkeyPatch) -> tuple[dict[str, Any], dict[str, Any]]:
+    authored = control.request("uniform")
+    job = probe_job_from_manifest(authored)
+    colour = {
+        "mode": "ocio",
+        "OCIO": "synthetic/resources/ocio/substance/config.ocio",
+        "PAINTER_ACE_CONFIG": None,
+    }
+    environment = {
+        "schema": "uzpainter/parity/oracle-environment/1",
+        "basis": "recorded",
+        "painter_build": deepcopy(current_envelope()["painter_build"]),
+        "gpu_model": "synthetic",
+        "driver_version": "synthetic",
+        "os_build": "synthetic",
+        "colour_configuration_sha256": "1" * 64,
+        "recorder_version": "synthetic/1",
+    }
+    anchor = {**environment, "colour_configuration_sha256": "2" * 64}
+    envelope = {
+        **current_envelope(),
+        "envelope_sha256": envelope_sha256(anchor),
+        "equivalent_envelopes": [],
+    }
+    references = deepcopy([environment])
+    monkeypatch.setattr(ocio, "ocio_identities", lambda *args, **kwargs: ([anchor], references))
+    monkeypatch.setattr(__name__ + ".current_envelope", lambda: envelope)
+    return authored, {
+        "key": {
+            "instruction_sequence_sha256": job.instruction_sequence_sha256,
+            "inputs": job.input_hashes(),
+            "painter_build": deepcopy(authored["software"]["painter"]),
+            "project_settings": {"create": job.project_settings(), "colour_management": colour},
+            "effective_defaults": {"colour_management": deepcopy(colour)},
+        },
+        "environment": environment,
+    }
+
+
+def test_receipt_accepts_exact_authored_context(
+    authored_receipt: tuple[dict[str, Any], dict[str, Any]],
+) -> None:
+    authored, record = authored_receipt
+    assert envelope_sha256(record["environment"]) != current_envelope()["envelope_sha256"]
+    validate_receipt_context(record, authored, Mock())
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "sequence",
+        "inputs",
+        "build",
+        "create",
+        "create_type",
+        "colour",
+        "defaults",
+        "environment_missing",
+        "environment_unknown",
+        "environment_changed",
+        "environment_build",
+    ],
+)
+def test_receipt_rejects_other_context_before_comparison(
+    authored_receipt: tuple[dict[str, Any], dict[str, Any]], mutation: str
+) -> None:
+    authored, record = authored_receipt
+    key = record["key"]
+    if mutation == "sequence":
+        key["instruction_sequence_sha256"] = "0" * 64
+    elif mutation == "inputs":
+        key["inputs"] = []
+    elif mutation == "build":
+        key["painter_build"]["build_id"] = "synthetic-other"
+    elif mutation in ("create", "create_type"):
+        key["project_settings"]["create"]["default_texture_resolution"] = (
+            128 if mutation == "create" else 256.0
+        )
+    elif mutation == "colour":
+        key["project_settings"]["colour_management"]["OCIO"] = "other/config.ocio"
+    elif mutation == "defaults":
+        key["effective_defaults"]["colour_management"]["mode"] = "legacy"
+    elif mutation == "environment_missing":
+        del record["environment"]
+    elif mutation == "environment_unknown":
+        record["environment"]["gpu_model"] = "unknown"
+    elif mutation == "environment_changed":
+        record["environment"]["colour_configuration_sha256"] = "2" * 64
+    elif mutation == "environment_build":
+        record["environment"]["painter_build"] = "synthetic-other"
+    with pytest.raises(ValueError, match="oracle receipt"):
+        validate_receipt_context(record, authored, Mock())
+
+
+@pytest.mark.parametrize(
+    "mutation", ["missing_anchor", "missing_reference", "split", "foreign_host", "unreadable"]
+)
+def test_receipt_refuses_unproved_ocio_reference(
+    authored_receipt: tuple[dict[str, Any], dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+    mutation: str,
+) -> None:
+    authored, record = authored_receipt
+    reference = deepcopy(record["environment"])
+    anchor = {**reference, "colour_configuration_sha256": "2" * 64}
+    anchors, references = [anchor], [reference]
+    if mutation == "missing_anchor":
+        anchors = []
+    elif mutation == "missing_reference":
+        references = []
+    elif mutation == "split":
+        references.append({**reference, "colour_configuration_sha256": "3" * 64})
+    elif mutation == "foreign_host":
+        anchor["gpu_model"] = "other"
+
+    def identities(*args: Any, **kwargs: Any) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        if mutation == "unreadable":
+            raise RecorderError("synthetic unreadable reference")
+        return anchors, references
+
+    monkeypatch.setattr(ocio, "ocio_identities", identities)
+    with pytest.raises(ValueError):
+        validate_receipt_context(record, authored, Mock())
+
+
+@pytest.mark.parametrize("mutation", ["missing", "kind", "sha256", "size_bytes", "size_type"])
+def test_unadmitted_receipt_is_not_loaded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mutation: str
+) -> None:
+    candidate = candidates(tmp_path)[0]
+    manifest = deepcopy(candidate.authored)
+    ref = {
+        "record_id": GOLDEN_RECORD_ID,
+        "kind": "private_oracle_record",
+        "sha256": "1" * 64,
+        "size_bytes": 1,
+    }
+    manifest["private_records"] = [ref]
+    directory = tmp_path / "tier0/api-probes"
+    directory.mkdir(parents=True)
+    (directory / f"{control.request_name(candidate.source)}.json").write_text(json.dumps(manifest))
+    store = Mock()
+    entry = SimpleNamespace(kind=ref["kind"], sha256=ref["sha256"], size_bytes=1)
+    if mutation == "missing":
+        store.entry.return_value = None
+    else:
+        setattr(
+            entry,
+            "size_bytes" if mutation == "size_type" else mutation,
+            True if mutation == "size_type" else "different",
+        )
+        store.entry.return_value = entry
+    monkeypatch.setattr(__name__ + ".locate", lambda: store)
+    monkeypatch.setattr(__name__ + ".manifest_root", lambda _: tmp_path)
+    report = new_report()
+    with pytest.raises(ValueError, match="not admitted"):
+        compare_produced([(candidate, b"authored-native-output")], report)
+    store.load.assert_not_called()
+    assert report["comparisons"] == 0

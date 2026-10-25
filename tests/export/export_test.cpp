@@ -31,6 +31,12 @@
 //       "native-png8-processing-candidate", "non_conformant": true, "planned", "png8_sha256",
 //       "tga": {sha256, size, width, height, channels}, "bypassed", "undecided"} or the same
 //       model fields with {"error": class, "message"}. Never conformity; TGA stays refused.
+//   uzp-export-tests ocio16-input-candidate <templates dir> <spec.json> <config.json>
+//       TEST-ONLY diagnostic hypothesis (`RunOcio16InputCandidate`): the one RGB16 bitmap of an
+//       OCIO spec evaluated through a legacy clone, then encoded and written by the original's
+//       planned file; prints {"model": "legacy-rgb16-to-srgb8-with-ocio-export",
+//       "non_conformant": true, "written", "observed"} or the model fields with {"error",
+//       "stage", "message"}. Never conformity; RGB16 under OCIO stays refused in production.
 //   uzp-export-tests export-backend <cpu|dx12|vulkan> <templates> <spec.json> <config.json>
 //       Normal WriteExport using the requested tile store; Vulkan uses the qualified native
 //       test seam only. Reports backend/adapter and real file hashes; unavailable GPU exits 77.
@@ -125,6 +131,7 @@
 #include "evaluator/admission.h"
 #include "evaluator/arith.h"
 #include "evaluator/cpu_store.h"
+#include "evaluator/dag.h"
 #include "evaluator/evaluator.h"
 #include "evaluator/error.h"
 #include "python/stack_sync.h"
@@ -162,6 +169,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <bit>
 #include <chrono>
 #include <cmath>
@@ -175,8 +183,10 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <thread>
+#include <tuple>
 #include <vector>
 #include "../no_error_dialogs.h"
 
@@ -974,6 +984,355 @@ int RunTgaProcessingCandidate(const fs::path& templatesDir, const fs::path& spec
         return refuse("NotYetSupported", e.what());
     } catch (const std::exception& e) {
         // Malformed inputs, manifests or encoder faults: never a blocked map, never a success.
+        return refuse("InternalError", e.what());
+    }
+    std::cout << json::WriteCanonical(result) << "\n";
+    return 0;
+}
+
+/// The three authored public RGB16 bitmaps of the OCIO RGB16 hypothesis
+/// (parity/fixtures/tier0-semantics/bitmaps/field-a, field-a-brg and field-a-gbr).
+constexpr std::array<std::string_view, 3> kOcio16CandidateBitmaps{
+    "7d793137ca4e9c567388c6bf20e067893226b7a3321a4107082a0aa45fdda143",
+    "d48e2f9793b90261db65ddcd18e6c1af5f4e5205d06d439fe845a7994c79c150",
+    "1754904b13f4311ea2e5d64b711f187dbcb44a3b1ee6812aa82f51260457b0ef"};
+
+/// The fetches of the one expected resource through `inner`; any other hash asked is recorded.
+class CountingResources final : public evaluator::IResourceProvider {
+public:
+    CountingResources(std::shared_ptr<const evaluator::IResourceProvider> inner, std::string expected)
+        : m_inner(std::move(inner)), m_expected(std::move(expected)) {}
+    std::shared_ptr<const evaluator::DecodedImage> Fetch(std::string_view sha256) const override {
+        if (sha256 == m_expected) {
+            ++m_fetches;
+        } else {
+            m_foreign = true;
+        }
+        return m_inner->Fetch(sha256);
+    }
+    bool Available(std::string_view sha256) const override {
+        if (sha256 != m_expected) m_foreign = true;
+        return m_inner->Available(sha256);
+    }
+    [[nodiscard]] std::int64_t Fetches() const { return m_fetches; }
+    [[nodiscard]] bool Foreign() const { return m_foreign; }
+
+private:
+    std::shared_ptr<const evaluator::IResourceProvider> m_inner;
+    std::string m_expected;
+    mutable std::atomic<std::int64_t> m_fetches{0};
+    mutable std::atomic<bool> m_foreign{false};
+};
+
+/// The leaves where `a` and `b` differ, as (path, value in a, value in b); a missing key or an
+/// array of another length differs as a whole (null for the missing side).
+void JsonDifferences(const json::Value& a, const json::Value& b, const std::string& path,
+                     std::vector<std::tuple<std::string, json::Value, json::Value>>& out) {
+    if (a == b) return;
+    const auto* oa = std::get_if<json::Object>(&a.data);
+    const auto* ob = std::get_if<json::Object>(&b.data);
+    if (oa != nullptr && ob != nullptr) {
+        for (const auto& [key, value] : *oa) {
+            const auto it = ob->find(key);
+            if (it == ob->end()) {
+                out.emplace_back(path + "/" + key, value, json::Value{});
+            } else {
+                JsonDifferences(value, it->second, path + "/" + key, out);
+            }
+        }
+        for (const auto& [key, value] : *ob) {
+            if (!oa->contains(key)) out.emplace_back(path + "/" + key, json::Value{}, value);
+        }
+        return;
+    }
+    const auto* aa = std::get_if<json::Array>(&a.data);
+    const auto* ab = std::get_if<json::Array>(&b.data);
+    if (aa != nullptr && ab != nullptr && aa->size() == ab->size()) {
+        for (size_t i = 0; i < aa->size(); ++i) JsonDifferences((*aa)[i], (*ab)[i], path + "/" + std::to_string(i), out);
+        return;
+    }
+    out.emplace_back(path, a, b);
+}
+
+/// `ocio16-input-candidate`: a TEST-ONLY diagnostic hypothesis, never a product route (an RGB16
+/// bitmap under OCIO stays refused by `EvaluateFileOn`). The spec's project (OCIO with Painter's
+/// substance config, one RGB16 bitmap tagged "OcioColorSpace.sRGB" on an sRGB8 BaseColor) is
+/// first closed to the authored domain (one 256 x 256 RGB file of BaseColor R, G, B, no dithering,
+/// passthrough padding; the public plane mesh; one visible fill, Normal at opacity 1, of that
+/// bitmap only, UV Nearest Repeat with the identity transform, nothing else) and planned as is; a clone differing only in the colour management mode ("legacy") and that tag
+/// ("sRGB") must plan the same files. The clone's one file is evaluated on a new CPU store (the
+/// legacy sRGB decode of the 16-bit codes), the original's processing guard and OCIO PNG guard
+/// are applied to its raster, and the original's planned file is encoded (`EncodeFile`, no
+/// padding bypass) and written at exportPath / relativePath. Prints {"model":
+/// "legacy-rgb16-to-srgb8-with-ocio-export", "non_conformant": true, "written": [{relativePath,
+/// path, size, sha256}], "observed": {source_bits, source_channels, source_width, source_height,
+/// bitmap_fetches, srgb_decode}} or the model fields with {"error": class, "stage", "message"},
+/// nothing reported written.
+int RunOcio16InputCandidate(const fs::path& templatesDir, const fs::path& specPath, const fs::path& configPath) {
+    json::Object result{{"model", "legacy-rgb16-to-srgb8-with-ocio-export"}, {"non_conformant", true}};
+    // Where a refusal happened: parse_spec, compile_plan, clone, source, check_processing,
+    // evaluate, raster, encode or write.
+    std::string stage = "parse_spec";
+    const auto refuse = [&](std::string error, std::string message) {
+        result["error"] = std::move(error);
+        result["stage"] = stage;
+        result["message"] = std::move(message);
+        std::cout << json::WriteCanonical(result) << "\n";
+        return 0;
+    };
+    try {
+        const Spec spec = ParseSpec(specPath);
+        const core::Project& original = spec.project;
+        if (!evaluator::PainterOcio(original)) return refuse("Setup", "the spec must use OCIO with Painter's substance config");
+        if (original.texture_sets.size() != 1 || original.texture_sets.front().stacks.size() != 1) {
+            return refuse("Setup", "the spec must hold one texture set with one stack");
+        }
+        if (original.resources.size() != 1) return refuse("Setup", "the spec must hold exactly one resource");
+        const std::string sha = original.resources.begin()->first;
+        if (std::find(kOcio16CandidateBitmaps.begin(), kOcio16CandidateBitmaps.end(), sha) ==
+            kOcio16CandidateBitmaps.end()) {
+            return refuse("Setup", "the resource is not one of the three authored public RGB16 bitmaps");
+        }
+        const json::Value originalJson = core::ProjectToJson(original);
+        stage = "compile_plan";
+        const std::string configText = ReadText(configPath);
+        const exporter::ExportPlan plan = exporter::CompilePlan(original, configText);
+        if (plan.files.size() != 1) return refuse("Setup", "the configuration must plan exactly one file");
+        const exporter::PlannedFile& file = plan.files.front();
+        // Only the canonical file is written here: no derivative, material output or skipped map
+        // may be planned beside it.
+        if (file.uztexture || file.dds || !plan.materials.empty() || !plan.skipped.empty()) {
+            return refuse("Setup", "the plan must hold no .uztexture, DDS, material output or skipped map");
+        }
+        if (!file.parameters) return refuse("Setup", "the planned file must not be a statistics file");
+        const exporter::FileFormat format = file.parameters->fileFormat;
+        const exporter::BitDepth depth = file.parameters->bitDepth;
+        if (!(format == exporter::FileFormat::png && (depth == exporter::BitDepth::u8 || depth == exporter::BitDepth::u16)) &&
+            !(format == exporter::FileFormat::exr && depth == exporter::BitDepth::f32)) {
+            return refuse("Setup", "the planned file must be a PNG 8, PNG 16 or OpenEXR 32f");
+        }
+        if (file.parameters->dithering || file.parameters->paddingAlgorithm != exporter::Padding::passthrough ||
+            file.parameters->sizeLog2) {
+            return refuse("Setup", "the planned file must have no dithering, passthrough padding and no resize");
+        }
+        if (file.layout != exporter::FileLayout::RGB || file.channels.size() != 3 || file.width != 256 ||
+            file.height != 256) {
+            return refuse("Setup", "the planned file must be a 256 x 256 RGB file");
+        }
+        // R, G and B, in that order, each reading its own BaseColor component.
+        constexpr std::array<exporter::ChannelLetter, 3> kRgb{exporter::ChannelLetter::R, exporter::ChannelLetter::G,
+                                                              exporter::ChannelLetter::B};
+        for (size_t c = 0; c < 3; ++c) {
+            const exporter::PlannedChannel& channel = file.channels[c];
+            if (channel.dest != kRgb[c] || channel.src != kRgb[c] || channel.component != c || channel.luma ||
+                channel.source.type != exporter::SourceType::documentMap || channel.source.channel != ChannelType::BaseColor ||
+                channel.source.components != 3) {
+                return refuse("Setup", "the planned file must read BaseColor R, G and B in order");
+            }
+        }
+        const core::TextureSet& originalSet = original.texture_sets.front();
+        if (originalSet.resolution.width != 256 || originalSet.resolution.height != 256 || !originalSet.mesh_maps.empty()) {
+            return refuse("Setup", "the texture set must be 256 x 256 without mesh maps");
+        }
+        // The texturing mesh is the public full-UV plane (parity/fixtures/meshes/plane.obj).
+        const json::Value specValue = json::Parse(ReadText(specPath));
+        const json::Object& specObject = Obj(specValue, "spec");
+        if (!spec.mesh || !spec.geometry || !specObject.contains("mesh") ||
+            core::Sha256Hex(ReadText(fs::path(Str(specObject.at("mesh"), "mesh")))) !=
+                "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe") {
+            return refuse("Setup", "the texturing mesh must be the public full-UV plane");
+        }
+        const core::Stack& originalStack = originalSet.stacks.front();
+        const auto baseColor = originalStack.channels.find(ChannelType::BaseColor);
+        if (baseColor == originalStack.channels.end() || baseColor->second.format != ChannelFormat::sRGB8) {
+            return refuse("Setup", "the stack's BaseColor must be sRGB8");
+        }
+        // Exactly one visible fill layer, BaseColor Normal at opacity 1, with nothing a DAG would
+        // leave out: no effect, mask, geometry mask, child, instance, paint, preset or extra.
+        if (originalStack.root_layers.size() != 1) return refuse("Setup", "the stack must hold exactly one layer");
+        const core::Layer& layer = originalStack.root_layers.front();
+        const core::ChannelBlending normal{{ChannelType::BaseColor, core::Blending{core::BlendingMode::Normal, 1.0, {}}}};
+        if (layer.kind != core::LayerKind::fill || !layer.visible || layer.blending != normal ||
+            !layer.content_effects.empty() || layer.mask || layer.geometry_mask != core::GeometryMask{} ||
+            !layer.children.empty() || layer.instance_source != core::kNoId || layer.paint || layer.preset_ref ||
+            !layer.extra.empty() || !layer.fill) {
+            return refuse("Setup", "the layer must be one visible fill, BaseColor Normal at opacity 1, with nothing else");
+        }
+        const core::FillContent& fill = *layer.fill;
+        if (fill.source_mode != core::SourceMode::Split || fill.sources.size() != 1 ||
+            !fill.sources.contains(ChannelType::BaseColor) ||
+            !std::holds_alternative<core::BitmapSource>(fill.sources.at(ChannelType::BaseColor).value) ||
+            fill.mono_source || fill.material_source || fill.active_channels != std::set<ChannelType>{ChannelType::BaseColor} ||
+            fill.symmetry != core::Symmetry{} || !fill.extra.empty()) {
+            return refuse("Setup", "the fill must hold one active BaseColor bitmap and nothing else");
+        }
+        const core::BitmapSource& bitmap = std::get<core::BitmapSource>(fill.sources.at(ChannelType::BaseColor).value);
+        if (bitmap.resource.sha256 != sha || !bitmap.extra.empty()) {
+            return refuse("Setup", "the fill's bitmap must be the authored resource");
+        }
+        core::Projection identity;
+        identity.mode = core::ProjectionMode::UV;
+        identity.uv.filtering_mode = core::FilteringMode::Nearest;
+        identity.uv.uv_wrapping_mode = core::UVWrapMode::Repeat;
+        if (fill.projection != identity) {
+            return refuse("Setup", "the projection must be UV, Nearest, Repeat with the identity transform");
+        }
+
+        stage = "clone";
+        core::Project clone = original;
+        clone.settings.color_management.mode = "legacy";
+        std::vector<core::BitmapSource*> bitmaps;
+        const std::function<void(std::vector<core::Layer>&)> collect = [&](std::vector<core::Layer>& layers) {
+            for (core::Layer& layer : layers) {
+                if (layer.fill) {
+                    for (auto& [channel, source] : layer.fill->sources) {
+                        if (auto* bitmap = std::get_if<core::BitmapSource>(&source.value)) bitmaps.push_back(bitmap);
+                    }
+                }
+                collect(layer.children);
+            }
+        };
+        for (core::TextureSet& set : clone.texture_sets) {
+            for (core::Stack& stack : set.stacks) collect(stack.root_layers);
+        }
+        if (bitmaps.size() != 1 || bitmaps.front()->color_space != "OcioColorSpace.sRGB") {
+            return refuse("Setup", "the project must hold one bitmap source, tagged \"OcioColorSpace.sRGB\"");
+        }
+        bitmaps.front()->color_space = "sRGB";
+        // Exactly the two authored changes: the mode and the one bitmap tag; the configuration
+        // hash and everything else unchanged.
+        std::vector<std::tuple<std::string, json::Value, json::Value>> differences;
+        JsonDifferences(originalJson, core::ProjectToJson(clone), "", differences);
+        bool modeChanged = false;
+        bool tagChanged = false;
+        for (const auto& [path, before, after] : differences) {
+            if (path == "/settings/color_management/mode" && before == json::Value{std::string("ocio")} &&
+                after == json::Value{std::string("legacy")}) {
+                modeChanged = true;
+            } else if (path.ends_with("/color_space") && before == json::Value{std::string("OcioColorSpace.sRGB")} &&
+                       after == json::Value{std::string("sRGB")}) {
+                tagChanged = true;
+            } else {
+                return refuse("Setup", "the clone differs from the project at " + path);
+            }
+        }
+        if (differences.size() != 2 || !modeChanged || !tagChanged) {
+            return refuse("Setup", "the clone must differ from the project in its mode and its bitmap tag only");
+        }
+        const exporter::ExportPlan clonePlan = exporter::CompilePlan(clone, configText);
+        if (core::ProjectToJson(original) != originalJson) return refuse("Setup", "cloning changed the project");
+        if (exporter::PlanJson(clonePlan) != exporter::PlanJson(plan)) {
+            return refuse("Setup", "the clone's plan differs from the project's");
+        }
+        const exporter::PlannedFile& cloneFile = clonePlan.files.front();
+
+        stage = "source";
+        auto templates = std::make_shared<const evaluator::TemplateLibrary>(evaluator::TemplateLibrary::Load(templatesDir));
+        const core::TextureSet& cloneSet = clone.texture_sets.front();
+        render::Result<evaluator::ChannelDag> dag = evaluator::BuildDag(
+            clone, cloneSet.id, cloneSet.stacks.front().id, ChannelType::BaseColor, *templates, spec.templateId);
+        if (!dag) return refuse("Failure", dag.error().reason);
+        const std::vector<evaluator::DagLayer>& layers = dag->root.layers;
+        if (layers.size() != 1 || !layers.front().source || layers.front().maskStack || layers.front().group ||
+            !layers.front().effects.empty() || layers.front().source->kind != evaluator::DagSource::Kind::Bitmap) {
+            return refuse("Setup", "the BaseColor DAG must hold exactly one bitmap fill layer");
+        }
+        const evaluator::DagSource& source = *layers.front().source;
+        if (source.sha256 != sha || !source.srgbDecode || source.l8Material ||
+            source.ocio != evaluator::DagSource::Ocio::None) {
+            return refuse("Setup", "the bitmap is not read with the legacy sRGB decode of the authored resource");
+        }
+        const std::shared_ptr<const evaluator::DecodedImage> image = spec.resources->Fetch(sha);
+        if (!image) return refuse("Setup", "the resource bytes do not decode to the authored hash");
+        if (image->encoding != render::TexelEncoding::Unorm16 || image->channels != 3 || image->width != 256 ||
+            image->height != 256) {
+            return refuse("Setup", "the resource is not a 256 x 256 RGB 16-bit image");
+        }
+
+        stage = "check_processing";
+        exporter::CheckProcessing(original, file);
+
+        stage = "evaluate";
+        evaluator::CpuEvaluator cpu(templates, evaluator::AdmissionLimits{64ull << 30, 1 << 20});
+        auto counting = std::make_shared<CountingResources>(spec.resources, sha);
+        exporter::SourceInputs inputs;
+        inputs.templateId = spec.templateId;
+        inputs.resources = counting;
+        inputs.geometry = spec.geometry;
+        render::Result<exporter::FileRaster> raster =
+            exporter::EvaluateFileOn(clone, 1, cloneFile, inputs, *templates, cpu.store(), cpu.cache());
+        if (!raster) return refuse("Failure", raster.error().reason);
+        if (counting->Foreign()) return refuse("Setup", "the evaluation asked for a resource other than the authored one");
+        if (counting->Fetches() <= 0) return refuse("Setup", "the evaluation did not fetch the bitmap");
+
+        stage = "raster";
+        if (raster->statistics || raster->ocio || raster->channels != 3 || raster->width != file.width ||
+            raster->height != file.height ||
+            raster->values.size() != size_t{raster->width} * raster->height * raster->channels) {
+            return refuse("Setup", "the clone's raster does not match the planned file");
+        }
+        const std::vector<uint8_t> encodedFlags(3, 1);
+        const std::vector<std::optional<core::ChannelFormat>> expectedFormats(3, ChannelFormat::sRGB8);
+        if (raster->srgbEncoded != encodedFlags || raster->documentFormat != expectedFormats) {
+            return refuse("Setup", "the raster's channels are not the sRGB-encoded sRGB8 BaseColor");
+        }
+        if (format == exporter::FileFormat::png) {
+            // The original's OCIO PNG guard (plan.cpp `EvaluateFileOn`): every sRGB-encoded value
+            // must be one Session O records.
+            for (const float v : raster->values) {
+                if (!exporter::OcioSrgbPng16Code(v)) {
+                    return refuse("Failure", "under OCIO, the PNG encode of the linear value " + std::to_string(v) +
+                                                 " is not recorded (decision 190)");
+                }
+            }
+        }
+        raster->ocio = true;
+
+        stage = "encode";
+        const exporter::EncodedImage encoded =
+            exporter::EncodeFile(file, *raster, nullptr, exporter::InexactPadding::refuse);
+
+        if (core::ProjectToJson(original) != originalJson) return refuse("Setup", "the evaluation changed the project");
+
+        stage = "write";
+        const fs::path path(file.path);
+        if (fs::exists(path)) return refuse("Setup", "the candidate file already exists");
+        fs::create_directories(path.parent_path());
+        std::ofstream output(path, std::ios::binary);
+        output.write(encoded.bytes.data(), static_cast<std::streamsize>(encoded.bytes.size()));
+        output.close();
+        // A failed write leaves no exported file behind.
+        std::error_code removed;
+        if (!output) {
+            fs::remove(path, removed);
+            return refuse("Failure", "the candidate file could not be written");
+        }
+        const bool readBack = [&] {
+            try {
+                return ReadText(path) == encoded.bytes;
+            } catch (const std::exception&) {
+                return false;
+            }
+        }();
+        if (!readBack) {
+            fs::remove(path, removed);
+            return refuse("Failure", "the written candidate file differs from its bytes");
+        }
+        result["written"] = json::Array{json::Object{{"relativePath", file.relativePath},
+                                                     {"path", path.generic_string()},
+                                                     {"size", static_cast<std::int64_t>(encoded.bytes.size())},
+                                                     {"sha256", core::Sha256Hex(encoded.bytes)}}};
+        result["observed"] = json::Object{{"source_bits", std::int64_t{16}},
+                                          {"source_channels", static_cast<std::int64_t>(image->channels)},
+                                          {"source_width", static_cast<std::int64_t>(image->width)},
+                                          {"source_height", static_cast<std::int64_t>(image->height)},
+                                          {"bitmap_fetches", counting->Fetches()},
+                                          {"srgb_decode", source.srgbDecode}};
+    } catch (const core::ValueError& e) {
+        return refuse("ValueError", e.what());
+    } catch (const core::NotYetSupported& e) {
+        return refuse("NotYetSupported", e.what());
+    } catch (const std::exception& e) {
         return refuse("InternalError", e.what());
     }
     std::cout << json::WriteCanonical(result) << "\n";
@@ -1833,6 +2192,7 @@ int main(int argc, char** argv) {
         if (args.size() == 5 && args[0] == "tga-processing-candidate") {
             return RunTgaProcessingCandidate(args[1], args[2], args[3], args[4]);
         }
+        if (args.size() == 4 && args[0] == "ocio16-input-candidate") return RunOcio16InputCandidate(args[1], args[2], args[3]);
         if (args.size() == 2 && args[0] == "reencode") return RunReencode(args[1]);
         if (args.size() == 2 && args[0] == "roundtrip") return RunRoundtrip(args[1]);
         if (args.size() == 2 && args[0] == "process") return RunProcess(args[1]);
