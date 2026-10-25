@@ -190,6 +190,38 @@ void CheckResolutionAvailable(const SourceSubstance& s) {
     if (FilterSource(s)) throw core::ValueError("Resolution property is not available on a FilterEffectNode.");
 }
 
+/// The `source_metadata` recorded with the snapshot that serves this fill source's current exact
+/// signature (store/snapshots.h); never inferred from the output mapping or another snapshot.
+store::SourceMetadata RecordedMetadata(const SourceSubstance& s, const std::string& what) {
+    const core::ProceduralRef ref = ReadProcedural(s);  // a stale handle keeps its error
+    if (s.effect) {
+        throw ApiError("UnsupportedProcedural", what + ": a generator or filter effect source has no recorded metadata");
+    }
+    const std::shared_ptr<OpenProject> open = Session::Get().Current();
+    const auto project = Read();
+    const NodeInfo info = Resolve(*project, s.node);
+    const core::TextureSet* set = nullptr;
+    for (const core::TextureSet& candidate : project->texture_sets) {
+        if (candidate.id == info.texture_set) set = &candidate;
+    }
+    const core::Stack* stack = core::FindStack(*project, info.texture_set, info.stack);
+    const auto channel = stack && s.channel ? stack->channels.find(*s.channel) : decltype(stack->channels)::const_iterator{};
+    if (set == nullptr || stack == nullptr || !s.channel || channel == stack->channels.end()) {
+        throw ApiError("UnsupportedProcedural", what + ": the source is not a channel source of a stack");
+    }
+    const procedural::SnapshotSourceProvider provider(*open->store, *project);
+    auto metadata = provider.Metadata(*project, *set, *s.channel, channel->second.format, FillOf(info, s.node), ref,
+                                      s.node, info.in_mask());
+    if (!metadata) throw ApiError("UnsupportedProcedural", what + ": " + metadata.error());
+    return std::move(*metadata);
+}
+
+py::list Names(const std::vector<std::string>& names) {
+    py::list result;
+    for (const std::string& name : names) result.append(name);
+    return result;
+}
+
 core::json::Object SourceArgs(const SourceSubstance& s) {
     core::json::Object args = s.effect ? NodeArgs(s.node) : NodeArgs(s.node, s.channel);
     if (s.effect) args["effect"] = true;
@@ -656,30 +688,37 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
         })
         // The outputs the recording observed for the snapshot of this source's current exact
         // signature (store/snapshots.h `source_metadata`); never inferred from the output mapping.
-        .def_property_readonly("image_outputs", [read_procedural](const SourceSubstance& s) {
-            const core::ProceduralRef ref = read_procedural(s);  // a stale handle keeps its error
-            if (s.effect) {
-                throw ApiError("UnsupportedProcedural",
-                               "image_outputs: a generator or filter effect source has no recorded output metadata");
+        .def_property_readonly("image_outputs", [](const SourceSubstance& s) {
+            return Names(RecordedMetadata(s, "image_outputs").image_outputs);
+        })
+        .def_property_readonly("image_inputs", [](const SourceSubstance& s) {
+            const auto inputs = RecordedMetadata(s, "image_inputs").image_inputs;
+            if (!inputs) throw ApiError("UnsupportedProcedural", "image_inputs: the snapshot's recording did not observe them");
+            return Names(*inputs);
+        })
+        .def("get_preset_list", [](const SourceSubstance& s) {
+            const auto presets = RecordedMetadata(s, "get_preset_list").presets;
+            if (!presets) throw ApiError("UnsupportedProcedural", "get_preset_list: the snapshot's recording did not observe it");
+            return Names(*presets);
+        })
+        .def("get_properties", [](const SourceSubstance& s) {
+            const auto properties = RecordedMetadata(s, "get_properties").properties;
+            if (!properties) throw ApiError("UnsupportedProcedural", "get_properties: the snapshot's recording did not observe it");
+            py::dict result;
+            const std::string source = "source " + std::to_string(s.node) + "/" +
+                                       (s.channel ? std::string(core::ToString(*s.channel)) : std::string("mono"));
+            for (const auto& [name, description] : *properties) {
+                // Every getter re-reads the descriptor for the source's current exact signature.
+                result[py::str(name)] = SourcePropertyObject(source + "/" + name, [s, name = name] {
+                    const auto now = RecordedMetadata(s, "Property " + name).properties;
+                    const auto found = now ? now->find(name) : core::json::Object::const_iterator{};
+                    if (!now || found == now->end()) {
+                        throw ApiError("UnsupportedProcedural",
+                                       "Property " + name + ": the current signature's recording does not observe it");
+                    }
+                    return std::get<core::json::Object>(found->second.data);
+                });
             }
-            const std::shared_ptr<OpenProject> open = Session::Get().Current();
-            const auto project = Read();
-            const NodeInfo info = Resolve(*project, s.node);
-            const core::TextureSet* set = nullptr;
-            for (const core::TextureSet& candidate : project->texture_sets) {
-                if (candidate.id == info.texture_set) set = &candidate;
-            }
-            const core::Stack* stack = core::FindStack(*project, info.texture_set, info.stack);
-            const auto channel = stack && s.channel ? stack->channels.find(*s.channel) : decltype(stack->channels)::const_iterator{};
-            if (set == nullptr || stack == nullptr || !s.channel || channel == stack->channels.end()) {
-                throw ApiError("UnsupportedProcedural", "image_outputs: the source is not a channel source of a stack");
-            }
-            const procedural::SnapshotSourceProvider provider(*open->store, *project);
-            const auto outputs = provider.ImageOutputs(*project, *set, *s.channel, channel->second.format,
-                                                       FillOf(info, s.node), ref, s.node, info.in_mask());
-            if (!outputs) throw ApiError("UnsupportedProcedural", "image_outputs: " + outputs.error());
-            py::list result;
-            for (const std::string& name : *outputs) result.append(name);
             return result;
         })
         .def_property("active_output", [read_procedural, output_key](const SourceSubstance& s) {

@@ -175,6 +175,19 @@ metadata never replays an earlier receipt. The command verifies the stored list 
 The member travels with save, reopen and bundle import. Like the snapshot itself, it is
 project-private and stays out of recipes and public fixtures.
 
+Schema `/2` adds optional observations from the same paired readback: `image_inputs`, the
+`presets` of `get_preset_list()` and `properties`. Each property is one `get_properties()` entry,
+described by exactly its documented getters (`value`, `name`, `short_name`, `label`,
+`widget_type`, `enum_values`, `properties`). Its `name` must equal its key, and its `widget_type`
+must be one of the documented widget types. An absent member means "not observed"; an empty one
+is an observation and reads back as `[]`. Metadata with only `image_outputs` is still written as
+`/1`, so 2.6d's entries and idempotency keys keep their bytes. `/1` entries stay readable, and a
+`/2` member under `/1` is refused.
+`SourceSubstance.image_inputs`, `get_preset_list()` and `get_properties()` return copies of these
+observations for the current exact signature. `get_properties()` returns `properties.Property`
+handles over the recorded descriptors, the same class as baking's. Unobserved members raise
+`UnsupportedProcedural`.
+
 `SourceSubstance.image_outputs` (both APIs) resolves the source again and returns a copy of the
 list recorded with the snapshot that serves the source's current exact signature. Another
 signature's snapshot is never consulted, and nothing is inferred from the output mapping. A

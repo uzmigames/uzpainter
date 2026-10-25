@@ -263,14 +263,19 @@ int RunSnapshotSourceMetadata(const fs::path& work) {
     auto metadataStore = store::ProjectStore::Create(path, initial);
     core::Document document(initial);
     metadataStore->Attach(document);
+    const auto outputsOnly = [](std::vector<std::string> names) {
+        return store::SourceMetadata{std::move(names), std::nullopt, std::nullopt, std::nullopt};
+    };
     const std::vector<std::pair<std::string, std::vector<std::string>>> invalid{
         {"empty", {}}, {"absent output", {"mask"}}, {"repeated", {"grey", "grey"}}, {"empty name", {"grey", ""}}};
     for (const auto& [name, bad] : invalid) {
-        const auto refused = RecordSnapshotExport(*metadataStore, document, capture, exportFile, initial.project_uuid, 0, bad);
+        const auto refused =
+            RecordSnapshotExport(*metadataStore, document, capture, exportFile, initial.project_uuid, 0, outputsOnly(bad));
         Check(!refused && document.revision() == 0 && store::ReadCurrentRevision(metadataStore->container()) == 0,
               "metadata: " + name + " image outputs are refused before a transaction");
     }
-    const auto recorded = RecordSnapshotExport(*metadataStore, document, capture, exportFile, initial.project_uuid, 0, outputs);
+    const auto recorded =
+        RecordSnapshotExport(*metadataStore, document, capture, exportFile, initial.project_uuid, 0, outputsOnly(outputs));
     Check(committed(recorded) && document.revision() == 1, "metadata: recorded image outputs commit with the snapshot");
     const std::string metadataHash = core::Sha256Hex(json::WriteCanonical(expectedMetadata));
     Check(recorded && recorded->committed &&
@@ -286,13 +291,15 @@ int RunSnapshotSourceMetadata(const fs::path& work) {
                   "uzasset://test/noise@1",
           "metadata: the entry stores the schema, the exact pin and the ordered outputs under the unchanged signature hash");
 
-    const auto replay = RecordSnapshotExport(*metadataStore, document, capture, exportFile, initial.project_uuid, 1, outputs);
+    const auto replay =
+        RecordSnapshotExport(*metadataStore, document, capture, exportFile, initial.project_uuid, 1, outputsOnly(outputs));
     Check(replay && replay->decision.admission == core::Admission::stored_outcome && document.revision() == 1,
           "metadata: the identical recording replays its stored outcome");
     bool otherReplayed = true;
     try {
         const std::vector<std::string> other{"mask", "grey"};
-        const auto changed = RecordSnapshotExport(*metadataStore, document, capture, exportFile, initial.project_uuid, 1, other);
+        const auto changed =
+            RecordSnapshotExport(*metadataStore, document, capture, exportFile, initial.project_uuid, 1, outputsOnly(other));
         otherReplayed = changed && (changed->decision.admission == core::Admission::stored_outcome || committed(changed));
     } catch (const std::exception&) {
         otherReplayed = false;
@@ -328,7 +335,7 @@ int RunSnapshotSourceMetadata(const fs::path& work) {
         json::Value member = document.snapshot().project->extra.at(std::string(store::kSnapshotsKey));
         mutate(std::get<json::Object>(std::get<json::Object>(member.data).at(signatureKey).data));
         const auto parsed = store::SnapshotEntries(member);
-        Check(parsed.size() == 1 && !parsed[0].error.empty() && !parsed[0].image_outputs &&
+        Check(parsed.size() == 1 && !parsed[0].error.empty() && !parsed[0].source_metadata &&
                   !store::SnapshotProblem(parsed[0], initial.project_uuid).empty(),
               "metadata: an entry with a bad " + name + " is malformed");
         bool refused = false;
@@ -415,5 +422,164 @@ int RunSnapshotSourceMetadata(const fs::path& work) {
                                resource, capture),
           "metadata: sources without an active output refuse");
     Check(!ReceiptImageOutputs(json::Object{}, resource, capture), "metadata: a receipt without readback refuses");
+
+    // Schema /2: optional observations; an empty observation differs from an absent one.
+    const json::Value signature = SignatureJson(capture);
+    // An authored descriptor in the bridge's serialization (painter_side.described), not Painter data.
+    const json::Object gain{{"value", 0.5},
+                            {"name", std::string("gain")},
+                            {"short_name", std::string("gain")},
+                            {"label", std::string("Authored gain")},
+                            {"widget_type", std::string("Slider")},
+                            {"enum_values", json::Object{}},
+                            {"properties", json::Object{{"min", int64_t{0}}, {"max", int64_t{1}}}}};
+    const store::SourceMetadata observed{{"grey", "mask"}, std::vector<std::string>{},
+                                         std::vector<std::string>{"authored preset"}, json::Object{{"gain", gain}}};
+    const json::Value v2 = store::SourceMetadataJson(signature, observed);
+    const auto reread = store::ParseSourceMetadata(signature, v2);
+    Check(std::get<std::string>(std::get<json::Object>(v2.data).at("schema").data) == store::kSourceMetadataSchemaV2 &&
+              reread && *reread == observed && reread->image_inputs && reread->image_inputs->empty(),
+          "metadata v2: optional observations roundtrip and an empty observation stays present");
+    Check(json::WriteCanonical(store::SourceMetadataJson(signature, outputsOnly(outputs))) == json::WriteCanonical(expectedMetadata),
+          "metadata v2: outputs alone are still written as schema /1");
+    const std::vector<std::pair<std::string, std::function<void(json::Object&)>>> invalidV2{
+        {"repeated input", [](json::Object& m) { m["image_inputs"] = json::Array{std::string("a"), std::string("a")}; }},
+        {"non-string preset", [](json::Object& m) { m["presets"] = json::Array{int64_t{1}}; }},
+        {"non-object property", [](json::Object& m) { m["properties"] = json::Object{{"gain", int64_t{1}}}; }},
+        {"property whose name differs from its key", [gain](json::Object& m) {
+             json::Object renamed = gain;
+             renamed["name"] = std::string("other");
+             m["properties"] = json::Object{{"gain", renamed}};
+         }},
+        {"property with an undocumented widget", [gain](json::Object& m) {
+             json::Object widget = gain;
+             widget["widget_type"] = std::string("Knob");
+             m["properties"] = json::Object{{"gain", widget}};
+         }},
+        {"property missing a getter", [gain](json::Object& m) {
+             json::Object partial = gain;
+             partial.erase("label");
+             m["properties"] = json::Object{{"gain", partial}};
+         }},
+        {"property with a non-integer enum value", [gain](json::Object& m) {
+             json::Object labels = gain;
+             labels["enum_values"] = json::Object{{"On", std::string("1")}};
+             m["properties"] = json::Object{{"gain", labels}};
+         }},
+        {"property with a null value", [gain](json::Object& m) {
+             json::Object empty = gain;
+             empty["value"] = nullptr;
+             m["properties"] = json::Object{{"gain", empty}};
+         }},
+        {"property with a vector value (no typed codec)", [gain](json::Object& m) {
+             json::Object vector = gain;
+             vector["value"] = json::Array{0.25, 0.75};
+             m["properties"] = json::Object{{"gain", vector}};
+         }},
+        {"property with a boolean value", [gain](json::Object& m) {
+             json::Object flag = gain;
+             flag["value"] = true;
+             m["properties"] = json::Object{{"gain", flag}};
+         }},
+        {"unknown member", [](json::Object& m) { m["defaults"] = json::Object{}; }},
+        {"v1 with a v2 member", [](json::Object& m) { m["schema"] = std::string(store::kSourceMetadataSchema); }},
+    };
+    for (const auto& [name, mutate] : invalidV2) {
+        json::Object broken = std::get<json::Object>(v2.data);
+        mutate(broken);
+        Check(!store::ParseSourceMetadata(signature, broken), "metadata v2: a " + name + " is refused");
+    }
+    ProceduralRequest second = capture;
+    second.params["gain"] = 0.25;
+    const store::SourceMetadata secondObserved = observed;
+    {
+        auto v2Store = store::ProjectStore::Create(work / "source-metadata-v2.uzp", initial);
+        core::Document v2Document(initial);
+        v2Store->Attach(v2Document);
+        const auto stored = RecordSnapshotExport(*v2Store, v2Document, second, exportFile, initial.project_uuid, 0, secondObserved);
+        Check(committed(stored), "metadata v2: observations commit with the snapshot");
+        v2Store->Save(v2Document);
+        v2Store->Close();
+    }
+    auto v2Reopened = store::ProjectStore::Open(work / "source-metadata-v2.uzp");
+    const auto v2Backend = SnapshotBackend::Load(*v2Reopened.store, v2Reopened.state.project);
+    const auto v2Metadata = v2Backend ? v2Backend->Metadata(second)
+                                      : std::expected<store::SourceMetadata, UnsupportedProcedural>(std::unexpect, Refuse("test", "load failed"));
+    Check(v2Metadata && *v2Metadata == secondObserved, "metadata v2: observations survive save and reopen");
+    Check(v2Backend && reason(v2Backend->Metadata(capture), kNoSnapshot),
+          "metadata v2: another signature never borrows the observations");
+    v2Reopened.store->Close();
+
+    // A receipt's full observations: identical paired sources and typed parameters.
+    json::Object parameters;
+    for (const auto& [name, value] : capture.params) parameters[name] = ParamJson(value);
+    const auto fullSource = [&](json::Object extra) {
+        json::Object built{{"resource", resource}, {"outputs", single}, {"active_output", std::string("grey")},
+                           {"parameters", parameters}, {"inputs", json::Array{}}};
+        for (auto& [key, value] : extra) built[key] = std::move(value);
+        return built;
+    };
+    const json::Object observedSource =
+        fullSource({{"presets", json::Array{std::string("authored preset")}}, {"properties", json::Object{{"gain", gain}}}});
+    const auto fullRead = ReceiptSourceMetadata(receipt(observedSource, observedSource), resource, capture);
+    Check(fullRead && fullRead->image_outputs == std::vector<std::string>{"grey"} && fullRead->image_inputs &&
+              fullRead->image_inputs->empty() && fullRead->presets == std::vector<std::string>{"authored preset"} &&
+              fullRead->properties == json::Object{{"gain", gain}},
+          "metadata receipt: the paired readback gives every observation");
+    const json::Object unobservedSource = fullSource({});
+    const auto unobservedRead = ReceiptSourceMetadata(receipt(unobservedSource, unobservedSource), resource, capture);
+    Check(unobservedRead && unobservedRead->image_inputs && !unobservedRead->presets && !unobservedRead->properties,
+          "metadata receipt: unobserved presets and properties stay absent");
+    json::Object otherPresets = observedSource;
+    otherPresets["presets"] = json::Array{};
+    Check(!ReceiptSourceMetadata(receipt(observedSource, otherPresets), resource, capture),
+          "metadata receipt: paired sources with different observations refuse");
+    json::Object retyped = observedSource;
+    std::get<json::Object>(retyped["parameters"].data)["gain"] = std::string("0.5");
+    Check(!ReceiptSourceMetadata(receipt(retyped, retyped), resource, capture),
+          "metadata receipt: a parameter of another type refuses");
+    json::Object extraParameter = observedSource;
+    std::get<json::Object>(extraParameter["parameters"].data)["extra"] = int64_t{1};
+    Check(!ReceiptSourceMetadata(receipt(extraParameter, extraParameter), resource, capture),
+          "metadata receipt: parameters other than the signature's refuse");
+    // Parameters compare through the signature's own codec (ParamJson, numbers by value): a real
+    // readback double 15.0 matches the signature's 15, and -0.0 is the same identity as 0.0.
+    ProceduralRequest integral = capture;
+    integral.params["gain"] = 15.0;
+    json::Object integralSource = observedSource;
+    std::get<json::Object>(integralSource["parameters"].data)["gain"] = 15.0;
+    const auto integralRead = ReceiptSourceMetadata(receipt(integralSource, integralSource), resource, integral);
+    Check(bool(integralRead) && json::WriteCanonical(ParamJson(integral.params.at("gain"))) == "15",
+          "metadata receipt: an integral double parameter matches the signature's value encoding",
+          integralRead ? std::string() : integralRead.error());
+    ProceduralRequest zeroCapture = capture;
+    zeroCapture.params["gain"] = 0.0;
+    json::Object zeroSource = observedSource;
+    std::get<json::Object>(zeroSource["parameters"].data)["gain"] = 0.0;
+    json::Object negativeZeroSource = zeroSource;
+    std::get<json::Object>(negativeZeroSource["parameters"].data)["gain"] = -0.0;
+    ProceduralRequest negativeZeroCapture = capture;
+    negativeZeroCapture.params["gain"] = -0.0;
+    const auto negativeRead = ReceiptSourceMetadata(receipt(negativeZeroSource, negativeZeroSource), resource, zeroCapture);
+    Check(bool(negativeRead) && SignatureHash(zeroCapture) == SignatureHash(negativeZeroCapture),
+          "metadata receipt: a parameter's signed zero is one signature identity and is accepted",
+          negativeRead ? std::string() : negativeRead.error());
+    json::Object signedGain = gain;
+    signedGain["value"] = 0.0;
+    json::Object zeroObservation = zeroSource;
+    zeroObservation["properties"] = json::Object{{"gain", signedGain}};
+    json::Object negativeZeroObservation = zeroObservation;
+    signedGain["value"] = -0.0;
+    negativeZeroObservation["properties"] = json::Object{{"gain", signedGain}};
+    const bool signKept = json::WriteCanonical(json::Value(-0.0)) != json::WriteCanonical(json::Value(0.0));
+    Check(signKept && !ReceiptSourceMetadata(receipt(zeroObservation, negativeZeroObservation), resource, zeroCapture),
+          "metadata receipt: paired observations that differ only in the sign of zero refuse",
+          "canonical -0.0 is " + json::WriteCanonical(json::Value(-0.0)));
+    json::Object badDescriptor = observedSource;
+    json::Object renamedGain = gain;
+    renamedGain["name"] = std::string("other");
+    badDescriptor["properties"] = json::Object{{"gain", renamedGain}};
+    Check(!ReceiptSourceMetadata(receipt(badDescriptor, badDescriptor), resource, capture),
+          "metadata receipt: a malformed property descriptor refuses");
     return Finish();
 }

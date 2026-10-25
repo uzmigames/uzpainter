@@ -21,7 +21,10 @@
 // source's complete ordered output identifiers (A-PYDOC `SourceSubstance.image_outputs`), which
 // include the signature's output id. It is not part of the signature: an absent member means
 // "not recorded" and is never written as empty or null, so entries recorded without it keep their
-// bytes.
+// bytes. Schema `/2` adds optional observations of the same recording: `image_inputs` (the ordered
+// input identifiers), `presets` (`get_preset_list()`) and `properties` (each `get_properties()`
+// entry described by its documented getters). An absent optional member means "not observed"; an
+// empty one is an observation. Metadata with only `image_outputs` is written as `/1`.
 //
 // The entry holds its plane as a mask-stack paint object does (`plane`, `plane_versions`), so the
 // plane rules of planes.h cover it unchanged: its binding travels with the manifest (digest,
@@ -33,6 +36,7 @@
 // (`CheckSnapshots`), reported by the integrity check and never served (SnapshotBackend). The
 // document model keeps the key verbatim (`Project::extra`); the store owns it.
 
+#include <expected>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -52,6 +56,17 @@ inline constexpr std::string_view kSnapshotsKey = "procedural_snapshots";
 /// An entry's optional member of recorded source metadata, and its schema.
 inline constexpr std::string_view kSourceMetadataKey = "source_metadata";
 inline constexpr std::string_view kSourceMetadataSchema = "uzpainter/procedural-source-metadata/1";
+inline constexpr std::string_view kSourceMetadataSchemaV2 = "uzpainter/procedural-source-metadata/2";
+
+/// The observations of a recording beside its signature (`source_metadata`, above).
+struct SourceMetadata {
+    std::vector<std::string> image_outputs;
+    std::optional<std::vector<std::string>> image_inputs;
+    std::optional<std::vector<std::string>> presets;
+    std::optional<core::json::Object> properties;
+
+    bool operator==(const SourceMetadata&) const = default;
+};
 
 /// One entry of `procedural_snapshots`.
 struct SnapshotEntry {
@@ -60,18 +75,25 @@ struct SnapshotEntry {
     std::string project_uuid;
     core::Id plane_id = core::kNoId;
     std::optional<VersionRef> version;
-    /// The recorded `image_outputs` of `source_metadata`; empty when the entry has none.
-    std::optional<std::vector<std::string>> image_outputs;
+    /// The entry's parsed `source_metadata`; empty when it has none.
+    std::optional<SourceMetadata> source_metadata;
     std::string path;   ///< The JSON path of the entry (`procedural_snapshots.<key>`).
     std::string error;  ///< Why the entry is malformed; empty when it is well-formed.
 };
 
-/// The `source_metadata` of a snapshot of `signature` recording `image_outputs`.
+/// The `source_metadata` of a snapshot of `signature`: `/1` when only `image_outputs` is given,
+/// `/2` with the optional members that are present otherwise.
+core::json::Value SourceMetadataJson(const core::json::Value& signature, const SourceMetadata& metadata);
 core::json::Value SourceMetadataJson(const core::json::Value& signature, const std::vector<std::string>& image_outputs);
-/// Why `metadata` may not be the `source_metadata` of a snapshot of `signature`, or empty: it is
-/// not an object of exactly `schema`, `asset` and `image_outputs`; its schema is not
-/// `kSourceMetadataSchema`; `asset` is not the signature's `<asset>@<version>`; or `image_outputs`
-/// is not a nonempty array of distinct nonempty strings that holds the signature's `output.id`.
+/// `metadata` read as the `source_metadata` of a snapshot of `signature`, or why it may not be:
+/// it is not an object of `schema`, `asset` and `image_outputs` (plus, under `/2` only, the
+/// optional `image_inputs`, `presets` and `properties`); its schema is neither `/1` nor `/2`;
+/// `asset` is not the signature's `<asset>@<version>`; `image_outputs` is not a nonempty array of
+/// distinct nonempty strings that holds the signature's `output.id`; `image_inputs` or `presets`
+/// is not an array of distinct nonempty strings; or `properties` is not an object of objects.
+std::expected<SourceMetadata, std::string> ParseSourceMetadata(const core::json::Value& signature,
+                                                               const core::json::Value& metadata);
+/// The error of `ParseSourceMetadata`, or empty.
 std::string SourceMetadataProblem(const core::json::Value& signature, const core::json::Value& metadata);
 
 /// Every entry of the `procedural_snapshots` member `member` (the manifest's, or the value
@@ -94,7 +116,7 @@ void CheckSnapshots(const core::Project& project, std::string_view project_uuid)
 
 /// Stages a snapshot of project `project_uuid` in the edit's working copy: allocates a plane id
 /// from the project counter, stages `image` as its first version and adds the entry under the
-/// SHA-256 of `signature`'s canonical JSON, with `source_metadata` when `image_outputs` is given.
+/// SHA-256 of `signature`'s canonical JSON, with `source_metadata` when `metadata` is given.
 /// Returns the plane id. The texels are stored unmodified in the image's plane format. Throws
 /// `core::ValueError` when `signature` is not an object, the metadata has a
 /// `SourceMetadataProblem`, the project already holds a snapshot with that signature (a snapshot
@@ -102,6 +124,6 @@ void CheckSnapshots(const core::Project& project, std::string_view project_uuid)
 /// texels; `StoreError(conflict)` when the allocated id is already a stored plane.
 core::Id StageSnapshot(Container& container, PendingPlanes& pending, core::Edit& edit,
                        std::string_view project_uuid, const core::json::Value& signature, const PlaneImage& image,
-                       const std::optional<std::vector<std::string>>& image_outputs = std::nullopt);
+                       const std::optional<SourceMetadata>& metadata = std::nullopt);
 
 }  // namespace uzp::store

@@ -24,6 +24,18 @@ def readback() -> dict[str, Any]:
         "parameters": {"gain": 0.5, "$randomseed": 7},
         "inputs": [],
         "outputs": ["value"],
+        "presets": ["authored preset"],
+        "properties": {
+            "gain": {
+                "value": 0.5,
+                "name": "gain",
+                "short_name": "gain",
+                "label": "Authored gain",
+                "widget_type": "Slider",
+                "enum_values": {},
+                "properties": {"min": 0, "max": 1},
+            }
+        },
         "active_output": "value",
         "resolution": {"mode": "Auto", "value": [1024, 1024], "log2_offset": 0},
         "opacity": 1,
@@ -117,6 +129,15 @@ def test_composited_or_hidden_layer_refuses(field: str, value: Any) -> None:
     observed = readback()
     observed["isolated_tree"][field] = value
     with pytest.raises(ValueError, match="tree is not isolated"):
+        bridge.validate_readback(observed, {"resource": RESOURCE, "parameters": {}})
+
+
+@pytest.mark.parametrize("field", ["presets", "properties"])
+def test_paired_sources_with_different_observations_refuse(field: str) -> None:
+    """The recorded presets and property descriptions must agree across the paired sources."""
+    observed = readback()
+    observed["sources"][1][field] = [] if field == "presets" else {}
+    with pytest.raises(ValueError, match="paired source state differs"):
         bridge.validate_readback(observed, {"resource": RESOURCE, "parameters": {}})
 
 

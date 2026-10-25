@@ -56,11 +56,20 @@ struct BakingParametersHandle {
     core::Id texture_set = core::kNoId;
 };
 
-/// One key of one texture set's parameters.
+/// One key of one texture set's parameters, or one recorded property of a procedural source:
+/// `recorded` resolves its descriptor for the source's current exact signature at every call
+/// (store/snapshots.h `source_metadata`), and `recorded_key` identifies it.
 struct PropertyHandle {
     core::Id texture_set = core::kNoId;
     const bake::PropertySpec* spec = nullptr;
+    std::function<core::json::Object()> recorded;
+    std::string recorded_key;
 };
+
+/// A recorded descriptor's string getter (validated by `store::ParseSourceMetadata`).
+std::string RecordedText(const PropertyHandle& p, const char* field) {
+    return std::get<std::string>(p.recorded().at(field).data);
+}
 
 bake::MeshMapUsage BakeUsage(core::MeshMapUsage usage) {
     const std::string name(core::ToString(usage));
@@ -91,7 +100,9 @@ bake::Property Live(const PropertyHandle& handle) {
 
 py::dict Handles(core::Id texture_set, const std::map<std::string, bake::Property>& properties) {
     py::dict out;
-    for (const auto& [key, property] : properties) out[py::str(key)] = PropertyHandle{texture_set, &property.spec()};
+    for (const auto& [key, property] : properties) {
+        out[py::str(key)] = PropertyHandle{texture_set, &property.spec(), {}, {}};
+    }
     return out;
 }
 
@@ -185,6 +196,10 @@ py::object StartBake(const std::vector<std::string>& texture_sets,
 
 }  // namespace
 
+py::object SourcePropertyObject(std::string key, std::function<core::json::Object()> resolve) {
+    return py::cast(PropertyHandle{core::kNoId, nullptr, std::move(resolve), std::move(key)});
+}
+
 void BindBaking(py::module_& baking, py::module_& properties) {
     py::enum_<CurvatureMethod>(baking, "CurvatureMethod")
         .value("FromMesh", CurvatureMethod::FromMesh)
@@ -193,26 +208,56 @@ void BindBaking(py::module_& baking, py::module_& properties) {
     py::class_<PropertyHandle> property(properties, "Property",
                                         "A parameter: one key of a texture set's bake parameters "
                                         "(`baking.BakingParameters.common()` and `baker(usage)`).");
-    property.def("value", [](const PropertyHandle& p) { return ToPython(*p.spec, Live(p).value()); })
-        .def("name", [](const PropertyHandle& p) { return Live(p).name(); })
-        .def("short_name", [](const PropertyHandle& p) { return Live(p).short_name(); })
-        .def("label", [](const PropertyHandle& p) { return Live(p).label(); })
-        .def("widget_type", [](const PropertyHandle& p) { return Live(p).widget_type(); })
-        .def("enum_values", [](const PropertyHandle& p) { return Live(p).enum_values(); })
+    property
+        .def("value",
+             [](const PropertyHandle& p) -> py::object {
+                 if (p.recorded) return FromJson(p.recorded().at("value"));
+                 return ToPython(*p.spec, Live(p).value());
+             })
+        .def("name",
+             [](const PropertyHandle& p) { return p.recorded ? RecordedText(p, "name") : Live(p).name(); })
+        .def("short_name",
+             [](const PropertyHandle& p) { return p.recorded ? RecordedText(p, "short_name") : Live(p).short_name(); })
+        .def("label", [](const PropertyHandle& p) { return p.recorded ? RecordedText(p, "label") : Live(p).label(); })
+        .def("widget_type",
+             [](const PropertyHandle& p) { return p.recorded ? RecordedText(p, "widget_type") : Live(p).widget_type(); })
+        .def("enum_values",
+             [](const PropertyHandle& p) -> py::object {
+                 if (p.recorded) return FromJson(p.recorded().at("enum_values"));
+                 return py::cast(Live(p).enum_values());
+             })
         .def(
-            "enum_value", [](const PropertyHandle& p, const std::string& name) { return Live(p).enum_value(name); },
+            "enum_value",
+            [](const PropertyHandle& p, const std::string& name) -> py::object {
+                if (!p.recorded) return py::int_(Live(p).enum_value(name));
+                const core::json::Object descriptor = p.recorded();
+                const auto& labels = std::get<core::json::Object>(descriptor.at("enum_values").data);
+                if (const auto it = labels.find(name); it != labels.end()) {
+                    // The recorded integer as Python reads it: never narrowed to 32 bits.
+                    return py::int_(std::get<std::int64_t>(it->second.data));
+                }
+                throw core::ValueError(std::get<std::string>(descriptor.at("short_name").data) + " has no enum value '" +
+                                       name + "'");
+            },
             py::arg("name"))
-        .def("properties", [](const PropertyHandle& p) { return Live(p).properties(); })
+        .def("properties",
+             [](const PropertyHandle& p) -> py::object {
+                 if (p.recorded) return FromJson(p.recorded().at("properties"));
+                 return py::cast(Live(p).properties());
+             })
         .def("__eq__",
              [](const PropertyHandle& a, const PropertyHandle& b) {
+                 if (a.recorded || b.recorded) return a.recorded && b.recorded && a.recorded_key == b.recorded_key;
                  return a.texture_set == b.texture_set && a.spec == b.spec;
              })
         .def("__hash__",
              [](const PropertyHandle& p) {
+                 if (p.recorded) return py::hash(py::str(p.recorded_key));
                  return py::hash(py::make_tuple(p.texture_set, p.spec->name, static_cast<int>(p.spec->usage),
                                                 p.spec->group == bake::PropertyGroup::Baker));
              })
         .def("__repr__", [](const PropertyHandle& p) {
+            if (p.recorded) return "Property(" + p.recorded_key + ")";
             return "Property(" + p.spec->name + ", texture_set=" + std::to_string(p.texture_set) + ")";
         });
     SealClass(property);
@@ -270,6 +315,8 @@ void BindBaking(py::module_& baking, py::module_& properties) {
                 for (const auto& [key, value] : property_values) {
                     if (!py::isinstance<PropertyHandle>(key)) throw py::type_error("set() takes a dict keyed by Property");
                     const auto& handle = key.cast<const PropertyHandle&>();
+                    // A procedural source's recorded Property is not a bake parameter.
+                    if (handle.recorded) throw py::type_error("set() takes bake parameter Properties, not a source's");
                     values.emplace_back(handle, FromPython(*handle.spec, value));
                     keys.push_back(core::json::Array{static_cast<std::int64_t>(handle.texture_set), handle.spec->name});
                 }

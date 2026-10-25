@@ -242,9 +242,9 @@ std::string ProjectStore::ReadPlaneChunk(std::int64_t revision, core::Id plane_i
 }
 
 core::Id ProjectStore::RecordSnapshot(core::Edit& edit, const core::json::Value& signature, const PlaneImage& image,
-                                      const std::optional<std::vector<std::string>>& image_outputs) {
+                                      const std::optional<SourceMetadata>& metadata) {
     std::lock_guard lock(mutex_);
-    return StageSnapshot(container_, planes_, edit, project_uuid_, signature, image, image_outputs);
+    return StageSnapshot(container_, planes_, edit, project_uuid_, signature, image, metadata);
 }
 
 void ProjectStore::AddCommitExtension(CommitExtension extension) {

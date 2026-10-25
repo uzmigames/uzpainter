@@ -186,10 +186,10 @@ public:
     /// (`StageSnapshot`, snapshots.h): `image` as the first version of a new plane, `signature`
     /// in the manifest's `procedural_snapshots` under its SHA-256, with this project's uuid. Call
     /// it from the transaction's call; returns the plane id. The commit refuses any snapshot
-    /// entry recorded for another project (`CheckSnapshots`). `image_outputs`, when given, is
-    /// stored as the entry's `source_metadata`.
+    /// entry recorded for another project (`CheckSnapshots`). `metadata`, when given, is stored as
+    /// the entry's `source_metadata`.
     core::Id RecordSnapshot(core::Edit& edit, const core::json::Value& signature, const PlaneImage& image,
-                            const std::optional<std::vector<std::string>>& image_outputs = std::nullopt);
+                            const std::optional<SourceMetadata>& metadata = std::nullopt);
 
     /// Rows written inside every mutation's SQLite transaction, after the plane rows.
     void AddCommitExtension(CommitExtension extension);

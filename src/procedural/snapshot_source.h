@@ -27,6 +27,11 @@ public:
         const core::Project& project, const core::TextureSet& set, core::ChannelType channel,
         core::ChannelFormat format, const core::FillContent& fill, const core::ProceduralRef& ref,
         core::Id node, bool mask) const;
+    /// A copy of the whole `source_metadata` of that same snapshot, or why there is none.
+    std::expected<store::SourceMetadata, std::string> Metadata(
+        const core::Project& project, const core::TextureSet& set, core::ChannelType channel,
+        core::ChannelFormat format, const core::FillContent& fill, const core::ProceduralRef& ref,
+        core::Id node, bool mask) const;
 
 private:
     /// The admitted request of a fill source and the snapshots that admitted it, or why not.

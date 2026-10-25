@@ -358,6 +358,17 @@ class SourceSubstance:
     def image_outputs(self) -> list[str]:
         return [str(name) for name in self._native().image_outputs]
 
+    @property
+    def image_inputs(self) -> list[str]:
+        return [str(name) for name in self._native().image_inputs]
+
+    def get_preset_list(self) -> list[str]:
+        return [str(name) for name in self._native().get_preset_list()]
+
+    def get_properties(self) -> dict[str, Any]:
+        # The native `properties.Property` handles are the facade's class (as for baking).
+        return dict(self._native().get_properties())
+
     def get_parameters(self) -> dict[str, int | float | str]:
         return dict(self._native().get_parameters())
 

@@ -131,6 +131,10 @@ CallResult Mutate(const std::string& tool, core::json::Object arguments, const s
 py::object ResultObject(const CallResult& result);
 /// The project the calling thread reads.
 std::shared_ptr<const core::Project> Read();
+/// A `properties.Property` over one recorded procedural-source property: `resolve` returns its
+/// descriptor for the source's current exact signature at every call, or throws (bind_baking.cpp;
+/// descriptors validated by `store::ParseSourceMetadata`). `key` identifies it for `==`/`hash`.
+py::object SourcePropertyObject(std::string key, std::function<core::json::Object()> resolve);
 
 /// Binds the enumeration `E` with the member names of its `EnumTable`.
 template <typename E>

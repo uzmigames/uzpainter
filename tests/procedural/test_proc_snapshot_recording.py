@@ -41,5 +41,14 @@ def test_snapshot_source_metadata(procedural_tests: Path, tmp_path: Path) -> Non
         "metadata: a receipt with an extra output refuses (no capture domain widening)",
         "metadata: a receipt whose active output differs from the signature refuses",
         "metadata: the order of the outputs changes the canonical metadata and its hash",
+        "metadata v2: optional observations roundtrip and an empty observation stays present",
+        "metadata v2: outputs alone are still written as schema /1",
+        "metadata v2: observations survive save and reopen",
+        "metadata receipt: the paired readback gives every observation",
+        "metadata receipt: unobserved presets and properties stay absent",
+        "metadata receipt: a parameter of another type refuses",
+        "metadata receipt: an integral double parameter matches the signature's value encoding",
+        "metadata receipt: a parameter's signed zero is one signature identity and is accepted",
+        "metadata receipt: paired observations that differ only in the sign of zero refuse",
     ):
         assert "PASS " + name in result.stdout, name

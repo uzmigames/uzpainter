@@ -25,6 +25,25 @@ namespace {
 void Check(bool okay, const char* message) {
     if (!okay) throw std::runtime_error(message);
 }
+
+/// The alternate snapshot's recorded observations (schema /2): authored test values in the
+/// bridge's serialization, not Painter data. Its image inputs are an empty observation.
+uzp::store::SourceMetadata AuthoredObservations() {
+    namespace json = uzp::core::json;
+    const auto property = [](const std::string& name, json::Value value, const std::string& widget) {
+        return json::Object{{"value", std::move(value)}, {"name", name}, {"short_name", name},
+                            {"label", "Authored " + name}, {"widget_type", widget},
+                            {"enum_values", json::Object{}}, {"properties", json::Object{{"visible", true}}}};
+    };
+    json::Object mode = property("mode", std::int64_t{1}, "Combobox");
+    // A label beyond 32 bits: enum_value must return the full integer.
+    mode["enum_values"] = json::Object{{"Small", std::int64_t{1}}, {"Big", std::int64_t{2147483648LL}}};
+    return uzp::store::SourceMetadata{
+        {"scalar", "aux"}, std::vector<std::string>{}, std::vector<std::string>{"authored preset"},
+        json::Object{{"$randomseed", property("$randomseed", std::int64_t{7}, "RandomSeed")},
+                     {"amount", property("amount", 0.625, "Slider")},
+                     {"mode", std::move(mode)}}};
+}
 }
 
 int RunSnapshotSource(const std::filesystem::path& path, std::optional<int64_t> seed) {
@@ -171,7 +190,7 @@ int RunSnapshotSource(const std::filesystem::path& path, std::optional<int64_t> 
     }
     auto alternate = submit([&](core::Edit& edit) {
         procedural::RecordSnapshot(store, edit, alternateRequest, alternateBytes,
-                                   std::vector<std::string>{"scalar", "aux"});
+                                   AuthoredObservations());
     });
     Check(alternate.result && alternate.result->status == core::ResultStatus::committed,
           "record editable synthetic plane after refusal checks");

@@ -166,7 +166,7 @@ std::expected<std::string, std::string> SnapshotExportTexels(std::string_view fi
 std::expected<core::RequestOutcome, std::string> RecordSnapshotExport(
     store::ProjectStore& store, core::Document& document, const ProceduralRequest& request,
     std::string_view exportFile, std::string_view projectUuid, int64_t revision,
-    const std::optional<std::vector<std::string>>& imageOutputs) {
+    const std::optional<store::SourceMetadata>& observed) {
     using Result = std::expected<core::RequestOutcome, std::string>;
     const core::Snapshot snapshot = document.snapshot();
     if (projectUuid != store.project_uuid() || document.project_uuid() != store.project_uuid() ||
@@ -194,9 +194,9 @@ std::expected<core::RequestOutcome, std::string> RecordSnapshotExport(
     const std::string exportHash = core::Sha256Hex(exportFile);
     core::json::Object args{{"signature_sha256", key}, {"export_sha256", exportHash}};
     std::string operation = "snapshot-" + key + "-" + exportHash;
-    if (imageOutputs) {
+    if (observed) {
         const json::Value signature = SignatureJson(request);
-        const json::Value metadata = store::SourceMetadataJson(signature, *imageOutputs);
+        const json::Value metadata = store::SourceMetadataJson(signature, *observed);
         const std::string problem = store::SourceMetadataProblem(signature, metadata);
         if (!problem.empty()) return Result(std::unexpect, problem);
         const std::string metadataHash = core::Sha256Hex(json::WriteCanonical(metadata));
@@ -204,7 +204,7 @@ std::expected<core::RequestOutcome, std::string> RecordSnapshotExport(
         operation += "-" + metadataHash;
     }
     return store.Submit(document, core::MutationRequest{"procedural_snapshot", std::move(args), operation, revision},
-                        [&](core::Edit& edit) { RecordSnapshot(store, edit, request, *texels, imageOutputs); });
+                        [&](core::Edit& edit) { RecordSnapshot(store, edit, request, *texels, observed); });
 }
 
 std::expected<std::vector<std::string>, std::string> ReceiptImageOutputs(
@@ -243,6 +243,65 @@ std::expected<std::vector<std::string>, std::string> ReceiptImageOutputs(
         return *observed;
     } catch (const std::out_of_range&) {
         return Result(std::unexpect, "readback source lacks resource, outputs or active_output");
+    } catch (const std::exception& error) {
+        return Result(std::unexpect, error.what());
+    }
+}
+
+std::expected<store::SourceMetadata, std::string> ReceiptSourceMetadata(
+    const core::json::Value& receipt, std::string_view resource, const ProceduralRequest& request) {
+    using Result = std::expected<store::SourceMetadata, std::string>;
+    auto outputs = ReceiptImageOutputs(receipt, resource, request);
+    if (!outputs) return Result(std::unexpect, outputs.error());
+    try {
+        const auto& sources = std::get<json::Array>(Object(Object(receipt, "receipt").at("readback"), "readback")
+                                                        .at("sources")
+                                                        .data);
+        // Canonical JSON keeps what Value equality does not: the sign of zero and int versus double,
+        // as SignatureJson does.
+        if (json::WriteCanonical(sources[0]) != json::WriteCanonical(sources[1])) {
+            throw std::invalid_argument("the paired sources' readbacks differ");
+        }
+        const auto& source = Object(sources[0], "readback source");
+        // The recorded parameters are the request's effective parameters as the signature encodes
+        // them (ParamJson: numbers by value, so 15.0 and 15, or -0.0 and 0.0, are one identity; a
+        // string never equals a number). Comparing raw readback JSON would refuse real captures.
+        const json::Object& recorded = Object(source.at("parameters"), "source parameters");
+        if (recorded.size() != request.params.size()) {
+            throw std::invalid_argument("the paired sources' parameters differ from the capture signature");
+        }
+        for (const auto& [name, value] : recorded) {
+            const auto expected = request.params.find(name);
+            const auto parsed = ParamFromJson(value);
+            if (expected == request.params.end() || !parsed ||
+                json::WriteCanonical(ParamJson(*parsed)) != json::WriteCanonical(ParamJson(expected->second))) {
+                throw std::invalid_argument("the paired sources' parameter " + name + " differs from the capture signature");
+            }
+        }
+        store::SourceMetadata metadata{std::move(*outputs), std::nullopt, std::nullopt, std::nullopt};
+        const auto names = [&](std::string_view key) {
+            std::vector<std::string> list;
+            for (const json::Value& item : std::get<json::Array>(source.at(std::string(key)).data)) {
+                list.push_back(String(item, "source " + std::string(key)));
+            }
+            return list;
+        };
+        if (!source.at("inputs").IsArray()) throw std::invalid_argument("source inputs must be an array");
+        metadata.image_inputs = names("inputs");
+        if (const auto presets = source.find("presets"); presets != source.end()) {
+            if (!presets->second.IsArray()) throw std::invalid_argument("source presets must be an array");
+            metadata.presets = names("presets");
+        }
+        if (const auto properties = source.find("properties"); properties != source.end()) {
+            if (!properties->second.IsObject()) throw std::invalid_argument("source properties must be an object");
+            metadata.properties = std::get<json::Object>(properties->second.data);
+        }
+        const json::Value signature = SignatureJson(request);
+        const std::string problem = store::SourceMetadataProblem(signature, store::SourceMetadataJson(signature, metadata));
+        if (!problem.empty()) throw std::invalid_argument(problem);
+        return metadata;
+    } catch (const std::out_of_range&) {
+        return Result(std::unexpect, "readback source lacks parameters or inputs");
     } catch (const std::exception& error) {
         return Result(std::unexpect, error.what());
     }

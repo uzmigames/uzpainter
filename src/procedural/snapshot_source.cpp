@@ -82,11 +82,21 @@ std::expected<std::vector<std::string>, std::string> SnapshotSourceProvider::Ima
     core::ChannelFormat format, const core::FillContent& fill, const core::ProceduralRef& ref,
     core::Id node, bool mask) const {
     using Result = std::expected<std::vector<std::string>, std::string>;
+    auto metadata = Metadata(project, set, channel, format, fill, ref, node, mask);
+    if (!metadata) return Result(std::unexpect, metadata.error());
+    return std::move(metadata->image_outputs);
+}
+
+std::expected<store::SourceMetadata, std::string> SnapshotSourceProvider::Metadata(
+    const core::Project& project, const core::TextureSet& set, core::ChannelType channel,
+    core::ChannelFormat format, const core::FillContent& fill, const core::ProceduralRef& ref,
+    core::Id node, bool mask) const {
+    using Result = std::expected<store::SourceMetadata, std::string>;
     auto admitted = Admitted(project, set, channel, format, fill, ref, node, mask);
     if (!admitted) return Result(std::unexpect, "procedural snapshot: " + admitted.error());
-    auto outputs = admitted->second.ImageOutputs(admitted->first);
-    if (!outputs) return Result(std::unexpect, "procedural snapshot: " + outputs.error().Describe());
-    return std::move(*outputs);
+    auto metadata = admitted->second.Metadata(admitted->first);
+    if (!metadata) return Result(std::unexpect, "procedural snapshot: " + metadata.error().Describe());
+    return std::move(*metadata);
 }
 
 render::Result<std::shared_ptr<const evaluator::ProceduralImage>> SnapshotSourceProvider::Resolve(

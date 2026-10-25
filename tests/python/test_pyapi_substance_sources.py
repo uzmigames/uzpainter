@@ -98,6 +98,32 @@ assert value.active_output == "scalar"
 assert value.get_parameters() == {"amount": 0.5, "$randomseed": 7}
 # The original snapshot was recorded without metadata: its outputs are unknown, not guessed.
 assert raises(getattr, value, "image_outputs").startswith("UnsupportedProcedural:")
+assert raises(getattr, value, "image_inputs").startswith("UnsupportedProcedural:")
+assert raises(value.get_preset_list).startswith("UnsupportedProcedural:")
+assert raises(value.get_properties).startswith("UnsupportedProcedural:")
+
+def observations():
+    # The alternate snapshot's authored /2 observations (tests/export/snapshot_source_test.cpp).
+    assert value.image_inputs == []
+    presets = value.get_preset_list()
+    assert presets == ["authored preset"]
+    presets.append("changed")
+    assert value.get_preset_list() == ["authored preset"]
+    properties = value.get_properties()
+    assert sorted(properties) == ["$randomseed", "amount", "mode"]
+    mode = properties["mode"]
+    assert mode.widget_type() == "Combobox" and mode.value() == 1
+    assert mode.enum_values() == {"Small": 1, "Big": 2147483648}
+    assert mode.enum_value("Big") == 2147483648 and mode.enum_value("Small") == 1
+    amount = properties["amount"]
+    assert (amount.name(), amount.short_name(), amount.label(), amount.widget_type()) == (
+        "amount", "amount", "Authored amount", "Slider")
+    assert amount.value() == 0.625 and amount.enum_values() == {}
+    assert amount.properties() == {"visible": True}
+    assert raises(amount.enum_value, "On").startswith("ValueError:")
+    assert properties["$randomseed"].value() == 7
+    assert value.get_properties() == properties
+
 copied = value.get_parameters()
 copied["amount"] = 0.75
 assert value.get_parameters()["amount"] == 0.5
@@ -128,6 +154,16 @@ outputs = value.image_outputs
 assert outputs == ["scalar", "aux"]
 outputs.append("changed")
 assert value.image_outputs == ["scalar", "aux"]
+observations()
+# A held Property re-reads the current exact signature at every call.
+held = value.get_properties()["amount"]
+value.set_parameters({"amount": 0.5})
+assert raises(held.value).startswith("UnsupportedProcedural:")
+value.set_parameters({"amount": 0.625})
+assert held.value() == 0.625 and held == value.get_properties()["amount"]
+revision = uzpainter.project.revision()
+assert raises(uzpainter.baking.BakingParameters.set, {held: 1}).startswith("TypeError:")
+assert uzpainter.project.revision() == revision
 capture("alternate")
 uzpainter.project.save()
 uzpainter.project.close()
@@ -137,11 +173,13 @@ value = node.get_source(CT.User0)
 assert value.get_parameters() == {"amount": 0.625, "$randomseed": 7}
 assert value.resolution.mode == modes.Auto
 assert value.image_outputs == ["scalar", "aux"]
+observations()
 capture("reopened")
 value.set_parameters({"amount": 0.5})
 capture("reverted")
 # The same handle never keeps the alternate snapshot's metadata after reverting the signature.
 assert raises(getattr, value, "image_outputs").startswith("UnsupportedProcedural:")
+assert raises(value.get_properties).startswith("UnsupportedProcedural:")
 def invalid_transaction():
     with uzpainter.Transaction("invalid procedural final state"):
         value.set_parameters({"amount": 0.625})

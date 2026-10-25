@@ -78,18 +78,51 @@ def configure(request: dict[str, Any]) -> None:
     STATE["channels"] = channels
 
 
+def plain(value: Any) -> Any:
+    """A documented getter's value as JSON (tuples become lists)."""
+    if isinstance(value, (list, tuple)):
+        return [plain(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): plain(item) for key, item in value.items()}
+    return value
+
+
+def described(prop: Any) -> dict[str, Any]:
+    """One `properties.Property` through its documented getters (store/snapshots.h metadata).
+
+    Only finite integer, number and string values are representable; anything else refuses the
+    capture before any project change (no typed codec for vectors or colours yet)."""
+    value = prop.value()
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)) or value != value:
+        raise ValueError(f"property {prop.name()!r} has a value the snapshot cannot represent")
+    if isinstance(value, float) and value in (float("inf"), float("-inf")):
+        raise ValueError(f"property {prop.name()!r} has a non-finite value")
+    return {
+        "value": value,
+        "name": prop.name(),
+        "short_name": prop.short_name(),
+        "label": prop.label(),
+        "widget_type": prop.widget_type(),
+        "enum_values": plain(prop.enum_values()),
+        "properties": plain(prop.properties()),
+    }
+
+
 def readback() -> dict[str, Any]:
     """Effective source state, layer identity and texture set resolution."""
     fill = STATE["fill"]
     sources = []
     for channel in STATE["channels"]:
         source = fill.get_source(channel)
+        properties = source.get_properties()
         sources.append(
             {
                 "resource": source.resource_id.url(),
                 "parameters": source.get_parameters(),
                 "inputs": list(source.image_inputs),
                 "outputs": list(source.image_outputs),
+                "presets": list(source.get_preset_list()),
+                "properties": {name: described(properties[name]) for name in sorted(properties)},
                 "active_output": source.active_output,
                 "resolution": {
                     "mode": source.resolution.mode.name,

@@ -166,9 +166,9 @@ int RunSnapshotCommand(const std::vector<std::string>& args, std::FILE* out, std
             !request.inputs.empty() || request.meshClass != "quad" || request.uvTiles != 1 || request.outputId.empty()) {
             throw std::runtime_error("capture signature lies outside the supported domain");
         }
-        // Only the receipt's explicit, paired readback names the outputs; nothing is inferred.
-        const auto imageOutputs = ReceiptImageOutputs(capture, resource, request);
-        if (!imageOutputs) throw std::runtime_error("capture outputs: " + imageOutputs.error());
+        // Only the receipt's explicit, paired readback gives the observations; nothing is inferred.
+        const auto observed = ReceiptSourceMetadata(capture, resource, request);
+        if (!observed) throw std::runtime_error("capture observations: " + observed.error());
         std::string scalarExport;
         std::string scalarTexels;
         const auto& hashes = Object(receipt.at("files"));
@@ -192,7 +192,7 @@ int RunSnapshotCommand(const std::vector<std::string>& args, std::FILE* out, std
             }
         }
         const auto outcome = RecordSnapshotExport(*opened.store, document, request, scalarExport,
-                                                  opened.store->project_uuid(), document.revision(), *imageOutputs);
+                                                  opened.store->project_uuid(), document.revision(), *observed);
         if (!outcome) throw std::runtime_error(outcome.error());
         if (!outcome->result || outcome->result->status != core::ResultStatus::committed) {
             throw std::runtime_error("snapshot transaction did not commit");
@@ -207,9 +207,9 @@ int RunSnapshotCommand(const std::vector<std::string>& args, std::FILE* out, std
         if (!stored || (*stored)->bytes != scalarTexels) {
             throw std::runtime_error("saved snapshot did not serve the captured texels exactly after reopen");
         }
-        const auto storedOutputs = backend->ImageOutputs(request);
-        if (!storedOutputs || *storedOutputs != *imageOutputs) {
-            throw std::runtime_error("saved snapshot did not keep the captured image outputs after reopen");
+        const auto storedObservations = backend->Metadata(request);
+        if (!storedObservations || *storedObservations != *observed) {
+            throw std::runtime_error("saved snapshot did not keep the captured observations after reopen");
         }
         Print(out, {{"status", "ok"}, {"asset", core::FormatAssetUrl(request.asset)},
                     {"signature_sha256", SignatureHash(request)}, {"revision", recordedRevision},

@@ -4,6 +4,8 @@
 #include "uzp_core/types/errors.h"
 
 #include <algorithm>
+#include <array>
+#include <cmath>
 
 namespace uzp::store {
 
@@ -31,47 +33,149 @@ std::pair<std::string, std::string> PinAndOutput(const Value& signature) {
 
 }  // namespace
 
-Value SourceMetadataJson(const Value& signature, const std::vector<std::string>& image_outputs) {
-    core::json::Array outputs;
-    for (const std::string& output : image_outputs) outputs.push_back(output);
-    return Object{{"schema", std::string(kSourceMetadataSchema)},
+namespace {
+
+core::json::Array Strings(const std::vector<std::string>& values) {
+    core::json::Array array;
+    for (const std::string& value : values) array.push_back(value);
+    return array;
+}
+
+/// A `source_metadata` member that must be an array of distinct nonempty strings.
+std::expected<std::vector<std::string>, std::string> DistinctNames(const Value& value, std::string_view member,
+                                                                   bool nonempty) {
+    using Result = std::expected<std::vector<std::string>, std::string>;
+    const std::string what = "source_metadata " + std::string(member);
+    const auto* array = std::get_if<core::json::Array>(&value.data);
+    if (array == nullptr || (nonempty && array->empty())) {
+        return Result(std::unexpect, what + (nonempty ? " must be a nonempty array" : " must be an array"));
+    }
+    std::vector<std::string> names;
+    for (const Value& item : *array) {
+        if (!item.IsString() || std::get<std::string>(item.data).empty()) {
+            return Result(std::unexpect, what + " must hold nonempty strings");
+        }
+        const std::string& name = std::get<std::string>(item.data);
+        if (std::find(names.begin(), names.end(), name) != names.end()) {
+            return Result(std::unexpect, what + " repeats " + name);
+        }
+        names.push_back(name);
+    }
+    return names;
+}
+
+/// Why `description` is not one `properties.Property` as the snapshot bridge serializes it
+/// (python/uzpainter_snapshot/painter_side.py `described`): exactly the documented getters
+/// `value`, `name`, `short_name`, `label`, `widget_type` (one of the documented widget types),
+/// `enum_values` (label -> integer) and `properties` (an object), with `name` equal to its key.
+std::string PropertyProblem(const std::string& key, const Value& description) {
+    static constexpr std::array<std::string_view, 7> kFields = {
+        "value", "name", "short_name", "label", "widget_type", "enum_values", "properties"};
+    // python-doc `Property.widget_type() -> str`, "One of:".
+    static constexpr std::array<std::string_view, 11> kWidgets = {
+        "Slider", "Angle", "Color", "Togglebutton", "Combobox", "RandomSeed",
+        "File", "FileList", "LineEdit", "Resource", "TextEdit"};
+    const auto* object = std::get_if<Object>(&description.data);
+    if (key.empty() || object == nullptr || object->size() != kFields.size() ||
+        !std::all_of(kFields.begin(), kFields.end(), [&](std::string_view f) { return object->contains(std::string(f)); })) {
+        return "a property is an object of exactly value, name, short_name, label, widget_type, enum_values and properties";
+    }
+    const auto text = [&](std::string_view field) { return object->at(std::string(field)).IsString(); };
+    if (!text("name") || std::get<std::string>(object->at("name").data) != key) return "name must equal its key";
+    if (!text("short_name") || !text("label")) return "short_name and label must be strings";
+    if (!text("widget_type") ||
+        std::find(kWidgets.begin(), kWidgets.end(), std::get<std::string>(object->at("widget_type").data)) ==
+            kWidgets.end()) {
+        return "widget_type must be a documented widget type";
+    }
+    const auto* labels = std::get_if<Object>(&object->at("enum_values").data);
+    if (labels == nullptr ||
+        !std::all_of(labels->begin(), labels->end(), [](const auto& entry) { return entry.second.IsInt(); })) {
+        return "enum_values must map labels to integers";
+    }
+    if (!object->at("properties").IsObject()) return "properties must be an object";
+    // No typed codec exists for vectors, colours or other values yet: only finite scalars are kept.
+    const Value& value = object->at("value");
+    const bool finite = value.IsInt() || value.IsString() ||
+                        (value.IsDouble() && std::isfinite(std::get<double>(value.data)));
+    if (!finite) return "value must be a finite integer, number or string";
+    return {};
+}
+
+}  // namespace
+
+Value SourceMetadataJson(const Value& signature, const SourceMetadata& metadata) {
+    const bool v2 = metadata.image_inputs || metadata.presets || metadata.properties;
+    Object object{{"schema", std::string(v2 ? kSourceMetadataSchemaV2 : kSourceMetadataSchema)},
                   {"asset", PinAndOutput(signature).first},
-                  {"image_outputs", std::move(outputs)}};
+                  {"image_outputs", Strings(metadata.image_outputs)}};
+    if (metadata.image_inputs) object["image_inputs"] = Strings(*metadata.image_inputs);
+    if (metadata.presets) object["presets"] = Strings(*metadata.presets);
+    if (metadata.properties) object["properties"] = *metadata.properties;
+    return object;
+}
+
+Value SourceMetadataJson(const Value& signature, const std::vector<std::string>& image_outputs) {
+    return SourceMetadataJson(signature, SourceMetadata{image_outputs, std::nullopt, std::nullopt, std::nullopt});
+}
+
+std::expected<SourceMetadata, std::string> ParseSourceMetadata(const Value& signature, const Value& metadata) {
+    using Result = std::expected<SourceMetadata, std::string>;
+    const auto* object = std::get_if<Object>(&metadata.data);
+    const Value* schema = object ? (object->contains("schema") ? &object->at("schema") : nullptr) : nullptr;
+    const bool v1 = schema && schema->IsString() && std::get<std::string>(schema->data) == kSourceMetadataSchema;
+    const bool v2 = schema && schema->IsString() && std::get<std::string>(schema->data) == kSourceMetadataSchemaV2;
+    if (object == nullptr || !object->contains("asset") || !object->contains("image_outputs") || schema == nullptr) {
+        return Result(std::unexpect, "source_metadata must be an object of schema, asset and image_outputs");
+    }
+    if (!v1 && !v2) {
+        return Result(std::unexpect, "source_metadata schema must be " + std::string(kSourceMetadataSchema) + " or " +
+                                         std::string(kSourceMetadataSchemaV2));
+    }
+    for (const auto& [name, ignored] : *object) {
+        const bool required = name == "schema" || name == "asset" || name == "image_outputs";
+        const bool optional = name == "image_inputs" || name == "presets" || name == "properties";
+        if (!required && !(v2 && optional)) {
+            return Result(std::unexpect, v1 ? "source_metadata must be an object of exactly schema, asset and image_outputs"
+                                            : "source_metadata has the unknown member " + name);
+        }
+    }
+    const auto [pin, output] = PinAndOutput(signature);
+    if (pin.empty() || output.empty()) {
+        return Result(std::unexpect, "source_metadata needs a signature with asset, version and output id");
+    }
+    const Value& asset = object->at("asset");
+    if (!asset.IsString() || std::get<std::string>(asset.data) != pin) {
+        return Result(std::unexpect, "source_metadata asset must be the signature's exact pin " + pin);
+    }
+    SourceMetadata parsed;
+    auto outputs = DistinctNames(object->at("image_outputs"), "image_outputs", true);
+    if (!outputs) return Result(std::unexpect, outputs.error());
+    parsed.image_outputs = std::move(*outputs);
+    if (std::find(parsed.image_outputs.begin(), parsed.image_outputs.end(), output) == parsed.image_outputs.end()) {
+        return Result(std::unexpect, "source_metadata image_outputs does not hold the signature's output " + output);
+    }
+    for (const auto& [member, target] : {std::pair{"image_inputs", &parsed.image_inputs}, std::pair{"presets", &parsed.presets}}) {
+        if (!object->contains(member)) continue;
+        auto names = DistinctNames(object->at(member), member, false);
+        if (!names) return Result(std::unexpect, names.error());
+        *target = std::move(*names);
+    }
+    if (object->contains("properties")) {
+        const auto* properties = std::get_if<Object>(&object->at("properties").data);
+        if (properties == nullptr) return Result(std::unexpect, "source_metadata properties must be an object");
+        for (const auto& [name, description] : *properties) {
+            const std::string problem = PropertyProblem(name, description);
+            if (!problem.empty()) return Result(std::unexpect, "source_metadata properties." + name + ": " + problem);
+        }
+        parsed.properties = *properties;
+    }
+    return parsed;
 }
 
 std::string SourceMetadataProblem(const Value& signature, const Value& metadata) {
-    const auto* object = std::get_if<Object>(&metadata.data);
-    if (object == nullptr || object->size() != 3 || !object->contains("schema") || !object->contains("asset") ||
-        !object->contains("image_outputs")) {
-        return "source_metadata must be an object of exactly schema, asset and image_outputs";
-    }
-    const Value& schema = object->at("schema");
-    if (!schema.IsString() || std::get<std::string>(schema.data) != kSourceMetadataSchema) {
-        return "source_metadata schema must be " + std::string(kSourceMetadataSchema);
-    }
-    const auto [pin, output] = PinAndOutput(signature);
-    if (pin.empty() || output.empty()) return "source_metadata needs a signature with asset, version and output id";
-    const Value& asset = object->at("asset");
-    if (!asset.IsString() || std::get<std::string>(asset.data) != pin) {
-        return "source_metadata asset must be the signature's exact pin " + pin;
-    }
-    const auto* outputs = std::get_if<core::json::Array>(&object->at("image_outputs").data);
-    if (outputs == nullptr || outputs->empty()) return "source_metadata image_outputs must be a nonempty array";
-    std::vector<std::string> seen;
-    for (const Value& item : *outputs) {
-        if (!item.IsString() || std::get<std::string>(item.data).empty()) {
-            return "source_metadata image_outputs must hold nonempty strings";
-        }
-        const std::string& name = std::get<std::string>(item.data);
-        if (std::find(seen.begin(), seen.end(), name) != seen.end()) {
-            return "source_metadata image_outputs repeats " + name;
-        }
-        seen.push_back(name);
-    }
-    if (std::find(seen.begin(), seen.end(), output) == seen.end()) {
-        return "source_metadata image_outputs does not hold the signature's output " + output;
-    }
-    return {};
+    const auto parsed = ParseSourceMetadata(signature, metadata);
+    return parsed ? std::string() : parsed.error();
 }
 
 std::vector<SnapshotEntry> SnapshotEntries(const Value& member) {
@@ -124,13 +228,11 @@ std::vector<SnapshotEntry> SnapshotEntries(const Value& member) {
             }
             const Value* metadata = member_of(kSourceMetadataKey);
             if (entry.error.empty() && metadata != nullptr) {
-                entry.error = SourceMetadataProblem(entry.signature, *metadata);
-                if (entry.error.empty()) {
-                    entry.image_outputs.emplace();
-                    const Value& outputs = std::get<Object>(metadata->data).at("image_outputs");
-                    for (const Value& item : std::get<core::json::Array>(outputs.data)) {
-                        entry.image_outputs->push_back(std::get<std::string>(item.data));
-                    }
+                auto parsed = ParseSourceMetadata(entry.signature, *metadata);
+                if (parsed) {
+                    entry.source_metadata = std::move(*parsed);
+                } else {
+                    entry.error = parsed.error();
                 }
             }
         }
@@ -173,11 +275,11 @@ void CheckSnapshots(const core::Project& project, std::string_view project_uuid)
 
 Id StageSnapshot(Container& container, PendingPlanes& pending, core::Edit& edit, std::string_view project_uuid,
                  const Value& signature, const PlaneImage& image,
-                 const std::optional<std::vector<std::string>>& image_outputs) {
+                 const std::optional<SourceMetadata>& observed) {
     if (!signature.IsObject()) throw core::ValueError("snapshot: the signature is not a JSON object");
     std::optional<Value> metadata;
-    if (image_outputs) {
-        metadata = SourceMetadataJson(signature, *image_outputs);
+    if (observed) {
+        metadata = SourceMetadataJson(signature, *observed);
         const std::string problem = SourceMetadataProblem(signature, *metadata);
         if (!problem.empty()) throw core::ValueError("snapshot: " + problem);
     }

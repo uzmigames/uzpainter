@@ -63,9 +63,9 @@ public:
     [[nodiscard]] static std::expected<SnapshotBackend, std::string> Load(store::ProjectStore& store,
                                                                          const core::Project& project);
 
-    /// Adds a snapshot (`Load` and tests), with its recorded `image_outputs` when known.
+    /// Adds a snapshot (`Load` and tests), with its recorded `source_metadata` when known.
     void Add(const ProceduralRequest& request, SnapshotRaster raster,
-             std::optional<std::vector<std::string>> imageOutputs = std::nullopt);
+             std::optional<store::SourceMetadata> metadata = std::nullopt);
 
     [[nodiscard]] std::string_view Name() const override { return "snapshot"; }
     /// `unavailable` for every asset (`kSnapshotStatus`): a snapshot certifies nothing.
@@ -89,6 +89,10 @@ public:
     /// `kNoImageOutputs` when its recording observed none. No other snapshot is consulted.
     [[nodiscard]] std::expected<std::vector<std::string>, UnsupportedProcedural> ImageOutputs(
         const ProceduralRequest& request) const;
+    /// A copy of the whole `source_metadata` the snapshot of the request's exact signature
+    /// recorded; refused as `ImageOutputs` is.
+    [[nodiscard]] std::expected<store::SourceMetadata, UnsupportedProcedural> Metadata(
+        const ProceduralRequest& request) const;
 
     [[nodiscard]] size_t size() const { return m_snapshots.size(); }
 
@@ -96,7 +100,7 @@ private:
     struct Entry {
         core::json::Value signature;
         SnapshotRaster raster;
-        std::optional<std::vector<std::string>> imageOutputs;
+        std::optional<store::SourceMetadata> metadata;
     };
     std::map<std::string, Entry> m_snapshots;  ///< By signature SHA-256.
 };
@@ -106,10 +110,9 @@ private:
 /// `SnapshotPlaneFormat(request.output)` and the request's signature in the manifest. Call it
 /// from the transaction's call; returns the plane id. Throws `core::ValueError` for a request
 /// that names a tile (a snapshot is a whole texture), an output of 2 or 4 channels, bytes of
-/// another size, and what `RecordSnapshot` throws. `imageOutputs`, when given, is stored as the
+/// another size, and what `RecordSnapshot` throws. `metadata`, when given, is stored as the
 /// entry's `source_metadata`.
 core::Id RecordSnapshot(store::ProjectStore& store, core::Edit& edit, const ProceduralRequest& request,
-                        std::string bytes,
-                        const std::optional<std::vector<std::string>>& imageOutputs = std::nullopt);
+                        std::string bytes, const std::optional<store::SourceMetadata>& metadata = std::nullopt);
 
 }  // namespace uzp::procedural
