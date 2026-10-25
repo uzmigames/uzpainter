@@ -241,6 +241,7 @@ class ProbeJob:
     exports: tuple[ExportStep, ...]
     events: tuple[str, ...]
     timing: bool = False
+    keyed_export_steps: frozenset[int] = frozenset()
 
     @property
     def lifecycle(self) -> bool:
@@ -302,6 +303,21 @@ def input_arg_key(call: str, args: dict[str, Any]) -> str | None:
 
 
 def check_input_arg(step: Step, inputs: dict[str, Path]) -> None:
+    if "key_by_step" in step.args:
+        raise RecorderError("key_by_step is only valid on a final capture export")
+    if "color_space_type" in step.args:
+        args = step.args
+        if (
+            step.call != CONSTANTS["SET_BITMAP_COLOR_SPACE"]
+            or set(args) != {"node_step", "channel", "color_space", "color_space_type"}
+            or args["color_space_type"] != "str"
+            or args["color_space"] != "sRGB"
+            or type(args["node_step"]) is not int
+            or args["node_step"] < 1
+            or not isinstance(args["channel"], str)
+            or not args["channel"]
+        ):
+            raise RecorderError("literal bitmap colour space requires a node, channel and str sRGB")
     work_file = step.args.get(WORK_FILE)
     if work_file is not None and not is_plain_name(work_file):
         raise RecorderError(f"step {step.step}: `{WORK_FILE}` must be a plain file name")
@@ -396,6 +412,15 @@ def probe_job_from_manifest(manifest: dict[str, Any], repo_root: Path = REPO_ROO
     ]
     if [s.step for s in steps] != list(range(1, len(steps) + 1)):
         raise RecorderError("instruction steps must be numbered 1..n in order")
+    for step in steps:
+        if "color_space_type" in step.args and step.call != CONSTANTS["SET_BITMAP_COLOR_SPACE"]:
+            raise RecorderError("color_space_type is only valid on the bitmap colour-space setter")
+        if "key_by_step" in step.args and (
+            step.call != EXPORT
+            or step.args["key_by_step"] is not True
+            or step.args.get(PROBE_FLAG, False) is not False
+        ):
+            raise RecorderError("key_by_step must be true on a final capture export")
     if steps and steps[0].call == EVENT_CONNECT:
         return lifecycle_job(manifest, inputs, steps)
     if not steps or steps[0].call != ps.CREATE:
@@ -404,7 +429,10 @@ def probe_job_from_manifest(manifest: dict[str, Any], repo_root: Path = REPO_ROO
     state: list[ProbeStep] = []
     probes: list[ProbeStep] = []
     exports: list[ExportStep] = []
+    keyed_export_steps: set[int] = set()
     for step in steps[1:]:
+        if "key_by_step" in step.args:
+            keyed_export_steps.add(step.step)
         if step.call == EXPORT and step.args.get(PROBE_FLAG) is not True:
             exports.append(export_step(step))
             continue
@@ -431,7 +459,16 @@ def probe_job_from_manifest(manifest: dict[str, Any], repo_root: Path = REPO_ROO
         (probes if probe else state).append(ProbeStep(step.step, step.call, step.args, probe, wait))
     if not probes:
         raise RecorderError("a probe golden needs at least one probe step")
-    return ProbeJob(manifest, inputs, steps[0], tuple(state), tuple(probes), tuple(exports), ())
+    return ProbeJob(
+        manifest,
+        inputs,
+        steps[0],
+        tuple(state),
+        tuple(probes),
+        tuple(exports),
+        (),
+        keyed_export_steps=frozenset(keyed_export_steps),
+    )
 
 
 def load_probe_job(path: Path, repo_root: Path = REPO_ROOT) -> ProbeJob:
@@ -802,7 +839,12 @@ def record_probes(
         outputs += rebound(session, step, closed)
     blobs: list[Path] = []
     for export in job.exports:
-        exported, files = export_outputs(session, export, template, directory)
+        keyed = (
+            frozenset(out.name for out in export.maps)
+            if export.step in job.keyed_export_steps
+            else frozenset()
+        )
+        exported, files = export_outputs(session, export, template, directory, keyed)
         outputs += exported
         blobs += files
     recording = {

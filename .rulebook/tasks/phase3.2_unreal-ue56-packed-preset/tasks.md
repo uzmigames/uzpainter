@@ -388,3 +388,17 @@ compile_plan. The OCIO session stopped at its first candidate (`ocio/r1/s56/base
 native refused at encode_export with unsupported_source (decision 190: under OCIO only an 8-bit
 colour bitmap on an sRGB8 channel sampled 1:1 is recorded). That is a real failure. The remaining
 16 OCIO targets are unclassified. There was no retry, and no gate changes.
+
+## 18. Authored OCIO16 input controls (2026-10-25; capture pending)
+
+Five independent `ocio16-bitmap-srgb-basecolor*` requests isolate the decision 190
+input gap blocking item 2.5/R-322: public RGB16 field-a and two cyclic permutations,
+an RGB8 control, and a Working uniform, on BaseColor sRGB8 under pinned OCIO.
+Each captures PNG8, PNG16 and EXR32f after its getter, then repeats after Full
+save/reopen without setters: 15 exported-map records per condition, 30 total.
+Bitmap setters preserve the literal configuration string `sRGB`, not its enum.
+Final exports opt into `key_by_step` identities; existing output IDs stay unchanged.
+Mock pipeline checks retain every referenced byte through inbox copying, including
+stable repeats that deduplicate content blobs. All 29 new CPU cases and 21 affected
+recorder/provenance regressions pass; Ruff/mypy pass. Painter capture and admission
+remain pending. No fit, checklist, capability or acceptance gate changes.

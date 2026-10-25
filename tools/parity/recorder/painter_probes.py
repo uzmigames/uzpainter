@@ -1517,6 +1517,17 @@ def substance_edit(call: str, args: dict[str, Any]) -> Any:
 
 def edit(step: int, call: str, args: dict[str, Any], resolved: dict[str, Any]) -> Any:
     """Apply one edit call; returns what the documented call returned."""
+    if "color_space_type" in args and (
+        call != SET_BITMAP_COLOR_SPACE
+        or set(args) != {"node_step", "channel", "color_space", "color_space_type"}
+        or args["color_space_type"] != "str"
+        or args["color_space"] != "sRGB"
+        or type(args["node_step"]) is not int
+        or args["node_step"] < 1
+        or not isinstance(args["channel"], str)
+        or not args["channel"]
+    ):
+        raise ValueError("literal bitmap colour space requires a node, channel and str sRGB")
     if call in SUBSTANCE_EDIT_CALLS or call in SUBSTANCE_VALUE_ARGS:
         return substance_edit(call, args)
     if call in P295_EDIT_CALLS or call in P295_VALUE_ARGS:
@@ -1625,7 +1636,11 @@ def edit(step: int, call: str, args: dict[str, Any], resolved: dict[str, Any]) -
     if call == SET_PROJECTION_PARAMETERS:
         return node.set_projection_parameters(uv_projection(args))
     if call == SET_BITMAP_COLOR_SPACE:
-        space = member(BITMAP_COLOR_SPACES, "color space", args["color_space"])
+        space = (
+            args["color_space"]
+            if args.get("color_space_type") == "str"
+            else member(BITMAP_COLOR_SPACES, "color space", args["color_space"])
+        )
         return node.get_source(channel_arg(args)).set_color_space(space)
     if call == ADD_MASK:
         return node.add_mask(member(MASK_BACKGROUNDS, "MaskBackground", args["background"]))
