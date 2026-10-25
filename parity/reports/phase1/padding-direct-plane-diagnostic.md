@@ -141,6 +141,27 @@ task checkbox or refusal changed.
 | Pinned tau-prism public manifest (not executed) | `b7f91cb30b7e9d62e5ff42f79dee2df062ae3ff752f28fbec32b848724574937` |
 | Reference | `c36795882a04c6ee6ff956f4280e4e58a5e605451039dc4f3b0df732e82e546a` |
 
+## Authored plane-offset forecast (2026-10-25)
+
+Commit `247fc72e` freezes one CPU-only pair that cyclically permutes only the
+uncovered J triangles. Its single run completed in 0.929 seconds (exit 0,
+external limit 900 seconds), without an oracle or capture. Normal bits, fold
+gates, coverage, uncovered J, query/tap order and selected source planes remain
+equal. Both normalized source offsets change, but none of the 40 tested ring
+coordinates exercises either changed J triangle. Final quantized predictions
+differ at zero coordinates.
+
+The result is `inconclusive/no_isolated_final_discriminator`: the pair does not
+exercise the proposed mechanism and therefore does not refute the plane-offset
+hypothesis. The pair was not adjusted, rerun or captured. No production change
+or acceptance follows.
+
+| Authored forecast artifact | SHA-256 |
+| --- | --- |
+| `plane_offset_forecast.py` | `1f75ebb1dabd7a07b404e1e147eddee40ab232b604fe66a59e033eddafa5147b` |
+| Original mesh | `78bccacb03ff0d8d49b77dfb8c0b5420126344aa1563f6ba0be54b8f546076d0` |
+| Cyclic-corner mesh | `882b914488d1d1a45891cf15b7bcfc1d6f37c48e18b4e2df7a92446adda99cb7` |
+
 ## Evidence identities
 
 Public evidence contains aggregates and hashes only. Coordinates, weights,
