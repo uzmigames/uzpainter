@@ -21,15 +21,13 @@ import pytest
 from python.uzpainter_facade.bitmap_defaults import PAINTER_OCIO_CONFIG_SHA256
 from tests.export.conftest import export_tests as export_tests
 from tests.parity.test_filter_observation_import import (
+    install_authored_envelope,
     receipt,
-    synthetic_environment,
     synthetic_inputs,
 )
 from tests.python.conftest import Run
 from tests.python.test_pyapi_native import ok
 from tools.parity import filter_observation_import as importer
-from tools.parity.envelope.registry import current_envelope
-from tools.parity.recorder.environment import envelope_sha256
 
 HASH_PARAMETERS = {"seed": 3, "gain": -0.0}  # the synthetic receipt's public placeholder values
 
@@ -52,14 +50,6 @@ def ids(target: dict[str, Any]) -> tuple[int, int]:
     (texture_set,) = [s for s in target["projection"]["texture_sets"] if s["name"] == "uzp_plane"]
     (stack,) = texture_set["stacks"]
     return int(texture_set["id"]), int(stack["id"])
-
-
-def authored_envelope() -> dict[str, Any]:
-    return {
-        **current_envelope(),
-        "envelope_sha256": envelope_sha256(synthetic_environment()),
-        "equivalent_envelopes": [],
-    }
 
 
 @pytest.fixture
@@ -92,11 +82,13 @@ result = True
     ok(run(script))
     observed = tmp_path / "observed.uzp"
     target = base(export_tests, observed, tmp_path / "base.json")
-    monkeypatch.setattr(importer, "current_envelope", authored_envelope)
+    store = install_authored_envelope(monkeypatch)
     manifest, record, _ = synthetic_inputs()
     data = receipt(manifest, record)
     texture_set, stack = ids(target)
-    built = importer.build_payload(manifest, data, target, texture_set=texture_set, stack=stack)
+    built = importer.build_payload(
+        manifest, data, target, texture_set=texture_set, stack=stack, store=store
+    )
     # One JSON round trip: no shared Python objects between payload members.
     document = json.loads(json.dumps(built))
     return {"target": target, "payload": document, "path": observed}

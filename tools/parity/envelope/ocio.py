@@ -39,7 +39,7 @@ from tools.parity.recorder.environment import (
 )
 from tools.parity.recorder.session import RecorderError
 from tools.parity.schemas import REPO_ROOT, load_json
-from tools.parity.store.store import OracleStore, load_oracle
+from tools.parity.store.store import OracleStore, StoreError, load_oracle
 
 OCIO_REFERENCE = "ocio_reference"
 COLOUR_FIELD = "colour_configuration_sha256"
@@ -152,3 +152,35 @@ def detect_for_colour(
     assert found.identity.environment is not None
     anchors, references = ocio_identities(found.current, store, configuration, repo_root)
     return ocio_reference_state(found.identity.environment, anchors, references, configuration)
+
+
+def recorded_request_environment_matches(
+    environment: Mapping[str, Any],
+    manifest: Mapping[str, Any],
+    current: Mapping[str, Any],
+    store: OracleStore | None,
+    repo_root: Path = REPO_ROOT,
+) -> bool:
+    """Apply decision 309 offline to a recorded request, without relabelling its envelope."""
+    if environment.get("basis") != "recorded" or any(
+        type(environment.get(field)) is not str or environment[field] in ("", UNKNOWN)
+        for field in ENVELOPE_FIELDS
+    ):
+        return False
+    if environment["painter_build"] != current["painter_build"]:
+        return False
+    try:
+        configuration = named_ocio(manifest)
+        if configuration is None:
+            return envelope_sha256(environment) in {
+                current["envelope_sha256"],
+                *current["equivalent_envelopes"],
+            }
+        if store is None:
+            return False
+        anchors, references = ocio_identities(current, store, configuration, repo_root)
+        state, _ = ocio_reference_state(environment, anchors, references, configuration)
+        return state == OCIO_REFERENCE
+    except (RecorderError, StoreError, OSError, ValueError, KeyError, TypeError):
+        # Recorded paths, configuration names and host details must not enter caller errors.
+        return False

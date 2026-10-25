@@ -11,8 +11,9 @@ from pathlib import Path
 from typing import Any, cast
 
 from python.uzpainter_facade.bitmap_defaults import PAINTER_OCIO_CONFIG_SHA256
+from tools.parity.envelope.ocio import recorded_request_environment_matches
 from tools.parity.envelope.registry import current_envelope
-from tools.parity.recorder.environment import ENVELOPE_FIELDS, envelope_sha256
+from tools.parity.recorder.environment import ENVELOPE_FIELDS
 from tools.parity.recorder.job import canonical_json
 from tools.parity.recorder.probes import ProbeJob, probe_job_from_manifest
 from tools.parity.schemas import record_problems
@@ -226,6 +227,7 @@ def build_payload(
     *,
     texture_set: int,
     stack: int,
+    store: OracleStore | None = None,
 ) -> dict[str, Any]:
     """One derivation for synthetic receipts and verified own-Painter records; no native calls."""
     authored = control.request()
@@ -261,12 +263,6 @@ def build_payload(
         "recorded environment required",
     )
     environment = cast(dict[str, Any], environment)
-    require(
-        environment["painter_build"] == current["painter_build"]
-        and envelope_sha256(environment)
-        in {current["envelope_sha256"], *current["equivalent_envelopes"]},
-        "recorded envelope differs",
-    )
     project_settings = closed(
         key["project_settings"], {"create", "colour_management"}, "record project settings"
     )
@@ -285,6 +281,10 @@ def build_payload(
         and colour["OCIO"].replace("\\", "/").endswith("resources/ocio/substance/config.ocio")
         and typed_json(key["effective_defaults"].get("colour_management")) == typed_json(colour),
         "record colour context differs",
+    )
+    require(
+        recorded_request_environment_matches(environment, authored, current, store),
+        "recorded envelope differs",
     )
     closed(
         base, {"schema", "project_uuid", "projection", "projection_sha256", "mesh"}, "base fields"
@@ -370,7 +370,10 @@ def build_payload(
         return paired["same_session"][matches[0].step]
 
     def equal(call: str, node: int, expected: Any) -> None:
-        require(typed_json(observed(call, node)) == typed_json(expected), "setter readback differs")
+        require(
+            typed_json(observed(call, node)) == typed_json(expected),
+            f"setter readback differs: {call} (step {node})",
+        )
 
     for node, name in ((host_step, "Observation host"), (filter_step, "Observation filter")):
         for getter, value in (
@@ -394,7 +397,6 @@ def build_payload(
         "filtering_mode": control.UV["filtering_mode"],
         "uv_wrapping_mode": control.UV["uv_wrapping_mode"],
         "uv_transformation": {
-            "class": "UVTransformationParams",
             **{k: control.UV[k] for k in ("scale_mode", "scale", "rotation", "offset")},
         },
     }
@@ -482,7 +484,6 @@ def build_payload(
     }
     core_uv = deepcopy(uv)
     del core_uv["class"]
-    del core_uv["uv_transformation"]["class"]
     host = {
         "uid": next_id,
         "kind": "fill",
@@ -544,7 +545,7 @@ def admitted_payload(
     stack: int,
 ) -> dict[str, Any]:
     data, _ = admitted_record(store, manifest)
-    return build_payload(manifest, data, base, texture_set=texture_set, stack=stack)
+    return build_payload(manifest, data, base, texture_set=texture_set, stack=stack, store=store)
 
 
 def write_private(path: Path, payload: dict[str, Any]) -> None:

@@ -20,10 +20,12 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 
 from tools.parity.envelope import canary as canary_module
+from tools.parity.envelope import ocio as ocio_module
 from tools.parity.envelope.backfill import backfill, manifest_environment
 from tools.parity.envelope.canary import CANARY
 from tools.parity.envelope.compare import RecordSource, normalise_text, normalised
@@ -34,6 +36,7 @@ from tools.parity.envelope.ocio import (
     detect_for_colour,
     named_ocio,
     ocio_reference_state,
+    recorded_request_environment_matches,
 )
 from tools.parity.envelope.refresh import (
     CURRENT_OUTCOME,
@@ -1115,3 +1118,137 @@ def test_named_ocio_reads_the_manifest_setting() -> None:
     assert named_ocio({"applied_settings": [{**setting, "applied_by": "recorder_api"}]}) is None
     with pytest.raises(RecorderError, match="several OCIO"):
         named_ocio({"applied_settings": [setting, {**setting, "value": "x.ocio"}]})
+
+
+@pytest.fixture
+def recorded_envelope_case(monkeypatch: pytest.MonkeyPatch) -> tuple[dict[str, Any], ...]:
+    anchor = {
+        "basis": "recorded",
+        "painter_build": "synthetic-build",
+        **HOST_A,
+        "colour_configuration_sha256": "1" * 64,
+    }
+    reference = {**anchor, "colour_configuration_sha256": "2" * 64}
+    current = {
+        "painter_build": anchor["painter_build"],
+        "envelope_sha256": envelope_sha256(anchor),
+        "equivalent_envelopes": [],
+    }
+    request = {
+        "applied_settings": [
+            {"name": "OCIO", "value": OCIO_VALUE, "applied_by": "environment_variable"}
+        ]
+    }
+    monkeypatch.setattr(
+        ocio_module,
+        "ocio_identities",
+        lambda entry, store, config, root: ([anchor], [reference] if config == OCIO_VALUE else []),
+    )
+    return anchor, reference, current, request
+
+
+@pytest.mark.parametrize("kind", ["current", "equivalent", "ocio"])
+def test_recorded_request_policy_accepts_only_matching_relation(
+    recorded_envelope_case: tuple[dict[str, Any], ...], kind: str
+) -> None:
+    anchor, reference, current, request = recorded_envelope_case
+    environment = reference if kind == "ocio" else dict(anchor)
+    store = Mock(spec=OracleStore) if kind == "ocio" else None
+    if kind == "equivalent":
+        environment["driver_version"] = "equivalent-driver"
+        current["equivalent_envelopes"] = [envelope_sha256(environment)]
+    assert recorded_request_environment_matches(
+        environment, request if kind == "ocio" else {}, current, store
+    )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "legacy_for_ocio",
+        "ocio_for_legacy",
+        "foreign_request",
+        "conflicting_request",
+        "missing_store",
+        "missing_field",
+        "unknown_field",
+        "numeric_field",
+        "basis",
+        "build",
+        "gpu",
+        "driver",
+        "os",
+        "config",
+        "missing_anchor",
+        "missing_reference",
+        "split",
+        "foreign_reference",
+        "unreadable",
+        "store_error",
+    ],
+)
+def test_recorded_request_policy_refuses_invalid_context(
+    recorded_envelope_case: tuple[dict[str, Any], ...],
+    mutation: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    anchor, reference, current, request = recorded_envelope_case
+    environment = dict(reference)
+    store = None if mutation == "missing_store" else Mock(spec=OracleStore)
+    if mutation == "legacy_for_ocio":
+        environment = dict(anchor)
+    elif mutation == "ocio_for_legacy":
+        request = {}
+    elif mutation == "foreign_request":
+        request["applied_settings"][0]["value"] = "foreign.ocio"
+    elif mutation == "conflicting_request":
+        request["applied_settings"].append({**request["applied_settings"][0], "value": "other"})
+    elif mutation == "missing_field":
+        environment.pop("gpu_model")
+    elif mutation in ("unknown_field", "numeric_field", "basis"):
+        field, value = {
+            "unknown_field": ("gpu_model", "unknown"),
+            "numeric_field": ("gpu_model", 3),
+            "basis": ("basis", "inferred"),
+        }[mutation]
+        environment[field] = value
+    elif mutation in ("build", "gpu", "driver", "os", "config"):
+        field = {
+            "build": "painter_build",
+            "gpu": "gpu_model",
+            "driver": "driver_version",
+            "os": "os_build",
+            "config": "colour_configuration_sha256",
+        }[mutation]
+        environment[field] = "foreign"
+    elif mutation in ("missing_anchor", "missing_reference", "split", "foreign_reference"):
+        anchors = [] if mutation == "missing_anchor" else [anchor]
+        references = [] if mutation == "missing_reference" else [reference]
+        if mutation == "split":
+            references.append({**reference, "colour_configuration_sha256": "3" * 64})
+        elif mutation == "foreign_reference":
+            references = [{**reference, "gpu_model": "foreign"}]
+        monkeypatch.setattr(ocio_module, "ocio_identities", lambda *args: (anchors, references))
+    elif mutation in ("unreadable", "store_error"):
+        monkeypatch.setattr(
+            ocio_module,
+            "ocio_identities",
+            Mock(
+                side_effect=(RecorderError if mutation == "unreadable" else StoreError)(
+                    "private-path-marker"
+                )
+            ),
+        )
+    assert recorded_request_environment_matches(environment, request, current, store) is False
+
+
+def test_recorded_ocio_policy_reads_existing_store_offline(ocio_repo: Repo) -> None:
+    request = load_json(ocio_repo.manifests[0].with_name("ocio-reference.json"))
+    environment = manifest_environment(
+        ocio_repo.store, ocio_repo.manifests[0].with_name("ocio-reference.json")
+    )
+    assert environment is not None
+    current = load_registry(ocio_repo.root)["envelopes"][0]
+    assert recorded_request_environment_matches(
+        environment, request, current, ocio_repo.store, ocio_repo.root
+    )
