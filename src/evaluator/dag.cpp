@@ -645,7 +645,8 @@ render::Result<ChannelDag> BuildDag(const core::Project& project, core::Id textu
         return EvalFail(EvalErrorKind::NotFound, "channel " + std::string(core::ToString(channel)) +
                                                      " is not in stack " + std::to_string(stack));
     }
-    render::Result<std::array<float, 3>> base = templates.BaseValue(templateId, channel, channelIt->second.format);
+    render::Result<std::array<float, 3>> base = templates.BaseValue(templateId, channel, channelIt->second.format,
+                                                                    ColourDomainOf(project.settings.color_management));
     if (!base) return render::Unexpected(base.error());
     render::Result<EvaluatorProfile> profile = FindProfile(project.versions.evaluator_profile);
     if (!profile) return render::Unexpected(profile.error());

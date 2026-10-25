@@ -7,6 +7,7 @@
 #include <sstream>
 
 #include "evaluator/error.h"
+#include "evaluator/sources.h"
 #include "render/kernel_cache.h"
 #include "uzp_core/types/errors.h"
 
@@ -73,6 +74,14 @@ TemplateChannel ParseChannel(const Value& value, std::string_view path, bool def
             channel.projectTemplates.push_back(id);
         }
     }
+    if (const auto it = object.find("colour_management"); it != object.end()) {
+        const std::string scopePath = std::string(path) + ".colour_management";
+        if (!defaults) Fail(scopePath, "only channel defaults may restrict colour management");
+        if (!it->second.IsString() || std::get<std::string>(it->second.data) != "legacy") {
+            Fail(scopePath, "expected \"legacy\"");
+        }
+        channel.colourManagement = ColourDomain::Legacy;
+    }
     const Value& base = Need(object, "base", path);
     const std::string basePath = std::string(path) + ".base";
     if (!base.IsArray()) Fail(basePath, "expected an array of three numbers");
@@ -94,6 +103,12 @@ TemplateChannel ParseChannel(const Value& value, std::string_view path, bool def
 }
 
 }  // namespace
+
+ColourDomain ColourDomainOf(const core::ColorManagement& colour) {
+    if (colour.mode.empty() || colour.mode == "legacy") return ColourDomain::Legacy;
+    if (colour.mode == "ocio" && colour.config_hash == kPainterOcioConfigSha256) return ColourDomain::PainterOcio;
+    return ColourDomain::Unknown;
+}
 
 const TemplateChannel* ProjectTemplate::Find(core::ChannelType type) const {
     for (const TemplateChannel& channel : channels) {
@@ -232,7 +247,8 @@ std::vector<std::string> TemplateLibrary::Ids() const {
 
 render::Result<const TemplateChannel*> TemplateLibrary::BaseChannel(std::string_view templateId,
                                                                    core::ChannelType type,
-                                                                   std::optional<core::ChannelFormat> format) const {
+                                                                   std::optional<core::ChannelFormat> format,
+                                                                   std::optional<ColourDomain> colour) const {
     const ProjectTemplate* project = Find(templateId);
     if (project == nullptr) {
         return EvalFail(EvalErrorKind::UnknownTemplate,
@@ -245,7 +261,16 @@ render::Result<const TemplateChannel*> TemplateLibrary::BaseChannel(std::string_
         if (!fallback.projectTemplates.empty() &&
             std::find(fallback.projectTemplates.begin(), fallback.projectTemplates.end(), templateId) ==
                 fallback.projectTemplates.end()) continue;
-        if (!fallback.format || fallback.format == format) return &fallback;
+        const bool formatApplies = !fallback.format || fallback.format == format;
+        if (fallback.colourManagement && formatApplies) {
+            if (!colour) {
+                return EvalFail(EvalErrorKind::MissingBaseValue,
+                                "the channel default of " + std::string(core::ToString(type)) +
+                                    " is restricted to legacy colour management and no colour management was given");
+            }
+            if (*colour != *fallback.colourManagement) continue;
+        }
+        if (formatApplies) return &fallback;
         recorded += (recorded.empty() ? "" : " and ") + std::string(core::ToString(*fallback.format));
     }
     if (!recorded.empty()) {
@@ -260,8 +285,9 @@ render::Result<const TemplateChannel*> TemplateLibrary::BaseChannel(std::string_
 }
 
 render::Result<std::array<float, 3>> TemplateLibrary::BaseValue(std::string_view templateId, core::ChannelType type,
-                                                                std::optional<core::ChannelFormat> format) const {
-    render::Result<const TemplateChannel*> channel = BaseChannel(templateId, type, format);
+                                                                std::optional<core::ChannelFormat> format,
+                                                                std::optional<ColourDomain> colour) const {
+    render::Result<const TemplateChannel*> channel = BaseChannel(templateId, type, format, colour);
     if (!channel) return render::Unexpected(channel.error());
     return (*channel)->base;
 }

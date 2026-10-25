@@ -203,7 +203,7 @@ std::optional<std::string> ProcessingRefusal(const core::Project& project, const
     }
     for (const PlannedChannel& channel : file.channels) {
         const std::optional<core::ChannelType> srgb8 = Srgb8Channel(set, file, channel.source);
-        if (!srgb8 || IsUserChannel(*srgb8) || SrgbEncodedOnExport(*srgb8)) continue;
+        if (!srgb8 || IsUserChannel(*srgb8) || SrgbEncodedSrgb8OnExport(project, *srgb8)) continue;
         return Refused(file,
                        "the export encoding of the sRGB8 channel " + std::string(core::ToString(*srgb8)) +
                            " (linear like a User channel, or sRGB-encoded like BaseColor) is not recorded",
@@ -215,6 +215,12 @@ std::optional<std::string> ProcessingRefusal(const core::Project& project, const
         // in srcChannel R, B and L and as the linear value in G (export-l8-material, decision 204),
         // recorded for the RGB and L files of one L8 channel under Legacy.
         const std::optional<core::ChannelType> l8 = L8Channel(set, file, channel.source);
+        // An L8 EmissionColor, Emissive's canonical name (decision 295), is not in that recording:
+        // refused rather than written linear.
+        if (l8 == core::ChannelType::EmissionColor) {
+            return Refused(file, "the PNG encoding of the L8 channel EmissionColor is not recorded",
+                           kL8MaterialNotRecorded);
+        }
         if (!l8 || !SrgbEncodedOnExport(*l8)) continue;
         const std::string what = "the PNG encoding of the L8 channel " + std::string(core::ToString(*l8));
         if (evaluator::PainterOcio(project)) {

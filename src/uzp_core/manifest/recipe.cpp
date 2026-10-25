@@ -380,7 +380,8 @@ json::Object Document(const Project& project, const BaseValueFn& base_value) {
             for (auto& [type, channel] : Obj(stack.at("channels"))) {
                 const ChannelFormat format = *FromString<ChannelFormat>(std::get<std::string>(Obj(channel).at("format").data));
                 Obj(channel)["base"] =
-                    BaseJson(base_value(project.settings.template_id, *FromString<ChannelType>(type), format));
+                    BaseJson(base_value(project.settings.template_id, *FromString<ChannelType>(type), format,
+                                        &project.settings.color_management));
             }
         }
         std::map<std::int64_t, std::string> pointers;
@@ -559,6 +560,21 @@ json::Value RebuildManifest(json::Object doc, const RecipeHost& host) {
     }
     const std::string template_id = AsString(Need(settings, "template", "$.recipe.settings"), "$.recipe.settings.template");
     if (template_id == "default") settings.erase("template");
+    // The colour management of the project being rebuilt, never the session's: the host's base
+    // values can depend on it. Absent when the recipe names no string mode.
+    std::optional<ColorManagement> colour;
+    if (const auto it = settings.find("color_management"); it != settings.end() && it->second.IsObject()) {
+        const json::Object& recorded = std::get<json::Object>(it->second.data);
+        const auto mode = recorded.find("mode");
+        if (mode != recorded.end() && mode->second.IsString()) {
+            colour.emplace();
+            colour->mode = std::get<std::string>(mode->second.data);
+            const auto hash = recorded.find("config_hash");
+            if (hash != recorded.end() && hash->second.IsString()) {
+                colour->config_hash = std::get<std::string>(hash->second.data);
+            }
+        }
+    }
     manifest["settings"] = std::move(settings);
     manifest["mesh"] = Need(doc, "mesh", "$.recipe");
     for (const char* key : {"display", "export_defaults", "metadata"}) {
@@ -599,7 +615,8 @@ json::Value RebuildManifest(json::Object doc, const RecipeHost& host) {
                                                           path + ".channels." + type + ".format");
                 const std::optional<ChannelFormat> format = FromString<ChannelFormat>(format_name);
                 if (!format) Fail(path + ".channels." + type + ".format", "unknown member '" + format_name + "'");
-                const json::Value expected = BaseJson(host.base_value(template_id, *channel_type, *format));
+                const json::Value expected =
+                    BaseJson(host.base_value(template_id, *channel_type, *format, colour ? &*colour : nullptr));
                 if (Need(channel, "base", path + ".channels." + type) != expected) {
                     throw ValueError("recipe: the base value of channel " + type + " differs from this build's template '" +
                                      template_id + "' (" + json::WriteCanonical(channel.at("base")) + " recorded, " +

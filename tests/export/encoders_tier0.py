@@ -25,6 +25,7 @@ import subprocess
 import sys
 import types
 from collections import defaultdict
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -711,12 +712,55 @@ def _bit_depth_golden() -> tuple[Golden, dict[str, Any]]:
     return golden, working_colours(golden.manifest)
 
 
-def srgb8_material_written(exe: Path, tmp: Path) -> dict[str, Any]:
+def canonical_emission_spec(spec: dict[str, Any]) -> dict[str, Any]:
+    """Rename only the observed Emissive channel identity, leaving values and resources intact."""
+    result = deepcopy(spec)
+
+    def canonical(name: str) -> str:
+        return "EmissionColor" if name == "Emissive" else name
+
+    names = [canonical(channel["type"]) for channel in result["channels"]]
+    if len(set(names)) != len(names):
+        raise ValueError("canonical emission channel declaration collision")
+    for channel, name in zip(result["channels"], names, strict=True):
+        channel["type"] = name
+
+    def remap(node: dict[str, Any]) -> None:
+        for field in ("sources", "blending"):
+            if field in node:
+                original = node[field]
+                mapped = {canonical(name): value for name, value in original.items()}
+                if len(mapped) != len(original):
+                    raise ValueError(f"canonical emission {field} collision")
+                node[field] = mapped
+        if "active_channels" in node:
+            active = [canonical(name) for name in node["active_channels"]]
+            if len(set(active)) != len(active):
+                raise ValueError("canonical emission active channel collision")
+            node["active_channels"] = active
+        if node.get("affected_channel") == "Emissive":
+            node["affected_channel"] = "EmissionColor"
+        for field in ("children", "effects"):
+            for child in node.get(field, []):
+                remap(child)
+        if node.get("mask") is not None:
+            for effect in node["mask"].get("effects", []):
+                remap(effect)
+
+    for layer in result["layers"]:
+        remap(layer)
+    return result
+
+
+def srgb8_material_written(
+    exe: Path, tmp: Path, *, canonical_emission: bool = False
+) -> dict[str, Any]:
     """export-bit-depth's BaseColor, Specular and Emissive maps (bitmaps, uniform colours, empty
     channels over their linear template constants) rebuilt per texture set on the grid mesh and
     written by `WriteExport` at PNG 8, PNG 16, OpenEXR 16f and OpenEXR 32f: compared byte for
     byte with Painter's files of r1, and of r2 wherever r2 equals r1 (decision 032). Returns the
-    counts and the differing files or refusals."""
+    counts and the differing files or refusals. `canonical_emission` changes only the spec's
+    Emissive channel identity to EmissionColor; configuration and oracle targets stay intact."""
     golden, manifest = _bit_depth_golden()
     by_step = {s["step"]: s for s in manifest["instruction_sequence"]["steps"]}
     report: dict[str, Any] = {
@@ -728,6 +772,8 @@ def srgb8_material_written(exe: Path, tmp: Path) -> dict[str, Any]:
     for texture_set in sorted({k.split("/")[0] for k in golden.maps("r1")}):
         spec_dir = tmp / texture_set / "spec"
         spec = _set_spec(manifest, texture_set, spec_dir, template_channels=True)
+        if canonical_emission:
+            spec = canonical_emission_spec(spec)
         for step in SRGB8_STEPS:
             raw = by_step[step]
             out_dir = tmp / texture_set / f"out{step}"

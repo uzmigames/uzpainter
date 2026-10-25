@@ -57,6 +57,24 @@
       }
     },
     {
+      "type": "EmissionColor",
+      "format": "sRGB8",
+      "project_templates": ["default"],
+      "colour_management": "legacy",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/export-bit-depth",
+        "record_sha256": "a646339578936fe65ddc1ad20a0dd4bc386855852d1328829d0c089380f8b9ef",
+        "map": "s3/emissive",
+        "note": "The same observation as the Emissive sRGB8 entry: Painter's Emissive is the legacy alias of EmissionColor (CT.Emissive is CT.EmissionColor, P22-B, decision 295), so that recording observed this channel; restricted to template default and legacy colour management, where it was recorded, and to sRGB8 (other formats, templates and colour management fail with missing_base_value)"
+      }
+    },
+    {
       "type": "Normal",
       "base": [
         0.49803921580314636,

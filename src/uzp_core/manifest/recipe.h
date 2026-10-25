@@ -50,9 +50,10 @@ inline constexpr std::string_view kRecipeSchema = "uzpainter/recipe/1";
 
 /// The float32 backdrop of channel `type` stored as `format` in a stack of a project created from
 /// `template_id` (the template's entry, else the channel default, which can depend on the format:
-/// decision 126). Throws when the host does not know it.
-using BaseValueFn =
-    std::function<std::array<float, 3>(std::string_view template_id, ChannelType type, ChannelFormat format)>;
+/// decision 126, and on `colour`, the colour management of that project, null when the recipe
+/// names none). Throws when the host does not know it.
+using BaseValueFn = std::function<std::array<float, 3>(std::string_view template_id, ChannelType type,
+                                                       ChannelFormat format, const ColorManagement* colour)>;
 
 /// What the running application supplies: its version (ARC-11) and its template base values.
 struct RecipeHost {

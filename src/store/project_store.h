@@ -63,7 +63,7 @@ struct OpenOptions {
     /// read through a read-only connection, and a reader of its resources (blobs or locators).
     /// A throw refuses the open with the file untouched. A file a killed worker left with a hot
     /// journal cannot be read read-only and is refused rather than recovered (decision 360).
-    std::function<void(const core::Project&, const std::function<std::string(const std::string&)>&)> preflight;
+    std::function<void(const core::Project&, const std::function<std::string(const std::string&)>&)> preflight = {};
 };
 
 class ProjectStore {

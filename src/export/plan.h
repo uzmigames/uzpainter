@@ -365,6 +365,18 @@ struct FileRaster {
 /// value (export-l8-material: an RGB file holds (sRGB, linear, sRGB), decision 204).
 [[nodiscard]] bool SrgbEncodedRead(core::ChannelType type, core::ChannelFormat format, ChannelLetter src);
 
+/// True for the channels of `project` Painter exports sRGB-encoded when they are stored as sRGB8:
+/// the `SrgbEncodedOnExport` channels, and EmissionColor under legacy colour management. Painter's
+/// Emissive is the legacy alias of EmissionColor (P22-B, decision 295); the alias is a candidate
+/// until the canonical replay of R-090 P10 passes. Not under OCIO, and not for L8 (decision 204
+/// records Emissive only): those keep `SrgbEncodedOnExport`.
+[[nodiscard]] bool SrgbEncodedSrgb8OnExport(const core::Project& project, core::ChannelType type);
+
+/// `SrgbEncodedRead` in `project`: a channel stored as sRGB8 follows `SrgbEncodedSrgb8OnExport`,
+/// any other format the project-independent rule.
+[[nodiscard]] bool SrgbEncodedRead(const core::Project& project, core::ChannelType type, core::ChannelFormat format,
+                                   ChannelLetter src);
+
 /// Per channel of `file` (planned on `project`), in its channel order: whether its PNG holds the
 /// channel sRGB-encoded (`SrgbEncodedRead` of a documentMap source that is not a luma). All false
 /// for a file that is not a PNG. The receipt's colour space and the UzEngine derivatives' sRGB

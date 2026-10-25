@@ -903,6 +903,107 @@ int RunTemplates(const fs::path& assets) {
     render::Result<std::array<float, 3>> missing = library->BaseValue("default", ChannelType::Ior);
     Check(!missing && KindName(missing.error()) == "missing_base_value",
           "a channel without an observed base value is refused explicitly", Describe(missing));
+
+    // The EmissionColor channel default is restricted to template "default" and legacy colour
+    // management (decision 295 alias of the recorded Emissive): no context refuses, another colour
+    // management or format or template finds no default, a template's own entry stays first.
+    const auto colour = [](std::string mode, std::string hash = "") {
+        core::ColorManagement c;
+        c.mode = std::move(mode);
+        c.config_hash = std::move(hash);
+        return c;
+    };
+    const std::string painterOcio(kPainterOcioConfigSha256);
+    Check(ColourDomainOf(colour("")) == ColourDomain::Legacy && ColourDomainOf(colour("legacy")) == ColourDomain::Legacy,
+          "an empty or legacy mode is legacy colour management");
+    Check(ColourDomainOf(colour("ocio", painterOcio)) == ColourDomain::PainterOcio &&
+              ColourDomainOf(colour("ocio", "other")) == ColourDomain::Unknown &&
+              ColourDomainOf(colour("aces")) == ColourDomain::Unknown,
+          "only Painter's pinned OCIO config is PainterOcio; any other mode is unknown, never legacy");
+    const auto emission = [&](std::string_view id, ChannelFormat format, std::optional<ColourDomain> domain) {
+        return library->BaseValue(id, ChannelType::EmissionColor, format, domain);
+    };
+    const render::Result<std::array<float, 3>> legacyEmission =
+        emission("default", ChannelFormat::sRGB8, ColourDomain::Legacy);
+    Check(legacyEmission && *legacyEmission == std::array<float, 3>{1.0f, 1.0f, 1.0f},
+          "an added sRGB8 EmissionColor starts from 1.0 under legacy colour management", Describe(legacyEmission));
+    const render::Result<std::array<float, 3>> noContext = emission("default", ChannelFormat::sRGB8, std::nullopt);
+    Check(!noContext && KindName(noContext.error()) == "missing_base_value" &&
+              noContext.error().reason.find("no colour management was given") != std::string::npos,
+          "the restricted default refuses without a colour management", Describe(noContext));
+    for (const ColourDomain other : {ColourDomain::PainterOcio, ColourDomain::Unknown}) {
+        const render::Result<std::array<float, 3>> refused = emission("default", ChannelFormat::sRGB8, other);
+        Check(!refused && KindName(refused.error()) == "missing_base_value",
+              "the restricted default does not apply outside legacy colour management", Describe(refused));
+    }
+    const render::Result<std::array<float, 3>> l8 = emission("default", ChannelFormat::L8, ColourDomain::Legacy);
+    Check(!l8 && KindName(l8.error()) == "missing_base_value", "the default is recorded for sRGB8 only", Describe(l8));
+    const render::Result<std::array<float, 3>> otherTemplate =
+        emission("unreal-engine", ChannelFormat::sRGB8, ColourDomain::Legacy);
+    Check(!otherTemplate && KindName(otherTemplate.error()) == "missing_base_value",
+          "the default applies to template \"default\" only", Describe(otherTemplate));
+    const TemplateChannel* own = library->Find("pbr-metallic-roughness-alpha-blend")->Find(ChannelType::EmissionColor);
+    for (const std::optional<ColourDomain> domain :
+         {std::optional<ColourDomain>{}, std::optional(ColourDomain::PainterOcio)}) {
+        const render::Result<std::array<float, 3>> owned =
+            emission("pbr-metallic-roughness-alpha-blend", ChannelFormat::sRGB8, domain);
+        Check(own != nullptr && owned && *owned == own->base,
+              "a template's own EmissionColor entry comes first, whatever the colour management", Describe(owned));
+    }
+    // The evaluator's own DAG takes the project's colour management (dag.cpp), independently of
+    // the export guards: an empty added sRGB8 EmissionColor builds over 1.0 under legacy and has no
+    // base under Painter's OCIO or an unknown colour management.
+    Builder emissionProject(8, 8, {{ChannelType::EmissionColor, ChannelFormat::sRGB8}});
+    const auto emissionDag = [&] {
+        return BuildDag(emissionProject.project, emissionProject.SetId(), emissionProject.StackId(),
+                        ChannelType::EmissionColor, *library, kDefaultTemplateId);
+    };
+    const render::Result<ChannelDag> legacyDag = emissionDag();
+    Check(legacyDag && legacyDag->base == std::array<float, 3>{1.0f, 1.0f, 1.0f},
+          "a legacy project's empty EmissionColor builds over the restricted default", Describe(legacyDag));
+    emissionProject.project.settings.color_management.mode = "ocio";
+    emissionProject.project.settings.color_management.config_hash = std::string(kPainterOcioConfigSha256);
+    const render::Result<ChannelDag> ocioDag = emissionDag();
+    Check(!ocioDag && KindName(ocioDag.error()) == "missing_base_value",
+          "an OCIO project's empty EmissionColor on template default has no base", Describe(ocioDag));
+    emissionProject.project.settings.color_management = colour("aces");
+    const render::Result<ChannelDag> unknownDag = emissionDag();
+    Check(!unknownDag && KindName(unknownDag.error()) == "missing_base_value",
+          "an unknown colour management is never treated as legacy", Describe(unknownDag));
+
+    const auto scoped = [](core::json::Value value, std::string_view kind) {
+        core::json::Object channel{{"type", std::string("EmissionColor")},
+                                   {"format", std::string("sRGB8")},
+                                   {"colour_management", std::move(value)},
+                                   {"base", core::json::Array{1.0, 1.0, 1.0}},
+                                   {"base_provenance", core::json::Object{{"kind", std::string("unobserved")}}}};
+        return core::json::Value(core::json::Object{{"schema", std::string(kTemplateSchema)},
+                                                    {"id", std::string("t")},
+                                                    {"name", std::string("t")},
+                                                    {"kind", std::string(kind)},
+                                                    {"channels", core::json::Array{channel}}});
+    };
+    Check(ParseTemplate(scoped("legacy", "channel-defaults"), "t").channels.at(0).colourManagement ==
+              ColourDomain::Legacy,
+          "colour_management \"legacy\" is read on a channel default");
+    const auto loadFails = [](const core::json::Value& document) {
+        try {
+            (void)ParseTemplate(document, "t");
+        } catch (const core::ManifestError&) {
+            return true;
+        }
+        return false;
+    };
+    Check(loadFails(scoped("ocio", "channel-defaults")), "a colour_management other than \"legacy\" fails the load");
+    Check(loadFails(scoped(1, "channel-defaults")) && loadFails(scoped(nullptr, "channel-defaults")),
+          "a non-string colour_management fails the load");
+    core::json::Value plainProject = scoped("legacy", "project");
+    core::json::Array& plainChannels =
+        std::get<core::json::Array>(std::get<core::json::Object>(plainProject.data).at("channels").data);
+    std::get<core::json::Object>(plainChannels[0].data).erase("colour_management");
+    Check(!loadFails(plainProject) && loadFails(scoped("legacy", "project")),
+          "a project template's entry may not restrict colour management (the same entry without it loads)");
+
     const std::map<ChannelType, core::Channel> channels = library->Find("unreal-engine")->StackChannels();
     Check(channels.size() == 5 && channels.at(ChannelType::BaseColor).format == ChannelFormat::sRGB8,
           "StackChannels gives the template's channel set");

@@ -435,7 +435,7 @@ void InspectWhileLocked() {
 
     // The recipe dump of the current revision, read the same way (phase2.1_recipe-dump-manifest-blocks
     // 3.3): the report's digest is the dump's, and `inspect --recipe` prints the dump.
-    const RecipeHost host{"0.0.0-test", [](std::string_view, ChannelType, ChannelFormat) {
+    const RecipeHost host{"0.0.0-test", [](std::string_view, ChannelType, ChannelFormat, const ColorManagement*) {
                               return std::array<float, 3>{0.5f, 0.5f, 0.5f};
                           }};
     const json::Object dump = InspectRecipe(f.path, std::nullopt, host);

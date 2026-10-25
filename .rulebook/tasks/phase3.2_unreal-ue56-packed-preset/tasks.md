@@ -353,3 +353,28 @@ p22b-host-resources, export-ocio-encode and its Legacy twin). Each passed its co
 before its trace was updated (decision 112). The capability files take 10 facade promotions and 2
 native evidence corrections, committed separately, and the 5 capability conformance tests pass.
 Item 2.5, parity and the OCIO 16-bit bitmap gap stay open.
+
+## 17. EmissionColor in the sRGB8 export rule (2026-10-25, decision 126 amendment)
+
+The first real `test_r322_tga_capture_diagnostic` runs failed, and both failures stay failures,
+not blocked rows. In the first, the test derived each recorded output id from the lowercased
+public record id. Router fixed the selection: it now goes through the recorder's own slug, with
+uniqueness and every identity check kept. In the second, the native candidate refused the
+`EmissionColor` sRGB8 map at `encode_export` (`kSrgb8NotRecorded`), after 2 native runs before
+the failure; no completed comparison report was retained. The classifier stays v2 (compile_plan
+only).
+
+Painter's `Emissive` is the legacy alias of `EmissionColor` (decision 295). Decision 126 is
+amended to cover `EmissionColor` exactly where R-090 recorded it: an sRGB8 channel under legacy
+colour management. The export follows the same sRGB8 rule. The base value comes from one channel
+default restricted to template `default`, legacy colour management and sRGB8, applied by the
+evaluator, the export and the recipe with the project's own colour management. An L8
+`EmissionColor` in a PNG is now refused instead of written linear, and an sRGB8 one under OCIO
+stays refused.
+
+Evidence: R-090/P10 rebuilt with `EmissionColor` matches Painter byte for byte, 96 files and
+192/192 comparisons. The domain controls and export refusals pass. A missing `preflight` default
+on `store::OpenOptions` (since b28e25e8) had stopped `uzp-store-inspect-tests` from compiling; it
+is fixed in the header. The 4 OCIO emissive TGA targets stay outside the supported domain (sRGB8
+`EmissionColor` under OCIO is refused). The R-322 TGA diagnostic has not been rerun since this
+change.

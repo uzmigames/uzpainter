@@ -701,14 +701,17 @@ void ResultHeader() {
 /// which knows no Metallic default outside L8 (a format-restricted default, decision 126).
 RecipeHost TestHost() {
     return {"9.9.9-test",
-            [](std::string_view template_id, ChannelType type, ChannelFormat format) -> std::array<float, 3> {
+            [](std::string_view template_id, ChannelType type, ChannelFormat format,
+               const ColorManagement* colour) -> std::array<float, 3> {
                 if (template_id == "unknown") throw ValueError("no project template 'unknown' is installed");
                 if (type == ChannelType::Metallic && format != ChannelFormat::L8) {
                     throw ValueError("no Metallic default outside L8");
                 }
+                // Each project's own colour management reaches the host, in the dump and the rebuild.
+                if (colour == nullptr) throw ValueError("no colour management given");
                 const float k = static_cast<float>(static_cast<int>(type)) / 7.0f;
                 const float f = format == ChannelFormat::sRGB8 ? 1.0f / 3.0f : 1.0f / 5.0f;
-                return {k, template_id == "default" ? 0.5f : 0.25f, f};
+                return {k, template_id == "default" ? 0.5f : 0.25f, colour->mode == "legacy" ? f : f / 2.0f};
             }};
 }
 
@@ -920,6 +923,13 @@ void RecipeRebuild() {
     const Project rebuilt = ProjectFromRecipe(json::Value(dump), host);
     Validate(rebuilt);
     CHECK(RecipeBody(rebuilt, host.base_value) == O(dump.at("recipe")));
+    // The rebuild asks the host with the recipe's own colour management: an OCIO project's bases
+    // (another value in TestHost) dump and rebuild alike; the session's or a legacy context would
+    // be refused as a base value mismatch, a missing one by TestHost.
+    Project ocio = PaintlessFixture();
+    ocio.settings.color_management.mode = "ocio";
+    const json::Object ocio_dump = DumpRecipe(ocio, 4, host);
+    CHECK(RecipeBody(ProjectFromRecipe(json::Value(ocio_dump), host), host.base_value) == O(ocio_dump.at("recipe")));
     CHECK(Digest(rebuilt) == std::get<std::string>(dump.at("digest").data));
     CHECK(rebuilt.versions.app_version == "9.9.9-test");
     CHECK(rebuilt.versions.evaluator_profile == original.versions.evaluator_profile);
@@ -983,7 +993,9 @@ void RecipeRebuild() {
     MO(MO(tampered)["recipe"])["evaluator_profile"] = "painter-12.1-isolated-linear";
     CHECK(Contains(EXPECT_THROW(ManifestError, ProjectFromRecipe(tampered, host)), "digest"));
     RecipeHost other = host;
-    other.base_value = [](std::string_view, ChannelType, ChannelFormat) { return std::array<float, 3>{0.0f, 0.0f, 0.0f}; };
+    other.base_value = [](std::string_view, ChannelType, ChannelFormat, const ColorManagement*) {
+        return std::array<float, 3>{0.0f, 0.0f, 0.0f};
+    };
     CHECK(Contains(EXPECT_THROW(ValueError, ProjectFromRecipe(json::Value(dump), other)), "base value"));
     json::Value dangling = dump;
     json::Object& body = MO(MO(dangling)["recipe"]);

@@ -24,6 +24,7 @@ import importlib.util
 import json
 import shutil
 import subprocess
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -521,6 +522,62 @@ def test_srgb8_material_channels_are_written_encoded(export_tests: Path, tmp_pat
     assert files_under(out) == {}
 
 
+@pytest.mark.parametrize("depth", ["8", "16"])
+@pytest.mark.parametrize(
+    ("channel", "channel_format", "profile", "decision"),
+    [
+        ("EmissionColor", "sRGB8", "ocio", "126"),
+        ("EmissionColor", "L8", "legacy", "204"),
+        ("EmissionColor", "L8", "ocio", "204"),
+        ("Diffuse", "sRGB8", "legacy", "126"),
+    ],
+)
+def test_canonical_emission_encoding_refuses_unrecorded_domains(
+    export_tests: Path,
+    tmp_path: Path,
+    depth: str,
+    channel: str,
+    channel_format: str,
+    profile: str,
+    decision: str,
+) -> None:
+    """The Legacy sRGB8 alias correction grants no OCIO, L8 PNG or other-channel encoding."""
+    from tests.export.encoders_tier0 import OCIO_CONFIG_SHA256
+
+    document: dict[str, Any] = {
+        "name": "s0",
+        "resolution": [256, 256],
+        "mesh": str(GRID),
+        "color_management": profile,
+        "channels": [{"type": channel, "format": channel_format}],
+        "resources": [],
+        "layers": [
+            {
+                "kind": "fill",
+                "sources": {channel: {"uniform": [0.25, 0.5, 0.75], "color_space": "Working"}},
+            }
+        ],
+    }
+    if profile == "ocio":
+        document["config_hash"] = OCIO_CONFIG_SHA256
+    spec_path = tmp_path / "spec.json"
+    spec_path.write_text(json.dumps(document), encoding="utf-8")
+    out = tmp_path / "out"
+    cfg = config(out, bitDepth=depth)
+    cfg["exportPresets"][0]["maps"] = [
+        {
+            "fileName": "$textureSet_guard",
+            "channels": [chan(component, "documentMap", channel.lower()) for component in "RGB"],
+        }
+    ]
+    cfg["exportParameters"] = [{"parameters": {**PNG16, "bitDepth": depth}}]
+    result = export(export_tests, spec_path, cfg, tmp_path / "run")
+    assert result.get("error") == "NotYetSupported", result
+    assert f"encoding of the {channel_format} channel {channel}" in result["message"], result
+    assert f"decision {decision}" in result["message"], result
+    assert files_under(out) == {}
+
+
 def test_l8_material_channels_are_written_encoded(export_tests: Path, tmp_path: Path) -> None:
     """Decision 204: an empty L8 BaseColor (float32(0.8)) and Specular (float32(10/255), its
     channel default) are written to PNG with the sRGB encode of the linear value in R, B and L and
@@ -942,6 +999,163 @@ def test_srgb8_material_channels_equal_painter_files(export_tests: Path, tmp_pat
     assert report["problems"] == [], report["problems"][:10]
     assert report["files"] == 8 * 4 * 3, report
     assert report["identical"] == report["comparisons"] == 2 * report["files"], report
+
+
+def test_canonical_emissioncolor_equals_painter_files(export_tests: Path, tmp_path: Path) -> None:
+    """The same R-090/P10 targets with EmissionColor as the spec's canonical channel identity. The
+    sanitized counts are saved privately before any assertion; messages carry counts only."""
+    from tests.export import encoders_tier0
+
+    report: dict[str, Any] | None = None
+    failure = ""
+    try:
+        report = encoders_tier0.srgb8_material_written(
+            export_tests, tmp_path, canonical_emission=True
+        )
+    except Exception as error:  # recorded as a class name, never echoed
+        failure = type(error).__name__
+    summary = _save_private_counts("canonical-emission-replay", report, failure)
+    if failure:
+        pytest.fail("canonical replay failed; counts unavailable", pytrace=False)
+    assert summary["problems"] == 0, summary
+    assert summary["files"] == 8 * 4 * 3, summary
+    assert summary["identical"] == summary["comparisons"] == 2 * summary["files"], summary
+
+
+# The problem categories a private count may name; anything else counts as "other".
+PROBLEM_KINDS = frozenset(
+    {
+        *(
+            f"evaluator:{kind}"
+            for kind in (
+                "not_found",
+                "unknown_template",
+                "missing_base_value",
+                "unsupported_node",
+                "unsupported_blend_mode",
+                "unsupported_source",
+                "invalid_argument",
+                "missing_resource",
+                "texture_set_over_budget",
+                "tile_budget_exceeded",
+                "unknown_profile",
+                "invalid_profile",
+                "internal",
+            )
+        ),
+        "NotYetSupported",
+        "Failure",
+        "ValueError",
+        "differs",
+    }
+)
+
+
+def _save_private_counts(
+    name: str, report: dict[str, Any] | None, failure: str = ""
+) -> dict[str, Any]:
+    """Writes `report`'s counts and its problems counted by category (`PROBLEM_KINDS`, else
+    "other") to %LOCALAPPDATA%/UzPainter/<name>.json before any assertion, so a truncated pytest
+    message never hides them, and returns that summary; no value, path, digest or message text is
+    kept. When the run raised (`failure`, its exception class) there is no completed report: only
+    `counts_known: false` and the class are written, no count is invented."""
+    import os
+    import re
+
+    summary: dict[str, Any]
+    if report is None or failure:
+        raised = failure if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", failure) else "other"
+        summary = {"counts_known": False, "raised": raised}
+    else:
+        kinds: dict[str, int] = {}
+        for problem in report["problems"]:
+            if problem.endswith(("differs from r1", "differs from r2")):
+                kind = "differs"
+            else:
+                code = re.search(r"evaluator:[a-z_]+", problem) or re.search(
+                    r"\b(?:NotYetSupported|Failure|ValueError)\b", problem
+                )
+                kind = code.group(0) if code else "other"
+            kind = kind if kind in PROBLEM_KINDS else "other"
+            kinds[kind] = kinds.get(kind, 0) + 1
+        summary = {"counts_known": True}
+        summary |= {k: int(report[k]) for k in ("files", "comparisons", "identical")}
+        summary["problems"] = len(report["problems"])
+        summary["problem_kinds"] = dict(sorted(kinds.items()))
+    path = Path(os.environ["LOCALAPPDATA"]) / "UzPainter" / f"{name}.json"
+    path.write_text(json.dumps(summary), encoding="utf-8")
+    return summary
+
+
+def _emission_remap_spec() -> dict[str, Any]:
+    fill = {
+        "kind": "fill",
+        "name": "Emissive",
+        "sources": {"Emissive": {"bitmap": "authored", "color_space": "sRGB"}},
+        "blending": {"Emissive": {"mode": "Normal", "opacity": 0.75}},
+        "active_channels": ["Emissive", "BaseColor"],
+    }
+    return {
+        "template": "default",
+        "resolution": [256, 256],
+        "channels": [
+            {"type": "Emissive", "format": "sRGB8"},
+            {"type": "BaseColor", "format": "sRGB8"},
+        ],
+        "resources": [{"sha256": "authored", "png": "Emissive.png"}],
+        "outputs": ["documentMap/emissive:RGB"],
+        "layers": [
+            {
+                "kind": "group",
+                "children": [
+                    {
+                        **fill,
+                        "effects": [{"kind": "levels", "affected_channel": "Emissive"}],
+                        "mask": {"background": "White", "effects": [deepcopy(fill)]},
+                    }
+                ],
+            }
+        ],
+    }
+
+
+def test_canonical_emission_remap_preserves_values_and_authored_input() -> None:
+    from tests.export.encoders_tier0 import canonical_emission_spec
+
+    spec = _emission_remap_spec()
+    original = deepcopy(spec)
+    result = canonical_emission_spec(spec)
+    expected = deepcopy(spec)
+    expected["channels"][0]["type"] = "EmissionColor"
+    fill = expected["layers"][0]["children"][0]
+    for node in (fill, fill["mask"]["effects"][0]):
+        for field in ("sources", "blending"):
+            node[field]["EmissionColor"] = node[field].pop("Emissive")
+        node["active_channels"] = ["EmissionColor", "BaseColor"]
+    fill["effects"][0]["affected_channel"] = "EmissionColor"
+    assert result == expected
+    assert spec == original
+    assert canonical_emission_spec(result) == result
+
+
+@pytest.mark.parametrize("where", ["channels", "sources", "blending", "active_channels", "nested"])
+def test_canonical_emission_remap_rejects_collisions(where: str) -> None:
+    from tests.export.encoders_tier0 import canonical_emission_spec
+
+    spec = _emission_remap_spec()
+    fill = spec["layers"][0]["children"][0]
+    if where == "channels":
+        spec["channels"].append({"type": "EmissionColor", "format": "L8"})
+    elif where == "active_channels":
+        fill[where].append("EmissionColor")
+    elif where == "nested":
+        fill["mask"]["effects"][0]["sources"]["EmissionColor"] = {"uniform": [0.0] * 3}
+    else:
+        fill[where]["EmissionColor"] = deepcopy(fill[where]["Emissive"])
+    original = deepcopy(spec)
+    with pytest.raises(ValueError, match="collision"):
+        canonical_emission_spec(spec)
+    assert spec == original
 
 
 def test_observed_template_bases_equal_painter_files(export_tests: Path, tmp_path: Path) -> None:

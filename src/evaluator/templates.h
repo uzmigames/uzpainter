@@ -35,6 +35,12 @@ inline constexpr std::string_view kDefaultTemplateId = "default";
 /// The id of the channel-defaults table.
 inline constexpr std::string_view kChannelDefaultsId = "channel-defaults";
 
+/// A project's colour management as a channel default can be restricted to it: legacy (mode empty
+/// or "legacy"), OCIO with Painter's substance config, or anything else, which is never legacy.
+enum class ColourDomain { Legacy, PainterOcio, Unknown };
+
+[[nodiscard]] ColourDomain ColourDomainOf(const core::ColorManagement& colour);
+
 struct TemplateChannel {
     core::ChannelType type = core::ChannelType::BaseColor;
     /// Absent in a channel-defaults entry that applies to any format; present in one that applies
@@ -44,6 +50,9 @@ struct TemplateChannel {
     /// Empty means all projects; a non-empty list restricts an added-channel default to the
     /// templates whose empty-channel exports establish it.
     std::vector<std::string> projectTemplates;
+    /// Present on a channel default restricted to projects of that colour management (only
+    /// legacy is recorded: `colour_management`); absent means any.
+    std::optional<ColourDomain> colourManagement;
     std::array<float, 3> base{0.0f, 0.0f, 0.0f};
     /// "observed", "fitted", "inferred" or "unobserved" (EVALUATOR.md §3).
     std::string baseProvenance;
@@ -83,15 +92,19 @@ public:
     /// The entry giving the base value of channel `type` stored as `format` in a stack created
     /// from `templateId`: the template's entry when it lists the channel, else the channel default
     /// for any format or for `format`, within its optional project_templates scope (none for a
-    /// format-restricted default when `format` is unknown). `evaluator:unknown_template` or
+    /// format-restricted default when `format` is unknown) and its optional colour management
+    /// scope: a default restricted to one is skipped for a project of another `colour`, and
+    /// refused when `colour` is not given. `evaluator:unknown_template` or
     /// `evaluator:missing_base_value` otherwise.
     [[nodiscard]] render::Result<const TemplateChannel*> BaseChannel(
         std::string_view templateId, core::ChannelType type,
-        std::optional<core::ChannelFormat> format = std::nullopt) const;
+        std::optional<core::ChannelFormat> format = std::nullopt,
+        std::optional<ColourDomain> colour = std::nullopt) const;
     /// The base value of that entry (BaseChannel).
     [[nodiscard]] render::Result<std::array<float, 3>> BaseValue(
         std::string_view templateId, core::ChannelType type,
-        std::optional<core::ChannelFormat> format = std::nullopt) const;
+        std::optional<core::ChannelFormat> format = std::nullopt,
+        std::optional<ColourDomain> colour = std::nullopt) const;
 
 private:
     std::map<std::string, ProjectTemplate, std::less<>> templates_;

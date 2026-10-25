@@ -807,7 +807,7 @@ json::Value PlanBody(const ExportPlan& plan) {
 /// The channels of `file` a PNG writes sRGB-encoded, in its channel order, exactly as
 /// `EvaluateFileOn` flags them for the encoder: `SrgbEncodedRead` of a documentMap source, its luma
 /// included (decisions 126 and 204); all false for any other format.
-std::vector<bool> EncodedChannels(const core::Stack& stack, const PlannedFile& file) {
+std::vector<bool> EncodedChannels(const core::Project& project, const core::Stack& stack, const PlannedFile& file) {
     std::vector<bool> encoded(file.channels.size(), false);
     if (!file.parameters || file.parameters->fileFormat != FileFormat::png) return encoded;
     for (size_t c = 0; c < file.channels.size(); ++c) {
@@ -815,7 +815,8 @@ std::vector<bool> EncodedChannels(const core::Stack& stack, const PlannedFile& f
         const PlannedSource& s = channel.source;
         if (s.type != SourceType::documentMap || !s.channel) continue;
         const auto it = stack.channels.find(*s.channel);
-        encoded[c] = it != stack.channels.end() && SrgbEncodedRead(*s.channel, it->second.format, channel.src);
+        encoded[c] =
+            it != stack.channels.end() && SrgbEncodedRead(project, *s.channel, it->second.format, channel.src);
     }
     return encoded;
 }
@@ -877,7 +878,7 @@ void AttachUzEngine(ExportPlan& plan, size_t first, const ExportListEntry& entry
         }
         // The stored transfer function is the file's: an sRGB derivative of sRGB-encoded colour, a
         // linear one of linear values (the alpha is linear in both).
-        const std::vector<bool> encoded = EncodedChannels(*root.stack, *canonical);
+        const std::vector<bool> encoded = EncodedChannels(project, *root.stack, *canonical);
         for (size_t c = 0; c < canonical->channels.size(); ++c) {
             if (canonical->channels[c].dest == ChannelLetter::A) continue;
             if (encoded[c] != target.srgb) {
@@ -1102,7 +1103,7 @@ void RequestDds(ExportPlan& plan, const core::Project& project, std::string_view
         for (const core::Stack& candidate : set.stacks) if (candidate.id == file.stackId) stack = &candidate;
     }
     if (!stack) Invalid(what, "its texture set and stack are not in the project");
-    const std::vector<bool> encoded = EncodedChannels(*stack, file);
+    const std::vector<bool> encoded = EncodedChannels(project, *stack, file);
     for (size_t c = 0; c < file.channels.size(); ++c) {
         if (file.channels[c].dest != ChannelLetter::A && encoded[c] != BcIsSrgb(format)) {
             bound("canonical channel transfer differs from DDS storage; implicit colour conversion is not supported");
@@ -1287,7 +1288,8 @@ render::Result<void> RequireIdentifiedChannel(const core::Project& project, core
     if (stack == nullptr) return {};
     const auto it = stack->channels.find(type);
     if (it == stack->channels.end()) return {};
-    render::Result<const evaluator::TemplateChannel*> base = templates.BaseChannel(templateId, type, it->second.format);
+    render::Result<const evaluator::TemplateChannel*> base = templates.BaseChannel(
+        templateId, type, it->second.format, evaluator::ColourDomainOf(project.settings.color_management));
     if (!base) return render::Unexpected(base.error());
     if ((*base)->baseProvenance != "inferred") return {};
     return evaluator::EvalFail(evaluator::EvalErrorKind::UnsupportedSource,
@@ -1314,12 +1316,23 @@ bool SrgbEncodedOnExport(ChannelType type) {
 std::vector<bool> SrgbEncodedChannels(const core::Project& project, const PlannedFile& file) {
     const core::Stack* stack = core::FindStack(project, file.textureSetId, file.stackId);
     if (stack == nullptr) return std::vector<bool>(file.channels.size(), false);
-    return EncodedChannels(*stack, file);
+    return EncodedChannels(project, *stack, file);
 }
 
 bool SrgbEncodedRead(ChannelType type, core::ChannelFormat format, ChannelLetter src) {
     if (!SrgbEncodedOnExport(type)) return false;
     return format == core::ChannelFormat::sRGB8 || (format == core::ChannelFormat::L8 && src != ChannelLetter::G);
+}
+
+bool SrgbEncodedSrgb8OnExport(const core::Project& project, ChannelType type) {
+    if (SrgbEncodedOnExport(type)) return true;
+    const std::string& mode = project.settings.color_management.mode;
+    return type == ChannelType::EmissionColor && (mode.empty() || mode == "legacy");
+}
+
+bool SrgbEncodedRead(const core::Project& project, ChannelType type, core::ChannelFormat format, ChannelLetter src) {
+    if (format == core::ChannelFormat::sRGB8) return SrgbEncodedSrgb8OnExport(project, type);
+    return SrgbEncodedRead(type, format, src);
 }
 
 render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int64_t revision, const PlannedFile& file,
@@ -1414,7 +1427,7 @@ render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int
         raster.padded[c] = padded.contains(key) ? 1 : 0;
         const auto format = stored.find(key);
         raster.srgbEncoded[c] =
-            format != stored.end() && SrgbEncodedRead(*s.channel, format->second, channel.src) ? 1 : 0;
+            format != stored.end() && SrgbEncodedRead(project, *s.channel, format->second, channel.src) ? 1 : 0;
         if (format != stored.end() && !channel.luma) raster.documentFormat[c] = format->second;
         const DiagnosticMap& map = evaluated.at(key);
         if (map.width != raster.width || map.height != raster.height || channel.component >= map.components) {
