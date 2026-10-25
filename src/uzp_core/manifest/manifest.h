@@ -25,6 +25,10 @@ json::Value EffectToJson(const Effect& effect, bool mask);
 /// a missing or mistyped member; unknown keys are kept in `extra`.
 json::Value ProceduralRefToJson(const ProceduralRef& ref);
 ProceduralRef ProceduralRefFromJson(const json::Value& value, const std::string& path);
+/// The readers of `LayerToJson` and `EffectToJson`: `ManifestError` (with `path`) on a missing or
+/// mistyped member; unknown keys are kept in `extra`.
+Layer LayerFromJson(const json::Value& value, const std::string& path);
+Effect EffectFromJson(const json::Value& value, const std::string& path, bool mask);
 
 /// Reads a manifest object. Throws `ManifestError` on a missing or mistyped key, an unknown
 /// enum member, a wrong `schema` or a `format_version` of a newer major; unknown keys are kept

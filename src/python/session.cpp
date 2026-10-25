@@ -641,6 +641,16 @@ std::shared_ptr<const core::Project> Session::ReadProject() const {
     return Current()->document->snapshot().project;
 }
 
+std::shared_ptr<const core::Project> Session::ReadProjectOf(const std::shared_ptr<OpenProject>& open) const {
+    ThreadState& thread = Thread();
+    if (thread.transaction) {
+        // Never another project's snapshot in place of the working copy this thread edits.
+        if (thread.project != open) ThrowProjectError("this thread's open transaction is on another open project");
+        return {thread.project, &thread.edit->project()};
+    }
+    return open->document->snapshot().project;
+}
+
 std::int64_t Session::Revision() const {
     const ThreadState& thread = Thread();
     if (thread.transaction) return thread.base_revision;

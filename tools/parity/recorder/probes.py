@@ -303,6 +303,36 @@ def input_arg_key(call: str, args: dict[str, Any]) -> str | None:
 
 
 def check_input_arg(step: Step, inputs: dict[str, Path]) -> None:
+    unique_keys = {"require_unique", "resource_context", "resource_name"}
+    if unique_keys.intersection(step.args):
+        args = step.args
+        expected = (
+            {"node_step", "channel", "search", *unique_keys}
+            if step.call == ps.SET_SOURCE
+            else {"inside_step", "node_stack", "search", *unique_keys}
+            if step.call == ps.INSERT_FILTER
+            else set()
+        )
+        node_key = "node_step" if step.call == ps.SET_SOURCE else "inside_step"
+        if (
+            not expected
+            or set(args) != expected
+            or args.get("require_unique") is not True
+            or any(
+                type(args.get(k)) is not str or not args[k]
+                for k in ("search", "resource_context", "resource_name")
+            )
+            or type(args.get(node_key)) is not int
+            or args[node_key] < 1
+            or (
+                step.call == ps.SET_SOURCE
+                and (type(args.get("channel")) is not str or not args["channel"])
+            )
+            or (step.call == ps.INSERT_FILTER and args.get("node_stack") != "Content")
+        ):
+            raise RecorderError(
+                "unique resource selection requires a closed source or Content Filter recipe"
+            )
     if "key_by_step" in step.args:
         raise RecorderError("key_by_step is only valid on a final capture export")
     if "color_space_type" in step.args:
@@ -413,6 +443,8 @@ def probe_job_from_manifest(manifest: dict[str, Any], repo_root: Path = REPO_ROO
     if [s.step for s in steps] != list(range(1, len(steps) + 1)):
         raise RecorderError("instruction steps must be numbered 1..n in order")
     for step in steps:
+        if {"require_unique", "resource_context", "resource_name"}.intersection(step.args):
+            check_input_arg(step, inputs)
         if "color_space_type" in step.args and step.call != CONSTANTS["SET_BITMAP_COLOR_SPACE"]:
             raise RecorderError("color_space_type is only valid on the bitmap colour-space setter")
         if "key_by_step" in step.args and (
@@ -933,7 +965,10 @@ def record_api_probe(
 ) -> Path:
     identity = session.connect()
     require_colour_management(job, identity)
-    if any("resource_url" in step.args for step in job.state_steps):
+    if any(
+        "resource_url" in step.args or step.args.get("require_unique") is True
+        for step in job.state_steps
+    ):
         session.wait_catalog_ready()
     directory = run_directory(job, identity, work, now)
     staged = stage_inputs(job.inputs, directory / "inputs")

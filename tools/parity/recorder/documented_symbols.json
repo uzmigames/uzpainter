@@ -815,6 +815,18 @@
       "documented_as": "substance_painter.layerstack.GeneratorEffectNode.get_source",
       "page": "substance_painter/layerstack/layereffect/generator.html"
     },
+    "substance_painter.layerstack.GeometryMaskMeshParams": {
+      "documented_as": "substance_painter.layerstack.GeometryMaskMeshParams",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.GeometryMaskMeshParams.inclusion_list": {
+      "documented_as": "substance_painter.layerstack.GeometryMaskMeshParams",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.GeometryMaskMeshParams.meshes": {
+      "documented_as": "substance_painter.layerstack.GeometryMaskMeshParams",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
     "substance_painter.layerstack.GroupLayerNode": {
       "documented_as": "substance_painter.layerstack.GroupLayerNode",
       "page": "substance_painter/layerstack/layereffect/group.html"
@@ -867,6 +879,10 @@
       "documented_as": "substance_painter.layerstack.LayerNode.enable_mask",
       "page": "substance_painter/layerstack/navigation.html"
     },
+    "substance_painter.layerstack.LayerNode.get_geometry_mask": {
+      "documented_as": "substance_painter.layerstack.LayerNode.get_geometry_mask",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
     "substance_painter.layerstack.LayerNode.get_mask_background": {
       "documented_as": "substance_painter.layerstack.LayerNode.get_mask_background",
       "page": "substance_painter/layerstack/navigation.html"
@@ -889,6 +905,10 @@
     },
     "substance_painter.layerstack.LayerNode.remove_mask": {
       "documented_as": "substance_painter.layerstack.LayerNode.remove_mask",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.LayerNode.set_geometry_mask": {
+      "documented_as": "substance_painter.layerstack.LayerNode.set_geometry_mask",
       "page": "substance_painter/layerstack/navigation.html"
     },
     "substance_painter.layerstack.LayerNode.set_mask_background": {

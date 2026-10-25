@@ -215,6 +215,12 @@ public:
     /// The project this thread reads: the working copy of its open native `Transaction`, or
     /// the current revision.
     std::shared_ptr<const core::Project> ReadProject() const;
+    /// The project of `open` as this thread reads it: the working copy of its open native
+    /// `Transaction` when that transaction is on `open` (`ProjectError` when it is on another
+    /// open project), else `open`'s current revision. A caller
+    /// that takes one `Current()` reads its project once through this, so every check of one call
+    /// (resolution, observation lookup, UUID) sees the same open project and the same project.
+    std::shared_ptr<const core::Project> ReadProjectOf(const std::shared_ptr<OpenProject>& open) const;
     std::int64_t Revision() const;
 
     /// One API call (see above). `tool` and `arguments` form the operation record's request.

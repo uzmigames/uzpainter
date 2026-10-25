@@ -15,6 +15,7 @@
 #include "uzp_core/manifest/sha256.h"
 #include "uzp_core/types/errors.h"
 #include "uzp_core/types/receipt.h"
+#include "uzp_core/types/resource_url.h"
 #include "uzp_core/types/validation.h"
 
 namespace uzp::core {
@@ -232,6 +233,21 @@ json::Value BaseJson(const std::array<float, 3>& base) {
 
 void CollectBinding(const ResourceBinding& binding, std::set<std::string>& out) { out.insert(binding.sha256); }
 
+/// True when `value` holds, at any depth, an `asset` of the reserved observation family.
+bool NamesObservation(const json::Value& value) {
+    if (const auto* object = std::get_if<json::Object>(&value.data)) {
+        for (const auto& [key, member] : *object) {
+            if (key == "asset" && member.IsString() && IsObservationAsset(std::get<std::string>(member.data))) return true;
+            if (NamesObservation(member)) return true;
+        }
+    } else if (const auto* array = std::get_if<json::Array>(&value.data)) {
+        for (const json::Value& item : *array) {
+            if (NamesObservation(item)) return true;
+        }
+    }
+    return false;
+}
+
 void CollectProcedural(const ProceduralRef& ref, std::set<std::string>& out) {
     for (const auto& [name, binding] : ref.image_inputs) CollectBinding(binding, out);
 }
@@ -359,6 +375,12 @@ void Partition(json::Value& value, std::vector<std::string>& path, json::Object&
 /// as content, base values on the channels, `resources` the referenced hashes `{mime, size}` and
 /// `resource_catalog` every stored entry without its id.
 json::Object Document(const Project& project, const BaseValueFn& base_value) {
+    // Decision 362: Filter source observations are project-private provenance that a recipe would
+    // silently drop (Stripped), leaving reserved pins without them; such a project has no recipe.
+    if (project.extra.contains(kFilterObservationsKey) || NamesObservation(ProjectToJson(project))) {
+        throw ValueError("recipe: a project holding Filter source observations or a reserved observation "
+                         "reference has no recipe (decision 362)");
+    }
     json::Value manifest = ProjectToJson(Stripped(project));
     json::Object& m = Obj(manifest);
     json::Object doc;
@@ -724,6 +746,9 @@ Project ProjectFromRecipe(const json::Value& dump_value, const RecipeHost& host)
     const json::Object& body = AsObject(member("recipe"), "$.recipe");
     if (RecipeDigest(body) != AsString(member("digest"), "$.digest")) {
         Fail("$.digest", "does not match the SHA-256 of the recipe's canonical JSON");
+    }
+    if (NamesObservation(body)) {
+        Fail("$.recipe", "names an asset of the reserved observation family, which a recipe never carries (decision 362)");
     }
     // The ARC-11 header: every key present and typed (HeaderFromJson), the compatibility profile
     // this build implements, and the profile and hashes the body states.

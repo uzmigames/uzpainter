@@ -930,6 +930,16 @@ void RecipeRebuild() {
     ocio.settings.color_management.mode = "ocio";
     const json::Object ocio_dump = DumpRecipe(ocio, 4, host);
     CHECK(RecipeBody(ProjectFromRecipe(json::Value(ocio_dump), host), host.base_value) == O(ocio_dump.at("recipe")));
+    // Decision 362: a project holding Filter source observations, or any reserved observation
+    // reference, has no recipe; a recipe naming such an asset is never rebuilt (valid digest).
+    Project observed = PaintlessFixture();
+    observed.extra[std::string(kFilterObservationsKey)] = json::Object{};
+    CHECK(Contains(EXPECT_THROW(ValueError, RecipeBody(observed, host.base_value)), "decision 362"));
+    json::Value reserved = dump;
+    json::Object& reserved_body = MO(MO(reserved)["recipe"]);
+    reserved_body["future"] = json::Object{{"asset", std::string("uzasset://observation/x@1")}};
+    MO(reserved)["digest"] = RecipeDigest(reserved_body);
+    CHECK(Contains(EXPECT_THROW(ManifestError, ProjectFromRecipe(reserved, host)), "reserved observation family"));
     CHECK(Digest(rebuilt) == std::get<std::string>(dump.at("digest").data));
     CHECK(rebuilt.versions.app_version == "9.9.9-test");
     CHECK(rebuilt.versions.evaluator_profile == original.versions.evaluator_profile);

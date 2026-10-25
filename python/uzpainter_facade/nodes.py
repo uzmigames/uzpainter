@@ -353,14 +353,19 @@ class SourceBitmap:
 class SourceSubstance:
     """A stored procedural source; edits must match an admitted project snapshot."""
 
-    __slots__ = ("_channel", "_effect", "_node")
+    __slots__ = ("_channel", "_effect", "_node", "_origin")
 
-    def __init__(self, node: int, channel: Any, effect: bool = False) -> None:
+    def __init__(self, node: int, channel: Any, effect: bool = False, origin: Any = None) -> None:
         self._node = node
         self._channel = channel
         self._effect = effect
+        # The native handle of an observation-origin source (decision 362): it carries the lease
+        # captured when it was created, so it is kept rather than resolved again by UID.
+        self._origin = origin
 
     def _native(self) -> Any:
+        if self._origin is not None:
+            return self._origin
         node = _ls.get_node_by_uid(self._node)
         # A generator or filter effect's get_source() takes no channel.
         source = node.get_source() if self._effect else node.get_source(self._channel)
@@ -446,8 +451,13 @@ def wrap_source(node: int, channel: Any, native: Any) -> Any:
     if isinstance(native, uzpainter.source.SourceBitmap):
         return SourceBitmap(node, channel)
     if isinstance(native, uzpainter.source.SourceSubstance):
-        return SourceSubstance(node, channel)
+        return SourceSubstance(node, channel, origin=observation_origin(native))
     raise TypeError(f"unexpected native source {native!r}")
+
+
+def observation_origin(native: Any) -> Any:
+    """`native` when it is an observation-origin procedural source handle, else None."""
+    return native if native._observation_origin else None
 
 
 # ── Nodes ───────────────────────────────────────────────────────────────────────────────────────
@@ -839,18 +849,20 @@ class GeneratorEffectNode(EffectNode):
     __slots__ = ()
 
     def get_source(self) -> SourceSubstance | None:
-        if self._native().get_source() is None:
+        native = self._native().get_source()
+        if native is None:
             return None
-        return SourceSubstance(self.uid(), None, effect=True)
+        return SourceSubstance(self.uid(), None, effect=True, origin=observation_origin(native))
 
 
 class FilterEffectNode(EffectNode):
     __slots__ = ()
 
     def get_source(self) -> SourceSubstance | None:
-        if self._native().get_source() is None:
+        native = self._native().get_source()
+        if native is None:
             return None
-        return SourceSubstance(self.uid(), None, effect=True)
+        return SourceSubstance(self.uid(), None, effect=True, origin=observation_origin(native))
 
 
 class CompareMaskEffectNode(EffectNode):

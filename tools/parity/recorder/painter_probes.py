@@ -117,6 +117,9 @@ SET_VISIBLE = "substance_painter.layerstack.Node.set_visible"
 SET_BLENDING_MODE = "substance_painter.layerstack.Node.set_blending_mode"
 SET_OPACITY = "substance_painter.layerstack.Node.set_opacity"
 ACTIVE_CHANNELS = "substance_painter.layerstack.FillLayerNode.active_channels"
+FILTER_ACTIVE_CHANNELS = "substance_painter.layerstack.FilterEffectNode.active_channels"
+SET_GEOMETRY_MASK = "substance_painter.layerstack.LayerNode.set_geometry_mask"
+GET_GEOMETRY_MASK = "substance_painter.layerstack.LayerNode.get_geometry_mask"
 SET_SOURCE = "substance_painter.layerstack.FillLayerNode.set_source"
 SET_PROJECTION_MODE = "substance_painter.layerstack.FillLayerNode.set_projection_mode"
 SET_PROJECTION_PARAMETERS = "substance_painter.layerstack.FillLayerNode.set_projection_parameters"
@@ -259,6 +262,8 @@ EDIT_CALLS = (
     "substance_painter.layerstack.Node.set_blending_mode",
     "substance_painter.layerstack.Node.set_opacity",
     "substance_painter.layerstack.FillLayerNode.active_channels",
+    "substance_painter.layerstack.FilterEffectNode.active_channels",
+    "substance_painter.layerstack.LayerNode.set_geometry_mask",
     "substance_painter.layerstack.FillLayerNode.set_source",
     "substance_painter.layerstack.FillLayerNode.set_projection_mode",
     "substance_painter.layerstack.FillLayerNode.set_projection_parameters",
@@ -312,6 +317,7 @@ EDIT_CALLS = (
 
 # Readback calls. `active_channels` and `affected_channel` read when no value is given.
 GETTER_CALLS = (
+    "substance_painter.layerstack.LayerNode.get_geometry_mask",
     "substance_painter.source.ResolutionMode",
     "substance_painter.source.ResolutionOverride",
     "substance_painter.layerstack.Node.get_name",
@@ -390,6 +396,7 @@ GETTER_CALLS = (
 # an assignment.
 VALUE_ARGS = {
     "substance_painter.layerstack.FillLayerNode.active_channels": "channels",
+    "substance_painter.layerstack.FilterEffectNode.active_channels": "channels",
     "substance_painter.layerstack.LevelsEffectNode.affected_channel": "channel",
     "substance_painter.display.Camera.projection_type": "value",
     "substance_painter.display.Camera.position": "value",
@@ -1228,6 +1235,27 @@ def searched_resource(query: str) -> Any:
     return found[0].identifier()
 
 
+def uniquely_searched_resource(args: dict[str, Any]) -> Any:
+    """Resolve one exact fresh identity, preserving its returned version in the binding."""
+    if args.get("require_unique") is not True or not all(
+        type(args.get(key)) is str and args[key]
+        for key in ("search", "resource_context", "resource_name")
+    ):
+        raise ValueError("unique resource selection requires query, context and name")
+    found = [
+        resource.identifier() for resource in substance_painter.resource.search(args["search"])
+    ]
+    matches = [
+        identifier
+        for identifier in found
+        if identifier.context == args["resource_context"]
+        and identifier.name == args["resource_name"]
+    ]
+    if len(matches) != 1 or not matches[0].version or not matches[0].url():
+        raise ValueError("unique resource selection requires one versioned exact match")
+    return matches[0]
+
+
 def triple(value: Any) -> tuple[float, float, float]:
     r, g, b = (float(component) for component in value)
     return (r, g, b)
@@ -1326,7 +1354,11 @@ def p22b_edit(call: str, args: dict[str, Any]) -> Any:
     if call == INSTANTIATE:
         return layerstack.instantiate(insert_position(args), fresh(args["layer_step"]))
     if call == INSERT_FILTER_EFFECT:
-        found = searched_resource(str(args["search"]))
+        found = (
+            uniquely_searched_resource(args)
+            if "require_unique" in args
+            else searched_resource(str(args["search"]))
+        )
         return layerstack.insert_filter_effect(insert_position(args), found)
     if call == INSERT_GENERATOR_EFFECT:
         found = searched_resource(str(args["search"]))
@@ -1612,6 +1644,16 @@ def edit(step: int, call: str, args: dict[str, Any], resolved: dict[str, Any]) -
     node = fresh(args["node_step"])
     if call == SET_NAME:
         return node.set_name(str(args["name"]))
+    if call == SET_GEOMETRY_MASK:
+        if (
+            set(args) != {"node_step", "inclusion_list", "meshes"}
+            or args["inclusion_list"] is not False
+            or args["meshes"] != []
+        ):
+            raise ValueError("observation geometry requires explicit neutral mesh mask")
+        return node.set_geometry_mask(
+            substance_painter.layerstack.GeometryMaskMeshParams(inclusion_list=False, meshes=[])
+        )
     if call == SET_VISIBLE:
         return node.set_visible(bool(args["visible"]))
     if call == SET_BLENDING_MODE:
@@ -1619,11 +1661,13 @@ def edit(step: int, call: str, args: dict[str, Any], resolved: dict[str, Any]) -
         return node.set_blending_mode(mode, channel_arg(args))
     if call == SET_OPACITY:
         return node.set_opacity(float(args["opacity"]), channel_arg(args))
-    if call == ACTIVE_CHANNELS:
+    if call in (ACTIVE_CHANNELS, FILTER_ACTIVE_CHANNELS):
         node.active_channels = {channel_type(c) for c in args["channels"]}
         return None
     if call == SET_SOURCE:
-        if "resource_step" in args:
+        if "require_unique" in args:
+            source = uniquely_searched_resource(args)
+        elif "resource_step" in args:
             source = PROBE_RESOURCES[int(args["resource_step"])]
         elif "resource_url" in args:
             source = substance_painter.resource.ResourceID.from_url(str(args["resource_url"]))
@@ -1805,6 +1849,11 @@ def read(call: str, args: dict[str, Any]) -> Any:
         return node.uid()
     if call == GET_NAME:
         return node.get_name()
+    if call == GET_GEOMETRY_MASK:
+        value = node.get_geometry_mask()
+        if not isinstance(value, substance_painter.layerstack.GeometryMaskMeshParams):
+            raise ValueError("observation geometry requires a mesh mask")
+        return {"type": "Mesh", "inclusion_list": value.inclusion_list, "items": list(value.meshes)}
     if call == IS_VISIBLE:
         return node.is_visible()
     if call == GET_BLENDING_MODE:
@@ -1817,7 +1866,7 @@ def read(call: str, args: dict[str, Any]) -> Any:
         return node.is_in_mask_stack()
     if call == HAS_BLENDING:
         return node.has_blending()
-    if call == ACTIVE_CHANNELS:
+    if call in (ACTIVE_CHANNELS, FILTER_ACTIVE_CHANNELS):
         return node.active_channels
     if call == SOURCE_MODE:
         return node.source_mode

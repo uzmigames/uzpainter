@@ -183,7 +183,8 @@ uzpainter.project.close()
         assert observed["unchanged"] is True, source
         for error in observed["errors"]:
             assert error is not None and error.startswith("UnsupportedProcedural:"), (source, error)
-            assert "reserved observation family" in error, (source, error)
+            # The unbound Filter refuses through its observed getters, the others as reserved.
+            assert "decision 362" in error, (source, error)
 
 
 @pytest.mark.parametrize("api", ["run", "facade"])

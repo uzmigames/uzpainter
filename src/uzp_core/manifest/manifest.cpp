@@ -825,6 +825,12 @@ ProceduralRef ProceduralRefFromJson(const json::Value& value, const std::string&
     return ReadProcedural(r);
 }
 
+Layer LayerFromJson(const json::Value& value, const std::string& path) { return ReadLayer(value, path); }
+
+Effect EffectFromJson(const json::Value& value, const std::string& path, bool mask) {
+    return ReadEffect(value, path, mask);
+}
+
 json::Value ProjectToJson(const Project& project) {
     json::Object o = project.extra;
     o["schema"] = std::string(kManifestSchema);

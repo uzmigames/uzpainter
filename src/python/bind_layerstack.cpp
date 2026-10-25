@@ -16,10 +16,13 @@
 
 #include "python/bindings.h"
 #include "python/edits.h"
+#include "procedural/filter_observation_source.h"
 #include "procedural/snapshot_source.h"
 #include "python/errors.h"
 #include "python/session.h"
 #include "python/stack_sync.h"
+#include "store/filter_observations.h"
+#include "uzp_core/manifest/manifest.h"
 #include "uzp_core/naming/naming.h"
 #include "uzp_core/types/errors.h"
 #include "uzp_core/types/resource_url.h"
@@ -42,11 +45,27 @@ struct SourceBitmap {
     Id node = core::kNoId;
     ChannelArg channel;
 };
+/// What a Filter source handle captured of its observation when it was created (decision 362):
+/// the open project it was read from (weak, so a handle never keeps a closed store alive), that
+/// project's authoritative UUID, the observation entry the Filter was bound to and the Filter's
+/// complete reference. Checked again by every observed getter (`ObservationOf`).
+struct ObservationLease {
+    std::weak_ptr<OpenProject> open;
+    std::string project_uuid;
+    std::string entry_key;
+    core::ProceduralRef reference;
+};
 struct SourceSubstance {
     Id node = core::kNoId;
     ChannelArg channel;
     /// The source of a generator or filter effect (`get_source()` takes no channel there).
     bool effect = false;
+    /// The reference was of the reserved observation family when the handle was created: the
+    /// handle never gains a legacy reading, even after the reference changes.
+    bool origin_reserved = false;
+    /// Present only for a Filter bound to an observation when the handle was created; a reserved
+    /// handle without it never gains access, even after a later binding.
+    std::optional<ObservationLease> lease = {};
 };
 
 enum class SourceResolutionMode { Auto, Document, Manual, TextureSet, UVTile };
@@ -134,8 +153,11 @@ py::object SourceObject(const core::Source* source, Id uid, const ChannelArg& ch
         case core::SourceKind::vector:
         case core::SourceKind::font:
             ThrowNotYetSupported("vector and font sources are release gaps (phase4.1_nodes-vector-font-sources)");
-        case core::SourceKind::procedural:
-            return py::cast(SourceSubstance{uid, channel});
+        case core::SourceKind::procedural: {
+            SourceSubstance handle{uid, channel};
+            handle.origin_reserved = core::IsObservationAsset(std::get<core::ProceduralSource>(source->value).ref.asset);
+            return py::cast(handle);
+        }
         case core::SourceKind::reference:
             ThrowNotYetSupported("anchor reference sources are release gaps (phase4.1_nodes-instances-anchors)");
     }
@@ -151,32 +173,157 @@ const core::Effect& ProceduralEffectOf(const NodeInfo& info, Id uid) {
     return *info.effect;
 }
 
+/// Run by `ReadProcedural` for a reserved handle before its refusal, with the effect (null for a
+/// channel source): a setter's argument checks and the established Filter errors come first.
+using BeforeReservedRefusal = std::function<void(const core::Project&, const core::Effect*)>;
+
 /// The stored procedural of a source handle, read through a freshly resolved node.
-/// Every SourceSubstance getter and setter reads its reference here first. A reference of the
-/// reserved observation family (decision 362) has no legacy reading: its pin, parameters and
-/// outputs would be fabricated, so every call refuses before any mutation. Its observed getters
-/// are not implemented yet (phase3.1 item 2.6h).
-core::ProceduralRef DenyObservation(core::ProceduralRef ref) {
-    if (core::IsObservationAsset(ref.asset)) {
+/// Every SourceSubstance getter and setter reads its reference here first, except the three
+/// observed Filter getters (`ObservationOf`). A reference of the reserved observation family
+/// (decision 362), or a handle created on one, has no legacy reading: its pin, parameters and
+/// outputs would be fabricated, so every call refuses before any mutation, after
+/// `before_refusal`.
+core::ProceduralRef ReadProcedural(const SourceSubstance& s, const BeforeReservedRefusal& before_refusal = {}) {
+    const auto project = Read();
+    const NodeInfo info = Resolve(*project, s.node);
+    const core::Effect* effect = nullptr;
+    core::ProceduralRef ref;
+    if (s.effect) {
+        effect = &ProceduralEffectOf(info, s.node);
+        if (!effect->procedural) throw core::ValueError("stale handle: the effect no longer has a procedural source");
+        ref = *effect->procedural;
+    } else {
+        const core::Source* src = SourceOf(info, s.node, s.channel);
+        if (src == nullptr || src->kind() != core::SourceKind::procedural) {
+            throw core::ValueError("stale handle: the node no longer has this procedural source");
+        }
+        ref = std::get<core::ProceduralSource>(src->value).ref;
+    }
+    if (s.origin_reserved || core::IsObservationAsset(ref.asset)) {
+        if (before_refusal) before_refusal(*project, effect);
         throw ApiError("UnsupportedProcedural",
                        "a source of the reserved observation family has no legacy reading (decision 362)");
     }
     return ref;
 }
 
-core::ProceduralRef ReadProcedural(const SourceSubstance& s) {
-    const auto project = Read();
+/// The observation of an observed Filter handle (decision 362, phase3.1 item 2.6h): one
+/// `Current()`, one read of that open project, the handle's lease checked against it (same open
+/// project, same authoritative UUID, the Filter's complete reference unchanged), then the strict
+/// lookup, which refuses a missing, corrupt, foreign, stale or mismatched observation. Any
+/// failure raises `UnsupportedProcedural`; nothing falls back to a legacy reading.
+procedural::FilterObservation ObservationOf(const SourceSubstance& s, const std::string& what) {
+    const auto refused = [&](const std::string& why) {
+        return ApiError("UnsupportedProcedural", what + ": " + why + " (decision 362)");
+    };
+    if (!s.effect || !s.lease) throw refused("the handle holds no bound Filter observation");
+    const std::shared_ptr<OpenProject> open = Session::Get().Current();
+    if (s.lease->open.lock() != open) throw refused("the handle was created in another open project");
+    if (open->store->project_uuid() != s.lease->project_uuid) throw refused("the project is another one");
+    const std::shared_ptr<const core::Project> project = Session::Get().ReadProjectOf(open);
     const NodeInfo info = Resolve(*project, s.node);
-    if (s.effect) {
-        const core::Effect& effect = ProceduralEffectOf(info, s.node);
-        if (!effect.procedural) throw core::ValueError("stale handle: the effect no longer has a procedural source");
-        return DenyObservation(*effect.procedural);
+    if (info.effect == nullptr || info.effect->kind != core::EffectKind::filter || !info.effect->procedural) {
+        throw refused("the node is no longer an observed Filter");
     }
-    const core::Source* src = SourceOf(info, s.node, s.channel);
-    if (src == nullptr || src->kind() != core::SourceKind::procedural) {
-        throw core::ValueError("stale handle: the node no longer has this procedural source");
+    // Typed canonical equality: ProceduralRef's == compares doubles by value and loses the sign of zero.
+    if (core::json::WriteCanonical(core::ProceduralRefToJson(*info.effect->procedural)) !=
+        core::json::WriteCanonical(core::ProceduralRefToJson(s.lease->reference))) {
+        throw refused("the Filter's reference changed");
     }
-    return DenyObservation(std::get<core::ProceduralSource>(src->value).ref);
+    std::expected<procedural::FilterObservation, std::string> observed =
+        procedural::ObservedFilter(*open->store, *project, s.node);
+    if (!observed) throw refused(observed.error());
+    if (observed->entry_key != s.lease->entry_key) throw refused("the Filter is bound to another observation");
+    return std::move(*observed);
+}
+
+/// The established Filter errors (`tier0/api-probes/source-substance-booleans-filter`, steps
+/// 19-24), raised for a reserved Filter before its refusal, from the effect already read.
+void ReservedFilterContext(const core::Project&, const core::Effect* effect) {
+    if (effect != nullptr && effect->kind == core::EffectKind::filter) ThrowEditionContext("Only valid in single channel context");
+}
+void ReservedFilterResolution(const core::Project&, const core::Effect* effect) {
+    if (effect != nullptr && effect->kind == core::EffectKind::filter) {
+        throw core::ValueError("Resolution property is not available on a FilterEffectNode.");
+    }
+}
+
+/// The raw typed parameters of the Filter descriptor a reserved Filter handle is bound to, read
+/// from `project` (the caller's one read), or empty when the namespace is not structurally valid,
+/// the handle holds no lease, or its binding or complete reference (typed) no longer match. No
+/// dynamic context is consulted: a stale entry still gives its descriptor.
+std::optional<core::json::Object> LeasedDescriptorParameters(const SourceSubstance& s, const core::Project& project,
+                                                             const core::Effect* effect) {
+    if (!s.lease || effect == nullptr || effect->kind != core::EffectKind::filter || !effect->procedural) {
+        return std::nullopt;
+    }
+    if (core::json::WriteCanonical(core::ProceduralRefToJson(*effect->procedural)) !=
+        core::json::WriteCanonical(core::ProceduralRefToJson(s.lease->reference))) {
+        return std::nullopt;
+    }
+    // The handle's own open project and its authoritative UUID, then a present, structurally valid
+    // namespace: an absent namespace (structurally no problem) gives no descriptor, never a lookup.
+    const std::shared_ptr<OpenProject> open = s.lease->open.lock();
+    if (!open || open != Session::Get().Current() || open->store->project_uuid() != s.lease->project_uuid) {
+        return std::nullopt;
+    }
+    const auto found = project.extra.find(store::kFilterObservationsKey);
+    if (found == project.extra.end()) return std::nullopt;
+    if (!store::ProjectFilterObservationsProblem(project, s.lease->project_uuid).empty()) return std::nullopt;
+    const auto& space = std::get<core::json::Object>(found->second.data);
+    const auto member = [&](const core::json::Object& object, const std::string& key) -> const core::json::Value& {
+        return object.at(key);
+    };
+    const auto& bindings = std::get<core::json::Object>(member(space, "bindings").data);
+    const auto bound = bindings.find(std::to_string(s.node));
+    if (bound == bindings.end() || std::get<std::string>(bound->second.data) != s.lease->entry_key) return std::nullopt;
+    const auto& entry = std::get<core::json::Object>(
+        std::get<core::json::Object>(member(space, "entries").data).at(s.lease->entry_key).data);
+    const auto& descriptor = std::get<core::json::Object>(
+        std::get<core::json::Object>(member(space, "descriptors").data)
+            .at(std::get<std::string>(entry.at("filter_descriptor").data))
+            .data);
+    return std::get<core::json::Object>(descriptor.at("parameters").data);
+}
+
+/// The per-parameter types of a reserved Filter's `set_parameters`, from its bound descriptor's raw
+/// typed parameters (never inferred from the core reference: a raw 2.0 may be stored as 2): an
+/// unknown name, a bool for an int parameter (Painter's established TypeError) and any other type
+/// mismatch raise; without a usable descriptor only the universal checks apply.
+void CheckLeasedParameterTypes(const SourceSubstance& s, const core::Project& project, const core::Effect* effect,
+                               const py::dict& values) {
+    const std::optional<core::json::Object> parameters = LeasedDescriptorParameters(s, project, effect);
+    if (!parameters) return;
+    for (const auto& item : values) {
+        const std::string name = item.first.cast<std::string>();
+        const auto raw = parameters->find(name);
+        if (raw == parameters->end()) throw core::ValueError("unknown procedural parameter: " + name);
+        const auto value = item.second;
+        if (py::isinstance<py::bool_>(value)) {
+            if (raw->second.IsInt()) {
+                throw py::type_error("Bad value for property '" + name + "': expected value of type <int32> but got <bool>.");
+            }
+            throw py::type_error("boolean procedural parameters require integer values");
+        }
+        const bool matches = (raw->second.IsInt() && py::isinstance<py::int_>(value)) ||
+                             (raw->second.IsDouble() && py::isinstance<py::float_>(value)) ||
+                             (raw->second.IsString() && py::isinstance<py::str>(value));
+        if (!matches) throw py::type_error("procedural parameter type mismatch: " + name);
+    }
+}
+
+/// The lease of a Filter source handle created now on `project` of `open`: present only when the
+/// namespace is structurally valid and binds the Filter (a stale context is no reason to withhold
+/// it; the getters check the context). Without it the handle never gains access.
+std::optional<ObservationLease> LeaseOf(const std::shared_ptr<OpenProject>& open, const core::Project& project,
+                                        Id filter, const core::ProceduralRef& reference) {
+    if (!store::ProjectFilterObservationsProblem(project, open->store->project_uuid()).empty()) return std::nullopt;
+    const auto space = project.extra.find(store::kFilterObservationsKey);
+    if (space == project.extra.end()) return std::nullopt;
+    const auto& bindings = std::get<core::json::Object>(std::get<core::json::Object>(space->second.data).at("bindings").data);
+    const auto bound = bindings.find(std::to_string(filter));
+    if (bound == bindings.end()) return std::nullopt;
+    return ObservationLease{open, open->store->project_uuid(), std::get<std::string>(bound->second.data), reference};
 }
 
 core::ProceduralRef& EditProcedural(core::Edit& edit, const SourceSubstance& s) {
@@ -676,12 +823,33 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
     py::class_<SourceSubstance> substance(source, "SourceSubstance");
     substance
         .def("get_parameters", [read_procedural](const SourceSubstance& s) {
+            if (s.origin_reserved && s.effect) {
+                const procedural::FilterObservation observed = ObservationOf(s, "get_parameters");
+                if (!observed.parameters) {
+                    throw ApiError("UnsupportedProcedural", "get_parameters: the recording did not observe them");
+                }
+                return FromJson(*observed.parameters);
+            }
             const auto ref = read_procedural(s);
             CheckProceduralParameters(ref.params);
             return FromJson(ref.params);
         })
-        .def("set_parameters", [read_procedural](const SourceSubstance& s, const py::dict& values) {
-            const auto ref = read_procedural(s);
+        .def("set_parameters", [](const SourceSubstance& s, const py::dict& values) {
+            // A reserved source: the documented argument types are checked, then the call refuses.
+            const auto ref = ReadProcedural(s, [&](const core::Project& project, const core::Effect* effect) {
+                for (const auto& item : values) {
+                    if (!py::isinstance<py::str>(item.first)) throw py::type_error("parameter names must be strings");
+                    const auto value = item.second;
+                    if (!py::isinstance<py::bool_>(value) && !py::isinstance<py::int_>(value) &&
+                        !py::isinstance<py::float_>(value) && !py::isinstance<py::str>(value)) {
+                        throw py::type_error("procedural parameter type mismatch: " + item.first.cast<std::string>());
+                    }
+                    if (py::isinstance<py::float_>(value) && !std::isfinite(value.cast<double>())) {
+                        throw core::ValueError("procedural parameters must be finite");
+                    }
+                }
+                CheckLeasedParameterTypes(s, project, effect, values);
+            });
             CheckProceduralParameters(ref.params);
             core::json::Object updates;
             for (const auto& item : values) {
@@ -719,6 +887,16 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
             });
         })
         .def("resource_id", [read_procedural](const SourceSubstance& s) -> py::object {
+            if (s.origin_reserved && s.effect) {
+                const procedural::FilterObservation observed = ObservationOf(s, "resource_id");
+                if (!observed.resource_id) {
+                    throw ApiError("UnsupportedProcedural", "resource_id: the recording did not observe it");
+                }
+                const auto part = [&](const char* name) {
+                    return std::get<std::string>(observed.resource_id->at(name).data);
+                };
+                return py::cast(ObservedResourceIdHandle{part("context"), part("name"), part("version"), part("url")});
+            }
             const auto asset = core::ParseAssetUrl(read_procedural(s).asset);
             const ResourceIdHandle pin{"uzasset", asset.family + "/" + asset.id, asset.version};
             // Effect and mono mask sources hold no recorded observations: their pin, as before.
@@ -733,8 +911,17 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
         // The outputs the recording observed for the snapshot of this source's current exact
         // signature (store/snapshots.h `source_metadata`); never inferred from the output mapping.
         .def_property_readonly("image_outputs", [](const SourceSubstance& s) {
+            if (s.origin_reserved && s.effect) {
+                const procedural::FilterObservation observed = ObservationOf(s, "image_outputs");
+                if (!observed.image_outputs) {
+                    throw ApiError("UnsupportedProcedural", "image_outputs: the recording did not observe them");
+                }
+                return Names(*observed.image_outputs);
+            }
             return Names(RecordedMetadata(s, "image_outputs").image_outputs);
         })
+        // Private: the facade keeps an observation-origin handle (its lease) instead of re-resolving it.
+        .def_property_readonly("_observation_origin", [](const SourceSubstance& s) { return s.origin_reserved; })
         .def_property_readonly("image_inputs", [](const SourceSubstance& s) {
             const auto inputs = RecordedMetadata(s, "image_inputs").image_inputs;
             if (!inputs) throw ApiError("UnsupportedProcedural", "image_inputs: the snapshot's recording did not observe them");
@@ -765,11 +952,14 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
             }
             return result;
         })
-        .def_property("active_output", [read_procedural, output_key](const SourceSubstance& s) {
-            const auto ref = read_procedural(s);
+        .def_property("active_output", [output_key](const SourceSubstance& s) {
+            const auto ref = ReadProcedural(s, ReservedFilterContext);
             return ref.output_mapping.at(output_key(s, ref));
-        }, [read_procedural, output_key](const SourceSubstance& s, const std::string& output) {
-            const auto key = output_key(s, read_procedural(s));
+        }, [output_key](const SourceSubstance& s, const std::string& output) {
+            const auto key = output_key(s, ReadProcedural(s, [&](const core::Project& project, const core::Effect* effect) {
+                ReservedFilterContext(project, effect);
+                if (output.empty()) throw core::ValueError("active_output must not be empty");
+            }));
             if (output.empty()) throw core::ValueError("active_output must not be empty");
             auto args = SourceArgs(s);
             args["output"] = output;
@@ -778,8 +968,8 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
                 ref.output_mapping.at(key) = output;
             });
         })
-        .def_property("resolution", [read_procedural](const SourceSubstance& s) -> py::object {
-            const auto ref = read_procedural(s);
+        .def_property("resolution", [](const SourceSubstance& s) -> py::object {
+            const auto ref = ReadProcedural(s, ReservedFilterResolution);
             CheckResolutionAvailable(s);
             if (!ref.resolution_override) return py::none();
             SourceResolutionOverride result{SourceResolutionMode::Auto, {128, 128}, 0};
@@ -801,8 +991,11 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
             }
             CheckSourceResolution(result);
             return py::cast(result);
-        }, [read_procedural](const SourceSubstance& s, const SourceResolutionOverride& value) {
-            read_procedural(s);
+        }, [](const SourceSubstance& s, const SourceResolutionOverride& value) {
+            ReadProcedural(s, [&](const core::Project& project, const core::Effect* effect) {
+                ReservedFilterResolution(project, effect);
+                CheckSourceResolution(value);
+            });
             CheckResolutionAvailable(s);
             CheckSourceResolution(value);
             auto args = SourceArgs(s);
@@ -1136,9 +1329,17 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
     // get_source() of a stored generator or filter effect: the procedural, or None (python-doc).
     // Their insertion and set_source/remove_source stay release gaps (phase3.3_procedural-families).
     const auto effect_source = [](const Node& n) -> py::object {
-        const auto project = Read();
-        if (!ProceduralEffectOf(Resolve(*project, n.uid), n.uid).procedural) return py::none();
-        return py::cast(SourceSubstance{n.uid, std::nullopt, true});
+        // One open project and one read of it: the handle's lease is captured from what it resolves.
+        const std::shared_ptr<OpenProject> open = Session::Get().Current();
+        const std::shared_ptr<const core::Project> project = Session::Get().ReadProjectOf(open);
+        const core::Effect& effect = ProceduralEffectOf(Resolve(*project, n.uid), n.uid);
+        if (!effect.procedural) return py::none();
+        SourceSubstance handle{n.uid, std::nullopt, true};
+        handle.origin_reserved = core::IsObservationAsset(effect.procedural->asset);
+        if (handle.origin_reserved && effect.kind == core::EffectKind::filter) {
+            handle.lease = LeaseOf(open, *project, n.uid, *effect.procedural);
+        }
+        return py::cast(handle);
     };
     SealClass(py::class_<GeneratorEffectNode, EffectNode>(m, "GeneratorEffectNode").def("get_source", effect_source));
     SealClass(py::class_<FilterEffectNode, EffectNode>(m, "FilterEffectNode").def("get_source", effect_source));
