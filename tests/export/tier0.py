@@ -39,7 +39,12 @@ if __name__ == "__main__":
     _tests.__path__ = [str(_root / "tests")]
     sys.modules["tests"] = _tests
 
-from tests.evaluator.masks_fits import envelope_golden, envelope_manifest, spec_from_steps
+from tests.evaluator.masks_fits import (
+    BitmapDefaultResolver,
+    envelope_golden,
+    envelope_manifest,
+    spec_from_steps,
+)
 from tests.evaluator.test_compositor_tile_dag import TEMPLATES_DIR
 from tools.parity.envelope.registry import current_envelope
 from tools.parity.fit.common import document, entry, parameter, residual, source
@@ -489,7 +494,13 @@ def method_of(manifest: dict[str, Any], texture_set: str) -> str:
     return "Sharp"
 
 
-def export_spec(manifest: dict[str, Any], texture_set: str, workdir: Path) -> dict[str, Any]:
+def export_spec(
+    manifest: dict[str, Any],
+    texture_set: str,
+    workdir: Path,
+    *,
+    bitmap_default_resolver: BitmapDefaultResolver | None = None,
+) -> dict[str, Any]:
     """The evaluator spec of one texture set with its bound mesh maps: the mesh-map binding steps
     are taken out of the sequence (the evaluator converter does not model them) and become the
     spec's `mesh_maps`, keyed by usage, of the resource each step binds."""
@@ -497,7 +508,13 @@ def export_spec(manifest: dict[str, Any], texture_set: str, workdir: Path) -> di
     bindings = [s for s in steps if s["call"] == SET_MESH_MAP]
     others = [s for s in steps if s["call"] != SET_MESH_MAP]
     sequence = dict(manifest["instruction_sequence"], steps=others)
-    spec = spec_from_steps(dict(manifest, instruction_sequence=sequence), texture_set, workdir, [])
+    spec = spec_from_steps(
+        dict(manifest, instruction_sequence=sequence),
+        texture_set,
+        workdir,
+        [],
+        bitmap_default_resolver=bitmap_default_resolver,
+    )
     inputs = {i["input_id"]: REPO_ROOT / i["path"] for i in manifest["inputs"]}
     by_step = {s["step"]: s["args"] for s in steps}
     mesh_maps = {}

@@ -376,5 +376,15 @@ Evidence: R-090/P10 rebuilt with `EmissionColor` matches Painter byte for byte, 
 192/192 comparisons. The domain controls and export refusals pass. A missing `preflight` default
 on `store::OpenOptions` (since b28e25e8) had stopped `uzp-store-inspect-tests` from compiling; it
 is fixed in the header. The 4 OCIO emissive TGA targets stay outside the supported domain (sRGB8
-`EmissionColor` under OCIO is refused). The R-322 TGA diagnostic has not been rerun since this
-change.
+`EmissionColor` under OCIO is refused). At amendment validation, the R-322 TGA diagnostic had
+not yet been rerun; the subsequent run 3 is recorded below.
+
+Run 3 (2026-10-25, at a2106b5f, with router's partial-progress report; one run, private report
+0f2d26d6c89cc3e9) is a diagnostic failure, not a parity result. 5 candidates were attempted and
+returned, and 16 of 32 targets were classified. The Legacy session is complete. Its basecolor,
+emissive and normal targets (12) produced candidates whose diagnostics differ under the
+candidate's declared padding bypass. Its occlusionroughnessmetallic targets (4) are blocked at
+compile_plan. The OCIO session stopped at its first candidate (`ocio/r1/s56/basecolor`): the
+native refused at encode_export with unsupported_source (decision 190: under OCIO only an 8-bit
+colour bitmap on an sRGB8 channel sampled 1:1 is recorded). That is a real failure. The remaining
+16 OCIO targets are unclassified. There was no retry, and no gate changes.

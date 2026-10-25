@@ -21,6 +21,7 @@ import hashlib
 import json
 import sys
 import types
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -97,6 +98,8 @@ UID_OFFSET = 1000
 RECORDED_BLUR_SEARCH = "s:starterassets u:filter n:Blur="
 RECORDED_BLUR_ASSET = "uzasset://filter/blur@1"
 
+type BitmapDefaultResolver = Callable[[str | None, bytes], str]
+
 
 class Unmodelled(AssertionError):
     """A step of the texture set that the converter does not model."""
@@ -122,7 +125,12 @@ def is_getter(call: str, args: dict[str, Any]) -> bool:
 
 
 def spec_from_steps(
-    manifest: dict[str, Any], texture_set: str, workdir: Path, outputs: list[str]
+    manifest: dict[str, Any],
+    texture_set: str,
+    workdir: Path,
+    outputs: list[str],
+    *,
+    bitmap_default_resolver: BitmapDefaultResolver | None = None,
 ) -> dict[str, Any]:
     """The evaluator spec of `texture_set` of a Tier 0 instruction sequence with layers, groups,
     masks (background, fill and levels effects with their mono blending) and content effects
@@ -233,7 +241,11 @@ def spec_from_steps(
                 png = (workdir / resource["png"]).read_bytes()
                 item: dict[str, Any] = {
                     "bitmap": resource["sha256"],
-                    "color_space": bitmap_color_space(args, channel, png),
+                    "color_space": (
+                        bitmap_default_resolver(channel, png)
+                        if bitmap_default_resolver is not None and "color_space" not in args
+                        else bitmap_color_space(args, channel, png)
+                    ),
                 }
             else:
                 space = args.get("color_space", "Working")
