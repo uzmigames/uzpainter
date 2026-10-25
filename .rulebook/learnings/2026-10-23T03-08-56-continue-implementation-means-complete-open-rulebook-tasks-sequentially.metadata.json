@@ -1,11 +1,19 @@
 {
   "id": "2026-10-23T03-08-56-continue-implementation-means-complete-open-rulebook-tasks-sequentially",
   "title": "Continue implementation means complete open Rulebook tasks sequentially",
-  "content": "Owner corrections in this session: first 'e pra vc conferir as tasks em aberto carai', then 'e pra vc continuar a implementacao implementando a task completamente ate arquivar e vai pra proxima, so para quando eu mandar'. Start from open Rulebook tasks and dependencies. Continue implementation, required evidence and checks through legitimate task acceptance/archive, then proceed to next task. Do not end at an isolated prerequisite slice. Preserve all blockers/evidence requirements; never mark incomplete parity work accepted or waive tests to satisfy continuity. New independent work may run in parallel, but complete dependencies needed for full task acceptance.",
+  "content": "Owner repeated the instruction on 2026-10-24/25: 'e pra vc ficar ativo coordenando, c n fica toda hora parando porra'. Earlier requests: inspect open tasks; implement each task through acceptance/archive and proceed to the next until told to stop. During explicitly continuous UzPainter coordination, keep the same Claude VS Code session and requested router models working on disjoint authorized slices, inspect real deliveries, resolve findings, and chain ready Rulebook dependencies. A helper exit, completed test run, commit or slice is a checkpoint, not task completion. Preserve all evidence requirements and blockers; never waive parity or promote synthetic evidence. Keep truthful progress updates. End only on owner stop, actual overall acceptance, or a concrete blocking condition with no useful authorized work; user approval remains necessary where authorization truly does not exist.",
   "source": "manual",
   "relatedTask": "phase1.25_pilot-wand",
-  "tags": [],
+  "tags": [
+    "coordination",
+    "continuous-implementation",
+    "owner-correction"
+  ],
   "createdAt": "2026-10-23T03:08:56.917Z",
-  "occurrences": 1,
-  "lastSeenAt": "2026-10-23T03:08:56.917Z"
+  "occurrences": 2,
+  "lastSeenAt": "2026-10-25T03:01:33.671Z",
+  "promotedTo": {
+    "type": "skill",
+    "id": "uzpainter-continuous-coordination"
+  }
 }
