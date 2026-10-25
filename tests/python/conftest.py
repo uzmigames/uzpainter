@@ -113,7 +113,7 @@ def pyapi_runner(tmp_path_factory: pytest.TempPathFactory) -> Path:
         pytest.skip("zig is not on PATH; uzp-pyapi-tests.exe cannot be built")
     prefix = tmp_path_factory.mktemp("pyapi-tests")
     build = subprocess.run(
-        [zig, "build", "pyapi-tests", "--prefix", str(prefix)],
+        [zig, "build", "pyapi-tests", "-j4", "--prefix", str(prefix)],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,

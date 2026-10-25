@@ -20,7 +20,7 @@ def export_tests(tmp_path_factory: pytest.TempPathFactory) -> Path:
         pytest.skip("zig is not on PATH; uzp-export-tests.exe cannot be built")
     prefix = tmp_path_factory.mktemp("export-tests")
     build = subprocess.run(
-        [zig, "build", "export-tests", "--prefix", str(prefix)],
+        [zig, "build", "export-tests", "-j4", "--prefix", str(prefix)],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
