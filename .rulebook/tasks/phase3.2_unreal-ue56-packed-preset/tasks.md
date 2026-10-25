@@ -389,7 +389,7 @@ native refused at encode_export with unsupported_source (decision 190: under OCI
 colour bitmap on an sRGB8 channel sampled 1:1 is recorded). That is a real failure. The remaining
 16 OCIO targets are unclassified. There was no retry, and no gate changes.
 
-## 18. Authored OCIO16 input controls (2026-10-25; capture pending)
+## 18. Authored OCIO16 input controls (2026-10-25; capture admitted)
 
 Five independent `ocio16-bitmap-srgb-basecolor*` requests isolate the decision 190
 input gap blocking item 2.5/R-322: public RGB16 field-a and two cyclic permutations,
@@ -400,5 +400,13 @@ Bitmap setters preserve the literal configuration string `sRGB`, not its enum.
 Final exports opt into `key_by_step` identities; existing output IDs stay unchanged.
 Mock pipeline checks retain every referenced byte through inbox copying, including
 stable repeats that deduplicate content blobs. All 29 new CPU cases and 21 affected
-recorder/provenance regressions pass; Ruff/mypy pass. Painter capture and admission
-remain pending. No fit, checklist, capability or acceptance gate changes.
+recorder/provenance regressions pass; Ruff/mypy pass.
+
+All five controls are captured and admitted, one attempt per run. The owned Painter
+process ended and its lock was released. Offline verification resolved and re-hashed
+all 30 export references: 15/15 r1/reopen-r2 encoded-file pairs have identical hashes,
+which also establishes identical bytes and pixels without another decode. All 5/5
+primary getter pairs match exactly, preserving types and signed zero; setup and
+bookkeeping readbacks are not counted as primary getters. The admitted instruction
+sequences match the authored requests. This establishes capture stability only,
+not UzPainter parity. No fit, domain, checklist, capability or acceptance gate changes.
