@@ -10,6 +10,7 @@ stderr, error?, last_committed_revision, committed}`. CPU only: no test here nee
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import textwrap
@@ -126,7 +127,70 @@ def pyapi_runner(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return prefix / "bin" / "uzp-pyapi-tests.exe"
 
 
-def runner(exe: Path, work: Path, prelude: str) -> Run:
+def _private_report(command: list[str], directory: Path) -> dict[str, Any]:
+    """Keep transport failures out of pytest's assertion and exception rendering."""
+    diagnostic: dict[str, Any] = {}
+    problem = ""
+    report: Any = None
+    try:
+        process = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=600,
+            check=False,
+        )
+        diagnostic = {
+            "stdout": process.stdout,
+            "stderr": process.stderr,
+            "returncode": process.returncode,
+        }
+        lines = [line for line in process.stdout.splitlines() if line.startswith(JSON_PREFIX)]
+        if not lines:
+            problem = "missing report"
+        else:
+            try:
+                report = json.loads(lines[-1][len(JSON_PREFIX) :])
+            except ValueError:
+                problem = "invalid report JSON"
+            if not problem:
+                if (
+                    not isinstance(report, dict)
+                    or report.get("status") not in ("ok", "failed")
+                    or (report["status"] == "ok" and "result" not in report)
+                    or (report["status"] == "failed" and not isinstance(report.get("error"), dict))
+                ):
+                    problem = "invalid report shape"
+                elif process.returncode != (0 if report["status"] == "ok" else 1):
+                    problem = "report exit mismatch"
+    except subprocess.TimeoutExpired as error:
+        diagnostic = {"stdout": error.stdout, "stderr": error.stderr}
+        problem = "runner timeout"
+    except OSError as error:
+        diagnostic = {"error": str(error)}
+        problem = "runner unavailable"
+    if not problem:
+        result: dict[str, Any] = report
+        return result
+    # Raise outside the except blocks: no raw exception context reaches pytest.
+    diagnostic = {
+        key: value.decode("utf-8", errors="replace") if isinstance(value, bytes) else value
+        for key, value in diagnostic.items()
+    }
+    saved = True
+    try:
+        (directory / "private-runner-diagnostics.json").write_text(
+            json.dumps(diagnostic, ensure_ascii=True), encoding="utf-8"
+        )
+    except OSError:
+        saved = False
+    suffix = "details kept privately" if saved else "private diagnostic write failed"
+    pytest.fail(f"{problem} ({suffix})", pytrace=False)
+
+
+def runner(exe: Path, work: Path, prelude: str, private_diagnostics: Path | None = None) -> Run:
     """Runs a script body (after `prelude`) with `work` as `WORK`; returns its report. A report
     whose status is not "ok" carries the script's error and traceback. The Debug unavailable
     fixture keeps this suite on its historical CPU export path."""
@@ -134,6 +198,11 @@ def runner(exe: Path, work: Path, prelude: str) -> Run:
     def go(body: str) -> dict[str, Any]:
         script = work / "script.py"
         script.write_text(prelude + textwrap.dedent(body), encoding="utf-8")
+        if private_diagnostics is not None:
+            return _private_report(
+                [str(exe), str(script), "--test-gpu-unavailable", str(work)],
+                private_diagnostics,
+            )
         process = subprocess.run(
             [str(exe), str(script), "--test-gpu-unavailable", str(work)],
             capture_output=True,
@@ -162,3 +231,10 @@ def run(pyapi_runner: Path, tmp_path: Path) -> Run:
 def facade(pyapi_runner: Path, tmp_path: Path) -> Run:
     """Runs a facade script body (after FACADE_PRELUDE) in the test's temporary folder."""
     return runner(pyapi_runner, tmp_path, FACADE_PRELUDE)
+
+
+@pytest.fixture
+def private_facade(pyapi_runner: Path, tmp_path: Path) -> Run:
+    """Facade runner whose transport diagnostics stay in the existing private store folder."""
+    directory = Path(os.environ["LOCALAPPDATA"]) / "UzPainter"
+    return runner(pyapi_runner, tmp_path, FACADE_PRELUDE, private_diagnostics=directory)
