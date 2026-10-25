@@ -476,3 +476,40 @@ def test_adapter_production_round_against_the_native_guard(
     from tests.adapters.assets3d.production_round import check_production_round
 
     check_production_round(painter, tmp_path, monkeypatch)
+
+
+def test_adapter_failed_upstream_gate_never_launches_or_mutates(
+    painter: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tests.adapters.assets3d.production_round import check_refused_round
+
+    mesh = tmp_path / "low.obj"
+    mesh.write_bytes(PLANE.read_bytes())
+    check_refused_round(painter, tmp_path, mesh, monkeypatch, failed_gate=True)
+
+
+def test_adapter_genuine_failed_certificate_never_launches_or_mutates(
+    painter: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tests.adapters.assets3d.production_round import check_refused_round
+
+    mesh = tmp_path / "zero-normals.obj"
+    mesh.write_text(ZERO_NORMAL_OBJ, encoding="utf-8")
+    check_refused_round(painter, tmp_path, mesh, monkeypatch, failed_gate=False)
+
+
+def test_adapter_genuine_warn_import_proceeds_flagged_diagnostic(
+    painter: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tests.adapters.assets3d.production_round import check_warn_diagnostic_round
+
+    # Existing valid quad: fan triangulation is a warning, not a fabricated report status.
+    mesh = tmp_path / "warn-quad.obj"
+    mesh.write_text(OTHER_OBJ, encoding="utf-8")
+    check_warn_diagnostic_round(painter, tmp_path, mesh, monkeypatch)
