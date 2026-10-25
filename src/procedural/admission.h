@@ -95,4 +95,13 @@ std::expected<core::RequestOutcome, UnsupportedProcedural> SetEffectProcedural(
     core::Id effect, const core::ProceduralRef& ref, const UseContext& context,
     const AssetLibrary& library, const ProceduralSeam& seam, const SubmitEdit& submit);
 
+/// Sets `ref` as a procedural source of the fill layer or fill effect `node`, in one transaction
+/// of `submit`, after `RequestFor` and `Admit`: the source of `channel` in a content stack, or the
+/// mono source of a fill in a mask stack (`channel` empty). A refusal returns before `submit` is
+/// called: the revision does not advance, nothing is clamped or substituted. An admitted
+/// reference is committed exactly as given. (`SetGrungeSource` and `assets bind-snapshot`.)
+std::expected<core::RequestOutcome, UnsupportedProcedural> SetFillProcedural(
+    core::Id node, std::optional<core::ChannelType> channel, const core::ProceduralRef& ref, const UseContext& context,
+    const AssetLibrary& library, const ProceduralSeam& seam, const SubmitEdit& submit);
+
 }  // namespace uzp::procedural

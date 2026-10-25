@@ -1,6 +1,7 @@
 #pragma once
 
 #include "evaluator/procedural_source.h"
+#include "procedural/admission.h"
 #include "procedural/snapshot_backend.h"
 #include "store/project_store.h"
 
@@ -10,6 +11,15 @@
 #include <vector>
 
 namespace uzp::procedural {
+
+/// The use context of a snapshot fill source of texture set `set` (the provider's admission and
+/// `assets bind-snapshot`): the recorded plane's mesh class, the set's UV tiles and square
+/// resolution as a raw F32 scalar parent output, `outputId`, `EvaluationSettings(project)`, the
+/// seed of the effective `$randomseed` integer (int64 bits kept as uint64; absent means zero) and
+/// the set's dimensions for the TextureSet/UVTile modes. Nothing is taken from a signature.
+/// Refused for a non-square set, a set without UV tiles and a non-integer seed.
+std::expected<UseContext, std::string> SnapshotUseContext(const core::Project& project, const core::TextureSet& set,
+                                                         const core::ProceduralRef& ref, const std::string& outputId);
 
 /// Provider lifetime must not outlive the store. Each revision owns its provider.
 class SnapshotSourceProvider final : public evaluator::IProceduralSourceProvider {

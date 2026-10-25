@@ -124,6 +124,48 @@ checks receipt schema, transaction rollback, persistent hits, corrupted retained
 inputs and a foreign store UUID. This synthetic transport test establishes no new
 Painter parity or certified editable procedural domain.
 
+## Binding a stored snapshot
+
+`UzPainter.exe assets bind-snapshot <project.uzp> --request <bind.json>` binds one
+snapshot already stored in the project as the source of a fill layer channel. The
+request is closed: exactly `signature_sha256`, `node`, `channel` and
+`resolution_override`. `resolution_override` is required. `null` means the bound
+reference deliberately has none. Otherwise it is exactly `{mode, value, log2_offset}`.
+Nothing is defaulted, and no Auto, Manual or nominal value is inferred from the effective
+raster size.
+
+Before any transaction, the command:
+
+- looks up the exact signature hash in the project's snapshots, refusing a malformed
+  or foreign entry, a signature with a preset or image inputs, and anything but one
+  named raw F32 scalar output;
+- requires the node to be an existing fill layer outside every mask, in split source
+  mode, whose channel is an active User channel of its stack in L32F (fill effects are
+  not bound);
+- builds the reference from the complete selected signature (asset pin, every effective
+  parameter, output) with an explicit channel mapping and the supplied override;
+- rebuilds the use context from the target's own texture set, evaluation settings,
+  dimensions and `$randomseed` (`SnapshotUseContext`, shared with the evaluator's
+  provider). The context's signature must be exactly the selected hash. An override
+  whose effective size differs from the snapshot's is refused, and nothing is resized.
+
+The provider must then serve that signature for the candidate state. Recorded metadata
+is not required: `/1` entries and entries without metadata bind as well. The bind is one
+`SetFillProcedural` transaction (the body `SetGrungeSource` delegates to) through the
+project store, with the snapshot backend and
+the support check on the final state. Its operation key includes the base revision and
+the complete override, so binding A again after A, B does not replay the first operation
+and leave B bound. When the channel already holds exactly the same complete reference,
+including the override or its explicit absence, the command reports `unchanged` and
+writes nothing. After saving, it reopens the project and verifies the complete reference,
+the signature, the served raster and, when recorded, the metadata. A refusal (exit 3,
+`status: refused`) changes nothing.
+
+CPU evidence: `tests/python/test_bind_snapshot_cli.py` drives the installed command over
+two authored synthetic snapshots (`uzp-export-tests snapshot-bind`). It covers getters
+after reopen, 0 to 1 to 0, a nominal Auto override kept as given, no-op repeats, and
+refusals that leave the file bytes unchanged. This route establishes no Painter parity.
+
 ## Editing a stored source
 
 `get_parameters()` returns a copy of the stored scalar parameters. `set_parameters()`

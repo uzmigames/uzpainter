@@ -822,27 +822,7 @@ float GrungeTexel(std::span<const uint32_t> w, int32_t texelX, int32_t texelY, u
 std::expected<core::RequestOutcome, UnsupportedProcedural> SetGrungeSource(
     core::Id node, std::optional<core::ChannelType> channel, const core::ProceduralRef& ref, const UseContext& context,
     const AssetLibrary& library, const ProceduralSeam& seam, const SubmitEdit& submit) {
-    const std::expected<ProceduralRequest, UnsupportedProcedural> request = RequestFor(ref, context, library);
-    if (!request) return Refused(request.error());
-    const std::expected<IProceduralBackend*, UnsupportedProcedural> backend = Admit(*request, library, seam);
-    if (!backend) return Refused(backend.error());
-    return submit([&](core::Edit& edit) {
-        std::optional<core::FillContent>* fill = nullptr;
-        if (core::Layer* layer = core::FindLayer(edit.project(), node); layer != nullptr) {
-            if (layer->kind == core::LayerKind::fill) fill = &layer->fill;
-        } else if (core::Effect* effect = core::FindEffect(edit.project(), node); effect != nullptr) {
-            if (effect->kind == core::EffectKind::fill) fill = &effect->fill;
-        }
-        if (fill == nullptr || !fill->has_value()) {
-            throw core::ValueError("node " + std::to_string(node) + " is not a fill layer or fill effect");
-        }
-        const core::Source source{core::ProceduralSource{ref}};
-        if (channel) {
-            (*fill)->sources[*channel] = source;
-        } else {
-            (*fill)->mono_source = source;
-        }
-    });
+    return SetFillProcedural(node, channel, ref, context, library, seam, submit);
 }
 
 }  // namespace uzp::procedural

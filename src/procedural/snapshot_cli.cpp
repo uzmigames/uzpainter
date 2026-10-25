@@ -1,15 +1,20 @@
 #include "procedural/snapshot_cli.h"
 
+#include "evaluator/support.h"
 #include "procedural/admission.h"
 #include "procedural/snapshot_recording.h"
 #include "procedural/snapshot_backend.h"
+#include "procedural/snapshot_source.h"
 #include "python/interpreter.h"
+#include "store/snapshots.h"
+#include "uzp_core/document/nodes.h"
 #include "uzp_core/manifest/sha256.h"
 
 #include <Python.h>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <sstream>
 #include <stdexcept>
 #include <memory>
@@ -104,6 +109,158 @@ void CheckCaptureDomain(const core::Project& project, std::string_view mesh, std
 
 void Print(std::FILE* out, const json::Object& report) {
     std::fprintf(out, "UZP_JSON:%s\n", json::WriteCanonical(report).c_str());
+    // Flushed here: a buffered report was observed lost at process exit (exit code kept).
+    std::fflush(out);
+}
+
+/// A refusal of `assets bind-snapshot`: printed as `refused`, nothing was written.
+struct BindRefusal : std::runtime_error {
+    using std::runtime_error::runtime_error;
+};
+
+/// One `assets bind-snapshot` request: exactly `signature_sha256`, `node`, `channel` and
+/// `resolution_override` (null: deliberately absent; otherwise exactly `mode`, `value` and
+/// `log2_offset`). Nothing is defaulted.
+struct BindRequest {
+    std::string signature;
+    core::Id node = core::kNoId;
+    core::ChannelType channel{};
+    std::optional<core::ProceduralResolution> override;
+    json::Value overrideJson;  ///< As supplied, for the operation's arguments.
+};
+
+int64_t Int(const json::Value& value, std::string_view what) {
+    if (!value.IsInt()) throw BindRefusal(std::string(what) + " must be an integer");
+    return std::get<int64_t>(value.data);
+}
+
+BindRequest ParseBindRequest(const json::Value& value) {
+    const auto* object = std::get_if<json::Object>(&value.data);
+    if (object == nullptr || object->size() != 4 || !object->contains("signature_sha256") || !object->contains("node") ||
+        !object->contains("channel") || !object->contains("resolution_override")) {
+        throw BindRefusal("request requires exactly signature_sha256, node, channel and resolution_override");
+    }
+    BindRequest request;
+    const json::Value& signature = object->at("signature_sha256");
+    if (!signature.IsString() || !core::IsSha256Hex(std::get<std::string>(signature.data))) {
+        throw BindRefusal("signature_sha256 must be a lowercase SHA-256");
+    }
+    request.signature = std::get<std::string>(signature.data);
+    const int64_t node = Int(object->at("node"), "node");
+    if (node <= 0) throw BindRefusal("node must be a positive node uid");
+    request.node = static_cast<core::Id>(node);
+    const json::Value& channel = object->at("channel");
+    const auto parsed = channel.IsString() ? core::FromString<core::ChannelType>(std::get<std::string>(channel.data))
+                                           : std::nullopt;
+    if (!parsed) throw BindRefusal("channel must name a channel type");
+    request.channel = *parsed;
+    request.overrideJson = object->at("resolution_override");
+    if (request.overrideJson.IsNull()) return request;
+    const auto* r = std::get_if<json::Object>(&request.overrideJson.data);
+    if (r == nullptr || r->size() != 3 || !r->contains("mode") || !r->contains("value") || !r->contains("log2_offset")) {
+        throw BindRefusal("resolution_override must be null or exactly mode, value and log2_offset");
+    }
+    const json::Value& mode = r->at("mode");
+    const auto parsedMode = mode.IsString() ? core::FromString<core::ProceduralResolutionMode>(
+                                                  std::get<std::string>(mode.data))
+                                            : std::nullopt;
+    if (!parsedMode) throw BindRefusal("resolution_override.mode must name a resolution mode");
+    const auto* sizes = std::get_if<json::Array>(&r->at("value").data);
+    if (sizes == nullptr || sizes->size() != 2) throw BindRefusal("resolution_override.value must be two integers");
+    const auto bounded = [](const json::Value& item, std::string_view what) {
+        const int64_t number = Int(item, what);
+        if (number < std::numeric_limits<int>::min() || number > std::numeric_limits<int>::max()) {
+            throw BindRefusal(std::string(what) + " is outside the signed-int range");
+        }
+        return static_cast<int>(number);
+    };
+    core::ProceduralResolutionOverride resolution;
+    resolution.mode = *parsedMode;
+    resolution.value = {bounded((*sizes)[0], "resolution_override.value"),
+                        bounded((*sizes)[1], "resolution_override.value")};
+    resolution.log2_offset = bounded(r->at("log2_offset"), "resolution_override.log2_offset");
+    request.override = resolution;
+    return request;
+}
+
+/// The fill layer `node`, its owning set and stack, checked before any transaction: a fill layer
+/// (fill effects are not claimed) outside every mask list, with a split fill whose `channel` is
+/// an active User channel of its stack in L32F.
+struct BindTarget {
+    const core::Layer* layer = nullptr;
+    const core::TextureSet* set = nullptr;
+    core::ChannelFormat format{};
+};
+
+BindTarget FindBindTarget(const core::Project& project, core::Id node, core::ChannelType channel) {
+    std::optional<core::NodeVisit> found;
+    core::ForEachNode(project, [&](const core::NodeVisit& visit) {
+        if ((visit.layer != nullptr && visit.layer->uid == node) || (visit.effect != nullptr && visit.effect->uid == node)) {
+            found = visit;
+        }
+    });
+    if (!found) throw BindRefusal("node " + std::to_string(node) + " does not exist");
+    if (found->effect != nullptr) throw BindRefusal("node " + std::to_string(node) + " is an effect; only fill layers are bound");
+    if (found->owner_stack == core::NodeStack::Mask) throw BindRefusal("node " + std::to_string(node) + " is in a mask");
+    const core::Layer& layer = *found->layer;
+    if (layer.kind != core::LayerKind::fill || !layer.fill) {
+        throw BindRefusal("node " + std::to_string(node) + " is not a fill layer");
+    }
+    if (layer.fill->source_mode != core::SourceMode::Split) throw BindRefusal("the fill layer is not in split source mode");
+    BindTarget target{&layer};
+    for (const core::TextureSet& set : project.texture_sets) {
+        if (set.id == found->texture_set) target.set = &set;
+    }
+    const core::Stack* stack = core::FindStack(project, found->texture_set, found->stack);
+    if (target.set == nullptr || stack == nullptr) throw BindRefusal("the fill layer has no owning stack");
+    const auto entry = stack->channels.find(channel);
+    if (!core::ToString(channel).starts_with("User") || entry == stack->channels.end() ||
+        entry->second.format != core::ChannelFormat::L32F || !layer.fill->active_channels.contains(channel)) {
+        throw BindRefusal("channel " + std::string(core::ToString(channel)) +
+                          " is not an active User L32F channel of the fill layer's stack");
+    }
+    target.format = entry->second.format;
+    return target;
+}
+
+/// The stored snapshot `signature` of `project` (store `uuid`): its entry, request and backend.
+struct BoundSnapshot {
+    store::SnapshotEntry entry;
+    ProceduralRequest request;
+    SnapshotBackend backend;
+};
+
+BoundSnapshot FindSnapshot(store::ProjectStore& store, const core::Project& project, const std::string& signature) {
+    std::optional<store::SnapshotEntry> entry;
+    for (store::SnapshotEntry& candidate : store::ProjectSnapshots(project)) {
+        if (candidate.key == signature) entry = std::move(candidate);
+    }
+    if (!entry) throw BindRefusal("the project holds no snapshot with signature " + signature);
+    if (const std::string problem = store::SnapshotProblem(*entry, store.project_uuid()); !problem.empty()) {
+        throw BindRefusal("the snapshot entry is refused: " + problem);
+    }
+    auto request = RequestFromSignature(entry->signature);
+    if (!request) throw BindRefusal("the snapshot signature is refused: " + request.error());
+    if (request->preset || !request->inputs.empty() || request->outputId.empty() ||
+        request->output.format != ChannelFormat::F32 || request->output.colourSpace != "raw" ||
+        request->output.channels != 1) {
+        throw BindRefusal("the snapshot lies outside the bindable domain (no preset, no image inputs, one named raw F32 scalar output)");
+    }
+    auto backend = SnapshotBackend::Load(store, project);
+    if (!backend) throw BindRefusal("the project's snapshots are refused: " + backend.error());
+    if (const auto stored = backend->Stored(*request); !stored) throw BindRefusal(stored.error().Describe());
+    return {std::move(*entry), std::move(*request), std::move(*backend)};
+}
+
+/// The fill source `ref` bound to `channel` of `node`, served by the provider of `project`
+/// exactly as the snapshot `signature`, or the refusal.
+void CheckServed(store::ProjectStore& store, const core::Project& project, const core::Id node,
+                 core::ChannelType channel, const core::ProceduralRef& ref, const std::string& signature) {
+    const BindTarget target = FindBindTarget(project, node, channel);
+    const SnapshotSourceProvider provider(store, project);
+    const auto image = provider.Resolve(project, *target.set, channel, target.format, *target.layer->fill, ref, node, false);
+    if (!image) throw BindRefusal(image.error().reason);
+    if ((*image)->signature != signature) throw BindRefusal("the provider serves another signature than the request's");
 }
 }  // namespace
 
@@ -218,6 +375,121 @@ int RunSnapshotCommand(const std::vector<std::string>& args, std::FILE* out, std
         return 0;
     } catch (const std::exception& error) {
         Print(out, {{"status", "host_error"}, {"error", error.what()}, {"work", Utf8(work)}});
+        return 3;
+    }
+}
+
+int RunBindSnapshotCommand(const std::vector<std::string>& args, std::FILE* out, std::FILE* err) {
+    if (args.size() != 5 || args[0] != "assets" || args[1] != "bind-snapshot" || args[3] != "--request") {
+        std::fputs("usage: UzPainter.exe assets bind-snapshot <file.uzp> --request <bind.json>\n", err);
+        return 2;
+    }
+    try {
+        json::Value requested;
+        try {
+            requested = json::Parse(Read(Path(args[4])));
+        } catch (const json::ParseError& error) {
+            throw BindRefusal(std::string("request is not JSON: ") + error.what());
+        }
+        const BindRequest bind = ParseBindRequest(requested);
+        const std::string channelName(core::ToString(bind.channel));
+        auto opened = store::ProjectStore::Open(Path(args[2]));
+        core::Document document(std::move(opened.state));
+        opened.store->Attach(document);
+        store::ProjectStore& store = *opened.store;
+        const auto state = document.snapshot();
+        const core::Project& project = *state.project;
+        BoundSnapshot snapshot = FindSnapshot(store, project, bind.signature);
+        const BindTarget target = FindBindTarget(project, bind.node, bind.channel);
+        // The complete selected signature, an explicit channel mapping and the supplied override.
+        core::ProceduralRef ref;
+        ref.asset = core::FormatAssetUrl(snapshot.request.asset);
+        ref.params = Object(Object(snapshot.entry.signature).at("params"));
+        ref.output_mapping = {{channelName, snapshot.request.outputId}};
+        ref.resolution_override = bind.override;
+        // The context is the target's own: its set, settings, dimensions and the ref's seed.
+        const auto context = SnapshotUseContext(project, *target.set, ref, snapshot.request.outputId);
+        if (!context) throw BindRefusal(context.error());
+        const AssetLibrary library;
+        const auto effective = RequestFor(ref, *context, library);
+        if (!effective) throw BindRefusal(effective.error().Describe());
+        if (SignatureHash(*effective) != bind.signature) {
+            throw BindRefusal("in the target's context the bound source is not the snapshot's signature (effective resolution " +
+                              std::to_string(effective->output.resolution) + ", snapshot " +
+                              std::to_string(snapshot.request.output.resolution) + ")");
+        }
+        core::Project candidate = project;
+        core::FindLayer(candidate, bind.node)->fill->sources[bind.channel] = core::Source{core::ProceduralSource{ref}};
+        CheckServed(store, candidate, bind.node, bind.channel, ref, bind.signature);
+        const json::Object identity{{"signature_sha256", bind.signature},
+                                    {"node", static_cast<int64_t>(bind.node)},
+                                    {"channel", channelName}};
+        const auto current = target.layer->fill->sources.find(bind.channel);
+        if (current != target.layer->fill->sources.end() && current->second == core::Source{core::ProceduralSource{ref}}) {
+            json::Object report = identity;
+            report["status"] = "unchanged";
+            report["revision"] = document.revision();
+            Print(out, report);
+            return 0;
+        }
+        // The key names the base revision: replaying A after A->B->A would otherwise return A's
+        // stored outcome and leave B bound.
+        const int64_t base = document.revision();
+        json::Object arguments = identity;
+        arguments["resolution_override"] = bind.overrideJson;
+        arguments["base_revision"] = base;
+        const std::string key = "bind-snapshot-" + core::Sha256Hex(json::WriteCanonical(arguments));
+        const ProceduralSeam seam(&snapshot.backend, nullptr);
+        const auto outcome = SetFillProcedural(
+            bind.node, bind.channel, ref, *context, library, seam, [&](const std::function<void(core::Edit&)>& call) {
+                return store.Submit(document, core::MutationRequest{"bind_snapshot", arguments, key, base},
+                                    [&](core::Edit& edit) {
+                                        call(edit);
+                                        const SnapshotSourceProvider procedurals(store, edit.project());
+                                        evaluator::RequireSupported(edit.base(), edit.project(), {}, &procedurals);
+                                    });
+            });
+        if (!outcome) throw BindRefusal(outcome.error().Describe());
+        if (!outcome->result || outcome->result->status != core::ResultStatus::committed) {
+            throw BindRefusal("the bind did not commit: " +
+                              (outcome->result ? json::WriteCanonical(outcome->result->ToJson())
+                                               : std::string(core::ToString(outcome->decision.admission))));
+        }
+        const int64_t revision = document.revision();
+        store.Save(document);
+        store.Close();
+        auto reopened = store::ProjectStore::Open(Path(args[2]));
+        const core::Project& saved = reopened.state.project;
+        const BindTarget savedTarget = FindBindTarget(saved, bind.node, bind.channel);
+        const auto bound = savedTarget.layer->fill->sources.find(bind.channel);
+        if (bound == savedTarget.layer->fill->sources.end() || bound->second != core::Source{core::ProceduralSource{ref}}) {
+            throw std::runtime_error("the saved project does not hold the complete bound reference after reopen");
+        }
+        const auto savedContext = SnapshotUseContext(saved, *savedTarget.set, ref, snapshot.request.outputId);
+        const auto savedRequest = savedContext ? RequestFor(ref, *savedContext, library) : decltype(effective){};
+        if (!savedContext || !savedRequest || SignatureHash(*savedRequest) != bind.signature) {
+            throw std::runtime_error("the saved binding no longer gives the snapshot's signature after reopen");
+        }
+        CheckServed(*reopened.store, saved, bind.node, bind.channel, ref, bind.signature);
+        if (snapshot.entry.source_metadata) {
+            const SnapshotSourceProvider provider(*reopened.store, saved);
+            const auto metadata = provider.Metadata(saved, *savedTarget.set, bind.channel, savedTarget.format,
+                                                    *savedTarget.layer->fill, ref, bind.node, false);
+            if (!metadata || *metadata != *snapshot.entry.source_metadata) {
+                throw std::runtime_error("the saved binding does not read the snapshot's recorded metadata after reopen");
+            }
+        }
+        json::Object report = identity;
+        report["status"] = "ok";
+        report["revision"] = revision;
+        report["verified_after_reopen"] = true;
+        Print(out, report);
+        return 0;
+    } catch (const BindRefusal& refusal) {
+        Print(out, {{"status", "refused"}, {"error", refusal.what()}});
+        return 3;
+    } catch (const std::exception& error) {
+        Print(out, {{"status", "host_error"}, {"error", error.what()}});
         return 3;
     }
 }

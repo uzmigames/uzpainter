@@ -265,3 +265,76 @@ int RunProceduralEffects(const std::filesystem::path& path) {
     std::cout << "procedural effects stored\n";
     return 0;
 }
+
+/// The `assets bind-snapshot` fixture: two authored synthetic snapshots of one asset (toggle
+/// `flag` 0 and 1; the first with recorded `/1` metadata, the second without, as a legacy entry),
+/// nothing bound, and a bottom fill layer `effect host` holding a content fill effect and a mask
+/// fill effect (the refused targets). The positive target and the channels are created by the
+/// test through the public API. Prints one `BIND_FIXTURE:` JSON line with the hashes and uids.
+/// Test values only; no Painter data.
+int RunSnapshotBindFixture(const std::filesystem::path& path) {
+    using namespace uzp;
+    auto opened = store::ProjectStore::Open(path);
+    Check(opened.report.ok(), "initial project integrity");
+    core::Document document(std::move(opened.state));
+    opened.store->Attach(document);
+    auto& store = *opened.store;
+    int key = 0;
+    const auto submit = [&](const std::function<void(core::Edit&)>& call) {
+        const auto id = "snapshot-bind-fixture-" + std::to_string(++key);
+        auto outcome = store.Submit(document, {"snapshot-bind-fixture", core::json::Object{}, id, document.revision()}, call);
+        if (!outcome.result || outcome.result->status != core::ResultStatus::committed) {
+            throw std::runtime_error("fixture transaction " + id + ": " +
+                                     (outcome.result ? core::json::WriteCanonical(outcome.result->ToJson()) : "no result"));
+        }
+    };
+    core::json::Object hashes;
+    for (const int64_t flag : {0, 1}) {
+        procedural::ProceduralRequest request;
+        request.asset = core::ParseAssetUrl("uzasset://snapshot/authored-bind@1");
+        request.params = {{"amount", 0.5}, {"flag", flag}};
+        request.meshClass = "quad";
+        request.outputId = "scalar";
+        request.output = {128, procedural::ChannelFormat::F32, "raw", 1};
+        request.settings = procedural::EvaluationSettings(*document.snapshot().project);
+        std::string bytes(128 * 128 * 4, '\0');
+        for (size_t i = 0; i < 128 * 128; ++i) {
+            const float value = static_cast<float>(flag) * 0.5f + static_cast<float>(i % 128) / 256.0f;
+            std::memcpy(bytes.data() + i * 4, &value, 4);
+        }
+        std::optional<store::SourceMetadata> metadata;
+        if (flag == 0) metadata = store::SourceMetadata{{"scalar", "aux"}, std::nullopt, std::nullopt, std::nullopt};
+        submit([&](core::Edit& edit) { procedural::RecordSnapshot(store, edit, request, bytes, metadata); });
+        hashes["flag" + std::to_string(flag)] = procedural::SignatureHash(request);
+    }
+    core::Id host = 0, content = 0, mask = 0;
+    submit([&](core::Edit& edit) {
+        auto& stack = edit.project().texture_sets.front().stacks.front();
+        core::Layer hostLayer;
+        hostLayer.uid = host = edit.AllocateId();
+        hostLayer.name = "effect host";
+        hostLayer.kind = core::LayerKind::fill;
+        hostLayer.fill.emplace();
+        core::Effect contentEffect;
+        contentEffect.uid = content = edit.AllocateId();
+        contentEffect.name = "content fill";
+        contentEffect.fill.emplace();
+        contentEffect.fill->active_channels = {core::ChannelType::User0};
+        hostLayer.content_effects.push_back(std::move(contentEffect));
+        core::Effect maskEffect;
+        maskEffect.uid = mask = edit.AllocateId();
+        maskEffect.name = "mask fill";
+        maskEffect.fill.emplace();
+        maskEffect.mono_blending.emplace();
+        hostLayer.mask.emplace();
+        hostLayer.mask->effects.push_back(std::move(maskEffect));
+        stack.root_layers.push_back(std::move(hostLayer));
+    });
+    store.Save(document);
+    store.Close();
+    const core::json::Object report{{"signatures", std::move(hashes)}, {"host", static_cast<int64_t>(host)},
+                                    {"content_effect", static_cast<int64_t>(content)},
+                                    {"mask_effect", static_cast<int64_t>(mask)}};
+    std::cout << "BIND_FIXTURE:" << core::json::WriteCanonical(report) << "\n";
+    return 0;
+}

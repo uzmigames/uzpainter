@@ -70,6 +70,7 @@ constexpr const char* kUsage =
     "       UzPainter.exe capabilities [--runtime]\n"
     "       UzPainter.exe assets list [--parity] [--library <dir>]\n"
     "       UzPainter.exe assets snapshot <file.uzp> --request <request.json>\n"
+    "       UzPainter.exe assets bind-snapshot <file.uzp> --request <bind.json>\n"
     "       UzPainter.exe cache info | clear\n"
     "       UzPainter.exe --preview <file.uzp> [--gpu-backend dx12|vulkan] [--headless]\n"
     "       UzPainter.exe --mcp [--mcp-http <host>:<port> [--token <token>] [--allow-remote]]\n"
@@ -185,6 +186,9 @@ int main() {
     if (!args.empty() && uzp::procedural::IsAssetsCommand(args.front())) {
         if (args.size() > 1 && args[1] == "snapshot") {
             return uzp::procedural::RunSnapshotCommand(args, stdout, stderr);
+        }
+        if (args.size() > 1 && args[1] == "bind-snapshot") {
+            return uzp::procedural::RunBindSnapshotCommand(args, stdout, stderr);
         }
         return uzp::procedural::RunAssetsCommand(args, stdout, stderr);
     }

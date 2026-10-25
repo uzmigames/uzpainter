@@ -11,6 +11,28 @@
 
 namespace uzp::procedural {
 
+std::expected<UseContext, std::string> SnapshotUseContext(const core::Project& project, const core::TextureSet& set,
+                                                         const core::ProceduralRef& ref, const std::string& outputId) {
+    using Result = std::expected<UseContext, std::string>;
+    if (set.resolution.width != set.resolution.height || set.uv_tiles.empty()) {
+        return Result(std::unexpect, "a snapshot fill source needs a square texture set with UV tiles");
+    }
+    UseContext context;
+    context.meshClass = "quad";
+    context.uvTiles = static_cast<uint32_t>(set.uv_tiles.size());
+    context.output = {static_cast<uint32_t>(set.resolution.width), ChannelFormat::F32, "raw", 1};
+    context.outputId = outputId;
+    context.settings = EvaluationSettings(project);
+    if (const auto seed = ref.params.find("$randomseed"); seed != ref.params.end()) {
+        if (!seed->second.IsInt()) return Result(std::unexpect, "effective random seed is not an integer");
+        // Match snapshot capture: signed JSON seeds preserve all uint64 bits.
+        context.seed = static_cast<uint64_t>(std::get<int64_t>(seed->second.data));
+    }
+    context.textureSetResolution = set.resolution;
+    context.uvTileResolution = set.resolution;
+    return context;
+}
+
 SnapshotSourceProvider::SnapshotSourceProvider(store::ProjectStore& store, const core::Project& project)
     : store_(store), project_(project) {}
 
@@ -53,20 +75,10 @@ std::expected<std::pair<ProceduralRequest, SnapshotBackend>, std::string> Snapsh
     if (snapshots == project.extra.end() || bound == project_.extra.end() || snapshots->second != bound->second) {
         return fail("the provider belongs to another snapshot revision");
     }
-    UseContext context;
-    context.meshClass = "quad";
-    context.output = {128, ChannelFormat::F32, "raw", 1};
-    context.outputId = output->second;
-    context.settings = EvaluationSettings(project);
-    if (const auto seed = ref.params.find("$randomseed"); seed != ref.params.end()) {
-        if (!seed->second.IsInt()) return fail("effective random seed is not an integer");
-        // Match snapshot capture: signed JSON seeds preserve all uint64 bits.
-        context.seed = static_cast<uint64_t>(std::get<int64_t>(seed->second.data));
-    }
-    context.textureSetResolution = set.resolution;
-    context.uvTileResolution = set.resolution;
+    const auto context = SnapshotUseContext(project, set, ref, output->second);
+    if (!context) return fail(context.error());
     const AssetLibrary library;
-    auto request = RequestFor(ref, context, library);
+    auto request = RequestFor(ref, *context, library);
     if (!request) return fail(request.error().Describe());
     if (request->output.resolution != 128) return fail("effective source resolution must equal the 128px target");
     auto backend = SnapshotBackend::Load(store_, project);
