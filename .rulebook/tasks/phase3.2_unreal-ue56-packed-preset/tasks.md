@@ -687,3 +687,25 @@ samples, with 21,845 differences per RGB channel. Report SHA-256:
 This refutes joint position/channel/value identity under the fixed comparison;
 it does not identify a numerical transform, prove channel invariance or justify
 scalar collision claims. No inversion, normalization or production change follows.
+
+## 24. Paired Raw transfer comparison
+
+`tools/parity/ocio16_raw_normalization_compare.py` fixes the FLOAT/PNG16 comparison
+before reading their real output pixels. It revalidates both admissions, verifies
+authored inputs and formulas at native precision, joins the common recipe,
+recorded environment and observed context, and checks an unchanged registry.
+Recorder versions are retained separately as provenance, not equated as envelope
+fields, following `environment.py`. No code-equivalence or execution-attestation
+claim follows from that provenance.
+
+Output comparison uses uint32 bits at the same EXR coordinates and RGB channels,
+with identical closed coordinate windows. Equal or different describes only
+observable transfer in that context; neither outcome identifies the internal
+normalization, establishes readout identity or promotes production support.
+Reports and refusal diagnostics remain private and write-once.
+
+Sixty-four distinct authored cases passed across this module and the reused
+identity/post-admission modules. The sixteen paired cases passed again after the
+provenance-only recorder-version correction; static checks and independent review
+passed. Cases cover mismatched contexts/environments, changed registry, receipts,
+formulas, windows, native bits and preserved differing recorder provenance.
