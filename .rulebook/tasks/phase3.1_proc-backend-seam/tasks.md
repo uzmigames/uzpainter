@@ -307,3 +307,33 @@ The final rerun log is `tmp/scratch/rev383-desktop-permitted-tests.log`.
 Mypy, Ruff, formatting and independent source review passed. No actual desktop
 navigation or Painter run was performed for this change. The check observes a
 point in time; existing per-action ownership guards still apply.
+
+### Owned F context runner (2026-10-26)
+
+The dedicated runner records the unchanged recipe A with the five context
+boundaries, through the existing owned-process lock, transport and cleanup. Its
+distinct authored request is `tier0/api-probes/filter-context-a`. Default probe
+hooks and Raw capture policies retain their prior behavior. The recorder digest
+now includes the injected F contract, retaining its existing 64-bit,
+LF-normalized provenance format rather than claiming execution attestation.
+
+The F trace is reconstructed from ordered recorded outputs. Lifecycle evidence
+uses documented state getters actually called after create/save/close/open;
+helper aggregates and the short-circuited closed-state edition check are not
+presented as getter outcomes. Extra outputs, identity readbacks and reopen
+resolution have closed producer shapes. Lifecycle phases must be contiguous
+and ordered. Rebind by the original location is required for this F domain;
+the producer's UID fallback remains a refusal here.
+
+Completion checks require exactly r1/same_session and r2/after_save_reopen, the
+recipe key, the authored public manifest and matching private receipt bytes.
+They do not grant F domain or effective-settings acceptance. Reconstruction
+checks the observable F domain separately; missing effective settings continue
+to refuse. No real F run has occurred at this checkpoint.
+
+The 157 original affected cases, twelve additional closed-trace cases and eight
+completion cases passed across focused runs and affected retries. Failed authored
+test assumptions were corrected without repeating unaffected passing suites.
+Logs are `tmp/scratch/rev382-tests.log`, `tmp/scratch/rev383b-tests.log`,
+`tmp/scratch/rev384-tests.log` and `tmp/scratch/rev384b-tests.log`, with the
+earlier focused retry logs preserved. Static checks and independent review passed.

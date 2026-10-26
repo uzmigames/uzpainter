@@ -837,17 +837,27 @@ def create_project(
 
 
 def apply_state(
-    session: PainterSession, job: ProbeJob, staged: dict[str, Path], work_dir: Path
+    session: PainterSession,
+    job: ProbeJob,
+    staged: dict[str, Path],
+    work_dir: Path,
+    *,
+    after_create: Callable[[ProjectState], list[dict[str, Any]]] | None = None,
+    after_setup: Callable[[], list[dict[str, Any]]] | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """Create the project and apply the state steps once; returns defaults and step outcomes."""
+    """Create the project and apply the state steps once; returns defaults and step outcomes.
+
+    `after_create` (given the ready state that followed the creation) and `after_setup` add
+    read-only outputs before the first and after the last state step; without them nothing
+    else is read or recorded."""
     created = create_project(session, job, staged, work_dir)
-    session.wait_ready()
+    ready = session.wait_ready()
+    outcomes: list[dict[str, Any]] = [] if after_create is None else after_create(ready)
     defaults: dict[str, Any] = {
         "project.create": session.call("template_capture"),
         "colour_management": created["colour_management"],
         "inserted": {},
     }
-    outcomes: list[dict[str, Any]] = []
     closed: dict[str, Any] = {}
     for step in job.state_steps:
         outcome = run_step_rebinding(session, step, staged, work_dir, closed)
@@ -856,6 +866,8 @@ def apply_state(
         outcomes += step_outputs(session, job, step, work_dir, outcome)
         outcomes += rebound(session, step, closed)
     session.wait_ready()
+    if after_setup is not None:
+        outcomes += after_setup()
     return defaults, outcomes
 
 
@@ -912,7 +924,10 @@ def record_probes(
     first_outputs: list[dict[str, Any]],
     now: Now,
     staged: dict[str, Path],
+    *,
+    before_step: Callable[[ProbeStep], list[dict[str, Any]]] | None = None,
 ) -> tuple[dict[str, Any], list[Path]]:
+    """One recording of the probe steps; `before_step` adds read-only outputs before a step."""
     session.wait_ready()
     template = session.call("template_capture")
     if job.observed:
@@ -933,6 +948,8 @@ def record_probes(
     closed: dict[str, Any] = {}
     for step in job.probe_steps:
         step = step_for_recording(step, condition)
+        if before_step is not None:
+            outputs += before_step(step)
         if step.call == EXPORT:
             outputs += probe_export(session, job, step, template, directory)
             continue

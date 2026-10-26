@@ -182,6 +182,15 @@ class CapabilityPolicy:
     def ready(self, job: ProbeJob, run: Path, manifest: dict[str, Any]) -> None:
         ownership.require(not job.exports, "capability only")
 
+    def session(self, owned: GuardedTransport, build_id: str) -> RawSession:
+        """The owned session; a policy may attach a subclass with more read-only extensions."""
+        return RawSession.attached(owned, build_id)
+
+    def record(self, session: RawSession, job: ProbeJob, work: Path, inbox: Path) -> Path:
+        """The one recording of the owned capture; a policy may record a different orchestration
+        of the same ProbeJob."""
+        return record_probe_golden(session, job, work, inbox)
+
 
 def run_owned_capture(request: Request, policy: CapabilityPolicy) -> dict[str, Any]:
     with ExitStack() as stack:
@@ -253,11 +262,9 @@ def run_owned_capture(request: Request, policy: CapabilityPolicy) -> dict[str, A
                 owned = GuardedTransport(raw, launcher, lock, current["started"])
                 owned.closed_expected = True
                 owned.verify()
-                session = RawSession.attached(
-                    owned, job.manifest["software"]["painter"]["build_id"]
-                )
+                session = policy.session(owned, job.manifest["software"]["painter"]["build_id"])
                 report["stage"] = "capture"
-                run = record_probe_golden(session, job, work, inbox)
+                run = policy.record(session, job, work, inbox)
                 report.update(captures=1, exports=policy.exports, run=str(run))
                 evidence.log("capture_ready", captures=1, exports=policy.exports, run=str(run))
                 owned.verify()
