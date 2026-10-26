@@ -1382,6 +1382,20 @@ json::Value Observations(const std::string& uuid,
 
 json::Object& At(json::Value& value, const std::string& key) { return std::get<json::Object>(std::get<json::Object>(value.data).at(key).data); }
 
+/// `space` with one more entry that no binding names (a historical entry): a copy of its entry with
+/// a distinct context (a kept unknown key in the projection), changed by `edit` before its context
+/// hash and key are recomputed.
+json::Value WithHistorical(json::Value space, const std::function<void(json::Value& space, json::Object& entry)>& edit = {}) {
+    json::Object& entries = At(space, "entries");
+    json::Object historical = std::get<json::Object>(entries.begin()->second.data);
+    std::get<json::Object>(std::get<json::Object>(historical.at("context").data).at("project").data)["x-history"] =
+        std::string("an older context");
+    if (edit) edit(space, historical);
+    historical["context_sha256"] = ObservationKey(historical.at("context"));
+    At(space, "entries")[ObservationKey(historical)] = historical;
+    return space;
+}
+
 void FilterObservations() {
     const std::string uuid = "11111111-2222-4333-8444-555555555555";
     const auto problem = [&](const json::Value& space) { return FilterObservationsProblem(space, uuid); };
@@ -1470,6 +1484,32 @@ void FilterObservations() {
     for (const auto& [key, entry] : At(other, "entries")) At(twice, "entries")[key] = entry;
     CHECK(Contains(problem(twice), "conflicting observations"));
 
+    // A historical entry no binding names is still checked against its host binding: valid, it
+    // passes (it need not be bound and its nodes need not be alive); a missing host binding or
+    // another channel or descriptor refuses, although every key is recomputed.
+    const auto hostBinding = [](json::Object& entry) -> json::Object& {
+        return std::get<json::Object>(entry.at("binding").data);
+    };
+    CHECK(problem(WithHistorical(Observations(uuid))).empty());
+    const json::Value missingHost =
+        WithHistorical(Observations(uuid), [&](json::Value&, json::Object& entry) { hostBinding(entry)["host_uid"] = 99; });
+    CHECK(Contains(problem(missingHost), "has no host binding"));
+    const json::Value otherChannel = WithHistorical(Observations(uuid), [&](json::Value&, json::Object& entry) {
+        hostBinding(entry)["host_channel"] = std::string("User1");
+    });
+    CHECK(Contains(problem(otherChannel), "disagrees with the entry's host channel or descriptor"));
+    const json::Value otherDescriptor = WithHistorical(Observations(uuid), [&](json::Value& space, json::Object& entry) {
+        json::Object descriptor = std::get<json::Object>(At(space, "descriptors").at(std::get<std::string>(entry.at("host_descriptor").data)).data);
+        descriptor["parameters"] = json::Object{{"amount", 0.25}};
+        const std::string key = ObservationKey(descriptor);
+        At(space, "descriptors")[key] = descriptor;
+        entry["host_descriptor"] = key;
+        ProceduralRef reference = ProceduralRefFromJson(hostBinding(entry).at("host_reference"), "host_reference");
+        reference.asset = ObservationPin(key);
+        hostBinding(entry)["host_reference"] = ProceduralRefToJson(reference);
+    });
+    CHECK(Contains(problem(otherDescriptor), "disagrees with the entry's host channel or descriptor"));
+
     // The store: a stale entry (its UIDs name no node of the project) commits, saves and reopens;
     // a foreign one is refused at commit; the reserved family is never a snapshot.
     const fs::path path = CreateProject(WorkDir("filter-observations"));
@@ -1482,7 +1522,7 @@ void FilterObservations() {
         CHECK(foreign.result && foreign.result->status == ResultStatus::failed);
         CHECK(Contains(foreign.result->error, "project-private") && s.doc->revision() == 0);
         const RequestOutcome stale = s.store->Submit(*s.doc, Req("stale", 0), [&](Edit& e) {
-            e.project().extra[std::string(kFilterObservationsKey)] = Observations(own);
+            e.project().extra[std::string(kFilterObservationsKey)] = WithHistorical(Observations(own));
         });
         CHECK(Committed(stale) && s.doc->revision() == 1);
         const std::string reserved = "uzasset://observation/" + Sha256Hex("descriptor");
@@ -1504,6 +1544,10 @@ void FilterObservations() {
         CHECK(reopened.report.ok() && reopened.doc->revision() == 2);
         CHECK(ProjectFilterObservationsProblem(*reopened.doc->snapshot().project, reopened.store->project_uuid())
                   .empty());
+        // The historical entry survives the save and reopen unchanged.
+        const Project& kept = *reopened.doc->snapshot().project;
+        json::Value space = kept.extra.at(std::string(kFilterObservationsKey));
+        CHECK(json::WriteCanonical(space) == json::WriteCanonical(WithHistorical(Observations(reopened.store->project_uuid()))));
     }
     // An older revision whose namespace is corrupt (its manifest hash kept coherent): the current
     // revision still opens, and the full verification names the structural problem.

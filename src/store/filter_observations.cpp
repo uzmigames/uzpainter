@@ -335,6 +335,19 @@ void CheckV1(const Value& value, std::string_view project_uuid) {
         hosts.emplace(uid, &host);
     }
 
+    // Every entry, bound or historical, names a host binding that agrees with it. An entry need not
+    // be bound and its nodes need not be alive.
+    for (const auto& [key, entry] : entries) {
+        const std::string path = root + ".entries." + key;
+        const Object& binding = std::get<Object>(Member(*entry, "binding").data);
+        const auto host = hosts.find(std::get<std::int64_t>(Member(binding, "host_uid").data));
+        if (host == hosts.end()) Fail(path + ".binding.host_uid", "the entry's host UID has no host binding");
+        if (Member(*host->second, "channel") != Member(binding, "host_channel") ||
+            Member(*host->second, "descriptor") != Member(*entry, "host_descriptor")) {
+            Fail(path, "the host binding disagrees with the entry's host channel or descriptor");
+        }
+    }
+
     for (const auto& [key, body] : Map(space, "bindings", root)) {
         const std::string path = root + ".bindings." + key;
         const std::int64_t uid = UidKey(key, path);
@@ -344,12 +357,6 @@ void CheckV1(const Value& value, std::string_view project_uuid) {
         const Object& binding = std::get<Object>(Member(*entry->second, "binding").data);
         if (std::get<std::int64_t>(Member(binding, "filter_uid").data) != uid) {
             Fail(path, "the entry is bound to another Filter UID");
-        }
-        const auto host = hosts.find(std::get<std::int64_t>(Member(binding, "host_uid").data));
-        if (host == hosts.end()) Fail(path, "the entry's host UID has no host binding");
-        if (Member(*host->second, "channel") != Member(binding, "host_channel") ||
-            Member(*host->second, "descriptor") != Member(*entry->second, "host_descriptor")) {
-            Fail(path, "the host binding disagrees with the entry's host channel or descriptor");
         }
     }
 }

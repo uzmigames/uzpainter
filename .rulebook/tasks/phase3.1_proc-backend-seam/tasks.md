@@ -425,3 +425,27 @@ explicitly retains the 64-bit/LF-normalized provenance limitation, without
 runtime attestation. All existing receipt, envelope, registry and domain checks
 remain, and effective settings still block acceptance. Thirty-three validation
 tests passed; binding fixtures explicitly name the reviewed historical producer.
+
+After the corrected method/profile commit `3b66031d`, the real admitted F385 and
+H379 pair passed J1-J4. Both boolean probes remain recorded as TypeError refusals;
+their observed typed state stays unchanged and matches H. Private diagnostic
+SHA-256:
+`6913181e7760c933abb6ec098f40e7ddc92836ee2bd8d0a48405fbc61fa2c505`.
+The earlier refused attempt remains preserved. This establishes the diagnostic
+source binding only; effective settings, destination binding and the frozen-host
+proof still block any real importer authorization.
+
+### Historical V1 host binding validation
+
+The completed, scoped Grok and Kimi reviews of decision 362 / slice 2.6g
+identified one confirmed V1 gap: an entry without a current filter binding
+escaped the host-link checks. Every entry now requires an existing host binding
+with the same channel and descriptor. Historical entries remain valid without
+live nodes or a consuming filter binding; V2 is unchanged.
+
+The frozen native change passed the store build and both affected V1 and V2
+cases. Authored tests cover missing hosts, mismatched channels and descriptors,
+and canonical preservation of a valid historical entry through save/reopen.
+Independent review and source/log hash checks passed. Evidence:
+`tmp/scratch/rev391-store-tests.xml` (two passed, no failures or skips). This
+fix does not close the outstanding settings, destination or frozen-host proofs.
