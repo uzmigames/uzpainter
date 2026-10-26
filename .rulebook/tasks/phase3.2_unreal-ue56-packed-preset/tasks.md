@@ -716,3 +716,27 @@ verified common context. Private report SHA-256:
 `40c94a11446fef7bbb00d47bd275ff7856cf53a67a3ae6b4590b99ed94c2845e`.
 This establishes the measured transfer equality only. Calibration's nonidentity,
 internal normalization, Color flag and production support remain unresolved.
+
+## 25. Fixed Raw transfer diagnostics
+
+The separate `ocio16_raw_transfer_diagnostics` method compares the existing
+calibration FLOAT and normalization FLOAT experiments after fresh admission,
+input hash/formula, native FLOAT32, envelope, context and registry checks. Its
+primary metrics remain uint32 equality at identical EXR [y,x,RGB] coordinates,
+with per-row, per-column and authored finite-value-class counts. It also checks
+the shared authored R input before comparing R outputs at identical coordinates.
+A difference there identifies a failed equality under the two RGB contexts,
+not its cause.
+
+A separate metric compares the normalization input's same authored code at its
+three formula-defined channel/position combinations. Indices are fixed from the
+public formula before inspecting real outputs. They never replace the direct
+identity result or correct pixels, and they cannot separate channel dependence
+from position dependence. No fit, inversion, general identity or production
+promotion follows from any result.
+
+Seventy-nine authored tests passed, including fifteen new diagnostic cases and
+sixty-four reused admission/comparison cases. Mypy, Ruff, formatting and
+independent source review passed. Reports and failure diagnostics are private
+and write-once. No actual oracle pixels have been inspected by this new method
+at this checkpoint; the method must be committed before that measurement.
