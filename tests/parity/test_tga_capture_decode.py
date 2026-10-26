@@ -229,16 +229,20 @@ def test_export_capture_records_tga_blob_format_and_explicit_encoding_basis(tmp_
     Draft202012Validator({"$defs": schema["$defs"], "$ref": "#/$defs/output"}).validate(output)
 
 
-def test_recorder_fingerprint_tracks_shared_tga_reader(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    "shared_source", ["tga.py", "filter_context_contract.py", "filter_context_settings.py"]
+)
+def test_recorder_fingerprint_tracks_shared_sources(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, shared_source: str
 ) -> None:
     from tools.parity.recorder import environment
 
     directory = tmp_path / "recorder"
     directory.mkdir()
     (directory / "documented_symbols.json").write_bytes(b"{}")
-    reader = tmp_path / "tga.py"
-    reader.write_bytes(b"version = 1\n")
+    for name in ("tga.py", "filter_context_contract.py", "filter_context_settings.py"):
+        (tmp_path / name).write_bytes(b"version = 1\n")
+    reader = tmp_path / shared_source
     monkeypatch.setattr(environment, "RECORDER_DIR", directory)
     environment.recorder_version.cache_clear()
     try:

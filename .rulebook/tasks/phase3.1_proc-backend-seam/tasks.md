@@ -489,3 +489,20 @@ actual visibility and process ID, plus the dialog's HWND and process ID. The
 default payload and navigation actions are unchanged. Thirty-seven affected
 authored cases, Mypy, Ruff and independent review passed. This supplies the
 collector interface only; no new F capture or settings admission has run.
+
+The pure settings contract now validates exactly five adjacent panel/image
+triples, preserving the recording identity and all other operations for the
+complete F trace parser. It checks typed context hashes and reread bytes,
+process/session/project/window bindings, unique owned controls, exact imported
+plane bytes and the documented unitless-OBJ derivation. Raw observations remain
+separate from derived settings. Its result is not an admission or a native
+`VerifiedFilterContext`; the caller must validate the full trace and admitted
+artifacts first. Sixty-three authored contract cases and independent review pass.
+
+Shared receipt checks retain admission-before-read, hashes, environment, input
+and round validation. The historical public wrapper still requires its exact
+manifest, two references, golden and immutable producer. Sixty validation/binding
+regressions pass after the extraction. The recorder digest now includes the
+settings contract; three source-change/LF-normalization tests pass. Mypy and
+Ruff pass. A separately pinned settings producer and actual bound F capture are
+still pending; no historical setting has been inferred or promoted.

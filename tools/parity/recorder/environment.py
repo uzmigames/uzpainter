@@ -166,7 +166,7 @@ def colour_configuration_sha256(colour_management: Mapping[str, Any]) -> str:
 def recorder_version() -> str:
     """`RECORDER_VERSION+src.<digest>`: the digest covers every recorder source (line endings
     normalised), so a code change of the recorder is visible in the record. It also covers the
-    F context contract, whose readback specification the recorder injects into Painter. This is
+    F context contract and bound settings contract used to validate recorder output. This is
     provenance (64-bit, LF-normalised), not an attestation of what ran."""
     digest = hashlib.sha256()
     sources = [
@@ -174,6 +174,7 @@ def recorder_version() -> str:
         RECORDER_DIR / "documented_symbols.json",
         RECORDER_DIR.parent / "tga.py",
         RECORDER_DIR.parent / "filter_context_contract.py",
+        RECORDER_DIR.parent / "filter_context_settings.py",
     ]
     for path in sources:
         digest.update(path.name.encode("utf-8") + b"\0")

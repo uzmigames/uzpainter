@@ -114,9 +114,10 @@ def manifest_request(manifest: dict[str, Any]) -> dict[str, Any]:
     return authored
 
 
-def receipt(
-    manifest: dict[str, Any], authored: dict[str, Any], store: OracleStore
+def _receipt_data(
+    manifest: dict[str, Any], store: OracleStore
 ) -> tuple[dict[str, Any], bytes, bytes, bytes, dict[str, Any]]:
+    """Shared admitted artifact checks; protocol identity and producer are checked separately."""
     registry_raw, current = registry_snapshot()
     # Admission joins precede reads, so a caller-provided hash alone cannot select evidence.
     require_admitted_refs(store, manifest)
@@ -137,7 +138,19 @@ def receipt(
     require(not record_problems(record), "private record schema")
     require(not environment_problems(environment), "environment schema")
     equal(record.get("environment"), environment, "environment blob differs from record")
-    equal([record["golden_id"], record["tier"]], [control.GOLDEN_ID, "0"], "record identity")
+    return record, blobs[GOLDEN_RECORD_ID], blobs[ENVIRONMENT_RECORD_ID], registry_raw, current
+
+
+def _validate_receipt_record(
+    record: dict[str, Any],
+    manifest: dict[str, Any],
+    authored: dict[str, Any],
+    store: OracleStore,
+    current: dict[str, Any],
+) -> None:
+    """Common environment/input/trace identity checks, without selecting a producer policy."""
+    environment = record["environment"]
+    equal([record["golden_id"], record["tier"]], [authored["golden_id"], "0"], "record identity")
     build = manifest["software"]["painter"]
     require(
         build["build_id"] == current["painter_build"]
@@ -149,7 +162,6 @@ def receipt(
         recorded_request_environment_matches(environment, manifest, current, store),
         "recorded environment differs from current envelope",
     )
-    resolve_producer(environment["recorder_version"])
     require(
         environment["colour_configuration_sha256"] == colour_configuration_sha256(LEGACY),
         "environment is not the declared Legacy configuration",
@@ -182,7 +194,19 @@ def receipt(
         "F recording identities differ",
     )
     require(rounds[0]["session_id"] == rounds[1]["session_id"], "recording sessions differ")
-    return record, blobs[GOLDEN_RECORD_ID], blobs[ENVIRONMENT_RECORD_ID], registry_raw, current
+
+
+def receipt(
+    manifest: dict[str, Any], authored: dict[str, Any], store: OracleStore
+) -> tuple[dict[str, Any], bytes, bytes, bytes, dict[str, Any]]:
+    """The historical protocol only: its exact reference inventory and immutable producer."""
+    equal(authored, manifest_request(manifest), "authored F request differs")
+    result = _receipt_data(manifest, store)
+    record, _, _, _, current = result
+    equal([record["golden_id"], record["tier"]], [control.GOLDEN_ID, "0"], "record identity")
+    resolve_producer(record["environment"]["recorder_version"])
+    _validate_receipt_record(record, manifest, authored, store, current)
+    return result
 
 
 def new_report() -> dict[str, Any]:
