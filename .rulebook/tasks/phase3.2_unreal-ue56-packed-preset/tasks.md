@@ -639,3 +639,14 @@ tests passed, with mypy, Ruff, formatting, independent review and guard checks.
 Authored real EXRs cover equal pixels with different file bytes. No actual export
 has run at this checkpoint; input equality, fits, Color flag and production parity
 remain separate open requirements.
+
+The subsequent owned REV375 calibration FLOAT export completed with two maps and
+four admitted private references. The collector stopped its own Painter and
+released its lock. The native FLOAT32 post-admission validation passed both
+rounds, including exact uint32 pixel equality. Capture report SHA-256:
+`fd11ab768fffdcfa6d25c7de0484770e95a41b10d302e38af6be016a1bb44ae5`;
+validation report SHA-256:
+`9dcaa65439aeffa142fc091823c3edb4f8b9360d9b9b311c5642f6610dba7cc5`.
+Normalization FLOAT and PNG16 exports remain pending. This proves repeated
+output stability for calibration only; input identity and production parity
+remain unestablished.
