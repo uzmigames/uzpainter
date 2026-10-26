@@ -10,6 +10,7 @@ import zlib
 from copy import deepcopy
 from dataclasses import replace
 from datetime import UTC, datetime
+from enum import Enum
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -33,6 +34,7 @@ from tools.parity.recorder.probes import (
 from tools.parity.recorder.session import PainterIdentity, RecorderError
 from tools.parity.schemas import REPO_ROOT, Schema, record_problems, validation_errors
 from tools.parity.tier0_semantics import ocio16_bitmap_control as control
+from tools.parity.tier0_semantics import ocio16_raw_readout_control as raw_control
 from tools.parity.tier0_semantics import recording_requests as rr
 
 
@@ -148,6 +150,47 @@ def dispatcher() -> tuple[Any, dict[str, Any]]:
         namespace,
     )
     return namespace["edit"], namespace
+
+
+@pytest.mark.parametrize("state", raw_control.STATES)
+@pytest.mark.parametrize("exports", [False, True])
+def test_raw_v2_resolves_actual_probe_enum_table(state: str, exports: bool) -> None:
+    class GenericColorSpace(Enum):
+        Raw = "authored Raw enum"
+
+    edit, namespace = dispatcher()
+    namespace["substance_painter"].colormanagement.GenericColorSpace = GenericColorSpace
+    probe_tree = ast.parse(PAINTER_PROBES.read_text())
+    table = next(
+        node
+        for node in probe_tree.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "BITMAP_COLOR_SPACES"
+            for target in node.targets
+        )
+    )
+    side = PAINTER_PROBES.with_name("painter_side.py")
+    member = next(
+        node
+        for node in ast.parse(side.read_text()).body
+        if isinstance(node, ast.FunctionDef) and node.name == "member"
+    )
+    exec(
+        compile(ast.Module(body=[table, member], type_ignores=[]), str(PAINTER_PROBES), "exec"),
+        namespace,
+    )
+    job = probe_job_from_manifest(raw_control.request(state, exports=exports))
+    step = next(
+        step for step in job.state_steps if step.call == raw_control.BITMAP + "set_color_space"
+    )
+    edit(step.step, step.call, dict(step.args), {})
+    setter = namespace["fresh"].return_value.get_source.return_value.set_color_space
+    setter.assert_called_once_with(GenericColorSpace.Raw)
+    setter.reset_mock()
+    with pytest.raises(ValueError, match="color space 'Raw' is not a documented member"):
+        edit(step.step, step.call, {**step.args, "color_space": "Raw"}, {})
+    setter.assert_not_called()
 
 
 @pytest.mark.parametrize("literal", [False, True])

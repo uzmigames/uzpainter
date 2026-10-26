@@ -523,3 +523,34 @@ No Painter capture, export, fit or production change was performed in this
 offline slice. Runtime still needs the bounded owned-process runner and a
 successful capability gate for each state. Export requests are not authorized
 by this preparation; item 2.5/R-322 and broader acceptance remain open.
+
+## 20. Owned capability capture and corrected V2 requests
+
+The owned-process runner is committed in `tools/parity/recorder/raw_capability_capture.py`.
+It uses the shared canonical lock, PID/start identity and CREATE-bound UUID checks,
+closed-state reopen guards and sticky ownership-loss refusal. READY location and
+counts are recorded privately before the final ownership check. Runtime fixes
+distinguish only the exact known bridge executable from Painter and use the
+canonical CLI response envelope and documented `Astra/<session>` owner. No bridge
+is imported or executed; a narrowly pinned negative process classifier is the
+only provenance exception. Raw capture performs neither exports nor admission.
+
+The first `calibration-float` capability run completed in its own Painter, wrote
+two private records and passed the public manifest gate. Cleanup stopped its
+process and released the lock. The store admitted the immutable capture, but
+capability validation refused it: the sole raised output is first-round setup
+`s15/set_color_space`. The authored request passed `Raw`; the recorder's actual
+bitmap table accepts `GenericColorSpace.Raw`, so it refused before calling the
+Painter API. This is not evidence that Painter lacks Raw. The private capture
+report SHA-256 is `0794f01d5db214a03c1dbfa96e94f5a4fe9953e9413d863d20fa8a9a8b2488a8`.
+The original request and admitted manifest remain unchanged, and no capability,
+transfer, fit, export or production behavior is accepted by this run.
+
+Six new `*-v2.json` requests have distinct golden identities and use the qualified
+enum key. Every other authored field and all three bitmap fixtures are unchanged.
+The current runner and validator require the exact V2 recipe and refuse historical
+requests. Regression coverage now executes the real `member` function and bitmap
+enum table against an authored enum, proving that the qualified key reaches the
+setter and the old short key refuses first. Sixty-eight affected cases passed;
+mypy, Ruff and formatting passed. V2 runtime admission remains a separate gate;
+export requests still require successful capability evidence for their state.

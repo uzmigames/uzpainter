@@ -140,7 +140,7 @@ def fixed_readbacks() -> dict[str, Any]:
 
 def request(state: str, *, exports: bool = False, root: Path = REPO_ROOT) -> dict[str, Any]:
     path = fixture_path(state)
-    name = f"{PREFIX}-{state}-{'export' if exports else 'capability'}"
+    name = f"{PREFIX}-{state}-{'export' if exports else 'capability'}-v2"
     s = start("plane", resolution=256)
     s.add("substance_painter.layerstack.delete_node", initial_root=True, expected_type="PaintLayer")
     s.channels(((CHANNEL, "RGB32F"),))
@@ -153,7 +153,12 @@ def request(state: str, *, exports: bool = False, root: Path = REPO_ROOT) -> dic
     s.add(FILL + "set_projection_mode", node_step=node, projection_mode="UV")
     s.add(FILL + "set_projection_parameters", node_step=node, **UV)
     s.add(ps.SET_SOURCE, node_step=node, channel=CHANNEL, resource_step=imported)
-    s.add(BITMAP + "set_color_space", node_step=node, channel=CHANNEL, color_space="Raw")
+    s.add(
+        BITMAP + "set_color_space",
+        node_step=node,
+        channel=CHANNEL,
+        color_space="GenericColorSpace.Raw",
+    )
     for call in fixed_readbacks():
         args: dict[str, Any] = {} if call == ROOT_LAYERS else {"node_step": node}
         if call in (NODE + "get_blending_mode", NODE + "get_opacity", BITMAP + "get_color_space"):

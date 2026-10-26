@@ -10,11 +10,13 @@ from typing import Any
 import numpy as np
 import pytest
 
+from tools.parity import ocio16_raw_readout_admission as admission
 from tools.parity.feasibility import png
 from tools.parity.fit.decode import decode
 from tools.parity.recorder import vocabulary as ps
 from tools.parity.recorder.job import EXPORT
 from tools.parity.recorder.probes import is_read, manifest_symbol_problems, probe_job_from_manifest
+from tools.parity.recorder.raw_capability_capture import Request, prepared
 from tools.parity.recorder.resource_qualification import exr_fields
 from tools.parity.schemas import REPO_ROOT, Schema, validation_errors
 from tools.parity.tier0_semantics import ocio16_raw_readout_control as control
@@ -93,7 +95,22 @@ def test_requests_use_existing_vocabulary_and_separate_setup(state: str, exports
     space = next(
         step for step in job.state_steps if step.call == control.BITMAP + "set_color_space"
     )
-    assert space.args["color_space"] == "Raw" and "color_space_type" not in space.args
+    assert space.args["color_space"] == "GenericColorSpace.Raw"
+    assert "color_space_type" not in space.args
+    assert manifest["golden_id"].endswith("-v2")
+    historical = json.loads(
+        stored.with_name(stored.name.removesuffix("-v2.json") + ".json").read_bytes()
+    )
+    assert historical["golden_id"] + "-v2" == manifest["golden_id"]
+    historical["golden_id"] = manifest["golden_id"]
+    original_space = next(
+        step
+        for step in historical["instruction_sequence"]["steps"]
+        if step["call"] == control.BITMAP + "set_color_space"
+    )
+    assert original_space["args"]["color_space"] == "Raw"
+    original_space["args"]["color_space"] = "GenericColorSpace.Raw"
+    assert historical == manifest
     if exports:
         capability = control.request(state)
         assert (
@@ -108,6 +125,19 @@ def test_requests_use_existing_vocabulary_and_separate_setup(state: str, exports
         }
     assert manifest["private_records"] == []
     assert "flag remains unobserved" in manifest["description"]
+
+
+@pytest.mark.parametrize("state", control.STATES)
+def test_current_runner_and_admission_refuse_historical_request(state: str, tmp_path: Path) -> None:
+    historical = (
+        rr.request_root(REPO_ROOT)
+        / "tier0/api-probes"
+        / f"{control.PREFIX}-{state}-capability.json"
+    )
+    with pytest.raises(ValueError, match="authored request differs"):
+        prepared(Request(state, historical, REPO_ROOT / "pyproject.toml", tmp_path / "unused"))
+    with pytest.raises(ValueError, match="authored capability request differs"):
+        admission.validate_manifest(json.loads(historical.read_bytes()), state)
 
 
 def synthetic() -> tuple[dict[str, Any], dict[str, Any], dict[str, str]]:
