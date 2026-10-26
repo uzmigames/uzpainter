@@ -337,3 +337,39 @@ test assumptions were corrected without repeating unaffected passing suites.
 Logs are `tmp/scratch/rev382-tests.log`, `tmp/scratch/rev383b-tests.log`,
 `tmp/scratch/rev384-tests.log` and `tmp/scratch/rev384b-tests.log`, with the
 earlier focused retry logs preserved. Static checks and independent review passed.
+
+REV385 then captured the actual F request through the committed runner
+`1b6bfc63`: two rounds, 317/260 context leaves and two private references admitted
+and freshly verified in the store. The owned Painter stopped, its lock released,
+and independent checks found no Painter or endpoint. All 35 frozen producer
+source hashes remained unchanged; the recorded version was
+`uzp-recorder/1+src.6fdbba920f54307b`. Capture report SHA-256:
+`34091ee1a9d5af10c3d8dcfed20efd8437e6ed6280a773b3091a7086b27c3e3d`;
+source-freeze audit SHA-256:
+`5e51036235ee8ff5dd21ca5d8e48584cde971b7913aa85c1a459612be684aa94`.
+
+The committed reconstruction validated the actual five-boundary observable
+context, while `require_effective_settings` refused the missing effective
+settings. Private context audit SHA-256:
+`fe5e79044c3b07b858bad3702e8cb61326431d14d8c9c93056a23a829ba04f4a`.
+The public manifest hashes to
+`633e37df7f48566569597dc555ae8e40db4992e46c3e1d7f146e4800d5ee3674`.
+This does not establish F/H source-state equality, the destination relation,
+effective project settings or the frozen-host proof, and does not enable import.
+
+### Offline F admission and context validation
+
+`filter_context_validation` revalidates the public request, exactly two admitted
+private references, stored bytes, schemas, Legacy environment, recipe/input pins
+and recording identities before reconstructing the observable context. It checks
+registry bytes and the selected envelope before and after validation, including
+domain refusals. Receipt integrity and source provenance are not runtime or PID
+attestation. Private reports preserve receipt and domain results separately;
+missing effective settings always leave acceptance blocked, with no override.
+
+Twenty-nine distinct authored cases passed: 27 initially, then two new registry
+drift cases and two affected cases after review. Mypy, Ruff, formatting and final
+independent review passed. Reports are write-once outside the repository, and
+stdout carries hashes and counts only. The command exits 2 while acceptance is
+blocked even when receipt and observable-domain validation pass. No actual record
+has yet been processed by this new command at this method checkpoint.

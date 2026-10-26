@@ -740,3 +740,13 @@ sixty-four reused admission/comparison cases. Mypy, Ruff, formatting and
 independent source review passed. Reports and failure diagnostics are private
 and write-once. No actual oracle pixels have been inspected by this new method
 at this checkpoint; the method must be committed before that measurement.
+
+After method commit `5c1ff152`, REV386 measured both actual FLOAT captures.
+Each has 65,535 direct differences per round, 21,845 per RGB channel. Shared R
+outputs are bit-equal at identical coordinates in both rounds (0/65,536
+differences). The normalization same-code combinations are also mutually equal
+for all three pairs in both rounds, while each differs from its authored center
+in 21,845 samples. These are the predeclared finite comparisons; they do not
+establish general channel invariance or identify the cause of the differences.
+Private report SHA-256:
+`67e3bd716285700247409a72fd9a0f702285358087369ed3632901164a57ea44`.
