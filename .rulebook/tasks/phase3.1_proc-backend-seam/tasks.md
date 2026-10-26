@@ -619,3 +619,44 @@ These are authored native checks. The real destination mapping, H admission
 gate, production factory/command and frozen-host proof remain required before
 actual import. No real native F import, full-suite acceptance or task closure is
 claimed by this checkpoint.
+
+### Native destination, H admission and real command
+
+C4 now checks the complete starting shape and J1-J4, constructs the destination
+without touching the store, preserves retained data, and rejects unknown nested
+projection/blending state. Only the exact approved inactive constructor defaults
+may be removed. Missing host, Paint and Filter ids follow one deterministic order.
+H admission reads the closed snapshot admission and fixed compiled producer policy
+before any blob, validates all six artifacts natively and rechecks both documents.
+
+The real C5 entry requires admitted H, the strictly parsed request and the C4
+result. Its private seal binds the actual store, revision, base, evidence,
+prospective projection and allocated ids. Mapping, allocation, frozen-host proof
+and observation insertion occur inside one Submit. C6 registers the production
+command, checks retained replay before mapping under the project lock, saves only
+after commit, then reopens and verifies ObservedFilter. Legacy transaction tests
+and same-token replay remain covered.
+
+The focused union passed 328 authored native checks: admission 88, destination 61,
+H admission 25, payload 46, transaction 97 and command 11. The command tests cover
+one revision/operation, original UUID preservation, getters after reopen, retained
+replay after later edits, and byte-identical refusals for stale/horizon/corrupt
+operation rows, invalid starting state and failed native proof. Their F envelope
+uses the existing private test friend with authored pins because the compiled
+private machine envelope has no authored preimage. H retains its compiled policy.
+The public command always uses compiled F pins; synthetic results do not certify
+the real Painter import.
+
+The test-friend production guard and two public UzPainter.exe command smoke tests
+also passed, for nine Python nodes across focused runs. Mypy, Ruff, Zig formatting
+and independent reviews passed. The initial build log records the fixed local
+Refuse name collision; the only subsequent failure was a Windows MAX_PATH fixture
+path, corrected by shortening only the test folder name. Passing cases were not
+repeated for that fixture correction. Logs remain in
+`tmp/scratch/rev405-gates.log`, `tmp/scratch/rev405b-gates.log` and
+`tmp/scratch/rev405c-host-app.log`, with JUnit XML beside them. All 40 final frozen
+source hashes and the retained H379 validator binary remained unchanged.
+
+The real import on the original H store, its production-pin validation and proof,
+and the remaining task acceptance obligations are still pending at this software
+checkpoint. No full-suite result, push, PR, archive or Painter parity is claimed.

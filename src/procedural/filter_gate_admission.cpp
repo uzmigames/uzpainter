@@ -468,6 +468,20 @@ std::optional<ImportRefusal> OracleStoreReader::RequireAdmitted(std::string_view
     }
 }
 
+std::optional<std::string> OracleStoreReader::SnapshotAdmissionBytes(std::string_view capture_id,
+                                                                  std::string_view policy_sha256) const {
+    if (observe_) observe_("snapshot-admission");
+    if (!core::IsSha256Hex(capture_id) || !core::IsSha256Hex(policy_sha256)) return std::nullopt;
+    return ReadFenced(root_, final_root_,
+                      {"snapshot-captures", std::string(capture_id), std::string(policy_sha256) + ".json"});
+}
+
+std::optional<std::string> OracleStoreReader::SnapshotPolicyBytes(std::string_view policy_sha256) const {
+    if (observe_) observe_("snapshot-policy");
+    if (!core::IsSha256Hex(policy_sha256)) return std::nullopt;
+    return ReadFenced(root_, final_root_, {"snapshot-producer-policies", std::string(policy_sha256) + ".json"});
+}
+
 std::optional<std::string> OracleStoreReader::Blob(std::string_view sha256, std::optional<std::int64_t> size_bytes) const {
     try {
         if (observe_) observe_("blob");

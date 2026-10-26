@@ -321,6 +321,17 @@ A distinct command and payload: `UzPainter.exe assets import-filter-observation 
 
 No locator map, trust flag or computed value is accepted. Every private byte is read from the oracle store by the layout below.
 
+The command is registered in `UzPainter.exe` (`src/main.cpp`) and in the export test executable's dispatcher. It reads the envelope registry at `<executable folder>/assets/filter-gate/registry.json`, which the build installs from `parity/envelopes/registry.json`; the bytes must still equal the compiled registry. In order, it:
+1. parses the payload strictly (`ParseFilterImportRequest`);
+2. opens the oracle store;
+3. admits H (`AdmitHostCapture`) and F (`AdmitFilterCapture`, C2 and C3);
+4. runs the store-free `ValidateFilterHostBinding`;
+5. requires the original H file to be at rest, with no `-wal`, `-shm`, `-journal`, `.compact` or `.vacuum` companion;
+6. opens it with a read-only preflight under the project lock. The preflight requires journal mode `delete`, checks that the store UUID is the H receipt's project UUID, looks up the replay row (`DecideStored`) and computes `ExpectedDestination` on the store's actual base;
+7. calls `CommitAdmittedFilterObservation`, saves, reopens, and requires `ObservedFilter` to return the committed entry with the expected observations.
+
+It prints one `UZP_JSON:` report: `ok` (with `replayed` and `verified_after_reopen`), `refused`, `host_error` or `committed_verification_failed`. A refusal inside the commit is reported with its reason and the fixed detail `NATIVE_COMMIT_REFUSED`; no store or proof detail text is printed.
+
 The public manifest is NOT an admitted blob. `record_run` admits only its twelve private refs and writes the manifest outside the store, so no store entry or blob exists for it. The manifest bytes are untrusted input until all three of these pass:
 - their SHA-256 and size equal the payload ref;
 - the F1 invariants hold;
@@ -329,6 +340,26 @@ The public manifest is NOT an admitted blob. `record_run` admits only its twelve
 Its ref in the capture/2 filter section is the hash of exactly those bytes.
 
 The destination is the ORIGINAL H store at `<h-store.uzp>`: no copy, no `SaveAs`, no new store and no new UUID. Its `project_uuid` must equal the H receipt's. It must hold the H snapshot entry, with the receipt's signature and `/3` metadata, and the census plane equal to B. `CheckCaptureDomain` (mesh and settings) must pass. All mapping is computed in memory. The mapping, the Filter insertion, the native proof and the immutable entry happen in ONE `Submit`. Any refusal, including inside that callback, leaves the store byte-identical: no revision, operation record or stored change. Only a committed outcome is followed by `Save`, close, reopen and `ObservedFilter`, which must return the same entry and observations.
+
+### H admission (shipped)
+
+`AdmitHostCapture(host, store)` (`filter_gate_host.h/.cpp`) admits the capture/2 host section from the same oracle store:
+
+- **Capture id.** Slot ids are assigned by protocol position (`receipt`, `request`, `r1-scalar`, `r2-scalar`, `r1-rgb`, `r2-rgb`) and never taken from a caller. The capture id is the typed hash of `{protocol, artifacts}`.
+- **Admission before blobs.** Two files are read before any blob:
+  - the admission record `snapshot-captures/<capture id>/<policy sha256>.json`: closed schema, the producer policy `{sha256, revision 1}`, artifacts equal to the slots, provenance `owner_local_submission` with no execution attestation, the validation hashes and the admission time;
+  - the retained policy `snapshot-producer-policies/<sha256>.json`, which must be byte-equal to the compiled `parity/snapshot-producer-policy-v1.json`.
+- **Approved producer.** The receipt's recorder pins must be one of the policy's approved producer rows.
+- **Native validation.** Every artifact is read and rehashed, then validated natively (`ValidateHostCaptureArtifacts`). The admission's signature, capture context and raster hashes must equal the native validation's.
+- **Re-read.** The admission and policy are read again afterwards and must be unchanged.
+
+The reason is `HOST_CAPTURE_INVALID`, with a fixed detail: `H_ADMISSION_UNAVAILABLE`, `H_ADMISSION_INVALID`, `H_POLICY_UNAVAILABLE`, `H_POLICY_INVALID`, `H_PRODUCER_UNAPPROVED`, `H_ARTIFACT_UNAVAILABLE`, `H_VALIDATION_MISMATCH` or `H_ADMISSION_CHANGED`. A native validation refusal keeps its own reason, with the detail `H_ARTIFACT_INVALID`.
+
+### Test seam of the command (limitation)
+
+The public `RunFilterImportCommand` always uses the installed registry path and the compiled F pins (`AdmitFilterCapture`). The command body is a private static `FilterImportCommandDriver::Run`, whose only friends are that public wrapper and the test-only `FilterGateTestAccess` (defined once in `tests/export/filter_gate_test_support.h`).
+
+The end-to-end test admits its authored F under authored pins (an authored registry and envelope) through `FilterGateTestAccess::RunCommand`. This is unavoidable: the compiled envelope's hash has no authored preimage, and its real preimage is private host data. Everything else in that test is the real command: the compiled H policy, the payload, the preflight, C4, C5 with the native proof, saving and the getters. The test therefore proves the command's behaviour on authored evidence, not the admission of the real F envelope.
 
 ### F1 manifest
 
@@ -480,6 +511,17 @@ The owner's private checks only confirm that the real store falls inside this ru
 
   Together with the role map, these are the expected destination's identity that the seal (slice C5) binds.
 
+### Destination rules the slice C4 code enforces
+
+- **Store-free binding.** `ValidateFilterHostBinding(capture, panels, trace, settings, H)` checks the slices' admission identity, then J1–J4, with no base, store or mapping. The command runs it before any replay lookup. `ExpectedDestination` runs the same code, so the two cannot drift.
+- **No silent drop.** Every member C4 replaces from F must hold no unknown data in the base: the host Fill's `projection.extra`, `projection.params`, `projection.uv.extra` and `projection.uv.uv_transformation.extra`, and every host and Paint `Blending.extra`. Otherwise `DESTINATION_STARTING_SHAPE`. `collapsed` must be false on the host and on the Paint. The host reference must be exactly the bind: no `extra`, preset, image input or mask output. Otherwise `DESTINATION_HOST_SOURCES`.
+- **Dropped channels.** A base stack channel absent from F is dropped only when no base layer references it: no host or Paint blending entry, no Paint plane, and no host source other than the removed known defaults. Otherwise `DESTINATION_STARTING_SHAPE`.
+- **Symmetry.** `is_symmetry_enabled` and `get_symmetry_parameters` are read from both pre16 frames, which must have equal outcomes (the same value, or the same raise type). Enabled must be `False` or raise `ValueError`. Parameters must raise `ValueError`: unraised parameters have no representation here and refuse with `DESTINATION_F_CONTEXT`, never dropped. The destination's neutral symmetry is then the observed state.
+- **Blending.** Host and Paint blending come from F for every F stack channel; a raised leaf refuses. The Filter's blending covers every F stack channel:
+  - active channels must be unraised;
+  - on an inactive channel, the observed state is kept when both frames are unraised, and is absent when both frames raised;
+  - any other combination refuses.
+
 ### Mapping, deterministic ids and target seal
 
 `ExpectedDestination(F, H, base)` is a pure function that returns the complete prospective project:
@@ -489,20 +531,37 @@ The owner's private checks only confirm that the real store falls inside this ru
 
 The host Fill and the empty Paint are reused when the starting shape holds them, keeping their ids. Missing nodes are allocated from `base.next_id` in a fixed order: the host Fill (if missing), then the empty Paint (if missing), then the Filter. The Filter id is therefore `base.next_id + (number of nodes allocated before it)`, never assumed to be `base.next_id`. Texture set and stack ids are the base's. The role map holds the native id for the set, stack, host, Paint and Filter, each with the F UID it maps. Inside the transaction, `Edit::AllocateId` is called in the same order and must return exactly the expected ids; anything else refuses.
 
-The factory `VerifyFilterContext` does not exist until C1–C4 exist. It is the only producer of a `VerifiedFilterContext` and seals, privately:
-- the store binding: the transient in-process identity of the owning `ProjectStore` instance (compared in-process, never serialized, hashed or written to a record) plus the store's `project_uuid`;
-- `expected_base_revision`, which must equal the current revision;
-- the base projection hash;
-- the role map;
-- the `ExpectedDestination` projection hash;
-- the H identity hash;
-- the F evidence hash: the capture/2 filter section plus the validated manifest, record and environment hashes.
+The only production route to a `VerifiedFilterContext` is the combined private factory and commit `CommitAdmittedFilterObservation(store, document, AdmittedHostCapture, ParsedFilterImportRequest, ValidatedFilterDestination, templates)` (`filter_observation_import_v2.h/.cpp`). No public `VerifyFilterContext` or other constructor exists; the context is built and committed inside this one call, and no token leaves it.
+
+Before building the context, it requires:
+- the document attached to this store, with the store's UUID;
+- the request's host section to be the admitted H's;
+- the destination's H identity to be the admitted H's;
+- the request's `expected_base_revision` to equal the document and store revision;
+- no observation namespace yet;
+- the actual base projection hash to equal the destination's base hash.
+
+It then runs, on the prospective project:
+- `VerifyHostCapture`;
+- `CurrentFilterObservationContextV2`, whose projection hash must equal the destination's prospective hash;
+- `FrozenHostDomainProblem`.
+
+The mapped native roles must equal the prospective nodes. The allocated ids must be consecutive from the base's `next_id` and end with the Filter.
+
+The private seal records:
+- the store binding: the transient in-process identity of the owning `ProjectStore` instance (compared in-process, never serialized, hashed or written to a record);
+- the target `{project_uuid, revision, base projection hash, Filter id}`, computed from the store and the destination, never from a caller;
+- the prospective projection and inventory hashes;
+- the native roles and the F source roles;
+- the verified H identity;
+- the Filter identity: effect, descriptor, observations and capture section, plus a gate identity. The gate identity holds the destination identity, the H admission identity, the request arguments and the allocation ids.
 
 The seal has no public constructor, setter, token or callback. A context sealed for one store instance refuses on any other instance, even one with the same UUID and revision. No persistent file identity is introduced.
 
-The commit takes no caller `ImportTarget` on the real path. Inside its one `Submit`, it:
-1. checks the store binding and every sealed field;
-2. applies `ExpectedDestination` with the same allocation order;
+Before `Submit`, the commit checks the store binding and the immutable seal.
+Inside its one `Submit`, it:
+1. checks the current revision, base projection and sealed evidence;
+2. applies the expected destination with the same allocation order;
 3. requires the projection hash (without the namespace) to equal the sealed one;
 4. runs the existing domain, host request, context, native proof, recheck, namespace check and `ObservedFilter` steps.
 
@@ -551,7 +610,11 @@ The seal stays a private in-process recheck and never enters the request.
 2. **C2, settings slots, settings contract and full PNG decode (F7):** `src/procedural/filter_gate_settings.h/.cpp`, plus tests. Runs in parallel with C3 once the C1 header is fixed.
 3. **C3, trace, context, cross-round comparison and round hashes (F5, F6, F9):** `src/procedural/filter_gate_trace.h/.cpp`, plus tests.
 4. **C4, J1–J4, F8 projection, starting-shape predicate and `ExpectedDestination` with deterministic allocation:** `src/procedural/filter_gate_destination.h/.cpp`, plus tests.
-5. **C5, seal, factory and sealed commit:** `filter_observation_import_v2.h/.cpp` and `tests/export/filter_import_v2_test.cpp`, owned by the transactional-seal owner. Can begin in parallel with C4; the factory lands only after C1–C4.
-6. **C6, command, payload, replay lookup and the end-to-end authored test.**
+5. **C5, the combined private factory and sealed commit:** `CommitAdmittedFilterObservation` in `filter_observation_import_v2.h/.cpp`, with `tests/export/filter_import_v2_test.cpp`.
+6. **H admission:** `src/procedural/filter_gate_host.h/.cpp`, with `tests/export/filter_gate_host_test.cpp`.
+7. **C6, payload and command:**
+   - `src/procedural/filter_gate_request.h/.cpp`: `ParseFilterImportRequest` and the stable operation request `MutationRequestFor`;
+   - `src/procedural/filter_import_cli.h/.cpp`: `RunFilterImportCommand` and the private `FilterImportCommandDriver`;
+   - the end-to-end authored test `RunFilterImportCommandCases` (in `tests/export/filter_gate_destination_test.cpp`).
 
 Each slice carries authored refusals and test-only differential cases against the Python specification. No slice adds a diagnostic descriptor, UUID, store or proof, and no slice reads old expected 16–18.

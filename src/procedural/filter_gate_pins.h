@@ -44,11 +44,11 @@ struct FilterGatePins {
 /// as its current entry, or the embedded request is not recipe A with its one plane input.
 std::expected<FilterGatePins, ImportRefusal> CompiledFilterGatePins();
 
-/// SHA-256 of the gate's own sources (the pins, admission, settings and trace slices, headers and
-/// sources) and the embedded pin files, in that fixed order, each hashed with CRLF read as LF so the
+/// SHA-256 of the gate's sources (pins, F admission, settings, trace, destination, H admission,
+/// transaction, payload and command, headers then sources) and the embedded pin files, in that
+/// fixed order, each hashed with CRLF read as LF so the
 /// value does not depend on the checkout's line endings. It is typed source provenance of what this
-/// binary was built from, not a runtime attestation; later gate slices (destination, factory, command)
-/// extend the list when they exist.
+/// binary was built from, not a runtime attestation.
 std::string FilterGateCodeSha256();
 
 }  // namespace uzp::procedural

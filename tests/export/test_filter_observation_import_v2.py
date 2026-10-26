@@ -1,5 +1,5 @@
 """Decision 363: the internal V2 verified-context transaction component on authored evidence
-(authored H artifacts and F context; no Painter, no captured data, no runtime entry point)."""
+(authored H artifacts and F context; no Painter or captured data)."""
 
 from __future__ import annotations
 
@@ -29,12 +29,11 @@ def test_filter_import_v2_transaction_on_authored_evidence(
     lines = [line for line in proc.stdout.splitlines() if line.startswith(PREFIX)]
     assert len(lines) == 1, proc.stdout
     summary = json.loads(lines[0][len(PREFIX) :])
-    assert summary == {"checks": 81}
+    assert summary == {"checks": 97}
 
 
-def test_no_production_route_reaches_the_verified_filter_context() -> None:
-    """The F gate does not exist: no production source defines the test-only access, and only the
-    test binary compiles the transaction component."""
+def test_production_never_defines_test_only_filter_access() -> None:
+    """Only authored tests define the native factory's test friend."""
     definition = re.compile(r"struct\s+FilterImportTestAccess\s*\{")
     defined = [
         path.relative_to(REPO).as_posix()
@@ -42,5 +41,3 @@ def test_no_production_route_reaches_the_verified_filter_context() -> None:
         if path.suffix in {".h", ".cpp"} and definition.search(path.read_text(encoding="utf-8"))
     ]
     assert defined == []
-    build = (REPO / "build.zig").read_text(encoding="utf-8")
-    assert build.count("procedural/filter_observation_import_v2.cpp") == 1

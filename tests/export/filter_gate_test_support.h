@@ -27,6 +27,7 @@
 
 #include "procedural/filter_gate_admission.h"
 #include "procedural/filter_gate_pins.h"
+#include "procedural/filter_import_cli.h"
 #include "uzp_core/manifest/json.h"
 #include "uzp_core/manifest/sha256.h"
 #include "../filter_observation_v2_fixture.h"
@@ -35,6 +36,13 @@ namespace uzp::procedural {
 
 /// The authored-tests-only route to admission under authored pins.
 struct FilterGateTestAccess {
+    static int RunCommand(const std::vector<std::string>& args, std::FILE* out, std::FILE* err,
+                          const std::filesystem::path& registry, const FilterGatePins& pins) {
+        return FilterImportCommandDriver::Run(args, out, err, registry,
+            [&pins](std::string_view bytes, const core::json::Object& ref, const OracleStoreReader& store) {
+                return AdmittedFilterCapture::Admit(bytes, ref, store, pins);
+            });
+    }
     static std::expected<AdmittedFilterCapture, ImportRefusal> Admit(std::string_view manifest_bytes,
                                                                      const core::json::Object& manifest_ref,
                                                                      const OracleStoreReader& store,

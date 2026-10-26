@@ -10,6 +10,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <iterator>
 #include <limits>
 #include <map>
 #include <memory>
@@ -36,7 +37,7 @@
 
 namespace uzp::procedural {
 
-/// The authored-tests-only route to a verified F context (the F gate does not exist yet).
+/// The authored-tests-only route to a verified F context, independent of real admissions.
 struct FilterImportTestAccess {
     static VerifiedFilterContext Make(core::Effect effect, core::json::Object descriptor, core::json::Object observations,
                                       core::json::Object filter_capture) {
@@ -97,6 +98,41 @@ struct FilterImportTestAccess {
         context.filter_capture_ = other.filter_capture_;
         return context;
     }
+
+    static VerifiedFilterContext Mapped(VerifiedFilterContext context, store::ProjectStore& store,
+                                        const VerifiedHostMigration& host, const ImportTarget& target,
+                                        const core::Project& prospective, const std::vector<core::Id>& allocations) {
+        context.effect_.uid = target.filter_uid;
+        context = Seal(std::move(context), store, host, target, prospective);
+        context.expected_destination_ = prospective;
+        context.allocation_ids_ = allocations;
+        core::json::Array ids;
+        for (core::Id id : allocations) ids.push_back(static_cast<std::int64_t>(id));
+        const core::json::Object args{{"payload_sha256", core::Sha256Hex("authored mapped payload")},
+                                      {"project_uuid", target.project_uuid},
+                                      {"expected_base_revision", target.revision}};
+        context.operation_request_ = core::MutationRequest{
+            "filter-observation-commit-v2", args, "filter-observation-commit-v2:" + store::ObservationKey(args),
+            target.revision};
+        context.gate_identity_ = core::json::Object{{"destination", core::Sha256Hex("authored destination")},
+                                                   {"host_admission", core::Sha256Hex("authored admission")},
+                                                   {"request_arguments", args}, {"allocation_ids", ids}};
+        context.target_seal_["filter_identity_sha256"] = store::ObservationKey(core::json::Object{
+            {"effect", core::EffectToJson(context.Effect(), false)}, {"descriptor", context.Descriptor()},
+            {"observations", context.Observations()}, {"capture", context.FilterCapture()},
+            {"gate_identity", context.gate_identity_}});
+        return context;
+    }
+
+    static VerifiedFilterContext ChangedMappedProject(VerifiedFilterContext context) {
+        context.expected_destination_->texture_sets[0].name += " changed";
+        return context;
+    }
+
+    static VerifiedFilterContext ChangedAllocation(VerifiedFilterContext context) {
+        ++context.allocation_ids_[0];
+        return context;
+    }
 };
 
 }  // namespace uzp::procedural
@@ -112,6 +148,12 @@ using procedural::ImportRefusal;
 
 void Expect(bool okay, const std::string& message) {
     if (!okay) throw std::runtime_error(message);
+}
+
+std::string FileSha256(const fs::path& path) {
+    std::ifstream file(path, std::ios::binary);
+    Expect(static_cast<bool>(file), "read the authored project file");
+    return core::Sha256Hex(std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()));
 }
 
 /// The authored H readback of the paired capture (the bridge's isolated User0/User1 layer).
@@ -874,6 +916,73 @@ int RunFilterImportV2Cases(const fs::path& work) {
               "the recheck refuses a moved revision, a same-version census change and a changed projection (revision " +
                   std::to_string(staleRevision) + ", census " + std::to_string(staleCensus) + ", projection " +
                   std::to_string(staleProjection) + ")");
+    }
+
+    // The mapped branch applies its complete prospective project and allocations atomically.
+    // This friend supplies authored expectations; C6 exercises the admitted production factory.
+    for (unsigned missing = 0; missing != 4; ++missing) {
+        Case mapped = Prepare(work / ("import-mapped-" + std::to_string(missing) + ".uzp"), fixed);
+        const core::Project original = *mapped.document->snapshot().project;
+        core::Layer hostLayer = original.texture_sets[0].stacks[0].root_layers[0];
+        core::Layer paintLayer = original.texture_sets[0].stacks[0].root_layers[1];
+        const auto changed = mapped.store->Submit(
+            *mapped.document, {"authored-map-base", {}, "authored-map-base", mapped.document->revision()},
+            [&](core::Edit& edit) {
+                auto& set = edit.project().texture_sets[0];
+                set.name = "before mapping";
+                auto& roots = set.stacks[0].root_layers;
+                roots.clear();
+                if (!(missing & 1)) roots.push_back(hostLayer);
+                if (!(missing & 2)) roots.push_back(paintLayer);
+            });
+        Expect(changed.result && changed.result->status == core::ResultStatus::committed,
+               "prepare a mapped starting shape");
+        core::Project prospective = *mapped.document->snapshot().project;
+        prospective.texture_sets[0].name = original.texture_sets[0].name;
+        std::vector<core::Id> allocated;
+        if (missing & 1) { hostLayer.uid = prospective.AllocateId(); allocated.push_back(hostLayer.uid); }
+        if (missing & 2) { paintLayer.uid = prospective.AllocateId(); allocated.push_back(paintLayer.uid); }
+        auto authored = FilterContext();
+        core::Effect effect = authored.Effect();
+        effect.uid = prospective.AllocateId();
+        allocated.push_back(effect.uid);
+        hostLayer.content_effects = {effect};
+        prospective.texture_sets[0].stacks[0].root_layers = {hostLayer, paintLayer};
+        const auto artifacts = procedural::ValidateHostCaptureArtifacts(mapped.HostCapture(), mapped.Transport());
+        Expect(artifacts.has_value(), "validate authored mapped H artifacts");
+        const auto host = procedural::VerifyHostCapture(*mapped.store, prospective, *artifacts);
+        Expect(host.has_value(), host ? "" : host.error().detail);
+        auto target = Target(mapped);
+        target.filter_uid = effect.uid;
+        const auto token = FilterImportTestAccess::Mapped(authored, *mapped.store, *host, target, prospective, allocated);
+        const auto revision = mapped.document->revision();
+        const auto baseHash = store::ObservationKey(core::ProjectToJson(*mapped.document->snapshot().project));
+        const auto fileHash = FileSha256(mapped.store->path());
+        for (const auto& invalid : {FilterImportTestAccess::ChangedMappedProject(token),
+                                    FilterImportTestAccess::ChangedAllocation(token)}) {
+            const auto refused = procedural::CommitFilterObservation(*mapped.store, *mapped.document, *host, invalid,
+                                                                       target, templates);
+            check(!refused && mapped.document->revision() == revision &&
+                      mapped.store->OperationsAfter(revision).records.empty() &&
+                      store::ObservationKey(core::ProjectToJson(*mapped.document->snapshot().project)) == baseHash &&
+                      FileSha256(mapped.store->path()) == fileHash,
+                  "a changed mapped projection or allocation refuses without a transaction");
+        }
+        const auto committedMap = procedural::CommitFilterObservation(*mapped.store, *mapped.document, *host, token,
+                                                                         target, templates);
+        Expect(committedMap.has_value(), committedMap ? "" : committedMap.error().detail);
+        auto projection = core::ProjectToJson(*mapped.document->snapshot().project);
+        std::get<json::Object>(projection.data).erase(std::string(store::kFilterObservationsKey));
+        check(mapped.document->revision() == revision + 1 &&
+                  json::WriteCanonical(projection) == json::WriteCanonical(core::ProjectToJson(prospective)) &&
+                  procedural::ObservedFilter(*mapped.store, *mapped.document->snapshot().project, effect.uid).has_value(),
+              "mapping and deterministic missing-node allocation commit with the observation");
+        const auto replayedMap = procedural::CommitFilterObservation(*mapped.store, *mapped.document, *host, token,
+                                                                        target, templates);
+        check(replayedMap && *replayedMap == *committedMap && mapped.document->revision() == revision + 1,
+              "the same mapped token replays after its base revision advances");
+        mapped.document.reset();
+        mapped.store->Close();
     }
 
     std::cout << "FILTER_IMPORT_V2: " << json::WriteCanonical(json::Object{{"checks", checks}}) << "\n";

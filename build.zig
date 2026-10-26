@@ -1521,6 +1521,18 @@ pub fn build(b: *std.Build) void {
     app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &pyapi_sources, .flags = &pyapi_flags });
     // `UzPainter.exe assets list [--parity]` (src/procedural/cli.h).
     app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &.{ "procedural/cli.cpp", "procedural/snapshot_cli.cpp", "procedural/snapshot_recording.cpp" }, .flags = &pyapi_flags });
+    app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &.{
+        "procedural/filter_observation_import_v2.cpp",
+        "procedural/filter_gate_admission.cpp",
+        "procedural/filter_gate_settings.cpp",
+        "procedural/filter_gate_trace.cpp",
+        "procedural/filter_gate_destination.cpp",
+        "procedural/filter_gate_request.cpp",
+        "procedural/filter_import_cli.cpp",
+    }, .flags = &evaluator_flags });
+    embed_inputs.add(app_mod, "src", &.{ "procedural/filter_gate_pins.cpp", "procedural/filter_gate_host.cpp" }, &evaluator_flags);
+    const install_filter_registry = b.addInstallBinFile(b.path("parity/envelopes/registry.json"), "assets/filter-gate/registry.json");
+    painter_step.dependOn(&install_filter_registry.step);
     painter_step.dependOn(&b.addInstallBinFile(b.path("parity/fixtures/meshes/plane.obj"), "assets/snapshot/plane.obj").step);
     // The supervisor and worker roles (phase2.1). The worker's test-only fault hooks exist in a
     // Debug build only: ReleaseFast, ReleaseSafe and ReleaseSmall contain none of their code and
@@ -1832,13 +1844,15 @@ pub fn build(b: *std.Build) void {
             "filter_gate_admission_test.cpp",
             "filter_gate_settings_test.cpp",
             "filter_gate_trace_test.cpp",
+            "filter_gate_destination_test.cpp",
+            "filter_gate_host_test.cpp",
+            "filter_gate_request_test.cpp",
         },
         .flags = &export_hook_flags,
     });
     // The test-only H diagnostic `snapshot-capture-validate` embeds its validator sources.
     embed_inputs.add(export_tests_mod, "tests/export", &.{"snapshot_capture_validate.cpp"}, &export_hook_flags);
-    // The internal V2 verified-context transaction component (decision 363) has no runtime entry:
-    // only this test binary compiles it, with the H receipt validators it uses.
+    // The native V2 gates and transactional importer, also exercised through the real command.
     export_tests_mod.addCSourceFiles(.{
         .root = b.path("src"),
         .files = &.{
@@ -1847,10 +1861,13 @@ pub fn build(b: *std.Build) void {
             "procedural/filter_gate_admission.cpp",
             "procedural/filter_gate_settings.cpp",
             "procedural/filter_gate_trace.cpp",
+            "procedural/filter_gate_destination.cpp",
+            "procedural/filter_gate_request.cpp",
+            "procedural/filter_import_cli.cpp",
         },
         .flags = &export_hook_flags,
     });
-    embed_inputs.add(export_tests_mod, "src", &.{"procedural/filter_gate_pins.cpp"}, &export_hook_flags);
+    embed_inputs.add(export_tests_mod, "src", &.{ "procedural/filter_gate_pins.cpp", "procedural/filter_gate_host.cpp" }, &export_hook_flags);
     export_tests_mod.addCSourceFiles(.{
         .root = b.path("src"),
         .files = &(export_sources ++ [_][]const u8{export_fault_source}),
@@ -1884,6 +1901,7 @@ pub fn build(b: *std.Build) void {
     export_tests_step.dependOn(&b.addInstallArtifact(export_tests_exe, .{}).step);
     for (dx_runtime) |step| export_tests_step.dependOn(step);
     export_tests_step.dependOn(&install_templates.step);
+    export_tests_step.dependOn(&install_filter_registry.step);
     export_tests_step.dependOn(&install_export_presets.step);
     b.getInstallStep().dependOn(export_tests_step);
 

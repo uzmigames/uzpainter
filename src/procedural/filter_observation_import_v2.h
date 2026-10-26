@@ -11,10 +11,9 @@
 //   from a caller.
 // - `VerifyHostCapture` reuses that result and binds it to the destination: the owning store's
 //   uuid, the stored host snapshot's signature and `/3` metadata, and the census raster.
-// - `VerifiedFilterContext` (the observed Filter's effect, descriptor, observations and F capture
-//   section) has no public constructor: the F gate that would verify a closed F capture protocol
-//   does not exist yet, so no real F context can be built. Authored tests reach it through the
-//   test-only `FilterImportTestAccess`, declared here and defined only in a test source.
+// - `VerifiedFilterContext` has no public constructor. The admitted production route binds
+//   C4 to the owning store, constructs it privately and commits without exporting the token.
+//   Authored tests reach the transaction through the test-only `FilterImportTestAccess`.
 // - `CommitFilterObservation` inserts the Filter and the immutable V2 entry in one store `Submit`
 //   (whose callback holds no store mutex): it checks the target revision and projection, the
 //   frozen-host domain and the host request, builds the context from one census, runs the native
@@ -28,6 +27,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "evaluator/templates.h"
 #include "procedural/seam.h"
@@ -140,6 +140,8 @@ private:
     friend std::expected<VerifiedHostMigration, ImportRefusal> VerifyHostCapture(store::ProjectStore&, const core::Project&,
                                                                                 const core::json::Object&,
                                                                                 const ArtifactBytes&);
+    friend std::expected<VerifiedHostMigration, ImportRefusal> VerifyHostCapture(
+        store::ProjectStore&, const core::Project&, const ValidatedHostArtifacts&);
     core::json::Object host_capture_;
     std::string capture_context_sha256_;
     std::string signature_sha256_;
@@ -163,8 +165,14 @@ std::expected<VerifiedHostMigration, ImportRefusal> VerifyHostCapture(store::Pro
                                                                      const core::json::Object& host_capture,
                                                                      const ArtifactBytes& artifacts);
 
+std::expected<VerifiedHostMigration, ImportRefusal> VerifyHostCapture(
+    store::ProjectStore& store, const core::Project& project, const ValidatedHostArtifacts& artifacts);
+
 struct FilterImportTestAccess;
 struct ImportTarget;
+class AdmittedHostCapture;
+class ParsedFilterImportRequest;
+class ValidatedFilterDestination;
 
 namespace detail {
 /// The bridge's comparison of a requested override with an effective parameter, as Python compares
@@ -191,21 +199,29 @@ private:
     friend std::expected<std::string, ImportRefusal> CommitFilterObservation(
         store::ProjectStore&, core::Document&, const VerifiedHostMigration&, const VerifiedFilterContext&,
         const ImportTarget&, const evaluator::TemplateLibrary&);
-    // Transient ownership is never serialized or hashed. A future production gate must mint
-    // this context and commit it inside one native call, without exporting a token to Python.
+    friend std::expected<std::string, ImportRefusal> CommitAdmittedFilterObservation(
+        store::ProjectStore&, core::Document&, const AdmittedHostCapture&, const ParsedFilterImportRequest&,
+        const ValidatedFilterDestination&, const evaluator::TemplateLibrary&);
+    // Transient ownership is never serialized or hashed. The production gate mints and
+    // commits this context inside one native call, without exporting a token to Python.
     const store::ProjectStore* owner_store_ = nullptr;
-    // Closed, typed target/evidence bindings. Only the test friend can populate them until the
-    // raw F production gate exists; there is deliberately no public "seal current project" API.
+    // Closed, typed target/evidence bindings; no public "seal current project" API.
     core::json::Object target_seal_;
     core::Effect effect_;
     core::json::Object descriptor_;
     core::json::Object observations_;
     core::json::Object filter_capture_;
+    // Present only on the production route. The complete mapping is applied inside Submit;
+    // the stable command request remains separate from the transient target seal.
+    std::optional<core::Project> expected_destination_;
+    std::vector<core::Id> allocation_ids_;
+    core::json::Object gate_identity_;
+    std::optional<core::MutationRequest> operation_request_;
 };
 
 /// The destination the transaction must find unchanged: the store uuid, the owning Document's
 /// revision, the typed hash of its projection without the observation namespace, and the id the
-/// Filter receives (the base's next id).
+/// Filter receives (after any mapped host and Paint allocations).
 struct ImportTarget {
     std::string project_uuid;
     std::int64_t revision = 0;
@@ -237,5 +253,13 @@ std::expected<std::string, ImportRefusal> CommitFilterObservation(store::Project
                                                                   const VerifiedFilterContext& filter,
                                                                   const ImportTarget& target,
                                                                   const evaluator::TemplateLibrary& templates);
+
+// The only production factory and commit route: binds admitted H and the parsed request to
+// C4 and the actual owning store, constructs the private context, and commits it in one call.
+// No caller target or verified-context token crosses this interface.
+std::expected<std::string, ImportRefusal> CommitAdmittedFilterObservation(
+    store::ProjectStore& store, core::Document& document, const AdmittedHostCapture& host,
+    const ParsedFilterImportRequest& request, const ValidatedFilterDestination& destination,
+    const evaluator::TemplateLibrary& templates);
 
 }  // namespace uzp::procedural

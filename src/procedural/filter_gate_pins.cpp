@@ -47,6 +47,39 @@ constexpr char kTraceHeader[] = {
 constexpr char kTraceSource[] = {
 #embed "filter_gate_trace.cpp"
 };
+constexpr char kDestinationHeader[] = {
+#embed "filter_gate_destination.h"
+};
+constexpr char kDestinationSource[] = {
+#embed "filter_gate_destination.cpp"
+};
+constexpr char kHostHeader[] = {
+#embed "filter_gate_host.h"
+};
+constexpr char kHostSource[] = {
+#embed "filter_gate_host.cpp"
+};
+constexpr char kImportHeader[] = {
+#embed "filter_observation_import_v2.h"
+};
+constexpr char kImportSource[] = {
+#embed "filter_observation_import_v2.cpp"
+};
+constexpr char kPayloadHeader[] = {
+#embed "filter_gate_request.h"
+};
+constexpr char kPayloadSource[] = {
+#embed "filter_gate_request.cpp"
+};
+constexpr char kCommandHeader[] = {
+#embed "filter_import_cli.h"
+};
+constexpr char kCommandSource[] = {
+#embed "filter_import_cli.cpp"
+};
+constexpr char kHostPolicy[] = {
+#embed "../../parity/snapshot-producer-policy-v1.json"
+};
 #pragma clang diagnostic pop
 
 // The approved envelope and the reviewed settings producer (decision 363; REV398 freeze).
@@ -150,7 +183,19 @@ std::string FilterGateCodeSha256() {
           std::string_view(kAdmissionSource, sizeof(kAdmissionSource)),
           std::string_view(kSettingsHeader, sizeof(kSettingsHeader)),
           std::string_view(kSettingsSource, sizeof(kSettingsSource)), std::string_view(kTraceHeader, sizeof(kTraceHeader)),
-          std::string_view(kTraceSource, sizeof(kTraceSource)), std::string_view(kRequest, sizeof(kRequest)),
+          std::string_view(kTraceSource, sizeof(kTraceSource)),
+          std::string_view(kDestinationHeader, sizeof(kDestinationHeader)),
+          std::string_view(kDestinationSource, sizeof(kDestinationSource)),
+          std::string_view(kHostHeader, sizeof(kHostHeader)),
+          std::string_view(kHostSource, sizeof(kHostSource)),
+          std::string_view(kImportHeader, sizeof(kImportHeader)),
+          std::string_view(kImportSource, sizeof(kImportSource)),
+          std::string_view(kPayloadHeader, sizeof(kPayloadHeader)),
+          std::string_view(kPayloadSource, sizeof(kPayloadSource)),
+          std::string_view(kCommandHeader, sizeof(kCommandHeader)),
+          std::string_view(kCommandSource, sizeof(kCommandSource)),
+          std::string_view(kHostPolicy, sizeof(kHostPolicy)),
+          std::string_view(kRequest, sizeof(kRequest)),
           std::string_view(kRegistry, sizeof(kRegistry))}) {
         const std::string normalized = Lf(part);
         text += core::Sha256Hex(normalized);

@@ -11,6 +11,9 @@
 #include <variant>
 
 #include "procedural/filter_observation_source.h"
+#include "procedural/filter_gate_destination.h"
+#include "procedural/filter_gate_host.h"
+#include "procedural/filter_gate_request.h"
 #include "procedural/frozen_host_proof.h"
 #include "procedural/seam.h"
 #include "procedural/snapshot_recording.h"
@@ -474,6 +477,14 @@ Object ValidatedHostArtifacts::Identity() const {
 std::expected<VerifiedHostMigration, ImportRefusal> VerifyHostCapture(store::ProjectStore& store, const core::Project& project,
                                                                      const Object& host_capture,
                                                                      const ArtifactBytes& artifacts) {
+    const auto validated = ValidateHostCaptureArtifacts(host_capture, artifacts);
+    if (!validated) return std::expected<VerifiedHostMigration, ImportRefusal>(std::unexpect, validated.error());
+    return VerifyHostCapture(store, project, *validated);
+}
+
+std::expected<VerifiedHostMigration, ImportRefusal> VerifyHostCapture(
+    store::ProjectStore& store, const core::Project& project, const ValidatedHostArtifacts& artifacts) {
+    const auto* validated = &artifacts;
     try {
         // The destination host, its exact request and its recorded snapshot with /3 metadata.
         store::FrozenHostNodes nodes;
@@ -495,9 +506,7 @@ std::expected<VerifiedHostMigration, ImportRefusal> VerifyHostCapture(store::Pro
                                         [&](const store::InventoryPlane& p) { return p.row.plane_id == snapshot->plane_id; });
         Require(plane != inventory.planes.end(), kHostSourceStateMismatch, "the census holds no plane of the host snapshot");
 
-        // The H artifacts on their own, then bound to this store, the stored snapshot and the census.
-        const auto validated = ValidateHostCaptureArtifacts(host_capture, artifacts);
-        if (!validated) return std::expected<VerifiedHostMigration, ImportRefusal>(std::unexpect, validated.error());
+        // Bind the already validated H artifacts to the actual stored snapshot and census.
         Require(validated->CapturedProjectUuid() == store.project_uuid(), kHostSourceStateMismatch,
                 "the receipt was recorded for another project");
         Require(SameTyped(validated->Signature(), snapshot->signature) && SameTyped(validated->Signature(), SignatureJson(*request)),
@@ -513,7 +522,7 @@ std::expected<VerifiedHostMigration, ImportRefusal> VerifyHostCapture(store::Pro
                 "the scalar export is not the stored snapshot raster");
 
         VerifiedHostMigration verified;
-        verified.host_capture_ = host_capture;
+        verified.host_capture_ = validated->HostCapture();
         verified.capture_context_sha256_ = validated->CaptureContextSha256();
         verified.signature_sha256_ = key;
         verified.project_uuid_ = store.project_uuid();
@@ -553,9 +562,11 @@ Object HostSealIdentity(const VerifiedHostMigration& host) {
     return Object{{"capture", host.HostCapture()}, {"identity", host.Identity()}};
 }
 
-Object FilterSealIdentity(const VerifiedFilterContext& filter) {
-    return Object{{"effect", core::EffectToJson(filter.Effect(), false)}, {"descriptor", filter.Descriptor()},
-                  {"observations", filter.Observations()}, {"capture", filter.FilterCapture()}};
+Object FilterSealIdentity(const VerifiedFilterContext& filter, const Object& gateIdentity = {}) {
+    Object identity{{"effect", core::EffectToJson(filter.Effect(), false)}, {"descriptor", filter.Descriptor()},
+                    {"observations", filter.Observations()}, {"capture", filter.FilterCapture()}};
+    if (!gateIdentity.empty()) identity["gate_identity"] = gateIdentity;
+    return identity;
 }
 
 Object NativeRoles(const store::FrozenHostNodes& nodes) {
@@ -567,7 +578,7 @@ Object NativeRoles(const store::FrozenHostNodes& nodes) {
 }
 
 void CheckTargetSeal(const Object& seal, const ImportTarget& target, const VerifiedHostMigration& host,
-                     const VerifiedFilterContext& filter) {
+                     const VerifiedFilterContext& filter, const Object& gateIdentity) {
     ClosedObject(Value(seal), kTargetContextUnrepresentable, "target seal",
                  {"target", "prospective_projection_sha256", "inventory_sha256", "native_roles", "source_roles",
                   "host_identity_sha256", "filter_identity_sha256"});
@@ -603,7 +614,7 @@ void CheckTargetSeal(const Object& seal, const ImportTarget& target, const Verif
     }
     Require(seal.at("host_identity_sha256") == Value(store::ObservationKey(HostSealIdentity(host))),
             kHostSourceStateMismatch, "the H identity differs from the seal");
-    Require(seal.at("filter_identity_sha256") == Value(store::ObservationKey(FilterSealIdentity(filter))),
+    Require(seal.at("filter_identity_sha256") == Value(store::ObservationKey(FilterSealIdentity(filter, gateIdentity))),
             kUnreviewedContextDifference, "the F evidence differs from the seal");
 }
 
@@ -611,6 +622,7 @@ void CheckTargetSeal(const Object& seal, const ImportTarget& target, const Verif
 
 core::MutationRequest FilterObservationCommitRequest(const VerifiedHostMigration& host, const VerifiedFilterContext& filter,
                                                      const ImportTarget& target) {
+    if (filter.operation_request_) return *filter.operation_request_;
     const Object arguments{
         {"target", TargetIdentity(target)},
         {"target_seal", filter.target_seal_},
@@ -657,7 +669,23 @@ std::expected<std::string, ImportRefusal> CommitFilterObservation(store::Project
                                         "the verified Filter belongs to another open store"});
     }
     try {
-        CheckTargetSeal(filter.target_seal_, target, host, filter);
+        CheckTargetSeal(filter.target_seal_, target, host, filter, filter.gate_identity_);
+        if (filter.expected_destination_) {
+            Require(filter.operation_request_.has_value() && !filter.gate_identity_.empty(),
+                    kTargetContextUnrepresentable, "the mapped context has no admitted operation");
+            Array allocations;
+            for (core::Id id : filter.allocation_ids_) allocations.push_back(static_cast<std::int64_t>(id));
+            const auto& request = *filter.operation_request_;
+            Require(SameTyped(allocations, filter.gate_identity_.at("allocation_ids")) &&
+                        SameTyped(request.arguments, filter.gate_identity_.at("request_arguments")) &&
+                        request.expected_revision == target.revision &&
+                        request.tool == "filter-observation-commit-v2" &&
+                        request.idempotency_key == request.tool + ":" + store::ObservationKey(request.arguments),
+                    kTargetContextUnrepresentable, "the admitted mapping or operation differs from the seal");
+        } else {
+            Require(!filter.operation_request_ && filter.gate_identity_.empty() && filter.allocation_ids_.empty(),
+                    kTargetContextUnrepresentable, "an incomplete mapped context");
+        }
     } catch (const ImportRefused& refused) {
         return std::expected<std::string, ImportRefusal>(std::unexpect, refused.refusal);
     } catch (const std::exception&) {
@@ -681,17 +709,32 @@ std::expected<std::string, ImportRefusal> CommitFilterObservation(store::Project
             std::get<Object>(base.data).erase(std::string(store::kFilterObservationsKey));
             Require(store::ObservationKey(base) == target.base_projection_sha256, kStaleProspectiveView,
                     "the project is not the target base projection");
-            Require(project.texture_sets.size() == 1 && project.texture_sets[0].stacks.size() == 1 &&
-                        !project.texture_sets[0].stacks[0].root_layers.empty() &&
-                        project.texture_sets[0].stacks[0].root_layers[0].content_effects.empty(),
-                    kTargetContextUnrepresentable, "the host Fill is not the base's top layer without effects");
-            const core::Id uid = edit.AllocateId();
-            Require(uid == target.filter_uid, kTargetContextUnrepresentable, "the Filter id is not the base's next id");
-            core::Effect effect = filter.Effect();
-            effect.uid = uid;
-            Require(effect.procedural && effect.procedural->asset == store::ObservationPin(descriptorKey),
+            Require(filter.Effect().procedural &&
+                        filter.Effect().procedural->asset == store::ObservationPin(descriptorKey),
                     kTargetContextUnrepresentable, "the verified Filter reference is not the descriptor's pin");
-            project.texture_sets[0].stacks[0].root_layers[0].content_effects.push_back(std::move(effect));
+            if (filter.expected_destination_) {
+                Require(!filter.allocation_ids_.empty() && filter.allocation_ids_.back() == target.filter_uid,
+                        kTargetContextUnrepresentable, "the mapping has no final Filter allocation");
+                for (core::Id expected : filter.allocation_ids_) {
+                    Require(edit.AllocateId() == expected, kTargetContextUnrepresentable,
+                            "the mapped allocation differs from the sealed order");
+                }
+                Require(project.next_id == filter.expected_destination_->next_id, kTargetContextUnrepresentable,
+                        "the mapped next id differs from the actual allocations");
+                project = *filter.expected_destination_;
+            } else {
+                Require(project.texture_sets.size() == 1 && project.texture_sets[0].stacks.size() == 1 &&
+                            !project.texture_sets[0].stacks[0].root_layers.empty() &&
+                            project.texture_sets[0].stacks[0].root_layers[0].content_effects.empty(),
+                        kTargetContextUnrepresentable, "the host Fill is not the base's top layer without effects");
+                const core::Id uid = edit.AllocateId();
+                Require(uid == target.filter_uid, kTargetContextUnrepresentable, "the Filter id is not the base's next id");
+                core::Effect effect = filter.Effect();
+                effect.uid = uid;
+                Require(effect.procedural && effect.procedural->asset == store::ObservationPin(descriptorKey),
+                        kTargetContextUnrepresentable, "the verified Filter reference is not the descriptor's pin");
+                project.texture_sets[0].stacks[0].root_layers[0].content_effects.push_back(std::move(effect));
+            }
 
             store::FrozenHostNodes nodes;
             const std::string domain = store::FrozenHostDomainProblem(project, nodes);
@@ -829,6 +872,103 @@ std::expected<std::string, ImportRefusal> CommitFilterObservation(store::Project
             std::unexpect, ImportRefusal{std::string(kStaleProspectiveView), "a stored outcome without its returned entry"});
     }
     return entryKey;
+}
+
+std::expected<std::string, ImportRefusal> CommitAdmittedFilterObservation(
+    store::ProjectStore& store, core::Document& document, const AdmittedHostCapture& admittedHost,
+    const ParsedFilterImportRequest& request, const ValidatedFilterDestination& destination,
+    const evaluator::TemplateLibrary& templates) {
+    try {
+        Require(document.project_uuid() == store.project_uuid() && document.HasCommitSink(&store),
+                kTargetContextUnrepresentable, "the document is not attached to the owning store");
+        Require(SameTyped(request.HostCapture(), admittedHost.HostCapture()) &&
+                    SameTyped(request.ManifestRef(), destination.FilterCapture().at("manifest")),
+                kUnreviewedContextDifference, "the parsed request names different admitted evidence");
+        Require(destination.HostIdentitySha256() == store::ObservationKey(admittedHost.Artifacts().Identity()),
+                kHostSourceStateMismatch, "the destination names different H artifacts");
+        const core::Snapshot snapshot = document.snapshot();
+        const std::int64_t revision = request.ExpectedBaseRevision();
+        Require(snapshot.revision == revision && store.CheckpointState().current == revision,
+                kStaleProspectiveView, "the admitted request's base revision moved");
+        Require(!snapshot.project->extra.contains(std::string(store::kFilterObservationsKey)),
+                kUnreviewedContextDifference, "the target already holds observations");
+        const Value actualBase = core::ProjectToJson(*snapshot.project);
+        Require(store::ObservationKey(actualBase) == destination.BaseProjectionSha256() &&
+                    SameTyped(actualBase, core::ProjectToJson(destination.Base())),
+                kStaleProspectiveView, "the destination was mapped from another base");
+
+        // H is admitted before this route; bind its validated bytes to this store's actual
+        // snapshot metadata and raster, not a caller-provided census or compatibility flag.
+        auto host = VerifyHostCapture(store, destination.Prospective(), admittedHost.Artifacts());
+        if (!host) return std::expected<std::string, ImportRefusal>(std::unexpect, host.error());
+        const auto context = CurrentFilterObservationContextV2(store, destination.Prospective());
+        Require(context.has_value(), kTargetContextUnrepresentable, "the mapped context is unavailable");
+        Require(store::ObservationKey(context->at("project")) == destination.ProspectiveProjectionSha256(),
+                kStaleProspectiveView, "the mapped projection differs from C4");
+        store::FrozenHostNodes nodes;
+        Require(store::FrozenHostDomainProblem(destination.Prospective(), nodes).empty(),
+                kTargetContextUnrepresentable, "the mapped project is outside the frozen host domain");
+
+        const Object& roles = destination.Roles();
+        const auto roleId = [&](std::string_view role, std::string_view field) {
+            const auto& entry = std::get<Object>(roles.at(std::string(role)).data);
+            const Value& value = entry.at(std::string(field));
+            Require(value.IsInt() && std::get<std::int64_t>(value.data) > 0,
+                    kTargetContextUnrepresentable, "the mapped role id is invalid");
+            return std::get<std::int64_t>(value.data);
+        };
+        Object nativeRoles{{"texture_set", roleId("texture_set", "native")},
+                           {"stack", roleId("stack", "native")},
+                           {"host_uid", roleId("host", "native")},
+                           {"initial_paint_uid", roleId("initial_paint", "native")},
+                           {"filter_uid", roleId("filter", "native")}};
+        Require(SameTyped(nativeRoles, NativeRoles(nodes)), kTargetContextUnrepresentable,
+                "the mapped roles differ from the prospective project");
+        Object sourceRoles{{"set_index", std::int64_t{0}}, {"stack_index", std::int64_t{0}},
+                           {"host_uid", roleId("host", "f_uid")},
+                           {"initial_paint_uid", roleId("initial_paint", "f_uid")},
+                           {"filter_uid", roleId("filter", "f_uid")}};
+        ImportTarget target{store.project_uuid(), revision, destination.BaseProjectionSha256(), nodes.filter->uid};
+        VerifiedFilterContext filter;
+        filter.owner_store_ = &store;
+        filter.effect_ = destination.FilterEffect();
+        filter.descriptor_ = destination.Descriptor();
+        filter.observations_ = destination.Observations();
+        filter.filter_capture_ = destination.FilterCapture();
+        filter.expected_destination_ = destination.Prospective();
+        filter.operation_request_ = request.MutationRequestFor(store.project_uuid());
+        Array allocations;
+        core::Id next = snapshot.project->next_id;
+        for (const Value& allocated : std::get<Array>(roles.at("allocated").data)) {
+            const std::string& name = std::get<std::string>(allocated.data);
+            const core::Id id = static_cast<core::Id>(roleId(name, "native"));
+            Require(id == next && id <= core::kMaxId, kTargetContextUnrepresentable,
+                    "the mapped allocations are not consecutive from the base");
+            ++next;
+            filter.allocation_ids_.push_back(id);
+            allocations.push_back(static_cast<std::int64_t>(id));
+        }
+        Require(next == destination.Prospective().next_id && !filter.allocation_ids_.empty() &&
+                    filter.allocation_ids_.back() == target.filter_uid,
+                kTargetContextUnrepresentable, "the mapped allocation sequence does not end with the Filter");
+        filter.gate_identity_ = Object{{"destination", destination.Identity()},
+                                       {"host_admission", admittedHost.Identity()},
+                                       {"request_arguments", filter.operation_request_->arguments},
+                                       {"allocation_ids", std::move(allocations)}};
+        filter.target_seal_ = Object{
+            {"target", TargetIdentity(target)},
+            {"prospective_projection_sha256", destination.ProspectiveProjectionSha256()},
+            {"inventory_sha256", store::ObservationKey(context->at("inventory"))},
+            {"native_roles", std::move(nativeRoles)}, {"source_roles", std::move(sourceRoles)},
+            {"host_identity_sha256", store::ObservationKey(HostSealIdentity(*host))},
+            {"filter_identity_sha256", store::ObservationKey(FilterSealIdentity(filter, filter.gate_identity_))}};
+        return CommitFilterObservation(store, document, *host, filter, target, templates);
+    } catch (const ImportRefused& refused) {
+        return std::expected<std::string, ImportRefusal>(std::unexpect, refused.refusal);
+    } catch (const std::exception&) {
+        return std::expected<std::string, ImportRefusal>(
+            std::unexpect, ImportRefusal{std::string(kTargetContextUnrepresentable), "invalid admitted destination"});
+    }
 }
 
 }  // namespace uzp::procedural

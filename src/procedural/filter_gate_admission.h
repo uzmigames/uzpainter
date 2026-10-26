@@ -73,6 +73,7 @@ struct AdmittedRef {
 /// `tests/export/filter_gate_test_support.h`, never in a production source.
 struct FilterGateTestAccess;
 class AdmittedFilterCapture;
+class AdmittedHostCapture;
 
 /// The private oracle store, read-only (`tools/parity/store/store.py`): `store.json`, the entries
 /// `corpora/<build>/<golden>/<record id>.json` and the blobs `blobs/<first two hex>/<sha256>`,
@@ -103,8 +104,12 @@ private:
     [[nodiscard]] std::optional<std::string> Blob(std::string_view sha256, std::optional<std::int64_t> size_bytes) const;
     /// The registry's raw bytes at its locator, or nothing.
     [[nodiscard]] std::optional<std::string> RegistryBytes() const;
+    [[nodiscard]] std::optional<std::string> SnapshotAdmissionBytes(std::string_view capture_id,
+                                                                  std::string_view policy_sha256) const;
+    [[nodiscard]] std::optional<std::string> SnapshotPolicyBytes(std::string_view policy_sha256) const;
 
     friend class AdmittedFilterCapture;
+    friend class AdmittedHostCapture;
     friend struct FilterGateTestAccess;
     std::filesystem::path root_;
     std::wstring final_root_;  ///< The root's final path (handle-resolved), the fence of every read.
