@@ -205,25 +205,40 @@ def _bind(
             _same(frames[boundary]["get_parameters"], source["parameters"]), "J2_PRE16_PARAMETERS"
         )
 
-    # J3: the toggle set off at step 14 succeeded and step 15 read the state pre16 reads.
-    set_off, read_back = steps.get(14, {}), steps.get(15, {})
+    # J3: the pre16 state is the one the probes left. Recipe A writes the first Togglebutton with
+    # int 0 at step 12 and bool False at step 14, reading get_parameters at 13 and 15. The bool
+    # write probes whether Painter accepts a bool (the contract keeps refusals from step 7 on as
+    # observations), so it may succeed or refuse with TypeError; either way the state must not
+    # change: the int write succeeded and steps 13, 15 and the pre16 boundary read one typed map.
+    zero, zero_read, off, off_read = (steps.get(n, {}) for n in (12, 13, 14, 15))
     require(
-        set_off.get("call") == SOURCE + "set_parameters"
-        and set_off.get("args", {}).get("toggle") is False
-        and read_back.get("call") == SOURCE + "get_parameters",
+        zero.get("call") == off.get("call") == SOURCE + "set_parameters"
+        and type(zero.get("args", {}).get("toggle")) is int
+        and zero["args"]["toggle"] == 0
+        and off.get("args", {}).get("toggle") is False
+        and zero_read.get("call") == off_read.get("call") == SOURCE + "get_parameters",
         "J3_PRE16_STATE",
     )
+    bool_writes: list[dict[str, Any]] = []
     for recording in record["recordings"]:
         outputs = {o["output_id"]: o for o in recording["outputs"]}
+        written = outputs.get("s12/set_parameters")
+        require(written is not None and "raised" not in written, "J3_INT_WRITE")
         toggled = outputs.get("s14/set_parameters")
-        read = outputs.get("s15/get_parameters")
+        require(toggled is not None, "J3_BOOL_WRITE")
+        assert toggled is not None
+        refusal = toggled.get("raised")
+        require(refusal is None or refusal.get("type") == "TypeError", "J3_BOOL_WRITE")
+        reads = [outputs.get("s13/get_parameters"), outputs.get("s15/get_parameters")]
+        pre16 = frames[PRE16[recording["recording_id"]]]["get_parameters"]
         require(
-            toggled is not None
-            and "raised" not in toggled
-            and read is not None
-            and "raised" not in read
-            and _same(read["value"], frames[PRE16[recording["recording_id"]]]["get_parameters"]),
+            all(r is not None and "raised" not in r and _same(r["value"], pre16) for r in reads),
             "J3_PRE16_STATE",
+        )
+        bool_writes.append(
+            {"outcome": "succeeded"}
+            if refusal is None
+            else {"outcome": "refused", "type": "TypeError"}
         )
 
     # J4: outputs, inputs, active output and resolution of both pre16 states.
@@ -266,6 +281,7 @@ def _bind(
             "record_sha256": record_ref["sha256"],
             "record_size": record_ref["size_bytes"],
             "resolution_value_kinds": containers,
+            "toggle_bool_writes": bool_writes,
         },
         "joins": {"J1": True, "J2": True, "J3": True, "J4": True},
         "acceptance": {

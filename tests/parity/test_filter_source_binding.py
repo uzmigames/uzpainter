@@ -20,12 +20,12 @@ from tests.parity.test_snapshot_host_transport import PINS, record
 from tools.parity import filter_context_validation as validation
 from tools.parity import filter_source_binding as binding
 from tools.parity.filter_context_contract import MISSING_SETTINGS
+from tools.parity.filter_context_producer_policy import APPROVED_F_PRODUCER
 from tools.parity.recorder.environment import (
     ENVIRONMENT_KIND,
     ENVIRONMENT_RECORD_ID,
     colour_configuration_sha256,
     envelope_sha256,
-    recorder_version,
 )
 from tools.parity.recorder.output import GOLDEN_RECORD_ID
 from tools.parity.recorder.probes import probe_job_from_manifest
@@ -84,7 +84,7 @@ def admit_f(
         "driver_version": "authored driver",
         "os_build": "authored OS",
         "colour_configuration_sha256": colour_configuration_sha256(validation.LEGACY),
-        "recorder_version": recorder_version(),
+        "recorder_version": APPROVED_F_PRODUCER.recorder_version,
     }
     rec["environment"] = environment
     registry = {
@@ -207,9 +207,17 @@ def bind(
     )
 
 
-def toggled() -> Painter:
-    """Steps 15 of both rounds read the state the pre16 boundary reads."""
-    return Painter({15: {"value": deepcopy(PARAMETERS)}})
+def toggled(extra: dict[int, Any] | None = None) -> Painter:
+    """Steps 13 and 15 of both rounds read the state the pre16 boundary reads."""
+    answers: dict[Any, Any] = {
+        13: {"value": deepcopy(PARAMETERS)},
+        15: {"value": deepcopy(PARAMETERS)},
+    }
+    return Painter({**answers, **(extra or {})})
+
+
+def refused(kind: str) -> dict[str, Any]:
+    return {"value": None, "raised": {"type": kind, "message": "authored"}}
 
 
 def test_admitted_f_and_h_bind_their_source_without_authorizing_import(
@@ -227,6 +235,7 @@ def test_admitted_f_and_h_bind_their_source_without_authorizing_import(
         "missing_effective_settings": list(MISSING_SETTINGS),
     }
     assert report["f"]["resolution_value_kinds"] == ["tuple", "tuple"]
+    assert report["f"]["toggle_bool_writes"] == [{"outcome": "succeeded"}] * 2
     assert report["h"]["capture_id"] == h[0] and report["f"]["manifest_sha256"] == sha(manifest)
     text = json.dumps(report)
     assert RESOURCE_URL not in text and "grunge" not in text and "signed" not in text
@@ -244,7 +253,10 @@ def test_admitted_f_and_h_bind_their_source_without_authorizing_import(
         ("bool-in-pre16", "F_CONTEXT_INVALID"),
         ("vector-in-pre16", "F_CONTEXT_INVALID"),
         ("step15-differs", "J3_PRE16_STATE"),
-        ("step14-raised", "J3_PRE16_STATE"),
+        ("bool-write-other-error", "J3_BOOL_WRITE"),
+        ("bool-refused-state-changed", "J3_PRE16_STATE"),
+        ("int-write-failed", "J3_INT_WRITE"),
+        ("step13-raised", "J3_PRE16_STATE"),
         ("other-outputs", "J4_OUTPUTS"),
         ("other-resolution", "J4_OUTPUTS"),
         ("unknown-container", "J4_OUTPUTS"),
@@ -284,14 +296,15 @@ def test_each_join_refuses_with_its_code(
             lambda self: {**PARAMETERS, "vector": [0.25, 0.75]},
         )
     elif case == "step15-differs":
-        painter = Painter({15: {"value": {**PARAMETERS, "integer": 2}}})
-    elif case == "step14-raised":
-        painter = Painter(
-            {
-                14: {"value": None, "raised": {"type": "ValueError", "message": "authored"}},
-                15: {"value": deepcopy(PARAMETERS)},
-            }
-        )
+        painter = toggled({15: {"value": {**PARAMETERS, "integer": 2}}})
+    elif case == "bool-write-other-error":
+        painter = toggled({14: refused("RuntimeError")})
+    elif case == "bool-refused-state-changed":
+        painter = toggled({14: refused("TypeError"), 15: {"value": {**PARAMETERS, "integer": 0}}})
+    elif case == "int-write-failed":
+        painter = toggled({12: refused("TypeError")})
+    elif case == "step13-raised":
+        painter = toggled({13: refused("RuntimeError")})
     elif case == "other-outputs":
         source["outputs"], source["active_output"] = ["other"], "other"
     elif case == "other-resolution":
@@ -418,3 +431,16 @@ def test_io_failures_refuse_with_a_code_only(
     assert refused.value.code == code and str(refused.value) == code
     assert refused.value.__cause__ is None and refused.value.original is None
     assert "PRIVATE_SENTINEL" not in repr(refused.value.args)
+
+
+def test_a_bool_write_refused_with_type_error_and_no_state_change_binds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Recipe A's bool write is an observation: a TypeError refusal that left steps 13, 15 and
+    the pre16 boundary on one typed state binds, and is reported without its message."""
+    store = OracleStore.init(tmp_path / "store")
+    manifest = admit_f(store, tmp_path, monkeypatch, toggled({14: refused("TypeError")}))
+    report = bind(store, manifest, admit_h(store, tmp_path, monkeypatch, h_source()))
+    assert report["status"] == "source_bound"
+    assert report["f"]["toggle_bool_writes"] == [{"outcome": "refused", "type": "TypeError"}] * 2
+    assert "authored" not in json.dumps(report)

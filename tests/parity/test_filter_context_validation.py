@@ -15,12 +15,13 @@ import pytest
 from tests.parity.test_filter_context_run import Painter, load, record_with
 from tools.parity import filter_context_validation as validation
 from tools.parity.filter_context_contract import MISSING_SETTINGS
+from tools.parity.filter_context_producer_policy import APPROVED_F_PRODUCER, resolve_producer
+from tools.parity.recorder import environment as recorder_environment
 from tools.parity.recorder.environment import (
     ENVIRONMENT_KIND,
     ENVIRONMENT_RECORD_ID,
     colour_configuration_sha256,
     envelope_sha256,
-    recorder_version,
 )
 from tools.parity.recorder.output import GOLDEN_RECORD_ID
 from tools.parity.store.store import Status
@@ -42,7 +43,7 @@ def authored(
         "driver_version": "authored driver",
         "os_build": "authored OS",
         "colour_configuration_sha256": colour_configuration_sha256(validation.LEGACY),
-        "recorder_version": recorder_version(),
+        "recorder_version": APPROVED_F_PRODUCER.recorder_version,
     }
     record["environment"] = environment
     registry = {
@@ -99,6 +100,57 @@ def test_admitted_receipt_and_observable_domain_never_accept_missing_settings(
     }
     assert report["acceptance"] == {"status": "blocked", "code": validation.SETTINGS_BLOCK}
     assert store.resolve.call_count == len(manifest["inputs"])
+    assert report["capture"]["producer_profile"] == {
+        "profile_id": "uzpainter/filter-context-producer-profile/1",
+        "recorder_version": "uzp-recorder/1+src.6fdbba920f54307b",
+        "source_revision": "1b6bfc63332c4d38111fe830ecdcb77fe331f78d",
+        "source_digest_bits": 64,
+        "source_line_endings": "LF-normalized",
+        "basis": "provenance_not_runtime_attestation",
+    }
+
+
+def test_historical_admission_survives_changed_recorder_sources(
+    authored: tuple[dict[str, Any], dict[str, Any]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest, record = authored
+    original_read = Path.read_bytes
+    source = recorder_environment.RECORDER_DIR / "environment.py"
+    recorder_environment.recorder_version.cache_clear()
+    before = recorder_environment.recorder_version()
+
+    def changed_read(path: Path) -> bytes:
+        data = original_read(path)
+        return data + b"\n# authored source change\n" if path == source else data
+
+    monkeypatch.setattr(Path, "read_bytes", changed_read)
+    recorder_environment.recorder_version.cache_clear()
+    try:
+        assert recorder_environment.recorder_version() != before
+        assert recorder_environment.recorder_version() != APPROVED_F_PRODUCER.recorder_version
+        report = inspect(manifest, admitted(manifest, record))
+        assert "failure" not in report, report.get("failure")
+        assert report["capture"]["status"] == "validated"
+        assert report["acceptance"] == {"status": "blocked", "code": validation.SETTINGS_BLOCK}
+    finally:
+        recorder_environment.recorder_version.cache_clear()
+
+
+@pytest.mark.parametrize(
+    "version",
+    ["invented/1", "uzp-recorder/1+src.6fdbba920f54307c", "uzp-recorder/2+src.6fdbba920f54307b"],
+)
+def test_unknown_producer_refuses_before_domain(
+    authored: tuple[dict[str, Any], dict[str, Any]], version: str
+) -> None:
+    manifest, record = authored
+    record["environment"]["recorder_version"] = version
+    report = inspect(manifest, admitted(manifest, record))
+    assert report["capture"]["status"] == "refused"
+    assert report["observable_f_domain"]["status"] == "not_checked"
+    assert "approved F producer" in report["failure"]["message"]
+    with pytest.raises(ValueError, match="approved F producer"):
+        resolve_producer(version)
 
 
 @pytest.mark.parametrize(

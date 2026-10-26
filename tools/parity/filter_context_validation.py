@@ -11,6 +11,7 @@ import hashlib
 import json
 import math
 import traceback
+from dataclasses import asdict
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
@@ -24,12 +25,12 @@ from tools.parity.filter_context_contract import (
     require_effective_settings,
     typed,
 )
+from tools.parity.filter_context_producer_policy import resolve_producer
 from tools.parity.ocio16_bitmap_replay import require_admitted_refs
 from tools.parity.recorder.environment import (
     ENVIRONMENT_KIND,
     ENVIRONMENT_RECORD_ID,
     colour_configuration_sha256,
-    recorder_version,
 )
 from tools.parity.recorder.filter_context_run import f_evidence_from_record
 from tools.parity.recorder.output import GOLDEN_RECORD_ID, ensure_outside_repository
@@ -148,7 +149,7 @@ def receipt(
         recorded_request_environment_matches(environment, manifest, current, store),
         "recorded environment differs from current envelope",
     )
-    require(environment["recorder_version"] == recorder_version(), "recorder source pin differs")
+    resolve_producer(environment["recorder_version"])
     require(
         environment["colour_configuration_sha256"] == colour_configuration_sha256(LEGACY),
         "environment is not the declared Legacy configuration",
@@ -222,6 +223,12 @@ def inspect_capture(manifest_bytes: bytes, store: OracleStore) -> dict[str, Any]
         report["capture"] = {
             "status": "validated",
             "basis": "admitted_receipt_integrity_not_runtime_attestation",
+            "producer_profile": {
+                **asdict(resolve_producer(record["environment"]["recorder_version"])),
+                "source_digest_bits": 64,
+                "source_line_endings": "LF-normalized",
+                "basis": "provenance_not_runtime_attestation",
+            },
             "manifest_sha256": digest(manifest_bytes),
             "record_sha256": digest(raw),
             "environment_sha256": digest(environment),

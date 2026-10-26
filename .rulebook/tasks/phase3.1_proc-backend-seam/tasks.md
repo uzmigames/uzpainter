@@ -390,7 +390,7 @@ preserved initial refusal:
 `filter_source_binding` checks J1-J4 using actual admitted F and H bytes, never
 caller-extracted values or success flags. F receipt/environment and observable
 context validation precede complete identity, typed pre16 parameter equality,
-successful step 14/consistent step 15 and output/input/active-output/resolution
+integer-write and boolean-probe state continuity and output/input/active-output/resolution
 joins. The public H and F serializers have an explicit resolution projection;
 F tuple/list container kinds remain in the diagnostic, while unrepresented
 containers refuse. Numeric types and signed zero remain distinct.
@@ -401,3 +401,27 @@ no paths or observed values. Twenty-three authored cases, static checks and
 independent review passed. The result is diagnostic only: it cannot construct
 VerifiedFilterContext, authorize import or establish the destination relation.
 No real F/H binding has been attempted at this method checkpoint.
+
+The first real binding under `5f8d88b3` refused `J3_PRE16_STATE`; its immutable
+report hashes to
+`3061ab9a1198907cfbac49396fb01625e0c3c9a839e7c28b29786b7b798bf8c2`.
+Review found the method's requirement that step 14 succeed contradicted the
+existing public contract: recipe A deliberately probes boolean acceptance, and
+probe refusals are observations. Both real rounds kept the integer-zero state
+after a TypeError from the boolean probe. The corrected method requires step 12
+to succeed, steps 13/15/pre16 to read the same typed map, and step 14 to succeed
+or record TypeError. Other errors and changed state refuse. The outcome remains
+explicit in the diagnostic without messages or parameter values. All 27 authored
+binding cases passed, including refusal, partial-state and failed-integer-write
+cases; independent review and static checks passed. No importer requirement was
+waived.
+
+The F producer is now selected by a single immutable, reviewed profile outside
+the recorder: `uzp-recorder/1+src.6fdbba920f54307b`, source revision
+`1b6bfc63332c4d38111fe830ecdcb77fe331f78d`. Validation no longer equates a historical
+capture's producer with the current working tree. Unknown or future producers
+still refuse; no caller-supplied policy or trust flag is accepted. The report
+explicitly retains the 64-bit/LF-normalized provenance limitation, without
+runtime attestation. All existing receipt, envelope, registry and domain checks
+remain, and effective settings still block acceptance. Thirty-three validation
+tests passed; binding fixtures explicitly name the reviewed historical producer.
