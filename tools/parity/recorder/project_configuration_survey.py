@@ -574,10 +574,94 @@ def navigation_state(ui: PainterUi, element: Any) -> dict[str, Any]:
     }
 
 
+def desktop_state() -> dict[str, Any]:
+    """Observe desktop availability without changing desktops, focus, or input state."""
+    from ctypes import wintypes
+
+    state: dict[str, Any] = {
+        "available": False,
+        "reason": "desktop_state_unavailable",
+        "desktop": None,
+        "foreground_hwnd": 0,
+        "foreground_pid": 0,
+        "foreground_process": None,
+    }
+    try:
+        user = ctypes.WinDLL("user32", use_last_error=True)
+        user.OpenInputDesktop.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        user.OpenInputDesktop.restype = ctypes.c_void_p
+        user.GetUserObjectInformationW.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_int,
+            ctypes.c_void_p,
+            wintypes.DWORD,
+            ctypes.POINTER(wintypes.DWORD),
+        ]
+        user.GetUserObjectInformationW.restype = wintypes.BOOL
+        user.CloseDesktop.argtypes = [ctypes.c_void_p]
+        user.CloseDesktop.restype = wintypes.BOOL
+        user.GetForegroundWindow.argtypes = []
+        user.GetForegroundWindow.restype = wintypes.HWND
+        user.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+        user.GetWindowThreadProcessId.restype = wintypes.DWORD
+        desktop = user.OpenInputDesktop(0, False, 0x0001)  # DESKTOP_READOBJECTS
+        if not desktop:
+            state["reason"] = "input_desktop_unavailable"
+            return state
+        try:
+            name = ctypes.create_unicode_buffer(256)
+            needed = wintypes.DWORD()
+            readable = bool(
+                user.GetUserObjectInformationW(
+                    desktop, 2, name, ctypes.sizeof(name), ctypes.byref(needed)
+                )
+            )  # UOI_NAME
+        finally:
+            closed_desktop = bool(user.CloseDesktop(desktop))
+        if not closed_desktop:
+            state["reason"] = "desktop_handle_close_failed"
+            return state
+        if not readable:
+            state["reason"] = "input_desktop_name_unavailable"
+            return state
+        # Do not write arbitrary desktop names (which may contain user information).
+        state["desktop"] = "Default" if name.value == "Default" else "non-default"
+        if name.value != "Default":
+            state["reason"] = "input_desktop_not_default"
+            return state
+        hwnd = user.GetForegroundWindow()
+        state["foreground_hwnd"] = int(hwnd or 0)
+        pid = wintypes.DWORD()
+        if not hwnd or not user.GetWindowThreadProcessId(hwnd, ctypes.byref(pid)) or not pid.value:
+            state["reason"] = "foreground_identity_unavailable"
+            return state
+        state["foreground_pid"] = int(pid.value)
+        matches = [p for p in host_state().processes if p.get("pid") == pid.value]
+        if len(matches) != 1 or not isinstance(matches[0].get("name"), str):
+            state["reason"] = "foreground_process_unavailable"
+            return state
+        process = ntpath.basename(matches[0]["name"]).casefold()
+        if not process:
+            state["reason"] = "foreground_process_unavailable"
+            return state
+        state["foreground_process"] = process
+        if process == "lockapp.exe":
+            state["reason"] = "lock_screen_foreground"
+            return state
+        state.update(available=True, reason="available")
+    except Exception:
+        # Diagnostics never expose exception text or OS account information.
+        state["reason"] = "desktop_state_unavailable"
+    return state
+
+
 def configuration_survey(ui: PainterUi, owned: OwnedTransport, evidence: Evidence) -> None:
     def guard() -> None:
         owned.verify()
         require(ui.window.process_id() == owned.launcher.pid, "UI window process changed")
+        state = desktop_state()
+        evidence.log("desktop_availability", state=state)
+        require(state["available"] is True, "UI navigation refused: " + state["reason"])
 
     dialog = None
     cancel = None
@@ -587,6 +671,7 @@ def configuration_survey(ui: PainterUi, owned: OwnedTransport, evidence: Evidenc
         edit = ui.menu_item("Edit")
         require(edit.process_id() == owned.launcher.pid, "foreign Edit menu")
         evidence.log("navigation", phase="before_front", state=navigation_state(ui, edit))
+        guard()
         ui.front()
         guard()
         edit = ui.menu_item("Edit")

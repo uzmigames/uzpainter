@@ -289,3 +289,21 @@ to that catalog with their exact Sphinx anchors; the 12.1/Python 0.3.5 edition w
 confirmed against existing capability provenance and the installed inventory.
 The complete 37-node recorder provenance suite passed across the initial run and
 its single affected retry. No guard was relaxed or capability promoted.
+
+### Desktop navigation preflight (2026-10-26)
+
+The Project Configuration survey now checks the input desktop read-only before
+focusing Painter or invoking UI navigation, and rechecks before each action,
+including Cancel. Unavailable or non-Default input desktops, missing foreground
+identity, PID zero and LockApp refuse navigation. Desktop handles are closed on
+every path; private diagnostics use fixed reasons without arbitrary desktop
+names or exception text. Existing owned-window and hit-test checks remain active;
+API-only captures do not use this UI preflight.
+
+All 66 affected authored tests passed: 44 in the initial run and the 22 whose
+default pytest temporary directory was inaccessible in the sandbox in a scoped
+escalated rerun, with the configured external tmp_path and no basetemp override.
+The final rerun log is `tmp/scratch/rev383-desktop-permitted-tests.log`.
+Mypy, Ruff, formatting and independent source review passed. No actual desktop
+navigation or Painter run was performed for this change. The check observes a
+point in time; existing per-action ownership guards still apply.

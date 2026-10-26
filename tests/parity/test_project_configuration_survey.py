@@ -544,12 +544,120 @@ class Widget:
 
 
 @pytest.mark.parametrize(
+    "failure,reason",
+    [
+        ("", "available"),
+        ("open", "input_desktop_unavailable"),
+        ("name", "input_desktop_name_unavailable"),
+        ("nondefault", "input_desktop_not_default"),
+        ("close", "desktop_handle_close_failed"),
+        ("hwnd", "foreground_identity_unavailable"),
+        ("pid", "foreground_identity_unavailable"),
+        ("thread", "foreground_identity_unavailable"),
+        ("missing_process", "foreground_process_unavailable"),
+        ("lockapp", "lock_screen_foreground"),
+        ("exception", "desktop_state_unavailable"),
+    ],
+)
+def test_desktop_state_uses_readonly_os_calls_and_closes_handle(
+    failure: str,
+    reason: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from ctypes import wintypes
+
+    user = Mock()
+    user.OpenInputDesktop.return_value = 0 if failure == "open" else 123
+    user.CloseDesktop.return_value = failure != "close"
+    user.GetForegroundWindow.return_value = 0 if failure == "hwnd" else 456
+
+    def desktop_name(handle: int, field: int, buffer: Any, size: int, needed: Any) -> bool:
+        assert handle == 123 and field == 2 and size == ctypes.sizeof(buffer)
+        if failure == "exception":
+            raise OSError("private account information must not enter evidence")
+        buffer.value = "private-account-desktop" if failure == "nondefault" else "Default"
+        return failure != "name"
+
+    def foreground_pid(handle: int, target: Any) -> int:
+        assert handle == 456
+        ctypes.cast(target, ctypes.POINTER(wintypes.DWORD))[0] = 0 if failure == "pid" else 81
+        return 0 if failure == "thread" else 7
+
+    user.GetUserObjectInformationW.side_effect = desktop_name
+    user.GetWindowThreadProcessId.side_effect = foreground_pid
+    monkeypatch.setattr(ctypes, "WinDLL", Mock(return_value=user), raising=False)
+    process_name = "LoCkApP.ExE" if failure == "lockapp" else "explorer.exe"
+    census = [] if failure == "missing_process" else [{"pid": 81, "name": process_name}]
+    monkeypatch.setattr(survey, "host_state", lambda: host(*census))
+    state = survey.desktop_state()
+    assert state["available"] is (not failure)
+    assert state["reason"] == reason
+    assert "private-account" not in json.dumps(state) and "private account" not in json.dumps(state)
+    user.OpenInputDesktop.assert_called_once_with(0, False, 0x0001)
+    if failure == "open":
+        user.CloseDesktop.assert_not_called()
+    else:
+        user.CloseDesktop.assert_called_once_with(123)
+    called = {call[0] for call in user.mock_calls}
+    assert called <= {
+        "OpenInputDesktop",
+        "GetUserObjectInformationW",
+        "CloseDesktop",
+        "GetForegroundWindow",
+        "GetWindowThreadProcessId",
+    }
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "input_desktop_unavailable",
+        "input_desktop_not_default",
+        "lock_screen_foreground",
+        "foreground_identity_unavailable",
+        "desktop_state_unavailable",
+    ],
+)
+def test_unavailable_desktop_refuses_before_any_ui_action(
+    reason: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = {"available": False, "reason": reason}
+    monkeypatch.setattr(survey, "desktop_state", lambda: state)
+    ui = Mock(window=Widget("Painter", "Window", 25))
+    evidence = Mock()
+    with pytest.raises(ValueError, match="UI navigation refused"):
+        survey.configuration_survey(ui, Mock(launcher=Mock(pid=71)), evidence)
+    assert ui.mock_calls == []
+    evidence.log.assert_called_once_with("desktop_availability", state=state)
+
+
+def test_desktop_rechecked_immediately_before_foreground(monkeypatch: pytest.MonkeyPatch) -> None:
+    states = iter(
+        [
+            {"available": True, "reason": "available"},
+            {"available": False, "reason": "lock_screen_foreground"},
+        ]
+    )
+    monkeypatch.setattr(survey, "desktop_state", lambda: next(states))
+    monkeypatch.setattr(survey, "navigation_state", lambda *args: {})
+    ui = Mock(window=Widget("Painter", "Window", 25))
+    ui.menu_item.return_value = Widget("Edit", "MenuItem")
+    with pytest.raises(ValueError, match="lock_screen_foreground"):
+        survey.configuration_survey(ui, Mock(launcher=Mock(pid=71)), Mock())
+    ui.front.assert_not_called()
+    ui.click.assert_not_called()
+    ui.click_menu_item.assert_not_called()
+
+
+@pytest.mark.parametrize(
     "failure", ["", "ambiguous_menu", "foreground", "no_cancel", "ambiguous_dialog", "stale_pid"]
 )
 def test_configuration_reads_and_only_cancels(
     failure: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(time, "sleep", lambda _: None)
+    monkeypatch.setattr(survey, "desktop_state", lambda: {"available": True, "reason": "available"})
     diagnostic = Mock(side_effect=lambda ui, element: {"element_rect": element.box})
     monkeypatch.setattr(survey, "navigation_state", diagnostic)
     main = Widget("Painter", "Window", 25)
