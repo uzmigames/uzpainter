@@ -455,6 +455,19 @@ def _gltf_consumer_fixture(path: str, document: Any, data: bytes, ctx: _Context)
     return validation_errors(document, Schema.GLTF_CONSUMER_FIXTURE)
 
 
+def _snapshot_producer_policy(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
+    from tools.parity.store.snapshot_contract import parse_policy
+
+    problems = validation_errors(document, Schema.SNAPSHOT_PRODUCER_POLICY)
+    if problems:
+        return problems
+    try:
+        parse_policy(data)
+    except ValueError as error:
+        return [str(error)]
+    return []
+
+
 def _requested_manifest(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
     """A requested golden: a valid public manifest that names no private record yet."""
     problems = validation_errors(document, Schema.GOLDEN_PUBLIC)
@@ -634,6 +647,11 @@ PATH_RULES: tuple[tuple[re.Pattern[str], str, _Rule], ...] = (
         _report_sample,
     ),
     (re.compile(r"^parity/exceptions\.json$"), "exceptions.json", _register),
+    (
+        re.compile(r"^parity/snapshot-producer-policy-v1\.json$"),
+        "snapshot-producer-policy.json",
+        _snapshot_producer_policy,
+    ),
     (
         re.compile(r"^parity/manifests/consumers/gltf/wand-v1\.json$"),
         "gltf-consumer-fixture.json (public consumer selection, no private outputs)",

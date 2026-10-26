@@ -90,7 +90,7 @@
 - [ ] 5.2 Write tests covering the new behavior
 - [ ] 5.3 Run tests and confirm they pass
 
-## 6. Proposed dedicated H admission protocol (2026-10-26; coordinator review pending)
+## 6. Dedicated H admission protocol (2026-10-26; implementation in progress)
 
 The offline transport component is implemented in
 `tools/parity/snapshot_host_transport.py`. It preserves the original receipt
@@ -104,7 +104,19 @@ the ten unchanged provenance cases remain green from the first run. Type and
 lint checks passed. This component neither decodes pixels nor admits evidence,
 reads private H, runs Painter or opens an import route.
 
-This is a technical proposal, not an implemented importer, an admission of any private H, or completion of 2.6j. It extends private artifact transport for decision 363; the stored Filter V2 schemas and the snapshot /1-/3 schemas do not change. No private H or old steps 16-18 were read to prepare it.
+`tools/parity/store/snapshot_contract.py` implements the closed structural
+policy, artifact, validation-report and admission-document formats below.
+Eighty-four authored cases passed, with normal mypy, Ruff and formatting green.
+Parsing checks shapes and internal links only; it grants no admission or trust.
+`parity/snapshot-producer-policy-v1.json` is policy revision 1, accepting only
+the four explicit LF/CRLF pairs of public source revision
+`65095c000c9bd5bb3ac8f6b3aa1f0f53ddeef2e8`. Each pair was checked against that
+revision's Git blobs. Older producer protocols are not declared equivalent.
+Policy revisions are positive exact int64 values; source revisions are full
+Git commits. The native validator revision is the embedded protocol literal
+`uzpainter/snapshot-capture-validator/1`, separate from code and binary hashes.
+
+This is a technical implementation contract, not an implemented importer, an admission of any private H, or completion of 2.6j. It extends private artifact transport for decision 363; the stored Filter V2 schemas and the snapshot /1-/3 schemas do not change. No private H or old steps 16-18 were read to prepare it.
 
 ### Existing trust boundary
 
@@ -159,4 +171,4 @@ The validator computes its code hash from build-embedded validator source and it
 3. Test unknown/missing fields, bool-as-int, malformed hashes, unreviewed producer pairs, policy revision/hash mismatch, missing roles, swapped rounds, duplicate IDs, legitimate repeated blob hashes, request/receipt/source mismatch, changed numeric types and signed zero, wrong EXR precision/dimensions, RGB-component/repeat differences and unavailable environment claims.
 4. Test direct generic-kind refusal before any store write; hash-correct blobs with no admission stay unavailable; same hash with wrong role/kind refuses; mutation during copy refuses; interruption before final publication grants no admission; retry preserves the original document; concurrent conflicting publication refuses; corrupt/missing admitted blobs become unavailable. Keep existing golden `record/fetch/verify` regressions green.
 
-Coordinator contract review and an implementation brief remain prerequisites. This note records a proposal only; all current real H/F acceptance gates remain in force.
+Transport and structural parsing are complete software components. Native artifact validation, trusted diagnostic execution and authoritative publication remain separate implementation dependencies; all real H/F acceptance gates remain in force.

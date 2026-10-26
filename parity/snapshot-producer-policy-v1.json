@@ -1,0 +1,30 @@
+{
+  "schema": "uzpainter/parity/snapshot-producer-policy/1",
+  "revision": 1,
+  "producers": [
+    {
+      "protocol": "paired-scalar-rgb",
+      "source_revision": "65095c000c9bd5bb3ac8f6b3aa1f0f53ddeef2e8",
+      "bridge_sha256": "ddfcdae4ac03d2a7981fa772b1af7ca2712f4e70e726a35b2808eb02d7011d5f",
+      "painter_side_sha256": "625323d83cb6e7ff7878518861412dbf5c7f7cf0872435f154da1303870bd44d"
+    },
+    {
+      "protocol": "paired-scalar-rgb",
+      "source_revision": "65095c000c9bd5bb3ac8f6b3aa1f0f53ddeef2e8",
+      "bridge_sha256": "ddfcdae4ac03d2a7981fa772b1af7ca2712f4e70e726a35b2808eb02d7011d5f",
+      "painter_side_sha256": "97e0749e2ead57362d75f6151849784ded698e0ca18382622d2f677cc880f5d8"
+    },
+    {
+      "protocol": "paired-scalar-rgb",
+      "source_revision": "65095c000c9bd5bb3ac8f6b3aa1f0f53ddeef2e8",
+      "bridge_sha256": "61e0afa69d53518900039a2b9bdbd4b048d2068259c72266e202ee33972a7be9",
+      "painter_side_sha256": "625323d83cb6e7ff7878518861412dbf5c7f7cf0872435f154da1303870bd44d"
+    },
+    {
+      "protocol": "paired-scalar-rgb",
+      "source_revision": "65095c000c9bd5bb3ac8f6b3aa1f0f53ddeef2e8",
+      "bridge_sha256": "61e0afa69d53518900039a2b9bdbd4b048d2068259c72266e202ee33972a7be9",
+      "painter_side_sha256": "97e0749e2ead57362d75f6151849784ded698e0ca18382622d2f677cc880f5d8"
+    }
+  ]
+}
