@@ -1825,7 +1825,14 @@ pub fn build(b: *std.Build) void {
     const export_hook_flags = evaluator_flags ++ [_][]const u8{"-DUZP_EXPORT_FAULT_HOOKS=1"};
     export_tests_mod.addCSourceFiles(.{
         .root = b.path("tests/export"),
-        .files = &.{ "export_test.cpp", "snapshot_source_test.cpp" },
+        .files = &.{ "export_test.cpp", "snapshot_source_test.cpp", "filter_import_v2_test.cpp" },
+        .flags = &export_hook_flags,
+    });
+    // The internal V2 verified-context transaction component (decision 363) has no runtime entry:
+    // only this test binary compiles it, with the H receipt validators it uses.
+    export_tests_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &.{ "procedural/filter_observation_import_v2.cpp", "procedural/snapshot_recording.cpp" },
         .flags = &export_hook_flags,
     });
     export_tests_mod.addCSourceFiles(.{
