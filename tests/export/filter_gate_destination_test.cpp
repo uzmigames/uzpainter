@@ -949,9 +949,9 @@ struct CommandRun {
     json::Object report;
 };
 
-}  // namespace
-
-int RunFilterImportCommandCases(const fs::path& work) {
+/// The command driver: with `fixtureOnly`, it stops after the first import of A and its three
+/// checks, printing that fixture's identity and leaving the V2 project unchanged in `work`.
+int CommandCases(const fs::path& work, bool fixtureOnly) {
     int checks = 0;
     const auto check = [&](bool okay, const std::string& message) {
         Expect(okay, message);
@@ -1057,14 +1057,28 @@ int RunFilterImportCommandCases(const fs::path& work) {
     check(uuidAfter == a.uuid && uuidAfter == uuidBefore && revisionAfter == revisionBefore + 1 &&
               operationsAfter == operationsBefore + 1,
           "the original store keeps its uuid and gains one revision and one operation");
+    core::Id filterUid = core::kNoId;
     {
         auto opened = store::ProjectStore::Open(project);
         const core::Project& state = opened.state.project;
         const core::Id filter = state.texture_sets.at(0).stacks.at(0).root_layers.at(0).content_effects.at(0).uid;
+        filterUid = filter;
         const auto observed = procedural::ObservedFilter(*opened.store, state, filter);
         check(observed && "\"" + observed->entry_key + "\"" == entry && observed->parameters && observed->resource_id &&
                   observed->image_outputs,
               "the reopened store serves the imported observations");
+    }
+    if (fixtureOnly) {
+        std::cout << "FILTER_OBSERVATION_V2_FIXTURE: "
+                  << json::WriteCanonical(json::Object{{"checks", checks},
+                                                       {"project", "cli-h-a.uzp"},
+                                                       {"project_sha256", FileSha256(project)},
+                                                       {"project_uuid", uuidAfter},
+                                                       {"revision", revisionAfter},
+                                                       {"entry_key", json::Parse(entry)},
+                                                       {"filter_uid", static_cast<std::int64_t>(filterUid)}})
+                  << "\n";
+        return 0;
     }
 
     // 2. The same payload replays the recorded outcome without executing or writing.
@@ -1147,3 +1161,11 @@ int RunFilterImportCommandCases(const fs::path& work) {
     std::cout << "FILTER_IMPORT_COMMAND: " << json::WriteCanonical(json::Object{{"checks", checks}}) << "\n";
     return 0;
 }
+
+}  // namespace
+
+int RunFilterImportCommandCases(const fs::path& work) { return CommandCases(work, false); }
+
+/// The authored V2 fixture for facade tests: the command driver's first import only (no replay,
+/// later revision, horizon, corruption or refusal case), leaving a valid V2 `work/cli-h-a.uzp`.
+int RunFilterObservationV2Fixture(const fs::path& work) { return CommandCases(work, true); }

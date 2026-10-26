@@ -26,6 +26,7 @@ OLD_GOLDEN = "tier0/api-probes/source-substance-booleans-filter"
 F_GOLDEN = "tier0/api-probes/filter-context-settings-a"
 SOURCE = "substance_painter.source.SourceSubstance."
 GETTERS = {16: "get_parameters", 17: "resource_id", 18: "image_outputs"}
+RESTRICTIONS = {19: "active_output", **dict.fromkeys(range(20, 25), "resolution")}
 CONDITIONS = ("same_session", "after_save_reopen")
 HASH = re.compile(r"[0-9a-f]{64}")
 COUNTS = (
@@ -342,6 +343,76 @@ def select_readbacks(
     return result
 
 
+def restriction_steps() -> list[dict[str, Any]]:
+    """Public authored operations only; never oracle outcomes or messages."""
+    from tools.parity.tier0_semantics.source_substance_control import booleans_filter_request
+
+    return [
+        s
+        for s in booleans_filter_request()["instruction_sequence"]["steps"]
+        if s["step"] in RESTRICTIONS
+    ]
+
+
+def checked_outcome(value: Any) -> dict[str, Any]:
+    require(
+        type(value) is dict and set(value) in ({"value"}, {"value", "raised"}),
+        "F_REPLAY_RESTRICTION_OUTCOME",
+    )
+    if "raised" in value:
+        error = closed(value["raised"], {"type", "message"}, "F_REPLAY_RESTRICTION_OUTCOME")
+        require(
+            value["value"] is None
+            and type(error["type"]) is str
+            and bool(error["type"])
+            and type(error["message"]) is str,
+            "F_REPLAY_RESTRICTION_OUTCOME",
+        )
+    typed_json(value)
+    result: dict[str, Any] = value
+    return result
+
+
+def select_restrictions(
+    manifest: dict[str, Any], record: dict[str, Any], golden: str
+) -> dict[str, Any]:
+    # Reuse identity/recording/duplicate-step checks before selecting error-path evidence.
+    select_readbacks(manifest, record, golden)
+    steps = [s for s in manifest["instruction_sequence"]["steps"] if s["step"] in RESTRICTIONS]
+    require(typed_json(steps) == typed_json(restriction_steps()), "F_REPLAY_RESTRICTION_RECIPE")
+    result = {}
+    for index, recording in enumerate(record["recordings"], 1):
+        for step in steps:
+            number = step["step"]
+            output_id = f"s{number}/{RESTRICTIONS[number]}"
+            matches = [o for o in recording["outputs"] if o["output_id"] == output_id]
+            require(len(matches) == 1, "F_REPLAY_RESTRICTION_OUTPUTS")
+            output = matches[0]
+            args = {
+                key: value for key, value in step["args"].items() if key not in {"probe", "wait"}
+            }
+            require(
+                output["kind"] == "api_readback"
+                and output["call"] == step["call"]
+                and typed_json(output["args"]) == typed_json(args)
+                and "value" in output,
+                "F_REPLAY_RESTRICTION_OUTPUTS",
+            )
+            outcome = {key: output[key] for key in ("value", "raised") if key in output}
+            result[f"r{index}/{output_id}"] = checked_outcome(outcome)
+    return result
+
+
+def compare_restrictions(actual: dict[str, Any], expected: dict[str, Any]) -> None:
+    keys = {f"r{r}/s{n}/{g}" for r in (1, 2) for n, g in RESTRICTIONS.items()}
+    require(set(actual) == set(expected) == keys, "F_REPLAY_RESTRICTION_OUTPUTS")
+    for key in sorted(keys):
+        require(
+            typed_json(checked_outcome(actual[key])) == typed_json(checked_outcome(expected[key])),
+            "F_REPLAY_RESTRICTION_DIFFERENT",
+        )
+
+
 def validate_actual(plan: ReplayPlan, actual: dict[str, Any]) -> None:
     closed(
         actual,
@@ -351,6 +422,7 @@ def validate_actual(plan: ReplayPlan, actual: dict[str, Any]) -> None:
             "revision",
             "project_sha256",
             "readbacks",
+            "restrictions",
             "trace",
             "old_handles_refused",
             "unchanged",
@@ -388,6 +460,8 @@ def validate_actual(plan: ReplayPlan, actual: dict[str, Any]) -> None:
         all(SOURCE + key.rsplit("/", 1)[1] in actual["trace"][key] for key in keys),
         "F_REPLAY_TRACE",
     )
+    require(type(actual["restrictions"]) is dict, "F_REPLAY_RESTRICTION_OUTPUTS")
+    compare_restrictions(actual["restrictions"], actual["restrictions"])
 
 
 def compare_readbacks(actual: dict[str, Any], expected: dict[str, Any]) -> None:
@@ -427,6 +501,10 @@ def compare(plan: ReplayPlan, actual_path: Path) -> dict[str, Any]:
         )
         fresh = select_readbacks(captured.manifest, captured.record, F_GOLDEN)
         compare_readbacks(actual["readbacks"], fresh)
+        compare_restrictions(
+            actual["restrictions"],
+            select_restrictions(captured.manifest, captured.record, F_GOLDEN),
+        )
 
         old_manifest = parse(Path(plan.config["old_manifest"]).read_bytes())
         authored = booleans_filter_request()
@@ -460,6 +538,9 @@ def compare(plan: ReplayPlan, actual_path: Path) -> dict[str, Any]:
         )
         old = select_readbacks(old_manifest, old_record, OLD_GOLDEN)
         compare_readbacks(actual["readbacks"], old)
+        compare_restrictions(
+            actual["restrictions"], select_restrictions(old_manifest, old_record, OLD_GOLDEN)
+        )
         require(
             file_hash(plan.project) == plan.config["project_sha256"], "F_REPLAY_PROJECT_CHANGED"
         )
@@ -468,6 +549,8 @@ def compare(plan: ReplayPlan, actual_path: Path) -> dict[str, Any]:
             "status": "equal",
             "f_compared": 6,
             "old_compared": 6,
+            "f_restrictions_compared": 12,
+            "old_restrictions_compared": 12,
             "traced_outputs": 6,
             "old_handles_refused": 3,
             "unchanged": True,
@@ -477,6 +560,7 @@ def compare(plan: ReplayPlan, actual_path: Path) -> dict[str, Any]:
             "old_record_sha256": old_sha,
             "actual_sha256": digest(actual["readbacks"]),
             "trace_sha256": digest(actual["trace"]),
+            "restrictions_sha256": digest(actual["restrictions"]),
         }
     except ReplayRefused:
         raise
@@ -486,7 +570,14 @@ def compare(plan: ReplayPlan, actual_path: Path) -> dict[str, Any]:
 
 def recorder_source() -> str:
     text = (REPO_ROOT / "tools/parity/recorder/painter_probes.py").read_text(encoding="utf-8")
-    names = {"describe", "resolve", "substance_source", "substance_read"}
+    names = {
+        "describe",
+        "resolve",
+        "substance_source",
+        "substance_read",
+        "substance_edit",
+        "class_name",
+    }
     found = {
         n.name: ast.get_source_segment(text, n)
         for n in ast.parse(text).body
@@ -497,6 +588,34 @@ def recorder_source() -> str:
 
 
 WORKER = r"""
+def restriction_state(P):
+    values = {getter: describe(substance_read(
+        SOURCE_PREFIX + getter, {"node_step": 6, "effect": True}))
+        for getter in ("get_parameters", "resource_id", "image_outputs")}
+    return (P.revision(), P.needs_saving(),
+            json.dumps(values, sort_keys=True, separators=(",", ":"), allow_nan=False))
+
+def capture_restrictions(P, steps):
+    outcomes = {}
+    for step in steps:
+        before = restriction_state(P)
+        if before[:2] != (REVISION, False):
+            raise RuntimeError("F_REPLAY_MUTATION")
+        call = step["call"]
+        args = {key: value for key, value in step["args"].items()
+                if key not in {"probe", "wait"}}
+        try:
+            value = (substance_read(call, args) if "roundtrip" not in args
+                     else substance_edit(call, args))
+            outcome = {"value": describe(value)}
+        except Exception as error:
+            outcome = {"value": None, "raised": {
+                "type": type(error).__name__, "message": str(error)}}
+        if restriction_state(P) != before:
+            raise RuntimeError("F_REPLAY_MUTATION")
+        outcomes[f"s{step['step']}/{call.rsplit('.', 1)[1]}"] = outcome
+    return outcomes
+
 def capture_actual():
     P = uzpainter.project
     if P.is_open():
@@ -514,11 +633,12 @@ def capture_actual():
     globals()["fresh"] = fresh
     checked_file()
     values = {}
+    restrictions = {}
+    trace = {}
+    tracing = False
     refused = 0
     original = None
-    _TRACE["start"]()
     try:
-        _TRACE["mark"]("bookkeeping")
         for round_ in (1, 2):
             P.open(PROJECT)
             if P.revision() != REVISION or str(P.get_uuid()) != PROJECT_UUID:
@@ -537,12 +657,19 @@ def capture_actual():
                     else:
                         raise RuntimeError("F_REPLAY_OLD_HANDLE")
             getters = ((16, "get_parameters"), (17, "resource_id"), (18, "image_outputs"))
+            _TRACE["start"]()
+            tracing = True
             for number, getter in getters:
                 mark = f"r{round_}/s{number}/{getter}"
                 _TRACE["mark"](mark)
                 values[mark] = describe(substance_read(
                     SOURCE_PREFIX + getter, {"node_step": 6, "effect": True}))
                 _TRACE["mark"]("bookkeeping")
+            trace.update(_TRACE["stop"]())
+            tracing = False
+            # Restrictions run with tracing stopped: refusals earn no supported coverage.
+            outcomes = capture_restrictions(P, RESTRICTION_STEPS)
+            restrictions.update({f"r{round_}/{key}": outcome for key, outcome in outcomes.items()})
             if original is None:
                 original = fresh(6).get_source()
             if P.revision() != REVISION or P.needs_saving():
@@ -550,20 +677,22 @@ def capture_actual():
             P.close()
             checked_file()
     finally:
-        trace = _TRACE["stop"]()
+        if tracing:
+            _TRACE["stop"]()
         if P.is_open():
             P.close()
     selected = {key: trace.get(key, []) for key in values}
-    if (len(values) != 6 or refused != 3 or not all(selected.values())
+    if (len(values) != 6 or len(restrictions) != 12 or refused != 3 or not all(selected.values())
             or not all(SOURCE_PREFIX + key.rsplit("/", 1)[1] in names
                        for key, names in selected.items())):
         raise RuntimeError("F_REPLAY_CAPTURE_INCOMPLETE")
     Path(WORK, "filter-context-actual.json").write_text(json.dumps({
         "schema": "uzpainter/filter-context-actual/1", "entry_key": ENTRY_KEY,
         "revision": REVISION, "project_sha256": PROJECT_SHA, "readbacks": values,
+        "restrictions": restrictions,
         "trace": selected, "old_handles_refused": refused, "unchanged": True
     }, ensure_ascii=True), encoding="utf-8")
-    return {"status": "captured", "outputs": 6, "old_handles_refused": 3}
+    return {"status": "captured", "outputs": 6, "restrictions": 12, "old_handles_refused": 3}
 
 try:
     result = capture_actual()
@@ -586,6 +715,7 @@ def build_script(plan: ReplayPlan, trace_source: str) -> str:
         "FILTER_UID": plan.filter_uid,
         "ENTRY_KEY": plan.entry_key,
         "SOURCE_PREFIX": SOURCE,
+        "RESTRICTION_STEPS": restriction_steps(),
     }
     return (
         "import dataclasses, datetime, enum, hashlib, json, traceback\n"

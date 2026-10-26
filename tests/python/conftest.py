@@ -21,6 +21,8 @@ from typing import Any
 
 import pytest
 
+from tests.export.conftest import export_tests as export_tests
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PLANE = REPO_ROOT / "parity" / "fixtures" / "meshes" / "plane.obj"
 PROBE_IMAGES = REPO_ROOT / "parity" / "fixtures" / "api-probes"

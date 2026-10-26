@@ -630,7 +630,7 @@ These are authored cases, not observations of Painter.
 
 ### Facade replay after a materialized import (shipped tooling, private)
 
-`tools/parity/filter_context_replay.py`, driven by `tests/python/test_filter_context_capture_replay.py`, compares the native facade's Filter getters with independent recordings. It runs only after an import has actually been materialized. It is comparison tooling: it is not an import gate, and it grants no capability.
+`tools/parity/filter_context_replay.py`, driven by `tests/python/test_filter_context_capture_replay.py`, compares the native facade's Filter getters (steps 16–18) and its restrictions (steps 19–24) with independent recordings. It runs only after an import has actually been materialized. It is comparison tooling: it is not an import gate, and it grants no capability.
 
 **Configuration.** The environment variable `UZP_FILTER_CONTEXT_REPLAY_CONFIG` names a private configuration: an absolute file outside the repository, with no symbolic-link or junction ancestor. It is exactly `uzpainter/filter-context-replay/1` with these fields:
 - `project` and its `project_sha256`: the original H file after the import;
@@ -648,7 +648,30 @@ The project, import request/report and oracle store paths must be outside the re
    - the entry and its native proof: the proof's binary hash equals `import_binary_sha256`, its projection and inventory hashes equal the context's, and its raster, upload and final hashes are equal.
 
    The project's file hash is checked before and after.
-2. **Actual values first.** A worker opens the project through the real facade and reads the Filter's getters (`get_parameters`, `resource_id`, `image_outputs`) in both conditions, with a trace. It requires all three getters on the source handle retained before reopen to refuse. It never saves or copies the project.
-3. **Only then the recordings.** The tool opens the admitted F record and the independent old recording, which must be a different record. It compares the six readbacks, typed. The project's file hash must be unchanged at the end.
+2. **Actual values first.** A worker opens the project through the real facade and, in both conditions:
+   - reads the Filter's three getters (`get_parameters`, `resource_id`, `image_outputs`) with a trace;
+   - with the tracer stopped (an error path, decision 112), runs the booleans probe's steps 19–24 (`active_output`, then the `resolution` reads and the Custom and Auto writes) through the recorder's own `substance_read` and `substance_edit`, recording each outcome. The project's revision, unsaved state and typed values of the three getters must be unchanged after every step.
+
+   It requires all three getters on the source handle retained before reopen to refuse. It never saves or copies the project.
+3. **Only then the recordings.** The tool opens the admitted F record and the independent old recording, which must be a different record. It compares, typed, the six readbacks and the twelve restriction outcomes (steps 19–24 in both rounds) with each of them. The report counts `f_compared`, `old_compared`, `f_restrictions_compared`, `old_restrictions_compared` and `traced_outputs`, plus `restrictions_sha256`. The project's file hash must be unchanged at the end.
+
+**Authored V2 test (offline, no private data).** `uzp-export-tests filter-observation-v2-fixture <work>` (`RunFilterObservationV2Fixture`) builds the authored F, bound to an authored original H, and imports it through the real command. It uses authored F pins through the test-only access and the compiled H policy, the same fixture as `RunFilterImportCommandCases`, stopping after the first import and its three checks. It leaves that V2 project unchanged in the work folder and prints its identity.
+
+`tests/python/test_filter_observations_v2.py` opens the project through both the native API and the facade. It requires:
+- the three getters to equal the authored record's pre16 Filter source leaves, typed (never values read from the getters under test);
+- steps 19–24 in recipe order, and an `active_output` write, to raise the established errors (`EditionContextException: Only valid in single channel context` and `ValueError: Resolution property is not available on a FilterEffectNode.`);
+- a typed parameter write, an unknown parameter and `image_inputs` to refuse;
+- the revision and unsaved state to stay unchanged after every refusal;
+- the handle retained before reopen to refuse after it, while a fresh handle serves;
+- the file hash to stay unchanged.
+
+This is authored evidence only. The materialized original H, the private replay and item 2.6j remain pending.
+
+`tests/python/test_filter_context_authored_replay.py` also executes the generated
+worker on that authored V2 fixture. It checks all six readbacks against the
+independent authored pre16 leaves, twelve established restriction outcomes, all
+three stale-getter refusals, trace binding and unchanged project bytes. Its plan
+comes from the authored command summary solely to exercise collection; it does
+not test or replace the private materialization gate or oracle comparison.
 
 Private reports (the runner envelope, the actual values, the comparison and any error trace) are written only to the test's private work folder. A failure prints only `F_REPLAY_FAILED`, and refusals carry fixed `F_REPLAY_*` codes. A passing comparison promotes no capability and does not by itself close item 2.6j.

@@ -690,3 +690,38 @@ owner authorization. A private request and read-only preflight are prepared; the
 original remains at revision 7 with seven operations and identical bytes. The
 authorization question is pending. Neither the real import nor the configured
 private replay ran, and item 2.6j remains open.
+
+### V2 refusal replay and authored facade integration
+
+The replay now also executes steps 19-24 in both rounds through the recorder's
+own read/edit functions, with tracing stopped. Each operation must preserve the
+revision, unsaved state and typed values of all three observed getters. Only
+successful native collection permits reading F and the independent old record;
+all twelve restriction outcomes are compared with each, including exception
+types/messages, values and signed zero. Getter coverage remains six traced
+outputs; refused operations gain no supported coverage.
+
+A test-only fixture entry point reuses the real authored import command and
+stops after its first successful import, census and reopened getter checks,
+before later E2E revisions or deliberate corruption. The original E2E retains
+all eleven checks. Native and facade Python tests verify the V2 getters against
+independent authored pre16 observations, established refusal priorities,
+unchanged revision/unsaved state/file bytes and stale-handle behavior. A further
+authored test runs the generated replay worker itself, including all three
+stale-getter refusals and exact trace binding. Its command-summary plan tests
+collection only, not private admission or oracle parity. The two Python modules
+share their export fixture through `tests/python/conftest.py`.
+
+Validation: 52 passed in 129.32 seconds, none skipped: 45 pure replay tests,
+destination (66 checks), import command (11 checks), two V2 native/facade nodes,
+one generated-worker node and two public application smoke nodes. Ruff, format,
+strict mypy on six affected Python files and independent reviews passed. All
+46 frozen files remained unchanged during the sequential native builds and test
+run. Logs: `tmp/scratch/rev409-offline.log` and
+`tmp/scratch/rev409-offline.xml`; freeze: `tmp/scratch/rev409-source-freeze.json`.
+The three fixture checks reuse the command's first checks, not additional
+distinct checks in the existing native union of 333.
+
+No original-H import, configured private replay, capability promotion, full-suite
+claim, push, PR or archive occurred. Item 2.6j and parents 2.6/3.2 remain open;
+the existing original-H mutation authorization question remains pending.

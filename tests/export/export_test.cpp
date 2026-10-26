@@ -2141,6 +2141,7 @@ int RunFilterGateDestinationCases(const std::filesystem::path& work);
 int RunFilterGateHostCases(const std::filesystem::path& work);
 int RunFilterGateRequestCases();
 int RunFilterImportCommandCases(const std::filesystem::path& work);
+int RunFilterObservationV2Fixture(const std::filesystem::path& work);
 int RunSnapshotCaptureFixture(const std::filesystem::path& work, double amount, const std::string& bridge,
                               const std::string& painterSide);
 int RunFilterObservationBase(const std::filesystem::path& path, const std::filesystem::path& out);
@@ -2163,6 +2164,7 @@ int main(int argc, char** argv) {
         if (args.size() == 2 && args[0] == "filter-gate-host") return RunFilterGateHostCases(args[1]);
         if (args.size() == 1 && args[0] == "filter-gate-request") return RunFilterGateRequestCases();
         if (args.size() == 2 && args[0] == "filter-import-command") return RunFilterImportCommandCases(args[1]);
+        if (args.size() == 2 && args[0] == "filter-observation-v2-fixture") return RunFilterObservationV2Fixture(args[1]);
         if (args.size() >= 2 && args[0] == "assets" && args[1] == "import-filter-observation")
             return uzp::procedural::RunFilterImportCommand(args, stdout, stderr);
         if (args.size() == 5 && args[0] == "snapshot-capture-fixture")

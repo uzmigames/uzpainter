@@ -36,6 +36,7 @@ def test_materialized_filter_context_replays_independent_recordings(
             == {
                 "status": "captured",
                 "outputs": 6,
+                "restrictions": 12,
                 "old_handles_refused": 3,
             },
             "F_REPLAY_EXECUTION",
@@ -51,4 +52,8 @@ def test_materialized_filter_context_replays_independent_recordings(
                 )
     if failed:
         pytest.fail("F_REPLAY_FAILED: inspect private diagnostics", pytrace=False)
-    print("Filter context: F 6/6; independent old 6/6; traced 6/6; stale refusals 3/3; unchanged")
+    print(
+        "Filter context: F getters 6/6, restrictions 12/12; "
+        "independent old getters 6/6, restrictions 12/12; "
+        "traced 6/6; stale refusals 3/3; unchanged"
+    )
