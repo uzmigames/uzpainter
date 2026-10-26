@@ -542,6 +542,9 @@ class Widget:
     def descendants(self) -> list[Widget]:
         return self.widgets
 
+    def children(self) -> list[Widget]:
+        return self.widgets
+
 
 @pytest.mark.parametrize(
     "failure,reason",
@@ -664,7 +667,7 @@ def test_configuration_reads_and_only_cancels(
     dialog = Widget("Project Configuration", "Window")
     cancel = Widget("Cancel", "Button", 51)
     dialog.widgets = [] if failure == "no_cancel" else [cancel]
-    main.children = lambda: [dialog]  # type: ignore[attr-defined]
+    main.widgets = [dialog]
     owned = Mock(launcher=Mock(pid=71))
     if failure == "stale_pid":
         owned.verify.side_effect = ValueError("stale process")
@@ -730,6 +733,198 @@ def test_configuration_reads_and_only_cancels(
         assert logged == [{"element_rect": [0, 0, 10, 10]}, {"element_rect": [20, 0, 30, 10]}]
     if failure == "foreground":
         assert clicked == []
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "collapsed",
+        "expanded",
+        "missing",
+        "duplicate",
+        "foreign",
+        "hidden",
+        "disabled",
+        "wrong_id",
+        "wrong_label",
+        "no_cancel",
+        "click_failure",
+        "no_expansion",
+        "read_failure",
+        "lock_after_click",
+        "dialog_pid_changed",
+    ],
+)
+def test_physical_size_only_expands_observed_title_and_cancels_safely(
+    case: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+    ticks = iter(range(0, 1000, 20))
+    monkeypatch.setattr(time, "monotonic", lambda: next(ticks))
+    locked = False
+    monkeypatch.setattr(
+        survey,
+        "desktop_state",
+        lambda: {
+            "available": not locked,
+            "reason": "lock_screen_foreground" if locked else "available",
+        },
+    )
+    monkeypatch.setattr(survey, "navigation_state", lambda *args: {})
+    main = Widget("Painter", "Window", 25)
+    dialog = Widget("Project Configuration", "Window", 50)
+    cancel = Widget("Cancel", "Button", 51)
+    title = Widget("Physical size", "Button", 52)
+    title.element_info.automation_id = survey.PHYSICAL_SIZE_TITLE
+    leaf = Widget("Authored unit value", "Edit", 53)
+    # Unnamed controls still count when their actual ancestry is inside the section.
+    leaf.element_info.automation_id = ""
+    leaf.visible = case == "expanded"
+    monkeypatch.setattr(leaf, "iface_value", SimpleNamespace(CurrentValue="1.0"), raising=False)
+    section = Widget("", "Group", 55)
+    section.element_info.automation_id = survey.PHYSICAL_SIZE_SECTION
+    section.widgets = [title, leaf]
+    dialog.widgets = [cancel, section, title, leaf]
+    main.widgets = [dialog]
+    if case == "missing":
+        dialog.widgets.remove(title)
+    elif case == "duplicate":
+        duplicate = Widget("Physical size", "Button", 54)
+        duplicate.element_info.automation_id = survey.PHYSICAL_SIZE_TITLE
+        dialog.widgets.append(duplicate)
+    elif case == "foreign":
+        monkeypatch.setattr(title, "process_id", lambda: 99)
+    elif case == "hidden":
+        title.visible = False
+    elif case == "disabled":
+        monkeypatch.setattr(title, "is_enabled", lambda: False)
+    elif case == "wrong_id":
+        title.element_info.automation_id = "unrelated.Title"
+    elif case == "wrong_label":
+        title.label = "Another section"
+    elif case == "no_cancel":
+        dialog.widgets.remove(cancel)
+    ui = Mock(window=main, settle_s=0)
+    ui.desktop.windows.return_value = [dialog]
+    ui.menu_containers.return_value = [main]
+    ui.menu_item.side_effect = lambda label: Widget(label, "MenuItem")
+    ui.survey.return_value = {"authored": "tree"}
+    clicked: list[str] = []
+
+    def click(widget: Widget, **kwargs: Any) -> None:
+        nonlocal locked
+        clicked.append(widget.label)
+        if widget in (title, cancel):
+            assert kwargs == {"owner": dialog.handle}
+        if widget is title:
+            if case == "click_failure":
+                raise ValueError("covered by another HWND")
+            if case != "no_expansion":
+                leaf.visible = True
+            if case == "lock_after_click":
+                locked = True
+            if case == "dialog_pid_changed":
+                monkeypatch.setattr(dialog, "process_id", lambda: 99)
+        if widget is cancel:
+            dialog.visible = False
+
+    ui.click.side_effect = ui.click_menu_item.side_effect = click
+    evidence = Mock()
+    if case == "read_failure":
+
+        def write(name: str, value: Any) -> None:
+            if name == "physical_size":
+                raise OSError("authored evidence failure")
+
+        evidence.json.side_effect = write
+    owned = Mock(launcher=Mock(pid=71))
+    if case in ("collapsed", "expanded"):
+        survey.configuration_survey(ui, owned, evidence, physical_size=True)
+        data = next(c.args[1] for c in evidence.json.call_args_list if c.args[0] == "physical_size")
+        assert data["expanded_by_click"] is (case == "collapsed")
+        observed = next(row for row in data["values"] if row["label"] == leaf.label)
+        assert observed["value"] == "1.0" and "unavailable" in observed["toggle"]
+        assert [c.args[0] for c in evidence.image.call_args_list] == [
+            "configuration_image",
+            "physical_size_image",
+        ]
+    else:
+        with pytest.raises((ValueError, OSError)):
+            survey.configuration_survey(ui, owned, evidence, physical_size=True)
+    assert clicked[:2] == ["Edit", "Project Configuration"]
+    assert clicked.count("Physical size") == int(
+        case
+        in {
+            "collapsed",
+            "click_failure",
+            "no_expansion",
+            "read_failure",
+            "lock_after_click",
+            "dialog_pid_changed",
+        }
+    )
+    assert clicked.count("Cancel") == int(
+        case not in {"no_cancel", "lock_after_click", "dialog_pid_changed"}
+    )
+    assert set(clicked) <= {"Edit", "Project Configuration", "Physical size", "Cancel"}
+    ui.choose.assert_not_called()
+    ui.set_value.assert_not_called()
+    ui.invoke.assert_not_called()
+
+
+def test_physical_size_requires_configuration_before_evidence_or_actions(
+    request_data: survey.Request,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    evidence = Mock()
+    monkeypatch.setattr(survey, "Evidence", evidence)
+    with pytest.raises(ValueError, match="physical size requires configuration"):
+        survey.survey(replace(request_data, physical_size=True))
+    evidence.assert_not_called()
+    old = survey.Request(request_data.painter_exe, request_data.output_prefix, True, 4.0, 8.0)
+    assert old.configuration and not old.physical_size
+    assert old.min_free_memory_gib == 4.0 and old.min_commit_headroom_gib == 8.0
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_physical_size_artifacts_are_private_and_opt_in(tmp_path: Path, enabled: bool) -> None:
+    with ExitStack() as stack:
+        evidence = survey.Evidence(tmp_path / "survey", stack, physical_size=enabled)
+        extras = {"physical_size", "physical_size_image"}
+        assert extras.intersection(evidence.paths) == (extras if enabled else set())
+        assert all(path.parent == tmp_path for path in evidence.paths.values())
+
+
+@pytest.mark.parametrize(
+    "case", ["missing_section", "duplicate_section", "foreign_leaf", "chrome_only"]
+)
+def test_physical_size_content_census_requires_owned_section_and_ignores_title_chrome(
+    case: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dialog = Widget("Project Configuration", "Window")
+    section = Widget("", "Group")
+    section.element_info.automation_id = survey.PHYSICAL_SIZE_SECTION
+    leaf = Widget("Authored leaf", "Edit")
+    leaf.element_info.automation_id = ""
+    section.widgets = [leaf]
+    dialog.widgets = [section, leaf]
+    if case == "missing_section":
+        dialog.widgets = [leaf]
+    elif case == "duplicate_section":
+        dialog.widgets.append(section)
+    elif case == "foreign_leaf":
+        monkeypatch.setattr(leaf, "process_id", lambda: 99)
+    else:
+        chrome = Widget("", "Group")
+        chrome.element_info.automation_id = survey.PHYSICAL_SIZE_SECTION + ".groupTitle"
+        chrome.widgets = [leaf]
+        section.widgets = [chrome]
+        assert survey.physical_size_leaves(dialog, 71) == []
+        return
+    with pytest.raises(ValueError):
+        survey.physical_size_leaves(dialog, 71)
 
 
 def test_navigation_diagnostics_read_foreign_cover_without_actions(

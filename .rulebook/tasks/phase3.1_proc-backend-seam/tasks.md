@@ -449,3 +449,16 @@ and canonical preservation of a valid historical entry through save/reopen.
 Independent review and source/log hash checks passed. Evidence:
 `tmp/scratch/rev391-store-tests.xml` (two passed, no failures or skips). This
 fix does not close the outstanding settings, destination or frozen-host proofs.
+
+### Physical-size selector survey extension
+
+The private Project Configuration survey has an opt-in `--physical-size` mode,
+requiring `--configuration`. It preserves the initial observations, reads already
+visible section content, or expands the uniquely identified owned title once.
+The Cancel control is discovered before expansion and revalidated on exit.
+The default artifacts and positional request arguments are unchanged.
+
+Mypy, Ruff and independent static review passed. The 84-case survey suite and
+four additional section/content refusal cases passed. These are authored tests;
+the next owned survey will observe actual selectors. Neither this extension nor
+a separate survey project establishes effective settings of the historical F.

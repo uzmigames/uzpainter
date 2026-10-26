@@ -58,6 +58,11 @@ GIB = 1024**3
 CREATE = "substance_painter.project.create"
 CREATE_ARGS = {"mesh": "plane", "normal_map_format": "OpenGL", "default_texture_resolution": 128}
 OWNERSHIP_MARKER = "UZP_SURVEY_OWNERSHIP_LOST"
+PHYSICAL_SIZE_SECTION = (
+    "QApplication.ProjectSettingsDialog.scroll_area.qt_scrollarea_viewport."
+    "scroll_area_content.advanced_settings_section.content.physical_size_section"
+)
+PHYSICAL_SIZE_TITLE = PHYSICAL_SIZE_SECTION + ".groupTitle.titleButton"
 
 
 class OwnershipLost(ValueError):
@@ -81,6 +86,7 @@ class Request:
     configuration: bool = False
     min_free_memory_gib: float = 8.0
     min_commit_headroom_gib: float = 16.0
+    physical_size: bool = False
 
 
 @dataclass(frozen=True)
@@ -159,14 +165,14 @@ def resources_available(host: Host, request: Request) -> None:
 
 
 class Evidence:
-    def __init__(self, prefix: Path, stack: ExitStack) -> None:
+    def __init__(self, prefix: Path, stack: ExitStack, *, physical_size: bool = False) -> None:
         prefix = private_path(prefix, REPO_ROOT)
         require(
             prefix.parent.is_dir() and bool(prefix.name), "existing private output parent required"
         )
         self.paths: dict[str, Path] = {}
         self.handles: dict[str, BinaryIO] = {}
-        for name, suffix in (
+        artifacts = [
             ("report", ".report.json"),
             ("log", ".events.jsonl"),
             ("main", ".main.json"),
@@ -174,7 +180,13 @@ class Evidence:
             ("menu", ".menu.json"),
             ("configuration", ".configuration.json"),
             ("configuration_image", ".configuration.png"),
-        ):
+        ]
+        if physical_size:
+            artifacts += [
+                ("physical_size", ".physical-size.json"),
+                ("physical_size_image", ".physical-size.png"),
+            ]
+        for name, suffix in artifacts:
             path = private_path(prefix.with_name(prefix.name + suffix), REPO_ROOT)
             self.paths[name] = path
             self.handles[name] = stack.enter_context(path.open("xb"))
@@ -655,7 +667,58 @@ def desktop_state() -> dict[str, Any]:
     return state
 
 
-def configuration_survey(ui: PainterUi, owned: OwnedTransport, evidence: Evidence) -> None:
+def owned_cancel(dialog: Any, pid: int) -> Any:
+    return unique(
+        [
+            w
+            for w in dialog.descendants()
+            if w.element_info.control_type == "Button"
+            and menu_label(w.window_text()) == "Cancel"
+            and w.is_visible()
+            and w.is_enabled()
+            and w.process_id() == pid
+        ],
+        "one owned Cancel button required",
+    )
+
+
+def physical_size_leaves(dialog: Any, pid: int) -> list[Any]:
+    """Visible content leaves of the observed section; title chrome is not content."""
+    section = unique(
+        [
+            w
+            for w in dialog.descendants()
+            if w.element_info.automation_id == PHYSICAL_SIZE_SECTION
+            and w.is_visible()
+            and w.process_id() == pid
+        ],
+        "one owned Physical size section required",
+    )
+    leaves: list[Any] = []
+
+    def visit(element: Any, depth: int) -> None:
+        require(depth < 32, "Physical size ancestry is too deep")
+        if not element.is_visible():
+            return
+        require(element.process_id() == pid, "foreign Physical size content")
+        identity = element.element_info.automation_id
+        if isinstance(identity, str) and identity.startswith(PHYSICAL_SIZE_SECTION + ".groupTitle"):
+            return
+        children = [child for child in element.children() if child.is_visible()]
+        if children:
+            for child in children:
+                visit(child, depth + 1)
+        elif element.element_info.control_type not in {"Pane", "Group", "Window"}:
+            leaves.append(element)
+
+    for child in section.children():
+        visit(child, 0)
+    return leaves
+
+
+def configuration_survey(
+    ui: PainterUi, owned: OwnedTransport, evidence: Evidence, *, physical_size: bool = False
+) -> None:
     def guard() -> None:
         owned.verify()
         require(ui.window.process_id() == owned.launcher.pid, "UI window process changed")
@@ -711,21 +774,69 @@ def configuration_survey(ui: PainterUi, owned: OwnedTransport, evidence: Evidenc
             "configuration", {"tree": ui.survey(dialog), "values": visible_values(dialog)}
         )
         evidence.image("configuration_image", ui, dialog.handle)
-        cancel = unique(
-            [
-                w
-                for w in dialog.descendants()
-                if w.element_info.control_type == "Button"
-                and menu_label(w.window_text()) == "Cancel"
-                and w.is_visible()
-                and w.is_enabled()
-                and w.process_id() == owned.launcher.pid
-            ],
-            "one owned Cancel button required",
-        )
+        cancel = owned_cancel(dialog, owned.launcher.pid)
+        if physical_size:
+            guard()
+            require(
+                dialog.process_id() == owned.launcher.pid, "configuration dialog process changed"
+            )
+            title = unique(
+                [
+                    w
+                    for w in dialog.descendants()
+                    if w.element_info.control_type == "Button"
+                    and w.element_info.automation_id == PHYSICAL_SIZE_TITLE
+                    and menu_label(w.window_text()) == "Physical size"
+                    and w.is_visible()
+                    and w.is_enabled()
+                    and w.process_id() == owned.launcher.pid
+                ],
+                "one owned Physical size title required",
+            )
+            before = physical_size_leaves(dialog, owned.launcher.pid)
+            if not before:
+                guard()
+                require(
+                    dialog.process_id() == owned.launcher.pid,
+                    "configuration dialog process changed",
+                )
+                ui.click(title, owner=dialog.handle)
+                deadline = time.monotonic() + 10
+                while True:
+                    guard()
+                    require(
+                        dialog.process_id() == owned.launcher.pid,
+                        "configuration dialog process changed",
+                    )
+                    if physical_size_leaves(dialog, owned.launcher.pid):
+                        break
+                    require(
+                        time.monotonic() < deadline, "Physical size content did not become visible"
+                    )
+                    time.sleep(0.2)
+            guard()
+            require(
+                dialog.process_id() == owned.launcher.pid, "configuration dialog process changed"
+            )
+            evidence.json(
+                "physical_size",
+                {
+                    "expanded_by_click": not bool(before),
+                    "tree": ui.survey(dialog),
+                    "values": visible_values(dialog),
+                },
+            )
+            evidence.image("physical_size_image", ui, dialog.handle)
     finally:
         if dialog is not None and cancel is not None:
             guard()
+            if physical_size:
+                require(
+                    dialog.process_id() == owned.launcher.pid,
+                    "configuration dialog process changed",
+                )
+                cancel = owned_cancel(dialog, owned.launcher.pid)
+                guard()
             ui.click(cancel, owner=dialog.handle)
             deadline = time.monotonic() + 10
             while dialog.is_visible():
@@ -736,8 +847,11 @@ def configuration_survey(ui: PainterUi, owned: OwnedTransport, evidence: Evidenc
 
 
 def survey(request: Request) -> dict[str, Any]:
+    require(
+        not request.physical_size or request.configuration, "physical size requires configuration"
+    )
     with ExitStack() as stack:
-        evidence = Evidence(request.output_prefix, stack)
+        evidence = Evidence(request.output_prefix, stack, physical_size=request.physical_size)
         report: dict[str, Any] = {
             "schema": "uzpainter/project-configuration-selector-survey/1",
             "status": "refused",
@@ -822,7 +936,7 @@ def survey(request: Request) -> dict[str, Any]:
             owned.verify()
             evidence.image("main_image", ui, ui.window.handle)
             if request.configuration:
-                configuration_survey(ui, owned, evidence)
+                configuration_survey(ui, owned, evidence, physical_size=request.physical_size)
             owned.verify()
             after = session.state()
             needs_saving_after = owned.run(
@@ -856,6 +970,7 @@ def main() -> int:
     parser.add_argument("--painter-exe", type=Path, required=True)
     parser.add_argument("--output-prefix", type=Path, required=True)
     parser.add_argument("--configuration", action="store_true")
+    parser.add_argument("--physical-size", action="store_true")
     parser.add_argument("--min-free-memory-gib", type=float, default=8.0)
     parser.add_argument("--min-commit-headroom-gib", type=float, default=16.0)
     args = parser.parse_args()
