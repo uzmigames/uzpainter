@@ -1828,6 +1828,8 @@ pub fn build(b: *std.Build) void {
         .files = &.{ "export_test.cpp", "snapshot_source_test.cpp", "filter_import_v2_test.cpp" },
         .flags = &export_hook_flags,
     });
+    // The test-only H diagnostic `snapshot-capture-validate` embeds its validator sources.
+    embed_inputs.add(export_tests_mod, "tests/export", &.{"snapshot_capture_validate.cpp"}, &export_hook_flags);
     // The internal V2 verified-context transaction component (decision 363) has no runtime entry:
     // only this test binary compiles it, with the H receipt validators it uses.
     export_tests_mod.addCSourceFiles(.{

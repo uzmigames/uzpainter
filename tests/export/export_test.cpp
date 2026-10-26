@@ -167,6 +167,8 @@
 #include "uzp_core/types/errors.h"
 #include "uzp_core/types/validation.h"
 
+#include "snapshot_capture_validate.h"
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -2130,6 +2132,8 @@ int RunProceduralEffects(const std::filesystem::path& path, bool observation = f
 int RunSnapshotBindFixture(const std::filesystem::path& path);
 int RunFrozenHostProofCases(const std::filesystem::path& work);
 int RunFilterImportV2Cases(const std::filesystem::path& work);
+int RunSnapshotCaptureFixture(const std::filesystem::path& work, double amount, const std::string& bridge,
+                              const std::string& painterSide);
 int RunFilterObservationBase(const std::filesystem::path& path, const std::filesystem::path& out);
 int RunFilterObservationImport(const std::filesystem::path& path, const std::filesystem::path& payload);
 
@@ -2143,6 +2147,10 @@ int main(int argc, char** argv) {
         if (args.size() == 2 && args[0] == "snapshot-bind") return RunSnapshotBindFixture(args[1]);
         if (args.size() == 2 && args[0] == "frozen-host-proof") return RunFrozenHostProofCases(args[1]);
         if (args.size() == 2 && args[0] == "filter-import-v2") return RunFilterImportV2Cases(args[1]);
+        if (args.size() == 5 && args[0] == "snapshot-capture-fixture")
+            return RunSnapshotCaptureFixture(args[1], std::stod(args[2]), args[3], args[4]);
+        if (args.size() == 2 && args[0] == "snapshot-capture-validate" && args[1] == "--input-stdin")
+            return RunSnapshotCaptureValidate();
         if (args.size() == 3 && args[0] == "filter-observation-base") return RunFilterObservationBase(args[1], args[2]);
         if (args.size() == 3 && args[0] == "filter-observation-import") return RunFilterObservationImport(args[1], args[2]);
         if (args.size() == 6 && args[0] == "tga") return RunTga(args);

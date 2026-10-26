@@ -213,3 +213,31 @@ retry; mypy, Ruff, formatting, independent review and the repository guard passe
 on the frozen files. This tests storage with authored data and mocked validator
 invocations. The real native CLI-to-wrapper-to-store integration remains pending;
 no private H was read or admitted, and H/F acceptance remains open.
+
+### Native diagnostic and real authored integration (2026-10-26)
+
+The test executable now provides `snapshot-capture-validate --input-stdin`:
+closed UTF-8 input up to 64 KiB, six absolute regular-file slots, exact owned
+buffers and the pure host-artifact validator. Success emits one closed report;
+refusals emit only a reason code. Its source identity frames eight build-embedded
+files without EOL normalization; its executable identity hashes the full running
+binary. Complete sized reads reject short reads and check errors after EOF probing.
+
+REV376 completed 25 diagnostic/integration nodes plus the existing 71-check V2
+regression. Real Python command-to-wrapper-to-native-to-store tests passed for
+authored values 0.5, 1.0 and -0.0: complete membership, native signature identity,
+immutable retries and corrupt-blob unavailability. The first run found Windows
+stderr CRLF translation and a missing fixture parent directory; both root causes
+were fixed after compilation ended, then only the 22 failing nodes reran. The
+four unaffected passing nodes retain their evidence. All 26 distinct nodes passed.
+
+Root verified six frozen source hashes, six preserved logs, the retained binary
+and an independent reconstruction of the framed code hash. Binary SHA-256:
+`84039830ec80f399ea10d52b6cf53386d34b3488aa167aa039c5d4b7023eb88e`;
+validator code SHA-256:
+`72aaa453a3f636ffd34420c489780cfd0835258d9b5d547f62c5c19ba7b943e5`.
+Logs: `tmp/scratch/rev376-native-tests.log` and
+`tmp/scratch/rev376-native-tests2.log`, with their JUnit XML and build logs.
+Static checks, independent review and guard checks passed. This completes the
+authored integration dependency only; no private H was admitted or V2/F import
+enabled, and real H/F acceptance remains open.

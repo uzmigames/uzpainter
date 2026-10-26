@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <iostream>
 #include <limits>
@@ -64,7 +65,7 @@ void Expect(bool okay, const std::string& message) {
 }
 
 /// The authored H readback of the paired capture (the bridge's isolated User0/User1 layer).
-json::Object Readback() {
+json::Object Readback(double amount = 0.5) {
     const json::Object source{
         {"resource", std::string(fx::kHostUrl)},
         {"inputs", json::Array{}},
@@ -75,7 +76,7 @@ json::Object Readback() {
         {"resolution", json::Object{{"mode", std::string("Auto")}, {"log2_offset", std::int64_t{0}}}},
         {"resource_id", json::Object{{"url", std::string(fx::kHostUrl)}, {"context", std::string("authored")},
                                      {"name", std::string("host")}, {"version", std::string("1")}}},
-        {"parameters", json::Object{{"amount", 0.5}}}};
+        {"parameters", json::Object{{"amount", amount}}}};
     return json::Object{
         {"channel_formats", json::Object{{"User0", std::string("L32F")}, {"User1", std::string("RGB32F")}}},
         {"source_mode", std::string("Split")},
@@ -163,12 +164,12 @@ std::string Exr(const std::vector<std::uint32_t>& bits, std::uint32_t channels) 
 }
 
 Case Prepare(const fs::path& file, const std::vector<std::uint32_t>& pattern,
-             const std::string& uuid = "6f1c2a3e-0000-4000-8000-0000000a3633") {
+             const std::string& uuid = "6f1c2a3e-0000-4000-8000-0000000a3633", double amount = 0.5) {
     Case c;
     const std::string plane = fx::PlaneObj();
     core::DocumentState initial;
     initial.project_uuid = uuid;
-    initial.project = fx::Scene(store::ObservationPin(store::ObservationKey(fx::FilterDescriptor())), plane.size(), c.ids);
+    initial.project = fx::Scene(store::ObservationPin(store::ObservationKey(fx::FilterDescriptor())), plane.size(), c.ids, amount);
     initial.project.texture_sets[0].stacks[0].root_layers[0].content_effects.clear();
     store::CreateOptions options;
     options.resources = {store::PendingContent::Bytes{plane, "model/obj"}};
@@ -181,7 +182,7 @@ Case Prepare(const fs::path& file, const std::vector<std::uint32_t>& pattern,
     std::memcpy(bytes.data(), bits.data(), bytes.size());
     c.scalarExr = Exr(bits, 1);
     c.rgbExr = Exr(bits, 3);
-    c.request = json::Object{{"resource", std::string(fx::kHostUrl)}, {"parameters", json::Object{{"amount", 0.5}}}};
+    c.request = json::Object{{"resource", std::string(fx::kHostUrl)}, {"parameters", json::Object{{"amount", amount}}}};
     std::optional<std::string> failure;
     const auto outcome = c.store->Submit(
         *c.document, {"filter-import-v2-test", json::Object{}, "record", c.document->revision()}, [&](core::Edit& edit) {
@@ -200,7 +201,7 @@ Case Prepare(const fs::path& file, const std::vector<std::uint32_t>& pattern,
                                           {"OCIO", json::Value()}, {"PAINTER_ACE_CONFIG", json::Value()},
                                           {"project_open", false}, {"mesh", json::Value()}}},
                 {"resource", std::string(fx::kHostUrl)},
-                {"readback", Readback()},
+                {"readback", Readback(amount)},
                 {"exports", json::Array{ExportRound(1), ExportRound(2)}},
                 {"project_uuid", c.store->project_uuid()},
                 {"revision", c.document->revision()},
@@ -753,5 +754,80 @@ int RunFilterImportV2Cases(const fs::path& work) {
     }
 
     std::cout << "FILTER_IMPORT_V2: " << json::WriteCanonical(json::Object{{"checks", checks}}) << "\n";
+    return 0;
+}
+
+/// The authored H capture of host parameter `amount` with recorder pins `bridge` and `painter_side`,
+/// laid out under `work` as `UzPainter.exe assets snapshot` leaves a recording: `h-capture/` holds
+/// exactly capture.json, request.json, context.json, mesh.obj and export1/2 user0.exr and user1.exr,
+/// the receipt's export rounds naming those directories. Beside it: the store, the stdin input
+/// (`input.json`, absolute paths of the six slots) and an authored scalar export of another raster
+/// (`other-scalar.exr`). Prints the signature key the store recorded the host snapshot under.
+int RunSnapshotCaptureFixture(const fs::path& work, double amount, const std::string& bridge, const std::string& painterSide) {
+    const fs::path root = fs::absolute(work);
+    const fs::path recording = root / "h-capture";
+    fs::create_directories(root);
+    Case c = Prepare(root / "capture-fixture.uzp", {0x00000000u, 0x33800000u, 0x3f000000u, 0x3f800000u},
+                     "6f1c2a3e-0000-4000-8000-0000000a3633", amount);
+    const auto generic = [](const fs::path& path) {
+        const std::u8string text = path.generic_u8string();
+        return std::string(text.begin(), text.end());
+    };
+    // The bridge's own record: its pins, the effective parameters as observed (`"params":
+    // source["parameters"]`, so an integral double or -0 stays a double) and the rounds exported
+    // into this recording (`export_config(directory)` writes `directory.as_posix()`).
+    c.receipt["recorder"] = json::Object{{"bridge_sha256", bridge}, {"painter_side_sha256", painterSide}};
+    const auto& sources = std::get<json::Array>(std::get<json::Object>(c.receipt.at("readback").data).at("sources").data);
+    std::get<json::Object>(c.receipt.at("signature").data)["params"] = std::get<json::Object>(sources[0].data).at("parameters");
+    json::Array exports;
+    for (int i = 1; i <= 2; ++i) {
+        json::Object round = ExportRound(i);
+        const std::string directory = generic(recording / ("export" + std::to_string(i)));
+        std::get<json::Object>(round.at("config").data)["exportPath"] = directory;
+        std::get<json::Object>(round.at("result").data)["files"] =
+            json::Array{directory + "/user0.exr", directory + "/user1.exr"};
+        exports.push_back(std::move(round));
+    }
+    c.receipt["exports"] = std::move(exports);
+    // The context the snapshot command wrote before the capture, as the receipt recorded it.
+    const json::Object context{{"project_uuid", c.receipt.at("project_uuid")},
+                               {"revision", c.receipt.at("revision")},
+                               {"settings", std::get<json::Object>(c.receipt.at("signature").data).at("settings")},
+                               {"mesh_path", generic(recording / "mesh.obj")},
+                               {"bridge_sha256", bridge},
+                               {"painter_side_sha256", painterSide}};
+    const auto write = [](const fs::path& path, const std::string& bytes) {
+        fs::create_directories(path.parent_path());
+        std::ofstream file(path, std::ios::binary);
+        file.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+        Expect(static_cast<bool>(file), "cannot write the fixture");
+    };
+    const auto slot = [](const fs::path& path) {
+        const std::u8string text = path.u8string();
+        return json::Object{{"path", std::string(text.begin(), text.end())}};
+    };
+    write(recording / "capture.json", json::WriteCanonical(c.receipt));
+    write(recording / "request.json", json::WriteCanonical(c.request));
+    write(recording / "context.json", json::WriteCanonical(context));
+    write(recording / "mesh.obj", fx::PlaneObj());
+    json::Array scalar;
+    json::Array rgb;
+    for (const char* round : {"export1", "export2"}) {
+        write(recording / round / "user0.exr", c.scalarExr);
+        write(recording / round / "user1.exr", c.rgbExr);
+        scalar.push_back(slot(recording / round / "user0.exr"));
+        rgb.push_back(slot(recording / round / "user1.exr"));
+    }
+    write(root / "other-scalar.exr", Exr(std::vector<std::uint32_t>(128 * 128, 0x3f000000u), 1));
+    const json::Object input{{"schema", std::string("uzpainter/parity/snapshot-capture-validation-input/1")},
+                             {"protocol", std::string("paired-scalar-rgb")},
+                             {"receipt", slot(recording / "capture.json")},
+                             {"request", slot(recording / "request.json")},
+                             {"scalar_exports", std::move(scalar)},
+                             {"rgb_exports", std::move(rgb)}};
+    write(root / "input.json", json::WriteCanonical(input));
+    const auto snapshots = store::ProjectSnapshots(*c.document->snapshot().project);
+    Expect(snapshots.size() == 1, "the fixture records one host snapshot");
+    std::cout << "SNAPSHOT_CAPTURE_FIXTURE: " << json::WriteCanonical(json::Object{{"signature_sha256", snapshots[0].key}}) << "\n";
     return 0;
 }
