@@ -96,6 +96,70 @@ def test_bridge_import_is_rejected(source: str) -> None:
     assert any("MCP bridge" in p for p in problems_of(source))
 
 
+def survey_source() -> str:
+    return next(
+        p for p in recorder_sources() if p.name == "project_configuration_survey.py"
+    ).read_text(encoding="utf-8")
+
+
+def test_exact_negative_process_classifier_is_allowed() -> None:
+    source = survey_source()
+    assert check_source(source, "project_configuration_survey.py") == []
+    assert any("MCP bridge" in str(p) for p in check_source(source, "other.py"))
+
+
+@pytest.mark.parametrize(
+    "before,after,append",
+    [
+        ("", "", "\nsubprocess.run([MCP_BRIDGE])\n"),
+        ("and not known_bridge(p)", "and known_bridge(p)", ""),
+        ("and isinstance(path, str)", "or isinstance(path, str)", ""),
+        ("and isinstance(path, str)", "", ""),
+        ("", "", "\nalias = MCP_BRIDGE\n"),
+        ("", "", "\nalias = globals()['MCP_BRIDGE']\n"),
+        ("", "", "\nimport other as MCP_BRIDGE\n"),
+        ("", "", 'extra = "substance-painter-mcp.exe"\n'),
+        ("", "", "\nimport substance_painter_mcp\n"),
+        ("", "", "\nMCP_BRIDGE = 'elsewhere'\n"),
+        ("", "", "\ndel MCP_BRIDGE\n"),
+        ("def painters(host: Host)", "@decorator\ndef painters(host: Host)", ""),
+        ("def painters(host: Host)", "def painters(host: Other)", ""),
+        ("Tools/SubstancePainterMCP/.venv", "Tools/Other/.venv", ""),
+    ],
+)
+def test_negative_classifier_exception_cannot_enable_bridge_use(
+    before: str, after: str, append: str
+) -> None:
+    source = survey_source()
+    if before:
+        assert before in source
+        source = source.replace(before, after, 1)
+    assert any(
+        "MCP bridge" in str(p)
+        for p in check_source(source + append, "project_configuration_survey.py")
+    )
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "s.MCP_BRIDGE",
+        "getattr(s, 'MCP_BRIDGE')",
+        "vars(s)['MCP_BRIDGE']",
+        "vars(s).get('MCP_BRIDGE')",
+        "getattr(s, 'MCP_' + 'BRIDGE')",
+        "vars(s)['MCP_' + 'BRIDGE']",
+    ],
+)
+def test_other_module_cannot_execute_reserved_census_path(expression: str) -> None:
+    source = (
+        "from tools.parity.recorder import project_configuration_survey as s\n"
+        "from subprocess import run as execute\n"
+        f"execute([{expression}])\n"
+    )
+    assert any("MCP bridge" in p for p in problems_of(source))
+
+
 def test_vocabulary_calls_are_documented_symbols() -> None:
     symbols = documented_symbols()
     getters = [

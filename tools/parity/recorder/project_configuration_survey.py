@@ -18,6 +18,7 @@ import ctypes
 import hashlib
 import json
 import math
+import ntpath
 import subprocess
 import sys
 import time
@@ -35,6 +36,9 @@ from tools.parity.schemas import REPO_ROOT
 
 COLLAB = Path("E:/UzmiGames/Assets3D/Docs/Colaboracao/scripts/collab.py")
 COLLAB_ROOT = COLLAB.parent.parent
+MCP_BRIDGE = (
+    "E:/UzmiGames/Assets3D/Tools/SubstancePainterMCP/.venv/Scripts/substance-painter-mcp.exe"
+)
 PLANE = REPO_ROOT / "parity/fixtures/meshes/plane.obj"
 PLANE_SHA256 = "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe"
 BUILDERS = {
@@ -109,7 +113,7 @@ def host_state() -> Host:
     )
     command = (
         "@(Get-CimInstance Win32_Process | ForEach-Object { "
-        "[pscustomobject]@{pid=[int]$_.ProcessId;name=$_.Name;"
+        "[pscustomobject]@{pid=[int]$_.ProcessId;name=$_.Name;image_path=$_.ExecutablePath;"
         "started=if ($_.CreationDate) {$_.CreationDate.ToUniversalTime().ToString('o')} "
         "else {$null}} }) | ConvertTo-Json -Compress"
     )
@@ -126,7 +130,19 @@ def host_state() -> Host:
 
 
 def painters(host: Host) -> list[dict[str, Any]]:
-    return [p for p in host.processes if "painter" in str(p["name"]).lower()]
+    def known_bridge(process: dict[str, Any]) -> bool:
+        path = process.get("image_path")
+        return (
+            str(process["name"]).lower() == "substance-painter-mcp.exe"
+            and isinstance(path, str)
+            and ntpath.normcase(ntpath.normpath(path))
+            == ntpath.normcase(ntpath.normpath(MCP_BRIDGE))
+        )
+
+    # Missing paths and unfamiliar Painter-like names remain conservative blockers.
+    return [
+        p for p in host.processes if "painter" in str(p["name"]).lower() and not known_bridge(p)
+    ]
 
 
 def resources_available(host: Host, request: Request) -> None:
@@ -226,12 +242,14 @@ class Lock:
             stdout=result.stdout,
             stderr=result.stderr,
         )
-        reply = json.loads(result.stdout)
-        require(type(reply) is dict, "invalid lock reply")
-        assert isinstance(reply, dict)
-        if action == "acquire" and isinstance(reply.get("token"), str):
+        envelope = json.loads(result.stdout)
+        require(type(envelope) is dict, "invalid lock envelope")
+        reply = envelope.get("result")
+        if action == "acquire" and isinstance(reply, dict) and isinstance(reply.get("token"), str):
             self.token = reply["token"]
-        require(result.returncode == 0, "lock CLI refused")
+        require(result.returncode == 0 and envelope.get("ok") is True, "lock CLI refused")
+        require(set(envelope) == {"ok", "result"} and type(reply) is dict, "invalid lock reply")
+        assert isinstance(reply, dict)
         return reply
 
     def acquire(self) -> None:

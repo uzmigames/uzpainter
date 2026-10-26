@@ -2,7 +2,8 @@
 
 Rules over every `tools/parity/recorder/*.py`:
 
-1. No import of, and no reference to, the community Substance Painter MCP bridge.
+1. No import of, and no reference to, the community Substance Painter MCP bridge, except the
+   two pinned literals used only by the owned-process census's negative classification.
 2. No access to an underscore-prefixed attribute (no private or dunder interface).
 3. Every `substance_painter` symbol used — attribute chains on imported `substance_painter`
    modules and their aliases, and dotted `substance_painter.*` names in string constants (the
@@ -21,6 +22,7 @@ Rules over every `tools/parity/recorder/*.py`:
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 import re
 import zlib
@@ -147,6 +149,75 @@ def imports_bridge(node: ast.AST) -> str | None:
     return None
 
 
+def negative_process_classifier_literals(tree: ast.Module, file: str) -> set[int]:
+    """Allow only the two reviewed census literals, never a bridge call or general reference.
+
+    Pins cover the complete MCP_BRIDGE assignment and painters function in
+    project_configuration_survey.py, including its signature and decorators. The function
+    excludes only an exact process name AND normalized executable path from the Painter census.
+    Recompute after review with sha256(ast.dump(node, include_attributes=False).encode()).
+    Binding/use counts also forbid exporting the path through another call or alias.
+    """
+    if Path(file).name != "project_configuration_survey.py":
+        return set()
+    assignments = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "MCP_BRIDGE" for target in node.targets
+        )
+    ]
+    functions = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "painters"
+    ]
+    names = [
+        node for node in ast.walk(tree) if isinstance(node, ast.Name) and node.id == "MCP_BRIDGE"
+    ]
+    for node in ast.walk(tree):
+        for field, value in ast.iter_fields(node):
+            if isinstance(node, ast.Name) and field == "id":
+                continue
+            if value == "MCP_BRIDGE" or (isinstance(value, list) and "MCP_BRIDGE" in value):
+                return set()
+    if (
+        len(assignments) != 1
+        or len(functions) != 1
+        or len(names) != 2
+        or sum(isinstance(node.ctx, ast.Store) for node in names) != 1
+        or sum(isinstance(node.ctx, ast.Load) for node in names) != 1
+    ):
+        return set()
+    for node, digest in (
+        (assignments[0], "f25086f905f79c905eb2b9c71bf02e0ce7d8ed98bc7f90477aff9d5a0a6fec17"),
+        (functions[0], "ff38a056ccb83811770292a41f9a3d3fb90e287199da80237fd4c442b65af6c2"),
+    ):
+        if hashlib.sha256(ast.dump(node, include_attributes=False).encode()).hexdigest() != digest:
+            return set()
+    literals = {
+        id(node)
+        for root in (assignments[0], functions[0])
+        for node in ast.walk(root)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and BRIDGE_TEXT.search(node.value)
+    }
+    return literals if len(literals) == 2 else set()
+
+
+def literal_string(node: ast.AST) -> str | None:
+    """Resolve only string literals and their constant concatenation, without execution."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left, right = literal_string(node.left), literal_string(node.right)
+        if left is not None and right is not None:
+            return left + right
+    return None
+
+
 def check_source(
     source: str, file: str, symbols: dict[str, dict[str, str]] | None = None
 ) -> list[Problem]:
@@ -154,6 +225,7 @@ def check_source(
     members = member_names(known)
     tree = ast.parse(source, filename=file)
     painter, others = module_bindings(tree)
+    census_literals = negative_process_classifier_literals(tree, file)
     problems: list[Problem] = []
 
     def report(node: ast.AST, message: str) -> None:
@@ -164,8 +236,17 @@ def check_source(
         bridge = imports_bridge(node)
         if bridge is not None:
             report(node, f"imports the community MCP bridge ({bridge})")
+        if (
+            (isinstance(node, ast.Attribute) and node.attr == "MCP_BRIDGE")
+            or (isinstance(node, ast.Subscript) and literal_string(node.slice) == "MCP_BRIDGE")
+            or (
+                isinstance(node, ast.Call)
+                and any(literal_string(arg) == "MCP_BRIDGE" for arg in node.args)
+            )
+        ):
+            report(node, "accesses the reserved MCP bridge census path")
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
-            if BRIDGE_TEXT.search(node.value):
+            if BRIDGE_TEXT.search(node.value) and id(node) not in census_literals:
                 report(node, "refers to the community MCP bridge")
             if SYMBOL_PATTERN.match(node.value) and node.value not in known:
                 report(node, f"undocumented substance_painter symbol {node.value}")

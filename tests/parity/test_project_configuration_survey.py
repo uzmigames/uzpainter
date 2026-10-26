@@ -35,6 +35,36 @@ def host(*processes: dict[str, Any]) -> survey.Host:
     return survey.Host(32 * survey.GIB, 64 * survey.GIB, list(processes))
 
 
+def test_known_mcp_bridges_do_not_count_as_painter(monkeypatch: pytest.MonkeyPatch) -> None:
+    bridges = [
+        {"pid": pid, "name": "substance-painter-mcp.exe", "image_path": survey.MCP_BRIDGE}
+        for pid in (3, 4, 5, 6)
+    ]
+    assert survey.painters(host(*bridges)) == []
+    adobe = process()
+    assert survey.painters(host(*bridges, adobe)) == [adobe]
+    monkeypatch.setattr(survey, "host_state", lambda: host(*bridges, adobe))
+    owned = survey.OwnedTransport(Mock(), Mock(pid=71), Mock(), "authored-start")
+    owned.verify_process()
+    owned.launcher = Mock(pid=99)
+    with pytest.raises(survey.OwnershipLost, match="process identity"):
+        owned.verify_process()
+
+
+@pytest.mark.parametrize(
+    "name,path",
+    [
+        ("substance-painter-mcp.exe", None),
+        ("substance-painter-mcp.exe", "E:/elsewhere/substance-painter-mcp.exe"),
+        ("other-painter-mcp.exe", survey.MCP_BRIDGE),
+        ("Adobe Substance 3D Painter.exe", survey.MCP_BRIDGE),
+    ],
+)
+def test_unknown_painter_like_process_remains_blocker(name: str, path: str | None) -> None:
+    candidate = {"pid": 99, "name": name, "image_path": path}
+    assert survey.painters(host(candidate)) == [candidate]
+
+
 def install_boundaries(monkeypatch: pytest.MonkeyPatch, failure: str = "") -> Any:
     state = SimpleNamespace(
         running=False,
@@ -428,7 +458,9 @@ def test_lock_uses_canonical_cli_stdin_and_retains_token_on_audit_failure(
         else:
             assert action == "status"
             reply = dict(state)
-        return subprocess.CompletedProcess(command, 0, json.dumps(reply), "")
+        return subprocess.CompletedProcess(
+            command, 0, json.dumps({"ok": True, "result": reply}), ""
+        )
 
     monkeypatch.setattr(subprocess, "run", run)
     with ExitStack() as stack:
@@ -442,6 +474,39 @@ def test_lock_uses_canonical_cli_stdin_and_retains_token_on_audit_failure(
         lock.release()
     assert calls == ["status", "acquire", "status", "release"]
     assert not state["occupied"]
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        {"occupied": False},
+        {"ok": 1, "result": {"occupied": False}},
+        {"ok": False, "error": "authored refusal"},
+        {"ok": True, "result": []},
+        {"ok": True, "result": {"occupied": False}, "unknown": True},
+    ],
+)
+def test_lock_refuses_noncanonical_envelope(reply: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess([], 0, json.dumps(reply), ""),
+    )
+    with pytest.raises(ValueError):
+        survey.Lock(Mock()).command("status")
+
+
+def test_lock_error_envelope_preserves_acquired_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    reply = {"ok": False, "error": "authored failure", "result": {"token": "owned-token"}}
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess([], 1, json.dumps(reply), ""),
+    )
+    lock = survey.Lock(Mock())
+    with pytest.raises(ValueError, match="CLI refused"):
+        lock.command("acquire")
+    assert lock.token == "owned-token"
 
 
 class Widget:
