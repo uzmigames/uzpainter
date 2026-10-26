@@ -618,3 +618,37 @@ The seal stays a private in-process recheck and never enters the request.
    - the end-to-end authored test `RunFilterImportCommandCases` (in `tests/export/filter_gate_destination_test.cpp`).
 
 Each slice carries authored refusals and test-only differential cases against the Python specification. No slice adds a diagnostic descriptor, UUID, store or proof, and no slice reads old expected 16–18.
+
+The C4 test also covers five inactive-channel cases from four authored two-channel records (User0 and User1), which the wrapper produces through the authored recorder path. The native test derives the cross-round difference from one of those records:
+- an observed inactive channel keeps its blending;
+- a raised one stays absent;
+- a mixed one refuses;
+- one that differs between the pre16 frames refuses;
+- a raised host blending leaf refuses, even on an inactive channel.
+
+These are authored cases, not observations of Painter.
+
+### Facade replay after a materialized import (shipped tooling, private)
+
+`tools/parity/filter_context_replay.py`, driven by `tests/python/test_filter_context_capture_replay.py`, compares the native facade's Filter getters with independent recordings. It runs only after an import has actually been materialized. It is comparison tooling: it is not an import gate, and it grants no capability.
+
+**Configuration.** The environment variable `UZP_FILTER_CONTEXT_REPLAY_CONFIG` names a private configuration: an absolute file outside the repository, with no symbolic-link or junction ancestor. It is exactly `uzpainter/filter-context-replay/1` with these fields:
+- `project` and its `project_sha256`: the original H file after the import;
+- `import_binary_sha256`: the SHA-256 of the executable that ran the import;
+- `import_request` and `import_report`;
+- `oracle_store`;
+- `f_manifest` and `old_manifest`.
+
+The project, import request/report and oracle store paths must be outside the repository, without symbolic-link or junction ancestors. The two manifests are public inputs and may reside in the repository. Without the variable, the test SKIPS as `oracle_unavailable`. A skip is never a pass.
+
+**Order.**
+1. **Prepare, structural only.** Read the project through SQLite read-only (immutable, `query_only`, journal `delete`). Confirm:
+   - the operation row of the stable request key (`filter-observation-commit-v2:` + the typed hash of `{payload_sha256, project_uuid, expected_base_revision}`);
+   - the current revision's manifest, decompressed and checked against its stored hash;
+   - the entry and its native proof: the proof's binary hash equals `import_binary_sha256`, its projection and inventory hashes equal the context's, and its raster, upload and final hashes are equal.
+
+   The project's file hash is checked before and after.
+2. **Actual values first.** A worker opens the project through the real facade and reads the Filter's getters (`get_parameters`, `resource_id`, `image_outputs`) in both conditions, with a trace. It requires all three getters on the source handle retained before reopen to refuse. It never saves or copies the project.
+3. **Only then the recordings.** The tool opens the admitted F record and the independent old recording, which must be a different record. It compares the six readbacks, typed. The project's file hash must be unchanged at the end.
+
+Private reports (the runner envelope, the actual values, the comparison and any error trace) are written only to the test's private work folder. A failure prints only `F_REPLAY_FAILED`, and refusals carry fixed `F_REPLAY_*` codes. A passing comparison promotes no capability and does not by itself close item 2.6j.

@@ -18,6 +18,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -189,6 +190,34 @@ void ChangeLeaf(json::Object& record, std::size_t round, const std::string& pref
         return;
     }
     throw std::runtime_error("no leaf " + prefix + "*" + suffix);
+}
+
+/// Makes the Filter's blending leaves of `channel` in the frames starting with `prefix` unraised
+/// (Normal, opacity 1.0), as an observed inactive channel reads.
+void ChangeFilterBlend(json::Object& record, std::size_t round, const std::string& prefix, const std::string& channel) {
+    const json::Value path = json::Array{json::Array{"Root", std::int64_t{0}}, json::Array{"Content", std::int64_t{0}}};
+    const json::Value parameters = json::Object{{"channel", channel}};
+    int changed = 0;
+    for (json::Value& item : Outputs(record, round)) {
+        json::Object& output = Obj(item);
+        const auto& id = std::get<std::string>(output.at("output_id").data);
+        const auto call = output.find("call");
+        if (!id.starts_with(prefix) || call == output.end()) continue;
+        const auto& name = std::get<std::string>(call->second.data);
+        const bool mode = name.ends_with("Node.get_blending_mode");
+        if (!mode && !name.ends_with("Node.get_opacity")) continue;
+        const auto& args = std::get<json::Object>(output.at("args").data);
+        const auto& selector = std::get<json::Object>(args.at("selector").data);
+        const auto found = selector.find("path");
+        if (found == selector.end() || json::WriteCanonical(found->second) != json::WriteCanonical(path) ||
+            json::WriteCanonical(args.at("parameters")) != json::WriteCanonical(parameters)) {
+            continue;
+        }
+        output.erase("raised");
+        output["value"] = mode ? json::Value("Normal") : json::Value(1.0);
+        ++changed;
+    }
+    Expect(changed == 2, "the Filter's two blending leaves of the channel were changed");
 }
 
 void Raise(json::Object& record, std::size_t round, const std::string& id, const std::string& type) {
@@ -804,6 +833,41 @@ int RunFilterGateDestinationCases(const fs::path& work) {
         refuses("a symmetry outcome that differs between the pre16 frames", procedural::kTargetContextUnrepresentable,
                 gate::kFContext, expected(slices(record), h.base));
     }
+
+    // Inactive Filter channels: an observed state is kept, a raised one is absent, a mixed or
+    // differing one refuses; a raised host leaf refuses even on an inactive channel.
+    const auto variant = [&](const char* name) {
+        return Bound(std::get<json::Object>(json::Parse(Read(work / (std::string("destination-record-") + name + ".json"))).data),
+                     url);
+    };
+    {
+        const auto result = expected(slices(variant("inactive-observed")), h.base);
+        const bool ok = result.has_value();
+        const auto& filter = ok ? result->FilterEffect() : core::Effect{};
+        check(ok && filter.active_channels == std::set{core::ChannelType::User0} && filter.blending.size() == 2 &&
+                  filter.blending.contains(core::ChannelType::User1) &&
+                  filter.blending.at(core::ChannelType::User1).mode == core::BlendingMode::Normal &&
+                  filter.blending.at(core::ChannelType::User1).opacity == 1.0 &&
+                  result->Prospective().texture_sets[0].stacks[0].channels.size() == 2,
+              "an observed inactive Filter channel keeps its blending (" + detail(result) + ")");
+    }
+    {
+        const auto result = expected(slices(variant("inactive-raised")), h.base);
+        check(result && result->FilterEffect().blending.size() == 1 &&
+                  result->FilterEffect().blending.contains(core::ChannelType::User0),
+              "a raised inactive Filter channel stays absent (" + detail(result) + ")");
+    }
+    refuses("a mixed inactive Filter channel", procedural::kTargetContextUnrepresentable, gate::kFContext,
+            expected(slices(variant("inactive-mixed")), h.base));
+    {
+        json::Object record = variant("inactive-raised");
+        ChangeFilterBlend(record, 1, "context/pre16-r2/", "User1");
+        Rebind(record);
+        refuses("an inactive Filter channel that differs between the pre16 frames", procedural::kTargetContextUnrepresentable,
+                gate::kFContext, expected(slices(record), h.base));
+    }
+    refuses("a raised host blending leaf on an inactive channel", procedural::kTargetContextUnrepresentable, gate::kFContext,
+            expected(slices(variant("host-inactive-raised")), h.base));
 
     // The four slices must name one admission.
     {

@@ -660,3 +660,33 @@ source hashes and the retained H379 validator binary remained unchanged.
 The real import on the original H store, its production-pin validation and proof,
 and the remaining task acceptance obligations are still pending at this software
 checkpoint. No full-suite result, push, PR, archive or Painter parity is claimed.
+
+### Independent replay preparation and inactive-channel coverage
+
+The authored destination coverage now includes an observed inactive Filter channel,
+a consistently raised one, mixed mode/opacity outcomes, cross-round disagreement,
+and a raised inactive host blending leaf. All 66 destination checks passed; the
+focused native union is now 333 checks. These fixtures use the existing fake
+recorder and rebound authored settings panels, never private observations.
+
+The V2 facade replay helper and its private configured test are implemented.
+Preparation checks the saved import operation, selected V2 entry and file hash
+through read-only SQLite; these are structural checks, not a new native proof.
+The worker then obtains six traced native getter results across close/reopen,
+checks three getters on a stale source handle and verifies that the original file stayed unchanged.
+Only successful native collection permits comparison with admitted F and then
+the independent older recordings. Comparisons preserve integer/double distinctions
+and signed zero. No Save, project copy or capability promotion is performed.
+
+Thirty pure replay tests and two public application smoke tests passed alongside
+the 66 native destination checks: 33 pytest nodes in 33.95 seconds, with sequential
+native fixture builds. Mypy, Ruff and independent review passed. All 43 frozen
+source hashes remained unchanged. Evidence: `tmp/scratch/rev407-independent.log`
+and `tmp/scratch/rev407-independent.xml`.
+
+The real original-H import was rejected by automatic approval review before any
+process started, because that exact project mutation and Save require explicit
+owner authorization. A private request and read-only preflight are prepared; the
+original remains at revision 7 with seven operations and identical bytes. The
+authorization question is pending. Neither the real import nor the configured
+private replay ran, and item 2.6j remains open.
