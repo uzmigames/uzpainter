@@ -14,6 +14,7 @@ import math
 import queue
 import sys
 import threading
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Iterable
@@ -30,9 +31,64 @@ class Reply:
     content: str = ""
     finish_reason: str | None = None
     http_status: int | None = None
+    progress: dict[str, Any] | None = None
 
 
-def parse_response(lines: Iterable[bytes], requested_model: str) -> Reply:
+class Progress:
+    """Thread-safe metadata only; never retains request, response text, URLs or headers.
+
+    Body counters/times describe lines delivered to the parser, not socket-level packets.
+    SSE data events include [DONE]; comments/heartbeats count as bytes, not data events.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._started = time.monotonic()
+        self._state: dict[str, Any] = {
+            "phase": "before_request",
+            "http_status": None,
+            "headers_s": None,
+            "first_data_s": None,
+            "last_data_s": None,
+            "bytes_read": 0,
+            "data_events": 0,
+            "last_finish_reason": None,
+        }
+
+    def headers(self, status: Any) -> None:
+        with self._lock:
+            self._state["phase"] = "headers"
+            self._state["headers_s"] = time.monotonic() - self._started
+            self._state["http_status"] = (
+                status if type(status) is int and 100 <= status <= 599 else None
+            )
+
+    def body(self, size: int, data_event: bool) -> None:
+        with self._lock:
+            elapsed = time.monotonic() - self._started
+            self._state["phase"] = "stream"
+            if self._state["first_data_s"] is None:
+                self._state["first_data_s"] = elapsed
+            self._state["last_data_s"] = elapsed
+            self._state["bytes_read"] += size
+            self._state["data_events"] += int(data_event)
+
+    def finish(self, reason: str) -> None:
+        with self._lock:
+            self._state["last_finish_reason"] = (
+                reason
+                if reason in {"stop", "length", "content_filter", "tool_calls", "function_call"}
+                else "other"
+            )
+
+    def snapshot(self) -> dict[str, Any]:
+        with self._lock:
+            return {**self._state, "elapsed_s": time.monotonic() - self._started}
+
+
+def parse_response(
+    lines: Iterable[bytes], requested_model: str, progress: Progress | None = None
+) -> Reply:
     """Parse an OpenAI JSON response or SSE stream; a header alone is not completion."""
     reply = Reply(requested_model)
     plain: list[str] = []
@@ -60,8 +116,12 @@ def parse_response(lines: Iterable[bytes], requested_model: str) -> Reply:
         finish = choice.get("finish_reason")
         if isinstance(finish, str):
             reply.finish_reason = finish
+            if progress is not None:
+                progress.finish(finish)
 
     for raw in lines:
+        if progress is not None:
+            progress.body(len(raw), raw.strip().startswith(b"data:"))
         line = raw.decode("utf-8").strip()
         if line.startswith("data:"):
             streamed = True
@@ -78,7 +138,14 @@ def parse_response(lines: Iterable[bytes], requested_model: str) -> Reply:
     return reply
 
 
-def request(base: str, key: str, model: str, prompt: str, deadline: float) -> Reply:
+def request(
+    base: str,
+    key: str,
+    model: str,
+    prompt: str,
+    deadline: float,
+    progress: Progress | None = None,
+) -> Reply:
     """Perform one HTTP request; never expose provider errors or request credentials."""
     url = base.rstrip("/")
     url += "/chat/completions" if url.endswith("/v1") else "/v1/chat/completions"
@@ -92,8 +159,12 @@ def request(base: str, key: str, model: str, prompt: str, deadline: float) -> Re
     )
     try:
         with urllib.request.urlopen(outgoing, timeout=deadline) as response:
-            reply = parse_response(response, model)
+            if progress is not None:
+                progress.headers(getattr(response, "status", None))
+            reply = parse_response(response, model, progress)
     except urllib.error.HTTPError as error:
+        if progress is not None:
+            progress.headers(error.code)
         reply = Reply(model, "http_error", http_status=error.code)
     except (OSError, ValueError, KeyError, TypeError, IndexError):
         reply = Reply(model, "transport_or_response_error")
@@ -101,6 +172,8 @@ def request(base: str, key: str, model: str, prompt: str, deadline: float) -> Re
     reply.content = reply.content.replace(key, "[REDACTED]") if key else reply.content
     if reply.model and key:
         reply.model = reply.model.replace(key, "[REDACTED]")
+    if progress is not None:
+        reply.progress = progress.snapshot()
     return reply
 
 
@@ -109,15 +182,16 @@ def bounded_request(base: str, key: str, model: str, prompt: str, deadline: floa
     if not math.isfinite(deadline) or deadline <= 0:
         raise ValueError("deadline must be positive")
     replies: queue.Queue[Reply] = queue.Queue(maxsize=1)
+    progress = Progress()
 
     def work() -> None:
-        replies.put(request(base, key, model, prompt, deadline))
+        replies.put(request(base, key, model, prompt, deadline, progress))
 
     threading.Thread(target=work, daemon=True).start()
     try:
         return replies.get(timeout=deadline)
     except queue.Empty:
-        return Reply(model, "deadline_exceeded")
+        return Reply(model, "deadline_exceeded", progress=progress.snapshot())
 
 
 def configuration(path: Path) -> tuple[str, str]:
