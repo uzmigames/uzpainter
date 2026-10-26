@@ -521,5 +521,26 @@ non-target unit selection refuses. Nineteen collector and 48 runner cases pass,
 including image ownership changes and the historical no-new-I/O case. One test
 initially looked for screenshots in the inbox instead of the private work run;
 the corrected assertion passed, and the original failure log is preserved.
-Mypy, Ruff, independent final review and five source/eight source-log pin checks
+Mypy, Ruff, independent final review and five source plus three log hash checks
 passed. No real settings capture has run at this checkpoint.
+
+The settings producer is explicitly pinned to source revision
+`7c3f819cf420a1b9369882893f0950036186a491`, version
+`uzp-recorder/1+src.89f3bbffae21361e`. Root and independent review recomputed all
+37 source inputs from Git; the historical producer and resolver remain separate.
+Unknown or future producers refuse. The public settings request contains no
+private references before capture.
+
+The new offline loader validates exactly twelve admitted references (record,
+environment and ten PNG roles), full trace/context, original imported mesh bytes,
+UI bindings and the documented derivation. Manifest references are unordered;
+record slots remain strictly ordered. Registry checks run on success and refusal;
+errors are value-free and reports write-once. Thirty-one authored loader cases
+pass after rerunning a sandbox-blocked standard `tmp_path` invocation with access.
+
+Source binding selects only the historical or settings golden through its fixed
+loader, then runs the unchanged J1-J4 joins. The settings result retains its
+derivation and the hash of original authored settings, while destination binding,
+native proof and the native F gate remain outstanding. Twenty-seven historical
+and ten new binding cases pass. Mypy, Ruff, independent review and frozen source
+checks pass. These are software checks; actual F settings capture is next.

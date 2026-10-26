@@ -7,7 +7,9 @@ key) and `f_evidence_from_record` (closed trace and context frames); H through
 `resolve_snapshot_capture` under the approved producer policy (complete admission, re-hashed
 artifacts, the receipt the pinned native validator accepted). No caller-supplied value, report or
 flag is trusted. The result is a value-free diagnostic: it is not a `VerifiedFilterContext` and
-authorizes no import; effective settings stay unverified and acceptance blocked.
+authorizes no import. Historical F keeps its three unverified settings. The separate settings
+golden goes through `load_settings_capture`, including its bound panels and admitted PNGs, before
+the same J1-J4 joins; verified derived settings still do not establish destination/native gates.
 
 The F context leaves and the H receipt use different public serializers of the same documented
 getters, related exactly as follows (anything else refuses):
@@ -34,10 +36,12 @@ from typing import Any
 
 from tools.parity import filter_context_validation as validation
 from tools.parity.filter_context_contract import MISSING_SETTINGS, SOURCE, typed
+from tools.parity.filter_context_settings import GOLDEN_ID as SETTINGS_GOLDEN_ID
 from tools.parity.recorder.filter_context_run import f_evidence_from_record
 from tools.parity.store.snapshot_capture import resolve_snapshot_capture
 from tools.parity.store.snapshot_contract import parse_document
 from tools.parity.store.store import OracleStore, Status
+from tools.parity.tier0_semantics.filter_context_control import GOLDEN_ID
 
 SCHEMA = "uzpainter/parity/filter-source-binding/1"
 HOST_SOURCE = {"role": "host", "source": True}
@@ -156,12 +160,34 @@ def _bind(
     approved_policy_sha256: str,
     approved_policy_revision: int,
 ) -> dict[str, Any]:
-    manifest, record = _f_record(store, f_manifest)
-    recipe = manifest["instruction_sequence"]
+    # Select only the two fixed protocols. The settings loader validates admission and the
+    # shared core itself; never relabel a record or run the historical parser on its new slots.
     try:
-        evidence = f_evidence_from_record(record, recipe)
+        golden_id = validation.decode(f_manifest).get("golden_id")
     except (ValueError, KeyError, TypeError, OSError):
-        raise SourceBindingRefused("F_CONTEXT_INVALID") from None
+        raise SourceBindingRefused("F_RECORD_UNBOUND") from None
+    settings = None
+    if golden_id == SETTINGS_GOLDEN_ID:
+        from tools.parity.filter_context_settings_validation import load_settings_capture
+
+        try:
+            captured = load_settings_capture(f_manifest, store)
+        except (ValueError, KeyError, TypeError, OSError):
+            raise SourceBindingRefused("F_RECORD_UNBOUND") from None
+        manifest, record, evidence, settings = (
+            captured.manifest,
+            captured.record,
+            captured.context,
+            captured.settings,
+        )
+    else:
+        require(golden_id == GOLDEN_ID, "F_RECORD_UNBOUND")
+        manifest, record = _f_record(store, f_manifest)
+        try:
+            evidence = f_evidence_from_record(record, manifest["instruction_sequence"])
+        except (ValueError, KeyError, TypeError, OSError):
+            raise SourceBindingRefused("F_CONTEXT_INVALID") from None
+    recipe = manifest["instruction_sequence"]
     frames = {frame["boundary"]: _host_leaves(frame) for frame in evidence.contexts}
     require(
         all(set(frames[b]) >= {"get_parameters", "resource_id"} for b in SOURCE_FRAMES),
@@ -265,7 +291,7 @@ def _bind(
         r for r in manifest["private_records"] if r["kind"] == "private_oracle_record"
     )
     validation_fields = document["validation"]
-    return {
+    report: dict[str, Any] = {
         "schema": SCHEMA,
         "status": "source_bound",
         "h": {
@@ -289,3 +315,25 @@ def _bind(
             "missing_effective_settings": list(MISSING_SETTINGS),
         },
     }
+    if settings is not None:
+        report["effective_settings"] = {
+            "status": "derived",
+            "basis": "admitted_bound_settings_evidence",
+            "tangent_space": settings.tangent_space,
+            "workflow": settings.workflow,
+            "effective_cm_per_unit": settings.effective_cm_per_unit,
+            "provenance_basis": settings.provenance_basis,
+        }
+        report["f"]["authored_settings_sha256"] = hashlib.sha256(
+            typed(record["key"]["project_settings"])
+        ).hexdigest()
+        report["acceptance"] = {
+            "importer": "not_authorized",
+            "missing_effective_settings": [],
+            "remaining_requirements": [
+                "destination_domain",
+                "frozen_host_native_proof",
+                "native_f_gate",
+            ],
+        }
+    return report

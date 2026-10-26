@@ -14,12 +14,14 @@ from typing import Any
 
 import pytest
 
+import tests.parity.test_filter_context_settings_validation as settings_fixtures
 import tests.parity.test_painter_filter_context as context_world
 from tests.parity.test_filter_context_run import Painter, load, record_with
+from tests.parity.test_filter_context_settings_validation import admitted as settings_artifacts
 from tests.parity.test_snapshot_host_transport import PINS, record
 from tools.parity import filter_context_validation as validation
 from tools.parity import filter_source_binding as binding
-from tools.parity.filter_context_contract import MISSING_SETTINGS
+from tools.parity.filter_context_contract import MISSING_SETTINGS, typed
 from tools.parity.filter_context_producer_policy import APPROVED_F_PRODUCER
 from tools.parity.recorder.environment import (
     ENVIRONMENT_KIND,
@@ -49,6 +51,7 @@ PARTS = {
     "version": RESOURCE_URL.split("?version=")[1],
 }
 OTHER_URL = "resource://starter_assets/other/other?version=1"
+settings_authored = settings_fixtures.authored
 
 
 def sha(data: bytes) -> str:
@@ -444,3 +447,158 @@ def test_a_bool_write_refused_with_type_error_and_no_state_change_binds(
     assert report["status"] == "source_bound"
     assert report["f"]["toggle_bool_writes"] == [{"outcome": "refused", "type": "TypeError"}] * 2
     assert "authored" not in json.dumps(report)
+
+
+def admit_settings_f(
+    store: OracleStore,
+    tmp_path: Path,
+    authored: tuple[dict[str, Any], dict[str, Any]],
+    change: Callable[[dict[str, Any]], None] | None = None,
+) -> bytes:
+    """Admit the settings validator's authored bytes into a real store, never mock its loader."""
+    manifest, rec = deepcopy(authored)
+    for recording in rec["recordings"]:
+        for output in recording["outputs"]:
+            if output["output_id"] in ("s13/get_parameters", "s15/get_parameters"):
+                output["value"] = deepcopy(PARAMETERS)
+    if change is not None:
+        change(rec)
+    _, blobs = settings_artifacts(manifest, rec)
+    build = manifest["software"]["painter"]["build_id"]
+    for index, ref in enumerate(manifest["private_records"]):
+        source = tmp_path / f"settings-artifact-{index}.blob"
+        source.write_bytes(blobs[ref["sha256"]])
+        store.add_record(
+            build,
+            manifest["golden_id"],
+            ref["record_id"],
+            ref["kind"],
+            source,
+            ref["sha256"],
+            source.name,
+        )
+    job = probe_job_from_manifest(manifest)
+    for item in manifest["inputs"]:
+        store.add_input(job.inputs[item["input_id"]], item["sha256"], item["path"])
+    return json.dumps(manifest).encode()
+
+
+def test_admitted_settings_f_uses_same_joins_without_authorizing_import(
+    settings_authored: tuple[dict[str, Any], dict[str, Any]],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = typed(list(settings_authored))
+    store = OracleStore.init(tmp_path / "store")
+    manifest = admit_settings_f(store, tmp_path, settings_authored)
+    report = bind(store, manifest, admit_h(store, tmp_path, monkeypatch, h_source()))
+    assert report["status"] == "source_bound"
+    assert report["joins"] == dict.fromkeys(("J1", "J2", "J3", "J4"), True)
+    assert report["effective_settings"] == {
+        "status": "derived",
+        "basis": "admitted_bound_settings_evidence",
+        "tangent_space": "PerVertex",
+        "workflow": "Default",
+        "effective_cm_per_unit": 1,
+        "provenance_basis": "unitless-obj-internal-centimetres-v1",
+    }
+    assert report["acceptance"] == {
+        "importer": "not_authorized",
+        "missing_effective_settings": [],
+        "remaining_requirements": [
+            "destination_domain",
+            "frozen_host_native_proof",
+            "native_f_gate",
+        ],
+    }
+    assert report["f"]["authored_settings_sha256"] == sha(
+        typed(settings_authored[1]["key"]["project_settings"])
+    )
+    assert typed(list(settings_authored)) == original
+    assert RESOURCE_URL not in json.dumps(report)
+
+
+@pytest.mark.parametrize(
+    "case", ["foreign-settings", "unknown-golden", "cross-producer", "missing-image"]
+)
+def test_settings_source_binding_refuses_unbound_inputs(
+    settings_authored: tuple[dict[str, Any], dict[str, Any]],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    case: str,
+) -> None:
+    store = OracleStore.init(tmp_path / "store")
+
+    def change(rec: dict[str, Any]) -> None:
+        if case == "cross-producer":
+            rec["environment"]["recorder_version"] = APPROVED_F_PRODUCER.recorder_version
+        elif case == "foreign-settings":
+            output = next(
+                o for o in rec["recordings"][0]["outputs"] if o["kind"] == "settings_panel_readback"
+            )
+            output["values"]["binding"]["after"]["project_uuid"] = "foreign-project"
+
+    manifest = admit_settings_f(store, tmp_path, settings_authored, change)
+    if case in ("unknown-golden", "missing-image"):
+        document = json.loads(manifest)
+        if case == "unknown-golden":
+            document["golden_id"] = "tier0/api-probes/unknown-settings"
+        else:
+            missing = next(
+                r for r in document["private_records"] if r["kind"] == "settings_panel_evidence"
+            )
+            document["private_records"].remove(missing)
+        manifest = json.dumps(document).encode()
+    h = admit_h(store, tmp_path, monkeypatch, h_source())
+    with pytest.raises(binding.SourceBindingRefused, match=r"^F_RECORD_UNBOUND$"):
+        bind(store, manifest, h)
+
+
+@pytest.mark.parametrize("case", ["identity", "parameters", "probe-state", "outputs"])
+def test_settings_golden_preserves_all_four_source_joins(
+    settings_authored: tuple[dict[str, Any], dict[str, Any]],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    case: str,
+) -> None:
+    source = h_source()
+    if case == "identity":
+        source = h_source(
+            OTHER_URL, {"context": "starter_assets", "name": "other/other", "version": "1"}
+        )
+    elif case == "parameters":
+        source["parameters"]["integer"] = 1.0
+    elif case == "outputs":
+        source["outputs"], source["active_output"] = ["other"], "other"
+
+    def change(rec: dict[str, Any]) -> None:
+        if case == "probe-state":
+            row = next(
+                o for o in rec["recordings"][0]["outputs"] if o["output_id"] == "s15/get_parameters"
+            )
+            row["value"]["integer"] = 2
+
+    store = OracleStore.init(tmp_path / "store")
+    manifest = admit_settings_f(store, tmp_path, settings_authored, change)
+    code = {
+        "identity": "J1_SOURCE_IDENTITY",
+        "parameters": "J2_PRE16_PARAMETERS",
+        "probe-state": "J3_PRE16_STATE",
+        "outputs": "J4_OUTPUTS",
+    }[case]
+    with pytest.raises(binding.SourceBindingRefused, match=f"^{code}$"):
+        bind(store, manifest, admit_h(store, tmp_path, monkeypatch, source))
+
+
+def test_settings_binding_registry_drift_still_supersedes_the_result(
+    settings_authored: tuple[dict[str, Any], dict[str, Any]],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = OracleStore.init(tmp_path / "store")
+    manifest = admit_settings_f(store, tmp_path, settings_authored)
+    h = admit_h(store, tmp_path, monkeypatch, h_source())
+    drift(monkeypatch)
+    with pytest.raises(binding.SourceBindingRefused, match=r"^REGISTRY_DRIFT$") as caught:
+        bind(store, manifest, h)
+    assert caught.value.original is None
