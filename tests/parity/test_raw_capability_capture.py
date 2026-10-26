@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -28,7 +29,14 @@ def request_data(tmp_path: Path) -> capture.Request:
     return capture.Request("normalization-png16", manifest, exe, tmp_path / "capture")
 
 
-def boundaries(monkeypatch: pytest.MonkeyPatch, request: capture.Request, failure: str = "") -> Any:
+def boundaries(
+    monkeypatch: pytest.MonkeyPatch,
+    request: capture.Request,
+    failure: str = "",
+    *,
+    export: bool = False,
+    ready_writer: Callable[[Path, Any], None] | None = None,
+) -> Any:
     state = SimpleNamespace(
         running=False,
         opened=False,
@@ -64,8 +72,14 @@ def boundaries(monkeypatch: pytest.MonkeyPatch, request: capture.Request, failur
         token: str | None = None
 
         def __init__(self, evidence: Any, *, owner: str, task: str) -> None:
-            assert owner == "Astra/uzpainter-raw-capability"
-            assert task == "Codex/Raw: one authored capability capture"
+            assert owner == (
+                "Astra/uzpainter-raw-export" if export else "Astra/uzpainter-raw-capability"
+            )
+            assert task == (
+                "Codex/Raw: one gated authored export capture"
+                if export
+                else "Codex/Raw: one authored capability capture"
+            )
 
         def acquire(self) -> None:
             state.calls.append("lock")
@@ -115,7 +129,7 @@ def boundaries(monkeypatch: pytest.MonkeyPatch, request: capture.Request, failur
 
     def record(session: capture.RawSession, job: Any, work: Path, inbox: Path) -> Path:
         state.session = session
-        assert not job.exports and not job.lifecycle
+        assert bool(job.exports) is export and not job.lifecycle
         state.calls.append("capture")
         try:
             session.call("apply_step", step=1, call=ownership.CREATE)
@@ -150,6 +164,8 @@ def boundaries(monkeypatch: pytest.MonkeyPatch, request: capture.Request, failur
             encoding="utf-8",
         )
         (run / "READY").write_bytes(b"")
+        if ready_writer is not None:
+            ready_writer(run, job)
         if failure == "after_ready":
             state.lock_owned = False
         return run

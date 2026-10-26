@@ -147,6 +147,17 @@ def test_complete_capability_receipt_passes(monkeypatch: pytest.MonkeyPatch) -> 
     assert report["readout_identity"] == "not_established" and not report["exports_authorized"]
 
 
+def test_capability_api_does_not_accept_export_domain(monkeypatch: pytest.MonkeyPatch) -> None:
+    manifest, record = authored_record(monkeypatch)
+    export = control.request("normalization-png16", exports=True)
+    raw, environment, store = admitted(manifest, record)
+    export["private_records"] = manifest["private_records"]
+    with pytest.raises(ValueError, match="authored capability request differs"):
+        admission.validate_capability(
+            export, raw, "normalization-png16", store, environment_bytes=environment
+        )
+
+
 @pytest.mark.parametrize(
     "mutation",
     [

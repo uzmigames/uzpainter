@@ -70,15 +70,15 @@ def validate_manifest(manifest: dict[str, Any], state: str) -> dict[str, Any]:
     return authored
 
 
-def validate_capability(
+def validate_record_receipt(
     manifest: dict[str, Any],
+    authored: dict[str, Any],
     record_bytes: bytes,
-    state: str,
     store: OracleStore,
     *,
     environment_bytes: bytes,
 ) -> dict[str, Any]:
-    authored = validate_manifest(manifest, state)
+    """Shared admitted receipt joins; callers first close their public reference inventory."""
     refs = {ref["record_id"]: ref for ref in manifest["private_records"]}
     replay.require_admitted_refs(store, manifest)
     for identity, data in (
@@ -90,15 +90,26 @@ def validate_capability(
             [hashlib.sha256(data).hexdigest(), len(data)],
             "record receipt differs",
         )
-    record = json.loads(record_bytes)
+    record: dict[str, Any] = json.loads(record_bytes)
     require(not record_problems(record), "private record schema")
     environment = json.loads(environment_bytes)
     require(not environment_problems(environment), "environment record schema")
     equal(environment, record.get("environment"), "environment record differs")
     equal([record["golden_id"], record["tier"]], [authored["golden_id"], "0"], "record identity")
     replay.validate_receipt_context(record, authored, store)
+    return record
+
+
+def validate_rounds(
+    record: dict[str, Any],
+    authored: dict[str, Any],
+    *,
+    export_output_ids: tuple[str, str] | None = None,
+) -> None:
+    """Shared setup, state, resource and lifecycle checks with a closed per-round inventory."""
     job = probe_job_from_manifest(authored)
-    require(not job.exports and not job.events and not job.observed, "capability domain")
+    require(not job.events and not job.observed, "Raw observation domain")
+    require(len(job.exports) == int(export_output_ids is not None), "Raw export domain")
     equal(record["key"]["resource_hashes"], [], "unexpected resource hashes")
     require(
         record["key"]["bake_backend"] is None and record["key"]["render_state"] is None,
@@ -157,6 +168,8 @@ def validate_capability(
     for index, recording in enumerate(rounds):
         required = {"template/texture-sets", f"identity/s{node}"}
         required.update(s.output_id for s in job.probe_steps)
+        if export_output_ids is not None:
+            required.add(export_output_ids[index])
         if index == 0:
             required.update(s.output_id for s in job.state_steps)
         else:
@@ -208,6 +221,22 @@ def validate_capability(
         and found_by[str(node)] in {"uid", "location"},
         "reopen identity",
     )
+
+
+def validate_capability(
+    manifest: dict[str, Any],
+    record_bytes: bytes,
+    state: str,
+    store: OracleStore,
+    *,
+    environment_bytes: bytes,
+) -> dict[str, Any]:
+    authored = validate_manifest(manifest, state)
+    record = validate_record_receipt(
+        manifest, authored, record_bytes, store, environment_bytes=environment_bytes
+    )
+    validate_rounds(record, authored)
+    rounds = record["recordings"]
     return {
         "schema": "uzpainter/ocio16-raw-capability-validation/1",
         "status": "validated",

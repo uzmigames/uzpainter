@@ -163,10 +163,31 @@ def prepared(request: Request) -> ProbeJob:
 
 
 def capture(request: Request) -> dict[str, Any]:
+    return run_owned_capture(request, CapabilityPolicy())
+
+
+class CapabilityPolicy:
+    schema = "uzpainter/raw-capability-capture/1"
+    owner = OWNER
+    task = "Codex/Raw: one authored capability capture"
+    exports = 0
+
+    def prepare(self, request: Request) -> ProbeJob:
+        return prepared(request)
+
+    def authorize(self, request: Request, job: ProbeJob, evidence: Evidence) -> dict[str, Any]:
+        ownership.require(not job.exports, "capability only")
+        return {}
+
+    def ready(self, job: ProbeJob, run: Path, manifest: dict[str, Any]) -> None:
+        ownership.require(not job.exports, "capability only")
+
+
+def run_owned_capture(request: Request, policy: CapabilityPolicy) -> dict[str, Any]:
     with ExitStack() as stack:
         evidence = Evidence(request.output_prefix, stack)
         report: dict[str, Any] = {
-            "schema": "uzpainter/raw-capability-capture/1",
+            "schema": policy.schema,
             "status": "refused",
             "state": request.state,
             "stage": "preflight",
@@ -176,9 +197,7 @@ def capture(request: Request) -> dict[str, Any]:
             "capture_seconds": CAPTURE_SECONDS,
             "cleanup_seconds": CLEANUP_SECONDS,
         }
-        lock = ownership.Lock(
-            evidence, owner=OWNER, task="Codex/Raw: one authored capability capture"
-        )
+        lock = ownership.Lock(evidence, owner=policy.owner, task=policy.task)
         launcher = PainterLauncher(request.painter_exe, ready_timeout_s=120, stop_timeout_s=15)
         raw = BoundedTransport(timeout_s=10)
         raw.deadline = time.monotonic() + CAPTURE_SECONDS
@@ -187,7 +206,7 @@ def capture(request: Request) -> dict[str, Any]:
         preserve = False
         with redirect_stdout(evidence.console), redirect_stderr(evidence.console):
             try:
-                job = prepared(request)
+                job = policy.prepare(request)
                 limits = ownership.Request(request.painter_exe, request.output_prefix)
                 work, inbox = work_root(), inbox_root()
                 environment = launch_environment(declaration(job.manifest), request.painter_exe)
@@ -209,6 +228,16 @@ def capture(request: Request) -> dict[str, Any]:
                     not ownership.painters(host) and not endpoint_answers(),
                     "Painter appeared before launch",
                 )
+                report["stage"] = "authorization"
+                lock.verify()
+                report.update(policy.authorize(request, job, evidence))
+                lock.verify()
+                host = ownership.host_state()
+                ownership.resources_available(host, limits)
+                ownership.require(
+                    not ownership.painters(host) and not endpoint_answers(),
+                    "Painter appeared after authorization",
+                )
                 report["stage"] = "launch"
                 launcher.start(environment=environment)
                 current = ownership.unique(
@@ -229,10 +258,17 @@ def capture(request: Request) -> dict[str, Any]:
                 )
                 report["stage"] = "capture"
                 run = record_probe_golden(session, job, work, inbox)
-                report.update(captures=1, run=str(run))
-                evidence.log("capture_ready", captures=1, run=str(run))
+                report.update(captures=1, exports=policy.exports, run=str(run))
+                evidence.log("capture_ready", captures=1, exports=policy.exports, run=str(run))
                 owned.verify()
+                ownership.require(
+                    run.resolve() != inbox.resolve()
+                    and run.resolve().is_relative_to(inbox.resolve())
+                    and (run / "READY").is_file(),
+                    "READY location differs",
+                )
                 run_manifest = json.loads((run / "manifest.json").read_bytes())
+                policy.ready(job, run, run_manifest)
                 report.update(
                     status="complete",
                     private_records=run_manifest["private_records"],
@@ -250,6 +286,8 @@ def capture(request: Request) -> dict[str, Any]:
         return {
             "status": report["status"],
             "captures": report["captures"],
+            "exports": report["exports"],
+            "admissions": report["admissions"],
             "report_sha256": file_fingerprint(evidence.paths["report"])[0],
         }
 

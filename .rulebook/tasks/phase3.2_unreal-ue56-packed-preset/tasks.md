@@ -618,3 +618,24 @@ Painter and released the lock. Their validation reports hash respectively to
 All three V3 capabilities now validate. Readout identity, the Color flag and
 pixel/production parity remain unestablished; collection and post-export
 validation are separate dependencies.
+
+## 22. Gated Raw export collector and post-admission validation
+
+The separate export collector revalidates all three V3 capabilities under its
+ownership lock immediately before launch, records a private immutable audit and
+rechecks resources and endpoints. The capability command stays capability-only.
+READY requires two rounds, one map per round and four exact private references.
+Collection does not admit data or establish numerical identity.
+
+The offline post-admission validator joins the complete receipt, environment,
+authored setup, resource identity after reopen and exported-map inventory. It
+decodes verified EXR blobs directly using the existing OpenEXR binding, requiring
+RGB FLOAT32, 256-square dimensions, unit sampling and finite values. Round equality
+compares uint32 bits, including signed zero. The producer's linear encoding label
+is retained as file metadata; no input/output identity or transform is inferred.
+
+The collector's 45 affected tests plus provenance checks and the validator's 85
+tests passed, with mypy, Ruff, formatting, independent review and guard checks.
+Authored real EXRs cover equal pixels with different file bytes. No actual export
+has run at this checkpoint; input equality, fits, Color flag and production parity
+remain separate open requirements.
