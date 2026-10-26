@@ -587,3 +587,34 @@ versions, incorrect references and zero/multiple retrievals. A total of 151
 distinct affected cases passed across the initial run and targeted retries;
 mypy, Ruff and formatting passed. This validates the V3 software only. Fresh
 capability capture/admission remains required before any export collection.
+
+## 21. V3 calibration capability and export collection gate
+
+The owned REV370 calibration FLOAT capture passed manifest validation, private
+store admission and capability validation in both rounds. Its capture report
+hashes to `0caed6ce43dc1a8c4ba90a68cc78931cfbba79b44793ac2cd32d8380891b4c37`;
+the capability validation report hashes to
+`a3560baa27c0573c3a48a1ef6427796fe602937087bb8045fe007809dbf1f674`.
+The same sequence stopped before launching the normalization FLOAT capture:
+the unchanged memory preflight refused insufficient commit headroom. PNG16 did
+not start. No Painter or lock remained, and that refusal is preserved. This is
+not a Raw capability failure or authorization to lower the memory threshold.
+
+`tools/parity/ocio16_raw_export_gate.py` revalidates all three exact admitted V3
+capabilities for each requested export collection, including their environment
+joins and a stable current registry. Its private audit binds the export request
+and all prerequisite references; an old audit is never accepted as a permit.
+Eighteen authored cases passed with real capability validation over authored
+in-memory stores; type/lint/format checks and review passed. This gate grants
+no numerical identity, cross-format equality or pixel conformity. Actual export
+collection still requires a fully gated owned collector.
+
+After a fresh resource preflight recovered, REV372 captured and admitted the two
+remaining V3 capabilities without repeating calibration. Both normalization
+FLOAT and PNG16 validated in both rounds, with no exports; cleanup left no
+Painter and released the lock. Their validation reports hash respectively to
+`af7c66c7cddc6ab5f907120cbed7a584e5885daae5e89db8a03506be926e976d` and
+`97f836d6869c7ed29ecf6c2e199fde258716365416f8378868cd849b6b51833c`.
+All three V3 capabilities now validate. Readout identity, the Color flag and
+pixel/production parity remain unestablished; collection and post-export
+validation are separate dependencies.
