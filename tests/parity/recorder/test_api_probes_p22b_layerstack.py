@@ -16,6 +16,7 @@ from typing import Any
 
 import pytest
 
+from tools.parity.recorder.job import load_job
 from tools.parity.recorder.probes import (
     EDIT_CALLS,
     GETTER_CALLS,
@@ -199,6 +200,20 @@ DECISION_188 = {
     )
 }
 MODULES = ("layerstack", "levels", "properties", "colormanagement")
+EFFECT_SOURCE_OWNER = "phase3.1_proc-backend-seam"
+# Item 2.6c made these implemented-but-uncompared. Existing capture routes remain
+# owned by 2.6; neither route establishes the full getter contract or Tier 0 parity.
+EFFECT_SOURCE_ROUTES = {
+    LS + "GeneratorEffectNode.get_source": (
+        REQUESTS.parents[2]
+        / "manifests/phase0/procedural-feasibility/position--sphere--defaults.json"
+    ),
+    LS + "FilterEffectNode.get_source": (
+        REPO_ROOT
+        / "parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7"
+        / "manifests/tier0/api-probes/source-substance-booleans-filter.json"
+    ),
+}
 
 
 def manifest(stem: str) -> dict[str, Any]:
@@ -235,10 +250,44 @@ def test_every_pending_symbol_of_the_group_is_requested_routed_or_already_reques
         if e["status"] == "pending-evidence"
         and e["symbol"].split(".")[:2] in [["substance_painter", m] for m in MODULES]
     }
-    assert pending <= set(REQUESTED) | ROUTED | DECISION_188, sorted(
-        pending - set(REQUESTED) - ROUTED - DECISION_188
+    assert pending <= set(REQUESTED) | ROUTED | DECISION_188 | set(EFFECT_SOURCE_ROUTES), sorted(
+        pending - set(REQUESTED) - ROUTED - DECISION_188 - set(EFFECT_SOURCE_ROUTES)
     )
     assert not set(REQUESTED) & ROUTED
+
+
+@pytest.mark.parametrize("symbol", EFFECT_SOURCE_ROUTES)
+def test_effect_source_routes_keep_their_pending_owner_and_exercise_the_getter(symbol: str) -> None:
+    entries = json.loads(INVENTORY.read_text(encoding="utf-8"))["entries"]
+    entry = next(e for e in entries if e["symbol"] == symbol)
+    assert entry["status"] == "pending-evidence"
+    assert EFFECT_SOURCE_OWNER in entry["notes"]
+    owner = (REPO_ROOT / ".rulebook/tasks" / EFFECT_SOURCE_OWNER / "tasks.md").read_text(
+        encoding="utf-8"
+    )
+    assert "2.6c Stored generator/filter effect sources" in owner
+    assert symbol.removeprefix(LS) in owner
+    assert not set(EFFECT_SOURCE_ROUTES) & (set(REQUESTED) | ROUTED | DECISION_188)
+    path = EFFECT_SOURCE_ROUTES[symbol]
+    if symbol == LS + "GeneratorEffectNode.get_source":
+        job = load_job(path)
+        inserted = {s.step for s in job.state_steps if s.call == LS + "insert_generator_effect"}
+        assert inserted
+        assert any(
+            spec["call"] == symbol and spec["args"]["node_step"] in inserted
+            for spec in job.readback_specs()
+        )
+    else:
+        data = load_json(path)
+        sequence = data["instruction_sequence"]["steps"]
+        inserted = {s["step"] for s in sequence if s["call"] == LS + "insert_filter_effect"}
+        assert inserted
+        assert any(
+            s["call"] == "substance_painter.source.SourceSubstance.get_parameters"
+            and s["args"].get("effect") is True
+            and s["args"]["node_step"] in inserted
+            for s in sequence
+        )
 
 
 def test_each_requested_symbol_is_named_by_its_request() -> None:
