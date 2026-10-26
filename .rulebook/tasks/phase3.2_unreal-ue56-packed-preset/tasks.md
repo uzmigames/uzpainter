@@ -458,3 +458,28 @@ The aggregate batch JUnit hashes to
 `97d8f103b7aa58a15208690f48d7324e0a43065f627fba538c86b1eff33fa913`.
 The diagnostic failure remains explicit. Production RGB16, item 2.5/R-322,
 padding, fits and all broader acceptance gates remain open.
+
+Aggregate diagnosis of the preserved candidates completed without generating
+another candidate or capture. Each of the 18 image comparisons differs at six
+of 65536 pixels, in one channel; the affected channel follows the authored cyclic
+permutations. All nine r1/reopen-r2 image pairs and all 18 fixed inverse-permutation
+checks are exact. Neither side contains non-finite samples. In all nine
+source/condition matrices, all 196608 EXR samples belong to the existing 256
+sRGB8 operands; the corresponding PNG8 indices and PNG16 table codes have zero
+mismatches. The difference is visible in the common reconstructed code across
+formats. This does not identify a causal Painter stage or distinguish decode16
+from quantization/storage, and the candidate remains rejected.
+
+`tools/parity/ocio16_rejected_diagnostic.py` verifies the preserved inputs before
+using the shared admitted-receipt validator, then writes measurements only to a
+new private report. Its SHA-256 is
+`5ce9755be03fc581fae03b80441cd4e9eebd37b88bf499f5b92337b5890b016e`.
+The validator moved to `tools/parity/ocio16_bitmap_replay.py` with seven bodies
+unchanged by AST, removing an accidental dependency on the installed `tests`
+package. Forty-nine focused CPU tests passed, with 26 native cases deselected.
+A later pre-oracle path-key failure was corrected by normalizing preserved
+Windows path identities while retaining hash checks and duplicate refusal;
+seven diagnostic tests then passed. Operational failures now retain a private
+stage/traceback without overwriting prior evidence. Mypy, Ruff and independent
+review passed. No residual threshold, fit, model adjustment or capability change
+was introduced.
