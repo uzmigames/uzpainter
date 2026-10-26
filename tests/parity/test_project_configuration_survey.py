@@ -102,7 +102,8 @@ def install_boundaries(monkeypatch: pytest.MonkeyPatch, failure: str = "") -> An
     class Lock:
         token = None
 
-        def __init__(self, evidence: Any) -> None:
+        def __init__(self, evidence: Any, *, task: str) -> None:
+            assert task.startswith("Codex Project Configuration UI selector survey; run=")
             self.evidence = evidence
 
         def acquire(self) -> None:
@@ -423,11 +424,11 @@ def test_lock_uses_canonical_cli_stdin_and_retains_token_on_audit_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, custom_owner: bool
 ) -> None:
     token = "private-lock-token"
-    owner = "Codex/authored-raw" if custom_owner else "Codex/uzpainter-project-config-survey"
+    owner = "Astra/authored-raw" if custom_owner else "Astra/uzpainter-project-config-survey"
     task = (
         "Authored Raw capability"
         if custom_owner
-        else "Private authored Project Configuration UI selector survey"
+        else "Codex private authored Project Configuration UI selector survey"
     )
     state: dict[str, Any] = {"occupied": False}
     calls = []
@@ -494,6 +495,14 @@ def test_lock_refuses_noncanonical_envelope(reply: Any, monkeypatch: pytest.Monk
     )
     with pytest.raises(ValueError):
         survey.Lock(Mock()).command("status")
+
+
+def test_lock_refuses_noncanonical_owner_before_cli(monkeypatch: pytest.MonkeyPatch) -> None:
+    cli = Mock()
+    monkeypatch.setattr(subprocess, "run", cli)
+    with pytest.raises(ValueError, match="canonical lock owner"):
+        survey.Lock(Mock(), owner="Codex/uzpainter-project-config-survey")
+    cli.assert_not_called()
 
 
 def test_lock_error_envelope_preserves_acquired_token(monkeypatch: pytest.MonkeyPatch) -> None:

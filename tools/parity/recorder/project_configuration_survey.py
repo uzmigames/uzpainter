@@ -202,9 +202,12 @@ class Lock:
         self,
         evidence: LogSink,
         *,
-        owner: str = "Codex/uzpainter-project-config-survey",
-        task: str = "Private authored Project Configuration UI selector survey",
+        owner: str = "Astra/uzpainter-project-config-survey",
+        task: str = "Codex private authored Project Configuration UI selector survey",
     ) -> None:
+        require(
+            owner.split("/", 1)[0] in {"Astra", "Claude", "Todos"}, "canonical lock owner required"
+        )
         self.evidence = evidence
         self.owner = owner
         self.task = task
@@ -566,7 +569,11 @@ def survey(request: Request) -> dict[str, Any]:
             "stage": "preflight",
             "not_filter_capture": True,
         }
-        lock = Lock(evidence)
+        lock = Lock(
+            evidence,
+            task="Codex Project Configuration UI selector survey; "
+            f"run={request.output_prefix.name}",
+        )
         launcher = PainterLauncher(request.painter_exe, ready_timeout_s=120, stop_timeout_s=15)
         session = None
         owned = None

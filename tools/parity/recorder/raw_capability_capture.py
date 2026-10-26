@@ -33,7 +33,7 @@ from tools.parity.tier0_semantics import ocio16_raw_readout_control as control
 
 CAPTURE_SECONDS = 900.0
 CLEANUP_SECONDS = 120.0
-OWNER = "Codex/uzpainter-raw-capability"
+OWNER = "Astra/uzpainter-raw-capability"
 
 
 @dataclass(frozen=True)
@@ -176,7 +176,9 @@ def capture(request: Request) -> dict[str, Any]:
             "capture_seconds": CAPTURE_SECONDS,
             "cleanup_seconds": CLEANUP_SECONDS,
         }
-        lock = ownership.Lock(evidence, owner=OWNER, task="One authored Raw capability capture")
+        lock = ownership.Lock(
+            evidence, owner=OWNER, task="Codex/Raw: one authored capability capture"
+        )
         launcher = PainterLauncher(request.painter_exe, ready_timeout_s=120, stop_timeout_s=15)
         raw = BoundedTransport(timeout_s=10)
         raw.deadline = time.monotonic() + CAPTURE_SECONDS

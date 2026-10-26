@@ -64,7 +64,8 @@ def boundaries(monkeypatch: pytest.MonkeyPatch, request: capture.Request, failur
         token: str | None = None
 
         def __init__(self, evidence: Any, *, owner: str, task: str) -> None:
-            assert owner == capture.OWNER and "Raw" in task
+            assert owner == "Astra/uzpainter-raw-capability"
+            assert task == "Codex/Raw: one authored capability capture"
 
         def acquire(self) -> None:
             state.calls.append("lock")
@@ -286,7 +287,9 @@ def test_other_reopen_path_refuses_and_preserves_ownership(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     state = boundaries(monkeypatch, request_data)
-    lock = ownership.Lock(Mock(), owner=capture.OWNER, task="Raw")
+    lock = ownership.Lock(
+        Mock(), owner=capture.OWNER, task="Codex/Raw: one authored capability capture"
+    )
     launcher = launcher_module.PainterLauncher(request_data.painter_exe)
     state.running = True
     owned = capture.GuardedTransport(capture.BoundedTransport(), launcher, lock, "own-start")
