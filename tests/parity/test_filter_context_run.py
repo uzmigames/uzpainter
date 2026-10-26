@@ -39,6 +39,7 @@ from tools.parity.recorder.session import (
 )
 from tools.parity.schemas import Schema, record_problems, validation_errors
 from tools.parity.tier0_semantics import filter_context_control as control
+from tools.parity.tier0_semantics import filter_context_settings_control as settings_control
 from tools.parity.tier0_semantics.source_substance_control import booleans_filter_request
 
 LEGACY = {"mode": "legacy", "OCIO": None, "PAINTER_ACE_CONFIG": None}
@@ -487,8 +488,153 @@ def test_recorder_version_covers_the_injected_contract() -> None:
         recorder / "documented_symbols.json",
         recorder.parent / "tga.py",
         recorder.parent / "filter_context_contract.py",
+        recorder.parent / "filter_context_settings.py",
     ]:
         digest.update(path.name.encode("utf-8") + b"\0")
         digest.update(path.read_bytes().replace(b"\r\n", b"\n") + b"\0")
     expected = f"{environment.RECORDER_VERSION}+src.{digest.hexdigest()[:16]}"
     assert environment.recorder_version() == expected
+
+
+class Panels:
+    """An authored settings panel reader: one panel and two image outputs per boundary, the image
+    files written once inside the run directory; it records what the runner handed it."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, dict[str, Any]]] = []
+
+    def __call__(
+        self, boundary: str, frame: dict[str, Any], run_dir: Path, mesh_import: dict[str, Any]
+    ) -> tuple[list[dict[str, Any]], list[Path]]:
+        self.calls.append((boundary, frame["boundary"], deepcopy(mesh_import)))
+        outputs: list[dict[str, Any]] = [
+            {
+                "output_id": f"settings/{boundary}/panel",
+                "kind": "settings_panel_readback",
+                "panel": "Project Configuration",
+                "values": {"schema": "authored", "boundary": boundary},
+            }
+        ]
+        files = []
+        for name in ("configuration-image", "physical-size-image"):
+            path = run_dir / f"settings-{boundary}-{name}.png"
+            with path.open("xb") as stream:
+                stream.write(f"authored {boundary} {name}".encode())
+            data = path.read_bytes()
+            outputs.append(
+                {
+                    "output_id": f"settings/{boundary}/{name}",
+                    "kind": "settings_panel_evidence",
+                    "panel": "Project Configuration",
+                    "blob": {
+                        "sha256": hashlib.sha256(data).hexdigest(),
+                        "size_bytes": len(data),
+                        "media_type": "image/png",
+                    },
+                }
+            )
+            files.append(path)
+        return outputs, files
+
+
+def record_settings(tmp_path: Path) -> tuple[Painter, Panels, Path]:
+    painter, panels = Painter({13: {"value": None}, 15: {"value": None}}), Panels()
+    job = probe_job_from_manifest(settings_control.request())
+    directory = run.record_filter_context_golden(
+        cast(PainterSession, painter),
+        job,
+        tmp_path / "work",
+        tmp_path / "inbox",
+        settings_panel=panels,
+    )
+    return painter, panels, directory
+
+
+def test_the_settings_golden_binds_a_panel_after_each_boundary(tmp_path: Path) -> None:
+    painter, panels, directory = record_settings(tmp_path)
+    assert run.check_capture(directory, settings_control)["golden_id"] == settings_control.GOLDEN_ID
+    assert [call[0] for call in panels.calls] == list(BOUNDARIES)
+    assert all(boundary == frame for boundary, frame, _ in panels.calls)
+    staged = directory_of_inputs(tmp_path) / "plane.obj"
+    expected = {
+        "sha256": hashlib.sha256(staged.read_bytes()).hexdigest(),
+        "size_bytes": len(staged.read_bytes()),
+    }
+    for _, _, packet in panels.calls:
+        assert packet == {
+            "input_id": "plane",
+            "resolved_path": staged.as_posix(),
+            "before": expected,
+            "after": expected,
+        }
+    record = load(directory)
+    for recording in record["recordings"]:
+        ids = [o["output_id"] for o in recording["outputs"]]
+        for boundary in BOUNDARIES:
+            leaves = [i for i, oid in enumerate(ids) if oid.startswith(f"context/{boundary}/")]
+            if not leaves:
+                continue
+            assert leaves == list(range(leaves[0], leaves[-1] + 1))
+            assert ids[leaves[-1] + 1 : leaves[-1] + 4] == [
+                f"settings/{boundary}/panel",
+                f"settings/{boundary}/configuration-image",
+                f"settings/{boundary}/physical-size-image",
+            ]
+    # The probes ran exactly as for filter-context-a.
+    plain = [e for e in painter.log if e[0] != "context"]
+    reference = Painter({13: {"value": None}, 15: {"value": None}})
+    record_with(reference, tmp_path / "plain")
+    assert plain == [e for e in reference.log if e[0] != "context"]
+
+
+def test_the_historical_golden_never_reads_the_staged_mesh(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def refuse(path: Path) -> dict[str, Any]:
+        raise AssertionError("filter-context-a hashed the staged mesh")
+
+    monkeypatch.setattr(run, "file_identity", refuse)
+    directory = record_with(Painter(), tmp_path)
+    assert run.check_capture(directory)["golden_id"] == control.GOLDEN_ID
+
+
+def directory_of_inputs(tmp_path: Path) -> Path:
+    runs = list((tmp_path / "work").rglob("inputs"))
+    assert len(runs) == 1
+    return runs[0]
+
+
+def test_golden_and_panel_reader_must_match(tmp_path: Path) -> None:
+    settings_job = probe_job_from_manifest(settings_control.request())
+    plain_job = probe_job_from_manifest(control.request())
+    for job, reader in ((settings_job, None), (plain_job, Panels())):
+        painter = Painter()
+        with pytest.raises(RecorderError, match="not the F context golden"):
+            run.record_filter_context_golden(
+                cast(PainterSession, painter),
+                job,
+                tmp_path / "work",
+                tmp_path / "inbox",
+                settings_panel=reader,
+            )
+        assert painter.log == []
+
+
+def test_the_historical_parser_refuses_and_the_core_needs_the_exact_slots_removed(
+    tmp_path: Path,
+) -> None:
+    _, _, directory = record_settings(tmp_path)
+    record = load(directory)
+    with pytest.raises(ContextRefused, match="not the F context golden"):
+        run.f_evidence_from_record(record, recipe())
+    with pytest.raises(ContextRefused, match="unknown recorded operation"):
+        run._f_evidence_from_record(record, recipe(), expected_golden_id=settings_control.GOLDEN_ID)
+    stripped = deepcopy(record)
+    for recording in stripped["recordings"]:
+        recording["outputs"] = [
+            o for o in recording["outputs"] if not o["output_id"].startswith("settings/")
+        ]
+    evidence = run._f_evidence_from_record(
+        stripped, recipe(), expected_golden_id=settings_control.GOLDEN_ID
+    )
+    assert [frame["boundary"] for frame in evidence.contexts] == list(BOUNDARIES)

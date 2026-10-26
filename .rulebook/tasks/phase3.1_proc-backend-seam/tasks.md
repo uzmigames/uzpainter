@@ -506,3 +506,20 @@ regressions pass after the extraction. The recorder digest now includes the
 settings contract; three source-change/LF-normalization tests pass. Mypy and
 Ruff pass. A separately pinned settings producer and actual bound F capture are
 still pending; no historical setting has been inferred or promoted.
+
+The owned settings collector and the new `filter-context-settings-a` runner now
+record one UI panel and two private PNGs immediately after each context boundary.
+Mesh hashes bracket the actual creation, and the collector rereads the full
+context after Cancel. PID/ownership checks bracket each image before writing;
+the run directory must be private, existing and fenced, and images are write-once.
+The helper requires the session's own claimed creation UUID. Historical mode
+does not perform the new input reads, and its parser remains closed.
+
+The authored integration traverses the real runner, collector, survey, UI tree
+serialization, settings extraction, full context parser and derivation; a
+non-target unit selection refuses. Nineteen collector and 48 runner cases pass,
+including image ownership changes and the historical no-new-I/O case. One test
+initially looked for screenshots in the inbox instead of the private work run;
+the corrected assertion passed, and the original failure log is preserved.
+Mypy, Ruff, independent final review and five source/eight source-log pin checks
+passed. No real settings capture has run at this checkpoint.

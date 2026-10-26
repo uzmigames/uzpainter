@@ -21,8 +21,9 @@ import hashlib
 import json
 import re
 from collections.abc import Callable
+from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from tools.parity.filter_context_contract import (
     A_RECIPE_SHA256,
@@ -36,10 +37,12 @@ from tools.parity.recorder import project_configuration_survey as ownership
 from tools.parity.recorder.filter_context import (
     PAINTER_FILTER_CONTEXT,
     context_outputs,
+    context_readback,
     extension_code,
 )
 from tools.parity.recorder.job import canonical_json
 from tools.parity.recorder.output import MANIFEST_FILE, READY_FILE, RECORD_FILE, write_run
+from tools.parity.recorder.painter_ui import PainterUi
 from tools.parity.recorder.probes import (
     GET_NODE_BY_UID,
     PROBE_FLAG,
@@ -72,9 +75,11 @@ from tools.parity.recorder.session import (
     ProjectState,
     RecorderError,
 )
+from tools.parity.recorder.settings_panel import read_settings_panel
 from tools.parity.recorder.texture import Now, require_colour_management, utc_now
 from tools.parity.schemas import Schema, record_problems, validation_errors
 from tools.parity.tier0_semantics import filter_context_control as control
+from tools.parity.tier0_semantics import filter_context_settings_control as settings_control
 
 Output = dict[str, Any]
 PROJECT = "substance_painter.project."
@@ -141,11 +146,26 @@ def save_close_reopen(session: PainterSession, project_file: Path) -> list[Outpu
     return outputs
 
 
-def check_job(job: ProbeJob) -> None:
-    """Recipe A unchanged under the F context golden's identity; no export or lifecycle golden."""
+class SettingsPanelReader(Protocol):
+    """Read-only Project Configuration observations bound to a context frame just read at
+    `boundary`: returns their outputs (to follow the frame's leaves) and the private image files
+    they name, written inside `run_dir`; `mesh_import` is the run's closed import packet."""
+
+    def __call__(
+        self, boundary: str, frame: dict[str, Any], run_dir: Path, mesh_import: dict[str, Any]
+    ) -> tuple[list[Output], list[Path]]: ...
+
+
+def file_identity(path: Path) -> dict[str, Any]:
+    data = path.read_bytes()
+    return {"sha256": hashlib.sha256(data).hexdigest(), "size_bytes": len(data)}
+
+
+def check_job(job: ProbeJob, golden_id: str = control.GOLDEN_ID) -> None:
+    """Recipe A unchanged under one F context golden's identity; no export or lifecycle golden."""
     if (
         job.tier != "0"
-        or job.golden_id != control.GOLDEN_ID
+        or job.golden_id != golden_id
         or job.lifecycle
         or job.exports
         or hashlib.sha256(typed(job.manifest["instruction_sequence"])).hexdigest()
@@ -162,10 +182,13 @@ def record_filter_context_golden(
     now: Now = utc_now,
     *,
     record_prefix: str = "",
+    settings_panel: SettingsPanelReader | None = None,
 ) -> Path:
     """Record the golden and write it to the inbox; returns the run directory. The session must
-    load the F context extension when it connects (`FContextSession`)."""
-    check_job(job)
+    load the F context extension when it connects (`FContextSession`). Without `settings_panel`
+    this is the filter-context-a golden, unchanged; with it, the filter-context-settings-a golden,
+    whose panel outputs follow each boundary's context leaves."""
+    check_job(job, control.GOLDEN_ID if settings_panel is None else settings_control.GOLDEN_ID)
     identity = session.connect()
     require_colour_management(job, identity)
     if any(
@@ -177,24 +200,46 @@ def record_filter_context_golden(
     staged = stage_inputs(job.inputs, directory / "inputs")
     preflight(session, job)
 
+    panel_blobs: list[Path] = []
+    mesh = staged[job.create.args["mesh"]]
+    mesh_import: dict[str, Any] = {
+        "input_id": job.create.args["mesh"],
+        "resolved_path": mesh.as_posix(),
+    }
+
+    def context(boundary: str) -> list[Output]:
+        """The boundary's context leaves, then (settings golden) its bound panel outputs."""
+        if settings_panel is None:
+            return context_outputs(session, boundary)
+        frame = context_readback(session, boundary)
+        panel, files = settings_panel(boundary, frame, directory, mesh_import)
+        panel_blobs.extend(files)
+        return [*frame["outputs"], *panel]
+
+    def created(ready: ProjectState) -> list[Output]:
+        if settings_panel is not None:
+            # The staged mesh exactly as the creation read it, re-hashed right after it.
+            mesh_import["after"] = file_identity(mesh)
+        return [*state_readbacks("create", ready), *context("after-create")]
+
     def before(round_index: int) -> Callable[[ProbeStep], list[Output]]:
         def hook(step: ProbeStep) -> list[Output]:
-            return context_outputs(session, f"pre16-r{round_index}") if step.step == 16 else []
+            return context(f"pre16-r{round_index}") if step.step == 16 else []
 
         return hook
 
     try:
         session.call("probe_reset", root=directory.as_posix())
+        if settings_panel is not None:
+            # Only the settings golden reads the staged mesh; filter-context-a stays unchanged.
+            mesh_import["before"] = file_identity(mesh)
         defaults, outcomes = apply_state(
             session,
             job,
             staged,
             directory / "r1" / "work-files",
-            after_create=lambda ready: [
-                *state_readbacks("create", ready),
-                *context_outputs(session, "after-create"),
-            ],
-            after_setup=lambda: context_outputs(session, "after-setup6"),
+            after_create=created,
+            after_setup=lambda: context("after-setup6"),
         )
         locations = session.call("probe_locations")
         uids = {step: int(where["uid"]) for step, where in locations.items()}
@@ -226,7 +271,7 @@ def record_filter_context_golden(
             "r2",
             "after_save_reopen",
             uids,
-            [*lifecycle, rebind, *context_outputs(session, "after-reopen")],
+            [*lifecycle, rebind, *context("after-reopen")],
             now,
             staged,
             before_step=before(2),
@@ -246,7 +291,7 @@ def record_filter_context_golden(
     return write_run(
         inbox,
         record,
-        first_blobs + second_blobs,
+        first_blobs + second_blobs + panel_blobs,
         job.manifest,
         identity.session_id,
         environment=identity.environment,
@@ -286,12 +331,23 @@ def _readback(output: dict[str, Any], call: str, args: dict[str, Any], what: str
 
 
 def f_evidence_from_record(record: dict[str, Any], recipe: dict[str, Any]) -> FContextEvidence:
-    """The F trace and context frames rebuilt from the record's ordered outputs, then checked
-    against the unchanged recipe A. Every output must be an operation of A, a context leaf, one
-    contiguous lifecycle phase in the recorder's getter order, or one of the exact additions the
-    probe recorder makes for this job (the template capture first, then identity/s3 and
-    identity/s6 before the probe steps, and the reopen rebind); anything else is refused."""
-    if record.get("golden_id") != control.GOLDEN_ID:
+    """The F trace and context frames of a filter-context-a record (the historical golden),
+    rebuilt from its ordered outputs and checked against the unchanged recipe A; any settings
+    panel output is refused like every other unknown output."""
+    return _f_evidence_from_record(record, recipe, expected_golden_id=control.GOLDEN_ID)
+
+
+def _f_evidence_from_record(
+    record: dict[str, Any], recipe: dict[str, Any], *, expected_golden_id: str
+) -> FContextEvidence:
+    """The shared core parser: the F trace and context frames rebuilt from the record's ordered
+    outputs, then checked against the unchanged recipe A, for the golden `expected_golden_id`.
+    Every output must be an operation of A, a context leaf, one contiguous lifecycle phase in the
+    recorder's getter order, or one of the exact additions the probe recorder makes for this job
+    (the template capture first, then identity/s3 and identity/s6 before the probe steps, and the
+    reopen rebind); anything else is refused. A settings contract calls it only after validating
+    its own panel slots and removing exactly those, never with another golden's records."""
+    if record.get("golden_id") != expected_golden_id:
         raise ContextRefused("not the F context golden")
     key = record["key"]["instruction_sequence_sha256"]
     if key != hashlib.sha256(canonical_json(recipe)).hexdigest():
@@ -430,7 +486,7 @@ def f_evidence_from_record(record: dict[str, Any], recipe: dict[str, Any]) -> FC
     return validate_context_sequence(recipe, trace, frames)
 
 
-def check_capture(run: Path) -> dict[str, Any]:
+def check_capture(run: Path, golden: Any = control) -> dict[str, Any]:
     """Completion only, never the F domain or the effective settings: READY last; a schema-valid
     private record of the F context golden with exactly the two rounds r1 (same_session) and r2
     (after_save_reopen); its key, and the run's schema-valid public manifest, both naming recipe
@@ -445,12 +501,12 @@ def check_capture(run: Path) -> dict[str, Any]:
     if problems:
         raise RecorderError(f"private record invalid: {problems}")
     rounds = [(r["recording_id"], r["condition"]) for r in record["recordings"]]
-    if record["golden_id"] != control.GOLDEN_ID or rounds != [
+    if record["golden_id"] != golden.GOLDEN_ID or rounds != [
         ("r1", "same_session"),
         ("r2", "after_save_reopen"),
     ]:
         raise RecorderError("not the two rounds of the F context golden")
-    authored = control.request()
+    authored = golden.request()
     recipe_key = hashlib.sha256(canonical_json(authored["instruction_sequence"])).hexdigest()
     if record["key"]["instruction_sequence_sha256"] != recipe_key:
         raise RecorderError("record key is not recipe A")
@@ -524,16 +580,54 @@ class FContextPolicy(CapabilityPolicy):
         return record_filter_context_golden(session, job, work, inbox)
 
 
+class FContextSettingsPolicy(FContextPolicy):
+    """The same owned capture recording filter-context-settings-a: its own collector reads the
+    owned Painter's Project Configuration panel at each boundary (no own launch or creation)."""
+
+    schema = "uzpainter/filter-context-settings-capture/1"
+    task = "Claude/F: one recipe A capture with context boundaries and bound settings panels"
+
+    def prepare(self, request: Request) -> ProbeJob:
+        ownership.require(request.state == settings_control.NAME, "unknown F settings capture")
+        manifest = json.loads(request.manifest.read_bytes())
+        ownership.require(
+            canonical_json(manifest) == canonical_json(settings_control.request()),
+            "authored request differs",
+        )
+        job = probe_job_from_manifest(manifest)
+        check_job(job, settings_control.GOLDEN_ID)
+        ownership.require(request.painter_exe.is_file(), "Painter executable unavailable")
+        return job
+
+    def ready(self, job: ProbeJob, run: Path, manifest: dict[str, Any]) -> None:
+        check_capture(run, settings_control)
+
+    def record(self, session: RawSession, job: ProbeJob, work: Path, inbox: Path) -> Path:
+        pid = session.owned.launcher.pid
+        ui = PainterUi(pid=pid, timeout_s=10)
+        ownership.require(ui.window.process_id() == pid, "UI window process differs")
+        return record_filter_context_golden(
+            session, job, work, inbox, settings_panel=partial(read_settings_panel, session, ui)
+        )
+
+
+POLICIES: dict[str, Callable[[], FContextPolicy]] = {
+    control.NAME: FContextPolicy,
+    settings_control.NAME: FContextSettingsPolicy,
+}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--painter-exe", type=Path, required=True)
     parser.add_argument("--output-prefix", type=Path, required=True)
+    parser.add_argument("--golden", choices=sorted(POLICIES), default=control.NAME)
     args = parser.parse_args()
     try:
         result = run_owned_capture(
-            Request(control.NAME, args.manifest, args.painter_exe, args.output_prefix),
-            FContextPolicy(),
+            Request(args.golden, args.manifest, args.painter_exe, args.output_prefix),
+            POLICIES[args.golden](),
         )
     except Exception:
         result = {"status": "refused"}
