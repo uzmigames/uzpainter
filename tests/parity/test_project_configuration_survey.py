@@ -755,8 +755,10 @@ def test_configuration_reads_and_only_cancels(
         "dialog_pid_changed",
     ],
 )
+@pytest.mark.parametrize("bind_identity", [False, True])
 def test_physical_size_only_expands_observed_title_and_cancels_safely(
     case: str,
+    bind_identity: bool,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(time, "sleep", lambda _: None)
@@ -840,18 +842,37 @@ def test_physical_size_only_expands_observed_title_and_cancels_safely(
         evidence.json.side_effect = write
     owned = Mock(launcher=Mock(pid=71))
     if case in ("collapsed", "expanded"):
-        survey.configuration_survey(ui, owned, evidence, physical_size=True)
+        survey.configuration_survey(
+            ui, owned, evidence, physical_size=True, bind_identity=bind_identity
+        )
         data = next(c.args[1] for c in evidence.json.call_args_list if c.args[0] == "physical_size")
         assert data["expanded_by_click"] is (case == "collapsed")
         observed = next(row for row in data["values"] if row["label"] == leaf.label)
         assert observed["value"] == "1.0" and "unavailable" in observed["toggle"]
+        for call in evidence.json.call_args_list:
+            if call.args[0] in {"configuration", "physical_size"}:
+                snapshot = call.args[1]
+                if bind_identity:
+                    assert snapshot["dialog"] == {"hwnd": dialog.handle, "pid": 71}
+                    assert all(
+                        row["visible"] is True and row["process_id"] == 71
+                        for row in snapshot["values"]
+                    )
+                else:
+                    assert "dialog" not in snapshot
+                    assert all(
+                        "visible" not in row and "process_id" not in row
+                        for row in snapshot["values"]
+                    )
         assert [c.args[0] for c in evidence.image.call_args_list] == [
             "configuration_image",
             "physical_size_image",
         ]
     else:
         with pytest.raises((ValueError, OSError)):
-            survey.configuration_survey(ui, owned, evidence, physical_size=True)
+            survey.configuration_survey(
+                ui, owned, evidence, physical_size=True, bind_identity=bind_identity
+            )
     assert clicked[:2] == ["Edit", "Project Configuration"]
     assert clicked.count("Physical size") == int(
         case
@@ -871,6 +892,20 @@ def test_physical_size_only_expands_observed_title_and_cancels_safely(
     ui.choose.assert_not_called()
     ui.set_value.assert_not_called()
     ui.invoke.assert_not_called()
+
+
+def test_visible_values_binding_reads_each_actual_process(monkeypatch: pytest.MonkeyPatch) -> None:
+    root = Widget("root", "Window", 50)
+    child = Widget("child", "Edit", 51)
+    hidden = Widget("hidden", "Edit", 52)
+    hidden.visible = False
+    root.widgets = [child, hidden]
+    monkeypatch.setattr(child, "process_id", lambda: 92)
+    values = survey.visible_values(root, bind_identity=True)
+    assert [(row["label"], row["process_id"], row["visible"]) for row in values] == [
+        ("root", 71, True),
+        ("child", 92, True),
+    ]
 
 
 def test_physical_size_requires_configuration_before_evidence_or_actions(

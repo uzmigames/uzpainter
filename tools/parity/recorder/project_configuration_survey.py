@@ -209,6 +209,12 @@ class LogSink(Protocol):
     def log(self, event: str, **fields: Any) -> None: ...
 
 
+class EvidenceSink(LogSink, Protocol):
+    def json(self, name: str, value: Any) -> None: ...
+
+    def image(self, name: str, ui: PainterUi, handle: int) -> None: ...
+
+
 class Lock:
     def __init__(
         self,
@@ -476,10 +482,11 @@ def unique(items: list[Any], reason: str) -> Any:
     return items[0]
 
 
-def visible_values(root: Any) -> list[dict[str, Any]]:
+def visible_values(root: Any, *, bind_identity: bool = False) -> list[dict[str, Any]]:
     values = []
     for element in [root, *root.descendants()]:
-        if not element.is_visible():
+        visible = element.is_visible()
+        if not visible:
             continue
         info = element.element_info
         row: dict[str, Any] = {
@@ -488,6 +495,8 @@ def visible_values(root: Any) -> list[dict[str, Any]]:
             "automation_id": info.automation_id,
             "enabled": bool(element.is_enabled()),
         }
+        if bind_identity:
+            row.update(visible=visible, process_id=element.process_id())
         for field, interface, attribute in (
             ("value", "iface_value", "CurrentValue"),
             ("toggle", "iface_toggle", "CurrentToggleState"),
@@ -717,7 +726,12 @@ def physical_size_leaves(dialog: Any, pid: int) -> list[Any]:
 
 
 def configuration_survey(
-    ui: PainterUi, owned: OwnedTransport, evidence: Evidence, *, physical_size: bool = False
+    ui: PainterUi,
+    owned: OwnedTransport,
+    evidence: EvidenceSink,
+    *,
+    physical_size: bool = False,
+    bind_identity: bool = False,
 ) -> None:
     def guard() -> None:
         owned.verify()
@@ -771,7 +785,16 @@ def configuration_survey(
             "foreign configuration dialog",
         )
         evidence.json(
-            "configuration", {"tree": ui.survey(dialog), "values": visible_values(dialog)}
+            "configuration",
+            {
+                "tree": ui.survey(dialog),
+                "values": visible_values(dialog, bind_identity=bind_identity),
+                **(
+                    {"dialog": {"hwnd": dialog.handle, "pid": dialog.process_id()}}
+                    if bind_identity
+                    else {}
+                ),
+            },
         )
         evidence.image("configuration_image", ui, dialog.handle)
         cancel = owned_cancel(dialog, owned.launcher.pid)
@@ -823,7 +846,12 @@ def configuration_survey(
                 {
                     "expanded_by_click": not bool(before),
                     "tree": ui.survey(dialog),
-                    "values": visible_values(dialog),
+                    "values": visible_values(dialog, bind_identity=bind_identity),
+                    **(
+                        {"dialog": {"hwnd": dialog.handle, "pid": dialog.process_id()}}
+                        if bind_identity
+                        else {}
+                    ),
                 },
             )
             evidence.image("physical_size_image", ui, dialog.handle)

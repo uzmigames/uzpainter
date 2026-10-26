@@ -482,3 +482,10 @@ from API results and operator-entered settings. Screenshots use the existing
 `settings_panel_evidence` kind. This transport grants no acceptance. Mypy, Ruff
 and independent review passed; 97 schema cases passed (96 initially, then the
 single sandbox-blocked standard `tmp_path` case with normal external access).
+
+The survey now accepts a structural evidence sink and an opt-in `bind_identity`
+flag for reuse by the owned F session. Bound snapshots preserve each control's
+actual visibility and process ID, plus the dialog's HWND and process ID. The
+default payload and navigation actions are unchanged. Thirty-seven affected
+authored cases, Mypy, Ruff and independent review passed. This supplies the
+collector interface only; no new F capture or settings admission has run.
