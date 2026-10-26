@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import builtins
+import ctypes
 import hashlib
 import json
 import subprocess
+import sys
 import time
 from contextlib import ExitStack
 from dataclasses import replace
@@ -521,6 +523,7 @@ def test_lock_error_envelope_preserves_acquired_token(monkeypatch: pytest.Monkey
 class Widget:
     def __init__(self, label: str, kind: str, handle: int = 50) -> None:
         self.label, self.handle, self.visible = label, handle, True
+        self.box = [0, 0, 10, 10]
         self.element_info = SimpleNamespace(control_type=kind, automation_id="observed-id")
         self.widgets: list[Widget] = []
 
@@ -547,6 +550,8 @@ def test_configuration_reads_and_only_cancels(
     failure: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(time, "sleep", lambda _: None)
+    diagnostic = Mock(side_effect=lambda ui, element: {"element_rect": element.box})
+    monkeypatch.setattr(survey, "navigation_state", diagnostic)
     main = Widget("Painter", "Window", 25)
     dialog = Widget("Project Configuration", "Window")
     cancel = Widget("Cancel", "Button", 51)
@@ -564,15 +569,22 @@ def test_configuration_reads_and_only_cancels(
     ui.menu_containers.return_value = [main]
     ui.survey.return_value = []
     clicked = []
+    edits: list[Widget] = []
 
     def menu(label: str) -> Widget:
         if failure == "ambiguous_menu" and label == "Project Configuration":
             raise ValueError("ambiguous menu")
-        return Widget(label, "MenuItem")
+        widget = Widget(label, "MenuItem")
+        if label == "Edit":
+            widget.box = [len(edits) * 20, 0, len(edits) * 20 + 10, 10]
+            edits.append(widget)
+        return widget
 
     def click(widget: Widget, **kwargs: Any) -> None:
         if failure == "foreground":
             raise ValueError("covered by foreign window")
+        if widget.label == "Edit":
+            assert len(edits) == 2 and widget is edits[1]
         clicked.append(widget.label)
         if widget is cancel:
             assert kwargs == {"owner": dialog.handle}
@@ -594,6 +606,66 @@ def test_configuration_reads_and_only_cancels(
         assert not clicked
     if failure == "no_cancel":
         evidence.image.assert_called_once_with("configuration_image", ui, dialog.handle)
+    if failure != "stale_pid":
+        assert [
+            call.kwargs["phase"]
+            for call in evidence.log.call_args_list
+            if call.args[0] == "navigation"
+        ] == ["before_front", "after_front"]
+        assert diagnostic.call_args_list[0].args[1] is edits[0]
+        assert diagnostic.call_args_list[1].args[1] is edits[1]
+        logged = [
+            call.kwargs["state"]
+            for call in evidence.log.call_args_list
+            if call.args[0] == "navigation"
+        ]
+        assert logged == [{"element_rect": [0, 0, 10, 10]}, {"element_rect": [20, 0, 30, 10]}]
+    if failure == "foreground":
+        assert clicked == []
+
+
+def test_navigation_diagnostics_read_foreign_cover_without_actions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gui = Mock()
+    gui.GetAncestor.side_effect = lambda handle, flag: handle
+    gui.GetWindowRect.return_value = (0, 0, 100, 100)
+    gui.GetClassName.return_value = "authored-window"
+    gui.IsWindowEnabled.return_value = gui.IsWindowVisible.return_value = True
+    gui.GetClientRect.return_value = (0, 0, 100, 100)
+    gui.ClientToScreen.return_value = (0, 0)
+    gui.GetForegroundWindow.return_value = gui.WindowFromPoint.return_value = 99
+    gui.GetLastActivePopup.return_value = 25
+    process_api = Mock()
+    process_api.GetWindowThreadProcessId.side_effect = lambda handle: (
+        1,
+        71 if handle == 25 else 99,
+    )
+    monkeypatch.setitem(sys.modules, "win32gui", gui)
+    monkeypatch.setitem(sys.modules, "win32process", process_api)
+    user = Mock()
+    user.GetDpiForWindow.return_value = 144
+    user.GetThreadDpiAwarenessContext.return_value = 123
+    user.GetAwarenessFromDpiAwarenessContext.return_value = 2
+    monkeypatch.setattr(ctypes, "windll", SimpleNamespace(user32=user))
+    main = Mock(handle=25)
+    main.process_id.return_value = 71
+    main.element_info.control_type = "Window"
+    main.element_info.class_name = "authored-main"
+    element = Mock(handle=0)
+    element.process_id.return_value = 71
+    element.element_info.control_type = "MenuItem"
+    element.element_info.class_name = "authored-menu"
+    element.parent.return_value = main
+    element.rectangle.return_value = SimpleNamespace(left=10, top=20, right=30, bottom=40)
+    state = survey.navigation_state(Mock(window=main), element)
+    assert state["hit_root"]["pid"] == state["foreground"]["pid"] == 99
+    assert state["point"] == [20, 30] and state["ancestry_reaches_main"] is True
+    assert state["dpi"] == {"window_dpi": 144, "thread_context": 123, "thread_awareness": 2}
+    assert state["patterns"] == {"expand_collapse": True, "invoke": True}
+    element.iface_expand_collapse.Expand.assert_not_called()
+    element.iface_invoke.Invoke.assert_not_called()
+    element.click_input.assert_not_called()
 
 
 def test_cli_does_not_print_private_failure(

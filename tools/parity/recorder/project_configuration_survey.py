@@ -489,6 +489,91 @@ def visible_values(root: Any) -> list[dict[str, Any]]:
     return values
 
 
+def navigation_state(ui: PainterUi, element: Any) -> dict[str, Any]:
+    """Read coordinate/ownership diagnostics and UIA pattern availability; never navigate."""
+    from ctypes import wintypes
+
+    import win32gui
+    import win32process  # type: ignore[import-untyped]
+
+    def observed(read: Any) -> Any:
+        try:
+            return read()
+        except Exception as error:
+            return {"unavailable": repr(error).split("(", 1)[0]}
+
+    def window(handle: int) -> dict[str, Any]:
+        if not handle:
+            return {"hwnd": 0}
+        return {
+            "hwnd": handle,
+            "pid": win32process.GetWindowThreadProcessId(handle)[1],
+            "root": win32gui.GetAncestor(handle, 2),
+            "rect": list(win32gui.GetWindowRect(handle)),
+            "class": win32gui.GetClassName(handle),
+            "enabled": bool(win32gui.IsWindowEnabled(handle)),
+            "visible": bool(win32gui.IsWindowVisible(handle)),
+        }
+
+    box = element.rectangle()
+    point = ((box.left + box.right) // 2, (box.top + box.bottom) // 2)
+    ancestry = []
+    current = element
+    reached_main = False
+    for _ in range(32):
+        if current is None:
+            break
+        handle = int(current.handle or 0)
+        ancestry.append(
+            {
+                "hwnd": handle,
+                "pid": current.process_id(),
+                "control_type": current.element_info.control_type,
+                "class": current.element_info.class_name,
+            }
+        )
+        if handle == ui.window.handle:
+            reached_main = True
+            break
+        current = current.parent()
+
+    def dpi() -> dict[str, Any]:
+        user = ctypes.windll.user32
+        user.GetDpiForWindow.argtypes, user.GetDpiForWindow.restype = [wintypes.HWND], wintypes.UINT
+        user.GetThreadDpiAwarenessContext.argtypes = []
+        user.GetThreadDpiAwarenessContext.restype = ctypes.c_void_p
+        user.GetAwarenessFromDpiAwarenessContext.argtypes = [ctypes.c_void_p]
+        user.GetAwarenessFromDpiAwarenessContext.restype = ctypes.c_int
+        context = user.GetThreadDpiAwarenessContext()
+        return {
+            "window_dpi": user.GetDpiForWindow(ui.window.handle),
+            "thread_context": context,
+            "thread_awareness": user.GetAwarenessFromDpiAwarenessContext(context),
+        }
+
+    hit = win32gui.WindowFromPoint(point)
+    return {
+        "element_rect": [box.left, box.top, box.right, box.bottom],
+        "point": list(point),
+        "ancestry": ancestry,
+        "ancestry_reaches_main": reached_main,
+        "main": window(ui.window.handle),
+        "client_rect": list(win32gui.GetClientRect(ui.window.handle)),
+        "client_screen_origin": list(win32gui.ClientToScreen(ui.window.handle, (0, 0))),
+        "foreground": observed(lambda: window(win32gui.GetForegroundWindow())),
+        "hit": observed(lambda: window(hit)),
+        "hit_root": observed(lambda: window(win32gui.GetAncestor(hit, 2))),
+        "last_active_popup": observed(
+            lambda: window(win32gui.GetLastActivePopup(ui.window.handle))
+        ),
+        "dpi": observed(dpi),
+        "patterns": {
+            "expand_collapse": observed(lambda: element.iface_expand_collapse is not None),
+            "invoke": observed(lambda: element.iface_invoke is not None),
+        },
+    }
+
+
 def configuration_survey(ui: PainterUi, owned: OwnedTransport, evidence: Evidence) -> None:
     def guard() -> None:
         owned.verify()
@@ -501,7 +586,12 @@ def configuration_survey(ui: PainterUi, owned: OwnedTransport, evidence: Evidenc
         # Labels are discovered in the actual UI before any navigation; no guessed IDs.
         edit = ui.menu_item("Edit")
         require(edit.process_id() == owned.launcher.pid, "foreign Edit menu")
+        evidence.log("navigation", phase="before_front", state=navigation_state(ui, edit))
         ui.front()
+        guard()
+        edit = ui.menu_item("Edit")
+        require(edit.process_id() == owned.launcher.pid, "foreign Edit menu after foreground")
+        evidence.log("navigation", phase="after_front", state=navigation_state(ui, edit))
         guard()
         ui.click(edit)
         time.sleep(ui.settle_s)
