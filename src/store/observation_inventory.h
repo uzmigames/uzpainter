@@ -103,4 +103,16 @@ struct ObservationInventory {
 ObservationInventory InventoryIn(Container& container, const PendingPlanes& planes, const PendingContent& content,
                                  const core::Project& project);
 
+/// Why `inventory` is not the exact census serialization (`ObservationInventory::ToJson`) of the
+/// HISTORICAL project `historical` recorded for `project_uuid`, or empty. Pure: no container, no
+/// bytes. It checks every member, type, order and duplicate; that the planes are exactly those
+/// the project holds, each with its holder's row (the row checks above, before any arithmetic),
+/// referencing object, bound version and root, chunk rows in (x, y) order hashing to that root and
+/// `byte_count = width x height x texel bytes`; the snapshot keys exactly; and the resources
+/// exactly the project's, with their canonical records (never empty) and the size and MIME type of
+/// every record. Texel and resource hashes are checked as SHA-256 text only: without bytes they
+/// are not authenticated, which a live census (`InventoryIn`) does.
+std::string InventoryHistoryProblem(const core::Project& historical, const core::json::Value& inventory,
+                                    std::string_view project_uuid);
+
 }  // namespace uzp::store

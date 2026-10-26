@@ -22,6 +22,16 @@ namespace uzp::procedural {
 std::expected<UseContext, std::string> SnapshotUseContext(const core::Project& project, const core::TextureSet& set,
                                                          const core::ProceduralRef& ref, const std::string& outputId);
 
+/// The request a snapshot fill source asks for, from `project` alone (no store read): the
+/// provider's domain (a User L32F fill on the recorded 128px full-UV plane under Legacy, the
+/// identity UV or Fill projection with BilinearHQ and Repeat, one explicit scalar output mapping,
+/// no preset, image input or mask output), `SnapshotUseContext` and `RequestFor`, at a source
+/// resolution of 128. `SnapshotSourceProvider` admits only such a request; this does not say that
+/// a snapshot holds it.
+std::expected<ProceduralRequest, std::string> SnapshotFillRequest(
+    const core::Project& project, const core::TextureSet& set, core::ChannelType channel, core::ChannelFormat format,
+    const core::FillContent& fill, const core::ProceduralRef& ref, core::Id node, bool mask);
+
 /// Provider lifetime must not outlive the store. Each revision owns its provider.
 class SnapshotSourceProvider final : public evaluator::IProceduralSourceProvider {
 public:

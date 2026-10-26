@@ -6,7 +6,12 @@
 #include <stdexcept>
 #include <utility>
 
+#include <algorithm>
+
+#include "procedural/seam.h"
+#include "procedural/snapshot_source.h"
 #include "store/filter_observations.h"
+#include "store/observation_inventory.h"
 #include "store/planes.h"
 #include "store/snapshots.h"
 #include "uzp_core/manifest/manifest.h"
@@ -140,7 +145,108 @@ Object Context(store::ProjectStore& store, const core::Project& project, const s
                                              {"kind", std::string("mesh")}, {"identity", hash}, {"mime", first.mime},
                                              {"sha256", hash}, {"size_bytes", first.size}}}}};
 }
+/// A V2 current context and what it was built from: the domain's nodes, the host's snapshot fill
+/// request (pure provider predicates) and the one census read for it.
+struct ContextV2 {
+    store::FrozenHostNodes nodes;
+    ProceduralRequest request;
+    store::ObservationInventory inventory;
+    Object context;
+};
+
+/// The V2 context of `project` (decision 363): the frozen-host domain, the provider's pure snapshot
+/// fill request for the host, then exactly one locked census of `project` (store
+/// `ReadObservationInventory`, which verifies the bytes, roots, resources and uuid). Nothing else
+/// reads the store afterwards.
+ContextV2 BuildContextV2(store::ProjectStore& store, const core::Project& project) {
+    ContextV2 result;
+    Require(store::FrozenHostDomainProblem(project, result.nodes).empty(), "the project is outside the frozen-host domain");
+    const core::Layer& host = *result.nodes.host;
+    auto request = SnapshotFillRequest(project, *result.nodes.set, core::ChannelType::User0, core::ChannelFormat::L32F,
+                                       *host.fill, *result.nodes.host_ref, host.uid, false);
+    Require(request.has_value(), "the host is outside the snapshot provider's domain");
+    result.request = std::move(*request);
+    result.inventory = store.ReadObservationInventory(project);
+    Value manifest = core::ProjectToJson(project);
+    std::get<Object>(manifest.data).erase(std::string(store::kFilterObservationsKey));
+    result.context = Object{{"schema", std::string(store::kObservationContextSchemaV2)},
+                            {"project", std::move(manifest)},
+                            {"store_uuid", store.project_uuid()},
+                            {"inventory", result.inventory.ToJson()}};
+    return result;
+}
+
+FilterObservation Observations(const std::string& key, const Object& entry) {
+    FilterObservation result;
+    result.entry_key = key;
+    const auto& observations = ObjectOf(entry.at("observations"));
+    if (const auto value = observations.find("parameters"); value != observations.end()) {
+        result.parameters = ObjectOf(value->second);
+    }
+    if (const auto value = observations.find("resource_id"); value != observations.end()) {
+        result.resource_id = ObjectOf(value->second);
+    }
+    if (const auto value = observations.find("image_outputs"); value != observations.end()) {
+        result.image_outputs.emplace();
+        for (const auto& name : std::get<Array>(value->second.data)) {
+            result.image_outputs->push_back(std::get<std::string>(name.data));
+        }
+    }
+    return result;
+}
+
+/// The V2 lookup of a structurally valid namespace `space`.
+FilterObservation ObservedFilterV2(store::ProjectStore& store, const core::Project& project, core::Id filter_uid,
+                                   const Object& space) {
+    const auto& bindings = ObjectOf(space.at("bindings"));
+    const auto binding = bindings.find(std::to_string(filter_uid));
+    Require(binding != bindings.end(), "Filter observation binding is missing");
+    const std::string key = std::get<std::string>(binding->second.data);
+    const auto& entry = ObjectOf(ObjectOf(space.at("entries")).at(key));
+    const auto& recorded = ObjectOf(entry.at("binding"));
+    const ContextV2 current = BuildContextV2(store, project);
+    const store::FrozenHostNodes& nodes = current.nodes;
+    const auto matchesId = [&](const char* name, core::Id id) {
+        return std::get<std::int64_t>(recorded.at(name).data) == static_cast<std::int64_t>(id);
+    };
+    Require(nodes.filter->uid == filter_uid && matchesId("filter_uid", filter_uid) && matchesId("host_uid", nodes.host->uid) &&
+                matchesId("initial_paint_uid", nodes.paint->uid) && matchesId("texture_set", nodes.set->id) &&
+                matchesId("stack", nodes.stack->id),
+            "Filter observation roles are stale");
+    Require(SameTyped(recorded.at("host_reference"), core::ProceduralRefToJson(*nodes.host_ref)) &&
+                SameTyped(recorded.at("filter_reference"), core::ProceduralRefToJson(*nodes.filter->procedural)),
+            "complete procedural reference is stale");
+    const auto& filterDescriptor = ObjectOf(ObjectOf(space.at("descriptors")).at(Text(entry, "filter_descriptor")));
+    ParametersMatch(nodes.filter->procedural->params, ObjectOf(filterDescriptor.at("parameters")));
+    // The real host: the provider's exact request is the selected snapshot, whose census plane (in
+    // the same census) is one 128 x 128 L32F raster.
+    const auto& hostSnapshot = ObjectOf(entry.at("host_snapshot"));
+    Require(SignatureHash(current.request) == Text(hostSnapshot, "signature_sha256"),
+            "the host's current request is not the selected snapshot");
+    const std::int64_t planeId = std::get<std::int64_t>(hostSnapshot.at("plane_id").data);
+    const auto plane = std::find_if(current.inventory.planes.begin(), current.inventory.planes.end(),
+                                    [&](const store::InventoryPlane& p) {
+                                        return static_cast<std::int64_t>(p.row.plane_id) == planeId;
+                                    });
+    Require(plane != current.inventory.planes.end() && plane->row.format == core::ChannelFormat::L32F &&
+                plane->row.width == 128 && plane->row.height == 128,
+            "the host snapshot plane is not one 128 x 128 L32F raster");
+    Require(SameTyped(entry.at("context"), current.context) &&
+                Text(entry, "context_sha256") == store::ObservationKey(current.context),
+            "Filter observation context is stale");
+    return Observations(key, entry);
+}
 }  // namespace
+
+std::expected<Object, std::string> CurrentFilterObservationContextV2(store::ProjectStore& store,
+                                                                    const core::Project& project) {
+    try {
+        return BuildContextV2(store, project).context;
+    } catch (const std::exception&) {
+        return std::expected<Object, std::string>(
+            std::unexpect, "filter observation: current project is outside the verified V2 context");
+    }
+}
 
 std::expected<Object, std::string> CurrentFilterObservationContext(store::ProjectStore& store,
                                                                   const core::Project& project) {
@@ -161,6 +267,7 @@ std::expected<FilterObservation, std::string> ObservedFilter(store::ProjectStore
         Require(namespaceIt != project.extra.end(), "observation namespace is missing");
         Require(store::FilterObservationsProblem(namespaceIt->second, uuid).empty(), "observation namespace is invalid");
         const auto& space = ObjectOf(namespaceIt->second);
+        if (Text(space, "schema") == store::kFilterObservationsSchemaV2) return ObservedFilterV2(store, project, filter_uid, space);
         const auto& bindings = ObjectOf(space.at("bindings"));
         const auto binding = bindings.find(std::to_string(filter_uid));
         Require(binding != bindings.end(), "Filter observation binding is missing");

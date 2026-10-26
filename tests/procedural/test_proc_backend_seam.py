@@ -79,6 +79,30 @@ def test_filter_observation_source_context_and_raw_values(
     )
 
 
+def test_filter_observation_source_v2_live_lookup(procedural_tests: Path, tmp_path: Path) -> None:
+    """Decision 363: the V2 lookup over a real snapshot-backed host, from one census per lookup."""
+    passed = run_case(procedural_tests, "observation-source-v2", tmp_path)
+    assert "v2: the provider's context is the projection and the store's census" in passed
+    assert "v2: a fresh lookup returns the raw observations, types and signed zero kept" in passed
+    assert (
+        "v2: an unrelated projection edit makes the lookup stale; the recorded state serves"
+        in passed
+    )
+    assert "v2: host parameters of another (inactive) snapshot refuse" in passed
+    assert "v2: a Filter observation pin never acts as the host" in passed
+    assert (
+        "v2: corrupted bytes of the inactive snapshot plane refuse; restored bytes serve again"
+        in passed
+    )
+    assert "v2: another store's uuid refuses" in passed
+    assert "v2: an unobserved getter stays absent, never empty" in passed
+    assert (
+        "v2: the prospective lookup runs without a deadlock and a rollback changes nothing"
+        in passed
+    )
+    assert "v2: after save and reopen a fresh lookup serves the persisted entry" in passed
+
+
 def test_domain_refusals_name_field_value_and_range(procedural_tests: Path, tmp_path: Path) -> None:
     """2.1 / decision 222: refusal outside the certified domain, nothing clamped."""
     passed = run_case(procedural_tests, "domain", tmp_path)

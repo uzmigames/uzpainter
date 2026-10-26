@@ -1,6 +1,8 @@
 #include "store/observation_inventory.h"
 
 #include <algorithm>
+#include <initializer_list>
+#include <limits>
 #include <map>
 #include <set>
 #include <utility>
@@ -225,6 +227,261 @@ InventoryResource CensusResource(Container& container, const PendingContent& con
     return resource;
 }
 
+/// The project's projection without the top-level observation namespace, after `core::Validate`
+/// and an exact canonical round trip (int versus double and the sign of zero kept).
+Value ValidatedProjection(const core::Project& project) {
+    Value manifest = core::ProjectToJson(project);
+    if (auto* top = std::get_if<Object>(&manifest.data)) top->erase(std::string(core::kFilterObservationsKey));
+    try {
+        core::Validate(project);
+        const std::string canonical = core::json::WriteCanonical(manifest);
+        if (core::json::WriteCanonical(core::ProjectToJson(core::ProjectFromJson(manifest))) != canonical) {
+            Refuse(StoreError::Code::conflict, "the projection does not round-trip");
+        }
+    } catch (const core::ValueError& error) {
+        Refuse(StoreError::Code::conflict, std::string("the project does not validate: ") + error.what());
+    } catch (const core::ManifestError& error) {
+        Refuse(StoreError::Code::conflict, std::string("the projection does not load: ") + error.what());
+    }
+    return manifest;
+}
+
+/// Every snapshot entry's key, sorted, each entry passing `SnapshotProblem` for `project_uuid`.
+std::vector<std::string> SnapshotKeys(const core::Project& project, std::string_view project_uuid) {
+    std::vector<std::string> keys;
+    for (const SnapshotEntry& entry : ProjectSnapshots(project)) {
+        if (const std::string problem = SnapshotProblem(entry, project_uuid); !problem.empty()) {
+            Refuse(StoreError::Code::conflict, entry.path + ": " + problem);
+        }
+        keys.push_back(entry.key);
+    }
+    std::sort(keys.begin(), keys.end());
+    return keys;
+}
+
+/// A plane the project holds: its holder, the paint object or snapshot entry referencing it and
+/// its binding.
+struct ExpectedPlane {
+    PlaneHolder holder;
+    InventoryReference reference;
+    VersionRef version;
+};
+
+/// Every plane of `project` (its validated projection `manifest`), by id: held once, referenced
+/// once by its holder and bound once (`conflict` otherwise).
+std::map<Id, ExpectedPlane> ExpectedPlanes(const core::Project& project, const Value& manifest) {
+    const std::map<Id, PlaneHolder> holders = PlaneHolders(project);
+    std::map<Id, ExpectedPlane> planes;
+    for (const PlaneReference& reference : ManifestPlaneReferences(manifest)) {
+        if (!reference.bound) {
+            Refuse(StoreError::Code::conflict, PlaneName(reference.plane_id) + " is not bound by " + reference.path);
+        }
+        const auto holder = holders.find(reference.plane_id);
+        if (holder == holders.end() || reference.owner != holder->second.owner ||
+            (holder->second.snapshot && reference.path != holder->second.path)) {
+            Refuse(StoreError::Code::conflict, reference.path + " references " + PlaneName(reference.plane_id) +
+                                                   ", which no paint node or snapshot entry there holds");
+        }
+        if (!planes.emplace(reference.plane_id, ExpectedPlane{holder->second, {reference.path, reference.owner}, {}})
+                 .second) {
+            Refuse(StoreError::Code::conflict, PlaneName(reference.plane_id) + " is referenced twice");
+        }
+    }
+    for (const auto& [plane_id, holder] : holders) {
+        if (!planes.contains(plane_id)) Refuse(StoreError::Code::conflict, PlaneName(plane_id) + " is held but not referenced");
+    }
+    std::set<Id> bound;
+    for (const ManifestBinding& binding : ManifestPlaneBindings(manifest)) {
+        if (!binding.version) Refuse(StoreError::Code::conflict, binding.path + ": " + binding.error);
+        const auto plane = planes.find(binding.plane_id);
+        if (plane == planes.end()) {
+            Refuse(StoreError::Code::conflict, binding.path + " binds " + PlaneName(binding.plane_id) + ", which it does not reference");
+        }
+        if (!bound.insert(binding.plane_id).second) Refuse(StoreError::Code::conflict, PlaneName(binding.plane_id) + " is bound twice");
+        plane->second.version = *binding.version;
+    }
+    return planes;
+}
+
+/// The canonical manifest records of resource `sha256` (null when the projection holds none).
+Value ResourceRecords(const Value& manifest, const std::string& sha256) {
+    const auto* top = std::get_if<Object>(&manifest.data);
+    if (top == nullptr) return {};
+    const auto resources = top->find("resources");
+    if (resources == top->end()) return {};
+    const auto* map = std::get_if<Object>(&resources->second.data);
+    if (map == nullptr) return {};
+    const auto records = map->find(sha256);
+    return records == map->end() ? Value{} : records->second;
+}
+
+// ── Historical census (pure: no container, no bytes) ────────────────────────────────────────────
+
+[[noreturn]] void Bad(const std::string& path, const std::string& what) {
+    Refuse(StoreError::Code::conflict, "historical census " + path + ": " + what);
+}
+
+const Object& ClosedObject(const Value& value, const std::string& path, std::initializer_list<std::string_view> members) {
+    const auto* object = std::get_if<Object>(&value.data);
+    if (object == nullptr) Bad(path, "expected an object");
+    if (object->size() != members.size()) Bad(path, "expected exactly its members");
+    for (const std::string_view name : members) {
+        if (!object->contains(name)) Bad(path, "missing member '" + std::string(name) + "'");
+    }
+    return *object;
+}
+
+const Value& At(const Object& object, std::string_view name) { return object.find(name)->second; }
+
+std::int64_t ExactInteger(const Value& value, const std::string& path) {
+    const auto* integer = std::get_if<std::int64_t>(&value.data);
+    if (integer == nullptr) Bad(path, "expected an integer");
+    return *integer;
+}
+
+int IntField(const Object& object, std::string_view name, const std::string& path) {
+    const std::int64_t value = ExactInteger(At(object, name), path + "." + std::string(name));
+    if (value < std::numeric_limits<int>::min() || value > std::numeric_limits<int>::max()) {
+        Bad(path + "." + std::string(name), "is outside the 32-bit range");
+    }
+    return static_cast<int>(value);
+}
+
+const std::string& StringField(const Value& value, const std::string& path) {
+    const auto* text = std::get_if<std::string>(&value.data);
+    if (text == nullptr) Bad(path, "expected a string");
+    return *text;
+}
+
+const std::string& HashField(const Value& value, const std::string& path) {
+    const std::string& text = StringField(value, path);
+    if (text.size() != 64 ||
+        !std::all_of(text.begin(), text.end(), [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); })) {
+        Bad(path, "expected a lowercase SHA-256");
+    }
+    return text;
+}
+
+const Array& ArrayField(const Value& value, const std::string& path) {
+    const auto* array = std::get_if<Array>(&value.data);
+    if (array == nullptr) Bad(path, "expected an array");
+    return *array;
+}
+
+void CheckHistory(const core::Project& historical, const Value& inventory, std::string_view project_uuid) {
+    const std::string root = "inventory";
+    const Object& census = ClosedObject(inventory, root, {"schema", "project_uuid", "planes", "resources", "snapshots"});
+    if (StringField(At(census, "schema"), root + ".schema") != kObservationInventorySchema) {
+        Bad(root + ".schema", "expected " + std::string(kObservationInventorySchema));
+    }
+    if (StringField(At(census, "project_uuid"), root + ".project_uuid") != project_uuid) {
+        Bad(root + ".project_uuid", "names another project");
+    }
+    const Value manifest = ValidatedProjection(historical);
+
+    const std::vector<std::string> keys = SnapshotKeys(historical, project_uuid);
+    const Array& snapshots = ArrayField(At(census, "snapshots"), root + ".snapshots");
+    if (snapshots.size() != keys.size()) Bad(root + ".snapshots", "does not list every retained snapshot exactly");
+    for (size_t i = 0; i < keys.size(); ++i) {
+        if (StringField(snapshots[i], root + ".snapshots[" + std::to_string(i) + "]") != keys[i]) {
+            Bad(root + ".snapshots", "does not list every retained snapshot exactly, in order");
+        }
+    }
+
+    const std::map<Id, ExpectedPlane> expected = ExpectedPlanes(historical, manifest);
+    const Array& planes = ArrayField(At(census, "planes"), root + ".planes");
+    if (planes.size() != expected.size()) Bad(root + ".planes", "does not cover every held plane exactly");
+    auto next = expected.begin();
+    for (size_t i = 0; i < planes.size(); ++i, ++next) {
+        const std::string path = root + ".planes[" + std::to_string(i) + "]";
+        const Object& plane = ClosedObject(planes[i], path,
+                                           {"plane_id", "references", "set_id", "stack_id", "channel", "tile_u", "tile_v",
+                                            "format", "width", "height", "chunk_size", "version_id", "chunk_root", "chunks",
+                                            "byte_count", "sha256"});
+        const std::int64_t plane_id = ExactInteger(At(plane, "plane_id"), path + ".plane_id");
+        if (plane_id != static_cast<std::int64_t>(next->first)) Bad(path + ".plane_id", "is not the next held plane in order");
+        const ExpectedPlane& want = next->second;
+
+        const Array& references = ArrayField(At(plane, "references"), path + ".references");
+        if (references.size() != 1) Bad(path + ".references", "expected the one referencing object");
+        const Object& reference = ClosedObject(references[0], path + ".references[0]", {"owner", "path"});
+        const Value& owner = At(reference, "owner");
+        const bool ownerMatches = want.reference.owner
+                                      ? (owner.IsInt() && std::get<std::int64_t>(owner.data) ==
+                                                              static_cast<std::int64_t>(*want.reference.owner))
+                                      : owner.IsNull();
+        if (!ownerMatches || StringField(At(reference, "path"), path + ".references[0].path") != want.reference.path) {
+            Bad(path + ".references[0]", "is not the object that references the plane");
+        }
+
+        PlaneRow row;
+        row.plane_id = static_cast<Id>(plane_id);
+        row.set_id = static_cast<Id>(ExactInteger(At(plane, "set_id"), path + ".set_id"));
+        row.stack_id = static_cast<Id>(ExactInteger(At(plane, "stack_id"), path + ".stack_id"));
+        if (const Value& channel = At(plane, "channel"); !channel.IsNull()) {
+            row.channel = core::FromString<core::ChannelType>(StringField(channel, path + ".channel"));
+            if (!row.channel) Bad(path + ".channel", "is not a channel type");
+        }
+        row.tile_u = IntField(plane, "tile_u", path);
+        row.tile_v = IntField(plane, "tile_v", path);
+        const auto format = core::FromString<core::ChannelFormat>(StringField(At(plane, "format"), path + ".format"));
+        if (!format) Bad(path + ".format", "is not a channel format");
+        row.format = *format;
+        row.width = IntField(plane, "width", path);
+        row.height = IntField(plane, "height", path);
+        row.chunk_size = IntField(plane, "chunk_size", path);
+        CheckRow(row, row.plane_id, want.holder, historical);  // before any size arithmetic
+
+        if (ExactInteger(At(plane, "version_id"), path + ".version_id") != want.version.version_id ||
+            HashField(At(plane, "chunk_root"), path + ".chunk_root") != want.version.chunk_root) {
+            Bad(path, "names another version than the projection binds");
+        }
+        std::vector<ChunkRow> chunks;
+        const Array& listed = ArrayField(At(plane, "chunks"), path + ".chunks");
+        for (size_t c = 0; c < listed.size(); ++c) {
+            const std::string item = path + ".chunks[" + std::to_string(c) + "]";
+            const Array& triple = ArrayField(listed[c], item);
+            if (triple.size() != 3) Bad(item, "expected [x, y, sha256]");
+            const std::int64_t x = ExactInteger(triple[0], item + "[0]");
+            const std::int64_t y = ExactInteger(triple[1], item + "[1]");
+            if (x < 0 || y < 0 || x >= row.chunks_x() || y >= row.chunks_y()) Bad(item, "lies outside the plane");
+            if (!chunks.empty() && std::pair<std::int64_t, std::int64_t>(chunks.back().x, chunks.back().y) >=
+                                       std::pair<std::int64_t, std::int64_t>(x, y)) {
+                Bad(item, "is not after the previous chunk in (x, y) order");
+            }
+            chunks.push_back(ChunkRow{static_cast<int>(x), static_cast<int>(y), HashField(triple[2], item + "[2]")});
+        }
+        if (ChunkRoot(chunks) != want.version.chunk_root) Bad(path + ".chunks", "do not hash to the bound chunk_root");
+        const std::int64_t bytes = static_cast<std::int64_t>(row.width) * row.height *
+                                   static_cast<std::int64_t>(TexelBytes(row.format));
+        if (ExactInteger(At(plane, "byte_count"), path + ".byte_count") != bytes) {
+            Bad(path + ".byte_count", "is not width x height x texel bytes");
+        }
+        HashField(At(plane, "sha256"), path + ".sha256");  // texels are not authenticated without bytes
+    }
+
+    const Array& resources = ArrayField(At(census, "resources"), root + ".resources");
+    if (resources.size() != historical.resources.size()) Bad(root + ".resources", "does not list every resource exactly");
+    auto resource = historical.resources.begin();
+    for (size_t i = 0; i < resources.size(); ++i, ++resource) {
+        const std::string path = root + ".resources[" + std::to_string(i) + "]";
+        const Object& entry = ClosedObject(resources[i], path, {"sha256", "size", "mime", "records"});
+        if (HashField(At(entry, "sha256"), path + ".sha256") != resource->first) {
+            Bad(path + ".sha256", "is not the next resource of the projection in order");
+        }
+        if (resource->second.empty()) Bad(path, "the projection holds no record for the resource");
+        if (core::json::WriteCanonical(At(entry, "records")) !=
+            core::json::WriteCanonical(ResourceRecords(manifest, resource->first))) {
+            Bad(path + ".records", "are not the projection's records of the resource");
+        }
+        const std::int64_t size = ExactInteger(At(entry, "size"), path + ".size");
+        const std::string& mime = StringField(At(entry, "mime"), path + ".mime");
+        for (const core::ResourceMeta& meta : resource->second) {
+            if (meta.size != size || meta.mime != mime) Bad(path, "the record '" + meta.name + "' names another MIME type or size");
+        }
+    }
+}
+
 }  // namespace
 
 Value ObservationInventory::ToJson() const {
@@ -278,83 +535,28 @@ ObservationInventory InventoryIn(Container& container, const PendingPlanes& plan
     const std::optional<std::string> project_uuid = container.Meta("project_uuid");
     if (!project_uuid || project_uuid->empty()) Refuse(StoreError::Code::conflict, "the container records no project uuid");
 
-    Value manifest = core::ProjectToJson(project);
-    if (auto* top = std::get_if<Object>(&manifest.data)) top->erase(std::string(core::kFilterObservationsKey));
-    try {
-        core::Validate(project);
-        // Canonical text, not Value equality: it keeps int versus double and the sign of zero.
-        const std::string canonical = core::json::WriteCanonical(manifest);
-        if (core::json::WriteCanonical(core::ProjectToJson(core::ProjectFromJson(manifest))) != canonical) {
-            Refuse(StoreError::Code::conflict, "the projection does not round-trip");
-        }
-    } catch (const core::ValueError& error) {
-        Refuse(StoreError::Code::conflict, std::string("the project does not validate: ") + error.what());
-    } catch (const core::ManifestError& error) {
-        Refuse(StoreError::Code::conflict, std::string("the projection does not load: ") + error.what());
-    }
+    const Value manifest = ValidatedProjection(project);
 
     ObservationInventory inventory;
     inventory.project_uuid = *project_uuid;
-
-    for (const SnapshotEntry& entry : ProjectSnapshots(project)) {
-        if (const std::string problem = SnapshotProblem(entry, *project_uuid); !problem.empty()) {
-            Refuse(StoreError::Code::conflict, entry.path + ": " + problem);
-        }
-        inventory.snapshots.push_back(entry.key);
-    }
-    std::sort(inventory.snapshots.begin(), inventory.snapshots.end());
-    const std::map<Id, PlaneHolder> holders = PlaneHolders(project);
-
-    std::map<Id, std::vector<InventoryReference>> references;
-    for (const PlaneReference& reference : ManifestPlaneReferences(manifest)) {
-        if (!reference.bound) {
-            Refuse(StoreError::Code::conflict, PlaneName(reference.plane_id) + " is not bound by " + reference.path);
-        }
-        const auto holder = holders.find(reference.plane_id);
-        if (holder == holders.end() || reference.owner != holder->second.owner ||
-            (holder->second.snapshot && reference.path != holder->second.path)) {
-            Refuse(StoreError::Code::conflict, reference.path + " references " + PlaneName(reference.plane_id) +
-                                                   ", which no paint node or snapshot entry there holds");
-        }
-        auto& list = references[reference.plane_id];
-        if (!list.empty()) Refuse(StoreError::Code::conflict, PlaneName(reference.plane_id) + " is referenced twice");
-        list.push_back(InventoryReference{reference.path, reference.owner});
-    }
-    for (const auto& [plane_id, holder] : holders) {
-        if (!references.contains(plane_id)) {
-            Refuse(StoreError::Code::conflict, PlaneName(plane_id) + " is held but not referenced");
-        }
-    }
-    std::map<Id, VersionRef> bindings;
-    for (const ManifestBinding& binding : ManifestPlaneBindings(manifest)) {
-        if (!binding.version) Refuse(StoreError::Code::conflict, binding.path + ": " + binding.error);
-        if (!references.contains(binding.plane_id)) {
-            Refuse(StoreError::Code::conflict, binding.path + " binds " + PlaneName(binding.plane_id) + ", which it does not reference");
-        }
-        if (!bindings.emplace(binding.plane_id, *binding.version).second) {
-            Refuse(StoreError::Code::conflict, PlaneName(binding.plane_id) + " is bound twice");
-        }
-    }
-    for (auto& [plane_id, list] : references) {
-        inventory.planes.push_back(CensusPlane(container, planes, plane_id, bindings.at(plane_id), std::move(list),
-                                               holders.at(plane_id), project));
-    }
-
-    const auto* top = std::get_if<Object>(&manifest.data);
-    const Value* records = nullptr;
-    if (top != nullptr) {
-        if (const auto it = top->find("resources"); it != top->end()) records = &it->second;
+    inventory.snapshots = SnapshotKeys(project, *project_uuid);
+    for (const auto& [plane_id, expected] : ExpectedPlanes(project, manifest)) {
+        inventory.planes.push_back(CensusPlane(container, planes, plane_id, expected.version, {expected.reference},
+                                               expected.holder, project));
     }
     for (const auto& [sha256, metas] : project.resources) {
-        Value recordsOf;
-        if (records != nullptr) {
-            if (const auto* map = std::get_if<Object>(&records->data)) {
-                if (const auto it = map->find(sha256); it != map->end()) recordsOf = it->second;
-            }
-        }
-        inventory.resources.push_back(CensusResource(container, content, sha256, metas, recordsOf));
+        inventory.resources.push_back(CensusResource(container, content, sha256, metas, ResourceRecords(manifest, sha256)));
     }
     return inventory;
+}
+
+std::string InventoryHistoryProblem(const core::Project& historical, const Value& inventory, std::string_view project_uuid) {
+    try {
+        CheckHistory(historical, inventory, project_uuid);
+    } catch (const StoreError& error) {
+        return error.what();
+    }
+    return {};
 }
 
 }  // namespace uzp::store

@@ -80,6 +80,8 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include "procedural/snapshot_source.h"
+#include "../filter_observation_v2_fixture.h"  // decision 363: the authored V2 fixture
 #include "../no_error_dialogs.h"
 
 namespace {
@@ -2483,6 +2485,184 @@ int RunObservationSource(const fs::path& work) {
     return Finish();
 }
 
+/// Decision 363: the V2 live lookup over a real snapshot-backed host, on the authored fixture.
+int RunObservationSourceV2(const fs::path& work) {
+    namespace core = uzp::core;
+    namespace json = core::json;
+    namespace store = uzp::store;
+    namespace fx = uzp::v2fixture;
+    using json::Object;
+    using json::Value;
+    const std::string plane = fx::PlaneObj();
+    const Object descriptor = fx::FilterDescriptor();
+    fx::SceneIds ids;
+    core::DocumentState initial;
+    initial.project_uuid = "6f1c2a3e-0000-4000-8000-0000000a3630";
+    initial.project = fx::Scene(store::ObservationPin(store::ObservationKey(descriptor)), plane.size(), ids);
+    store::CreateOptions options;
+    options.resources = {store::PendingContent::Bytes{plane, "model/obj"}};
+    const fs::path file = work / "observation-source-v2.uzp";
+    auto backing = store::ProjectStore::Create(file, initial, options);
+    core::Document document(initial);
+    backing->Attach(document);
+    int keys = 0;
+    const auto submit = [&](const std::function<void(core::Edit&)>& call) {
+        return backing->Submit(document,
+                               {"observation-source-v2-test", Object{}, "v2-" + std::to_string(++keys), document.revision()},
+                               call);
+    };
+    const auto committed = [](const core::RequestOutcome& outcome) {
+        return outcome.result && outcome.result->status == core::ResultStatus::committed;
+    };
+    const auto hostOf = [](core::Project& project) -> core::Layer& { return project.texture_sets[0].stacks[0].root_layers[0]; };
+    const auto hostRefOf = [&](core::Project& project) -> core::ProceduralRef& {
+        return std::get<core::ProceduralSource>(hostOf(project).fill->sources.at(core::ChannelType::User0).value).ref;
+    };
+    // The provider's own request for the host with `amount`.
+    const auto hostRequest = [&](const core::Project& project, double amount) {
+        core::Project variant = project;
+        hostRefOf(variant).params["amount"] = amount;
+        core::Layer& host = hostOf(variant);
+        auto request = SnapshotFillRequest(variant, variant.texture_sets[0], core::ChannelType::User0,
+                                           core::ChannelFormat::L32F, *host.fill, hostRefOf(variant), host.uid, false);
+        if (!request) throw std::runtime_error("host request: " + request.error());
+        return *request;
+    };
+
+    // The host snapshot (the provider's exact request) and an inactive variant.
+    std::string hostKey;
+    std::string recordError;
+    const auto recorded = submit([&](core::Edit& edit) {
+        try {
+            const ProceduralRequest host = hostRequest(edit.project(), 0.5);
+            hostKey = SignatureHash(host);
+            RecordSnapshot(*backing, edit, host, fx::Raster(1).texels, fx::Metadata(0.5));
+            RecordSnapshot(*backing, edit, hostRequest(edit.project(), 0.25), fx::Raster(2).texels, fx::Metadata(0.25));
+        } catch (const std::exception& error) {
+            recordError = error.what();
+            throw;
+        }
+    });
+    Check(committed(recorded), "v2: the host snapshot and an inactive variant record", recordError);
+    if (!committed(recorded)) return Finish();
+    const core::Project scene = *document.snapshot().project;
+    const auto context = CurrentFilterObservationContextV2(*backing, scene);
+    Check(context.has_value(), "v2: the current context builds from one census", context ? std::string() : context.error());
+    if (!context) return Finish();
+    Check(json::WriteCanonical(*context) == json::WriteCanonical(fx::Context(*backing, scene)),
+          "v2: the provider's context is the projection and the store's census");
+    const std::string uuid = backing->project_uuid();
+    const Object entry = fx::Entry(uuid, descriptor, *context, scene, hostKey);
+    const Object space = fx::Namespace(descriptor, {entry}, ids.filter);
+    const std::string structural = store::FilterObservationsProblem(space, uuid);
+    Check(structural.empty(), "v2: the authored namespace is structurally valid", structural);
+    const auto observe = submit([&](core::Edit& edit) { edit.project().extra[std::string(store::kFilterObservationsKey)] = space; });
+    Check(committed(observe), "v2: the observation commits");
+    if (!committed(observe)) return Finish();
+    const core::Project observed = *document.snapshot().project;
+    const auto works = [&](const core::Project& project) { return ObservedFilter(*backing, project, ids.filter).has_value(); };
+
+    const auto found = ObservedFilter(*backing, observed, ids.filter);
+    Check(found && found->parameters && found->resource_id && found->image_outputs && found->image_outputs->empty() &&
+              json::WriteCanonical(found->parameters->at("radius")) == json::WriteCanonical(Value(1.0)) &&
+              std::signbit(std::get<double>(found->parameters->at("zero").data)),
+          "v2: a fresh lookup returns the raw observations, types and signed zero kept",
+          found ? std::string() : found.error());
+
+    // Stale current state refuses; the recorded state again is served.
+    core::Project renamed = observed;
+    hostOf(renamed).name = "renamed";
+    Check(!works(renamed) && works(observed), "v2: an unrelated projection edit makes the lookup stale; the recorded state serves");
+    // The host relation and roles.
+    core::Project otherParams = observed;
+    hostRefOf(otherParams).params["amount"] = 0.25;
+    Check(!works(otherParams), "v2: host parameters of another (inactive) snapshot refuse");
+    core::Project pinnedHost = observed;
+    hostRefOf(pinnedHost).asset = store::ObservationPin(store::ObservationKey(descriptor));
+    Check(!works(pinnedHost), "v2: a Filter observation pin never acts as the host");
+    core::Project noPaint = observed;
+    noPaint.texture_sets[0].stacks[0].root_layers[1].paint->planes[core::ChannelType::User0] = 999999;
+    Check(!works(noPaint), "v2: an initial Paint layer holding content refuses");
+    core::Project otherMime = observed;
+    otherMime.resources.at(std::string(store::kFrozenHostPlaneMesh)).front().mime = "model/other";
+    Check(!works(otherMime), "v2: resource metadata disagreeing with the stored bytes refuses");
+
+    // Live rehash: corrupted bytes of the host plane, of the inactive snapshot's plane and of the
+    // mesh refuse, and restoring them restores the lookup.
+    const auto planeSha = [&](const std::string& key) {
+        std::int64_t planeId = 0;
+        for (const store::SnapshotEntry& snapshot : store::ProjectSnapshots(scene)) {
+            if (snapshot.key == key) planeId = static_cast<std::int64_t>(snapshot.plane_id);
+        }
+        const auto& chunks = std::get<json::Array>(fx::ContextPlane(*context, planeId).at("chunks").data);
+        return std::get<std::string>(std::get<json::Array>(chunks.front().data)[2].data);
+    };
+    std::string inactiveKey;
+    for (const store::SnapshotEntry& snapshot : store::ProjectSnapshots(scene)) {
+        if (snapshot.key != hostKey) inactiveKey = snapshot.key;
+    }
+    for (const auto& [label, sha] : {std::pair<std::string, std::string>{"the host plane", planeSha(hostKey)},
+                                     {"the inactive snapshot plane", planeSha(inactiveKey)},
+                                     {"the mesh resource", std::string(store::kFrozenHostPlaneMesh)}}) {
+        std::string original;
+        {
+            store::Statement q(backing->container(), "SELECT data FROM blob WHERE sha256 = ?");
+            q.Bind(1, sha);
+            if (q.Step()) original = q.Blob(0);
+        }
+        store::Statement corrupt(backing->container(), "UPDATE blob SET data = ? WHERE sha256 = ?");
+        corrupt.BindBlob(1, store::Compress("corrupt")).Bind(2, sha).Run();
+        const bool refusedCorrupt = !works(observed);
+        store::Statement restore(backing->container(), "UPDATE blob SET data = ? WHERE sha256 = ?");
+        restore.BindBlob(1, original).Bind(2, sha).Run();
+        Check(!original.empty() && refusedCorrupt && works(observed),
+              "v2: corrupted bytes of " + label + " refuse; restored bytes serve again");
+    }
+
+    // A foreign store never serves this project's observations.
+    core::DocumentState foreignState;
+    foreignState.project_uuid = "6f1c2a3e-0000-4000-8000-0000000a3631";
+    fx::SceneIds foreignIds;
+    foreignState.project = fx::Scene(store::ObservationPin(store::ObservationKey(descriptor)), plane.size(), foreignIds);
+    auto foreign = store::ProjectStore::Create(work / "observation-source-v2-foreign.uzp", foreignState, options);
+    Check(!ObservedFilter(*foreign, observed, ids.filter), "v2: another store's uuid refuses");
+    foreign->Close();
+
+    // Partial observations keep absence distinct from empty.
+    Object partial = entry;
+    partial["observations"] = Object{{"parameters", descriptor.at("parameters")}};
+    const auto partialCommit = submit([&](core::Edit& edit) {
+        edit.project().extra[std::string(store::kFilterObservationsKey)] = fx::Namespace(descriptor, {partial}, ids.filter);
+    });
+    const auto partialFound = ObservedFilter(*backing, *document.snapshot().project, ids.filter);
+    Check(committed(partialCommit) && partialFound && partialFound->parameters && !partialFound->resource_id &&
+              !partialFound->image_outputs,
+          "v2: an unobserved getter stays absent, never empty");
+    const auto restored = submit([&](core::Edit& edit) { edit.project().extra[std::string(store::kFilterObservationsKey)] = space; });
+    Check(committed(restored) && works(*document.snapshot().project), "v2: the complete entry serves again");
+
+    // Inside Submit's callback (no store mutex held) the prospective lookup takes the locked
+    // census once, without a deadlock; a rolled-back transaction changes nothing.
+    const std::int64_t before = document.revision();
+    bool prospective = false;
+    const auto rolled = submit([&](core::Edit& edit) {
+        prospective = ObservedFilter(*backing, edit.project(), ids.filter).has_value() &&
+                      CurrentFilterObservationContextV2(*backing, edit.project()).has_value();
+        throw std::runtime_error("refused after the prospective lookup");
+    });
+    Check(prospective && !committed(rolled) && document.revision() == before && works(*document.snapshot().project),
+          "v2: the prospective lookup runs without a deadlock and a rollback changes nothing");
+
+    // Save, close and reopen: a fresh lookup serves the persisted entry.
+    backing->Save(document);
+    backing->Close();
+    auto reopened = store::ProjectStore::Open(file, store::OpenOptions{store::VerifyLevel::full, store::VersionPolicy::Current()});
+    Check(reopened.report.ok() && ObservedFilter(*reopened.store, reopened.state.project, ids.filter).has_value(),
+          "v2: after save and reopen a fresh lookup serves the persisted entry");
+    reopened.store->Close();
+    return Finish();
+}
+
 int main(int argc, char** argv) {
     if (argc < 3) {
         std::fprintf(stderr, "usage: uzp-procedural-tests seam | domain | primitives | kernels | gpu | library | library-load <work-dir> [...]\n");
@@ -2493,6 +2673,7 @@ int main(int argc, char** argv) {
     if (mode == "seam") return RunSeam();
     if (mode == "observations") return RunObservations();
     if (mode == "observation-source") return RunObservationSource(dir);
+    if (mode == "observation-source-v2") return RunObservationSourceV2(dir);
     if (mode == "domain") return RunDomain();
     if (mode == "typed-params") return RunTypedParams();
     if (mode == "resolution") return RunResolution(dir);

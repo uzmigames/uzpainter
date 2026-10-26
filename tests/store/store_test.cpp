@@ -24,6 +24,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -44,6 +45,7 @@
 #include "uzp_core/manifest/sha256.h"
 #include "uzp_core/transaction/transaction.h"
 #include "uzp_core/types/errors.h"
+#include "../filter_observation_v2_fixture.h"
 #include "../no_error_dialogs.h"
 
 namespace {
@@ -1775,6 +1777,220 @@ void ObservationInventoryCensus() {
     }
 }
 
+/// Decision 363: the V2 namespace's structural and historical check, on the authored fixture.
+void FilterObservationsV2() {
+    namespace fx = uzp::v2fixture;
+    const auto O = [](json::Value& value) -> json::Object& { return std::get<json::Object>(value.data); };
+    const auto A = [](json::Value& value) -> json::Array& { return std::get<json::Array>(value.data); };
+    const auto expect = [](bool ok, const std::string& what) {
+        if (!ok) throw Failure{what};
+    };
+
+    const std::string plane = fx::PlaneObj();
+    const json::Object descriptor = fx::FilterDescriptor();
+    fx::SceneIds ids;
+    CreateOptions options;
+    options.resources = {PendingContent::Bytes{plane, "model/obj"}};
+    const fs::path path = CreateProject(WorkDir("filter-observations-v2"), options,
+                                        fx::Scene(ObservationPin(ObservationKey(descriptor)), plane.size(), ids));
+    Session s = OpenSession(path);
+    const std::string uuid = s.store->project_uuid();
+    // The host snapshot, an inactive variant (other parameters) and snapshots with the host's
+    // parameters but incomplete /3 metadata or another output format.
+    const json::Object host = fx::Signature(0.5);
+    const json::Object inactive = fx::Signature(0.25);
+    const json::Object typedOnly = fx::Signature(0.5, "f32", 1);
+    const json::Object idOnly = fx::Signature(0.5, "f32", 2);
+    const json::Object half = fx::Signature(0.5, "f16", 3);
+    CHECK(Committed(Mutate(s, "snapshots", [&](Edit& e) {
+        s.store->RecordSnapshot(e, host, fx::Raster(1), fx::Metadata(0.5));
+        s.store->RecordSnapshot(e, inactive, fx::Raster(2), fx::Metadata(0.25));
+        s.store->RecordSnapshot(e, typedOnly, fx::Raster(3), fx::Metadata(0.5, true, false));
+        s.store->RecordSnapshot(e, idOnly, fx::Raster(4), fx::Metadata(0.5, false, true));
+        s.store->RecordSnapshot(e, half, fx::Raster(5), fx::Metadata(0.5));
+    })));
+    const Project scene = *s.doc->snapshot().project;
+    const json::Object context = fx::Context(*s.store, scene);
+    const std::string hostKey = ObservationKey(host);
+    const json::Object entry = fx::Entry(uuid, descriptor, context, scene, hostKey);
+    const json::Object space = fx::Namespace(descriptor, {entry}, ids.filter);
+    const std::string valid = FilterObservationsProblem(space, uuid);
+    expect(valid.empty(), "a valid V2 namespace is refused: " + valid);
+    expect(!FilterObservationsProblem(space, "6f1c2a3e-0000-4000-8000-0000000000ff").empty(), "a foreign V2 namespace passes");
+
+    // It commits; a later edit of the current graph leaves it stale but committable; it reopens
+    // under full verification.
+    CHECK(Committed(Mutate(s, "observe", [&](Edit& e) { e.project().extra[std::string(kFilterObservationsKey)] = space; })));
+    CHECK(Committed(Mutate(s, "stale", [&](Edit& e) { e.project().texture_sets[0].stacks[0].root_layers[0].name = "renamed"; })));
+    s.doc.reset();
+    s.store.reset();
+    {
+        Session reopened = OpenSession(path, OpenOptions{VerifyLevel::full, VersionPolicy::Current()});
+        CHECK(reopened.report.ok());
+        CHECK(ProjectFilterObservationsProblem(*reopened.doc->snapshot().project, uuid).empty());
+    }
+
+    // Each refusal names its reason; `reseal` recomputes the hashes an entry derives from its context.
+    const auto refused = [&](const std::string& label, const std::string& reason,
+                             const std::function<void(json::Object&)>& change, bool reseal = false) {
+        json::Object changed = entry;
+        change(changed);
+        if (reseal) fx::Reseal(changed);
+        const std::string problem = FilterObservationsProblem(fx::Namespace(descriptor, {changed}, ids.filter), uuid);
+        expect(!problem.empty() && Contains(problem, reason), label + ": expected '" + reason + "', got '" + problem + "'");
+    };
+    const auto refusedSpace = [&](const std::string& label, const std::string& reason,
+                                  const std::function<void(json::Object&)>& change) {
+        json::Object changed = space;
+        change(changed);
+        const std::string problem = FilterObservationsProblem(changed, uuid);
+        expect(!problem.empty() && Contains(problem, reason), label + ": expected '" + reason + "', got '" + problem + "'");
+    };
+
+    // Dispatch and closed namespace: a V2 body under /1 or an unknown schema is read as V1 and
+    // refused; host bindings and host descriptors do not exist in V2.
+    refusedSpace("V2 body under /1", "host_bindings", [](json::Object& n) { n["schema"] = std::string(kFilterObservationsSchema); });
+    refusedSpace("unknown schema", "host_bindings", [](json::Object& n) { n["schema"] = std::string("uzpainter/other/9"); });
+    refusedSpace("host bindings", "unknown member 'host_bindings'", [](json::Object& n) { n["host_bindings"] = json::Object{}; });
+    refusedSpace("host descriptor", "expected filter", [&](json::Object& n) {
+        json::Object hostDescriptor = descriptor;
+        hostDescriptor["role"] = std::string("host");
+        O(n["descriptors"])[ObservationKey(hostDescriptor)] = hostDescriptor;
+    });
+    refusedSpace("non-canonical UID key", "not a node UID", [&](json::Object& n) {
+        n["bindings"] = json::Object{{"0" + std::to_string(ids.filter), ObservationKey(entry)}};
+    });
+    refusedSpace("conflicting observations", "same context", [&](json::Object& n) {
+        json::Object other = entry;
+        O(other["observations"])["image_outputs"] = json::Array{std::string("other")};
+        O(n["entries"])[ObservationKey(other)] = other;
+    });
+
+    // Closed members and exact scalar types.
+    refused("unknown member", "unknown member 'extra'", [](json::Object& e) { e["extra"] = std::int64_t{1}; });
+    refused("missing member", "missing member 'capture'", [](json::Object& e) { e.erase("capture"); });
+    refused("bool as integer", "expected an integer", [&](json::Object& e) { O(e["binding"])["effect_index"] = true; });
+    refused("double as integer", "expected an integer",
+            [&](json::Object& e) { O(e["binding"])["texture_set"] = static_cast<double>(ids.set); });
+    refused("malformed hash", "lowercase SHA-256", [](json::Object& e) { e["context_sha256"] = std::string("ABC"); });
+    refused("wrong role", "expected filter", [](json::Object& e) { e["role"] = std::string("host"); });
+    refused("wrong initial Paint", "historical node", [&](json::Object& e) {
+        O(e["binding"])["initial_paint_uid"] = static_cast<std::int64_t>(ids.host);
+    });
+
+    // The historical census must be the projection's exact census.
+    const auto planes = [&](json::Object& e) -> json::Array& { return A(O(O(e["context"])["inventory"])["planes"]); };
+    refused("missing plane", "does not cover", [&](json::Object& e) { planes(e).pop_back(); }, true);
+    refused("wrong reference path", "references the plane", [&](json::Object& e) {
+        O(A(O(planes(e)[0])["references"])[0])["path"] = std::string("elsewhere");
+    }, true);
+    refused("wrong version", "another version", [&](json::Object& e) {
+        O(planes(e)[0])["version_id"] = std::get<std::int64_t>(O(planes(e)[0])["version_id"].data) + 1;
+    }, true);
+    refused("wrong byte count", "texel bytes", [&](json::Object& e) { O(planes(e)[0])["byte_count"] = std::int64_t{1}; }, true);
+    refused("duplicate chunk", "not after", [&](json::Object& e) {
+        json::Array& chunks = A(O(planes(e)[0])["chunks"]);
+        chunks.push_back(chunks.front());
+    }, true);
+    refused("snapshot list without an inactive entry", "every retained snapshot", [&](json::Object& e) {
+        json::Array& keys = A(O(O(e["context"])["inventory"])["snapshots"]);
+        keys.erase(std::find(keys.begin(), keys.end(), json::Value(ObservationKey(inactive))));
+    }, true);
+    const auto resources = [&](json::Object& e) -> json::Array& { return A(O(O(e["context"])["inventory"])["resources"]); };
+    refused("resource size", "MIME type or size", [&](json::Object& e) { O(resources(e)[0])["size"] = std::int64_t{1}; }, true);
+    refused("resource records", "records", [&](json::Object& e) {
+        O(A(O(resources(e)[0])["records"])[0])["name"] = std::string("other.obj");
+    }, true);
+
+    // The selected host snapshot: present, its plane, both /3 observations, the host's output and
+    // parameters, one f32 raw channel; the host reference is the snapshot's pin.
+    refused("absent signature", "names no snapshot",
+            [&](json::Object& e) { O(e["host_snapshot"])["signature_sha256"] = Sha256Hex("absent"); });
+    for (const auto& [label, signature, reason] :
+         {std::tuple<const char*, const json::Object*, const char*>{"inactive snapshot", &inactive, "not the host's"},
+          {"typed parameters only", &typedOnly, "(/3)"},
+          {"observed ResourceID only", &idOnly, "(/3)"},
+          {"f16 output", &half, "f32 channel"}}) {
+        json::Object other;
+        try {
+            other = fx::Entry(uuid, descriptor, context, scene, ObservationKey(*signature));
+        } catch (const std::exception& error) {
+            throw Failure{std::string(label) + ": fixture: " + error.what()};
+        }
+        const std::string problem = FilterObservationsProblem(fx::Namespace(descriptor, {other}, ids.filter), uuid);
+        expect(!problem.empty() && Contains(problem, reason), std::string(label) + ": got '" + problem + "'");
+    }
+    refused("host plane", "not the snapshot's plane", [&](json::Object& e) {
+        O(e["host_snapshot"])["plane_id"] = std::get<std::int64_t>(O(e["host_snapshot"])["plane_id"].data) + 1;
+    });
+    refused("host observation pin", "historical reference",
+            [&](json::Object& e) { O(O(e["binding"])["host_reference"])["asset"] = ObservationPin(ObservationKey(descriptor)); });
+
+    // Capture /2: a historical H environment may be null (with its binding); F's may not; two
+    // exports per kind in round order, repeated blobs allowed.
+    const auto capture = [&](json::Object& e) -> json::Object& { return O(e["capture"]); };
+    refused("H environment without binding", "both", [&](json::Object& e) {
+        O(capture(e)["host"])["environment"] = fx::ArtifactRef("snapshot_environment", "environment");
+    });
+    refused("F environment missing", "expected an object", [&](json::Object& e) { O(capture(e)["filter"])["environment"] = json::Value(); });
+    refused("one scalar export", "exactly 2", [&](json::Object& e) { A(O(capture(e)["host"])["scalar_exports"]).pop_back(); });
+    refused("three RGB exports", "exactly 2", [&](json::Object& e) {
+        json::Array& rgb = A(O(capture(e)["host"])["rgb_exports"]);
+        rgb.push_back(rgb.front());
+    });
+    refused("swapped rounds", "same_session", [&](json::Object& e) {
+        json::Array& rounds = A(O(capture(e)["filter"])["rounds"]);
+        std::swap(rounds[0], rounds[1]);
+    });
+
+    // The native proof record must be self-consistent with this context; it is structure only.
+    const auto proof = [&](json::Object& e) -> json::Object& { return O(O(capture(e)["migration"])["native_evidence"]); };
+    for (const auto& [field, reason] : std::vector<std::pair<std::string, std::string>>{
+             {"domain_sha256", "domain record"}, {"prospective_projection_sha256", "projection"},
+             {"inventory_sha256", "inventory"}, {"signature_sha256", "host snapshot"}, {"chunk_root", "version"},
+             {"raster_sha256", "raster"}, {"uploaded_sha256", "raster"}, {"final_output_sha256", "raster"}}) {
+        refused("proof " + field, reason, [&, field = field](json::Object& e) { proof(e)[field] = Sha256Hex("other"); });
+    }
+    for (const auto& [field, value, reason] : std::vector<std::tuple<std::string, std::int64_t, std::string>>{
+             {"plane_id", 999, "plane"}, {"version_id", 999, "version"}, {"sample_count", 1, "width x height"},
+             {"nonfinite_count", 1, "expected zero"}, {"fixed_point_mismatches", 1, "expected zero"},
+             {"upload_mismatches", 1, "expected zero"}, {"final_output_mismatches", 1, "expected zero"}}) {
+        refused("proof " + field, reason, [&, field = field, value = value](json::Object& e) { proof(e)[field] = value; });
+    }
+    refused("proof uuid", "another project", [&](json::Object& e) { proof(e)["project_uuid"] = std::string("other"); });
+
+    // The domain keeps the observed Filter's reference boundary: a preset, an image input (even one
+    // naming the project's own mesh) or a parameter outside decision 361's codec is refused.
+    const auto filterRef = [](Project& p) -> ProceduralRef& {
+        return *p.texture_sets[0].stacks[0].root_layers[0].content_effects[0].procedural;
+    };
+    FrozenHostNodes nodes;
+    Project withPreset = scene;
+    filterRef(withPreset).preset = std::string("authored preset");
+    expect(Contains(FrozenHostDomainProblem(withPreset, nodes), "no preset"), "a Filter preset is admitted");
+    Project withInput = scene;
+    filterRef(withInput).image_inputs["input"] = ResourceBinding{std::string(kFrozenHostPlaneMesh), std::nullopt, {}};
+    expect(Contains(FrozenHostDomainProblem(withInput, nodes), "no image input"), "a Filter image input naming the mesh is admitted");
+    Project withVector = scene;
+    filterRef(withVector).params["vector"] = json::Array{1.0, 2.0};
+    expect(Contains(FrozenHostDomainProblem(withVector, nodes), "decision 361"), "a vector Filter parameter is admitted");
+    expect(FrozenHostDomainProblem(scene, nodes).empty(), "the authored scene is outside the domain");
+
+    // Pure: texel hashes no stored bytes match still validate structurally (bytes are the live
+    // census's to authenticate).
+    json::Object unbacked = entry;
+    const std::string arbitrary = Sha256Hex("no such texels");
+    const std::int64_t hostPlane = std::get<std::int64_t>(O(unbacked["host_snapshot"])["plane_id"].data);
+    for (json::Value& p : planes(unbacked)) {
+        if (std::get<std::int64_t>(O(p)["plane_id"].data) == hostPlane) O(p)["sha256"] = arbitrary;
+    }
+    O(capture(unbacked)["migration"])["raster_sha256"] = arbitrary;
+    for (const char* field : {"raster_sha256", "uploaded_sha256", "final_output_sha256"}) proof(unbacked)[field] = arbitrary;
+    fx::Reseal(unbacked);
+    const std::string pure = FilterObservationsProblem(fx::Namespace(descriptor, {unbacked}, ids.filter), uuid);
+    expect(pure.empty(), "an unbacked census is refused structurally: " + pure);
+}
+
 int Run(const std::string& only) {
     const std::vector<std::pair<const char*, std::function<void()>>> cases = {
         {"schema_and_pragmas", SchemaAndPragmas},     // 2.2
@@ -1800,6 +2016,7 @@ int Run(const std::string& only) {
         {"planes_binding_rules", PlanesBindingRules},          // planes 2.1, 2.5, 2.7
         {"filter_observations", FilterObservations},           // decision 362, phase3.1 2.6g
         {"observation_inventory", ObservationInventoryCensus},  // decision 362 option 2, phase3.1 2.6j
+        {"filter_observations_v2", FilterObservationsV2},     // decision 363, phase3.1 2.6j
     };
     int failed = 0;
     int ran = 0;

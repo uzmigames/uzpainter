@@ -43,6 +43,7 @@ NATIVE_CASES = (
     "planes_binding_rules",  # planes 2.1, 2.5, 2.7
     "filter_observations",  # decision 362, phase3.1 2.6g
     "observation_inventory",  # decision 362 option 2, phase3.1 2.6j
+    "filter_observations_v2",  # decision 363, phase3.1 2.6j
 )
 
 

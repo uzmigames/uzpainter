@@ -27,7 +27,18 @@ struct FilterObservation {
 std::expected<core::json::Object, std::string> CurrentFilterObservationContext(
     store::ProjectStore& store, const core::Project& project);
 
-/// Strict lookup: missing, corrupt, foreign, stale or mismatched observations always refuse.
+/// Decision 363's V2 context: the frozen-host domain (store/filter_observations.h), the host's
+/// snapshot fill request from the provider's pure predicates, then exactly one locked census of
+/// `project` (`ReadObservationInventory`): `{schema, project, store_uuid, inventory}`. Call it with
+/// an immutable snapshot or, inside `Submit`'s callback (which runs without the store's mutex),
+/// with the prospective project. Never selected by project shape for a V1 caller.
+std::expected<core::json::Object, std::string> CurrentFilterObservationContextV2(
+    store::ProjectStore& store, const core::Project& project);
+
+/// Strict lookup: missing, corrupt, foreign, stale or mismatched observations always refuse. The
+/// namespace's exact schema selects V1 (unchanged) or V2, whose lookup also requires the host's
+/// current request to be the entry's selected snapshot and the current context, from one census,
+/// to equal the recorded one.
 /// The caller owns legacy dispatch and must validate its retained OpenProject/session lease;
 /// this function neither manufactures a lease nor treats an unbound pin as a legacy source.
 std::expected<FilterObservation, std::string> ObservedFilter(

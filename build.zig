@@ -437,6 +437,7 @@ const export_sources = [_][]const u8{
     "procedural/asset_library.cpp",
     "procedural/admission.cpp",
     "procedural/snapshot_backend.cpp",
+    "procedural/snapshot_request.cpp",
     "procedural/snapshot_source.cpp",
     "procedural/filter_observation_source.cpp",
     "export/cli.cpp",
@@ -498,6 +499,7 @@ const procedural_sources = [_][]const u8{
     "procedural/cli.cpp",
     "procedural/admission.cpp",
     "procedural/snapshot_backend.cpp",
+    "procedural/snapshot_request.cpp",
     "procedural/filter_observation_source.cpp",
 };
 /// The filter families (`src/procedural/filters.h`, decision 328), relative to `src/`: compiled
