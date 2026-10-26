@@ -651,6 +651,15 @@ Normalization FLOAT and PNG16 exports remain pending. This proves repeated
 output stability for calibration only; input identity and production parity
 remain unestablished.
 
+REV377 then captured, admitted and validated normalization FLOAT and PNG16,
+one owned Painter at a time. Each has two exports and exact native-bit equality
+between its rounds; both processes stopped and the lock is free. Their validation
+reports hash respectively to
+`5475b2cbf569ba73652bb73bf4699dddfd301989ceda04d3fcd9fbe0699f3280` and
+`d56cc58e7cad55c0254b25eb20fefdb3bfee6127739c88e228fa0992eba1c9a4`.
+All three states now have admitted stable exports. Cross-input transfer and
+identity remain separate measurements.
+
 ## 23. Fixed-coordinate Raw calibration measurement
 
 `tools/parity/ocio16_raw_identity.py` defines a comparison before inspecting real
@@ -670,3 +679,11 @@ mypy, Ruff, formatting, independent review and guard checks passed. Tests cover
 different encodings of equal pixels, subnormal loss, zero sign, changed values,
 orientation, coordinate windows, receipt refusal and write-once diagnostics.
 No real calibration pixel was inspected while defining this comparison.
+
+After the method was committed as `1b344be6`, REV378 measured the admitted
+calibration: both rounds differ from the authored input in 65,535 of 196,608
+samples, with 21,845 differences per RGB channel. Report SHA-256:
+`1d75b2eea28d6059a778705c12c180d62b7ddfc53dc2a8e35e96338b7f7d4a0f`.
+This refutes joint position/channel/value identity under the fixed comparison;
+it does not identify a numerical transform, prove channel invariance or justify
+scalar collision claims. No inversion, normalization or production change follows.

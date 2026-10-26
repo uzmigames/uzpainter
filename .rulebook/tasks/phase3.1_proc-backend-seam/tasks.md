@@ -241,3 +241,17 @@ Logs: `tmp/scratch/rev376-native-tests.log` and
 Static checks, independent review and guard checks passed. This completes the
 authored integration dependency only; no private H was admitted or V2/F import
 enabled, and real H/F acceptance remains open.
+
+REV379 validated and admitted the retained original /3 toggle-zero H recording
+through that pinned native diagnostic and the dedicated private store route.
+Before publication, its original receipt hash matched capture history, its
+producer pair matched policy revision 1, its source matched A's public resource
+query, and the actual native signature matched the historical native key. The
+raw typed signature hash was not substituted for that key. Fresh admission then
+validated again, published all six role/round slots and resolved complete
+membership successfully. Private audit SHA-256:
+`0890d8fbd69ab4b48e058c812bfa6ef60b8fa297b289d903888e441f4e26ef51`.
+The original recording remains unchanged; provenance stays owner-local submission
+without historical execution attestation. This accepts H artifact admission only.
+F effective settings, independent context capture, destination relation and the
+frozen-host proof remain open before any real V2 import.
