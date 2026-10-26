@@ -4,11 +4,13 @@
 // (decision 363, `docs/filter-observations-v2.md`, rule `paired-scalar-rgb-to-user0-frozen-host-v1`).
 // It is NOT a complete importer: it has no runtime entry point that accepts a payload.
 //
-// - `VerifyHostCapture` verifies the H capture of the host snapshot completely: the paired
-//   scalar/RGB receipt, its request, its readback (the bridge's capture predicates), its observed
-//   metadata against the stored `/3` metadata, and its exports at native precision against the
-//   census raster. Its `capture_context_sha256` is computed from the validated readback, never taken
+// - `ValidateHostCaptureArtifacts` validates the H artifacts on their own (no store, target or F):
+//   the paired scalar/RGB receipt, the request its signature names, its request artifact, its
+//   readback (the bridge's capture predicates), its `/3` metadata and its exports at native
+//   precision. Its `capture_context_sha256` is computed from the validated readback, never taken
 //   from a caller.
+// - `VerifyHostCapture` reuses that result and binds it to the destination: the owning store's
+//   uuid, the stored host snapshot's signature and `/3` metadata, and the census raster.
 // - `VerifiedFilterContext` (the observed Filter's effect, descriptor, observations and F capture
 //   section) has no public constructor: the F gate that would verify a closed F capture protocol
 //   does not exist yet, so no real F context can be built. Authored tests reach it through the
@@ -28,7 +30,9 @@
 #include <string_view>
 
 #include "evaluator/templates.h"
+#include "procedural/seam.h"
 #include "store/project_store.h"
+#include "store/snapshots.h"
 #include "uzp_core/document/document.h"
 #include "uzp_core/manifest/json.h"
 #include "uzp_core/operation/operation.h"
@@ -53,6 +57,68 @@ struct ImportRefusal {
 
 /// The bytes of an admitted private artifact by SHA-256, or nothing when the transport lacks it.
 using ArtifactBytes = std::function<std::optional<std::string>(std::string_view sha256)>;
+
+/// The H artifacts of a capture/2 `host` section, validated on their own (no store, target or F):
+/// owning copies of what the original receipt recorded and the decoded scalar raster.
+class ValidatedHostArtifacts {
+public:
+    /// The capture/2 `host` section (artifact references only).
+    [[nodiscard]] const core::json::Object& HostCapture() const { return host_capture_; }
+    /// The receipt's typed signature, readback and resource, as recorded.
+    [[nodiscard]] const core::json::Value& Signature() const { return signature_; }
+    [[nodiscard]] const core::json::Value& Readback() const { return readback_; }
+    [[nodiscard]] const std::string& Resource() const { return resource_; }
+    /// The request the receipt's signature names (`RequestFromSignature`).
+    [[nodiscard]] const ProceduralRequest& Request() const { return request_; }
+    /// The `/3` source metadata the receipt observed (`ReceiptSourceMetadata`).
+    [[nodiscard]] const store::SourceMetadata& Metadata() const { return metadata_; }
+    /// The scalar raster: 128x128 finite float32 texels, every export round and RGB component
+    /// bit-equal to it.
+    [[nodiscard]] const std::string& ScalarTexels() const { return scalar_texels_; }
+    [[nodiscard]] const std::string& ScalarSha256() const { return scalar_sha256_; }
+    /// The project and revision the receipt was recorded for (not checked against any store).
+    [[nodiscard]] const std::string& CapturedProjectUuid() const { return captured_project_uuid_; }
+    [[nodiscard]] std::int64_t CapturedRevision() const { return captured_revision_; }
+    /// The typed canonical hash of the validated readback.
+    [[nodiscard]] const std::string& CaptureContextSha256() const { return capture_context_sha256_; }
+    /// What the validation computed: the captured project and revision, the signature key, the
+    /// scalar raster hash, the typed metadata hash and the readback hash.
+    [[nodiscard]] core::json::Object Identity() const;
+
+private:
+    ValidatedHostArtifacts() = default;
+    friend std::expected<ValidatedHostArtifacts, ImportRefusal> ValidateHostCaptureArtifacts(const core::json::Object&,
+                                                                                            const ArtifactBytes&);
+    core::json::Object host_capture_;
+    core::json::Value signature_;
+    core::json::Value readback_;
+    std::string resource_;
+    ProceduralRequest request_;
+    store::SourceMetadata metadata_;
+    std::string scalar_texels_;
+    std::string scalar_sha256_;
+    std::string captured_project_uuid_;
+    std::int64_t captured_revision_ = 0;
+    std::string capture_context_sha256_;
+};
+
+/// Validates the capture/2 `host` section `host_capture` and the artifacts it names on their own,
+/// with no store, target or F context: the closed section and references (resolved through
+/// `artifacts` by hash and size), the closed receipt `uzpainter/procedural-capture/1` exactly as the
+/// snapshot bridge writes it (schema, a nonempty project uuid, a nonnegative revision, recorder
+/// pins, the Legacy identity with no project open, the two raw export rounds and `files` naming
+/// the scalar and RGB artifacts in round order), the request derived from the receipt's signature
+/// (`RequestFromSignature`) inside the original H domain (the snapshot pin of the observed
+/// resource, one 128-square raw float32 channel, no preset or inputs, one quad UV tile, and the
+/// seed the bridge derives: the observed integer `$randomseed`, or 0 when it is absent), the
+/// request artifact (the exact versioned resource and scalar overrides), the readback (the
+/// bridge's capture predicates), its `/3` metadata (`ReceiptSourceMetadata`), and the four exports
+/// decoded at native precision: both rounds equal, every RGB component equal to the scalar, every
+/// texel finite. The H environment and its binding must both be null: no supported representation
+/// of historical H environment evidence exists, so a present one is refused, never accepted as an
+/// arbitrary blob. Nothing a caller computed is accepted in place of these checks.
+std::expected<ValidatedHostArtifacts, ImportRefusal> ValidateHostCaptureArtifacts(const core::json::Object& host_capture,
+                                                                                const ArtifactBytes& artifacts);
 
 /// The verified H capture of the host snapshot.
 class VerifiedHostMigration {
@@ -88,21 +154,11 @@ private:
 
 /// Verifies the capture/2 `host` section `host_capture` against `project`, the PROSPECTIVE
 /// destination (the base with the Filter to insert, since the frozen-host domain holds that Filter;
-/// its host snapshot recorded in `store`), resolving every artifact through `artifacts` by hash and
-/// size: the closed receipt `uzpainter/procedural-capture/1` exactly as the snapshot bridge writes
-/// it (`python/uzpainter_snapshot/bridge.py` `record` and `main`: recorder pins, the Legacy
-/// host identity with no project open, two `Success` exports of the bridge's raw export
-/// configuration into `export1` and `export2`, and `files`, the SHA-256 of each round's
-/// `user0.exr` and `user1.exr`, which must name the scalar and RGB artifacts in round order; this
-/// store's uuid; the stored signature, which is the host's current request; the observed resource
-/// naming the signature's pin), the request (the exact versioned resource and scalar overrides the
-/// readback's effective parameters hold, compared as the bridge compares Python values), the
-/// readback (the bridge's isolated paired User0 L32F / User1 RGB32F capture predicates), the
-/// observed metadata equal to the stored `/3` metadata, and the two scalar and two RGB exports
-/// decoded at native precision (scalar rounds, every RGB component and the census raster
-/// bit-equal). The H environment and its binding must both be null: no supported representation
-/// of historical H environment evidence exists, so a present one is refused, never accepted as an
-/// arbitrary blob.
+/// its host snapshot recorded in `store`): the target's frozen-host domain and host request, its
+/// recorded snapshot with `/3` metadata and one census plane, then `ValidateHostCaptureArtifacts`,
+/// then the receipt recorded for this store's uuid, its signature equal to the stored snapshot's and
+/// to the host's current request (the observed resource naming that signature's pin), its metadata
+/// equal to the stored `/3` metadata and its scalar raster equal to the census raster.
 std::expected<VerifiedHostMigration, ImportRefusal> VerifyHostCapture(store::ProjectStore& store, const core::Project& project,
                                                                      const core::json::Object& host_capture,
                                                                      const ArtifactBytes& artifacts);

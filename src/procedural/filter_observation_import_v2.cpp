@@ -20,6 +20,7 @@
 #include "store/snapshots.h"
 #include "uzp_core/manifest/manifest.h"
 #include "uzp_core/manifest/sha256.h"
+#include "uzp_core/types/resource_url.h"
 
 namespace uzp::procedural {
 namespace {
@@ -342,9 +343,8 @@ bool detail::BridgeScalarEquals(const Value& requested, const Value& effective) 
     return x == std::get<double>(*b);
 }
 
-std::expected<VerifiedHostMigration, ImportRefusal> VerifyHostCapture(store::ProjectStore& store, const core::Project& project,
-                                                                     const Object& host_capture,
-                                                                     const ArtifactBytes& artifacts) {
+std::expected<ValidatedHostArtifacts, ImportRefusal> ValidateHostCaptureArtifacts(const Object& host_capture,
+                                                                                const ArtifactBytes& artifacts) {
     try {
         const std::string path = "capture.host";
         const Value captureValue(host_capture);
@@ -354,27 +354,7 @@ std::expected<VerifiedHostMigration, ImportRefusal> VerifyHostCapture(store::Pro
         Require(StringAt(capture, "protocol", kHostCaptureInvalid, path) == "paired-scalar-rgb", kHostCaptureInvalid,
                 path + ".protocol: expected paired-scalar-rgb");
 
-        // The destination host, its exact request and its recorded snapshot with /3 metadata.
-        store::FrozenHostNodes nodes;
-        const std::string domain = store::FrozenHostDomainProblem(project, nodes);
-        Require(domain.empty(), kTargetContextUnrepresentable, domain);
-        auto request = SnapshotFillRequest(project, *nodes.set, core::ChannelType::User0, core::ChannelFormat::L32F,
-                                           *nodes.host->fill, *nodes.host_ref, nodes.host->uid, false);
-        Require(request.has_value(), kTargetContextUnrepresentable, "the host is outside the snapshot provider's domain");
-        const std::string key = SignatureHash(*request);
-        std::optional<store::SnapshotEntry> snapshot;
-        for (store::SnapshotEntry& entry : store::ProjectSnapshots(project)) {
-            if (entry.key == key) snapshot = std::move(entry);
-        }
-        Require(snapshot && snapshot->source_metadata && snapshot->source_metadata->typed_effective_parameters &&
-                    snapshot->source_metadata->observed_resource_id,
-                kHostSourceStateMismatch, "no recorded snapshot with /3 metadata holds the host's request");
-        const store::ObservationInventory inventory = store.ReadObservationInventory(project);
-        const auto plane = std::find_if(inventory.planes.begin(), inventory.planes.end(),
-                                        [&](const store::InventoryPlane& p) { return p.row.plane_id == snapshot->plane_id; });
-        Require(plane != inventory.planes.end(), kHostSourceStateMismatch, "the census holds no plane of the host snapshot");
-
-        // The receipt, bound to this store, the stored signature and the observed resource.
+        // The receipt as recorded: its project, revision and observed resource.
         const Value receiptValue = Parse(Resolve(At(capture, "receipt"), "snapshot_receipt", artifacts, path + ".receipt"),
                                          kHostCaptureInvalid, "the receipt");
         const Object& receipt = ClosedObject(receiptValue, kHostCaptureInvalid, "receipt",
@@ -382,19 +362,24 @@ std::expected<VerifiedHostMigration, ImportRefusal> VerifyHostCapture(store::Pro
                                               "project_uuid", "revision", "signature", "files"});
         Require(StringAt(receipt, "schema", kHostCaptureInvalid, "receipt") == "uzpainter/procedural-capture/1",
                 kHostCaptureInvalid, "receipt.schema: expected uzpainter/procedural-capture/1");
-        Require(StringAt(receipt, "project_uuid", kHostCaptureInvalid, "receipt") == store.project_uuid(),
-                kHostSourceStateMismatch, "the receipt was recorded for another project");
+        const std::string& projectUuid = StringAt(receipt, "project_uuid", kHostCaptureInvalid, "receipt");
+        Require(!projectUuid.empty(), kHostCaptureInvalid, "receipt.project_uuid: expected a nonempty uuid");
         const auto* revision = std::get_if<std::int64_t>(&At(receipt, "revision").data);
         Require(revision != nullptr && *revision >= 0, kHostCaptureInvalid, "receipt.revision: expected a nonnegative integer");
-        Require(SameTyped(At(receipt, "signature"), snapshot->signature) && SameTyped(At(receipt, "signature"), SignatureJson(*request)),
-                kHostSourceStateMismatch, "the receipt's signature is not the stored host snapshot's");
         const std::string& resource = StringAt(receipt, "resource", kHostCaptureInvalid, "receipt");
-        const auto& signature = std::get<Object>(snapshot->signature.data);
-        Require(signature.contains("asset") &&
-                    signature.at("asset") == Value("uzasset://snapshot/" + core::Sha256Hex(resource)),
-                kHostSourceStateMismatch, "the observed resource does not name the snapshot's pin");
 
-        // The request: the exact versioned resource and the scalar overrides.
+        // The request the receipt's signature names, inside the original H domain (the snapshot
+        // command's: the observed resource's pin, one 128-square raw float32 channel, no preset or
+        // inputs, one quad UV tile).
+        auto request = RequestFromSignature(At(receipt, "signature"));
+        Require(request.has_value(), kHostCaptureInvalid, "receipt.signature: " + (request ? std::string() : request.error()));
+        Require(core::FormatAssetUrl(request->asset) == "uzasset://snapshot/" + core::Sha256Hex(resource) + "@1" &&
+                    request->output == RasterSpec{128, ChannelFormat::F32, "raw", 1} && !request->preset &&
+                    request->inputs.empty() && request->meshClass == "quad" && request->uvTiles == 1 &&
+                    !request->outputId.empty(),
+                kHostCaptureInvalid, "receipt.signature: outside the original H capture domain");
+
+        // The request artifact: the exact versioned resource and the scalar overrides.
         const Value requestValue = Parse(Resolve(At(capture, "request"), "snapshot_request", artifacts, path + ".request"),
                                          kHostCaptureInvalid, "the request");
         const Object& captureRequest = ClosedObject(requestValue, kHostCaptureInvalid, "request", {"resource", "parameters"});
@@ -415,18 +400,28 @@ std::expected<VerifiedHostMigration, ImportRefusal> VerifyHostCapture(store::Pro
                 kHostCaptureInvalid, path + ": expected two scalar and two RGB export references");
         CheckReceiptProtocol(receipt, scalarRefs, rgbRefs);
 
-        // The readback and the metadata it observed.
+        // The readback and the /3 metadata it observed.
         CheckReadback(At(receipt, "readback"), resource, std::get<Object>(At(captureRequest, "parameters").data));
-        const auto metadata = ReceiptSourceMetadata(receiptValue, resource, *request);
+        // The signature's seed is the bridge's `source["parameters"].get("$randomseed", 0)`, an
+        // integer, written as that same JSON integer (int64, signed two's complement).
+        const Object& readbackObject = std::get<Object>(At(receipt, "readback").data);
+        const Object& effective = std::get<Object>(
+            At(std::get<Object>(std::get<Array>(At(readbackObject, "sources").data).front().data), "parameters").data);
+        const auto randomSeed = effective.find("$randomseed");
+        Require(randomSeed == effective.end() || randomSeed->second.IsInt(), kHostCaptureInvalid,
+                "receipt.readback: the effective random seed is not an integer");
+        const Value observedSeed = randomSeed == effective.end() ? Value(std::int64_t{0}) : randomSeed->second;
+        Require(SameTyped(At(std::get<Object>(At(receipt, "signature").data), "seed"), observedSeed), kHostCaptureInvalid,
+                "receipt.signature.seed: not the observed effective random seed");
+        auto metadata = ReceiptSourceMetadata(receiptValue, resource, *request);
         Require(metadata.has_value(), kHostCaptureInvalid, metadata ? std::string() : metadata.error());
-        Require(SameTyped(store::SourceMetadataJson(snapshot->signature, *metadata),
-                          store::SourceMetadataJson(snapshot->signature, *snapshot->source_metadata)),
-                kHostSourceStateMismatch, "the receipt's observations are not the stored /3 metadata");
+        Require(metadata->typed_effective_parameters && metadata->observed_resource_id, kHostCaptureInvalid,
+                "the receipt does not observe /3 source metadata");
 
-        // The exports at native precision: scalar rounds, RGB components and the census raster.
+        // The exports at native precision (`SnapshotExportTexels` refuses a non-finite sample): equal
+        // rounds and RGB components equal to the scalar.
         const auto exports = [&](std::string_view field, std::string_view kind, std::uint32_t channels) {
             const Array& refs = ArrayAt(capture, field, kHostCaptureInvalid, path);
-            Require(refs.size() == 2, kHostCaptureInvalid, path + "." + std::string(field) + ": expected exactly two exports");
             std::vector<std::vector<std::uint32_t>> rounds;
             for (std::size_t i = 0; i < refs.size(); ++i) {
                 const std::string item = path + "." + std::string(field) + "[" + std::to_string(i) + "]";
@@ -445,13 +440,81 @@ std::expected<VerifiedHostMigration, ImportRefusal> VerifyHostCapture(store::Pro
             components = rgb[0][3 * i] == scalar[0][i] && rgb[0][3 * i + 1] == scalar[0][i] && rgb[0][3 * i + 2] == scalar[0][i];
         }
         Require(components, kNativeTransportMismatch, "an RGB export component differs from the scalar export");
-        const std::string raster(reinterpret_cast<const char*>(scalar[0].data()), scalar[0].size() * 4);
-        Require(core::Sha256Hex(raster) == plane->sha256, kNativeTransportMismatch,
+
+        ValidatedHostArtifacts validated;
+        validated.host_capture_ = host_capture;
+        validated.signature_ = At(receipt, "signature");
+        validated.readback_ = At(receipt, "readback");
+        validated.resource_ = resource;
+        validated.request_ = std::move(*request);
+        validated.metadata_ = std::move(*metadata);
+        validated.scalar_texels_.assign(reinterpret_cast<const char*>(scalar[0].data()), scalar[0].size() * 4);
+        validated.scalar_sha256_ = core::Sha256Hex(validated.scalar_texels_);
+        validated.captured_project_uuid_ = projectUuid;
+        validated.captured_revision_ = *revision;
+        validated.capture_context_sha256_ = store::ObservationKey(validated.readback_);
+        return validated;
+    } catch (const ImportRefused& refused) {
+        return std::expected<ValidatedHostArtifacts, ImportRefusal>(std::unexpect, refused.refusal);
+    } catch (const std::exception& error) {
+        return std::expected<ValidatedHostArtifacts, ImportRefusal>(
+            std::unexpect, ImportRefusal{std::string(kHostCaptureInvalid), error.what()});
+    }
+}
+
+Object ValidatedHostArtifacts::Identity() const {
+    return Object{{"project_uuid", captured_project_uuid_},
+                  {"revision", captured_revision_},
+                  {"signature_sha256", SignatureHash(request_)},
+                  {"raster_sha256", scalar_sha256_},
+                  {"metadata_sha256", store::ObservationKey(store::SourceMetadataJson(signature_, metadata_))},
+                  {"capture_context_sha256", capture_context_sha256_}};
+}
+
+std::expected<VerifiedHostMigration, ImportRefusal> VerifyHostCapture(store::ProjectStore& store, const core::Project& project,
+                                                                     const Object& host_capture,
+                                                                     const ArtifactBytes& artifacts) {
+    try {
+        // The destination host, its exact request and its recorded snapshot with /3 metadata.
+        store::FrozenHostNodes nodes;
+        const std::string domain = store::FrozenHostDomainProblem(project, nodes);
+        Require(domain.empty(), kTargetContextUnrepresentable, domain);
+        auto request = SnapshotFillRequest(project, *nodes.set, core::ChannelType::User0, core::ChannelFormat::L32F,
+                                           *nodes.host->fill, *nodes.host_ref, nodes.host->uid, false);
+        Require(request.has_value(), kTargetContextUnrepresentable, "the host is outside the snapshot provider's domain");
+        const std::string key = SignatureHash(*request);
+        std::optional<store::SnapshotEntry> snapshot;
+        for (store::SnapshotEntry& entry : store::ProjectSnapshots(project)) {
+            if (entry.key == key) snapshot = std::move(entry);
+        }
+        Require(snapshot && snapshot->source_metadata && snapshot->source_metadata->typed_effective_parameters &&
+                    snapshot->source_metadata->observed_resource_id,
+                kHostSourceStateMismatch, "no recorded snapshot with /3 metadata holds the host's request");
+        const store::ObservationInventory inventory = store.ReadObservationInventory(project);
+        const auto plane = std::find_if(inventory.planes.begin(), inventory.planes.end(),
+                                        [&](const store::InventoryPlane& p) { return p.row.plane_id == snapshot->plane_id; });
+        Require(plane != inventory.planes.end(), kHostSourceStateMismatch, "the census holds no plane of the host snapshot");
+
+        // The H artifacts on their own, then bound to this store, the stored snapshot and the census.
+        const auto validated = ValidateHostCaptureArtifacts(host_capture, artifacts);
+        if (!validated) return std::expected<VerifiedHostMigration, ImportRefusal>(std::unexpect, validated.error());
+        Require(validated->CapturedProjectUuid() == store.project_uuid(), kHostSourceStateMismatch,
+                "the receipt was recorded for another project");
+        Require(SameTyped(validated->Signature(), snapshot->signature) && SameTyped(validated->Signature(), SignatureJson(*request)),
+                kHostSourceStateMismatch, "the receipt's signature is not the stored host snapshot's");
+        const auto& signature = std::get<Object>(snapshot->signature.data);
+        Require(signature.contains("asset") &&
+                    signature.at("asset") == Value("uzasset://snapshot/" + core::Sha256Hex(validated->Resource())),
+                kHostSourceStateMismatch, "the observed resource does not name the snapshot's pin");
+        Require(SameTyped(store::SourceMetadataJson(snapshot->signature, validated->Metadata()),
+                          store::SourceMetadataJson(snapshot->signature, *snapshot->source_metadata)),
+                kHostSourceStateMismatch, "the receipt's observations are not the stored /3 metadata");
+        Require(validated->ScalarSha256() == plane->sha256, kNativeTransportMismatch,
                 "the scalar export is not the stored snapshot raster");
 
         VerifiedHostMigration verified;
         verified.host_capture_ = host_capture;
-        verified.capture_context_sha256_ = store::ObservationKey(At(receipt, "readback"));
+        verified.capture_context_sha256_ = validated->CaptureContextSha256();
         verified.signature_sha256_ = key;
         verified.project_uuid_ = store.project_uuid();
         verified.plane_id_ = static_cast<std::int64_t>(plane->row.plane_id);

@@ -176,7 +176,32 @@ def test_recording_maps_to_the_host_section(tmp_path: Path) -> None:
         path.read_bytes() and sha(path.read_bytes()) == key for key, path in result.paths.items()
     )
     assert result.recorder == PINS
+    source_paths = [
+        work / name for name in ("capture.json", "request.json", "context.json", "mesh.obj")
+    ] + [work / f"export{i}" / name for i in (1, 2) for name in transport.EXPORT_NAMES]
+    assert result.source_fingerprints == {
+        path: (sha(path.read_bytes()), len(path.read_bytes())) for path in source_paths
+    }
     assert str(work) not in repr(result)
+
+
+@pytest.mark.parametrize("name", ["context.json", "mesh.obj"])
+def test_fingerprints_describe_bytes_read_not_later_disk_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    work = record(tmp_path)
+    path = work / name
+    baseline = path.read_bytes()
+    original = Path.read_bytes
+
+    def transient_read(self: Path) -> bytes:
+        data = original(self)
+        return data + b" " if self == path else data
+
+    monkeypatch.setattr(Path, "read_bytes", transient_read)
+    result = transport.host_transport(work)
+    assert result.source_fingerprints[path] == (sha(baseline + b" "), len(baseline) + 1)
+    assert original(path) == baseline
 
 
 def test_a_relocated_recording_keeps_its_recorded_root(tmp_path: Path) -> None:

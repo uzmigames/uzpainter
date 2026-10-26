@@ -280,6 +280,10 @@ bool Refused(const std::expected<procedural::VerifiedHostMigration, ImportRefusa
     return !result && result.error().reason == reason;
 }
 
+bool Refused(const std::expected<procedural::ValidatedHostArtifacts, ImportRefusal>& result, std::string_view reason) {
+    return !result && result.error().reason == reason;
+}
+
 }  // namespace
 
 int RunFilterImportV2Cases(const fs::path& work) {
@@ -321,7 +325,8 @@ int RunFilterImportV2Cases(const fs::path& work) {
                 [](Case& c) { c.receipt["project_uuid"] = std::string("6f1c2a3e-0000-4000-8000-0000000000ff"); });
     refusedHost("receipt schema", procedural::kHostCaptureInvalid,
                 [](Case& c) { c.receipt["schema"] = std::string("uzpainter/procedural-capture/2"); });
-    refusedHost("receipt signature", procedural::kHostSourceStateMismatch, [](Case& c) {
+    // A seed other than the observed effective random seed is an invalid receipt on its own.
+    refusedHost("receipt signature seed", procedural::kHostCaptureInvalid, [](Case& c) {
         std::get<json::Object>(c.receipt.at("signature").data)["seed"] = std::int64_t{9};
     });
     refusedHost("projection filtering", procedural::kHostCaptureInvalid, [&](Case& c) {
@@ -411,6 +416,135 @@ int RunFilterImportV2Cases(const fs::path& work) {
         environment["environment_binding"] = good.Ref("snapshot_environment_binding", "authored binding");
         check(Refused(procedural::VerifyHostCapture(*good.store, scene, environment, good.Transport()), procedural::kHostCaptureInvalid),
               "an H environment with a binding is refused: no supported representation exists");
+    }
+
+    // The H artifacts on their own: no store, target or F. A standalone copy holds only the
+    // artifacts; the result carries what the receipt recorded and what the validation computed.
+    {
+        const auto standalone = [&]() {
+            Case copy;
+            copy.receipt = good.receipt;
+            copy.request = good.request;
+            copy.scalarExr = good.scalarExr;
+            copy.rgbExr = good.rgbExr;
+            return copy;
+        };
+        Case alone = standalone();
+        const json::Object aloneCapture = alone.HostCapture();
+        const auto artifacts = procedural::ValidateHostCaptureArtifacts(aloneCapture, alone.Transport());
+        Expect(artifacts.has_value(), artifacts ? "" : artifacts.error().reason + ": " + artifacts.error().detail);
+        std::string texels;
+        for (std::size_t i = 0; i < 128 * 128; ++i) {
+            const std::uint32_t bits = fixed[i % fixed.size()];
+            texels.append(reinterpret_cast<const char*>(&bits), 4);
+        }
+        check(alone.store == nullptr && artifacts->CapturedProjectUuid() == good.store->project_uuid() &&
+                  artifacts->CapturedRevision() == std::get<std::int64_t>(good.receipt.at("revision").data) &&
+                  artifacts->Resource() == std::get<std::string>(good.receipt.at("resource").data),
+              "standalone H artifacts validate with the recorded project, revision and resource");
+        check(artifacts->Signature() == good.receipt.at("signature") && artifacts->Readback() == good.receipt.at("readback") &&
+                  procedural::SignatureJson(artifacts->Request()) == good.receipt.at("signature") &&
+                  artifacts->Metadata().typed_effective_parameters && artifacts->Metadata().observed_resource_id,
+              "the result keeps the typed signature and readback, the request they name and the /3 metadata");
+        check(artifacts->ScalarTexels() == texels && artifacts->ScalarSha256() == core::Sha256Hex(texels),
+              "the result owns the decoded scalar raster");
+        const json::Object identity = artifacts->Identity();
+        const json::Object bound = verified->Identity();
+        check(identity.at("signature_sha256") == bound.at("signature_sha256") && identity.at("raster_sha256") == bound.at("raster_sha256") &&
+                  identity.at("metadata_sha256") == bound.at("metadata_sha256") &&
+                  identity.at("capture_context_sha256") == bound.at("capture_context_sha256") &&
+                  artifacts->CaptureContextSha256() == verified->CaptureContextSha256(),
+              "the computed identity is the one VerifyHostCapture binds to the destination");
+
+        Case foreignUuid = standalone();
+        foreignUuid.receipt["project_uuid"] = std::string("6f1c2a3e-0000-4000-8000-0000000000ff");
+        const json::Object foreignCapture = foreignUuid.HostCapture();
+        const auto foreignArtifacts = procedural::ValidateHostCaptureArtifacts(foreignCapture, foreignUuid.Transport());
+        check(foreignArtifacts && foreignArtifacts->CapturedProjectUuid() == "6f1c2a3e-0000-4000-8000-0000000000ff",
+              "standalone validation records the captured project and binds it to no store");
+
+        const auto refusedArtifacts = [&](const std::string& label, std::string_view reason,
+                                          const std::function<json::Object(Case&)>& change) {
+            Case copy = standalone();
+            const json::Object capture = change(copy);
+            const auto result = procedural::ValidateHostCaptureArtifacts(capture, copy.Transport());
+            check(Refused(result, reason), "standalone " + label + ": expected " + std::string(reason) +
+                                               (result ? std::string(", accepted") : ", got " + result.error().reason + ": " + result.error().detail));
+        };
+        refusedArtifacts("empty project uuid", procedural::kHostCaptureInvalid, [](Case& c) {
+            c.receipt["project_uuid"] = std::string();
+            return c.HostCapture();
+        });
+        refusedArtifacts("signature outside the H domain", procedural::kHostCaptureInvalid, [](Case& c) {
+            auto& signature = std::get<json::Object>(c.receipt.at("signature").data);
+            std::get<json::Object>(signature.at("output").data)["resolution"] = std::int64_t{256};
+            return c.HostCapture();
+        });
+        refusedArtifacts("readback without the observed ResourceID", procedural::kHostCaptureInvalid, [](Case& c) {
+            auto& readbackObject = std::get<json::Object>(c.receipt.at("readback").data);
+            for (json::Value& item : std::get<json::Array>(readbackObject.at("sources").data)) {
+                std::get<json::Object>(item.data).erase("resource_id");
+            }
+            return c.HostCapture();
+        });
+        refusedArtifacts("non-finite raster", procedural::kNativeTransportMismatch, [](Case& c) {
+            const std::vector<std::uint32_t> infinite(128 * 128, 0x7f800000u);
+            c.scalarExr = Exr(infinite, 1);
+            c.rgbExr = Exr(infinite, 3);
+            auto& files = std::get<json::Object>(c.receipt.at("files").data);
+            for (const char* round : {"export1", "export2"}) {
+                files[std::string(round) + "/user0.exr"] = core::Sha256Hex(c.scalarExr);
+                files[std::string(round) + "/user1.exr"] = core::Sha256Hex(c.rgbExr);
+            }
+            return c.HostCapture();
+        });
+        refusedArtifacts("scalar rounds differ", procedural::kNativeTransportMismatch, [](Case& c) {
+            const std::string other = Exr(std::vector<std::uint32_t>(128 * 128, 0x3f000000u), 1);
+            std::get<json::Object>(c.receipt.at("files").data)["export2/user0.exr"] = core::Sha256Hex(other);
+            json::Object capture = c.HostCapture();
+            std::get<json::Array>(capture.at("scalar_exports").data)[1] = c.Ref("snapshot_scalar_export", other);
+            return capture;
+        });
+        refusedArtifacts("caller-supplied context hash", procedural::kHostCaptureInvalid, [](Case& c) {
+            json::Object capture = c.HostCapture();
+            capture["capture_context_sha256"] = core::Sha256Hex("claimed");
+            return capture;
+        });
+
+        // The signature's seed is the observed `$randomseed` (an integer), or 0 when absent.
+        const auto& goodSources = std::get<json::Array>(std::get<json::Object>(good.receipt.at("readback").data).at("sources").data);
+        check(!std::get<json::Object>(std::get<json::Object>(goodSources[0].data).at("parameters").data).contains("$randomseed") &&
+                  std::get<json::Object>(good.receipt.at("signature").data).at("seed") == json::Value(std::int64_t{0}) &&
+                  artifacts.has_value(),
+              "an absent effective random seed is the signature's seed 0");
+        const auto seeded = [](Case& c, const json::Value& observed, std::int64_t seed) {
+            for (json::Value& item : std::get<json::Array>(std::get<json::Object>(c.receipt.at("readback").data).at("sources").data)) {
+                std::get<json::Object>(std::get<json::Object>(item.data).at("parameters").data)["$randomseed"] = observed;
+            }
+            auto& signature = std::get<json::Object>(c.receipt.at("signature").data);
+            std::get<json::Object>(signature.at("params").data)["$randomseed"] = observed;
+            signature["seed"] = seed;
+        };
+        {
+            Case copy = standalone();
+            seeded(copy, json::Value(std::int64_t{-7}), -7);
+            const json::Object capture = copy.HostCapture();
+            const auto result = procedural::ValidateHostCaptureArtifacts(capture, copy.Transport());
+            check(result.has_value(), "an observed integer random seed equal to the signature's seed validates" +
+                                          (result ? std::string() : " (" + result.error().reason + ": " + result.error().detail + ")"));
+        }
+        refusedArtifacts("seed without an observed random seed", procedural::kHostCaptureInvalid, [](Case& c) {
+            std::get<json::Object>(c.receipt.at("signature").data)["seed"] = std::int64_t{9};
+            return c.HostCapture();
+        });
+        refusedArtifacts("observed random seed with the default seed", procedural::kHostCaptureInvalid, [&](Case& c) {
+            seeded(c, json::Value(std::int64_t{7}), 0);
+            return c.HostCapture();
+        });
+        refusedArtifacts("non-integer observed random seed", procedural::kHostCaptureInvalid, [&](Case& c) {
+            seeded(c, json::Value(7.0), 7);
+            return c.HostCapture();
+        });
     }
 
     // The bridge's override comparison is Python's: exact integers, an integer and a float only

@@ -187,6 +187,7 @@ class HostTransport:
     section: dict[str, Any]
     paths: dict[str, Path] = field(repr=False)
     recorder: dict[str, str]
+    source_fingerprints: dict[Path, tuple[str, int]] = field(repr=False)
 
 
 def _regular_file(path: Path, what: str) -> bytes:
@@ -246,7 +247,7 @@ def host_transport(work: Path) -> HostTransport:
     receipt_bytes = _regular_file(work / "capture.json", "receipt")
     request_bytes = _regular_file(work / "request.json", "request")
     context_bytes = _regular_file(work / "context.json", "context")
-    _regular_file(work / "mesh.obj", "mesh")
+    mesh_bytes = _regular_file(work / "mesh.obj", "mesh")
     exports = {
         f"export{i}/{name}": _regular_file(work / f"export{i}" / name, f"export{i}/{name}")
         for i in ROUNDS
@@ -338,4 +339,12 @@ def host_transport(work: Path) -> HostTransport:
             _ref("snapshot_rgb_export", exports[f"export{i}/user1.exr"]) for i in ROUNDS
         ],
     }
-    return HostTransport(section, paths, dict(recorder))
+    source_bytes = {
+        work / "capture.json": receipt_bytes,
+        work / "request.json": request_bytes,
+        work / "context.json": context_bytes,
+        work / "mesh.obj": mesh_bytes,
+        **{work / name: data for name, data in exports.items()},
+    }
+    fingerprints = {path: (sha256(data), len(data)) for path, data in source_bytes.items()}
+    return HostTransport(section, paths, dict(recorder), fingerprints)

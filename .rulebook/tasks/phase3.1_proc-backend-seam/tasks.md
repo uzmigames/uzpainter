@@ -116,6 +116,30 @@ Policy revisions are positive exact int64 values; source revisions are full
 Git commits. The native validator revision is the embedded protocol literal
 `uzpainter/snapshot-capture-validator/1`, separate from code and binary hashes.
 
+`ValidateHostCaptureArtifacts` now validates the six H artifacts without a
+destination store or F. It owns the parsed signature/readback, derived /3
+metadata and scalar raster, and checks native-precision paired exports. The
+signature seed must match the observed integer `$randomseed`, or integer zero
+when absent. `VerifyHostCapture` reuses this result and retains its single
+authoritative census plus destination UUID/signature/metadata/raster checks.
+Seventy-one authored native checks passed in REV371; the static route check
+remains green. An earlier duplicated header block failed compilation in REV369
+and was corrected after that build ended; its log remains preserved. The
+reviewed seed fix intentionally classifies a conflicting receipt seed as
+`HOST_CAPTURE_INVALID` at the pure boundary.
+
+`tools/parity/store/snapshot_validator.py` implements the host invocation
+contract for the forthcoming test-only native diagnostic. It requires explicit
+approved binary/code/policy pins and a policy revision, preserves all six slots,
+and verifies fingerprints of the eight actual transport buffers plus the second
+receipt read. It checks inputs and executable again before/after invocation.
+The snapshot key comes from the pinned native validator's ParamByValue semantics;
+it is not confused with the typed hash of the raw receipt signature. Readback
+context retains its typed hash. Ninety-three affected Python cases passed,
+including transient input changes and integral-double/signed-zero signatures.
+Subprocess execution in these tests is authored/mocked. The diagnostic command,
+real H validation and store publication are still separate dependencies.
+
 This is a technical implementation contract, not an implemented importer, an admission of any private H, or completion of 2.6j. It extends private artifact transport for decision 363; the stored Filter V2 schemas and the snapshot /1-/3 schemas do not change. No private H or old steps 16-18 were read to prepare it.
 
 ### Existing trust boundary
