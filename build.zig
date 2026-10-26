@@ -583,6 +583,7 @@ const store_sources = [_][]const u8{
     "store/plane_integrity.cpp",
     "store/snapshots.cpp",
     "store/filter_observations.cpp",
+    "store/observation_inventory.cpp",
     "store/project_store.cpp",
     "store/save.cpp",
     "store/compact.cpp",

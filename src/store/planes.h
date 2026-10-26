@@ -109,6 +109,11 @@ struct ChunkRow {
 /// SHA-256 of the canonical JSON `[[x, y, "<sha256>"], ...]` of `rows` sorted by `(x, y)`.
 std::string ChunkRoot(std::vector<ChunkRow> rows);
 
+/// The byte count of chunk (x, y) of a plane `row` (`chunk_width × chunk_height` texels).
+std::size_t ChunkByteCount(const PlaneRow& row, int x, int y);
+/// Copies the texels `chunk` of chunk (x, y) into `texels`, the whole plane of `row`.
+void PutChunk(const PlaneRow& row, std::string& texels, int x, int y, std::string_view chunk);
+
 /// A binding `{version_id, chunk_root}` of one plane.
 struct VersionRef {
     std::int64_t version_id = 0;

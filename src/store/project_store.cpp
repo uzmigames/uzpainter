@@ -262,6 +262,11 @@ std::string ProjectStore::ReadPlaneChunk(std::int64_t revision, core::Id plane_i
     return ReadPlaneChunkAt(container_, revision, plane_id, x, y);
 }
 
+ObservationInventory ProjectStore::ReadObservationInventory(const core::Project& project) {
+    std::lock_guard lock(mutex_);
+    return InventoryIn(container_, planes_, pending_, project);
+}
+
 core::Id ProjectStore::RecordSnapshot(core::Edit& edit, const core::json::Value& signature, const PlaneImage& image,
                                       const std::optional<SourceMetadata>& metadata) {
     std::lock_guard lock(mutex_);

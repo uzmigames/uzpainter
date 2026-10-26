@@ -254,6 +254,8 @@ std::string ChunkBytesOf(const PlaneRow& row, const std::string& texels, int x, 
     return chunk;
 }
 
+}  // namespace
+
 void PutChunk(const PlaneRow& row, std::string& texels, int x, int y, std::string_view chunk) {
     const std::size_t bpt = TexelBytes(row.format);
     const std::size_t stride = static_cast<std::size_t>(row.width) * bpt;
@@ -269,6 +271,8 @@ std::size_t ChunkByteCount(const PlaneRow& row, int x, int y) {
     return static_cast<std::size_t>(row.chunk_width(x)) * static_cast<std::size_t>(row.chunk_height(y)) *
            TexelBytes(row.format);
 }
+
+namespace {
 
 bool AllZero(std::string_view bytes) {
     return std::all_of(bytes.begin(), bytes.end(), [](char c) { return c == '\0'; });

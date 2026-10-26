@@ -32,6 +32,7 @@
 #include "store/container.h"
 #include "store/integrity.h"
 #include "store/lock.h"
+#include "store/observation_inventory.h"
 #include "store/planes.h"
 #include "store/save.h"
 #include "store/snapshots.h"
@@ -187,6 +188,12 @@ public:
     /// The texels of chunk (x, y) of that plane at `revision`; zeros when the version has no row
     /// for it (`ReadPlaneChunkAt`).
     std::string ReadPlaneChunk(std::int64_t revision, core::Id plane_id, int x, int y);
+
+    /// The verified census of `project`'s planes, snapshots and resources against this store and
+    /// the running transaction's staged state (`InventoryIn`, observation_inventory.h), taken under
+    /// one hold of the store's mutex. A commit extension, which runs under that mutex, calls
+    /// `InventoryIn` instead.
+    ObservationInventory ReadObservationInventory(const core::Project& project);
 
     /// Records a frozen procedural snapshot of this project in the transaction's working copy
     /// (`StageSnapshot`, snapshots.h): `image` as the first version of a new plane, `signature`

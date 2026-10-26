@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <fstream>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -31,6 +32,7 @@
 #include "store/container.h"
 #include "store/fault.h"
 #include "store/filter_observations.h"
+#include "store/observation_inventory.h"
 #include "store/integrity.h"
 #include "store/planes.h"
 #include "store/project_store.h"
@@ -1517,6 +1519,262 @@ void FilterObservations() {
           Contains(tampered.report.corrupt[0].detail, "schema"));
 }
 
+/// `project` with the binding of `plane` (a root paint layer's) set to `ref`, or removed.
+Project WithBinding(Project project, Id plane, const std::optional<VersionRef>& ref) {
+    for (Layer& layer : project.texture_sets[0].stacks[0].root_layers) {
+        if (!layer.paint) continue;
+        for (const auto& [channel, id] : layer.paint->planes) {
+            if (id != plane) continue;
+            auto& bindings = std::get<json::Object>(layer.paint->extra.at(std::string(kPlaneVersionsKey)).data);
+            if (ref) {
+                bindings[std::to_string(plane)] = ref->ToJson();
+            } else {
+                bindings.erase(std::to_string(plane));
+            }
+            return project;
+        }
+    }
+    throw Failure{"plane " + std::to_string(plane) + " is not a root paint layer's"};
+}
+
+const InventoryPlane& PlaneOf(const ObservationInventory& inventory, Id plane) {
+    for (const InventoryPlane& entry : inventory.planes) {
+        if (entry.row.plane_id == plane) return entry;
+    }
+    throw Failure{"plane " + std::to_string(plane) + " is not in the census"};
+}
+
+void ObservationInventoryCensus() {
+    const PlaneImage a0 = Synthetic(ChannelFormat::sRGB8, 2048, 1024, 70);
+    const PlaneImage a1 = Synthetic(ChannelFormat::sRGB8, 2048, 1024, 71);
+    const fs::path path = CreateProject(WorkDir("observation-inventory"));
+    Session s = OpenSession(path);
+    const std::string uuid = s.store->project_uuid();
+
+    // One transaction rewrites its own staged version under the same id: the census follows the
+    // bytes, and a copy of the project still bound to the first content refuses.
+    PaintPlane a;
+    std::string rewrittenSha;
+    CHECK(Committed(Mutate(s, "paint", [&](Edit& e) {
+        a = NewPaintPlane(s, e, "paint A", ChannelFormat::sRGB8, 2048, 1024);
+        const VersionRef first = s.store->WritePlane(e, a.plane, a0);
+        const Project firstCopy = e.project();
+        const ObservationInventory staged = s.store->ReadObservationInventory(e.project());
+        CHECK(PlaneOf(staged, a.plane).sha256 == Sha256Hex(a0.texels));
+        const VersionRef second = s.store->WritePlane(e, a.plane, a1);
+        CHECK(second.version_id == first.version_id && second.chunk_root != first.chunk_root);
+        const ObservationInventory rewritten = s.store->ReadObservationInventory(e.project());
+        rewrittenSha = rewritten.Sha256();
+        CHECK(rewrittenSha != staged.Sha256() && PlaneOf(rewritten, a.plane).sha256 == Sha256Hex(a1.texels));
+        const auto stale = EXPECT_THROW(StoreError, s.store->ReadObservationInventory(firstCopy));
+        CHECK(stale.code() == StoreError::Code::corrupt && Contains(stale.what(), "staged version"));
+    })));
+    // The committed census equals the staged one: created_revision is the only row field left out.
+    const ObservationInventory committed = s.store->ReadObservationInventory(*s.doc->snapshot().project);
+    CHECK(committed.Sha256() == rewrittenSha && PlaneOf(committed, a.plane).row.created_revision == 1);
+    CHECK(!Contains(json::WriteCanonical(committed.ToJson()), "created_revision"));
+
+    // A zero chunk has no row and reads as zero bytes; two snapshot entries are both enumerated.
+    PlaneImage sparse = a0;
+    for (int r = 0; r < 1024; ++r) {
+        std::fill_n(sparse.texels.begin() + (static_cast<std::ptrdiff_t>(r) * 2048 + 1024) * 3, 1024 * 3, '\0');
+    }
+    PaintPlane b;
+    CHECK(Committed(Mutate(s, "sparse", [&](Edit& e) {
+        b = NewPaintPlane(s, e, "paint B", ChannelFormat::sRGB8, 2048, 1024);
+        s.store->WritePlane(e, b.plane, sparse);
+        for (const std::int64_t toggle : {0, 1}) {
+            s.store->RecordSnapshot(e, json::Object{{"asset", std::string("uzasset://test/host@1")},
+                                                    {"params", json::Object{{"toggle", toggle}}}},
+                                    PlaneImage{2, 2, ChannelFormat::L32F, std::string(16, static_cast<char>(toggle))});
+        }
+    })));
+    const Project current = *s.doc->snapshot().project;
+    const ObservationInventory census = s.store->ReadObservationInventory(current);
+    CHECK(PlaneOf(census, b.plane).chunks.size() == 1 && PlaneOf(census, b.plane).sha256 == Sha256Hex(sparse.texels));
+    CHECK(PlaneOf(census, b.plane).byte_count == static_cast<std::int64_t>(sparse.texels.size()));
+    CHECK(census.snapshots.size() == 2 && census.planes.size() == 4);
+
+    // Hand-built staged state through the unlocked core: a version the store does not hold.
+    Container& c = s.store->container();
+    std::vector<ChunkRow> chunks;
+    std::map<std::string, std::string, std::less<>> bytes;
+    for (int x = 0; x < 2; ++x) {
+        const std::string chunk = ChunkOf(a0, x, 0);
+        chunks.push_back(ChunkRow{x, 0, Sha256Hex(chunk)});
+        bytes[Sha256Hex(chunk)] = chunk;
+    }
+    const std::string root = ChunkRoot(chunks);
+    const auto census_of = [&](const StagedVersion& version, const std::string& bound) {
+        PendingPlanes pending;
+        pending.versions[9999] = version;
+        return InventoryIn(c, pending, PendingContent{}, WithBinding(current, a.plane, VersionRef{9999, bound}));
+    };
+    const StagedVersion good{a.plane, chunks, bytes, root};
+    CHECK(PlaneOf(census_of(good, root), a.plane).sha256 == Sha256Hex(a0.texels));
+    StagedVersion altered = good;
+    altered.bytes[chunks[1].sha256][5] = static_cast<char>(altered.bytes[chunks[1].sha256][5] ^ 0x01);
+    CHECK(Contains(EXPECT_THROW(StoreError, census_of(altered, root)).what(), "staged bytes do not hash"));
+    StagedVersion otherRoot = good;
+    otherRoot.chunk_root = Sha256Hex("other");
+    CHECK(EXPECT_THROW(StoreError, census_of(otherRoot, root)).code() == StoreError::Code::corrupt);
+    StagedVersion wrongRoot = good;
+    wrongRoot.chunk_root = Sha256Hex("wrong");
+    CHECK(Contains(EXPECT_THROW(StoreError, census_of(wrongRoot, wrongRoot.chunk_root)).what(),
+                   "do not hash to the bound chunk_root"));
+    StagedVersion missing = good;
+    missing.bytes.erase(chunks[1].sha256);
+    CHECK(EXPECT_THROW(StoreError, census_of(missing, root)).code() == StoreError::Code::missing_resource);
+    StagedVersion foreign = good;
+    foreign.plane_id = b.plane;
+    CHECK(EXPECT_THROW(StoreError, census_of(foreign, root)).code() == StoreError::Code::conflict);
+    const auto unbound = EXPECT_THROW(StoreError, InventoryIn(c, PendingPlanes{}, PendingContent{},
+                                                              WithBinding(current, a.plane, std::nullopt)));
+    CHECK(unbound.code() == StoreError::Code::conflict && Contains(unbound.what(), "not bound"));
+
+    // A staged row is checked against its holder before any size is used: another id, set, stack
+    // or channel, a size outside 1..kMaxPlaneEdge (no allocation of an oversized plane), another
+    // chunk size or a UV tile the set lacks are refused. A snapshot plane's row names no set, stack,
+    // channel or UV tile.
+    const PlaneRow stored = *ReadPlaneRow(c, a.plane);
+    const auto rowCensus = [&](const PlaneRow& row) {
+        PendingPlanes pending;
+        pending.planes[a.plane] = row;
+        return InventoryIn(c, pending, PendingContent{}, current);
+    };
+    CHECK(PlaneOf(rowCensus(stored), a.plane).sha256 == PlaneOf(census, a.plane).sha256);
+    const std::vector<std::function<void(PlaneRow&)>> badRows = {
+        [&](PlaneRow& r) { r.plane_id = b.plane; },
+        [&](PlaneRow& r) { r.set_id = 999; },
+        [&](PlaneRow& r) { r.stack_id = 999; },
+        [&](PlaneRow& r) { r.channel = std::nullopt; },
+        [&](PlaneRow& r) { r.width = kMaxPlaneEdge + 1; },
+        [&](PlaneRow& r) { r.height = 0; },
+        [&](PlaneRow& r) { r.chunk_size = 512; },
+        [&](PlaneRow& r) { r.tile_u = 1; },
+        [&](PlaneRow& r) { r.tile_u = std::numeric_limits<int>::max(); },
+        [&](PlaneRow& r) { r.tile_u = std::numeric_limits<int>::min(); },
+        [&](PlaneRow& r) { r.tile_v = std::numeric_limits<int>::max(); },
+        [&](PlaneRow& r) { r.tile_v = std::numeric_limits<int>::min(); },
+    };
+    for (const auto& damage : badRows) {
+        PlaneRow row = stored;
+        damage(row);
+        CHECK(EXPECT_THROW(StoreError, rowCensus(row)).code() == StoreError::Code::corrupt);
+    }
+    Id snapshotPlane = kNoId;
+    for (const SnapshotEntry& entry : ProjectSnapshots(current)) snapshotPlane = entry.plane_id;
+    PlaneRow snapshotRow = *ReadPlaneRow(c, snapshotPlane);
+    snapshotRow.set_id = kSet;
+    PendingPlanes withSnapshotRow;
+    withSnapshotRow.planes[snapshotPlane] = snapshotRow;
+    CHECK(EXPECT_THROW(StoreError, InventoryIn(c, withSnapshotRow, PendingContent{}, current)).code() ==
+          StoreError::Code::corrupt);
+
+    // The uuid is the container's, never an argument; a signed zero survives the canonical round
+    // trip, which Value equality alone would not distinguish.
+    CHECK(census.project_uuid == uuid && c.Meta("project_uuid") == uuid);
+    Project signedZero = current;
+    signedZero.extra["inventory_signed_zero"] = json::Value(-0.0);
+    CHECK(InventoryIn(c, PendingPlanes{}, PendingContent{}, signedZero).planes.size() == 4);
+    CHECK(json::Value(-0.0) == json::Value(0.0) &&
+          json::WriteCanonical(json::Value(-0.0)) != json::WriteCanonical(json::Value(0.0)));
+
+    // Resources: staged bytes re-hashed, and every record's MIME type and size checked.
+    const std::string resource = Noise(300, 72);
+    const std::string resourceSha = Sha256Hex(resource);
+    Project withResource = current;
+    withResource.resources[resourceSha] = {Meta(withResource.AllocateId(), "r.png", resource.size())};
+    PendingContent content;
+    content.blobs[resourceSha] = PendingContent::Bytes{resource, "image/png"};
+    CHECK(InventoryIn(c, PendingPlanes{}, content, withResource).resources.size() == 1);
+    PendingContent corrupt = content;
+    corrupt.blobs[resourceSha].bytes[0] = static_cast<char>(corrupt.blobs[resourceSha].bytes[0] ^ 0x01);
+    CHECK(EXPECT_THROW(StoreError, InventoryIn(c, PendingPlanes{}, corrupt, withResource)).code() ==
+          StoreError::Code::corrupt);
+    CHECK(EXPECT_THROW(StoreError, InventoryIn(c, PendingPlanes{}, PendingContent{}, withResource)).code() ==
+          StoreError::Code::missing_resource);
+    PendingContent otherMime = content;
+    otherMime.blobs[resourceSha].mime = "image/jpeg";
+    CHECK(EXPECT_THROW(StoreError, InventoryIn(c, PendingPlanes{}, otherMime, withResource)).code() ==
+          StoreError::Code::corrupt);
+
+    // A commit extension runs under the store's mutex: the unlocked core runs there without a
+    // deadlock and sees the committed rows. A rolled-back transaction leaves the census unchanged.
+    std::string extensionSha;
+    s.store->AddCommitExtension([&](Container& inner, const Snapshot& snapshot) {
+        extensionSha = InventoryIn(inner, PendingPlanes{}, PendingContent{}, *snapshot.project).Sha256();
+    });
+    CHECK(Committed(AddLayer(s, "after", s.doc->revision())));
+    const ObservationInventory afterLayer = s.store->ReadObservationInventory(*s.doc->snapshot().project);
+    const std::string after = afterLayer.Sha256();
+    CHECK(extensionSha == after);
+    // The layer inserted on top moves the paint objects' positional paths (`root_layers[i]`), which
+    // the census records; every plane's version and bytes are unchanged.
+    CHECK(after != census.Sha256() && afterLayer.planes.size() == census.planes.size());
+    for (const InventoryPlane& plane : census.planes) {
+        const InventoryPlane& moved = PlaneOf(afterLayer, plane.row.plane_id);
+        CHECK(moved.version == plane.version && moved.sha256 == plane.sha256 && moved.chunks == plane.chunks);
+    }
+    const RequestOutcome rolled = Mutate(s, "rolled", [&](Edit& e) {
+        s.store->WritePlane(e, a.plane, a0);
+        throw std::runtime_error("refused after staging");
+    });
+    CHECK(rolled.result && rolled.result->status == ResultStatus::failed);
+    CHECK(s.store->ReadObservationInventory(*s.doc->snapshot().project).Sha256() == after);
+    s.doc.reset();
+    s.store.reset();
+
+    // Reopen: the same census. Then stored corruption on copies of the file.
+    {
+        Session reopened = OpenSession(path);
+        CHECK(reopened.store->ReadObservationInventory(*reopened.doc->snapshot().project).Sha256() == after);
+    }
+    const fs::path rowCopy = path.parent_path() / "row.uzp";
+    const fs::path versionCopy = path.parent_path() / "version.uzp";
+    fs::copy_file(path, rowCopy);
+    fs::copy_file(path, versionCopy);
+    VersionRef bRef;
+    {
+        Container tamper = Container::Open(rowCopy);
+        bRef = BoundVersion(LoadManifest(StoredManifest(tamper, 2)), b.plane);
+        tamper.Exec("DROP TRIGGER plane_chunk_immutable");
+        Statement q(tamper, "UPDATE plane_chunk SET sha256 = ? WHERE version_id = ? AND chunk_x = 0 AND chunk_y = 0");
+        q.Bind(1, Sha256Hex(ChunkOf(a1, 0, 0))).Bind(2, bRef.version_id).Run();
+    }
+    {
+        Session tampered = OpenSession(rowCopy);
+        const auto error = EXPECT_THROW(StoreError, tampered.store->ReadObservationInventory(*tampered.doc->snapshot().project));
+        CHECK(error.code() == StoreError::Code::corrupt && Contains(error.what(), "plane " + std::to_string(b.plane)));
+    }
+    {
+        Container tamper = Container::Open(versionCopy);
+        tamper.Exec("PRAGMA foreign_keys = OFF");
+        Statement q(tamper, "DELETE FROM plane_version WHERE version_id = ?");
+        q.Bind(1, bRef.version_id).Run();
+    }
+    {
+        Session tampered = OpenSession(versionCopy);
+        const auto error = EXPECT_THROW(StoreError, tampered.store->ReadObservationInventory(*tampered.doc->snapshot().project));
+        CHECK(error.code() == StoreError::Code::missing_resource && Contains(error.what(), "is not stored"));
+    }
+    // Stored rows with extreme UV tiles are refused before the UDIM is computed.
+    for (const auto& [column, value] : {std::pair<const char*, std::int64_t>{"tile_u", std::numeric_limits<int>::max()},
+                                        std::pair<const char*, std::int64_t>{"tile_v", std::numeric_limits<int>::min()}}) {
+        const fs::path tileCopy = path.parent_path() / (std::string(column) + ".uzp");
+        fs::copy_file(path, tileCopy);
+        {
+            Container tamper = Container::Open(tileCopy);
+            tamper.Exec("DROP TRIGGER plane_immutable");
+            Statement q(tamper, "UPDATE plane SET " + std::string(column) + " = ? WHERE plane_id = ?");
+            q.Bind(1, value).Bind(2, static_cast<std::int64_t>(b.plane)).Run();
+        }
+        Session tampered = OpenSession(tileCopy);
+        const auto error = EXPECT_THROW(StoreError, tampered.store->ReadObservationInventory(*tampered.doc->snapshot().project));
+        CHECK(error.code() == StoreError::Code::corrupt && Contains(error.what(), "UDIM grid"));
+    }
+}
+
 int Run(const std::string& only) {
     const std::vector<std::pair<const char*, std::function<void()>>> cases = {
         {"schema_and_pragmas", SchemaAndPragmas},     // 2.2
@@ -1541,6 +1799,7 @@ int Run(const std::string& only) {
         {"planes_corruption", PlanesCorruption},               // planes 3.7
         {"planes_binding_rules", PlanesBindingRules},          // planes 2.1, 2.5, 2.7
         {"filter_observations", FilterObservations},           // decision 362, phase3.1 2.6g
+        {"observation_inventory", ObservationInventoryCensus},  // decision 362 option 2, phase3.1 2.6j
     };
     int failed = 0;
     int ran = 0;
