@@ -373,3 +373,31 @@ independent review passed. Reports are write-once outside the repository, and
 stdout carries hashes and counts only. The command exits 2 while acceptance is
 blocked even when receipt and observable-domain validation pass. No actual record
 has yet been processed by this new command at this method checkpoint.
+
+After commit `59098434`, the first real validation correctly refused the missing
+authored plane input in the store; its report remains unchanged. The public
+371-byte `plane.obj` was then admitted through the normal input command after
+checking its existing authored hash. The next validation passed both receipt
+and observable domain: two rounds, five boundaries, 577 context leaves and zero
+diagnostic failures. Effective settings and importer acceptance remain blocked.
+Private successful report SHA-256:
+`09394a9f839b9ac71552382f009785de55304b9c2222340a4a139008c6e14aef`;
+preserved initial refusal:
+`0eaeb370da68594d6547837da599a775a0385f13fab9dd03849fb78995fea135`.
+
+### Admitted F/H source-binding diagnostic
+
+`filter_source_binding` checks J1-J4 using actual admitted F and H bytes, never
+caller-extracted values or success flags. F receipt/environment and observable
+context validation precede complete identity, typed pre16 parameter equality,
+successful step 14/consistent step 15 and output/input/active-output/resolution
+joins. The public H and F serializers have an explicit resolution projection;
+F tuple/list container kinds remain in the diagnostic, while unrepresented
+containers refuse. Numeric types and signed zero remain distinct.
+
+The registry is rechecked on success and every refusal; drift supersedes the
+result while preserving only a sanitized prior reason code. I/O failures expose
+no paths or observed values. Twenty-three authored cases, static checks and
+independent review passed. The result is diagnostic only: it cannot construct
+VerifiedFilterContext, authorize import or establish the destination relation.
+No real F/H binding has been attempted at this method checkpoint.
