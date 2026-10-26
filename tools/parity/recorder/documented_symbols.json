@@ -763,6 +763,10 @@
       "documented_as": "substance_painter.layerstack.FillLayerNode.get_source",
       "page": "substance_painter/layerstack/layereffect/fill.html"
     },
+    "substance_painter.layerstack.FillLayerNode.get_symmetry_parameters": {
+      "documented_as": "substance_painter.layerstack.FillLayerNode.get_symmetry_parameters",
+      "page": "substance_painter/layerstack/layereffect/fill.html"
+    },
     "substance_painter.layerstack.FillLayerNode.is_symmetry_enabled": {
       "documented_as": "substance_painter.layerstack.FillLayerNode.is_symmetry_enabled",
       "page": "substance_painter/layerstack/layereffect/fill.html"
@@ -1905,6 +1909,10 @@
     },
     "substance_painter.source.SourceSubstance.get_properties": {
       "documented_as": "substance_painter.source.SourceSubstance.get_properties",
+      "page": "substance_painter/source/substance.html"
+    },
+    "substance_painter.source.SourceSubstance.get_source": {
+      "documented_as": "substance_painter.source.SourceSubstance.get_source",
       "page": "substance_painter/source/substance.html"
     },
     "substance_painter.source.SourceSubstance.image_inputs": {

@@ -709,3 +709,10 @@ identity/post-admission modules. The sixteen paired cases passed again after the
 provenance-only recorder-version correction; static checks and independent review
 passed. Cases cover mismatched contexts/environments, changed registry, receipts,
 formulas, windows, native bits and preserved differing recorder provenance.
+
+After commit `b18b5cda` fixed the method, REV381 compared the actual admitted
+normalization outputs: FLOAT and PNG16 are bit-equal in both rounds under the
+verified common context. Private report SHA-256:
+`40c94a11446fef7bbb00d47bd275ff7856cf53a67a3ae6b4590b99ed94c2845e`.
+This establishes the measured transfer equality only. Calibration's nonidentity,
+internal normalization, Color flag and production support remain unresolved.

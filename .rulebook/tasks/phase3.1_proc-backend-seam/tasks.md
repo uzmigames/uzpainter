@@ -255,3 +255,37 @@ The original recording remains unchanged; provenance stays owner-local submissio
 without historical execution attestation. This accepts H artifact admission only.
 F effective settings, independent context capture, destination relation and the
 frozen-host proof remain open before any real V2 import.
+
+The exact step 5 `resource_url` of the pinned recipe A
+(`source_substance_control.booleans_filter_request`, not the V1 control) was also
+checked against the original H request, receipt and observed source URL: all
+three match. This does not substitute for the future fresh F pre16 source-state
+and destination joins.
+
+## 7. Read-only F context software (2026-10-26)
+
+The separate `filter_context_contract`, recorder `filter_context` and
+`painter_filter_context` modules collect documented getter leaves and validate a
+closed five-boundary context sequence: after create, after setup6, pre16 in both
+rounds, and after reopen. They preserve actual serializers, exceptions, integer
+and double types, signed zero, node/parent UIDs and fresh source resolution.
+The original A recipe stays unchanged. No runner hook or real capture is enabled
+by these modules alone.
+
+The contract validates the complete observable census, role lookup joins,
+host/Filter UID continuity, original Paint identity/name, neutral geometry,
+host blending, Filter channels and per-channel values. Channel formats, depths
+and flags use documented types without inferring the Color flag. UV symmetry
+refusals remain explicit observations. Missing tangent space, workflow and mesh
+unit scale always refuse with `F_EFFECTIVE_SETTINGS_UNVERIFIED`; callers cannot
+turn omitted evidence into defaults or override the gap.
+
+Seventy distinct focused authored tests passed (69 before the final provenance
+case, plus that case; affected exception cases were rerun after the helper fix).
+Mypy, Ruff, formatting, independent review and guard checks passed. The new
+provenance test binds every allowed getter to the documented symbol catalog and
+rejects arbitrary dynamic dispatch. Two existing documented symbols were added
+to that catalog with their exact Sphinx anchors; the 12.1/Python 0.3.5 edition was
+confirmed against existing capability provenance and the installed inventory.
+The complete 37-node recorder provenance suite passed across the initial run and
+its single affected retry. No guard was relaxed or capability promoted.
