@@ -2132,6 +2132,9 @@ int RunProceduralEffects(const std::filesystem::path& path, bool observation = f
 int RunSnapshotBindFixture(const std::filesystem::path& path);
 int RunFrozenHostProofCases(const std::filesystem::path& work);
 int RunFilterImportV2Cases(const std::filesystem::path& work);
+int RunFilterGateAdmissionCases(const std::filesystem::path& work);
+int RunFilterGateSettingsCases(const std::filesystem::path& work);
+int RunFilterGateTraceCases(const std::filesystem::path& work);
 int RunSnapshotCaptureFixture(const std::filesystem::path& work, double amount, const std::string& bridge,
                               const std::string& painterSide);
 int RunFilterObservationBase(const std::filesystem::path& path, const std::filesystem::path& out);
@@ -2147,6 +2150,9 @@ int main(int argc, char** argv) {
         if (args.size() == 2 && args[0] == "snapshot-bind") return RunSnapshotBindFixture(args[1]);
         if (args.size() == 2 && args[0] == "frozen-host-proof") return RunFrozenHostProofCases(args[1]);
         if (args.size() == 2 && args[0] == "filter-import-v2") return RunFilterImportV2Cases(args[1]);
+        if (args.size() == 2 && args[0] == "filter-gate-admission") return RunFilterGateAdmissionCases(args[1]);
+        if (args.size() == 2 && args[0] == "filter-gate-settings") return RunFilterGateSettingsCases(args[1]);
+        if (args.size() == 2 && args[0] == "filter-gate-trace") return RunFilterGateTraceCases(args[1]);
         if (args.size() == 5 && args[0] == "snapshot-capture-fixture")
             return RunSnapshotCaptureFixture(args[1], std::stod(args[2]), args[3], args[4]);
         if (args.size() == 2 && args[0] == "snapshot-capture-validate" && args[1] == "--input-stdin")

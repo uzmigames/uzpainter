@@ -8,14 +8,12 @@ import re
 import subprocess
 from pathlib import Path
 
-from tests.export.conftest import export_tests as export_tests
-
 REPO = Path(__file__).resolve().parents[2]
 PREFIX = "FILTER_IMPORT_V2: "
 
 
 def test_filter_import_v2_transaction_on_authored_evidence(
-    export_tests: Path,  # noqa: F811
+    export_tests: Path,
     tmp_path: Path,
 ) -> None:
     proc = subprocess.run(

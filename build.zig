@@ -1825,7 +1825,14 @@ pub fn build(b: *std.Build) void {
     const export_hook_flags = evaluator_flags ++ [_][]const u8{"-DUZP_EXPORT_FAULT_HOOKS=1"};
     export_tests_mod.addCSourceFiles(.{
         .root = b.path("tests/export"),
-        .files = &.{ "export_test.cpp", "snapshot_source_test.cpp", "filter_import_v2_test.cpp" },
+        .files = &.{
+            "export_test.cpp",
+            "snapshot_source_test.cpp",
+            "filter_import_v2_test.cpp",
+            "filter_gate_admission_test.cpp",
+            "filter_gate_settings_test.cpp",
+            "filter_gate_trace_test.cpp",
+        },
         .flags = &export_hook_flags,
     });
     // The test-only H diagnostic `snapshot-capture-validate` embeds its validator sources.
@@ -1834,9 +1841,16 @@ pub fn build(b: *std.Build) void {
     // only this test binary compiles it, with the H receipt validators it uses.
     export_tests_mod.addCSourceFiles(.{
         .root = b.path("src"),
-        .files = &.{ "procedural/filter_observation_import_v2.cpp", "procedural/snapshot_recording.cpp" },
+        .files = &.{
+            "procedural/filter_observation_import_v2.cpp",
+            "procedural/snapshot_recording.cpp",
+            "procedural/filter_gate_admission.cpp",
+            "procedural/filter_gate_settings.cpp",
+            "procedural/filter_gate_trace.cpp",
+        },
         .flags = &export_hook_flags,
     });
+    embed_inputs.add(export_tests_mod, "src", &.{"procedural/filter_gate_pins.cpp"}, &export_hook_flags);
     export_tests_mod.addCSourceFiles(.{
         .root = b.path("src"),
         .files = &(export_sources ++ [_][]const u8{export_fault_source}),

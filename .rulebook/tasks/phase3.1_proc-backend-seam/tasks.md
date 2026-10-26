@@ -582,3 +582,40 @@ the retained H379 validator binary remained unchanged. Logs:
 `tmp/scratch/rev400-seal.log` and `tmp/scratch/rev400-seal.xml`.
 This closes the transaction-seal defect only; native admission, full F validation,
 destination construction and the real frozen-host proof remain open.
+
+### Native F admission, settings and trace
+
+The C1 reader validates the fixed request and producer, the current compiled
+envelope, all twelve authoritative store entries before any private blob read,
+and every referenced byte hash and size. Windows handle fences reject reparse
+paths. Registry bytes are checked before and after success or refusal. Its
+private result proves admission integrity, not Painter execution attestation.
+
+C2 preserves the original record identity while validating the five bound panel
+triples, UI/process/project bindings, mesh evidence and complete bounded PNG
+decoding. C3 reconstructs the full ordered trace and five context frames, validates
+the complete census and computes the four per-round hashes without dropping
+observations. Effective settings are derived only after the C3 token joins the
+same admitted record. No caller flag, Python report or mutable result grants a
+native `VerifiedFilterContext`.
+
+The focused union passed 88 admission checks, 60 settings checks, 50 differential
+trace scenarios plus one cross-capture identity check, and the existing 81 seal
+checks. Mypy, Ruff, Zig formatting, independent reviews, the public-data guard
+and frozen source checks passed. The retained H379 validator binary was unchanged.
+
+The initial integrated build exposed a local exception-name collision; its log
+is preserved in `tmp/scratch/rev403-gates.log`. Removing redundant local fixture
+imports also restored a single shared native build across the selected wrappers.
+The next run passed admission and seal; two authored expectations needed
+correction: Pillow accepts some incomplete PNG framing/raster data, and UUID
+drift is correctly rejected by the panel gate before the trace gate. Native
+validation was not weakened. Both remaining nodes then passed, including all
+fifty differential scenarios, with one fixture setup per run. Evidence remains
+in `tmp/scratch/rev403b-gates.log`, `tmp/scratch/rev403c-gates.log` and their JUnit
+XML files. No unaffected passing node was repeated solely for these corrections.
+
+These are authored native checks. The real destination mapping, H admission
+gate, production factory/command and frozen-host proof remain required before
+actual import. No real native F import, full-suite acceptance or task closure is
+claimed by this checkpoint.

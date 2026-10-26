@@ -240,7 +240,7 @@ Only after independent fixture construction may old step17 identity and old16/18
 
 H isolation and F target are two authenticated contexts related by the following enumerated mappings. Their context hashes are not expected to equal. No caller-supplied `compatible` flag or free-form allowed-differences list is accepted.
 
-1. **Frozen source substitution.** H scalar B becomes the actual project-private snapshot plane. `SnapshotSourceProvider::Resolve` and `CpuTileStore::Upload` copy its Float32 bits. Destination keeps the genuine snapshot reference, signature, metadata, plane/version/root. Original ResourceID is provenance, never an executable archive alias.
+1. **Frozen source substitution.** H scalar B becomes the actual project-private snapshot plane. `SnapshotSourceProvider::Resolve` and `CpuTileStore::Upload` copy its Float32 bits. Destination keeps the genuine snapshot reference, signature, metadata, plane/version/root. Original ResourceID is provenance, never an executable archive alias. The H store's host Fill may also hold the facade's known constructor defaults on inactive channels; mapping 1 removes exactly those, as section 11 defines ("Known constructor defaults on the host Fill"), and nothing else.
 2. **Auxiliary RGB removal.** User1 is the paired bridge's isolation control. Its three components and both rounds must equal B before removal. Destination retains F's actual stack channels and exactly its User0 host source; do not invent or silently remove a channel from F's projection. This is the existing scalar snapshot migration, not an arbitrary channel-independence theorem.
 3. **Projection boundary.** H Nearest/RepeatNone remains capture provenance. Destination obeys existing identity full-UV128 BilinearHQ/Repeat admission. The snapshot provider uploads B directly without sampling either UV mode. This relates frozen output to stored source; it does not claim that rerendering the original procedural under two Painter projections gives identical intrinsic pixels. Provider guards remain unchanged.
 4. **Initial empty Paint.** H sole Fill maps to F's actual `[host Fill, initial empty Paint]`. Require the real empty-Paint predicate. Native proof retains the Paint and exercises its actual skip; name, UID and position remain context state.
@@ -307,3 +307,251 @@ Getters never run this proof. They perform pure checks and one locked inventory 
 8. Fresh getter success only for matching current context/lease. Stale handle after reopen refuses; fresh handle may succeed. Unsupported setters and legacy branches unchanged. Partial observations preserve absence versus empty.
 
 Real H/F acceptance additionally requires the approved migration-rule native computation and independently admitted fresh F context. This specification authorizes no substitute stub, fabricated proof, capture retry or parity promotion.
+
+## 11. Native F gate (contract addendum, before code)
+
+The only real constructor of `VerifiedFilterContext` is a native gate over admitted F bytes for the golden `tier0/api-probes/filter-context-settings-a`. Python validators (`filter_context_settings_validation`, `filter_context_validation`, `filter_source_binding`) remain the executable specification and a test-only differential oracle; a Python result, report, object or flag is never accepted as authentication. The isolated embedded interpreter is not a trusted boundary: nothing pins its standard library, site-packages or `python/` folder, and its `._pth` runs `site`. Historical F385 and every capture without bound settings evidence still refuse.
+
+### Entry point and destination
+
+A distinct command and payload: `UzPainter.exe assets import-filter-observation <h-store.uzp> --oracle-store <root> --manifest <public-manifest.json> --request <import.json>`, payload schema `uzpainter/filter-observation-v2-import/1` (never the V1 fixture payload `uzpainter/filter-observation-import/2`). The payload has exactly `schema, manifest, host, expected_base_revision`:
+- `manifest` is a `kind, sha256, size_bytes` ref of kind `filter_manifest` naming the public manifest bytes the command reads from `--manifest`;
+- `host` is the capture/2 host section;
+- `expected_base_revision` is an exact nonnegative integer.
+
+No locator map, trust flag or computed value is accepted. Every private byte is read from the oracle store by the layout below.
+
+The public manifest is NOT an admitted blob. `record_run` admits only its twelve private refs and writes the manifest outside the store, so no store entry or blob exists for it. The manifest bytes are untrusted input until all three of these pass:
+- their SHA-256 and size equal the payload ref;
+- the F1 invariants hold;
+- every one of its twelve refs joins an admitted store entry (F2–F4).
+
+Its ref in the capture/2 filter section is the hash of exactly those bytes.
+
+The destination is the ORIGINAL H store at `<h-store.uzp>`: no copy, no `SaveAs`, no new store and no new UUID. Its `project_uuid` must equal the H receipt's. It must hold the H snapshot entry, with the receipt's signature and `/3` metadata, and the census plane equal to B. `CheckCaptureDomain` (mesh and settings) must pass. All mapping is computed in memory. The mapping, the Filter insertion, the native proof and the immutable entry happen in ONE `Submit`. Any refusal, including inside that callback, leaves the store byte-identical: no revision, operation record or stored change. Only a committed outcome is followed by `Save`, close, reopen and `ObservedFilter`, which must return the same entry and observations.
+
+### F1 manifest
+
+Decode the manifest with core JSON, which keeps int64, double, bool, null and string distinct and rejects duplicate keys and non-finite numbers. Its typed invariants must equal those of the fixed request compiled into the binary (`#embed` of `parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/requests/tier0/api-probes/filter-context-settings-a.json`). The invariants are the document without `private_records` and without `software.painter`. The typed hash of `instruction_sequence` must equal A's.
+
+`software.painter` must equal the reviewed approved build compiled into the gate: `build_id`, `version` (its prefix before `+js-api.`) and `product`.
+
+`private_records` holds exactly twelve refs, each validated separately as exactly `record_id, kind, sha256, size_bytes`:
+- `golden-record`, kind `private_oracle_record`;
+- `oracle-environment`, kind `oracle_environment_record`;
+- ten `settings_panel_evidence` refs, with ids `r1-settings-<b>-<image>` for the first three boundaries and `r2-settings-<b>-<image>` for the last two, where `<image>` is `configuration-image` or `physical-size-image`.
+
+The twelve refs are matched by exact, UNORDERED membership of `(record_id, kind)` pairs, with no duplicate and no other ref; the manifest's ref order is not checked. The gate keeps them internally in the fixed order above. Order is checked only where the record defines it: the recording outputs.
+
+### F2–F4 admission and record
+
+Admission is authoritative only in the oracle store. The root must be outside the repository and hold `store.json` with schema `uzpainter/parity/store/1`. For each of the twelve refs, the entry `corpora/<build_id>/<golden_id>/<record_id>.json` must exist, be closed `uzpainter/parity/store-entry/1` (`painter_build_id, golden_id, record_id, kind, sha256, size_bytes, file_name`) and equal the ref. Admission is checked before any blob is read.
+
+The blob `blobs/<first two hex>/<sha256>` is read once, then its SHA-256 and size are recomputed. The plane input is the blob named by the fixed request's input SHA-256, read and rehashed exactly as the Python validator's `store.resolve` and `store.load` do. No `inputs/<sha256>.json` entry is required, because the F recorder writes none. The blob must hash to `PLANE_SHA256`. A receipt, ref or hash supplied by a caller never proves admission.
+
+The record and the environment blob must satisfy their closed schemas, and `record.environment` must be typed-equal to the environment blob. Three identities stay distinct:
+
+- **Environment identity.** The environment record (`uzpainter/parity/oracle-environment/1`) carries `painter_build`, `gpu_model`, `driver_version`, `os_build`, `colour_configuration_sha256`, `recorder_version` and its provenance fields; it carries no `OCIO`, `PAINTER_ACE_CONFIG` or source revision. It joins the approved envelope `painter-12.2.0+js-api.1.1.20-env-a981b586eae7` by the existing Legacy rule (`recorded_request_environment_matches` when the manifest names no OCIO configuration):
+- `basis` is `recorded`;
+- the five envelope fields are non-empty strings and none is `unknown`;
+- `painter_build` equals the registry entry's;
+- the SHA-256 of canonical `{painter_build, gpu_model, driver_version, os_build, colour_configuration_sha256}` is the entry's `envelope_sha256` or one of its `equivalent_envelopes`.
+
+The raw host fields are never compared to anything else. The gate reads the registry at its locator before admission: its raw bytes must equal the reviewed `parity/envelopes/registry.json` compiled into the gate, and the entry is parsed from that registry's `current` id. The gate reads the registry again after admission, on success and on refusal. Unreadable bytes, changed bytes or a changed typed entry give `F_SETTINGS_REGISTRY_DRIFT`, which supersedes any earlier code and keeps it only as `F_SETTINGS_REGISTRY_DRIFT:<earlier code>`. An unreadable registry before admission gives `F_SETTINGS_REGISTRY_UNAVAILABLE`. `colour_configuration_sha256` must equal the hash the recorder defines for the Legacy readback.
+- **Legacy selection.** This comes from the record key, not the environment. `key.project_settings` must be exactly `{create, colour_management}`, with `create` the compiled request's create settings and `colour_management` exactly `{mode: legacy, OCIO: null, PAINTER_ACE_CONFIG: null}`. `key.effective_defaults.colour_management` must be the same Legacy object.
+- **Producer.** `environment.recorder_version` must equal the single reviewed settings producer compiled into the gate (`uzp-recorder/1+src.89f3bbffae21361e`). The reviewed source revision `7c3f819c…` is compiled provenance of that pin and is never read from the record. Unknown or future producers refuse.
+
+The record must also have:
+- `golden_id` and tier `0`;
+- `key` with the build, the input pins and the recipe hash;
+- empty `resource_hashes`, a null `bake_backend` and a null `render_state`;
+- recordings exactly `[r1 same_session, r2 after_save_reopen]`, with one shared `session_id`.
+
+### F5–F7 trace, context, settings and images
+
+- **Settings slots removed first.** Exactly five validated panel/image triples are removed (the `split_settings_outputs` contract). The trace (`_f_evidence_from_record` with the settings golden) and the context sequence (`validate_context_readback`, `validate_context_sequence`, `validate_census`) are then checked exactly as section 6 and the Python specification define them.
+- **Cross-round comparison.** Full frames are never compared raw across rounds: their output ids and lifecycle state legitimately differ, and the round hashes (F9) keep them whole. A field consumed by the F8 projection must have a typed-equal value, with no `raised`, in the leaf with the same `leaf_key(call, selector, parameters)` in `pre16-r1` and in `pre16-r2`. A consumed leaf missing from either frame, or differing between them, refuses. Leaves that F8 does not consume are not compared across rounds. The existing invariants of `validate_context_sequence` remain exactly as defined: project UUID, role UIDs, root census and initial Paint name.
+- **Settings contract.** The settings contract (`_panel` through `derive_effective_settings`) must derive `PerVertex`, `Default`, one centimetre per unit and the basis `unitless-obj-internal-centimetres-v1`, against the admitted plane bytes.
+- **Images.** Each of the ten PNGs must equal its ref and record blob (sha256, size, `image/png`) and decode completely with the vendored libspng. The native check is deliberately STRICTER than the Python oracle (Pillow `verify()` then `load()`), not equivalent to it:
+  - Every image the oracle refuses must also refuse natively; differential tests prove this on the authored cases.
+  - A CRC error in any chunk, ancillary included, is a shared refusal. Pillow's default `verify()` rejects it, since `LOAD_TRUNCATED_IMAGES` is not enabled. The differential tests cover it as a case both sides refuse.
+  - The native-only refusals are exactly these six. Each has an authored native test whose image the settings wrapper asserts Pillow's `verify()` and `load()` accept (`tests/export/test_filter_gate_settings.py`):
+    - bytes after IEND (`trailing`);
+    - an incompletely framed IEND, such as an IEND whose last four CRC bytes are missing (`truncated`); natively, IEND must be complete with a valid CRC;
+    - stream data after the complete zlib stream inside IDAT, with every chunk CRC valid (`idat-trailing`);
+    - decompressed data beyond the expected scanlines (`extra-scanline`);
+    - decompressed data short of the expected scanlines (`missing-scanline`). The inflated size must be exactly the image's scanline bytes, neither more nor less;
+    - an image above the fixed limits (`over-width`, `over-height`, and the chunk and ancillary limits).
+  - The shared refusals, rejected by Pillow too, are:
+    - a CRC error in any chunk (`ancillary-crc`);
+    - a zlib stream missing its final Adler-32 bytes (`missing-adler`);
+    - an invalid scanline filter type (`invalid-filter`).
+
+  The native decode requires:
+  - the PNG signature, then IHDR;
+  - every chunk CRC, with errors fatal for critical and ancillary chunks;
+  - a complete zlib stream with every scanline decoded;
+  - IEND last, with no trailing bytes;
+  - width and height in 1..8192;
+  - a decoded RGBA8 size of at most 256 MiB;
+  - no chunk larger than 64 MiB, and no more than 64 MiB of ancillary chunk data in total.
+
+  Tests cover each limit at its edge and one above it. A truncated, corrupt or partially decodable image refuses.
+
+### F9 per-round hashes
+
+For recording `rk` of the stripped record (settings slots removed), each hash is the lowercase SHA-256 of `core::json::WriteCanonical` (typed canonical JSON) of one array:
+
+- `probe_sequence_sha256`: an array of complete OUTPUT objects, exactly as recorded and in record order: the outputs whose `output_id` matches `s<step>/<name>` with 7 ≤ step ≤ 24.
+- `context_readback_sha256`: an array of FRAME objects, one per context boundary of the round in order (r1: `after-create`, `after-setup6`, `pre16-r1`; r2: `after-reopen`, `pre16-r2`). Each frame is exactly `{schema, boundary, condition, outputs}` as the context contract rebuilds it, with `outputs` the boundary's complete output objects in record order.
+- `host_readback_sha256`: an array of complete OUTPUT objects from the round's pre16 frame, in record order, whose `args.selector` is exactly `{"role": "host"}` or `{"role": "host", "source": true}`.
+- `filter_readback_sha256`: the same, with `args.selector` exactly `{"role": "filter"}` or `{"role": "filter", "source": true}`. The context protocol has no `source: false`; a selector with any other `source` value is refused by the context contract before hashing.
+
+An empty array is hashed as `[]` and is legal only where the trace contract allows it. The store keeps validating only shape, order and links; the gate computes these values itself.
+
+### Starting shape of the H store
+
+Every member of the base projection is classified before mapping. A member is RETAINED (kept typed-identical), MAPPED (its value is set from F evidence only) or REFUSED (any value other than the one stated refuses with `TARGET_CONTEXT_UNREPRESENTABLE`). The mapper never deletes or overwrites unknown content. `ExpectedDestination` copies from the base only RETAINED members and never copies an `extra` object or an unlisted member. Any member, enum value or `extra` key this table does not name refuses.
+
+| Member | Class | Rule |
+|---|---|---|
+| `versions`, `display`, `export_defaults`, `mesh.import_report` | RETAINED | Unchanged; part of the projection hash. |
+| `settings` | REFUSED unless equal | Satisfies `CheckCaptureDomain` and equals the settings derived from F (Legacy, OpenGL, PerVertex, Default, scale 1); empty `settings.extra` and `color_management.extra`. |
+| `mesh` | REFUSED unless equal | The plane resource; empty `mesh.extra`. |
+| project `extra` | REFUSED unless listed | Holds only the procedural snapshot member(s) holding the H entry, whose other retained snapshot entries are RETAINED; no `filter_source_observations`. |
+| texture set | REFUSED unless equal, except `name` MAPPED | Exactly one; resolution 128; exactly one UV tile 1001 with empty `extra`; no mesh maps; `original_name`, `description`, `material_id`, `bake_settings` and `height_to_normal_method` RETAINED; empty `extra`. |
+| stack | `id` RETAINED; `name` MAPPED; `channels` MAPPED | Exactly one stack. The channels and formats become F's exactly. A base channel that F lacks may be dropped only when no layer references it; each channel `extra` must be empty. Empty stack `extra`. |
+| root layers | REFUSED unless listed | An order-preserving subsequence of `[host Fill, empty Paint]`; anything else, including groups, instances and extra layers, refuses. |
+| host Fill (when present) | `uid` RETAINED; `name`, `visible`, `blending`, `active_channels`, `projection` MAPPED; known constructor defaults REMOVED | `fill.source_mode` Split; `active_channels` exactly `{User0}`; `sources` exactly `{User0: ProceduralSource}` equal to the bind of the H signature, plus any subset of the two known constructor defaults below; `mono_source` and `material_source` absent; no `content_effects`; no `mask`; `geometry_mask` the neutral default (type Mesh, `inclusion_list` false, no items, empty `extra`); `symmetry` the neutral default; no `children`; no `instance_source`; `collapsed` false; no `preset_ref`; empty layer and fill `extra`. |
+| empty Paint (when present) | `uid` RETAINED; `name`, `visible`, `blending` MAPPED | `core::IsEmptyPaintLayer`; no `mask`; neutral `geometry_mask`; no `children`; no `instance_source`; no `preset_ref`; empty `extra`. |
+| missing host Fill or Paint | allocated (ids below) | Every field from F evidence; a neutral default only where F observed that neutral state (geometry mask, symmetry, masks, effects). |
+
+The neutral defaults, and the F leaves that prove each MAPPED field, are listed in code next to the F8 projection, with one authored refusal per row. The owner's classification of the real H store (counts and types only) must fall inside this table before a real run. The table is not widened to fit it.
+
+#### Known constructor defaults on the host Fill (approved, REV401)
+
+The owner's read-only classification of the real H store found three host Fill sources: two constant sources and the procedural `User0` one. After independent review, the following correction to mapping 1 is approved. It rests on these public facts:
+
+- **Origin.** The facade's Fill creation (`InsertDefaults`, `src/python/edits.cpp`) runs `ApplyDefaultSources` (`src/python/stack_sync.cpp`). That function gives every new Fill a uniform `BaseColor` of `float32(0.8)` and a uniform `Height` of `float32(+0)`, both in the `Working` colour space, when the stack has those channels.
+- **Bind and evaluation.** `assets bind-snapshot` keeps those other sources. The evaluator reads only active channels (`SourceOf`, `src/evaluator/dag.cpp`).
+- **Domain.** The frozen-host domain (`FrozenHostDomainProblem`) stays unchanged: exactly one host source, `User0`.
+
+The rule:
+
+- **Allowed host sources.** `User0` = the procedural H source, plus any subset of these two, and nothing else:
+  - `BaseColor` = `UniformColorSource` with components `[float32(0.8)] * 3`, `color_space` `Working`, empty `extra`;
+  - `Height` = `UniformColorSource` with components `[float32(+0)] * 3`, `color_space` `Working`, empty `extra`.
+- **Conditions.** `active_channels` is exactly `{User0}` and `source_mode` is `Split`.
+- **Exact comparison.** Typed canonical comparison applies, so `float32(0.8)` differs from the double `0.8` and `+0` differs from `-0`.
+- **Removal.** `ExpectedDestination` removes only these defaults, inside the same `Submit` as the rest of the import. F's stack channels, H's snapshots and census, and the empty Paint are kept.
+- **Refusals.** Any other value, type, colour space, `extra`, source or active channel refuses before anything is staged. The removal makes no claim about Painter's own state for those channels.
+- **Tests.**
+  - All four subsets are accepted: none, `BaseColor`, `Height`, both.
+  - Each single mutation refuses: value, double instead of float32, `-0`, colour space, `extra`, another source kind, another channel, an active default channel.
+  - A refusal leaves the store byte-identical.
+
+The owner's private checks only confirm that the real store falls inside this rule; they choose no value.
+
+### Filter evidence of the expected destination (slice C4)
+
+`ExpectedDestination` derives the Filter's evidence only from the validated slices, never from old expected values:
+
+- **Descriptor:** `{schema: uzpainter/filter-observation-descriptor/1, role: filter, resource_id, parameters}`. Its parts come from the authenticated recipe steps 16 (`get_parameters`), 17 (`resource_id`) and 18 (`image_outputs`).
+  - Each step must be unraised and typed-equal in both rounds.
+  - Each must also equal the Filter's pre16 source leaves; `image_inputs` must be empty.
+  - `resource_id` is the step-17 identity flattened to `{url, context, name, version}`.
+  - The parameters stay in decision 361's scalar codec, typed (int, double and signed zero kept apart).
+- **Observations:** exactly `{parameters, resource_id, image_outputs}` with those same values. The Filter reference is the descriptor's observation pin, carrying those parameters.
+- **capture/2 `filter` section:**
+  - `provenance` is the V1 body:
+    - `recorder` = `environment.recorder_version`;
+    - `envelope_id` = the admitted envelope;
+    - `painter_build_id` = the manifest's `software.painter.build_id`;
+    - `recipe_sha256` = recipe A;
+    - `resource_query` = recipe step 6's `search`;
+    - `authored_inputs` = `[{input_id: plane, sha256: PLANE_SHA256}]`;
+    - `receipts` = one `{condition, sha256}` per original recording, where `sha256` is the typed canonical hash (`ObservationKey`) of that complete recording as admitted.
+  - `manifest`, `record` and `environment` are the admitted references, with kinds `filter_manifest`, `filter_record` and `filter_environment`.
+  - `rounds` is the trace's F9 rounds.
+- **Hashes:**
+  - the base and prospective projection hashes (without the observation namespace);
+  - `ObservationKey(ValidatedHostArtifacts::Identity())`;
+  - `ObservationKey({filter_capture, admission_identity})`.
+
+  Together with the role map, these are the expected destination's identity that the seal (slice C5) binds.
+
+### Mapping, deterministic ids and target seal
+
+`ExpectedDestination(F, H, base)` is a pure function that returns the complete prospective project:
+- RETAINED members come from the base;
+- MAPPED members come from F;
+- the six section 7 mappings are applied: host bound to the snapshot like `bind-snapshot`, F projection inside the provider guards, F names and states, the Filter at host Content index 0.
+
+The host Fill and the empty Paint are reused when the starting shape holds them, keeping their ids. Missing nodes are allocated from `base.next_id` in a fixed order: the host Fill (if missing), then the empty Paint (if missing), then the Filter. The Filter id is therefore `base.next_id + (number of nodes allocated before it)`, never assumed to be `base.next_id`. Texture set and stack ids are the base's. The role map holds the native id for the set, stack, host, Paint and Filter, each with the F UID it maps. Inside the transaction, `Edit::AllocateId` is called in the same order and must return exactly the expected ids; anything else refuses.
+
+The factory `VerifyFilterContext` does not exist until C1–C4 exist. It is the only producer of a `VerifiedFilterContext` and seals, privately:
+- the store binding: the transient in-process identity of the owning `ProjectStore` instance (compared in-process, never serialized, hashed or written to a record) plus the store's `project_uuid`;
+- `expected_base_revision`, which must equal the current revision;
+- the base projection hash;
+- the role map;
+- the `ExpectedDestination` projection hash;
+- the H identity hash;
+- the F evidence hash: the capture/2 filter section plus the validated manifest, record and environment hashes.
+
+The seal has no public constructor, setter, token or callback. A context sealed for one store instance refuses on any other instance, even one with the same UUID and revision. No persistent file identity is introduced.
+
+The commit takes no caller `ImportTarget` on the real path. Inside its one `Submit`, it:
+1. checks the store binding and every sealed field;
+2. applies `ExpectedDestination` with the same allocation order;
+3. requires the projection hash (without the namespace) to equal the sealed one;
+4. runs the existing domain, host request, context, native proof, recheck, namespace check and `ObservedFilter` steps.
+
+The proof's projection hash must equal the seal's.
+
+### Operation request and replay scope
+
+`core::OperationRecord` stores only `project_uuid`, `idempotency_key`, `request_hash`, `outcome` and `committed_revision`; no tool, arguments or seal are stored. The operation request is therefore reconstructible from stable inputs alone:
+
+- **tool:** `filter-observation-commit-v2`;
+- **arguments:** exactly `{payload_sha256, project_uuid, expected_base_revision}`. `payload_sha256` is the SHA-256 of `core::json::WriteCanonical` of the strictly parsed payload (duplicate keys and unknown fields refuse), not of its raw file bytes;
+- **idempotency key:** `filter-observation-commit-v2:` + `ObservationKey(arguments)`; `request_hash` is `RequestHash(tool, arguments)`;
+- **outcome:** the store's standard outcome, whose `returned` object is exactly `{entry_key}` (lowercase SHA-256), as the existing commit already reads it.
+
+The seal stays a private in-process recheck and never enters the request.
+
+- **In-process replay (the C++ API, owned with the seal).** Submitting the exact same request object again returns the stored outcome through `DecideAdmission`, which admits a known key before any revision check. Nothing executes again.
+- **Command replay (C6, separately specified, limited scope).** After the store-free validation (H artifacts, F1–F9, J1–J4) and before any mapping, the command reads the key with the existing `store::ReadOperation`:
+  - A row that does not decode refuses.
+  - A found row must have `request_hash == RequestHash(tool, arguments)` and an outcome whose `returned` is exactly `{entry_key}`. The command then reports that entry as the outcome recorded in THIS file: no mapping, proof or execution, and never the document's current binding.
+  - With no row and `expected_base_revision` below the store's operation horizon (`store::ReadHorizon`), the outcome is unknown and the command refuses; it never re-executes.
+  - With no row, `expected_base_revision` must otherwise equal the current revision; if not, `STALE_PROSPECTIVE_VIEW`. The full import then runs.
+
+  Replay is promised only while the operation row is retained in the same project file. Compaction may rewrite the file and prune operation rows, so replay is never promised beyond the horizon. A moved revision without a retained row refuses rather than re-executing.
+- **Saving.** After a committed import the command saves with the existing default (incremental) `Save`, then closes, reopens and runs `ObservedFilter`. It never compacts, saves as or replaces the file.
+
+### Implementation slices (C++, disjoint files; one native window and one `zig build` at a time)
+
+1. **C1, admission and envelope (F1–F4):** `src/procedural/filter_gate_admission.h/.cpp` and `src/procedural/filter_gate_pins.h/.cpp`, plus `tests/export/filter_gate_admission_test.cpp` and the shared `tests/export/filter_gate_test_support.h`. Shipped API (namespace `uzp::procedural`):
+   - **Refusals.** `kFilterCaptureInvalid = "F_CAPTURE_INVALID"`; the detail is one fixed code of `filter_gate` (for example `F_SETTINGS_REFERENCES`), or `F_SETTINGS_REGISTRY_DRIFT:<earlier code>` after a refusal. It never carries a value or a path.
+   - **`struct AdmittedRef`** `{record_id, kind, sha256, size_bytes}`.
+   - **`class OracleStoreReader`**, read-only, with no write path:
+     - `static std::expected<OracleStoreReader, ImportRefusal> Open(const std::filesystem::path& root, const std::filesystem::path& registry)`. The root is an existing plain folder: no reparse-point root or ancestor, and no UzPainter checkout ancestor. Its `store.json` is exactly `{schema, hash}`. `registry` is the locator of `parity/envelopes/registry.json`.
+     - `std::optional<ImportRefusal> RequireAdmitted(std::string_view build_id, std::string_view golden_id, const AdmittedRef& ref) const`. The ids are validated before any path is built. The closed store entry must equal the ref. It reads the entry only, never the blob.
+     - The blob and registry reads are private. Blobs are read only by admission, through handles fenced inside the store root, and are rehashed. The plane is read as the blob of its pinned SHA-256; no `inputs/<sha256>.json` entry is read.
+     - Private test seams (a read observer and an action before the final registry read) are empty by default. Only the test-only `FilterGateTestAccess` sets them; it is defined once in the shared test header.
+   - **`class AdmittedFilterCapture`**, private constructor. Accessors:
+     - `Manifest()` and `ManifestRef()`;
+     - `Record()` and `Environment()`;
+     - `Refs()` (twelve, kept in the fixed order);
+     - `Image(std::string_view record_id)` (bytes only, decoded in C2);
+     - `PlaneBytes()`;
+     - `Identity()` (manifest, record, environment and registry hashes, envelope id, producer, gate code hash).
+   - **`AdmitFilterCapture`.** `std::expected<AdmittedFilterCapture, ImportRefusal> AdmitFilterCapture(std::string_view manifest_bytes, const core::json::Object& manifest_ref, const OracleStoreReader& store)`, under the compiled pins.
+   - **Pins.** `filter_gate_pins.h/.cpp` `#embed` the fixed request file and `parity/envelopes/registry.json`. `CompiledFilterGatePins()` selects the approved current envelope `env-a981b586eae7` and refuses when it is absent, and carries the reviewed settings producer. `FilterGateCodeSha256()` hashes the gate sources and embedded pins, LF-normalized.
+2. **C2, settings slots, settings contract and full PNG decode (F7):** `src/procedural/filter_gate_settings.h/.cpp`, plus tests. Runs in parallel with C3 once the C1 header is fixed.
+3. **C3, trace, context, cross-round comparison and round hashes (F5, F6, F9):** `src/procedural/filter_gate_trace.h/.cpp`, plus tests.
+4. **C4, J1–J4, F8 projection, starting-shape predicate and `ExpectedDestination` with deterministic allocation:** `src/procedural/filter_gate_destination.h/.cpp`, plus tests.
+5. **C5, seal, factory and sealed commit:** `filter_observation_import_v2.h/.cpp` and `tests/export/filter_import_v2_test.cpp`, owned by the transactional-seal owner. Can begin in parallel with C4; the factory lands only after C1–C4.
+6. **C6, command, payload, replay lookup and the end-to-end authored test.**
+
+Each slice carries authored refusals and test-only differential cases against the Python specification. No slice adds a diagnostic descriptor, UUID, store or proof, and no slice reads old expected 16–18.
