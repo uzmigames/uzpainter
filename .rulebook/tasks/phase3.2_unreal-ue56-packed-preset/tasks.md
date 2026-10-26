@@ -650,3 +650,23 @@ validation report SHA-256:
 Normalization FLOAT and PNG16 exports remain pending. This proves repeated
 output stability for calibration only; input identity and production parity
 remain unestablished.
+
+## 23. Fixed-coordinate Raw calibration measurement
+
+`tools/parity/ocio16_raw_identity.py` defines a comparison before inspecting real
+oracle pixels: revalidate the admitted calibration export, verify the exact
+authored input hash and public formula, decode native FLOAT32 and compare uint32
+bits at the same EXR [y,x,R/G/B] indices. Data and display windows must both be
+(0,0)-(255,255). No flips, channel permutation, colour conversion, fitting or
+tolerance are allowed. A valid difference is a measurement, not an execution
+failure or evidence identifying its cause. Equality would apply only to these
+finite calibration samples in their recorded context; negative-zero input,
+general readout identity, Color flag and production parity remain unestablished.
+
+The command writes a private immutable measurement, or preserves private refusal
+diagnostics without overwriting earlier evidence. Forty-eight distinct authored
+cases passed across the comparator/post-validator suite and targeted CLI delta;
+mypy, Ruff, formatting, independent review and guard checks passed. Tests cover
+different encodings of equal pixels, subnormal loss, zero sign, changed values,
+orientation, coordinate windows, receipt refusal and write-once diagnostics.
+No real calibration pixel was inspected while defining this comparison.
