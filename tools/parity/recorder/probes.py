@@ -467,7 +467,35 @@ def probe_job_from_manifest(manifest: dict[str, Any], repo_root: Path = REPO_ROO
     ]
     if [s.step for s in steps] != list(range(1, len(steps) + 1)):
         raise RecorderError("instruction steps must be numbered 1..n in order")
+    prior: dict[int, Step] = {}
     for step in steps:
+        args = step.args
+        if "import_step" in args:
+            source = prior.get(args["import_step"]) if type(args["import_step"]) is int else None
+            if (
+                step.call != CONSTANTS["RESOURCE_FROM_PROJECT"]
+                or set(args) != {"import_step"}
+                or source is None
+                or source.call != IMPORT_RESOURCE
+            ):
+                raise RecorderError("project resource query requires a prior import step")
+        if step.call == CONSTANTS["RESOURCE_RETRIEVE"]:
+            resource_step = args.get("resource_step")
+            source = prior.get(resource_step) if type(resource_step) is int else None
+            if (
+                set(args) != {"resource_step"}
+                or source is None
+                or source.call != CONSTANTS["RESOURCE_FROM_PROJECT"]
+                or set(source.args) != {"import_step"}
+            ):
+                raise RecorderError("resource retrieval requires a prior imported project query")
+        if "owned_project" in args and (
+            step.call != CONSTANTS["P295_GET_UUID"]
+            or set(args) != {"owned_project"}
+            or args["owned_project"] is not True
+        ):
+            raise RecorderError("owned project UUID requires exactly true")
+        prior[step.step] = step
         if {"initial_root", "expected_type"}.intersection(step.args) and (
             step.call != CONSTANTS["DELETE_NODE"]
             or step.step != 2

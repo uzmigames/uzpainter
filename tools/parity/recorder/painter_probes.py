@@ -576,6 +576,7 @@ SET_THROTTLING_PERIOD = (
 )
 LIST_PROJECT_RESOURCES = "substance_painter.resource.list_project_resources"
 RESOURCE_FROM_PROJECT = "substance_painter.resource.ResourceID.from_project"
+RESOURCE_RETRIEVE = "substance_painter.resource.Resource.retrieve"
 RESOURCE_FROM_URL = "substance_painter.resource.ResourceID.from_url"
 SHELVES_REFRESH_ALL = "substance_painter.resource.Shelves.refresh_all"
 SHELVES_REMOVE = "substance_painter.resource.Shelves.remove"
@@ -618,6 +619,7 @@ HOST_GETTER_CALLS = (
     "substance_painter.ui.get_current_mode",
     "substance_painter.resource.list_project_resources",
     "substance_painter.resource.ResourceID.from_project",
+    "substance_painter.resource.Resource.retrieve",
     "substance_painter.resource.ResourceID.from_url",
     "substance_painter_plugins.path",
     "substance_painter_plugins.plugin_module_names",
@@ -2252,6 +2254,16 @@ def p295_read(call: str, args: dict[str, Any]) -> Any:
     if call == P295_METADATA_GET:
         return project.Metadata(str(args["context"])).get(str(args["key"]))
     if call == P295_GET_UUID:
+        if "owned_project" in args:
+            if set(args) != {"owned_project"} or args["owned_project"] is not True:
+                raise ValueError("owned project UUID requires exactly true")
+            created = OWN_PROJECT_CREATION.get("uuid")
+            if type(created) is not str or not created:
+                raise ValueError("owned project creation marker unavailable")
+            return {
+                "created_project_uuid": created,
+                "current_project_uuid": str(project.get_uuid()),
+            }
         return uuid_record(project.get_uuid())
     if call == P295_LAST_MESH:
         return run_path(project.last_imported_mesh_path())
@@ -2969,7 +2981,24 @@ def host_read(call: str, args: dict[str, Any]) -> Any:
         return sorted_described(substance_painter.resource.list_project_resources())
     if call == RESOURCE_FROM_PROJECT:
         ids = substance_painter.resource.ResourceID
+        if "import_step" in args:
+            if set(args) != {"import_step"} or type(args["import_step"]) is not int:
+                raise ValueError("project resource query requires an import step")
+            imported = PROBE_RESOURCES[args["import_step"]]
+            if any(type(v) is not str or not v for v in (imported.name, imported.version)):
+                raise ValueError("project resource query requires imported name and version")
+            return resource_id(CURRENT["step"], ids.from_project(imported.name, imported.version))
         return resource_id(CURRENT["step"], ids.from_project(str(args["name"])))
+    if call == RESOURCE_RETRIEVE:
+        if set(args) != {"resource_step"} or type(args["resource_step"]) is not int:
+            raise ValueError("resource retrieval requires a project query step")
+        identifier = PROBE_RESOURCES[args["resource_step"]]
+        if type(identifier.version) is not str or not identifier.version:
+            raise ValueError("resource retrieval requires a version")
+        return [
+            describe(resource.identifier())
+            for resource in substance_painter.resource.Resource.retrieve(identifier)
+        ]
     if call == RESOURCE_FROM_URL:
         ids = substance_painter.resource.ResourceID
         url = args["url"] if "url" in args else PROBE_RESOURCES[int(args["resource_step"])].url()

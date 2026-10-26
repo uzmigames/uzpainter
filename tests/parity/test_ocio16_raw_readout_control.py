@@ -97,20 +97,16 @@ def test_requests_use_existing_vocabulary_and_separate_setup(state: str, exports
     )
     assert space.args["color_space"] == "GenericColorSpace.Raw"
     assert "color_space_type" not in space.args
-    assert manifest["golden_id"].endswith("-v2")
-    historical = json.loads(
-        stored.with_name(stored.name.removesuffix("-v2.json") + ".json").read_bytes()
+    assert manifest["golden_id"].endswith("-v3")
+    previous = json.loads(
+        stored.with_name(stored.name.replace("-v3.json", "-v2.json")).read_bytes()
     )
-    assert historical["golden_id"] + "-v2" == manifest["golden_id"]
-    historical["golden_id"] = manifest["golden_id"]
-    original_space = next(
-        step
-        for step in historical["instruction_sequence"]["steps"]
-        if step["call"] == control.BITMAP + "set_color_space"
+    assert previous["golden_id"].replace("-v2", "-v3") == manifest["golden_id"]
+    assert previous["inputs"] == manifest["inputs"]
+    assert (
+        previous["instruction_sequence"]["steps"][:29]
+        == manifest["instruction_sequence"]["steps"][:29]
     )
-    assert original_space["args"]["color_space"] == "Raw"
-    original_space["args"]["color_space"] = "GenericColorSpace.Raw"
-    assert historical == manifest
     if exports:
         capability = control.request(state)
         assert (
@@ -128,11 +124,14 @@ def test_requests_use_existing_vocabulary_and_separate_setup(state: str, exports
 
 
 @pytest.mark.parametrize("state", control.STATES)
-def test_current_runner_and_admission_refuse_historical_request(state: str, tmp_path: Path) -> None:
+@pytest.mark.parametrize("suffix", ["", "-v2"])
+def test_current_runner_and_admission_refuse_historical_request(
+    state: str, tmp_path: Path, suffix: str
+) -> None:
     historical = (
         rr.request_root(REPO_ROOT)
         / "tier0/api-probes"
-        / f"{control.PREFIX}-{state}-capability.json"
+        / f"{control.PREFIX}-{state}-capability{suffix}.json"
     )
     with pytest.raises(ValueError, match="authored request differs"):
         prepared(Request(state, historical, REPO_ROOT / "pyproject.toml", tmp_path / "unused"))
@@ -144,6 +143,12 @@ def synthetic() -> tuple[dict[str, Any], dict[str, Any], dict[str, str]]:
     manifest = control.request("normalization-png16")
     resource = {"context": "public-synthetic", "name": "public-ramp", "version": "public-v1"}
     expected = control.fixed_readbacks()
+    expected[control.PROJECT_UUID] = {
+        "created_project_uuid": "public-project",
+        "current_project_uuid": "public-project",
+    }
+    expected[control.RESOURCE_FROM_PROJECT] = {"resource": resource}
+    expected[control.RESOURCE_RETRIEVE] = [{"resource": resource}]
     expected[ps.GET_SOURCE] = {"bitmap": {"resource": resource}, "color_space": "Raw"}
     expected[control.BITMAP + "list_available_color_spaces"] = ["Data", "Raw"]
     outputs = [
@@ -189,7 +194,7 @@ def synthetic() -> tuple[dict[str, Any], dict[str, Any], dict[str, str]]:
 def test_state_gate_accepts_authored_synthetic_readbacks(condition: str) -> None:
     manifest, recording, resource = synthetic()
     recording["condition"] = condition
-    control.validate_observed_state(recording, manifest, resource)
+    control.validate_observed_state(recording, manifest, resource, "public-project")
 
 
 @pytest.mark.parametrize(
@@ -258,4 +263,56 @@ def test_state_gate_refuses_changed_context(mutation: str) -> None:
     else:
         by_call[control.BITMAP + "list_available_color_spaces"]["value"] = ["Data"]
     with pytest.raises(ValueError):
-        control.validate_observed_state(recording, manifest, resource)
+        control.validate_observed_state(recording, manifest, resource, "public-project")
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "context",
+        "retrieve_context",
+        "empty",
+        "multiple",
+        "version",
+        "name",
+        "missing_version",
+        "project",
+        "marker",
+    ],
+)
+def test_resource_evidence_refuses_unjoined_identity(mutation: str) -> None:
+    manifest, recording, imported = synthetic()
+    by_call = {o.get("call"): o for o in recording["outputs"]}
+    query = by_call[control.RESOURCE_FROM_PROJECT]["value"]["resource"]
+    retrieved = by_call[control.RESOURCE_RETRIEVE]["value"]
+    if mutation == "context":
+        query["context"] = "other-project"
+    elif mutation == "retrieve_context":
+        retrieved[0]["resource"]["context"] = "other-project"
+    elif mutation == "empty":
+        retrieved.clear()
+    elif mutation == "multiple":
+        retrieved.append(deepcopy(retrieved[0]))
+    elif mutation in ("version", "name", "missing_version"):
+        query["name" if mutation == "name" else "version"] = (
+            "" if mutation == "missing_version" else "wrong"
+        )
+    else:
+        key = "current_project_uuid" if mutation == "project" else "created_project_uuid"
+        by_call[control.PROJECT_UUID]["value"][key] = "foreign-project"
+    with pytest.raises(ValueError):
+        control.validate_observed_state(recording, manifest, imported, "public-project")
+
+
+def test_reopen_context_change_requires_independent_query_and_retrieval() -> None:
+    manifest, recording, imported = synthetic()
+    recording["condition"] = "after_save_reopen"
+    by_call = {o.get("call"): o for o in recording["outputs"]}
+    by_call[control.RESOURCE_FROM_PROJECT]["value"]["resource"]["context"] = (
+        "reopened-project-context"
+    )
+    by_call[control.RESOURCE_RETRIEVE]["value"][0]["resource"]["context"] = (
+        "reopened-project-context"
+    )
+    by_call[ps.GET_SOURCE]["value"]["bitmap"]["resource"]["context"] = "reopened-project-context"
+    control.validate_observed_state(recording, manifest, imported, "public-project")

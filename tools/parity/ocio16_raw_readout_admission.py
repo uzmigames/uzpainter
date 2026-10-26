@@ -184,7 +184,9 @@ def validate_capability(
             },
             "node lifecycle",
         )
-        control.validate_observed_state(recording, authored, identity)
+        control.validate_observed_state(
+            recording, authored, identity, receipt["created_project_uuid"]
+        )
     rebind = output(rounds[1], "identity/reopen")
     equal(
         {k: v for k, v in rebind.items() if k != "value"},

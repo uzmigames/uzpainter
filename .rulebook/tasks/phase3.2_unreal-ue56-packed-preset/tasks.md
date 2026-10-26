@@ -554,3 +554,36 @@ enum table against an authored enum, proving that the qualified key reaches the
 setter and the old short key refuses first. Sixty-eight affected cases passed;
 mypy, Ruff and formatting passed. V2 runtime admission remains a separate gate;
 export requests still require successful capability evidence for their state.
+
+The V2 `calibration-float` capability completed in its own Painter, passed the
+public manifest gate and admitted two private references. Cleanup stopped the
+owned process and released the lock. The capture report SHA-256 is
+`61d18c52b03f07bdf10f8fd0286c601702a3b1149b187425f912467c7bcbfede`.
+Capability validation refused `authored readback differs`: only round-two
+`s30/get_source`, `value.bitmap.resource.context`, differs from the original
+import identity. Resource name/version, Raw selection and the remaining fixed
+readbacks match. The V2 capture and public manifest remain immutable.
+
+The existing node rebind receipt does not establish a resource-context remap.
+The documented `ResourceID.from_project` constructs an identifier without
+proving existence; a versioned `Resource.retrieve` can establish its unique
+resolution. A corrected request therefore needs independent project-scoped
+resource evidence in each round, joined to the original import and the owned
+project UUID, before comparing the full bitmap identity. The resource version
+is not presumed to be the original file's SHA-256. No comparison is relaxed,
+no normalization capture follows this refusal, and exports remain gated.
+
+Six distinct V3 requests add three read-only probes per round: the current UUID
+joined to the recorder's own CREATE marker, `ResourceID.from_project` using the
+original import's nonempty name/version, and versioned `Resource.retrieve`.
+Exactly one retrieved identifier must equal the project-scoped query and the
+complete `get_source` bitmap identity. Prior import/query references and special
+argument forms are closed and type-checked; existing getter forms stay intact.
+The setup, authored fixtures and historical requests are not rewritten.
+
+The real dispatcher branches are tested with authored resource and project
+objects, including changed project context after reopen, foreign UUIDs, missing
+versions, incorrect references and zero/multiple retrievals. A total of 151
+distinct affected cases passed across the initial run and targeted retries;
+mypy, Ruff and formatting passed. This validates the V3 software only. Fresh
+capability capture/admission remains required before any export collection.

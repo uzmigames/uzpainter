@@ -46,6 +46,9 @@ NODE = "substance_painter.layerstack.Node."
 LAYER = "substance_painter.layerstack.LayerNode."
 BITMAP = "substance_painter.source.SourceBitmap."
 ROOT_LAYERS = "substance_painter.layerstack.get_root_layer_nodes"
+PROJECT_UUID = "substance_painter.project.get_uuid"
+RESOURCE_FROM_PROJECT = "substance_painter.resource.ResourceID.from_project"
+RESOURCE_RETRIEVE = "substance_painter.resource.Resource.retrieve"
 RAW = {"class": "GenericColorSpace", "name": "Raw"}
 UV = {
     "filtering_mode": "Nearest",
@@ -140,7 +143,7 @@ def fixed_readbacks() -> dict[str, Any]:
 
 def request(state: str, *, exports: bool = False, root: Path = REPO_ROOT) -> dict[str, Any]:
     path = fixture_path(state)
-    name = f"{PREFIX}-{state}-{'export' if exports else 'capability'}-v2"
+    name = f"{PREFIX}-{state}-{'export' if exports else 'capability'}-v3"
     s = start("plane", resolution=256)
     s.add("substance_painter.layerstack.delete_node", initial_root=True, expected_type="PaintLayer")
     s.channels(((CHANNEL, "RGB32F"),))
@@ -167,6 +170,9 @@ def request(state: str, *, exports: bool = False, root: Path = REPO_ROOT) -> dic
             args["typed"] = True
         s.add(call, **args)
     s.add(BITMAP + "list_available_color_spaces", node_step=node, channel=CHANNEL)
+    s.add(PROJECT_UUID, owned_project=True)
+    query = s.add(RESOURCE_FROM_PROJECT, import_step=imported)
+    s.add(RESOURCE_RETRIEVE, resource_step=query)
     s.add(ps.GET_SOURCE, node_step=node, channel=CHANNEL)
     if exports:
         s.add(
@@ -187,7 +193,9 @@ def request(state: str, *, exports: bool = False, root: Path = REPO_ROOT) -> dic
         "Color channel flag remains unobserved; format does not imply color management. "
         "Setup once; fresh getters in same_session and after Full save/reopen, no r2 setters. "
         "Template capture checks channels and resolution in each round. Resource identity "
-        "must join the pinned import receipt, not a guessed URL. Calibration uses "
+        "must join the pinned import receipt through a versioned from_project query and "
+        "exactly one retrieved resource in each round, with the owned CREATE UUID unchanged. "
+        "Resource version identifies resource content, not the input file SHA256. Calibration uses "
         "f32(n/65535) and adjacent floats toward 0/1 in different RGB channels; "
         "endpoints stay 0/1. Cross-channel differences do not establish scalar readout "
         "collisions without independent channel-invariance evidence. "
@@ -230,7 +238,10 @@ def request(state: str, *, exports: bool = False, root: Path = REPO_ROOT) -> dic
 
 
 def validate_observed_state(
-    recording: dict[str, Any], manifest: dict[str, Any], imported_resource: dict[str, str]
+    recording: dict[str, Any],
+    manifest: dict[str, Any],
+    imported_resource: dict[str, str],
+    created_project_uuid: str,
 ) -> None:
     """Pure state gate, not admission. Caller verifies authored manifest and receipt joins.
 
@@ -240,14 +251,65 @@ def validate_observed_state(
     require(recording["condition"] in ("same_session", "after_save_reopen"), "recording condition")
     require(set(imported_resource) == {"context", "name", "version"}, "import identity fields")
     require(all(type(v) is str and v for v in imported_resource.values()), "import identity values")
+    require(
+        type(created_project_uuid) is str and bool(created_project_uuid), "created project UUID"
+    )
     outputs = recording["outputs"]
     expected = fixed_readbacks()
-    expected[ps.GET_SOURCE] = {"bitmap": {"resource": imported_resource}, "color_space": "Raw"}
     steps = [
         step
         for step in manifest["instruction_sequence"]["steps"]
         if is_read(step["call"], step["args"])
     ]
+
+    def observed(call: str) -> Any:
+        authored = [s for s in steps if s["call"] == call]
+        require(len(authored) == 1, "required resource identity readback")
+        step = authored[0]
+        matches = [
+            o for o in outputs if o.get("output_id") == f"s{step['step']}/{call.rsplit('.', 1)[1]}"
+        ]
+        require(len(matches) == 1, "resource identity readback")
+        found = matches[0]
+        require(
+            found.get("kind") == "api_readback"
+            and "raised" not in found
+            and found.get("call") == call
+            and canonical_json(found.get("args")) == canonical_json(step["args"]),
+            "resource identity readback context",
+        )
+        return found.get("value")
+
+    project = observed(PROJECT_UUID)
+    require(
+        canonical_json(project)
+        == canonical_json(
+            {
+                "created_project_uuid": created_project_uuid,
+                "current_project_uuid": created_project_uuid,
+            }
+        ),
+        "owned project identity",
+    )
+    query = observed(RESOURCE_FROM_PROJECT)
+    require(type(query) is dict and set(query) == {"resource"}, "project resource query")
+    resource = query["resource"]
+    require(
+        type(resource) is dict
+        and set(resource) == {"context", "name", "version"}
+        and all(type(v) is str and v for v in resource.values()),
+        "project resource identity",
+    )
+    require(
+        resource["name"] == imported_resource["name"]
+        and resource["version"] == imported_resource["version"],
+        "imported resource version",
+    )
+    require(
+        canonical_json(observed(RESOURCE_RETRIEVE)) == canonical_json([query]),
+        "unique retrieved project resource",
+    )
+    expected[ps.GET_SOURCE] = {"bitmap": query, "color_space": "Raw"}
     for call in {*expected, BITMAP + "list_available_color_spaces"}:
         require(sum(step["call"] == call for step in steps) == 1, "required authored readback")
     for step in steps:
