@@ -20,6 +20,10 @@ Root: `UZP_PARITY_STORE` when set, else `%LOCALAPPDATA%\UzPainter\parity-store`.
 | `blobs/<aa>/<sha256>` | The bytes, named by their SHA-256 (`<aa>` = its first two hex digits), read-only |
 | `corpora/<Painter build id>/<golden id>/<record id>.json` | Write-once entry `{"schema": "uzpainter/parity/store-entry/1", painter_build_id, golden_id, record_id, kind, sha256, size_bytes, file_name}`, read-only |
 | `inputs/<sha256>.json` | Write-once entry `{"schema": "uzpainter/parity/store-input/1", sha256, size_bytes, path}` of an authored input a public manifest pins by hash (its bytes in `blobs/`), read-only. A pipeline-script job resolves an input here when its file at the pinned path is gone or changed (decision 144) |
+| `snapshot-captures/<capture_id>/<policy_sha256>.json` | Complete immutable `uzpainter/parity/snapshot-capture-admission/1` document, published last after fresh native validation and verified blob storage |
+| `snapshot-producer-policies/<sha256>.json` | Exact pinned public producer policy bytes retained for offline admission resolution; not an observed-output blob and not added to the private blob index |
+| `.staging-<id>.partial` | Preserved incomplete or competing publication files in the store root; never admission authority |
+| `.index.lock` | Persistent OS lock file serializing every blob-index update; process exit releases the lock without deleting the file |
 
 The Painter build id is the manifest's `software.painter.build_id` and must match `^[A-Za-z0-9][A-Za-z0-9._+-]*$` to name a directory. A record id is unique per (Painter build, golden).
 
@@ -35,10 +39,41 @@ Phase 0 prototype of `uzpainter parity`: run `python -m tools.parity.store [--st
 | `input FILE --path PATH` | Owner's machine only. Stores an authored input under its SHA-256, with an entry naming the path a manifest pins it at (`PATH`, e.g. its `assets3d_path`) |
 | `fetch <manifest> --out DIR` | Copies every blob the manifest names to `DIR/<record id><suffix>` and re-hashes the copy |
 | `verify [PATH ...]` | Re-hashes in the store every blob the given manifests (or every `*.json` under a directory) name. Without a path: whole-store integrity (index, blobs and entries agree; every blob hashes to its name) |
+| `admit-snapshot-capture WORK --producer-policy FILE --approved-policy-sha256 SHA --approved-policy-revision N --validator-binary ABSOLUTE_EXE --approved-binary-sha256 SHA --approved-code-sha256 SHA` | Fresh invocation of the coordinator-approved native diagnostic, then private immutable snapshot admission. Approval pins are trusted coordinator inputs, never inferred from the capture or a submitted report |
 
 Refusals, all checked before anything is written: a different blob under an existing record id (in the manifest or in the store), an invalid manifest or private record, a path inside the repository, a run without `READY`.
 
 Comparisons obtain oracle bytes with `tools.parity.store.store.load_oracle(locate(), ref)`; it returns `None` for an unavailable oracle, and `tools.parity.verdict.evaluate` turns a comparison whose oracle is `None` into `oracle_unavailable`.
+
+### 3.1 Snapshot admission
+
+Generic `record`, recorder-run merging and `add_record` reserve every `snapshot_*` kind before
+storing bytes. These kinds are not added to the public manifest enum. The dedicated command
+always invokes `validate_snapshot_capture`, including retries; it never accepts a caller report,
+cached success flag or a bare blob as evidence of admission.
+
+The six role/round slots retain their identities even when exports share a hash. The native
+report pins the exact opened receipt, request and export bytes. Admission copies and hashes
+those bytes again; a changed source refuses. Publication uses no-overwrite Windows rename or
+POSIX hard links, with complete admission written last. Failed and competing staging files are
+preserved, and orphan blobs confer no membership. POSIX successful hard-link publication also
+retains its staging link. Unsupported no-overwrite publication fails closed. No automatic
+cleanup deletes private evidence.
+
+`resolve_snapshot_capture` requires explicitly approved policy SHA and revision, validates the
+closed document and its path identity, checks its retained policy and producer pair, and
+re-hashes every member blob with its size. `resolve_snapshot_artifact` additionally requires an
+exact role/round/hash/size member. Missing or corrupt admission, policy or any member yields
+`oracle_unavailable`; generic blob availability cannot substitute for membership. Whole-store
+`verify` includes this namespace and retained policy integrity, but does not authorize policies
+merely because they exist on disk.
+
+An existing `(capture_id, policy_sha256)` must still resolve and match freshly validated artifact
+roles, policy, signature, context and raster. A matching retry returns the original timestamp
+and validator identity; revalidation never rewrites prior provenance. A different approved
+validator may confirm the same semantics without replacing that original identity. Conflicts
+and corrupt winners refuse. Owner-local submission remains the provenance basis, with no
+historical execution attestation.
 
 ## 4. Recorder hand-off (oracle inbox)
 

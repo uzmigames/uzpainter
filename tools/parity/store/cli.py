@@ -14,6 +14,7 @@ from pathlib import Path
 
 from tools.parity.schemas import Schema, is_valid, load_json, load_schema
 from tools.parity.store.manifest import fetch, load_manifest, record_file, record_run, verify
+from tools.parity.store.snapshot_capture import admit_snapshot_capture
 from tools.parity.store.store import (
     OracleStore,
     Resolution,
@@ -49,6 +50,16 @@ def _parser() -> argparse.ArgumentParser:
     )
     stored_input.add_argument("file", type=Path)
     stored_input.add_argument("--path", required=True, help="the path the manifest pins it at")
+    snapshot = commands.add_parser(
+        "admit-snapshot-capture", help="validate and admit a private snapshot capture"
+    )
+    snapshot.add_argument("work", type=Path)
+    snapshot.add_argument("--producer-policy", type=Path, required=True)
+    snapshot.add_argument("--approved-policy-sha256", required=True)
+    snapshot.add_argument("--approved-policy-revision", type=int, required=True)
+    snapshot.add_argument("--validator-binary", type=Path, required=True)
+    snapshot.add_argument("--approved-binary-sha256", required=True)
+    snapshot.add_argument("--approved-code-sha256", required=True)
     fetch_parser = commands.add_parser("fetch", help="copy the blobs a manifest names")
     fetch_parser.add_argument("manifest", type=Path)
     fetch_parser.add_argument(
@@ -97,6 +108,25 @@ def _run(args: argparse.Namespace) -> int:
         print(f"store ready at {store.root}")
         return 0
     found = OracleStore.open(args.store) if args.store else locate()
+    if args.command == "admit-snapshot-capture":
+        if found is None:
+            raise StoreError("no initialised store on this machine")
+        try:
+            policy_bytes = args.producer_policy.read_bytes()
+        except OSError as error:
+            raise StoreError("cannot read approved producer policy") from error
+        admitted = admit_snapshot_capture(
+            found,
+            args.work,
+            binary=args.validator_binary,
+            approved_binary_sha256=args.approved_binary_sha256,
+            approved_code_sha256=args.approved_code_sha256,
+            policy_bytes=policy_bytes,
+            approved_policy_sha256=args.approved_policy_sha256,
+            approved_policy_revision=args.approved_policy_revision,
+        )
+        print(f"snapshot capture {admitted['capture_id']} admitted")
+        return 0
     if args.command == "record":
         if found is None:
             raise StoreError("no initialised store on this machine; `record` runs only there")

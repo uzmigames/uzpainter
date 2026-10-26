@@ -21,8 +21,11 @@ import json
 import os
 import re
 import stat
+import sys
+import time
 import uuid
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -115,6 +118,61 @@ def _write_json(path: Path, document: Any) -> None:
     os.replace(temporary, path)
 
 
+def refuse_snapshot_kind(kind: str) -> None:
+    if kind.startswith("snapshot_"):
+        raise StoreError("snapshot_* kinds require dedicated snapshot capture admission")
+
+
+def publish_no_replace(staging: Path, target: Path) -> bool:
+    """Publish complete bytes once; retain staging on collision or failure."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        if os.name == "nt":
+            os.rename(staging, target)
+        else:
+            os.link(staging, target)
+    except OSError:
+        if target.exists():
+            return False
+        raise
+    return True
+
+
+@contextmanager
+def _index_lock(root: Path) -> Iterator[None]:
+    """Persistent lock file; the OS releases its byte lock when a process exits."""
+    with (root / ".index.lock").open("a+b") as stream:
+        if stream.seek(0, os.SEEK_END) == 0:
+            stream.write(b"\0")
+            stream.flush()
+        if sys.platform == "win32":
+            import msvcrt
+
+            deadline = time.monotonic() + 30
+            while True:
+                stream.seek(0)
+                try:
+                    msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+                    break
+                except OSError:
+                    if time.monotonic() >= deadline:
+                        raise StoreError("store index lock timed out") from None
+                    time.sleep(0.01)
+            try:
+                yield
+            finally:
+                stream.seek(0)
+                msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+
+
 class OracleStore:
     """An initialised store root. Use `init` to create one and `open`/`locate` to reach it."""
 
@@ -176,12 +234,16 @@ class OracleStore:
         return set(document["sha256"])
 
     def _add_to_index(self, sha256: str) -> None:
-        hashes = self.index()
-        if sha256 not in hashes:
-            hashes.add(sha256)
-            _write_json(
-                self.root / "index.json", {"schema": INDEX_SCHEMA, "sha256": sorted(hashes)}
-            )
+        with _index_lock(self.root):
+            hashes = self.index()
+            if sha256 not in hashes:
+                hashes.add(sha256)
+                _write_json(
+                    self.root / "index.json", {"schema": INDEX_SCHEMA, "sha256": sorted(hashes)}
+                )
+
+    def staging_path(self) -> Path:
+        return self.root / f".staging-{uuid.uuid4().hex}.partial"
 
     # --- records -----------------------------------------------------------------------------
 
@@ -214,27 +276,23 @@ class OracleStore:
             self._add_to_index(sha256)
             return size
         target.parent.mkdir(parents=True, exist_ok=True)
-        temporary = target.with_name(f".{sha256}.{uuid.uuid4().hex}.tmp")
+        temporary = self.staging_path()
         digest = hashlib.sha256()
         size = 0
-        try:
-            with source.open("rb") as reader, temporary.open("xb") as writer:
-                while chunk := reader.read(_CHUNK):
-                    digest.update(chunk)
-                    writer.write(chunk)
-                    size += len(chunk)
-                writer.flush()
-                os.fsync(writer.fileno())
-            if digest.hexdigest() != sha256:
-                raise StoreError(
-                    f"{source} changed while it was stored (hash {digest.hexdigest()})"
-                )
-            os.chmod(temporary, stat.S_IREAD)
-            os.rename(temporary, target)
-        finally:
-            if temporary.exists():
-                os.chmod(temporary, stat.S_IREAD | stat.S_IWRITE)
-                temporary.unlink()
+        with source.open("rb") as reader, temporary.open("xb") as writer:
+            while chunk := reader.read(_CHUNK):
+                digest.update(chunk)
+                writer.write(chunk)
+                size += len(chunk)
+            writer.flush()
+            os.fsync(writer.fileno())
+        if digest.hexdigest() != sha256:
+            raise StoreError(f"{source} changed while it was stored (hash {digest.hexdigest()})")
+        os.chmod(temporary, stat.S_IREAD)
+        if not publish_no_replace(temporary, target):
+            found, winner_size = sha256_file(target)
+            if found != sha256 or winner_size != size:
+                raise StoreError("concurrent stored blob fails its hash or size")
         self._add_to_index(sha256)
         return size
 
@@ -249,6 +307,7 @@ class OracleStore:
         file_name: str,
     ) -> StoredRecord:
         """Store `source` (already hashed to `sha256`) and its write-once entry."""
+        refuse_snapshot_kind(kind)
         path = self.entry_path(painter_build_id, golden_id, record_id)
         self.refuse_conflict(painter_build_id, golden_id, record_id, sha256)
         size = self.put_blob(source, sha256)
@@ -339,6 +398,9 @@ class OracleStore:
                 problems.append(
                     f"entry {path.relative_to(self.root).as_posix()} names a missing blob"
                 )
+        from tools.parity.store.snapshot_capture import check_snapshot_captures
+
+        problems.extend(check_snapshot_captures(self))
         return problems
 
 

@@ -26,6 +26,7 @@ from tools.parity.store.store import (
     Status,
     StoreError,
     refuse_inside_repository,
+    refuse_snapshot_kind,
     resolve_oracle,
     sha256_file,
 )
@@ -87,6 +88,8 @@ class _Pending:
 
 def _merge(store: OracleStore, manifest: dict[str, Any], pending: list[_Pending]) -> dict[str, Any]:
     """Refuse every conflict first, then store the blobs and return the updated manifest."""
+    for ref in [*manifest["private_records"], *(item.ref for item in pending)]:
+        refuse_snapshot_kind(ref["kind"])
     build, golden = _painter_build(manifest), manifest["golden_id"]
     refs: list[dict[str, Any]] = manifest["private_records"]
     by_id = {ref["record_id"]: ref for ref in refs}
@@ -126,6 +129,7 @@ def record_file(
     store: OracleStore, manifest_path: Path, record_id: str, kind: str, source: Path
 ) -> dict[str, Any]:
     """Store one recorded file and write its hash into an existing manifest."""
+    refuse_snapshot_kind(kind)
     manifest = load_manifest(manifest_path)
     if kind == RECORD_KIND:
         _check_private_record(source, manifest)
@@ -158,6 +162,8 @@ def record_run(store: OracleStore, manifest_path: Path, run_dir: Path) -> dict[s
     if not (run_dir / READY_MARKER).is_file():
         raise StoreError(f"{run_dir}: no {READY_MARKER} marker; the run is incomplete")
     run_manifest = load_manifest(run_dir / "manifest.json")
+    for ref in run_manifest["private_records"]:
+        refuse_snapshot_kind(ref["kind"])
     files: dict[str, tuple[Path, int]] = {}
     for path in [run_dir / "record.json", *sorted((run_dir / "blobs").glob("*"))]:
         sha256, size = sha256_file(path)

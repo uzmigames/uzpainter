@@ -196,3 +196,20 @@ The validator computes its code hash from build-embedded validator source and it
 4. Test direct generic-kind refusal before any store write; hash-correct blobs with no admission stay unavailable; same hash with wrong role/kind refuses; mutation during copy refuses; interruption before final publication grants no admission; retry preserves the original document; concurrent conflicting publication refuses; corrupt/missing admitted blobs become unavailable. Keep existing golden `record/fetch/verify` regressions green.
 
 Transport and structural parsing are complete software components. Native artifact validation, trusted diagnostic execution and authoritative publication remain separate implementation dependencies; all real H/F acceptance gates remain in force.
+
+### Storage and command implementation (2026-10-26)
+
+The dedicated `admit-snapshot-capture` command now always invokes the trusted
+validator, including retries, then publishes the complete immutable admission
+last. Resolution requires explicit approved policy pins and exact role/round
+membership, with fresh hashes of every blob. Public policies remain outside the
+private blob index. Generic admission paths refuse `snapshot_*` before writes.
+No-overwrite publication preserves competing or interrupted staging files; an
+OS lock serializes the entire shared blob-index update. Matching retries return
+the original document, timestamp and validator identity after fresh validation.
+
+Forty-six affected tests passed, including the corrected multiprocessing harness
+retry; mypy, Ruff, formatting, independent review and the repository guard passed
+on the frozen files. This tests storage with authored data and mocked validator
+invocations. The real native CLI-to-wrapper-to-store integration remains pending;
+no private H was read or admitted, and H/F acceptance remains open.
