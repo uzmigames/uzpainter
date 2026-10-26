@@ -46,3 +46,21 @@ The certification harness SHALL evaluate each asset over 3 meshes × {1024, 2048
 Given a manifest whose golden blob is absent from `UZP_PARITY_STORE`
 When the harness runs
 Then the comparison MUST fail as `oracle_unavailable`
+
+### Requirement: Snapshot-Backed Filter Observations
+Decision 363's closed contract in `docs/filter-observations-v2.md` SHALL govern the V2 observation namespace. V1 bytes and snapshot schemas /1-/3 MUST remain compatible. V2 SHALL retain the real snapshot host and original empty Paint, preserve the complete typed project projection and authoritative inventory, and expose only recorded Filter parameters, resource identity and image outputs. It MUST NOT admit Filter execution.
+
+#### Scenario: Historical observation becomes stale
+Given a valid V2 entry and a later project edit
+When the project is saved and reopened
+Then historical structural validation MUST remain independent of current bytes, while a getter MUST refuse unless one authoritative current inventory and the same project exactly match the recorded context
+
+#### Scenario: Frozen raster is not a readout fixed point
+Given an authenticated host raster containing negative zero or positive 2^-26
+When the diagnostic importer runs the actual native transport and full-chain proof
+Then raw upload MUST preserve the original bits, but frozen migration MUST refuse the non-fixed samples without normalizing the raster or mutating the destination
+
+#### Scenario: Real evidence is incomplete
+Given complete authored software tests but missing fresh F context or trusted native proof
+When real V2 import is attempted
+Then import MUST refuse, old expected values MUST NOT supply constructor inputs, and Filter parity or capability promotion MUST remain unaccepted

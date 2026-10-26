@@ -1,0 +1,11 @@
+{
+  "id": 363,
+  "slug": "filter-observation-v2-explicit-frozen-host-migration-and-authoritative-current-context",
+  "title": "Filter observation V2: explicit frozen-host migration and authoritative current context",
+  "status": "accepted",
+  "date": "2026-10-26",
+  "relatedTasks": [
+    "phase3.1_proc-backend-seam"
+  ],
+  "supersededBy": null
+}
