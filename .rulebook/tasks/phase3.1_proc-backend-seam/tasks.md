@@ -462,3 +462,23 @@ Mypy, Ruff and independent static review passed. The 84-case survey suite and
 four additional section/content refusal cases passed. These are authored tests;
 the next owned survey will observe actual selectors. Neither this extension nor
 a separate survey project establishes effective settings of the historical F.
+
+The owned REV393 survey completed, expanded the section once, cancelled, and
+stopped its Painter process. Independent checks found no Painter, no endpoint,
+a free lock and all 35 frozen producer sources unchanged. Private section JSON
+SHA-256: `a7c99f9290925faaea68194bbe528740fb0d714df4a90694fc72e1c14f21baaf`;
+screenshot: `52121e83e5892b8fd5a671b21420e12e1ca219280c4b542422211d770729b413`.
+The selected internal-unit mode establishes a usable selector, not F settings.
+
+Two independent public-source reviews support the closed future derivation
+`unitless-obj-internal-centimetres-v1`: an authenticated unitless OBJ actually
+imported, bound internal-mode observations and a complete unchanged import/scale
+trace establish one centimetre per OBJ unit. The new subsection in
+`docs/filter-observations-v2.md` keeps that derivation distinct from a numeric
+getter, requires all five F boundaries, and forbids retrofitting historical F.
+
+The private schema now transports UI JSON as `settings_panel_readback`, distinct
+from API results and operator-entered settings. Screenshots use the existing
+`settings_panel_evidence` kind. This transport grants no acceptance. Mypy, Ruff
+and independent review passed; 97 schema cases passed (96 initially, then the
+single sandbox-blocked standard `tmp_path` case with normal external access).

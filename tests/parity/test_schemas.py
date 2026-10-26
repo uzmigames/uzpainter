@@ -114,6 +114,53 @@ def test_private_texture_record_needs_a_save_reopen_recording() -> None:
     assert not is_valid(record, Schema.GOLDEN_PRIVATE)
 
 
+def settings_panel_record() -> dict[str, Any]:
+    record: dict[str, Any] = load_json(SAMPLES / "private" / "exported-map-record.json")
+    for recording in record["recordings"]:
+        recording["outputs"] = [
+            {
+                "output_id": "settings/authored-panel",
+                "kind": "settings_panel_readback",
+                "panel": "Authored test panel",
+                "values": {"controls": [{"selector": "authored-control", "toggle": 0}]},
+            }
+        ]
+    return record
+
+
+def test_private_settings_panel_readback_has_its_own_observation_kind() -> None:
+    record = settings_panel_record()
+    assert record_problems(record) == []
+    assert output_kinds(record) == {"settings_panel_readback"}
+    assert "blob" not in record["recordings"][0]["outputs"][0]
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("panel", ""),
+        ("values", []),
+        ("call", "substance_painter.project.is_open"),
+        ("entries", []),
+        ("accepted", True),
+    ],
+)
+def test_settings_panel_readback_rejects_wrong_shape_or_other_evidence_fields(
+    field: str,
+    value: Any,
+) -> None:
+    record = settings_panel_record()
+    record["recordings"][0]["outputs"][0][field] = value
+    assert not is_valid(record, Schema.GOLDEN_PRIVATE)
+
+
+@pytest.mark.parametrize("field", ["panel", "values"])
+def test_settings_panel_readback_requires_panel_and_observations(field: str) -> None:
+    record = settings_panel_record()
+    del record["recordings"][0]["outputs"][0][field]
+    assert not is_valid(record, Schema.GOLDEN_PRIVATE)
+
+
 def test_private_iray_record_needs_two_sessions_and_a_k_times_recording() -> None:
     record = load_json(SAMPLES / "private" / "iray-reference-record.json")
     one_session = copy.deepcopy(record)

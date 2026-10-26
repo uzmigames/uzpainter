@@ -248,6 +248,7 @@
             "template_capture",
             "iray_reference",
             "operator_recorded_settings",
+            "settings_panel_readback",
             "settings_panel_evidence"
           ]
         }
@@ -259,6 +260,7 @@
         { "$ref": "#/$defs/capture" },
         { "$ref": "#/$defs/iray_reference" },
         { "$ref": "#/$defs/operator_recorded_settings" },
+        { "$ref": "#/$defs/settings_panel_readback" },
         { "$ref": "#/$defs/settings_panel_evidence" }
       ]
     },
@@ -406,6 +408,18 @@
             }
           }
         }
+      }
+    },
+    "settings_panel_readback": {
+      "description": "Read-only UI observations of a settings panel, including their capture binding. These are neither documented Python API results nor operator-entered settings. Each consuming evidence protocol must independently validate the observations and their provenance before deriving effective settings.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["output_id", "kind", "panel", "values"],
+      "properties": {
+        "output_id": true,
+        "kind": { "const": "settings_panel_readback" },
+        "panel": { "type": "string", "minLength": 1 },
+        "values": { "type": "object" }
       }
     },
     "settings_panel_evidence": {
