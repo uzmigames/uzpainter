@@ -483,3 +483,43 @@ seven diagnostic tests then passed. Operational failures now retain a private
 stage/traceback without overwriting prior evidence. Mypy, Ruff and independent
 review passed. No residual threshold, fit, model adjustment or capability change
 was introduced.
+
+## 19. Authored Raw readout controls (offline preparation)
+
+`tools/parity/tier0_semantics/ocio16_raw_readout_control.py` authors three
+256-square controls independently of private differences: FLOAT EXR centers
+`float32(n/65535)` with adjacent values toward zero/one in the other RGB channels,
+complete cyclic RGB PNG16 codes, and the same codes normalized once to FLOAT
+EXR. Native-precision decoding and FLOAT headers are checked. Cross-channel
+adjacency alone cannot establish scalar collisions without a separate channel
+invariance check; matching PNG/EXR outputs would establish only observed transfer.
+The Color channel flag remains unobserved, not presumed false or inferred from
+RGB32F storage.
+
+Six public requests separate capability checks from later exports. The closed
+context is the pinned OCIO environment, public full-UV plane, User0 RGB32F, one
+visible Split Fill, Normal opacity one, neutral geometry and identity Nearest
+Repeat projection. Raw must appear once in available colour-space names and
+read back as the typed GenericColorSpace/Raw enum. Setup executes once; fresh
+getters repeat after Full save/reopen, without round-two setters. A new bounded
+delete-node selector removes only the single initial Paint immediately after
+the recorder's own CREATE: owned UUID, exact type/count, fresh UID resolution
+and empty roots afterward are required; ordinary deletion remains unchanged.
+
+`tools/parity/ocio16_raw_readout_admission.py` checks the exact generated request
+before loading private bytes, admitted capture and environment references,
+hashes/sizes/schemas, their environment join, receipt and OCIO identity, exact
+round/output inventories, imported-resource identity, cleanup receipt and closed
+topology/state. Review corrected an erroneous single-reference assumption:
+actual records require both golden-record and oracle-environment, selected by
+kind/ID rather than array position. Thirty-one admission tests passed after the
+fix; the focused recorder/control batch passed 53 cases initially and its two
+remaining failures passed after harness/provenance fixes. Earlier affected
+checks remain valid; mypy, Ruff and formatting passed. The separate preexisting
+P22-B route-index failure was corrected with real route/owner assertions in
+commit `fc611fdb`, keeping both getters pending-evidence.
+
+No Painter capture, export, fit or production change was performed in this
+offline slice. Runtime still needs the bounded owned-process runner and a
+successful capability gate for each state. Export requests are not authorized
+by this preparation; item 2.5/R-322 and broader acceptance remain open.

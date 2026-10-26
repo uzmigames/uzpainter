@@ -56,6 +56,8 @@ BAKE_STATE: dict[str, Any] = {
 }
 
 # State-changing calls of the instruction-sequence vocabulary (UzmiGames-authored steps).
+OWN_PROJECT_CREATION: dict[str, Any] = {}
+
 CREATE = "substance_painter.project.create"
 INSERT_FILL = "substance_painter.layerstack.insert_fill"
 SET_SOURCE = "substance_painter.layerstack.FillLayerNode.set_source"
@@ -611,6 +613,7 @@ SETTINGS_FOLDERS = ("default_save_path", "export_path")
 
 
 def create_project(args: dict[str, Any], resolved: dict[str, Any]) -> dict[str, Any]:
+    OWN_PROJECT_CREATION.clear()
     if substance_painter.project.is_open():
         raise RuntimeError("a project is already open; the recorder only creates its own")
     project = substance_painter.project
@@ -644,6 +647,14 @@ def create_project(args: dict[str, Any], resolved: dict[str, Any]) -> dict[str, 
     project.create(
         mesh_file_path=resolved["mesh"], template_file_path=template, settings=settings, **others
     )
+    try:
+        identity = str(project.get_uuid())
+        if identity:
+            OWN_PROJECT_CREATION["uuid"] = identity
+            OWN_PROJECT_CREATION["pending"] = True
+    except Exception:
+        # Ordinary creation remains supported; guarded cleanup requires this identity.
+        OWN_PROJECT_CREATION.clear()
     return {"colour_management": colour_management()}
 
 

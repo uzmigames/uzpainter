@@ -1,0 +1,313 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/api-probes/ocio16-raw-readout-normalization-float-capability",
+  "tier": "0",
+  "domain": "tier0/api-probes/ocio16-raw-readout",
+  "description": "Offline authored normalization-float control; pending review and separate capture authorization. Capability-only requests precede exports. Pinned Substance OCIO configuration; default template, 256px public plane, User0 RGB32F, one visible Split fill, Normal opacity 1, neutral geometry, identity Nearest Repeat UV. Explicit enum GenericColorSpace.Raw must roundtrip exactly; Data/string aliases refuse. Color channel flag remains unobserved; format does not imply color management. Setup once; fresh getters in same_session and after Full save/reopen, no r2 setters. Template capture checks channels and resolution in each round. Resource identity must join the pinned import receipt, not a guessed URL. Calibration uses f32(n/65535) and adjacent floats toward 0/1 in different RGB channels; endpoints stay 0/1. Cross-channel differences do not establish scalar readout collisions without independent channel-invariance evidence. Normalization uses complete RGB codes n,(n+21845)%65536,(n+43690)%65536, n=256*y+x. PNG16 and normalized FLOAT EXR compare observable transfer only. No identity-readout assumption, sRGB-float, decoder identification, fit, tolerance tuning or production promotion. All pixel inputs are public formulas, never selected from private differences.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    },
+    {
+      "input_id": "normalization-float",
+      "kind": "image",
+      "path": "parity/fixtures/tier0-semantics/bitmaps/ocio16-raw-readout-normalization-float.exr",
+      "sha256": "79972acbd621f5c70ebac1dd87e0b881d2bc732683f0e9fab9d678c4a289ab3b",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0",
+        "note": "Public integer/float formulas in tools/parity/tier0_semantics/ocio16_raw_readout_control.py; no captured pixels."
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.layerstack.delete_node",
+        "args": {
+          "initial_root": true,
+          "expected_type": "PaintLayer"
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User0",
+          "format": "RGB32F"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": {
+          "input": "normalization-float",
+          "usage": "TEXTURE"
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "position": "top",
+          "texture_set": "uzp_plane"
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 5,
+          "channels": [
+            "User0"
+          ]
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.layerstack.Node.set_name",
+        "args": {
+          "node_step": 5,
+          "name": "Authored Raw readout control"
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.layerstack.Node.set_visible",
+        "args": {
+          "node_step": 5,
+          "visible": true
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 5,
+          "blending_mode": "Normal",
+          "channel": "User0"
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.layerstack.Node.set_opacity",
+        "args": {
+          "node_step": 5,
+          "opacity": 1.0,
+          "channel": "User0"
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.layerstack.LayerNode.set_geometry_mask",
+        "args": {
+          "node_step": 5,
+          "inclusion_list": false,
+          "meshes": []
+        }
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.layerstack.FillLayerNode.set_projection_mode",
+        "args": {
+          "node_step": 5,
+          "projection_mode": "UV"
+        }
+      },
+      {
+        "step": 13,
+        "call": "substance_painter.layerstack.FillLayerNode.set_projection_parameters",
+        "args": {
+          "node_step": 5,
+          "filtering_mode": "Nearest",
+          "uv_wrapping_mode": "Repeat",
+          "scale_mode": "Factors",
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "rotation": 0.0,
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "step": 14,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 5,
+          "channel": "User0",
+          "resource_step": 4
+        }
+      },
+      {
+        "step": 15,
+        "call": "substance_painter.source.SourceBitmap.set_color_space",
+        "args": {
+          "node_step": 5,
+          "channel": "User0",
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 16,
+        "call": "substance_painter.layerstack.get_root_layer_nodes",
+        "args": {}
+      },
+      {
+        "step": 17,
+        "call": "substance_painter.layerstack.Node.get_name",
+        "args": {
+          "node_step": 5
+        }
+      },
+      {
+        "step": 18,
+        "call": "substance_painter.layerstack.Node.is_visible",
+        "args": {
+          "node_step": 5
+        }
+      },
+      {
+        "step": 19,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 5,
+          "channel": "User0"
+        }
+      },
+      {
+        "step": 20,
+        "call": "substance_painter.layerstack.Node.get_opacity",
+        "args": {
+          "node_step": 5,
+          "channel": "User0"
+        }
+      },
+      {
+        "step": 21,
+        "call": "substance_painter.layerstack.LayerNode.get_geometry_mask",
+        "args": {
+          "node_step": 5
+        }
+      },
+      {
+        "step": 22,
+        "call": "substance_painter.layerstack.LayerNode.has_mask",
+        "args": {
+          "node_step": 5
+        }
+      },
+      {
+        "step": 23,
+        "call": "substance_painter.layerstack.LayerNode.content_effects",
+        "args": {
+          "node_step": 5
+        }
+      },
+      {
+        "step": 24,
+        "call": "substance_painter.layerstack.FillLayerNode.source_mode",
+        "args": {
+          "node_step": 5
+        }
+      },
+      {
+        "step": 25,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 5
+        }
+      },
+      {
+        "step": 26,
+        "call": "substance_painter.layerstack.FillLayerNode.get_projection_mode",
+        "args": {
+          "node_step": 5
+        }
+      },
+      {
+        "step": 27,
+        "call": "substance_painter.layerstack.FillLayerNode.get_projection_parameters",
+        "args": {
+          "node_step": 5
+        }
+      },
+      {
+        "step": 28,
+        "call": "substance_painter.source.SourceBitmap.get_color_space",
+        "args": {
+          "node_step": 5,
+          "channel": "User0",
+          "typed": true
+        }
+      },
+      {
+        "step": 29,
+        "call": "substance_painter.source.SourceBitmap.list_available_color_spaces",
+        "args": {
+          "node_step": 5,
+          "channel": "User0"
+        }
+      },
+      {
+        "step": 30,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 5,
+          "channel": "User0"
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "OCIO",
+      "value": "resources/ocio/substance/config.ocio",
+      "applied_by": "environment_variable"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": []
+}

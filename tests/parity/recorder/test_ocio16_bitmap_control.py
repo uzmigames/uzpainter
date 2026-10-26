@@ -140,6 +140,7 @@ def dispatcher() -> tuple[Any, dict[str, Any]]:
         "member": MagicMock(return_value=object()),
         "channel_arg": lambda args: args["channel"],
         "BITMAP_COLOR_SPACES": {},
+        "OWN_PROJECT_CREATION": {},
         "P22B_CALLS": (),
     }
     exec(

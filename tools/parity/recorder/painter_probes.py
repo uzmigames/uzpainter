@@ -53,6 +53,7 @@ if TYPE_CHECKING:
         BLENDING_MODES,
         CHANNEL_FORMATS,
         OPERATIONS,
+        OWN_PROJECT_CREATION,
         TONE_MAPPINGS,
         UI_MODES,
         channel_type,
@@ -1661,8 +1662,58 @@ def substance_edit(call: str, args: dict[str, Any]) -> Any:
     raise ValueError("unsupported SourceSubstance setter")
 
 
+def remove_initial_paint(step: int, args: dict[str, Any]) -> dict[str, Any]:
+    """Consume a one-shot own-create identity before deleting its single initial Paint root."""
+    pending = OWN_PROJECT_CREATION.pop("pending", False)
+    if (
+        step != 2
+        or args != {"initial_root": True, "expected_type": "PaintLayer"}
+        or type(args.get("initial_root")) is not bool
+        or pending is not True
+        or not substance_painter.project.is_open()
+    ):
+        raise ValueError("initial Paint cleanup requires immediate owned creation")
+    created = OWN_PROJECT_CREATION.get("uuid")
+    current = str(substance_painter.project.get_uuid())
+    if type(created) is not str or not created or current != created:
+        raise ValueError("initial Paint cleanup project differs")
+    layerstack = substance_painter.layerstack
+    stack = substance_painter.textureset.get_active_stack()
+    roots = list(layerstack.get_root_layer_nodes(stack))
+    if len(roots) != 1 or roots[0].get_type().name != "PaintLayer":
+        raise ValueError("initial Paint cleanup requires exactly one Paint root")
+    uid = roots[0].uid()
+    if type(uid) is not int or uid <= 0:
+        raise ValueError("initial Paint cleanup identity")
+    node = layerstack.get_node_by_uid(uid)
+    again = list(layerstack.get_root_layer_nodes(stack))
+    if (
+        node.uid() != uid
+        or node.get_type().name != "PaintLayer"
+        or len(again) != 1
+        or again[0].uid() != uid
+        or str(substance_painter.project.get_uuid()) != created
+    ):
+        raise ValueError("initial Paint cleanup root changed")
+    layerstack.delete_node(node)
+    if list(layerstack.get_root_layer_nodes(stack)):
+        raise ValueError("initial Paint cleanup left roots")
+    return {
+        "created_project_uuid": created,
+        "current_project_uuid": current,
+        "before": {"uid": uid, "node_type": "PaintLayer"},
+        "after_root_count": 0,
+    }
+
+
 def edit(step: int, call: str, args: dict[str, Any], resolved: dict[str, Any]) -> Any:
     """Apply one edit call; returns what the documented call returned."""
+    if "initial_root" in args or "expected_type" in args:
+        if call != DELETE_NODE:
+            OWN_PROJECT_CREATION.pop("pending", None)
+            raise ValueError("initial root selector is only valid on delete_node")
+        return remove_initial_paint(step, args)
+    OWN_PROJECT_CREATION.pop("pending", None)
     if "color_space_type" in args and (
         call != SET_BITMAP_COLOR_SPACE
         or set(args) != {"node_step", "channel", "color_space", "color_space_type"}
@@ -2300,6 +2351,7 @@ def probe_identity(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def probe_reset(args: dict[str, Any]) -> dict[str, Any]:
+    OWN_PROJECT_CREATION.clear()
     PROBE_NODES.clear()
     PROBE_RESOURCES.clear()
     PROBE_RESOURCE_HANDLES.clear()

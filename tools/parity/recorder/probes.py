@@ -468,6 +468,16 @@ def probe_job_from_manifest(manifest: dict[str, Any], repo_root: Path = REPO_ROO
     if [s.step for s in steps] != list(range(1, len(steps) + 1)):
         raise RecorderError("instruction steps must be numbered 1..n in order")
     for step in steps:
+        if {"initial_root", "expected_type"}.intersection(step.args) and (
+            step.call != CONSTANTS["DELETE_NODE"]
+            or step.step != 2
+            or step.args != {"initial_root": True, "expected_type": "PaintLayer"}
+            or type(step.args.get("initial_root")) is not bool
+            or steps[0].call != ps.CREATE
+        ):
+            raise RecorderError(
+                "initial Paint cleanup requires a closed state step immediately after create"
+            )
         if {
             "require_unique",
             "resource_context",
