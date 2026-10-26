@@ -430,6 +430,10 @@ const evaluator_sources = [_][]const u8{
     "evaluator/templates.cpp",
     "evaluator/texture_unit.cpp",
 };
+/// The frozen-host native proof (`src/procedural/frozen_host_proof.h`, decision 363), relative to
+/// `src/`: compiled beside `export_sources` through `EmbedInputs.add`, because it embeds its own
+/// source (its `validator_code_sha256`), which must key its object.
+const frozen_host_proof_sources = [_][]const u8{"procedural/frozen_host_proof.cpp"};
 /// The export plan compiler (`src/export/`, P1-EXPORT, `08-export.md` §1, §2, §6), relative to
 /// `src/`: compiled with the evaluator into `UzPainter.exe` and into `uzp-export-tests.exe`.
 const export_sources = [_][]const u8{
@@ -1506,6 +1510,7 @@ pub fn build(b: *std.Build) void {
         .files = &export_sources,
         .flags = &evaluator_flags,
     });
+    embed_inputs.add(app_mod, "src", &frozen_host_proof_sources, &evaluator_flags);
     app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &.{tinyexr_unit}, .flags = &cxx_flags });
     app_mod.linkLibrary(uzp_core_lib);
     // The native Python API (phase1.19) creates projects from meshes and re-derives the texturing
@@ -1828,6 +1833,7 @@ pub fn build(b: *std.Build) void {
         .files = &(export_sources ++ [_][]const u8{export_fault_source}),
         .flags = &export_hook_flags,
     });
+    embed_inputs.add(export_tests_mod, "src", &frozen_host_proof_sources, &export_hook_flags);
     export_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &.{tinyexr_unit}, .flags = &cxx_flags });
     embed_inputs.add(export_tests_mod, "src", &evaluator_sources, &evaluator_flags);
     embed_inputs.add(export_tests_mod, "src", &render_sources, &(cxx_flags ++ own_warning_flags));
@@ -1980,6 +1986,7 @@ pub fn build(b: *std.Build) void {
         .flags = &(cxx_flags ++ [_][]const u8{"-DSPNG_STATIC"} ++ app_defines),
     });
     pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &export_sources, .flags = &evaluator_flags });
+    embed_inputs.add(pyapi_tests_mod, "src", &frozen_host_proof_sources, &evaluator_flags);
     pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &.{tinyexr_unit}, .flags = &cxx_flags });
     embed_inputs.add(pyapi_tests_mod, "src", &evaluator_sources, &evaluator_flags);
     embed_inputs.add(pyapi_tests_mod, "src", &render_sources, &(cxx_flags ++ own_warning_flags));

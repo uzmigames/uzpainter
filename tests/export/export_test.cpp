@@ -2128,6 +2128,7 @@ int RunTga(const std::vector<std::string>& args) {
 int RunSnapshotSource(const std::filesystem::path& path, std::optional<int64_t> seed);
 int RunProceduralEffects(const std::filesystem::path& path, bool observation = false);
 int RunSnapshotBindFixture(const std::filesystem::path& path);
+int RunFrozenHostProofCases(const std::filesystem::path& work);
 int RunFilterObservationBase(const std::filesystem::path& path, const std::filesystem::path& out);
 int RunFilterObservationImport(const std::filesystem::path& path, const std::filesystem::path& payload);
 
@@ -2139,6 +2140,7 @@ int main(int argc, char** argv) {
         if (args.size() == 2 && args[0] == "procedural-effects") return RunProceduralEffects(args[1]);
         if (args.size() == 2 && args[0] == "procedural-observations") return RunProceduralEffects(args[1], true);
         if (args.size() == 2 && args[0] == "snapshot-bind") return RunSnapshotBindFixture(args[1]);
+        if (args.size() == 2 && args[0] == "frozen-host-proof") return RunFrozenHostProofCases(args[1]);
         if (args.size() == 3 && args[0] == "filter-observation-base") return RunFilterObservationBase(args[1], args[2]);
         if (args.size() == 3 && args[0] == "filter-observation-import") return RunFilterObservationImport(args[1], args[2]);
         if (args.size() == 6 && args[0] == "tga") return RunTga(args);

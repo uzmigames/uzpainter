@@ -27,10 +27,14 @@
 #include "store/filter_observations.h"
 #include "render/disk_cache.h"
 #include "store/snapshots.h"
+#include "evaluator/templates.h"
+#include "procedural/frozen_host_proof.h"
 #include "uzp_core/document/nodes.h"
 #include "uzp_core/manifest/manifest.h"
 #include "uzp_core/manifest/sha256.h"
 #include "uzp_core/types/errors.h"
+
+#include "../filter_observation_v2_fixture.h"
 
 namespace {
 void Check(bool okay, const char* message) {
@@ -728,5 +732,184 @@ int RunSnapshotBindFixture(const std::filesystem::path& path) {
                                     {"content_effect", static_cast<int64_t>(content)},
                                     {"mask_effect", static_cast<int64_t>(mask)}};
     std::cout << "BIND_FIXTURE:" << core::json::WriteCanonical(report) << "\n";
+    return 0;
+}
+
+// ── Decision 363: the frozen-host native proof on authored bit patterns ─────────────────────────
+
+namespace frozen_host {
+
+namespace fs = std::filesystem;
+namespace json = uzp::core::json;
+
+/// A store holding the authored V2 scene whose host snapshot is `pattern` repeated over the
+/// 128 x 128 plane (the provider's exact request, /3 metadata with both observations).
+struct Scene {
+    std::unique_ptr<uzp::store::ProjectStore> store;
+    std::unique_ptr<uzp::core::Document> document;
+    uzp::v2fixture::SceneIds ids;
+    std::vector<std::uint32_t> bits;
+};
+
+Scene Prepare(const fs::path& file, const std::vector<std::uint32_t>& pattern) {
+    using namespace uzp;
+    namespace fx = uzp::v2fixture;
+    Scene scene;
+    const std::string plane = fx::PlaneObj();
+    core::DocumentState initial;
+    initial.project_uuid = "6f1c2a3e-0000-4000-8000-0000000a3632";
+    initial.project = fx::Scene(store::ObservationPin(store::ObservationKey(fx::FilterDescriptor())), plane.size(), scene.ids);
+    store::CreateOptions options;
+    options.resources = {store::PendingContent::Bytes{plane, "model/obj"}};
+    scene.store = store::ProjectStore::Create(file, initial, options);
+    scene.document = std::make_unique<core::Document>(initial);
+    scene.store->Attach(*scene.document);
+    scene.bits.resize(128 * 128);
+    for (std::size_t i = 0; i < scene.bits.size(); ++i) scene.bits[i] = pattern[i % pattern.size()];
+    std::string bytes(scene.bits.size() * 4, '\0');
+    std::memcpy(bytes.data(), scene.bits.data(), bytes.size());
+    const auto outcome = scene.store->Submit(
+        *scene.document, {"frozen-host-proof-test", json::Object{}, "record", scene.document->revision()},
+        [&](core::Edit& edit) {
+            core::Project& project = edit.project();
+            core::Layer& host = project.texture_sets[0].stacks[0].root_layers[0];
+            const core::ProceduralRef& ref = std::get<core::ProceduralSource>(host.fill->sources.at(core::ChannelType::User0).value).ref;
+            auto request = procedural::SnapshotFillRequest(project, project.texture_sets[0], core::ChannelType::User0,
+                                                           core::ChannelFormat::L32F, *host.fill, ref, host.uid, false);
+            if (!request) throw std::runtime_error(request.error());
+            procedural::RecordSnapshot(*scene.store, edit, *request, bytes, fx::Metadata(0.5));
+        });
+    Check(outcome.result && outcome.result->status == core::ResultStatus::committed, "record the authored host snapshot");
+    return scene;
+}
+
+/// `entry` with `evidence` as its native proof record.
+json::Object WithEvidence(json::Object entry, const json::Object& evidence) {
+    auto& capture = std::get<json::Object>(entry.at("capture").data);
+    std::get<json::Object>(capture.at("migration").data)["native_evidence"] = evidence;
+    return entry;
+}
+
+}  // namespace frozen_host
+
+int RunFrozenHostProofCases(const std::filesystem::path& work) {
+    using namespace uzp;
+    namespace fx = uzp::v2fixture;
+    namespace json = core::json;
+    using frozen_host::Prepare;
+    using frozen_host::WithEvidence;
+    const auto templates = evaluator::TemplateLibrary::Load(evaluator::TemplateLibrary::DefaultDirectory());
+
+    // The read-out on the six authored patterns: +0, 2^-24, 0.5 and 1 are fixed points; -0 and
+    // 2^-26 read out as +0 (idempotent, yet not fixed points).
+    const std::vector<std::uint32_t> mixed{0x00000000u, 0x80000000u, 0x32800000u, 0x33800000u, 0x3f000000u, 0x3f800000u};
+    const std::vector<std::uint32_t> readout{0x00000000u, 0x00000000u, 0x00000000u, 0x33800000u, 0x3f000000u, 0x3f800000u};
+    for (std::size_t i = 0; i < mixed.size(); ++i) {
+        Check(procedural::FrozenHostReadout(mixed[i]) == readout[i], "the read-out of each authored pattern");
+        Check(procedural::FrozenHostReadout(readout[i]) == readout[i], "the read-out is idempotent on the patterns");
+    }
+
+    // An all-fixed plane: raw upload and final output equal B bit for bit, every count zero, and
+    // the record passes the store structural check inside a V2 entry.
+    const std::vector<std::uint32_t> fixed{0x00000000u, 0x33800000u, 0x3f000000u, 0x3f800000u};
+    auto good = Prepare(work / "frozen-fixed.uzp", fixed);
+    const core::Project project = *good.document->snapshot().project;
+    const std::string before = json::WriteCanonical(core::ProjectToJson(project));
+    const auto run = procedural::RunFrozenHostProof(*good.store, project, templates);
+    if (!run) throw std::runtime_error(run.error());
+    Check(json::WriteCanonical(core::ProjectToJson(project)) == before, "the proof leaves the prospective project unchanged");
+    Check(run->uploads == 1 && run->projects == 0, "one cold procedural upload, no projection");
+    Check(run->source == good.bits && run->uploaded == good.bits && run->final == good.bits,
+          "B, the uploaded bits and the final output are bit-identical");
+    Check(run->nonfinite == 0 && run->fixed_point_mismatches == 0 && run->upload_mismatches == 0 &&
+              run->final_output_mismatches == 0,
+          "every count of a fixed plane is zero");
+    Check(run->evidence.at("raster_sha256") == run->evidence.at("final_output_sha256"), "the final output hash is the raster hash");
+    Check(run->evidence.at("validator_code_sha256") == json::Value(procedural::FrozenHostValidatorCodeSha256()),
+          "the record names the embedded validator source");
+    const json::Object descriptor = fx::FilterDescriptor();
+    const json::Object context = fx::Context(*good.store, project);
+    const json::Object entry = WithEvidence(fx::Entry(good.store->project_uuid(), descriptor, context, project,
+                                                      std::get<std::string>(run->evidence.at("signature_sha256").data)),
+                                            run->evidence);
+    const std::string accepted = store::FilterObservationsProblem(fx::Namespace(descriptor, {entry}, good.ids.filter),
+                                                                  good.store->project_uuid());
+    if (!accepted.empty()) throw std::runtime_error("the computed record is refused: " + accepted);
+    const auto again = procedural::RunFrozenHostProof(*good.store, project, templates);
+    Check(again && again->uploads == 1 && json::WriteCanonical(again->evidence) == json::WriteCanonical(run->evidence),
+          "a second run is cold again and computes the same record");
+
+    // Refusals: an unknown registered profile is never replaced, a Paint layer holding content is
+    // never erased.
+    core::Project otherProfile = project;
+    otherProfile.versions.evaluator_profile = "painter-12.1-unknown";
+    Check(!procedural::RunFrozenHostProof(*good.store, otherProfile, templates), "an unknown profile refuses");
+    core::Project paintContent = project;
+    paintContent.texture_sets[0].stacks[0].root_layers[1].paint->planes[core::ChannelType::User0] = 999999;
+    Check(!procedural::RunFrozenHostProof(*good.store, paintContent, templates),
+          "a Paint layer holding content refuses rather than being erased");
+
+    // Save, close and reopen: the same record; then corrupted host bytes refuse.
+    good.store->Save(*good.document);
+    good.document.reset();
+    good.store->Close();
+    good.store.reset();
+    {
+        auto reopened = store::ProjectStore::Open(work / "frozen-fixed.uzp");
+        const auto persisted = procedural::RunFrozenHostProof(*reopened.store, reopened.state.project, templates);
+        Check(persisted && json::WriteCanonical(persisted->evidence) == json::WriteCanonical(run->evidence),
+              "after save and reopen the proof computes the same record");
+        reopened.store->container().Exec("UPDATE blob SET data = X'00' WHERE mime = 'application/vnd.uzpainter.plane-chunk'");
+        Check(!procedural::RunFrozenHostProof(*reopened.store, reopened.state.project, templates),
+              "corrupted host bytes refuse");
+        reopened.store->Close();
+    }
+
+    // A mixed plane: the raw upload keeps every input pattern (-0 and 2^-26 included) while the
+    // final output is the read-out, so admission fails at exactly those samples; the record states
+    // it and the store refuses it.
+    auto mixedScene = Prepare(work / "frozen-mixed.uzp", mixed);
+    const core::Project mixedProject = *mixedScene.document->snapshot().project;
+    const auto mixedRun = procedural::RunFrozenHostProof(*mixedScene.store, mixedProject, templates);
+    if (!mixedRun) throw std::runtime_error(mixedRun.error());
+    std::int64_t nonFixed = 0;
+    bool finalIsReadout = true;
+    for (std::size_t i = 0; i < mixedScene.bits.size(); ++i) {
+        nonFixed += (i % mixed.size() == 1 || i % mixed.size() == 2) ? 1 : 0;
+        finalIsReadout = finalIsReadout && mixedRun->final[i] == readout[i % mixed.size()];
+    }
+    Check(mixedRun->source == mixedScene.bits && mixedRun->uploaded == mixedScene.bits,
+          "the raw upload keeps -0 and 2^-26 bit for bit");
+    Check(finalIsReadout && mixedRun->fixed_point_mismatches == nonFixed && mixedRun->final_output_mismatches == nonFixed &&
+              mixedRun->upload_mismatches == 0,
+          "the final output is the read-out and differs at exactly the non-fixed samples");
+    const json::Object mixedContext = fx::Context(*mixedScene.store, mixedProject);
+    const json::Object mixedEntry =
+        WithEvidence(fx::Entry(mixedScene.store->project_uuid(), descriptor, mixedContext, mixedProject,
+                               std::get<std::string>(mixedRun->evidence.at("signature_sha256").data)),
+                     mixedRun->evidence);
+    Check(!store::FilterObservationsProblem(fx::Namespace(descriptor, {mixedEntry}, mixedScene.ids.filter),
+                                            mixedScene.store->project_uuid())
+               .empty(),
+          "the store refuses a record with nonzero counts");
+    mixedScene.document.reset();
+    mixedScene.store->Close();
+
+    // Nonfinite samples are counted, never normalized.
+    auto nonfinite = Prepare(work / "frozen-nonfinite.uzp", {0x3f000000u, 0x7fc00000u, 0x7f800000u, 0xff800000u});
+    const auto nonfiniteRun = procedural::RunFrozenHostProof(*nonfinite.store, *nonfinite.document->snapshot().project,
+                                                             templates);
+    Check(nonfiniteRun && nonfiniteRun->nonfinite == 3 * 128 * 128 / 4 && nonfiniteRun->uploaded == nonfinite.bits,
+          "nonfinite samples are counted and uploaded unchanged");
+    nonfinite.document.reset();
+    nonfinite.store->Close();
+
+    std::cout << "FROZEN_HOST_PROOF: "
+              << json::WriteCanonical(json::Object{{"fixed_counts_zero", true},
+                                                   {"mixed_nonfixed", nonFixed},
+                                                   {"binary_sha256", run->evidence.at("binary_sha256")},
+                                                   {"validator_code_sha256", run->evidence.at("validator_code_sha256")},
+                                                   {"samples", static_cast<std::int64_t>(128 * 128)}})
+              << "\n";
     return 0;
 }
