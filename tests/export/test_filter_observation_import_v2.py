@@ -31,7 +31,7 @@ def test_filter_import_v2_transaction_on_authored_evidence(
     lines = [line for line in proc.stdout.splitlines() if line.startswith(PREFIX)]
     assert len(lines) == 1, proc.stdout
     summary = json.loads(lines[0][len(PREFIX) :])
-    assert summary == {"checks": 71}
+    assert summary == {"checks": 81}
 
 
 def test_no_production_route_reaches_the_verified_filter_context() -> None:

@@ -541,13 +541,79 @@ Object VerifiedHostMigration::Identity() const {
                   {"capture_context_sha256", capture_context_sha256_}};
 }
 
+namespace {
+
+Object TargetIdentity(const ImportTarget& target) {
+    return Object{{"project_uuid", target.project_uuid}, {"revision", target.revision},
+                  {"base_projection_sha256", target.base_projection_sha256},
+                  {"filter_uid", static_cast<std::int64_t>(target.filter_uid)}};
+}
+
+Object HostSealIdentity(const VerifiedHostMigration& host) {
+    return Object{{"capture", host.HostCapture()}, {"identity", host.Identity()}};
+}
+
+Object FilterSealIdentity(const VerifiedFilterContext& filter) {
+    return Object{{"effect", core::EffectToJson(filter.Effect(), false)}, {"descriptor", filter.Descriptor()},
+                  {"observations", filter.Observations()}, {"capture", filter.FilterCapture()}};
+}
+
+Object NativeRoles(const store::FrozenHostNodes& nodes) {
+    return Object{{"texture_set", static_cast<std::int64_t>(nodes.set->id)},
+                  {"stack", static_cast<std::int64_t>(nodes.stack->id)},
+                  {"host_uid", static_cast<std::int64_t>(nodes.host->uid)},
+                  {"initial_paint_uid", static_cast<std::int64_t>(nodes.paint->uid)},
+                  {"filter_uid", static_cast<std::int64_t>(nodes.filter->uid)}};
+}
+
+void CheckTargetSeal(const Object& seal, const ImportTarget& target, const VerifiedHostMigration& host,
+                     const VerifiedFilterContext& filter) {
+    ClosedObject(Value(seal), kTargetContextUnrepresentable, "target seal",
+                 {"target", "prospective_projection_sha256", "inventory_sha256", "native_roles", "source_roles",
+                  "host_identity_sha256", "filter_identity_sha256"});
+    const Object& sealedTarget = ClosedObject(seal.at("target"), kTargetContextUnrepresentable, "sealed target",
+                                             {"project_uuid", "revision", "base_projection_sha256", "filter_uid"});
+    Require(sealedTarget.at("project_uuid") == Value(target.project_uuid), kTargetContextUnrepresentable,
+            "the target store differs from the seal");
+    Require(SameTyped(sealedTarget.at("filter_uid"), Value(static_cast<std::int64_t>(target.filter_uid))),
+            kTargetContextUnrepresentable, "the target Filter id differs from the seal");
+    Require(SameTyped(Value(sealedTarget), Value(TargetIdentity(target))), kStaleProspectiveView,
+            "the target revision or base differs from the seal");
+    for (const char* key : {"prospective_projection_sha256", "inventory_sha256", "host_identity_sha256",
+                            "filter_identity_sha256"}) {
+        Require(core::IsSha256Hex(StringAt(seal, key, kTargetContextUnrepresentable, "target seal")),
+                kTargetContextUnrepresentable, "a target seal hash is invalid");
+    }
+    const Object& nativeRoles = ClosedObject(seal.at("native_roles"), kTargetContextUnrepresentable, "native roles",
+                                            {"texture_set", "stack", "host_uid", "initial_paint_uid", "filter_uid"});
+    const Object& sourceRoles = ClosedObject(seal.at("source_roles"), kTargetContextUnrepresentable, "source roles",
+                                            {"set_index", "stack_index", "host_uid", "initial_paint_uid", "filter_uid"});
+    for (const auto& [name, id] : nativeRoles) {
+        Require(id.IsInt() && std::get<std::int64_t>(id.data) > 0, kTargetContextUnrepresentable, "invalid native role id");
+    }
+    Require(SameTyped(sourceRoles.at("set_index"), Value(std::int64_t{0})) &&
+                SameTyped(sourceRoles.at("stack_index"), Value(std::int64_t{0})),
+            kTargetContextUnrepresentable, "the source set/stack indices differ from the single-stack domain");
+    std::set<std::int64_t> sourceNodes;
+    for (const char* name : {"host_uid", "initial_paint_uid", "filter_uid"}) {
+        const Value& id = sourceRoles.at(name);
+        Require(id.IsInt() && std::get<std::int64_t>(id.data) > 0, kTargetContextUnrepresentable, "invalid source role id");
+        Require(sourceNodes.insert(std::get<std::int64_t>(id.data)).second, kTargetContextUnrepresentable,
+                "source role ids collide");
+    }
+    Require(seal.at("host_identity_sha256") == Value(store::ObservationKey(HostSealIdentity(host))),
+            kHostSourceStateMismatch, "the H identity differs from the seal");
+    Require(seal.at("filter_identity_sha256") == Value(store::ObservationKey(FilterSealIdentity(filter))),
+            kUnreviewedContextDifference, "the F evidence differs from the seal");
+}
+
+}  // namespace
+
 core::MutationRequest FilterObservationCommitRequest(const VerifiedHostMigration& host, const VerifiedFilterContext& filter,
                                                      const ImportTarget& target) {
     const Object arguments{
-        {"target", Object{{"project_uuid", target.project_uuid},
-                          {"revision", target.revision},
-                          {"base_projection_sha256", target.base_projection_sha256},
-                          {"filter_uid", static_cast<std::int64_t>(target.filter_uid)}}},
+        {"target", TargetIdentity(target)},
+        {"target_seal", filter.target_seal_},
         {"host", Object{{"capture", host.HostCapture()}, {"identity", host.Identity()}}},
         {"filter", Object{{"effect", core::EffectToJson(filter.Effect(), false)},
                           {"descriptor", filter.Descriptor()},
@@ -583,6 +649,21 @@ std::expected<std::string, ImportRefusal> CommitFilterObservation(store::Project
                                                                   const VerifiedFilterContext& filter,
                                                                   const ImportTarget& target,
                                                                   const evaluator::TemplateLibrary& templates) {
+    // These compare immutable inputs, not the current revision. Keep current-state checks in
+    // Submit's callback so an exact retry still returns its original stored outcome.
+    if (filter.owner_store_ != &store) {
+        return std::expected<std::string, ImportRefusal>(
+            std::unexpect, ImportRefusal{std::string(kTargetContextUnrepresentable),
+                                        "the verified Filter belongs to another open store"});
+    }
+    try {
+        CheckTargetSeal(filter.target_seal_, target, host, filter);
+    } catch (const ImportRefused& refused) {
+        return std::expected<std::string, ImportRefusal>(std::unexpect, refused.refusal);
+    } catch (const std::exception&) {
+        return std::expected<std::string, ImportRefusal>(
+            std::unexpect, ImportRefusal{std::string(kTargetContextUnrepresentable), "invalid target seal"});
+    }
     const std::string descriptorKey = store::ObservationKey(filter.Descriptor());
     std::optional<ImportRefusal> refusal;
     std::string entryKey;
@@ -615,12 +696,20 @@ std::expected<std::string, ImportRefusal> CommitFilterObservation(store::Project
             store::FrozenHostNodes nodes;
             const std::string domain = store::FrozenHostDomainProblem(project, nodes);
             Require(domain.empty(), kTargetContextUnrepresentable, domain);
+            Require(SameTyped(Value(NativeRoles(nodes)), filter.target_seal_.at("native_roles")),
+                    kTargetContextUnrepresentable, "the native role map differs from the seal");
+            Value prospective = core::ProjectToJson(project);
+            std::get<Object>(prospective.data).erase(std::string(store::kFilterObservationsKey));
+            Require(Value(store::ObservationKey(prospective)) == filter.target_seal_.at("prospective_projection_sha256"),
+                    kStaleProspectiveView, "the complete prospective projection differs from the seal");
             auto hostRequest = SnapshotFillRequest(project, *nodes.set, core::ChannelType::User0, core::ChannelFormat::L32F,
                                                    *nodes.host->fill, *nodes.host_ref, nodes.host->uid, false);
             Require(hostRequest && SignatureHash(*hostRequest) == host.SignatureSha256(), kHostSourceStateMismatch,
                     "the host's request is not the verified H snapshot");
             const auto context = CurrentFilterObservationContextV2(store, project);
             Require(context.has_value(), kTargetContextUnrepresentable, context ? std::string() : context.error());
+            Require(Value(store::ObservationKey(context->at("inventory"))) == filter.target_seal_.at("inventory_sha256"),
+                    kStaleProspectiveView, "the prospective inventory differs from the seal");
             // The verified H capture still describes this prospective snapshot and its census plane.
             const Object identity = host.Identity();
             bool snapshotBound = false;

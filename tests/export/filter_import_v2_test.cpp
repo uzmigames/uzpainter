@@ -47,6 +47,56 @@ struct FilterImportTestAccess {
         context.filter_capture_ = std::move(filter_capture);
         return context;
     }
+
+    // Authored fixtures explicitly supply the expected prospective scene; this is not a
+    // production route from caller data to a verified F context.
+    static VerifiedFilterContext Seal(VerifiedFilterContext context, store::ProjectStore& store,
+                                      const VerifiedHostMigration& host, const ImportTarget& target,
+                                      const core::Project& prospective) {
+        auto projection = core::ProjectToJson(prospective);
+        std::get<core::json::Object>(projection.data).erase(std::string(store::kFilterObservationsKey));
+        const auto& set = prospective.texture_sets.at(0);
+        const auto& stack = set.stacks.at(0);
+        const auto& fill = stack.root_layers.at(0);
+        const auto& paint = stack.root_layers.at(1);
+        const auto& effect = fill.content_effects.at(0);
+        using core::json::Object;
+        context.owner_store_ = &store;
+        context.target_seal_ = Object{
+            {"target", Object{{"project_uuid", target.project_uuid}, {"revision", target.revision},
+                              {"base_projection_sha256", target.base_projection_sha256},
+                              {"filter_uid", static_cast<std::int64_t>(target.filter_uid)}}},
+            {"prospective_projection_sha256", store::ObservationKey(projection)},
+            {"inventory_sha256", store.ReadObservationInventory(prospective).Sha256()},
+            {"native_roles", Object{{"texture_set", static_cast<std::int64_t>(set.id)},
+                                     {"stack", static_cast<std::int64_t>(stack.id)},
+                                     {"host_uid", static_cast<std::int64_t>(fill.uid)},
+                                     {"initial_paint_uid", static_cast<std::int64_t>(paint.uid)},
+                                     {"filter_uid", static_cast<std::int64_t>(effect.uid)}}},
+            {"source_roles", Object{{"set_index", std::int64_t{0}}, {"stack_index", std::int64_t{0}},
+                                     {"host_uid", std::int64_t{20}}, {"initial_paint_uid", std::int64_t{10}},
+                                     {"filter_uid", std::int64_t{30}}}},
+            {"host_identity_sha256", store::ObservationKey(Object{{"capture", host.HostCapture()},
+                                                                   {"identity", host.Identity()}})},
+            {"filter_identity_sha256", store::ObservationKey(Object{
+                {"effect", core::EffectToJson(context.Effect(), false)}, {"descriptor", context.Descriptor()},
+                {"observations", context.Observations()}, {"capture", context.FilterCapture()}})}};
+        return context;
+    }
+
+    static VerifiedFilterContext ChangedSeal(VerifiedFilterContext context, const std::string& field,
+                                             core::json::Value value) {
+        context.target_seal_[field] = std::move(value);
+        return context;
+    }
+
+    static VerifiedFilterContext ChangedEvidence(VerifiedFilterContext context, const VerifiedFilterContext& other) {
+        context.effect_ = other.effect_;
+        context.descriptor_ = other.descriptor_;
+        context.observations_ = other.observations_;
+        context.filter_capture_ = other.filter_capture_;
+        return context;
+    }
 };
 
 }  // namespace uzp::procedural
@@ -275,6 +325,12 @@ procedural::ImportTarget Target(const Case& c) {
     std::get<json::Object>(projection.data).erase(std::string(store::kFilterObservationsKey));
     return procedural::ImportTarget{c.store->project_uuid(), c.document->revision(), store::ObservationKey(projection),
                                     project.next_id};
+}
+
+procedural::VerifiedFilterContext Sealed(Case& c, const procedural::VerifiedHostMigration& host,
+                                         procedural::VerifiedFilterContext filter = FilterContext()) {
+    return FilterImportTestAccess::Seal(filter, *c.store, host, Target(c),
+                                         Prospective(*c.document->snapshot().project, filter));
 }
 
 bool Refused(const std::expected<procedural::VerifiedHostMigration, ImportRefusal>& result, std::string_view reason) {
@@ -570,17 +626,82 @@ int RunFilterImportV2Cases(const fs::path& work) {
     }
 
     // The transaction: commit, then a fresh lookup after save and reopen.
-    const procedural::VerifiedFilterContext filter = FilterContext();
+    const procedural::VerifiedFilterContext filter = Sealed(good, *verified);
     const procedural::ImportTarget target = Target(good);
     {
+        const auto sealRefused = [&](const std::string& label, const procedural::VerifiedFilterContext& candidate,
+                                     std::string_view reason) {
+            const auto before = good.document->revision();
+            const auto projection = core::ProjectToJson(*good.document->snapshot().project);
+            const auto inventory = good.store->ReadObservationInventory(*good.document->snapshot().project).Sha256();
+            const auto result = procedural::CommitFilterObservation(*good.store, *good.document, *verified,
+                                                                     candidate, target, templates);
+            check(!result && result.error().reason == reason && good.document->revision() == before &&
+                      good.store->OperationsAfter(before).records.empty() &&
+                      json::WriteCanonical(core::ProjectToJson(*good.document->snapshot().project)) == json::WriteCanonical(projection) &&
+                      good.store->ReadObservationInventory(*good.document->snapshot().project).Sha256() == inventory,
+                  label + " refuses without a revision, operation, projection or inventory change");
+        };
+        sealRefused("an unsealed context", FilterContext(), procedural::kTargetContextUnrepresentable);
+        sealRefused("another expected prospective projection",
+                    FilterImportTestAccess::ChangedSeal(filter, "prospective_projection_sha256", core::Sha256Hex("other prospective")),
+                    procedural::kStaleProspectiveView);
+        sealRefused("another expected inventory",
+                    FilterImportTestAccess::ChangedSeal(filter, "inventory_sha256", core::Sha256Hex("other inventory")),
+                    procedural::kStaleProspectiveView);
+        sealRefused("another sealed H identity",
+                    FilterImportTestAccess::ChangedSeal(filter, "host_identity_sha256", core::Sha256Hex("other H")),
+                    procedural::kHostSourceStateMismatch);
+        sealRefused("another sealed F identity",
+                    FilterImportTestAccess::ChangedSeal(filter, "filter_identity_sha256", core::Sha256Hex("other F")),
+                    procedural::kUnreviewedContextDifference);
         const auto request = procedural::FilterObservationCommitRequest(*verified, filter, target);
-        check(request.idempotency_key == procedural::FilterObservationCommitRequest(*verified, FilterContext(), target).idempotency_key,
+        const auto seal = std::get<json::Object>(request.arguments.at("target_seal").data);
+        auto roles = std::get<json::Object>(seal.at("native_roles").data);
+        std::swap(roles.at("host_uid"), roles.at("initial_paint_uid"));
+        sealRefused("another native role binding", FilterImportTestAccess::ChangedSeal(filter, "native_roles", roles),
+                    procedural::kTargetContextUnrepresentable);
+        auto sourceRoles = std::get<json::Object>(seal.at("source_roles").data);
+        sourceRoles.at("set_index") = false;
+        sealRefused("a bool masquerading as a source index",
+                    FilterImportTestAccess::ChangedSeal(filter, "source_roles", sourceRoles),
+                    procedural::kTargetContextUnrepresentable);
+
+        // Copy only an authored test store. Logical identity is deliberately identical; the
+        // transient owner binding must still reject the original token before Submit/replay.
+        good.store->SaveAsCopy(work / "import-seal-clone.uzp");
+        auto opened = store::ProjectStore::Open(work / "import-seal-clone.uzp");
+        Case clone;
+        clone.store = std::move(opened.store);
+        clone.document = std::make_unique<core::Document>(opened.state);
+        clone.store->Attach(*clone.document);
+        check(clone.store->project_uuid() == good.store->project_uuid() &&
+                  clone.document->revision() == good.document->revision() &&
+                  Target(clone).base_projection_sha256 == target.base_projection_sha256,
+              "the authored clone has the same UUID, revision and projection");
+        const auto cloneToken = Sealed(clone, *verified);
+        check(procedural::FilterObservationCommitRequest(*verified, cloneToken, Target(clone)).idempotency_key == request.idempotency_key,
+              "transient ownership never enters the stable request hash");
+        const auto cloneRevision = clone.document->revision();
+        const auto cloneProjection = core::ProjectToJson(*clone.document->snapshot().project);
+        const auto result = procedural::CommitFilterObservation(*clone.store, *clone.document, *verified, filter,
+                                                                 Target(clone), templates);
+        check(!result && result.error().reason == procedural::kTargetContextUnrepresentable &&
+                  clone.document->revision() == cloneRevision && clone.store->OperationsAfter(cloneRevision).records.empty() &&
+                  json::WriteCanonical(core::ProjectToJson(*clone.document->snapshot().project)) == json::WriteCanonical(cloneProjection),
+              "the same logical target in another store cannot consume the original token");
+        clone.document.reset();
+        clone.store->Close();
+    }
+    {
+        const auto request = procedural::FilterObservationCommitRequest(*verified, filter, target);
+        check(request.idempotency_key == procedural::FilterObservationCommitRequest(*verified, Sealed(good, *verified), target).idempotency_key,
               "the same validated inputs give the same request key");
         procedural::ImportTarget later = target;
         later.revision += 1;
         check(procedural::FilterObservationCommitRequest(*verified, filter, later).idempotency_key != request.idempotency_key,
               "the same import at another revision is another request");
-        check(procedural::FilterObservationCommitRequest(*verified, FilterContext("Blur", false), target).request_hash() !=
+        check(procedural::FilterObservationCommitRequest(*verified, Sealed(good, *verified, FilterContext("Blur", false)), target).request_hash() !=
                   request.request_hash(),
               "other observations are another request");
     }
@@ -602,8 +723,8 @@ int RunFilterImportV2Cases(const fs::path& work) {
             const auto result = procedural::CommitFilterObservation(*good.store, *good.document, host, context, t, templates);
             check(!result && good.document->revision() == before, label + " does not replay the stored outcome");
         };
-        notReplayed("other observations", FilterContext("Blur", false), target, *verified);
-        notReplayed("another effect", FilterContext("Renamed"), target, *verified);
+        notReplayed("other observations", FilterImportTestAccess::ChangedEvidence(filter, FilterContext("Blur", false)), target, *verified);
+        notReplayed("another effect", FilterImportTestAccess::ChangedEvidence(filter, FilterContext("Renamed")), target, *verified);
         procedural::ImportTarget otherUid = target;
         otherUid.filter_uid += 1;
         notReplayed("another target", filter, otherUid, *verified);
@@ -636,8 +757,9 @@ int RunFilterImportV2Cases(const fs::path& work) {
         const core::Project retryScene = Prospective(*retry.document->snapshot().project, FilterContext());
         const auto retryHost = procedural::VerifyHostCapture(*retry.store, retryScene, retry.HostCapture(), retry.Transport());
         Expect(retryHost.has_value(), "the retry authored capture verifies");
+        const auto retryFilter = Sealed(retry, *retryHost);
         const procedural::ImportTarget a = Target(retry);
-        const auto keyA = procedural::CommitFilterObservation(*retry.store, *retry.document, *retryHost, filter, a, templates);
+        const auto keyA = procedural::CommitFilterObservation(*retry.store, *retry.document, *retryHost, retryFilter, a, templates);
         Expect(keyA.has_value(), keyA ? "" : keyA.error().reason + ": " + keyA.error().detail);
         // Remove the Filter and its observations, handing its uid out again.
         const auto unbound = retry.store->Submit(
@@ -650,7 +772,7 @@ int RunFilterImportV2Cases(const fs::path& work) {
         Expect(unbound.result && unbound.result->status == core::ResultStatus::committed, "the unbinding commits");
         const auto retried = [&](const std::string& label) {
             const std::int64_t before = retry.document->revision();
-            const auto result = procedural::CommitFilterObservation(*retry.store, *retry.document, *retryHost, filter, a, templates);
+            const auto result = procedural::CommitFilterObservation(*retry.store, *retry.document, *retryHost, retryFilter, a, templates);
             check(result && *result == *keyA && retry.document->revision() == before,
                   "retrying A " + label + " returns A's entry without a revision" +
                       (result ? std::string() : " (" + result.error().reason + ": " + result.error().detail + ")"));
@@ -660,7 +782,8 @@ int RunFilterImportV2Cases(const fs::path& work) {
               "the retry after the removal inserts nothing");
         const procedural::ImportTarget b = Target(retry);
         const auto keyB =
-            procedural::CommitFilterObservation(*retry.store, *retry.document, *retryHost, FilterContext("Blur", false), b, templates);
+            procedural::CommitFilterObservation(*retry.store, *retry.document, *retryHost,
+                                                 Sealed(retry, *retryHost, FilterContext("Blur", false)), b, templates);
         check(keyB && *keyB != *keyA && b.filter_uid == a.filter_uid,
               "import B with other observations binds the same Filter uid to another entry" +
                   (keyB ? std::string() : " (" + keyB.error().reason + ": " + keyB.error().detail + ")"));
@@ -675,7 +798,7 @@ int RunFilterImportV2Cases(const fs::path& work) {
         const std::int64_t before = c.document->revision();
         const core::Project prior = *c.document->snapshot().project;
         const std::string census = c.store->ReadObservationInventory(prior).Sha256();
-        const auto result = procedural::CommitFilterObservation(*c.store, *c.document, host, filter, t, templates);
+        const auto result = procedural::CommitFilterObservation(*c.store, *c.document, host, Sealed(c, host), t, templates);
         const core::Project after = *c.document->snapshot().project;
         check(!result && result.error().reason == reason && c.document->revision() == before &&
                   c.store->OperationsAfter(before).records.empty() &&

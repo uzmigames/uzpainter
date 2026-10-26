@@ -164,6 +164,7 @@ std::expected<VerifiedHostMigration, ImportRefusal> VerifyHostCapture(store::Pro
                                                                      const ArtifactBytes& artifacts);
 
 struct FilterImportTestAccess;
+struct ImportTarget;
 
 namespace detail {
 /// The bridge's comparison of a requested override with an effective parameter, as Python compares
@@ -185,6 +186,17 @@ public:
 private:
     VerifiedFilterContext() = default;
     friend struct FilterImportTestAccess;
+    friend core::MutationRequest FilterObservationCommitRequest(const VerifiedHostMigration&, const VerifiedFilterContext&,
+                                                                const ImportTarget&);
+    friend std::expected<std::string, ImportRefusal> CommitFilterObservation(
+        store::ProjectStore&, core::Document&, const VerifiedHostMigration&, const VerifiedFilterContext&,
+        const ImportTarget&, const evaluator::TemplateLibrary&);
+    // Transient ownership is never serialized or hashed. A future production gate must mint
+    // this context and commit it inside one native call, without exporting a token to Python.
+    const store::ProjectStore* owner_store_ = nullptr;
+    // Closed, typed target/evidence bindings. Only the test friend can populate them until the
+    // raw F production gate exists; there is deliberately no public "seal current project" API.
+    core::json::Object target_seal_;
     core::Effect effect_;
     core::json::Object descriptor_;
     core::json::Object observations_;
@@ -210,8 +222,9 @@ std::optional<ImportRefusal> RecheckProspectiveView(store::ProjectStore& store, 
 
 /// The store request of a commit: its arguments are every validated input (the target with its
 /// expected revision, the verified H capture and identity, the Filter effect, descriptor,
-/// observations and F capture section), and its idempotency key is their typed canonical hash, so
-/// only the exact same import at the same revision replays a stored outcome.
+/// observations, F capture section and target seal), and its idempotency key is their typed
+/// canonical hash. Transient store ownership is excluded. Only the exact same sealed request
+/// replays a stored outcome, even if the current revision has since advanced.
 core::MutationRequest FilterObservationCommitRequest(const VerifiedHostMigration& host, const VerifiedFilterContext& filter,
                                                      const ImportTarget& target);
 

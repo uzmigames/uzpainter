@@ -567,3 +567,18 @@ Private binding diagnostic SHA-256:
 Historical F385 and its reports remain unchanged. These checks establish the
 bound settings and diagnostic source relation only: destination mapping, native
 F validation and frozen-host proof remain required before real import.
+
+The native transaction now requires a private target seal: owning store instance,
+base revision and projection, prospective projection, role mapping, inventory and
+H/F identities. The store-instance binding is transient and never serialized.
+State-dependent checks remain inside `Submit`, preserving exact same-request
+replay before revision checks. A token from a clone with the same UUID, revision
+and projection refuses; divergent seals leave no mutation or operation record.
+No production F factory or runtime entry point was added.
+
+REV400 passed both focused Python nodes and all 81 native authored checks through
+one fixture build. Mypy, Ruff, independent review and frozen source checks passed;
+the retained H379 validator binary remained unchanged. Logs:
+`tmp/scratch/rev400-seal.log` and `tmp/scratch/rev400-seal.xml`.
+This closes the transaction-seal defect only; native admission, full F validation,
+destination construction and the real frozen-host proof remain open.
