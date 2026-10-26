@@ -544,3 +544,26 @@ derivation and the hash of original authored settings, while destination binding
 native proof and the native F gate remain outstanding. Twenty-seven historical
 and ten new binding cases pass. Mypy, Ruff, independent review and frozen source
 checks pass. These are software checks; actual F settings capture is next.
+
+REV398 captured the new settings golden through the pinned producer. The owned
+Painter stopped; independent checks found no Painter, no endpoint and a free
+lock. All 37 producer source paths and byte hashes remained unchanged. Capture
+report SHA-256:
+`ff36d28702a6492801801276c2226b5ec38ebf8ae3dd125992a94be97423ab86`.
+
+REV399 admitted its twelve private references and validated the admitted bytes:
+two rounds, five context boundaries, ten decoded screenshots and zero diagnostic
+failures. Effective settings derive through the documented bound protocol.
+Validation report SHA-256:
+`b158787b23371722c6ef51ac800c037d95c7c207f303bea06bb4a37608acaaeb`.
+The public manifest hashes to
+`75697dd6f29574c2a214831b728f8879c9b86f25f1d93e7ceeaaad566207db31`.
+
+The fresh admitted F and original admitted H379 then passed J1-J4 through the
+permanent source-binding API. Original H admission and prior binding report
+hashes were checked before reusing their approved capture and policy pins.
+Private binding diagnostic SHA-256:
+`f54937adb0761c95bead1ee4c554ca7e424b0d34fc12ceb8d81b8b77a7270bdc`.
+Historical F385 and its reports remain unchanged. These checks establish the
+bound settings and diagnostic source relation only: destination mapping, native
+F validation and frozen-host proof remain required before real import.
