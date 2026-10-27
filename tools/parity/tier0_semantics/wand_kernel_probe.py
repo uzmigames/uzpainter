@@ -94,7 +94,7 @@ def request_path(root: Path = REPO_ROOT) -> Path:
 def main() -> int:
     path = request_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(request(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    path.write_bytes((json.dumps(request(), indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
     print(path.relative_to(REPO_ROOT).as_posix())
     return 0
 
