@@ -1553,3 +1553,82 @@ def test_far_point_crosses_an_island_that_covers_no_texel(
     chosen = [values[ty, tx] for _, _, (tx, ty) in cands[:n]]
     value = [chain([v[c] for v in chosen], t) for c in range(3)]
     assert out[y, x].view(np.uint32).tolist() == np.array(value, F32).view(np.uint32).tolist()
+
+
+def test_far_tap_takes_the_least_distance_over_its_open_windows(
+    export_tests: Path, tmp_path: Path
+) -> None:
+    """Decision 366: a far tap held by open windows whose edges lie within 1.17 texels takes the
+    least of its frame distance and the distances through those windows' J. On the
+    kernel-bevelled-cube fixture (256 x 256), ring texel (71, 4) has two open windows over the same
+    far taps, through bevel facets 54 and 55. Tap (157, 122) of facet 55 is nearer through facet
+    54's J than through the nearest seam's (facet 55), and the taps' order equals the one decoded
+    from Painter's recording. UzPainter's taps, their distances and the ring value equal
+    `padding_reference`'s."""
+    mesh = (
+        Path(__file__).resolve().parents[2]
+        / "parity/fixtures/tier0-semantics/meshes/bevelled-cube.obj"
+    )
+    size = 256
+    values = np.random.default_rng(366).random((size, size, 3)).astype(F32)
+    raw, result = tmp_path / "values.f32", tmp_path / "result.f32"
+    raw.write_bytes(values.tobytes())
+    cases = tmp_path / "cases.json"
+    cases.write_text(
+        json.dumps(
+            [
+                dict(
+                    mesh=str(mesh),
+                    material="uzp_bevelled_cube",
+                    width=size,
+                    height=size,
+                    channels=3,
+                    values=str(raw),
+                    out=str(result),
+                )
+            ]
+        )
+    )
+    process = subprocess.run(
+        [str(export_tests), "ring", str(cases)],
+        capture_output=True,
+        text=True,
+        timeout=600,
+        check=False,
+    )
+    assert process.returncode == 0, process.stdout + process.stderr
+    native = {(r["x"], r["y"]): r for r in json.loads(process.stdout)["ring"]}
+    out = np.frombuffer(result.read_bytes(), F32).reshape(size, size, 3)
+    reference = Ring(mesh, "uzp_bevelled_cube", size, size)
+    tris = reference.tris
+    x, y = 71, 4
+    own = [
+        ((x + dx) % size, y + dy)
+        for dy, dx in NEIGHBOURS
+        if 0 <= y + dy < size and reference.owner[y + dy, (x + dx) % size] >= 0
+    ]
+    tau = reference.tau(x, y, own)
+    T = tris[tau]
+    cands, _ = reference.candidates(x, y, own, tau)
+    n = tap_count(cands)
+    expected = [((156, 122), True), ((156, 121), True), ((71, 5), False), ((157, 122), True)]
+    assert [(c[2], c[1]) for c in cands[:n]] == expected
+    q = T.point(T.bary(x + 0.5, y + 0.5))
+    K = tris[int(reference.owner[122, 157])]
+    p = K.point(K.bary(157.5, 122.5))
+    through = {
+        tris[j].face: norm(sub(q, plane_rotation(p, tris[j], T)))
+        for _, _, j in reference.seams[T.chart]
+        if tris[j].chart == K.chart
+    }
+    d = next(c[0] for c in cands if c[2] == (157, 122))
+    assert K.face == 55 and d == through[54] < through[55]
+    r = native[(x, y)]
+    assert r["taps"] == n == 4
+    assert [((c[0], c[1]), bool(c[3])) for c in r["candidates"][:n]] == expected
+    for c, ref_c in zip(r["candidates"][:n], cands[:n], strict=True):
+        assert math.isclose(c[2], ref_c[0], rel_tol=1e-12)
+    t = reference.chain_fractions(x, y, cands[:n])
+    chosen = [values[ty, tx] for _, _, (tx, ty) in cands[:n]]
+    value = [chain([v[c] for v in chosen], t) for c in range(3)]
+    assert out[y, x].view(np.uint32).tolist() == np.array(value, F32).view(np.uint32).tolist()

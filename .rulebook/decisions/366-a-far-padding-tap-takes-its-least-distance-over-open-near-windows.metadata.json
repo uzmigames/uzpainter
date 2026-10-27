@@ -1,0 +1,11 @@
+{
+  "id": 366,
+  "slug": "a-far-padding-tap-takes-its-least-distance-over-open-near-windows",
+  "title": "A far padding tap takes its least distance over open near windows",
+  "status": "accepted",
+  "date": "2026-10-27",
+  "relatedTasks": [
+    "phase1.25_pilot-wand"
+  ],
+  "supersededBy": null
+}

@@ -34,9 +34,48 @@ MANIFEST_ROOT = REPO_ROOT / (
     "parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/manifests/tier0/semantics"
 )
 POLICIES = ("baseline",)
+# Ring.far32: the far point of seam (e, edge, j) for ring texel (x, y) in float32: decision 273's
+# box-normalised position through E, fold32 into J, barycentrics in J and J's float32 UVs.
+FAR32_METHOD = """    def far32(self, e, edge, j, x, y):
+        E, J = self.tris[e], self.tris[j]
+        qe = position32(E.uv, E.normalised, self.width, self.height, x, y)
+        qf = self.fold32(qe, e, edge, j)
+        n = J.normalised.astype(F32)
+        e1, e2, v = _sub32(n[1], n[0]), _sub32(n[2], n[0]), _sub32(qf, n[0])
+        a, b, c = _dot32(e1, e1), _dot32(e1, e2), _dot32(e2, e2)
+        det = f32(f32(a * c) - f32(b * b))
+        l1 = f32(f32(f32(c * _dot32(e1, v)) - f32(b * _dot32(e2, v))) / det)
+        l2 = f32(f32(f32(a * _dot32(e2, v)) - f32(b * _dot32(e1, v))) / det)
+        l0 = f32(f32(F32(1) - l1) - l2)
+        uv = J.uv.astype(F32)
+        u = f32(f32(f32(l0 * uv[0][0]) + f32(l1 * uv[1][0])) + f32(l2 * uv[2][0]))
+        w = f32(f32(f32(l0 * uv[0][1]) + f32(l1 * uv[1][1])) + f32(l2 * uv[2][1]))
+        return float(f32(u * F32(self.width))), float(f32(f32(F32(1) - w) * F32(self.height)))
+
+"""
+F32_SIDE = """                mu, mv = fu - 0.5, fv - 0.5
+                if jw == j and (
+                    abs(mu - round(mu)) < WINDOW_SIDE or abs(mv - round(mv)) < WINDOW_SIDE
+                ):
+                    gu, gv = self.far32(e_index, edge, j, x, y)
+                    if abs(mu - round(mu)) < WINDOW_SIDE:
+                        mu = gu - 0.5
+                    if abs(mv - round(mv)) < WINDOW_SIDE:
+                        mv = gv - 0.5
+                col0, row0 = math.floor(mu), math.ceil(mv)
+"""
 # Named text patches of the reference, for policies such as "baseline+snapcol" (diagnostic
 # only).
 PATCHES: dict[str, list[tuple[str, str]]] = {
+    # At a far point within WINDOW_SIDE of a window boundary, the side is that of the far point
+    # computed in float32 (`far32`).
+    "f32side": [
+        (
+            "    def tau(self, x: int, y: int, own",
+            FAR32_METHOD + "    def tau(self, x: int, y: int, own",
+        ),
+        ("                col0, row0 = math.floor(fu - 0.5), math.ceil(fv - 0.5)\n", F32_SIDE),
+    ],
     # A far point within WINDOW_SIDE of a window boundary is snapped onto it before the window's
     # floor (columns) and ceil (rows).
     "snapwin": [
@@ -47,6 +86,28 @@ PATCHES: dict[str, list[tuple[str, str]]] = {
             "                mv = round(mv) if abs(mv - round(mv)) < WINDOW_SIDE else mv\n"
             "                col0, row0 = math.floor(mu), math.ceil(mv)\n",
         )
+    ],
+    # Instrumentation only: every window of the ring texel's last `candidates` call (E, its edge,
+    # the seam's J, the effective J, the far point, the gate and reach) and the windows holding
+    # each texel, in `self.dbg`.
+    "dbgwin": [
+        (
+            "        windows: list[tuple[int, tuple[int, int], int, int]] = []\n",
+            "        windows: list[tuple[int, tuple[int, int], int, int]] = []\n"
+            "        window_info: list[tuple[int, int, int, int, float, float]] = []\n",
+        ),
+        (
+            "                windows.append((e_index, (col0, row0), edge, j))\n",
+            "                windows.append((e_index, (col0, row0), edge, j))\n"
+            "                window_info.append((e_index, edge, j, jw, fu, fv))\n",
+        ),
+        (
+            "        # Decision 294 (a): per edge, when E lies outside tau's planar face",
+            "        if not flip:\n"
+            "            held = {t: list(v) for t, v in via.items()}\n"
+            "            self.dbg = (window_info, held, edges, q, tau)\n"
+            "        # Decision 294 (a): per edge, when E lies outside tau's planar face",
+        ),
     ],
     "snapcol": [
         (
@@ -65,6 +126,8 @@ PATCHES: dict[str, list[tuple[str, str]]] = {
         )
     ],
 }
+
+
 STEPS = {45: "infinite", 46: "infinite", 47: "passthrough", 48: "passthrough"}
 type Image = npt.NDArray[np.float32]
 type Point = tuple[int, int]
@@ -545,6 +608,40 @@ def native(probe: str, exe: Path) -> dict[str, Any]:
     }
 
 
+def sides(probe: str) -> list[dict[str, Any]]:
+    """Painter's side at every far window boundary (decision 291) of `probe`'s ring: per ring texel
+    with near-boundary axes, the axes (seam index, axis, the double far coordinate f - 1/2), and
+    which of the side choices (none flipped, or the one flipped axis) reproduces the recording; a
+    texel with more than one near axis lists every single flip. Rows are private data."""
+    p = Probe(probe)
+    ring = p.ring("baseline")
+    ref = p.ref
+    out: list[dict[str, Any]] = []
+    for x, y, candidates, _count in ring.texels():
+        if "window-side" not in ring.undecided.get((x, y), set()):
+            continue
+        own = [
+            ((x + dx) % p.size, y + dy)
+            for dy, dx in ref.NEIGHBOURS
+            if 0 <= y + dy < p.size and p.covered[y + dy, (x + dx) % p.size]
+        ]
+        tau = ring.tau(x, y, own)
+        near = ring.near[(x, y)]
+
+        def exact(cands: list[Any], x: int = x, y: int = y) -> bool:
+            n = ref.tap_count(cands)
+            taps = cands[:n]
+            values = np.asarray([p.source[ty, tx] for _, _, (tx, ty) in taps], np.float32)
+            return not p.missed((x, y), p.chain(values, ring.chain_fractions(x, y, taps)))
+
+        choices = {"none": exact(candidates)}
+        for index, axis, *_ in near:
+            flipped, _ = ring.candidates(x, y, own, tau, frozenset({(index, axis)}))
+            choices[f"{index}:{axis}"] = exact(flipped)
+        out.append({"texel": [x, y], "axes": near, "exact": choices})
+    return out
+
+
 def score(probe: str, policies: tuple[str, ...]) -> dict[str, Any]:
     p = Probe(probe)
     misses: dict[str, list[Point]] = {}
@@ -575,9 +672,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--limit", type=int, default=400)
     parser.add_argument("--infer", action="store_true", help="infer Painter's support instead")
     parser.add_argument("--native", type=Path, help="compare uzp-export-tests.exe's ring instead")
+    parser.add_argument("--sides", action="store_true", help="window-boundary truth to --out")
     args = parser.parse_args(argv)
     policies = tuple(args.policy or POLICIES)
     names = args.probe or probes()
+    if args.sides:
+        with ProcessPoolExecutor(args.jobs) as pool:
+            rows = dict(zip(names, pool.map(sides, names), strict=True))
+        for name, found in rows.items():
+            print(json.dumps({"probe": name, "texels": len(found)}), flush=True)
+        if args.out is not None:
+            args.out.write_text(json.dumps(rows), encoding="utf-8")
+        return 0
     if args.native is not None:
         with ProcessPoolExecutor(args.jobs) as pool:
             for line in pool.map(native, names, [args.native] * len(names)):

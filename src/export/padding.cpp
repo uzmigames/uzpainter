@@ -72,6 +72,9 @@ constexpr float kFoldHigh = 0.98501915f;
 constexpr double kReachCap = 1.78;
 constexpr double kReachLow = 1.7720044;
 constexpr double kReachHigh = 1.787242;
+// Decision 366: the reach of the open windows whose J may shorten a far tap's distance; Painter's
+// lies in [1.15943297, 1.18234014) texels (bevelled-cube-256).
+constexpr double kWindowReach = 1.17;
 // Legacy corner sensitivity diagnostic (decision 294): a seam edge outside tau's planar face whose nearest
 // point to the ring texel's centre is an end V, and which is not collinear (UV |sin| at most
 // kCollinear) with another seam edge of the island ending at V, reaches kCornerGated texels when
@@ -1105,6 +1108,7 @@ CandidateSet Candidates(const RingGeometry& g, uint32_t x, uint32_t y, const std
         std::array<int64_t, 2> window{};  // the far window's base (col0, row0)
         size_t edge = 0;                  // the edge of E
         uint32_t farTriangle = 0;         // J
+        uint32_t frameTriangle = 0;       // the window's J for the frame (decision 365)
         // Decision 294 (a): E lies outside tau's planar face and the edge's nearest point to the
         // texel centre is an end V; another edge of `edges` ending at V is gated; the least UV |sin|
         // with another seam edge of E's island ending at V (infinite when none).
@@ -1183,7 +1187,7 @@ CandidateSet Candidates(const RingGeometry& g, uint32_t x, uint32_t y, const std
             }
             const auto [col0, row0] = base;
             edges.push_back({GateOf(T, J, q, E.p[(seam.edge + 1) % 3]), reach, seam.own, base, seam.edge,
-                             seam.farTriangle});
+                             seam.farTriangle, windowTriangle});
             for (int64_t row = row0 - kFarReach; row <= row0 + kFarReach; ++row) {
                 for (int64_t col = col0 - kFarReach; col <= col0 + kFarReach; ++col) {
                     if (row < 0 || col < 0 || row >= g.height || col >= g.width) continue;
@@ -1195,6 +1199,19 @@ CandidateSet Candidates(const RingGeometry& g, uint32_t x, uint32_t y, const std
                     if (e.via.empty() || e.via.back() != index) e.via.push_back(index);
                 }
             }
+        }
+    }
+    // Decision 366: a far tap held by an open window whose edge lies within kWindowReach texels
+    // takes the least of its frame distance and the distances through those windows' J (decision
+    // 364's rotation from each).
+    for (Entry& e : pool) {
+        const KernelTriangle& k = g.triangles[e.triangle];
+        if (e.via.empty() || k.chart == T.chart || e.own) continue;
+        const Vec3 p = Point(k, TexelBary(k, static_cast<double>(e.texel % g.width) + 0.5,
+                                          static_cast<double>(e.texel / g.width) + 0.5));
+        for (const uint32_t w : e.via) {
+            if (edges[w].gate.gated || edges[w].reach > kWindowReach) continue;
+            e.frame = std::min(e.frame, Norm(Sub(q, PlaneRotation(p, g.triangles[edges[w].frameTriangle], T))));
         }
     }
     // Decision 294 (a): which edges end at a UV corner beyond the texel's projection onto them.

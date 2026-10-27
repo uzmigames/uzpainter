@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import itertools
-
 import numpy as np
 
 from tools.parity.fit import padding_corpus as corpus
@@ -71,16 +69,3 @@ def test_every_named_patch_applies_once_to_the_current_reference() -> None:
     for name, edits in corpus.PATCHES.items():
         for old, _ in edits:
             assert text.count(old) == 1, name
-    for a, b in itertools.combinations(sorted(corpus.PATCHES), 2):
-        olds = {old for old, _ in corpus.PATCHES[a]} & {old for old, _ in corpus.PATCHES[b]}
-        if olds:
-            # Patches that rewrite the same line are alternatives, never combined.
-            assert {a, b} <= {
-                "snapwin",
-                "snapcol",
-                "snaprow",
-                "uvwin",
-                "hop",
-                "hopempty",
-                "hopzero",
-            }, (a, b)

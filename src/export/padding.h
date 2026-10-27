@@ -61,6 +61,9 @@
 //        planes, or normals meeting at a dot product above 0.985, leave it as it is): J is the far
 //        triangle of the seam edge of tau's island, into the candidate's island, whose 3D segment
 //        is nearest q, else the far triangle of the window that first holds it (decision 364);
+//        a far candidate held by a window whose edge is open and lies within 1.17 texels takes
+//        the least of that distance and the distances through those windows' far triangles
+//        (decision 366);
 //      - any other candidate in tau's planar face is used at its 3D position, one in a face
 //        sharing a 3D edge with that face is rotated about the edge into its plane, onto the far
 //        side, any other

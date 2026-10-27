@@ -1,7 +1,7 @@
 """The measured `infinite` padding of src/export/padding.h (phase1.25 item 2.7; decisions 197, 206,
-267, 268, 270, 273, 275, 278 to 282, 285, 288, 290, 291, 294, 356, 364, 365; measured only, decision
-259), written again independently in Python for the tests: the ring over an OBJ's triangles, then
-the jump flood.
+267, 268, 270, 273, 275, 278 to 282, 285, 288, 290, 291, 294, 356, 364 to 366; measured only,
+decision 259), written again independently in Python for the tests: the ring over an OBJ's
+triangles, then the jump flood.
 
 The geometry (barycentrics, folds about seam edges, distances) is double precision with each
 operation in padding.cpp's order, so that a far point at an exact half-texel boundary, where
@@ -48,6 +48,9 @@ FOLD_HIGH = F32(0.98501915)
 # lies in [REACH_LOW, REACH_HIGH) (bevelled-cube-256 (4, 234)'s edge at 1.77200433 included, the
 # Wand's (740, 1459) edge at 1.78724202 excluded, rounded inward).
 REACH_CAP = 1.78
+# Decision 366: the reach of the open windows whose J may shorten a far tap's distance;
+# Painter's lies in [1.15943297, 1.18234014) texels (bevelled-cube-256).
+WINDOW_REACH = 1.17
 REACH_LOW = 1.7720044
 REACH_HIGH = 1.787242
 # Decision 294's corner reach: a seam edge of a triangle outside tau's planar face whose nearest
@@ -632,6 +635,9 @@ class Ring:
         self.runs: dict[int, dict[tuple[int, int, int], int]] = {}
         # Per ring texel (texels()): where decision 278's gate does not decide its taps.
         self.undecided: dict[tuple[int, int], set[str]] = {}
+        # Per ring texel (`candidates` without flips): its near window-boundary axes (decision
+        # 291), each (edge index, axis, f - 1/2, E, E's edge, J).
+        self.near: dict[tuple[int, int], list[tuple[int, int, float, int, int, int]]] = {}
 
     @staticmethod
     def _coplanar(a: Triangle, b: Triangle) -> bool:
@@ -995,7 +1001,10 @@ class Ring:
         edges: list[tuple[tuple[bool, bool, bool], float]] = []
         # per edge: E, its window's base, the edge and its far triangle J
         windows: list[tuple[int, tuple[int, int], int, int]] = []
+        # per edge: the window's J for the frame (decision 365)
+        window_js: list[int] = []
         sides: list[tuple[int, int]] = []
+        near: list[tuple[int, int, float, int, int, int]] = []
         charts = sorted({self.tris[int(self.owner[ty, tx])].chart for tx, ty in own})
         for chart in charts:
             # A strip writes its seam's run into the one map of every chart (decision 356); the
@@ -1027,6 +1036,7 @@ class Ring:
                 for axis, m in ((0, fu - 0.5), (1, fv - 0.5)):
                     if abs(m - round(m)) < WINDOW_SIDE:
                         sides.append((len(edges) - 1, axis))
+                        near.append((len(edges) - 1, axis, m, e_index, edge, j))
                         if (len(edges) - 1, axis) in flip:
                             # The other side: columns round(m) - 1 | round(m), rows round(m) |
                             # round(m) + 1.
@@ -1035,6 +1045,7 @@ class Ring:
                             else:
                                 row0 = 2 * round(m) + 1 - row0
                 windows.append((e_index, (col0, row0), edge, j))
+                window_js.append(jw)
                 for row in range(row0 - 1, row0 + 2):
                     for col in range(col0 - 1, col0 + 2):
                         if not (0 <= row < self.height and 0 <= col < self.width):
@@ -1045,6 +1056,18 @@ class Ring:
                         lst = via.setdefault((col, row), [])
                         if not lst or lst[-1] != len(edges) - 1:
                             lst.append(len(edges) - 1)
+        # Decision 366: a far tap held by an open window whose edge lies within WINDOW_REACH
+        # texels takes the least of its frame distance and the distances through those windows'
+        # J (decision 364's rotation from each).
+        for texel, held_by in via.items():
+            K = self.tris[int(self.owner[texel[1], texel[0]])]
+            if K.chart == T.chart or pool[texel][2]:
+                continue
+            P = K.point(K.bary(texel[0] + 0.5, texel[1] + 0.5))
+            for w in held_by:
+                if not edges[w][0][0] and edges[w][1] <= WINDOW_REACH:
+                    turned = plane_rotation(P, self.tris[window_js[w]], T)
+                    pool[texel][0] = min(pool[texel][0], norm(sub(q, turned)))
         # Decision 294 (a): per edge, when E lies outside tau's planar face and the edge's nearest
         # point to the texel centre is an end V (its projection outside [0, 1]): whether another
         # edge of `edges` ending at V is gated, and the least UV |sin| with another seam edge of
@@ -1109,6 +1132,7 @@ class Ring:
         undecided: set[str] = set()
         if flip:
             return result, undecided
+        self.near[(x, y)] = near
         n = tap_count(result)
         # Decision 291: a far window taken on the other side of a boundary, on any of the near
         # axes, that changes the taps; more than WINDOW_SIDES such axes are not tried.
