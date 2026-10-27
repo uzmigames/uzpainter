@@ -109,6 +109,45 @@ PATCHES: dict[str, list[tuple[str, str]]] = {
             "        # Decision 294 (a): per edge, when E lies outside tau's planar face",
         ),
     ],
+    **{
+        f"band{tag}": [("EQUAL_SHARE = 1e-5\n", f"EQUAL_SHARE = {value}\n")]
+        for tag, value in (("3e5", "3e-5"), ("1e4", "1e-4"), ("3e4", "3e-4"), ("1e3", "1e-3"))
+    },
+    # The far tie comparator's positions with the fused UV determinant (q_E, P or both).
+    "fuseq": [
+        (
+            "                        q_e = position32(E.uv, E.normalised, self.width, self.height, x, y)\n",
+            "                        q_e = position32(\n"
+            "                            E.uv, E.normalised, self.width, self.height, x, y,"
+            " fused_determinant=True\n"
+            "                        )\n",
+        )
+    ],
+    "fusep": [
+        (
+            "                        p = position32(k.uv, k.normalised, self.width, self.height, tx, ty)\n",
+            "                        p = position32(\n"
+            "                            k.uv, k.normalised, self.width, self.height, tx, ty,"
+            " fused_determinant=True\n"
+            "                        )\n",
+        )
+    ],
+    # The far tie comparator's q through tau (fused determinant) instead of through E.
+    "qtau": [
+        (
+            "                        q_e = position32(E.uv, E.normalised, self.width, self.height, x, y)\n",
+            "                        Tq = self.tris[self.tau(x, y, self._own)]\n"
+            "                        q_e = position32(\n"
+            "                            Tq.uv, Tq.normalised, self.width, self.height, x, y,"
+            " fused_determinant=True\n"
+            "                        )\n",
+        ),
+        (
+            "        T = self.tris[tau]\n        q = T.point(T.bary(x + 0.5, y + 0.5))\n",
+            "        T = self.tris[tau]\n        self._own = own\n"
+            "        q = T.point(T.bary(x + 0.5, y + 0.5))\n",
+        ),
+    ],
     "snapcol": [
         (
             "                col0, row0 = math.floor(fu - 0.5), math.ceil(fv - 0.5)\n",

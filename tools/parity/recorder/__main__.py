@@ -109,6 +109,9 @@ def parse(argv: Sequence[str]) -> argparse.Namespace:
         command.add_argument("--port", type=int, default=REMOTE_PORT)
         if name == "record":
             command.add_argument("--operator", choices=["console", "ui"], default=None)
+            command.add_argument(
+                "--assets-root", type=Path, default=None, help="the Assets3D root, for its inputs"
+            )
     iray = commands.add_parser("iray")
     iray.add_argument("manifests", type=Path, nargs="+", help="manifests or directories")
     iray.add_argument("--host", default=REMOTE_HOST)
@@ -411,7 +414,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             for template in list_shipped_templates(session):
                 print(template)
             return 0
-        job = load_job(args.manifest)
+        job = load_job(args.manifest, assets_root=getattr(args, "assets_root", None))
         if args.command == "record":
             operator = make_operator(args.operator) if args.operator else None
             run = record_texture_golden(session, job, work_root(), inbox_root(), operator=operator)

@@ -20,6 +20,7 @@ from typing import Any
 from tools.parity.recorder import vocabulary as ps
 from tools.parity.recorder.session import RecorderError
 from tools.parity.schemas import REPO_ROOT, Schema, load_json, validation_errors
+from tools.parity.store.store import OracleStore, Status, locate
 
 EXPORT = "substance_painter.export.export_project_textures"
 
@@ -457,18 +458,50 @@ class Job:
         return {}
 
 
-def load_job(path: Path, repo_root: Path = REPO_ROOT) -> Job:
+ASSETS3D_LICENCE = "LicenseRef-UzmiGames-Assets3D"
+
+
+def pinned_assets3d_file(
+    item: dict[str, Any], assets_root: Path, store: OracleStore | None
+) -> Path:
+    """The file holding an Assets3D input's pinned bytes (decision 099): its `assets3d_path` under
+    `assets_root` when the file there matches the pin, else the private store's blob of that hash;
+    refused when neither holds them."""
+    file: Path = assets_root / item["assets3d_path"]
+    found = sha256_file(file) if file.is_file() else None
+    if found == item["sha256"]:
+        return file
+    stored = store.resolve(item["input_id"], item["sha256"]) if store is not None else None
+    if stored is not None and stored.status is Status.AVAILABLE and stored.path is not None:
+        return stored.path
+    state = "does not exist" if found is None else f"has sha256 {found}, not the pinned one"
+    raise RecorderError(
+        f"input {item['input_id']}: {file} {state}, and the private store holds no blob "
+        f"{item['sha256']} ({stored.reason if stored is not None else 'no private store here'})"
+    )
+
+
+def load_job(path: Path, repo_root: Path = REPO_ROOT, assets_root: Path | None = None) -> Job:
     manifest = load_json(path)
     problems = validation_errors(manifest, Schema.GOLDEN_PUBLIC)
     if problems:
         raise RecorderError(f"{path}: not a valid public manifest: {problems}")
-    return job_from_manifest(manifest, repo_root)
+    return job_from_manifest(manifest, repo_root, assets_root)
 
 
-def job_from_manifest(manifest: dict[str, Any], repo_root: Path = REPO_ROOT) -> Job:
+def job_from_manifest(
+    manifest: dict[str, Any], repo_root: Path = REPO_ROOT, assets_root: Path | None = None
+) -> Job:
+    """The job of a public manifest. Its repository inputs are hash-checked; with `assets_root`,
+    so are its Assets3D inputs (`pinned_assets3d_file`), which are otherwise left to the job's
+    kind."""
     inputs: dict[str, Path] = {}
     for item in manifest["inputs"]:
         if "path" not in item:
+            if assets_root is not None and "assets3d_path" in item:
+                if item["provenance"]["licence"] != ASSETS3D_LICENCE:
+                    raise RecorderError(f"input {item['input_id']}: not an Assets3D input")
+                inputs[item["input_id"]] = pinned_assets3d_file(item, assets_root, locate())
             continue
         file = repo_root / item["path"]
         if not file.is_file():

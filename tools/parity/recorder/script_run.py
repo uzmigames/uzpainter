@@ -72,7 +72,13 @@ from tools.parity.recorder.capture import (
     verify_current_outputs,
     write_fence,
 )
-from tools.parity.recorder.job import Job, canonical_json, sha256_bytes, sha256_file
+from tools.parity.recorder.job import (
+    Job,
+    canonical_json,
+    pinned_assets3d_file,
+    sha256_bytes,
+    sha256_file,
+)
 from tools.parity.recorder.output import ensure_outside_repository, run_name, write_run
 from tools.parity.recorder.session import PainterIdentity, PainterSession, RecorderError
 from tools.parity.recorder.texture import (
@@ -187,18 +193,7 @@ def tail_matches(path: str, assets3d_path: str) -> bool:
 def input_file(item: dict[str, Any], assets_root: Path, store: OracleStore | None) -> Path:
     """The file holding an input's pinned bytes: its Assets3D path when the file there matches the
     pin, else the private store's blob of that hash; refused when neither holds them."""
-    file: Path = assets_root / item["assets3d_path"]
-    found = sha256_file(file) if file.is_file() else None
-    if found == item["sha256"]:
-        return file
-    stored = store.resolve(item["input_id"], item["sha256"]) if store is not None else None
-    if stored is not None and stored.status is Status.AVAILABLE and stored.path is not None:
-        return stored.path
-    state = "does not exist" if found is None else f"has sha256 {found}, not the pinned one"
-    raise RecorderError(
-        f"input {item['input_id']}: {file} {state}, and the private store holds no blob "
-        f"{item['sha256']} ({stored.reason if stored is not None else 'no private store here'})"
-    )
+    return pinned_assets3d_file(item, assets_root, store)
 
 
 def pinned_inputs(
