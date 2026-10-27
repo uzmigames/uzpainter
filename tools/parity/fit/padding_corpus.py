@@ -48,36 +48,6 @@ PATCHES: dict[str, list[tuple[str, str]]] = {
             "                col0, row0 = math.floor(mu), math.ceil(mv)\n",
         )
     ],
-    # The far point is the ring texel centre carried across the seam edge by the UV similarity
-    # that maps the own edge onto the far edge, mirrored to the far triangle's inside, instead of
-    # the 3D fold read back in J's UV.
-    "uvwin": [
-        (
-            "class Ring:\n",
-            """def uv_across(E, J, edge, va, vb, px, py):  # type: ignore[no-untyped-def]
-    a, b = E.t[(edge + 1) % 3], E.t[(edge + 2) % 3]
-    c = E.t[edge]
-    a2, b2 = J.t[J.vertex.index(va)], J.t[J.vertex.index(vb)]
-    c2 = J.t[3 - J.vertex.index(va) - J.vertex.index(vb)]
-    ex, ey = b[0] - a[0], b[1] - a[1]
-    length2 = ex * ex + ey * ey
-    s = ((px - a[0]) * ex + (py - a[1]) * ey) / length2
-    h = (ex * (py - a[1]) - ey * (px - a[0])) / length2
-    hc = ex * (c[1] - a[1]) - ey * (c[0] - a[0])
-    fx, fy = b2[0] - a2[0], b2[1] - a2[1]
-    hc2 = fx * (c2[1] - a2[1]) - fy * (c2[0] - a2[0])
-    h2 = -h * math.copysign(1.0, hc) * math.copysign(1.0, hc2)
-    return (a2[0] + s * fx - h2 * fy, a2[1] + s * fy + h2 * fx)
-
-
-class Ring:
-""",
-        ),
-        (
-            "                fu, fv = J.texel_of(fold(hinge(E, J, va, vb), q))\n",
-            "                fu, fv = uv_across(E, J, edge, va, vb, x + 0.5, y + 0.5)\n",
-        ),
-    ],
     "snapcol": [
         (
             "                col0, row0 = math.floor(fu - 0.5), math.ceil(fv - 0.5)\n",

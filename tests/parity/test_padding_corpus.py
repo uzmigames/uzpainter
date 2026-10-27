@@ -75,4 +75,12 @@ def test_every_named_patch_applies_once_to_the_current_reference() -> None:
         olds = {old for old, _ in corpus.PATCHES[a]} & {old for old, _ in corpus.PATCHES[b]}
         if olds:
             # Patches that rewrite the same line are alternatives, never combined.
-            assert {a, b} <= {"snapwin", "snapcol", "snaprow", "uvwin"}, (a, b)
+            assert {a, b} <= {
+                "snapwin",
+                "snapcol",
+                "snaprow",
+                "uvwin",
+                "hop",
+                "hopempty",
+                "hopzero",
+            }, (a, b)

@@ -1478,3 +1478,78 @@ def test_far_window_takes_every_island_and_turns_j_into_taus_plane(
     chosen = [values[ty, tx] for _, _, (tx, ty) in cands[:n]]
     value = [chain([v[c] for v in chosen], t) for c in range(3)]
     assert out[y, x].view(np.uint32).tolist() == np.array(value, F32).view(np.uint32).tolist()
+
+
+def test_far_point_crosses_an_island_that_covers_no_texel(
+    export_tests: Path, tmp_path: Path
+) -> None:
+    """Decision 365: an island that covers no texel centre is transparent. On the hinge-vary
+    fixture (512 x 512), ring texel (20, 20) below the hinged island K reaches K's seam into J, a
+    strip 0.4375 texel deep that covers no texel centre; the far point is carried on across J into
+    the island on J's other side, three of whose texels are far taps. UzPainter's taps, their
+    distances and the ring value equal `padding_reference`'s."""
+    mesh = (
+        Path(__file__).resolve().parents[2]
+        / "parity/fixtures/tier0-semantics/meshes/hinge-vary.obj"
+    )
+    size = 512
+    values = np.random.default_rng(365).random((size, size, 3)).astype(F32)
+    raw, result = tmp_path / "values.f32", tmp_path / "result.f32"
+    raw.write_bytes(values.tobytes())
+    cases = tmp_path / "cases.json"
+    cases.write_text(
+        json.dumps(
+            [
+                dict(
+                    mesh=str(mesh),
+                    material="uzp_hinge",
+                    width=size,
+                    height=size,
+                    channels=3,
+                    values=str(raw),
+                    out=str(result),
+                )
+            ]
+        )
+    )
+    process = subprocess.run(
+        [str(export_tests), "ring", str(cases)],
+        capture_output=True,
+        text=True,
+        timeout=600,
+        check=False,
+    )
+    assert process.returncode == 0, process.stdout + process.stderr
+    native = {(r["x"], r["y"]): r for r in json.loads(process.stdout)["ring"]}
+    out = np.frombuffer(result.read_bytes(), F32).reshape(size, size, 3)
+    reference = Ring(mesh, "uzp_hinge", size, size)
+    tris = reference.tris
+    x, y = 29, 20
+    own = [
+        ((x + dx) % size, y + dy)
+        for dy, dx in NEIGHBOURS
+        if 0 <= y + dy < size and reference.owner[y + dy, (x + dx) % size] >= 0
+    ]
+    tau = reference.tau(x, y, own)
+    T = tris[tau]
+    cands, _ = reference.candidates(x, y, own, tau)
+    n = tap_count(cands)
+    expected = [((19, 17), True), ((19, 16), True), ((29, 19), False), ((19, 18), True)]
+    assert [(c[2], c[1]) for c in cands[:n]] == expected
+    (seam,) = reference.seams[T.chart]
+    J = tris[seam[2]]
+    assert J.chart not in reference.covered_charts()
+    assert (
+        {tris[int(reference.owner[ty, tx])].chart for (tx, ty), far in expected if far}
+        == {tris[int(reference.owner[17, 19])].chart}
+        != {J.chart}
+    )
+    r = native[(x, y)]
+    assert r["taps"] == n == 4
+    assert [((c[0], c[1]), bool(c[3])) for c in r["candidates"][:n]] == expected
+    for c, ref_c in zip(r["candidates"][:n], cands[:n], strict=True):
+        assert math.isclose(c[2], ref_c[0], rel_tol=1e-12)
+    t = reference.chain_fractions(x, y, cands[:n])
+    chosen = [values[ty, tx] for _, _, (tx, ty) in cands[:n]]
+    value = [chain([v[c] for v in chosen], t) for c in range(3)]
+    assert out[y, x].view(np.uint32).tolist() == np.array(value, F32).view(np.uint32).tolist()

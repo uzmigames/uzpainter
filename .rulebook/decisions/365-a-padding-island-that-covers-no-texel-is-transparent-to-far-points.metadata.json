@@ -1,0 +1,11 @@
+{
+  "id": 365,
+  "slug": "a-padding-island-that-covers-no-texel-is-transparent-to-far-points",
+  "title": "A padding island that covers no texel is transparent to far points",
+  "status": "accepted",
+  "date": "2026-10-27",
+  "relatedTasks": [
+    "phase1.25_pilot-wand"
+  ],
+  "supersededBy": null
+}

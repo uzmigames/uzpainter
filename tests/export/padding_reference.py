@@ -1,5 +1,5 @@
 """The measured `infinite` padding of src/export/padding.h (phase1.25 item 2.7; decisions 197, 206,
-267, 268, 270, 273, 275, 278 to 282, 285, 288, 290, 291, 294, 356, 364; measured only, decision
+267, 268, 270, 273, 275, 278 to 282, 285, 288, 290, 291, 294, 356, 364, 365; measured only, decision
 259), written again independently in Python for the tests: the ring over an OBJ's triangles, then
 the jump flood.
 
@@ -82,6 +82,8 @@ WINDOW_SIDES = 10
 # Decision 281: the coverage's vertex precision (texels), and the most hinges of a face path.
 SUB_TEXEL = 256
 MAX_HINGES = 4
+# Decision 365: the most edges a far point is carried across after its fold into J.
+MAX_HOPS = 4
 # Decision 280's fixed orders of exactly tied taps, v-up offsets (du, dv): an own tap's from the
 # ring texel, a far tap's from its window's base (floor(f_u - 1/2), ceil(f_v - 1/2)).
 OWN_ORDER = ((1, 0), (-1, 0), (0, -1), (0, 1), (1, 1), (1, -1), (-1, 1), (-1, -1))
@@ -1011,7 +1013,16 @@ class Ring:
                     continue
                 va, vb = E.vertex[(edge + 1) % 3], E.vertex[(edge + 2) % 3]
                 edges.append((seam_gate(T.normal, J.normal, q, E.p[(edge + 1) % 3]), reach))
-                fu, fv = J.texel_of(fold(hinge(E, J, va, vb), q))
+                # Decision 365: an island that covers no texel centre is transparent; the far
+                # point is carried on across it to the first stage in a covered island, whose
+                # triangle is the window's J for the frame.
+                stages = self.hop(e_index, j, va, vb, q)
+                (fu, fv), jw = stages[0]
+                if J.chart not in self.covered_charts():
+                    for (su, sv), sj in stages[1:]:
+                        if self.tris[sj].chart in self.covered_charts():
+                            (fu, fv), jw = (su, sv), sj
+                            break
                 col0, row0 = math.floor(fu - 0.5), math.ceil(fv - 0.5)
                 for axis, m in ((0, fu - 0.5), (1, fv - 0.5)):
                     if abs(m - round(m)) < WINDOW_SIDE:
@@ -1030,7 +1041,7 @@ class Ring:
                             continue
                         if self.owner[row, col] < 0:
                             continue
-                        put(col, row, j)
+                        put(col, row, jw)
                         lst = via.setdefault((col, row), [])
                         if not lst or lst[-1] != len(edges) - 1:
                             lst.append(len(edges) - 1)
@@ -1155,6 +1166,48 @@ class Ring:
             if len({edges[e][0][0] for e in reaching}) > 1:
                 undecided.add("mixed-gates")
         return result, undecided
+
+    def covered_charts(self) -> set[int]:
+        """The islands that cover some texel centre."""
+        if "_covered_charts" not in self.__dict__:
+            self.__dict__["_covered_charts"] = {
+                self.tris[int(k)].chart for k in np.unique(self.owner[self.owner >= 0])
+            }
+        found: set[int] = self.__dict__["_covered_charts"]
+        return found
+
+    def hop(
+        self, e: int, j: int, va: int, vb: int, q: Vec
+    ) -> list[tuple[tuple[float, float], int]]:
+        """Decision 365's walk: q folded about seam edge (va, vb) of triangle `e` into its far
+        triangle `j`, then, while the point lies outside its triangle (a negative 3D barycentric,
+        the least, first on a tie), folded about that edge into the edge's next triangle (the first
+        other one in `edges`), at most MAX_HOPS times; never back across the edge it came through.
+        Each stage: the point in its triangle's texel space, and the triangle."""
+        point = fold(hinge(self.tris[e], self.tris[j], va, vb), q)
+        cur, came = j, {va, vb}
+        stages = [(self.tris[cur].texel_of(point), cur)]
+        for _ in range(MAX_HOPS):
+            C = self.tris[cur]
+            e1, e2, v = sub(C.p[1], C.p[0]), sub(C.p[2], C.p[0]), sub(point, C.p[0])
+            a, b, c = dot(e1, e1), dot(e1, e2), dot(e2, e2)
+            det = a * c - b * b
+            l1 = (c * dot(e1, v) - b * dot(e2, v)) / det
+            l2 = (a * dot(e2, v) - b * dot(e1, v)) / det
+            lam = (1.0 - l1 - l2, l1, l2)
+            i = min(range(3), key=lambda m: lam[m])
+            if lam[i] >= 0.0:
+                break
+            a_v, b_v = C.vertex[(i + 1) % 3], C.vertex[(i + 2) % 3]
+            if {a_v, b_v} == came:
+                break
+            nxt = next((n for n in self.edges[(min(a_v, b_v), max(a_v, b_v))] if n != cur), None)
+            if nxt is None:
+                break
+            point = fold(hinge(C, self.tris[nxt], a_v, b_v), point)
+            cur, came = nxt, {a_v, b_v}
+            stages.append((self.tris[cur].texel_of(point), cur))
+        return stages
 
     def tau(self, x: int, y: int, own: list[tuple[int, int]]) -> int:
         """Decision 279: the triangle of the own neighbour nearest under decision 273's comparator

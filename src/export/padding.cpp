@@ -18,6 +18,7 @@
 #include <map>
 #include <numeric>
 #include <optional>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -96,6 +97,8 @@ constexpr double kOwnBand = 1e-4;
 // A tap in a planar face with no 3D edge to tau's face is developed along face paths of at most
 // this many hinges (decision 281).
 constexpr size_t kMaxHinges = 4;
+// Decision 365: the most edges a far point is carried across after its fold into J.
+constexpr size_t kMaxHops = 4;
 // The window side (decision 291): a far point f with f - 1/2 within kWindowSide texel of an integer
 // on some axis lies on a window boundary, where Painter's side is not identified. At most
 // kWindowSides such axes of a ring texel are tried on both sides; with more, it is flagged untried.
@@ -311,6 +314,19 @@ public:
     /// Per texel cell (StripCell), the `drawOrder` indices, ascending, of the seams whose strip may
     /// cover the cell's centre: the floor-texel box of the UV ends widened by one texel.
     std::unordered_map<uint64_t, std::vector<uint32_t>> strips;
+    std::set<uint32_t> coveredCharts;  // the islands that cover some texel centre (decision 365)
+
+    /// A stage of Hop: the far point in its triangle's texel space, and the triangle.
+    struct HopStage {
+        std::array<double, 2> f{};
+        uint32_t triangle = 0;
+    };
+    /// Decision 365's walk: `q` folded about seam edge (va, vb) of triangle `e` into its far
+    /// triangle `j`, then, while the point lies outside its triangle (a negative 3D barycentric,
+    /// the least, the first on a tie), folded about that edge into the edge's next triangle (the
+    /// first other one in `edges`), at most kMaxHops times; never back across the edge it came
+    /// through.
+    std::vector<HopStage> Hop(uint32_t e, uint32_t j, uint32_t va, uint32_t vb, const Vec3& q) const;
 
     /// `p`, a point of triangle `k`, in tau's frame for the ring point `q`. A far tap (k in another
     /// chart than tau) is rotated rigidly from the plane of a far triangle J into tau's (decision
@@ -553,7 +569,51 @@ RingGeometry::RingGeometry(const Coverage& coverage) : width(coverage.width), he
         if ((owner[t] >= 0) != (coverage.covered[t] != 0)) {
             throw std::invalid_argument("export: the coverage is not its triangles' texel-centre coverage");
         }
+        if (owner[t] >= 0) coveredCharts.insert(triangles[static_cast<size_t>(owner[t])].chart);
     }
+}
+
+std::vector<RingGeometry::HopStage> RingGeometry::Hop(uint32_t e, uint32_t j, uint32_t va, uint32_t vb,
+                                                      const Vec3& q) const {
+    Vec3 point = Fold(MakeHinge(triangles[e], triangles[j], va, vb), q);
+    uint32_t cur = j;
+    std::array<uint32_t, 2> came{std::min(va, vb), std::max(va, vb)};
+    std::vector<HopStage> stages{{TexelOf(triangles[cur], point), cur}};
+    for (size_t hop = 0; hop < kMaxHops; ++hop) {
+        const KernelTriangle& C = triangles[cur];
+        const Vec3 e1 = Sub(C.p[1], C.p[0]);
+        const Vec3 e2 = Sub(C.p[2], C.p[0]);
+        const Vec3 v = Sub(point, C.p[0]);
+        const double a = Dot(e1, e1);
+        const double b = Dot(e1, e2);
+        const double c = Dot(e2, e2);
+        const double det = a * c - b * b;
+        const double l1 = (c * Dot(e1, v) - b * Dot(e2, v)) / det;
+        const double l2 = (a * Dot(e2, v) - b * Dot(e1, v)) / det;
+        const std::array<double, 3> lam{1.0 - l1 - l2, l1, l2};
+        size_t i = 0;
+        for (size_t m = 1; m < 3; ++m) {
+            if (lam[m] < lam[i]) i = m;
+        }
+        if (lam[i] >= 0.0) break;
+        const uint32_t av = C.vertex[(i + 1) % 3];
+        const uint32_t bv = C.vertex[(i + 2) % 3];
+        const std::array<uint32_t, 2> edge{std::min(av, bv), std::max(av, bv)};
+        if (edge == came) break;
+        std::optional<uint32_t> next;
+        for (const uint32_t n : edges.at({edge[0], edge[1]})) {
+            if (n != cur) {
+                next = n;
+                break;
+            }
+        }
+        if (!next) break;
+        point = Fold(MakeHinge(C, triangles[*next], av, bv), point);
+        cur = *next;
+        came = edge;
+        stages.push_back({TexelOf(triangles[cur], point), cur});
+    }
+    return stages;
 }
 
 const std::optional<RingGeometry::FaceHinge>& RingGeometry::HingeOf(uint32_t to, uint32_t from) const {
@@ -1094,7 +1154,21 @@ CandidateSet Candidates(const RingGeometry& g, uint32_t x, uint32_t y, const std
             const uint32_t va = E.vertex[(seam.edge + 1) % 3];
             const uint32_t vb = E.vertex[(seam.edge + 2) % 3];
             const auto index = static_cast<uint32_t>(edges.size());
-            const std::array<double, 2> farPoint = TexelOf(J, Fold(MakeHinge(E, J, va, vb), q));
+            // Decision 365: an island that covers no texel centre is transparent; the far point is
+            // carried on across it to the first stage in a covered island, whose triangle is the
+            // window's J for the frame.
+            const std::vector<RingGeometry::HopStage> stages = g.Hop(seam.own, seam.farTriangle, va, vb, q);
+            std::array<double, 2> farPoint = stages.front().f;
+            uint32_t windowTriangle = seam.farTriangle;
+            if (!g.coveredCharts.contains(J.chart)) {
+                for (size_t s = 1; s < stages.size(); ++s) {
+                    if (g.coveredCharts.contains(g.triangles[stages[s].triangle].chart)) {
+                        farPoint = stages[s].f;
+                        windowTriangle = stages[s].triangle;
+                        break;
+                    }
+                }
+            }
             std::array<int64_t, 2> base{static_cast<int64_t>(std::floor(farPoint[0] - 0.5)),
                                         static_cast<int64_t>(std::ceil(farPoint[1] - 0.5))};
             for (size_t axis = 0; axis < 2; ++axis) {
@@ -1117,7 +1191,7 @@ CandidateSet Candidates(const RingGeometry& g, uint32_t x, uint32_t y, const std
                     // Every covered texel, of any island (decision 364): a texel of tau's island
                     // that is not an own neighbour becomes a far tap at its frame distance.
                     if (g.owner[texel] < 0) continue;
-                    Entry& e = entry(texel, seam.farTriangle);
+                    Entry& e = entry(texel, windowTriangle);
                     if (e.via.empty() || e.via.back() != index) e.via.push_back(index);
                 }
             }

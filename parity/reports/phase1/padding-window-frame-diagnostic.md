@@ -102,3 +102,11 @@ Scored against the previous reference (`--policy git:7c4d804f --policy baseline`
 `--native` runs `uzp-export-tests ring` on every kernel probe's mesh, with the 24 kernel components
 as values. On all 168,275 ring texels of the 29 probes, its taps and values equal the reference
 bit for bit, and it misses Painter on the same 1,103 coordinates.
+
+## Transparent uncovered islands (decision 365)
+
+Decoding hinge-vary's remaining residuals showed far points that cross a seam strip covering no
+texel centre. Carrying the point on across such an island gives 1,103 -> 984 with zero new
+coordinates. The native ring again equals the reference on every ring texel. The variants that
+walk on always, or whenever the window is empty, regress the corner, atlas and cube (decision
+365).

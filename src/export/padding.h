@@ -39,7 +39,10 @@
 //        (decisions 275, 279, 285): q folded about the edge into
 //        the far triangle, f its point in that triangle's texel space (v down, centres at + 1/2),
 //        and the covered texels, of any island (decision 364), in the 3 x 3 block of columns
-//        floor(f_u - 1/2) +- 1 and rows ceil(f_v - 1/2) +- 1. A seam edge (E, J), E its triangle on
+//        floor(f_u - 1/2) +- 1 and rows ceil(f_v - 1/2) +- 1. When J's island covers no texel
+//        centre, the point is carried on across J's edges (folded about each, at most 4) to the
+//        first triangle of a covered island, whose texel space gives f (decision 365). A seam edge
+//        (E, J), E its triangle on
 //        the near side and J
 //        the far one, gives no far candidates when the float32 dot product of tau's and J's unit
 //        face normals (cross(P1 - P0, P2 - P0) over the stored positions, divided by its length) is
