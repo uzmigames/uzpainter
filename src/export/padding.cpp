@@ -56,6 +56,8 @@ constexpr double kZeroDistance = 1e-6;
 constexpr int kFarReach = 1;
 // Two triangles are coplanar (one planar face) within this relative tolerance.
 constexpr double kCoplanar = 1e-6;
+// Decision 364: unit normals whose cross product is shorter than this are parallel.
+constexpr double kParallel = 1e-10;
 // The seam gate (decision 278): a seam edge whose faces' float32 unit normals meet at a dot product
 // of at most kFoldGate is folded enough. Painter's constant lies in (kFoldLow, kFoldHigh], and
 // whether its comparison is <= or < is not identified (decision 278 open item (a)).
@@ -227,6 +229,36 @@ Vec3 Unfold(const Hinge& h, const Vec3& p) {
     return Add(Add(h.a, Scale(h.e, s)), Add(Scale(to, along), Scale(Cross(h.e, to), out)));
 }
 
+/// The 3D distance from `q` to the segment a b.
+double SegmentGap(const Vec3& a, const Vec3& b, const Vec3& q) {
+    const Vec3 e = Sub(b, a);
+    const double t = std::min(std::max(Dot(Sub(q, a), e) / Dot(e, e), 0.0), 1.0);
+    return Norm(Sub(q, Add(a, Scale(e, t))));
+}
+
+/// Decision 364: `p` turned rigidly about the line where the plane of `source` meets the plane of
+/// `target`, by the angle between their unit face normals m and n (Rodrigues), so that the source
+/// plane lands on the target plane; as it is when the planes are parallel or their normals meet at
+/// a dot product above kFoldGate (decision 282's gate). The line's point solves n.x = n.P_target,
+/// m.x = m.P_source, a.x = 0 (a the unit axis m x n) by Cramer's rule.
+Vec3 PlaneRotation(const Vec3& p, const KernelTriangle& source, const KernelTriangle& target) {
+    const Vec3 n = Unit({target.normal[0], target.normal[1], target.normal[2]});
+    const Vec3 m = Unit({source.normal[0], source.normal[1], source.normal[2]});
+    Vec3 axis = Cross(m, n);
+    const double sine = Norm(axis);
+    const double cosine = Dot(m, n);
+    if (sine < kParallel || cosine > static_cast<double>(kFoldGate)) return p;
+    axis = Scale(axis, 1.0 / sine);
+    const double dn = Dot(n, target.p[0]);
+    const double dm = Dot(m, source.p[0]);
+    const Vec3 across = Cross(m, axis);
+    const double det = Dot(n, across);
+    const Vec3 origin = Scale(Add(Scale(across, dn), Scale(Cross(axis, n), dm)), 1.0 / det);
+    const Vec3 v = Sub(p, origin);
+    const Vec3 turned = Add(Add(origin, Scale(v, cosine)), Scale(Cross(axis, v), sine));
+    return Add(turned, Scale(axis, Dot(axis, v) * (1.0 - cosine)));
+}
+
 /// The inverse of Unfold: a point on the own plane's far side, onto the other triangle's plane.
 Vec3 Fold(const Hinge& h, const Vec3& p) {
     const Vec3 v = Sub(p, h.a);
@@ -280,14 +312,19 @@ public:
     /// cover the cell's centre: the floor-texel box of the UV ends widened by one texel.
     std::unordered_map<uint64_t, std::vector<uint32_t>> strips;
 
-    /// `p`, a point of triangle `k`, in tau's frame for the ring point `q`: as it is in tau's planar
-    /// face, rotated about an edge shared by the two faces, else rotated hinge by hinge along the
-    /// fewest-hinge face paths (at most kMaxHinges) into tau's plane, the development nearest `q`
-    /// (decision 281), else as it is. A hinge is rotated about only when it is folded past the gate
-    /// (decision 282, `FoldedPast`: of k and tau across a shared edge, of the path's two triangles
-    /// at each hinge of a development). A far tap (k in another chart than tau) keeps its own chart
-    /// rigid: a hinge whose two triangles are both in k's chart is not rotated about (decision 342).
-    Vec3 Frame(const Vec3& p, uint32_t k, uint32_t tau, const Vec3& q) const;
+    /// `p`, a point of triangle `k`, in tau's frame for the ring point `q`. A far tap (k in another
+    /// chart than tau) is rotated rigidly from the plane of a far triangle J into tau's (decision
+    /// 364, PlaneRotation): J is the far triangle of the seam edge of tau's island, into k's island,
+    /// whose 3D segment is nearest `q` (the first on a tie), else `window`, the far triangle of the
+    /// window that puts the tap. Otherwise: as it is in tau's planar face, rotated about an edge
+    /// shared by the two faces, else rotated hinge by hinge along the fewest-hinge face paths (at
+    /// most kMaxHinges) into tau's plane, the development nearest `q` (decision 281), else as it is.
+    /// A hinge is rotated about only when it is folded past the gate (decision 282, `FoldedPast`: of
+    /// k and tau across a shared edge, of the path's two triangles at each hinge of a development).
+    /// A far tap with no J keeps its own chart rigid: a hinge whose two triangles are both in k's
+    /// chart is not rotated about (decision 342).
+    Vec3 Frame(const Vec3& p, uint32_t k, uint32_t tau, const Vec3& q,
+               std::optional<uint32_t> window = std::nullopt) const;
     /// Whether triangle `k`'s planar face is tau's or shares a 3D edge with it.
     bool Hinged(uint32_t k, uint32_t tau) const;
 
@@ -567,7 +604,25 @@ bool RingGeometry::Hinged(uint32_t k, uint32_t tau) const {
     return triangles[k].face == triangles[tau].face || HingeOf(triangles[tau].face, triangles[k].face).has_value();
 }
 
-Vec3 RingGeometry::Frame(const Vec3& p, uint32_t k, uint32_t tau, const Vec3& q) const {
+Vec3 RingGeometry::Frame(const Vec3& p, uint32_t k, uint32_t tau, const Vec3& q,
+                         std::optional<uint32_t> window) const {
+    const KernelTriangle& target = triangles[tau];
+    if (triangles[k].chart != target.chart) {
+        std::optional<uint32_t> source = window;
+        double nearest = std::numeric_limits<double>::infinity();
+        if (const auto island = seams.find(target.chart); island != seams.end()) {
+            for (const SeamEdge& seam : island->second) {
+                if (triangles[seam.farTriangle].chart != triangles[k].chart) continue;
+                const KernelTriangle& E = triangles[seam.own];
+                const double gap = SegmentGap(E.p[(seam.edge + 1) % 3], E.p[(seam.edge + 2) % 3], q);
+                if (gap < nearest) {
+                    source = seam.farTriangle;
+                    nearest = gap;
+                }
+            }
+        }
+        if (source) return PlaneRotation(p, triangles[*source], target);
+    }
     const uint32_t from = triangles[k].face;
     const uint32_t to = triangles[tau].face;
     if (from == to) return p;
@@ -935,7 +990,7 @@ CandidateSet Candidates(const RingGeometry& g, uint32_t x, uint32_t y, const std
         std::vector<uint32_t> via;  // the seam edges (indices into `edges`) whose window holds it
     };
     std::vector<Entry> pool;
-    const auto entry = [&](size_t texel) -> Entry& {
+    const auto entry = [&](size_t texel, std::optional<uint32_t> window = std::nullopt) -> Entry& {
         for (Entry& e : pool) {
             if (e.texel == texel) return e;
         }
@@ -946,7 +1001,7 @@ CandidateSet Candidates(const RingGeometry& g, uint32_t x, uint32_t y, const std
         const double tx = static_cast<double>(texel % g.width) + 0.5;
         const double ty = static_cast<double>(texel / g.width) + 0.5;
         const Vec3 p = Point(k, TexelBary(k, tx, ty));
-        e.frame = Norm(Sub(q, g.Frame(p, e.triangle, tau, q)));
+        e.frame = Norm(Sub(q, g.Frame(p, e.triangle, tau, q, window)));
         e.multiFacet = !g.Hinged(e.triangle, tau);
         if (k.chart != T.chart) {
             e.outside = std::min(Norm(Sub(Point(k, TexelBary(k, x + 0.5, y + 0.5)), p)), Norm(Sub(q, p)));
@@ -974,7 +1029,7 @@ CandidateSet Candidates(const RingGeometry& g, uint32_t x, uint32_t y, const std
     // kReachCap texels of the ring texel's centre (decisions 279 and 285; those within kReachHigh
     // are kept for the reach flag), each through decision 278's gate:
     // q folded about the edge into the far triangle J, f its point in J's texel space, and the
-    // covered texels of J's island or of tau's (decision 356) in the 3 x 3 block of columns
+    // covered texels, of any island (decision 364), in the 3 x 3 block of columns
     // floor(f_u - 1/2) +- 1 and rows ceil(f_v - 1/2) +- 1 (decision 275). No edge whose far
     // triangle is tau (decision 288) or whose UV ends both lie on the tile's left or right border
     // (decision 290) opens a window. The axes whose f - 1/2 lies within kWindowSide of an integer
@@ -1059,13 +1114,10 @@ CandidateSet Candidates(const RingGeometry& g, uint32_t x, uint32_t y, const std
                 for (int64_t col = col0 - kFarReach; col <= col0 + kFarReach; ++col) {
                     if (row < 0 || col < 0 || row >= g.height || col >= g.width) continue;
                     const size_t texel = static_cast<size_t>(row) * g.width + static_cast<size_t>(col);
-                    const int32_t k = g.owner[texel];
-                    if (k < 0) continue;
-                    // J's island, or tau's (decision 356): a texel of tau's island that is not an
-                    // own neighbour becomes a far tap at its frame distance.
-                    const uint32_t c = g.triangles[static_cast<size_t>(k)].chart;
-                    if (c != J.chart && c != T.chart) continue;
-                    Entry& e = entry(texel);
+                    // Every covered texel, of any island (decision 364): a texel of tau's island
+                    // that is not an own neighbour becomes a far tap at its frame distance.
+                    if (g.owner[texel] < 0) continue;
+                    Entry& e = entry(texel, seam.farTriangle);
                     if (e.via.empty() || e.via.back() != index) e.via.push_back(index);
                 }
             }

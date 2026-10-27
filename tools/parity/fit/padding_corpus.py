@@ -14,6 +14,7 @@ import argparse
 import itertools
 import json
 import os
+import subprocess
 import sys
 import types
 from collections.abc import Sequence
@@ -24,8 +25,7 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
-from tools.parity.fit.plane_transform_diagnostic import install_frame, load_module, validate_record
-from tools.parity.fit.plane_transforms import Plane, Vector, rotate_between_planes
+from tools.parity.fit.plane_transform_diagnostic import load_module, validate_record
 from tools.parity.schemas import REPO_ROOT
 from tools.parity.store.store import OracleStore, load_oracle, locate
 from tools.parity.tier0_semantics.recording_requests import kernel_bitmaps
@@ -33,17 +33,10 @@ from tools.parity.tier0_semantics.recording_requests import kernel_bitmaps
 MANIFEST_ROOT = REPO_ROOT / (
     "parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/manifests/tier0/semantics"
 )
-POLICIES = ("baseline", "jtau", "jwin")
-FRAMES = {"jwin": "chart", "jnear": "near", "jwj": "window", "jwk": "chart-window"}
-# Named text patches of the reference, for policies such as "jwin+anychart" (diagnostic only).
+POLICIES = ("baseline",)
+# Named text patches of the reference, for policies such as "baseline+snapcol" (diagnostic
+# only).
 PATCHES: dict[str, list[tuple[str, str]]] = {
-    # A far window takes every covered texel, of any island.
-    "anychart": [
-        (
-            "                        if k < 0 or self.tris[k].chart not in (J.chart, T.chart):\n",
-            "                        if k < 0:\n",
-        )
-    ],
     # A far point within WINDOW_SIDE of a window boundary is snapped onto it before the window's
     # floor (columns) and ceil (rows).
     "snapwin": [
@@ -55,21 +48,13 @@ PATCHES: dict[str, list[tuple[str, str]]] = {
             "                col0, row0 = math.floor(mu), math.ceil(mv)\n",
         )
     ],
-    # The far window's triangle J is passed to the frame of the taps it puts (frame jwj).
-    "windowj": [
-        (
-            "                        put(col, row)\n                        lst = via",
-            "                        self._window_j = j\n                        put(col, row)\n"
-            "                        self._window_j = None\n                        lst = via",
-        )
-    ],
     # The far point is the ring texel centre carried across the seam edge by the UV similarity
     # that maps the own edge onto the far edge, mirrored to the far triangle's inside, instead of
     # the 3D fold read back in J's UV.
     "uvwin": [
         (
             "class Ring:\n",
-            '''def uv_across(E, J, edge, va, vb, px, py):  # type: ignore[no-untyped-def]
+            """def uv_across(E, J, edge, va, vb, px, py):  # type: ignore[no-untyped-def]
     a, b = E.t[(edge + 1) % 3], E.t[(edge + 2) % 3]
     c = E.t[edge]
     a2, b2 = J.t[J.vertex.index(va)], J.t[J.vertex.index(vb)]
@@ -86,7 +71,7 @@ PATCHES: dict[str, list[tuple[str, str]]] = {
 
 
 class Ring:
-''',
+""",
         ),
         (
             "                fu, fv = J.texel_of(fold(hinge(E, J, va, vb), q))\n",
@@ -151,6 +136,19 @@ def material_of(manifest: dict[str, Any]) -> str:
     if len(names) != 1:
         raise ValueError("expected one material")
     return names.pop()
+
+
+def reference_text(revision: str | None) -> str:
+    """The reference's source, as in the working tree or at a git `revision`."""
+    if revision is None:
+        return (REPO_ROOT / "tests/export/padding_reference.py").read_text("utf-8")
+    shown = subprocess.run(
+        ["git", "show", f"{revision}:tests/export/padding_reference.py"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        check=True,
+    )
+    return shown.stdout.decode("utf-8")
 
 
 def ring_points(covered: npt.NDArray[np.bool_]) -> list[Point]:
@@ -246,57 +244,6 @@ def inverse_bins(
     return None if best is None else best[1]
 
 
-def segment_gap(a: Vector, b: Vector, q: Vector) -> float:
-    """The 3D distance from `q` to the segment a b."""
-    e = np.subtract(b, a)
-    t = float(np.clip(np.dot(np.subtract(q, a), e) / np.dot(e, e), 0.0, 1.0))
-    return float(np.linalg.norm(np.subtract(q, np.add(a, t * e))))
-
-
-def install_window_frame(ring: Any, ref: Any, mode: str = "chart") -> None:
-    """A far tap's chart rotated rigidly from the plane of a far triangle J into tau's plane (the
-    J/tau rotation with J taken from a seam rather than from a face path); own taps keep the
-    reference's frame. J is, by `mode`: `chart`, the far triangle of tau's island's seam edge
-    nearest to the ring point among those into the tap's island; `near`, among all of tau's
-    island's seam edges; `window`, the far triangle of the window that puts the tap (patch
-    `windowj`); `chart-window`, `chart` when the tap's island has such a seam, else `window`."""
-
-    def rotate(self: Any, p: Vector, j: int, tau: int) -> Vector:
-        origin, target = self.tris[j], self.tris[tau]
-        return rotate_between_planes(
-            p,
-            Plane(origin.normal, origin.p[0]),
-            Plane(target.normal, target.p[0]),
-            construction="intersection",
-        )
-
-    def frame(self: Any, p: Vector, k: int, tau: int, q: Vector) -> Vector:
-        source, target = self.tris[k], self.tris[tau]
-        if source.chart != target.chart:
-            window = getattr(self, "_window_j", None)
-            if mode == "window" and window is not None:
-                return rotate(self, p, window, tau)
-            seams = [
-                (e, edge, j)
-                for e, edge, j in self.seams.get(target.chart, [])
-                if self.tris[j].chart == source.chart or mode == "near"
-            ]
-            if seams:
-                _, _, j = min(
-                    seams,
-                    key=lambda s: segment_gap(
-                        self.tris[s[0]].p[(s[1] + 1) % 3], self.tris[s[0]].p[(s[1] + 2) % 3], q
-                    ),
-                )
-                return rotate(self, p, j, tau)
-            if mode == "chart-window" and window is not None:
-                return rotate(self, p, window, tau)
-        result: Vector = ref.Ring.frame(self, p, k, tau, q)
-        return result
-
-    ring.frame = types.MethodType(frame, ring)
-
-
 class Probe:
     """A kernel probe: the reference, its ring under a policy, the source and the recorded ring."""
 
@@ -307,7 +254,6 @@ class Probe:
         self.name = probe
         self.ref = load_module(REPO_ROOT / "tests/export/padding_reference.py", f"ref_{probe}")
         self.patched: dict[str, Any] = {}
-        self.ref_of: dict[int, Any] = {}
         path = MANIFEST_ROOT / f"export-padding-{probe}.json"
         manifest = json.loads(path.read_text("utf-8"))
         refs = [r for r in manifest["private_records"] if r["record_id"] == "golden-record"]
@@ -336,31 +282,26 @@ class Probe:
         )
 
     def ring(self, policy: str) -> Any:
-        """The ring under `policy`: a frame (baseline, jtau or jwin), then `+`-joined PATCHES."""
-        frame, *patches = policy.split("+")
-        ref = self.ref
-        if patches:
-            key = "+".join(patches)
-            if key not in self.patched:
-                text = (REPO_ROOT / "tests/export/padding_reference.py").read_text("utf-8")
+        """The ring under `policy`: `baseline` (the current reference) or `git:<revision>` (the
+        reference at that revision), then `+`-joined PATCHES."""
+        base, *patches = policy.split("+")
+        if base != "baseline" and not base.startswith("git:"):
+            raise ValueError(f"unknown reference {base}")
+        if policy == "baseline":
+            ref = self.ref
+        else:
+            if policy not in self.patched:
+                text = reference_text(None if base == "baseline" else base[4:])
                 for name in patches:
                     for old, new in PATCHES[name]:
                         if text.count(old) != 1:
                             raise ValueError(f"patch {name} does not apply")
                         text = text.replace(old, new)
-                module = types.ModuleType(f"ref_{self.name}_{key}")
-                exec(compile(text, f"padding_reference+{key}", "exec"), module.__dict__)
-                self.patched[key] = module
-            ref = self.patched[key]
-        ring = ref.Ring(self.mesh, self.material, self.size, self.size)
-        if frame == "jtau":
-            install_frame(ring, ref, "intersection")
-        elif frame in FRAMES:
-            install_window_frame(ring, ref, FRAMES[frame])
-        elif frame != "baseline":
-            raise ValueError(f"unknown frame {frame}")
-        self.ref_of[id(ring)] = ref
-        return ring
+                module = types.ModuleType(f"ref_{self.name}_{len(self.patched)}")
+                exec(compile(text, f"padding_reference@{policy}", "exec"), module.__dict__)
+                self.patched[policy] = module
+            ref = self.patched[policy]
+        return ref.Ring(self.mesh, self.material, self.size, self.size)
 
     def taps(self, ring: Any) -> list[tuple[Point, list[Any], list[np.float32], Image]]:
         """Each ring texel's chain taps, fractions and tap values under the ring's frame."""
@@ -563,6 +504,77 @@ def infer(probe: str, policy: str, limit: int, dump: Path | None = None) -> dict
     return {"probe": probe, "policy": policy, "classes": classes}
 
 
+def native(probe: str, exe: Path) -> dict[str, Any]:
+    """UzPainter's ring (`uzp-export-tests ring`) on `probe`'s mesh with the 24 kernel components
+    as values, against the reference's chains and against Painter's recording, bit for bit on every
+    ring texel. The values and the native output are throwaway files in `tmp/scratch`."""
+    p = Probe(probe)
+    scratch = REPO_ROOT / "tmp" / "scratch"
+    cases = scratch / f"native-{probe}-cases.json"
+    groups = range(0, p.source.shape[-1], 4)  # the command pads at most four channels
+    files = []
+    entries: list[dict[str, Any]] = []
+    for first in groups:
+        values = scratch / f"native-{probe}-{first}-values.f32"
+        result = scratch / f"native-{probe}-{first}-out.f32"
+        values.write_bytes(np.ascontiguousarray(p.source[..., first : first + 4]).tobytes())
+        files += [values, result]
+        entries.append(
+            {
+                "mesh": str(p.mesh),
+                "material": p.material,
+                "width": p.size,
+                "height": p.size,
+                "channels": 4,
+                "values": str(values),
+                "out": str(result),
+            }
+        )
+    cases.write_text(json.dumps(entries), encoding="utf-8")
+    try:
+        run = subprocess.run(
+            [str(exe), "ring", str(cases)],
+            capture_output=True,
+            text=True,
+            timeout=3600,
+            check=False,
+        )
+        if run.returncode != 0:
+            raise ValueError(f"native ring failed: {run.stderr[-400:]}")
+        lines = [json.loads(line) for line in run.stdout.splitlines() if line.startswith("{")]
+        rows = {(r["x"], r["y"]): r for r in lines[0]["ring"]}
+        out = np.concatenate(
+            [
+                np.frombuffer(Path(e["out"]).read_bytes(), np.float32).reshape(p.size, p.size, 4)
+                for e in entries
+            ],
+            axis=-1,
+        )
+    finally:
+        for path in (*files, cases):
+            path.unlink(missing_ok=True)
+    taps_differ = values_differ = painter = 0
+    for point, taps, weights, tapped in p.taps(p.ring("baseline")):
+        x, y = point
+        row = rows.get(point)
+        if row is None or [tuple(c[:2]) for c in row["candidates"][: row["taps"]]] != [
+            c[2] for c in taps
+        ]:
+            taps_differ += 1
+        if not np.array_equal(out[y, x].view(np.uint32), p.chain(tapped, weights).view(np.uint32)):
+            values_differ += 1
+        if p.missed(point, out[y, x]):
+            painter += 1
+    return {
+        "probe": probe,
+        "ring": len(p.points),
+        "native_rows": len(rows),
+        "taps_differ": taps_differ,
+        "values_differ": values_differ,
+        "painter_misses": painter,
+    }
+
+
 def score(probe: str, policies: tuple[str, ...]) -> dict[str, Any]:
     p = Probe(probe)
     misses: dict[str, list[Point]] = {}
@@ -592,9 +604,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--limit", type=int, default=400)
     parser.add_argument("--infer", action="store_true", help="infer Painter's support instead")
+    parser.add_argument("--native", type=Path, help="compare uzp-export-tests.exe's ring instead")
     args = parser.parse_args(argv)
     policies = tuple(args.policy or POLICIES)
     names = args.probe or probes()
+    if args.native is not None:
+        with ProcessPoolExecutor(args.jobs) as pool:
+            for line in pool.map(native, names, [args.native] * len(names)):
+                print(json.dumps(line, sort_keys=True), flush=True)
+        return 0
     if args.infer:
         with ProcessPoolExecutor(args.jobs) as pool:
             dumps = [

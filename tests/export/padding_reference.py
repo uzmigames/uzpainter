@@ -1,7 +1,7 @@
 """The measured `infinite` padding of src/export/padding.h (phase1.25 item 2.7; decisions 197, 206,
-267, 268, 270, 273, 275, 278 to 282, 285, 288, 290, 291, 294, 356; measured only, decision 259),
-written again independently in Python for the tests: the ring over an OBJ's triangles, then the
-jump flood.
+267, 268, 270, 273, 275, 278 to 282, 285, 288, 290, 291, 294, 356, 364; measured only, decision
+259), written again independently in Python for the tests: the ring over an OBJ's triangles, then
+the jump flood.
 
 The geometry (barycentrics, folds about seam edges, distances) is double precision with each
 operation in padding.cpp's order, so that a far point at an exact half-texel boundary, where
@@ -36,6 +36,8 @@ FLOOD = ((0, 1), (0, -1), (-1, 0), (1, 0), (-1, 1), (1, -1), (-1, -1), (1, 1))
 EQUAL_SHARE = 1e-5
 ZERO_DISTANCE = 1e-6
 COPLANAR = 1e-6
+# Decision 364: unit normals whose cross product is shorter than this are parallel.
+PARALLEL = 1e-10
 KEPT = 8
 # Decision 278's seam gate: the faces' float32 normal dot product at most FOLD_GATE; Painter's
 # constant lies in (FOLD_LOW, FOLD_HIGH].
@@ -469,6 +471,36 @@ def fold(h: Hinge, p: Vec) -> Vec:
     return add(add(a, scale(e, s)), add(scale(in_other, along), scale(cross(e, in_other), out)))
 
 
+def segment_gap(a: Vec, b: Vec, q: Vec) -> float:
+    """The 3D distance from `q` to the segment a b."""
+    e = sub(b, a)
+    t = min(max(dot(sub(q, a), e) / dot(e, e), 0.0), 1.0)
+    return norm(sub(q, add(a, scale(e, t))))
+
+
+def plane_rotation(p: Vec, source: Triangle, target: Triangle) -> Vec:
+    """Decision 364: `p` turned rigidly about the line where the plane of `source` meets the plane
+    of `target`, by the angle between their unit face normals m and n (Rodrigues), so that the
+    source plane lands on the target plane; as is when the planes are parallel or their normals
+    meet at a dot product above FOLD_GATE (decision 282's gate). The line's point solves
+    n.x = n.P_target, m.x = m.P_source, a.x = 0 (a the unit axis m x n) by Cramer's rule."""
+    n = unit(tuple(float(c) for c in target.normal))  # type: ignore[arg-type]
+    m = unit(tuple(float(c) for c in source.normal))  # type: ignore[arg-type]
+    axis = cross(m, n)
+    sine = norm(axis)
+    cosine = dot(m, n)
+    if sine < PARALLEL or cosine > float(FOLD_GATE):
+        return p
+    axis = scale(axis, 1.0 / sine)
+    dn, dm = dot(n, target.p[0]), dot(m, source.p[0])
+    across = cross(m, axis)
+    det = dot(n, across)
+    origin = scale(add(scale(across, dn), scale(cross(axis, n), dm)), 1.0 / det)
+    v = sub(p, origin)
+    turned = add(add(origin, scale(v, cosine)), scale(cross(axis, v), sine))
+    return add(turned, scale(axis, dot(axis, v) * (1.0 - cosine)))
+
+
 def obj_mesh(
     path: Path, material: str
 ) -> tuple[list[tuple[list[Vec], list[tuple[float, float]]]], np.ndarray, np.ndarray]:
@@ -656,15 +688,31 @@ class Ring:
         not unfolded."""
         return bool(_dot32(self.tris[a].normal, self.tris[b].normal) <= FOLD_GATE)
 
-    def frame(self, p: Vec, k: int, tau: int, q: Vec) -> Vec:
-        """`p` of triangle `k` in tau's frame for ring point `q`: as is in tau's planar face,
-        rotated about an edge shared by the two faces, else hinge by hinge along the fewest-hinge
-        face paths, the development nearest `q` (decision 281), else as is. A hinge is rotated
-        about only when folded past the gate (decision 282: `folded`, of k and tau across a shared
-        edge, of the path's two triangles at each hinge). A far tap (k in another chart than tau)
-        keeps its own chart rigid: a hinge whose two triangles are both in k's chart is not
-        rotated about (decision 342)."""
-        src, dst = self.tris[k].face, self.tris[tau].face
+    def frame(self, p: Vec, k: int, tau: int, q: Vec, window: int | None = None) -> Vec:
+        """`p` of triangle `k` in tau's frame for ring point `q`. A far tap (k in another chart
+        than tau) is rotated rigidly from the plane of a far triangle J into tau's (decision 364,
+        `plane_rotation`): J is the far triangle of the seam edge of tau's island, into k's island,
+        whose 3D segment is nearest `q` (the first on a tie), else `window`, the far triangle of
+        the window that puts the tap. Otherwise: as is in tau's planar face, rotated about an edge
+        shared by the two faces, else hinge by hinge along the fewest-hinge face paths, the
+        development nearest `q` (decision 281), else as is. A hinge is rotated about only when
+        folded past the gate (decision 282: `folded`, of k and tau across a shared edge, of the
+        path's two triangles at each hinge). A far tap with no J keeps its own chart rigid: a hinge
+        whose two triangles are both in k's chart is not rotated about (decision 342)."""
+        target = self.tris[tau]
+        if self.tris[k].chart != target.chart:
+            source = window
+            nearest = math.inf
+            for e, edge, j in self.seams.get(target.chart, []):
+                if self.tris[j].chart != self.tris[k].chart:
+                    continue
+                E = self.tris[e]
+                gap = segment_gap(E.p[(edge + 1) % 3], E.p[(edge + 2) % 3], q)
+                if gap < nearest:
+                    source, nearest = j, gap
+            if source is not None:
+                return plane_rotation(p, self.tris[source], target)
+        src, dst = self.tris[k].face, target.face
         if src == dst:
             return p
         h = self._hinge(dst, src)
@@ -911,7 +959,7 @@ class Ring:
         pool: dict[tuple[int, int], list[Any]] = {}
         via: dict[tuple[int, int], list[int]] = {}
 
-        def put(tx: int, ty: int) -> list[Any]:
+        def put(tx: int, ty: int, window: int | None = None) -> list[Any]:
             if (tx, ty) not in pool:
                 k = int(self.owner[ty, tx])
                 K = self.tris[k]
@@ -919,7 +967,7 @@ class Ring:
                 outside = None
                 if K.chart != T.chart:
                     outside = min(norm(sub(K.point(K.bary(x + 0.5, y + 0.5)), p)), norm(sub(q, p)))
-                pool[(tx, ty)] = [norm(sub(q, self.frame(p, k, tau, q))), outside, False]
+                pool[(tx, ty)] = [norm(sub(q, self.frame(p, k, tau, q, window))), outside, False]
             return pool[(tx, ty)]
 
         # Decision 285: an own neighbour of tau's island in another triangle K sharing a UV edge
@@ -938,8 +986,8 @@ class Ring:
         # REACH_CAP texels (UV segment distance; those within REACH_HIGH kept for the reach flag);
         # none whose far triangle is tau (decision 288) or whose UV ends both lie on the tile's
         # left or right border (decision 290); decision 275: q folded into the far triangle, the
-        # covered texels of the far island or of tau's (decision 356) of columns
-        # floor(f_u - 1/2) +- 1, rows ceil(f_v - 1/2) +- 1;
+        # covered texels, of any island (decision 364), of columns floor(f_u - 1/2) +- 1, rows
+        # ceil(f_v - 1/2) +- 1;
         # decision 278: the gate, with tau's normal (decision 292). Decision 291: the axes whose
         # f - 1/2 lies within WINDOW_SIDE of an integer.
         edges: list[tuple[tuple[bool, bool, bool], float]] = []
@@ -980,10 +1028,9 @@ class Ring:
                     for col in range(col0 - 1, col0 + 2):
                         if not (0 <= row < self.height and 0 <= col < self.width):
                             continue
-                        k = int(self.owner[row, col])
-                        if k < 0 or self.tris[k].chart not in (J.chart, T.chart):
+                        if self.owner[row, col] < 0:
                             continue
-                        put(col, row)
+                        put(col, row, j)
                         lst = via.setdefault((col, row), [])
                         if not lst or lst[-1] != len(edges) - 1:
                             lst.append(len(edges) - 1)

@@ -38,8 +38,9 @@
 //        centre (decision 294's corner edges: 1.0 or 1.15, below), whichever side of it q lies on
 //        (decisions 275, 279, 285): q folded about the edge into
 //        the far triangle, f its point in that triangle's texel space (v down, centres at + 1/2),
-//        and the far island's covered texels in the 3 x 3 block of columns floor(f_u - 1/2) +- 1
-//        and rows ceil(f_v - 1/2) +- 1. A seam edge (E, J), E its triangle on the near side and J
+//        and the covered texels, of any island (decision 364), in the 3 x 3 block of columns
+//        floor(f_u - 1/2) +- 1 and rows ceil(f_v - 1/2) +- 1. A seam edge (E, J), E its triangle on
+//        the near side and J
 //        the far one, gives no far candidates when the float32 dot product of tau's and J's unit
 //        face normals (cross(P1 - P0, P2 - P0) over the stored positions, divided by its length) is
 //        at most 0.985 and q lies behind J's plane, n_J . (q - p) < 0 with p a vertex of the edge
@@ -52,8 +53,14 @@
 //        other seam edge of its island ending at V exceeds 1e-3, reaches only within 1.0 texel
 //        when another seam edge reaching the texel (within 1.787242 texels) ending at V is gated,
 //        else within 1.15;
-//      - a candidate in tau's planar face is used at its 3D position, one in a face sharing a 3D
-//        edge with that face is rotated about the edge into its plane, onto the far side, any other
+//      - a far candidate (in another island than tau) is turned rigidly from the plane of a far
+//        triangle J into tau's plane, about the planes' intersection line (Rodrigues; parallel
+//        planes, or normals meeting at a dot product above 0.985, leave it as it is): J is the far
+//        triangle of the seam edge of tau's island, into the candidate's island, whose 3D segment
+//        is nearest q, else the far triangle of the window that first holds it (decision 364);
+//      - any other candidate in tau's planar face is used at its 3D position, one in a face
+//        sharing a 3D edge with that face is rotated about the edge into its plane, onto the far
+//        side, any other
 //        one is rotated hinge by hinge along the fewest-hinge paths of faces sharing 3D edges (at
 //        most 4 hinges, breadth first), the development nearest q (decision 281; not exact, and
 //        flagged), else used at its 3D position; d is the distance from q. A hinge is rotated about

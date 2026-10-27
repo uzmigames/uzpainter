@@ -1,6 +1,7 @@
 # Seam-window frame padding diagnostic
 
-Date: 2026-10-27. Status: diagnostic only; no production policy accepted.
+Date: 2026-10-27. Status: the best policy is adopted as decision 364 (reference and native,
+measured mode only); refusals 245/259 unchanged.
 Task: phase1.25_pilot-wand, item 2.7. Follows decision 358 and
 `padding-direct-plane-diagnostic.md`.
 
@@ -91,3 +92,13 @@ the J/tau-family policies:
 
 No production policy, tolerance, exception, checkbox or refusal changed. Item
 2.7 and refusals 245/259 remain open.
+
+## Adoption (decision 364)
+
+The best policy now lives in `tests/export/padding_reference.py` and `src/export/padding.cpp`.
+Scored against the previous reference (`--policy git:7c4d804f --policy baseline`), it gives 3,248
+-> 1,103 with 2,145 fixed and 1 new.
+
+`--native` runs `uzp-export-tests ring` on every kernel probe's mesh, with the 24 kernel components
+as values. On all 168,275 ring texels of the 29 probes, its taps and values equal the reference
+bit for bit, and it misses Painter on the same 1,103 coordinates.
