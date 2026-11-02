@@ -37,6 +37,19 @@ b. **Transport swap.** The sync script's own `execute(code, token=None)` is repl
    project lies in the private work directory, outside a production character's folder, so the
    guard passes without an attempt token; any other verdict is refused.
 
+A sync step may also carry, for a current round (decision 300 item 7):
+
+- `resource_prefix`, `resource_group` and `texture_set`: narrowly typed values the recorder
+  appends to the command line as the script's own `--resource-prefix`, `--resource-group` and
+  `--texture-set` options, in that order; the guard probe the script must send is the one for
+  that texture set. Without them the command line is the legacy one.
+- `import_closure`: the pinned helpers the `imports` import when they are imported. The job
+  resolves every import-time import of the sync script and of each pinned module (the standard
+  library, or a pinned module; a helper lies next to the module importing it) and refuses a
+  missing, unpinned, unreachable, duplicate or cyclic module; the run loads the helpers first.
+- `mask_folder` in place of `masks` and `mask_files` (the public schema bounds a list at 16
+  items): the bitmaps are exactly the mask and image inputs in that Assets3D folder.
+
 A fourth step may close the sequence: `substance_painter.export.export_project_textures` with
 `config`, an authored `recipe_json` repository file holding the `json_config` without `exportPath`
 (as a migration golden's export, decision 194). The recorder runs it after every script export,
@@ -56,10 +69,14 @@ from __future__ import annotations
 import argparse
 import ast
 import base64
+import importlib.abc
+import importlib.machinery
 import importlib.util
 import json
+import re
 import shutil
 import sys
+import sysconfig
 import types
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -107,6 +124,15 @@ CREATE_INPUTS = {
     "ao": ("image",),
 }
 SYNC_ARGS = frozenset({"script", "command", "stack", "masks", "mask_files", "imports"})
+SYNC_FOLDER_ARGS = frozenset({"script", "command", "stack", "mask_folder", "imports"})
+IMPORT_CLOSURE = "import_closure"
+# The optional sync options: argument -> (the sync script's flag, the values it may take). Each
+# given option becomes `flag value` on the command line, in this order.
+SYNC_OPTIONS: dict[str, tuple[str, re.Pattern[str]]] = {
+    "resource_prefix": ("--resource-prefix", re.compile(r"[A-Za-z0-9_]{1,32}")),
+    "resource_group": ("--resource-group", re.compile(r"[A-Za-z0-9_]{1,64}")),
+    "texture_set": ("--texture-set", re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")),
+}
 EXPORT_INPUTS = {"script": ("pipeline_script",), "args_file": ("recipe_json",)}
 MASK_KINDS = ("mask", "image")
 SYNC_COMMAND = "sync"
@@ -156,6 +182,9 @@ class ScriptStep:
     hard_coded_args: str | None = None  # the arguments path as written in the script
     arguments: dict[str, Any] | None = None  # the authored arguments file
     imports: tuple[PinnedInput, ...] = ()  # pinned modules the sync script imports
+    masks: tuple[PinnedInput, ...] = ()  # the sync's bitmaps, in one folder
+    options: tuple[tuple[str, str], ...] = ()  # the sync's optional `flag value` pairs, in order
+    load_order: tuple[PinnedInput, ...] = ()  # pinned modules loaded first, dependencies first
 
 
 @dataclass(frozen=True)
@@ -292,11 +321,52 @@ def script_step(raw: dict[str, Any], inputs: dict[str, PinnedInput]) -> tuple[st
         arguments = arguments_file(file, EXPORT_KEYS, step)
         path = hard_coded_args_path(script, file, step)
         return "export", ScriptStep(step, args, script, path, arguments)
-    if set(args) == SYNC_ARGS:
-        script = input_of(inputs, step, "script", args["script"], ("pipeline_script",))
-        if args["command"] != SYNC_COMMAND:
-            raise RecorderError(f"step {step}: only the `{SYNC_COMMAND}` command is recorded")
-        stack = input_of(inputs, step, "stack", args["stack"], ("recipe_json",))
+    if set(args) - set(SYNC_OPTIONS) - {IMPORT_CLOSURE} in (SYNC_ARGS, SYNC_FOLDER_ARGS):
+        return "sync", sync_step(step, args, inputs)
+    raise RecorderError(f"step {step}: arguments {sorted(args)} are no create, sync or export")
+
+
+def sync_step(step: int, args: dict[str, Any], inputs: dict[str, PinnedInput]) -> ScriptStep:
+    script = input_of(inputs, step, "script", args["script"], ("pipeline_script",))
+    if args["command"] != SYNC_COMMAND:
+        raise RecorderError(f"step {step}: only the `{SYNC_COMMAND}` command is recorded")
+    stack = input_of(inputs, step, "stack", args["stack"], ("recipe_json",))
+    files = sync_masks(step, args, inputs)
+    names = [f.name for f in files]
+    referenced = stack_bitmaps(json.loads(stack.file.read_bytes().decode("utf-8")))
+    if sorted(referenced) != sorted(PurePosixPath(n).stem for n in names):
+        raise RecorderError(
+            f"step {step}: the stack references the bitmaps {sorted(referenced)}, not the "
+            f"masks given {sorted(names)}"
+        )
+    if not isinstance(args["imports"], list):
+        raise RecorderError(f"step {step}: `imports` must be a list of pipeline-script inputs")
+    modules = tuple(
+        input_of(inputs, step, "imports", m, ("pipeline_script",)) for m in args["imports"]
+    )
+    missing = {m.module for m in modules} - imported_modules(script)
+    if missing:
+        raise RecorderError(f"step {step}: {script.name} imports no module {sorted(missing)}")
+    load_order = modules
+    if IMPORT_CLOSURE in args:
+        load_order = import_closure(step, script, modules, args[IMPORT_CLOSURE], inputs)
+    return ScriptStep(
+        step,
+        args,
+        script,
+        imports=modules,
+        masks=tuple(files),
+        options=sync_options(step, args, script),
+        load_order=load_order,
+    )
+
+
+def sync_masks(
+    step: int, args: dict[str, Any], inputs: dict[str, PinnedInput]
+) -> list[PinnedInput]:
+    """The sync's bitmaps: the parallel `masks` and `mask_files` lists, or every input in the
+    `mask_folder` (each a mask or image named `<bitmap>.png`, none twice)."""
+    if "mask_folder" not in args:
         masks, names = args["masks"], args["mask_files"]
         if not isinstance(masks, list) or not isinstance(names, list) or len(masks) != len(names):
             raise RecorderError(f"step {step}: `masks` and `mask_files` must be parallel lists")
@@ -305,22 +375,182 @@ def script_step(raw: dict[str, Any], inputs: dict[str, PinnedInput]) -> tuple[st
             raise RecorderError(f"step {step}: `mask_files` must be the masks' file names")
         if len({PurePosixPath(f.assets3d_path).parent for f in files}) != 1:
             raise RecorderError(f"step {step}: the masks must share one folder")
-        referenced = stack_bitmaps(json.loads(stack.file.read_bytes().decode("utf-8")))
-        if sorted(referenced) != sorted(PurePosixPath(n).stem for n in names):
-            raise RecorderError(
-                f"step {step}: the stack references the bitmaps {sorted(referenced)}, not the "
-                f"masks given {sorted(names)}"
-            )
-        if not isinstance(args["imports"], list):
-            raise RecorderError(f"step {step}: `imports` must be a list of pipeline-script inputs")
-        modules = tuple(
-            input_of(inputs, step, "imports", m, ("pipeline_script",)) for m in args["imports"]
+        return files
+    folder = args["mask_folder"]
+    if not isinstance(folder, str) or not folder:
+        raise RecorderError(f"step {step}: `mask_folder` must name an Assets3D folder")
+    files = sorted(
+        (
+            i
+            for i in inputs.values()
+            if PurePosixPath(i.assets3d_path).parent == PurePosixPath(folder)
+        ),
+        key=lambda i: i.name,
+    )
+    if not files:
+        raise RecorderError(f"step {step}: no input lies in the mask folder {folder}")
+    others = sorted(f.input_id for f in files if f.kind not in MASK_KINDS)
+    if others:
+        raise RecorderError(f"step {step}: the mask folder {folder} also holds {others}")
+    names = [f.name for f in files]
+    if len(set(names)) != len(names) or any(PurePosixPath(n).suffix != ".png" for n in names):
+        raise RecorderError(f"step {step}: the mask folder must hold each bitmap once, as .png")
+    return files
+
+
+def string_constants(script: PinnedInput) -> set[str]:
+    assert script.data is not None
+    return {
+        node.value
+        for node in ast.walk(ast.parse(script.data, filename=script.name))
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    }
+
+
+def sync_options(
+    step: int, args: dict[str, Any], script: PinnedInput
+) -> tuple[tuple[str, str], ...]:
+    """The optional sync options given, as `(flag, value)` in `SYNC_OPTIONS` order; refused on a
+    value of another shape or a flag the pinned script does not name."""
+    options: list[tuple[str, str]] = []
+    for key, (flag, pattern) in SYNC_OPTIONS.items():
+        if key not in args:
+            continue
+        value = args[key]
+        if not isinstance(value, str) or not pattern.fullmatch(value):
+            raise RecorderError(f"step {step}: `{key}` must match {pattern.pattern} ({value!r})")
+        if flag not in string_constants(script):
+            raise RecorderError(f"step {step}: {script.name} defines no {flag} option")
+        options.append((flag, value))
+    return tuple(options)
+
+
+def catches_import_error(node: ast.Try) -> bool:
+    """Whether a handler of the `try` catches `ImportError` (bare, `ImportError`, `Exception` or
+    `BaseException`; `ModuleNotFoundError` does not catch a failed relative import)."""
+    names = {"ImportError", "Exception", "BaseException"}
+    for handler in node.handlers:
+        kinds = handler.type.elts if isinstance(handler.type, ast.Tuple) else [handler.type]
+        if any(k is None or (isinstance(k, ast.Name) and k.id in names) for k in kinds):
+            return True
+    return False
+
+
+def import_time_imports(item: PinnedInput) -> list[tuple[int, str, int, bool]]:
+    """`(line, module, level, guarded)` of every import a module runs when it is imported: at
+    module scope, including `try`, `if`, `with` and class bodies, never inside a function.
+    `from . import a` gives `a` at level 1; `guarded` is whether a `try` around it catches
+    `ImportError`."""
+    assert item.data is not None
+    found: list[tuple[int, str, int, bool]] = []
+
+    def visit(nodes: Any, guarded: bool) -> None:
+        for node in nodes:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                continue
+            if isinstance(node, ast.Import):
+                found.extend((node.lineno, alias.name, 0, guarded) for alias in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    found.append((node.lineno, node.module, node.level, guarded))
+                else:
+                    found.extend(
+                        (node.lineno, alias.name, node.level, guarded) for alias in node.names
+                    )
+            elif isinstance(node, ast.Try):
+                visit(node.body, guarded or catches_import_error(node))
+                for handler in node.handlers:
+                    visit(handler.body, guarded)
+                visit(node.orelse, guarded)
+                visit(node.finalbody, guarded)
+            else:
+                visit(ast.iter_child_nodes(node), guarded)
+
+    visit(ast.parse(item.data, filename=item.name).body, False)
+    return found
+
+
+def import_closure(
+    step: int,
+    script: PinnedInput,
+    imports: tuple[PinnedInput, ...],
+    names: Any,
+    inputs: dict[str, PinnedInput],
+) -> tuple[PinnedInput, ...]:
+    """The sync script's pinned imports and their helpers (`import_closure`) in load order, each
+    module after the modules it imports. Every import-time import of the script is the standard
+    library or one of its `imports`; every absolute import-time import of a pinned module is the
+    standard library or a pinned helper next to it. A pinned module is loaded without a package,
+    so its relative import always fails: it is accepted only inside a `try` that catches
+    `ImportError`, whose handler's imports are resolved instead. Refused on any other import, a
+    module named twice, a helper no pinned import reaches, or a cycle."""
+    if not isinstance(names, list):
+        raise RecorderError(
+            f"step {step}: `{IMPORT_CLOSURE}` must be a list of pipeline-script inputs"
         )
-        missing = {m.module for m in modules} - imported_modules(script)
-        if missing:
-            raise RecorderError(f"step {step}: {script.name} imports no module {sorted(missing)}")
-        return "sync", ScriptStep(step, args, script, imports=modules)
-    raise RecorderError(f"step {step}: arguments {sorted(args)} are no create, sync or export")
+    helpers = tuple(input_of(inputs, step, IMPORT_CLOSURE, m, ("pipeline_script",)) for m in names)
+    pinned = imports + helpers
+    ids, stems = [m.input_id for m in pinned], [m.module for m in pinned]
+    if len(set(ids)) != len(ids) or len(set(stems)) != len(stems):
+        raise RecorderError(f"step {step}: the sync's imports and closure name a module twice")
+    roots = {m.module for m in imports}
+    for line, name, level, _ in import_time_imports(script):
+        top = name.split(".")[0]
+        if level or (top not in sys.stdlib_module_names and top not in roots):
+            raise RecorderError(
+                f"step {step}: {script.name} line {line} imports {'.' * level}{name} when "
+                "imported: neither the standard library nor one of its pinned `imports`"
+            )
+    by_stem = {m.module: m for m in pinned}
+    edges: dict[str, list[str]] = {}
+    for module in pinned:
+        folder = PurePosixPath(module.assets3d_path).parent
+        edges[module.input_id] = []
+        for line, name, level, guarded in import_time_imports(module):
+            top = name.split(".")[0]
+            if level and guarded:
+                continue  # fails at load (no package): the handler's fallback is what runs
+            if level:
+                raise RecorderError(
+                    f"step {step}: {module.name} line {line} imports {'.' * level}{name} outside "
+                    "a `try` that catches ImportError: a pinned module is loaded without a "
+                    "package, so a relative import cannot run"
+                )
+            if top in sys.stdlib_module_names:
+                continue
+            target = by_stem.get(top)
+            if (
+                "." in name
+                or target is None
+                or PurePosixPath(target.assets3d_path).parent != folder
+            ):
+                raise RecorderError(
+                    f"step {step}: {module.name} line {line} imports {name} when imported, which "
+                    f"is neither the standard library nor a pinned module of `{IMPORT_CLOSURE}` "
+                    f"({folder}/{top}.py)"
+                )
+            edges[module.input_id].append(target.input_id)
+    order: list[str] = []
+
+    def visit(node: str, path: tuple[str, ...]) -> None:
+        if node in path:
+            raise RecorderError(f"step {step}: the sync's imports form a cycle {[*path, node]}")
+        if node in order:
+            return
+        for target in sorted(set(edges[node])):
+            visit(target, (*path, node))
+        order.append(node)
+
+    for module in imports:
+        visit(module.input_id, ())
+    unreached = [m.input_id for m in helpers if m.input_id not in order]
+    if unreached:
+        raise RecorderError(
+            f"step {step}: `{IMPORT_CLOSURE}` names {unreached}, which no pinned import imports "
+            "when imported"
+        )
+    by_id = {m.input_id: m for m in pinned}
+    return tuple(by_id[i] for i in order)
 
 
 def stack_bitmaps(stack: dict[str, Any]) -> set[str]:
@@ -513,18 +743,100 @@ def pinned_module(item: PinnedInput, file: Path) -> types.ModuleType:
     return module
 
 
+STANDARD_ROOTS = tuple(
+    Path(p).resolve()
+    for p in sorted(
+        {
+            sysconfig.get_path("stdlib"),
+            sysconfig.get_path("platstdlib"),
+            str(Path(sys.base_exec_prefix) / "DLLs"),
+        }
+    )
+)
+
+
+def standard_library(fullname: str, path: Sequence[str] | None) -> bool:
+    """Whether an import is the interpreter's own standard library: a built-in or frozen module, or
+    a module or submodule of a standard-library name whose file lies under the standard library's
+    directories outside site-packages. A same-named file elsewhere on `sys.path` or on a package's
+    `__path__` is not. A standard-library name no finder here finds fails as it would."""
+    top = fullname.partition(".")[0]
+    if top in sys.builtin_module_names:
+        return True
+    if top not in sys.stdlib_module_names:
+        return False
+    if importlib.machinery.FrozenImporter.find_spec(fullname) is not None:
+        return True
+    spec = importlib.machinery.PathFinder.find_spec(fullname, path)
+    if spec is None:
+        return True  # nothing to load
+    if spec.origin is None:
+        return False
+    origin = Path(spec.origin).resolve()
+    return "site-packages" not in origin.parts and any(
+        origin.is_relative_to(root) for root in STANDARD_ROOTS
+    )
+
+
+class PinnedImports(importlib.abc.MetaPathFinder):
+    """While `on`, refuses (and records) every import of a module not loaded yet that is not the
+    standard library, so what static resolution cannot see (`importlib.import_module`, a function
+    called at import time, a file on `sys.path` shadowing a standard-library name) never loads
+    unpinned code. On only while pinned code runs, never while the recorder talks to Painter."""
+
+    def __init__(self) -> None:
+        self.on = False
+        self.refused: list[str] = []
+
+    def find_spec(
+        self,
+        fullname: str,
+        path: Sequence[str] | None,
+        target: types.ModuleType | None = None,
+    ) -> None:
+        if self.on and not standard_library(fullname, path):
+            self.refused.append(fullname)
+            raise ImportError(f"{fullname} is neither a pinned module nor the standard library")
+        return None
+
+    def check(self) -> None:
+        if self.refused:
+            raise RecorderError(
+                f"the pinned sync imports {sorted(set(self.refused))}, which are neither pinned "
+                "modules nor the standard library"
+            )
+
+
 def run_sync(
     session: PainterSession, job: ScriptJob, staged: dict[str, Path], directory: Path
 ) -> Any:
     """Run the sync command line host-side from the pinned bytes, with the script's Assets3D
-    imports loaded from their pinned bytes; `sys.path` and `sys.modules` are restored after."""
+    imports loaded from their pinned bytes (an import closure's helpers first, under
+    `PinnedImports`); `sys.path`, `sys.modules` and `sys.meta_path` are restored after."""
+    modules = job.sync.load_order or job.sync.imports
+    imports_guard = PinnedImports() if IMPORT_CLOSURE in job.sync.args else None
     saved_path = list(sys.path)
-    saved_modules = {item.module: sys.modules.get(item.module) for item in job.sync.imports}
+    saved_modules = {item.module: sys.modules.get(item.module) for item in modules}
+    if imports_guard is not None:
+        sys.meta_path.insert(0, imports_guard)
+        imports_guard.on = True
     try:
-        for item in job.sync.imports:
+        for item in modules:
             sys.modules[item.module] = pinned_module(item, staged[item.input_id])
-        return sync_command(session, job.sync, staged, directory)
+        if imports_guard is not None:
+            imports_guard.check()
+        result = sync_command(session, job.sync, staged, directory, imports_guard)
+        if imports_guard is not None:
+            imports_guard.check()
+        return result
+    except ImportError:
+        if imports_guard is not None:
+            imports_guard.check()
+        raise
     finally:
+        if imports_guard is not None:
+            imports_guard.on = False
+            sys.meta_path.remove(imports_guard)
         sys.path[:] = saved_path
         for name, module in saved_modules.items():
             if module is None:
@@ -534,12 +846,18 @@ def run_sync(
 
 
 def sync_command(
-    session: PainterSession, step: ScriptStep, staged: dict[str, Path], directory: Path
+    session: PainterSession,
+    step: ScriptStep,
+    staged: dict[str, Path],
+    directory: Path,
+    imports_guard: PinnedImports | None = None,
 ) -> Any:
     """The sync command line, its `execute` swapped for the recorder's remote control (same
     contract: run the code, return its `result`). The script's route guard sends its probe through
     it first; a verdict other than "outside the production layout" (no attempt token) is
-    refused. The script runs as its staged copy, so its Assets3D root is the staged mirror."""
+    refused. The script runs as its staged copy, so its Assets3D root is the staged mirror. A
+    script that defines `PROJECT_PROBE_CODE` sends that probe before its guard probe; the guard
+    probe is `GUARD_CODE` for the step's `texture_set` (None when it gives none)."""
     script = step.script
     assert script.data is not None
     file = staged[script.input_id]
@@ -549,8 +867,17 @@ def sync_command(
         raise RecorderError(f"{script.name} defines no `execute(code)` and `main()` to run")
     if not isinstance(namespace.get("GUARD_CODE"), str):
         raise RecorderError(f"{script.name} defines no route guard probe `GUARD_CODE`")
-    guard = namespace["GUARD_CODE"].replace("__TS__", repr(None))  # no --texture-set is given
+    texture_set = dict(step.options).get(SYNC_OPTIONS["texture_set"][0])
+    guard = namespace["GUARD_CODE"].replace("__TS__", repr(texture_set))
+    probe = namespace.get("PROJECT_PROBE_CODE")
+    expected = ([probe] if isinstance(probe, str) else []) + [guard]
     calls: list[tuple[str, Any]] = []
+
+    def wrong_calls(count: int) -> RecorderError:
+        return RecorderError(
+            f"{script.name} sync ran {count} Painter calls, not its route guard's "
+            f"{len(expected)} probe(s) and then one sync"
+        )
 
     def execute(code: str, token: str | None = None) -> Any:
         if token is not None:
@@ -559,7 +886,22 @@ def sync_command(
                 "paint attempt (it returned an attempt token): the recorder runs the wand only "
                 "outside the production layout"
             )
-        value = run_in_painter(session, code.encode("utf-8"), f"{script.name} {SYNC_COMMAND}")
+        # Each probe is checked before it is sent, so wrong probes never let the sync code run.
+        if len(calls) > len(expected) or (
+            len(calls) < len(expected) and code != expected[len(calls)]
+        ):
+            raise wrong_calls(len(calls) + 1)
+        if imports_guard is None:
+            value = run_in_painter(session, code.encode("utf-8"), f"{script.name} {SYNC_COMMAND}")
+        else:
+            imports_guard.check()  # nothing reaches Painter after a refused import
+            imports_guard.on = False
+            try:
+                value = run_in_painter(
+                    session, code.encode("utf-8"), f"{script.name} {SYNC_COMMAND}"
+                )
+            finally:
+                imports_guard.on = True
         calls.append((code, value))
         return value
 
@@ -567,7 +909,7 @@ def sync_command(
     state = directory / "sync-state.json"
     if state.exists():
         raise RecorderError(f"{state} already exists: the sync state must start empty")
-    masks = staged[step.args["masks"][0]].parent
+    masks = staged[step.masks[0].input_id].parent
     argv = [
         script.name,
         SYNC_COMMAND,
@@ -577,6 +919,7 @@ def sync_command(
         str(masks),
         "--state",
         str(state),
+        *(part for option in step.options for part in option),
     ]
     saved_argv = sys.argv
     sys.argv = argv
@@ -586,13 +929,14 @@ def sync_command(
         raise RecorderError(f"{script.name} {SYNC_COMMAND} exited: {exit.code}") from exit
     finally:
         sys.argv = saved_argv
-    if len(calls) != 2 or calls[0][0] != guard:
-        raise RecorderError(
-            f"{script.name} sync ran {len(calls)} Painter calls, not its route guard's probe "
-            "and then one sync"
-        )
+        if imports_guard is not None:
+            imports_guard.on = False  # the pinned code is done
+    if len(calls) != len(expected) + 1:
+        raise wrong_calls(len(calls))
+    if imports_guard is not None:
+        imports_guard.check()  # before the recorder talks to Painter again
     session.wait_ready()
-    return calls[1][1]
+    return calls[-1][1]
 
 
 def texture_set_of(key: str) -> str:

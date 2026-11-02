@@ -835,6 +835,516 @@ def test_manifest_command_stores_every_pinned_input(
     assert job.inputs["mask-t_belt"].file.is_relative_to(store.root)
 
 
+# --- a current round's sync: typed options, the import closure, the project probe ------------
+
+CURRENT_LAYER_STACK = """'''Stand-in of painter_layer_stack.py at Assets3D 1c9a312a.
+A project probe, then the route guard's probe for the texture set (from run.py's `locate` and
+`owner_preview_paint`); the resource prefix, group and texture set options.'''
+import argparse
+import base64
+import hashlib
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = next(p for p in Path(__file__).resolve().parents if (p / 'AGENTS.md').exists())
+CLIENT = ROOT / 'Pipeline/mcp/painter_mcp_client.py'
+sys.path.insert(0, str(ROOT / 'Pipeline/production'))
+from run import MARK, locate, owner_preview_paint  # noqa: E402
+
+PROJECT_PROBE_CODE = '''
+import substance_painter.project as project
+result = {'project': project.file_path() if project.is_open() else None}
+'''
+
+GUARD_CODE = '''
+import substance_painter.project as project
+name = __TS__
+result = {'project': project.file_path(), 'texture_set': name}
+'''
+
+SYNC_CODE = '''
+import base64, json
+import substance_painter.project as project
+D = json.loads(base64.b64decode('__DATA__').decode('utf-8'))
+result = {'project': project.file_path(), 'imported': sorted(D['masks']),
+          'options': D['options'], 'argv': D['argv'], 'run_mark': D['run_mark'],
+          'resources': {k: 'resource://fake/' + k for k in D['masks']}}
+'''
+
+
+def execute(code, token=None):
+    command = [sys.executable, str(CLIENT), 'execute_python', code]
+    env = dict(os.environ, UZ_ROUTE_TOKEN=token or '')
+    run = subprocess.run(command, capture_output=True, text=True, env=env)
+    return json.loads(run.stdout)['data']
+
+
+def route_guard(texture_set, mode):
+    probe = execute(PROJECT_PROBE_CODE)
+    if not probe.get('project'):
+        raise SystemExit('ROUTE BLOCKED: save the Painter project inside the piece folder first')
+    state, state_path = locate(probe['project'])
+    if state == 'legacy' or owner_preview_paint(probe['project']):
+        execute(GUARD_CODE.replace('__TS__', repr(texture_set)))
+        return None
+    if state != 'production':
+        raise SystemExit('ROUTE BLOCKED: ' + probe['project'] + ' has no production state')
+    execute(GUARD_CODE.replace('__TS__', repr(texture_set)), 'attempt-token')
+    return 'attempt-token'
+
+
+def sync(a):
+    stack = json.loads(Path(a.stack).read_text(encoding='utf-8'))
+    masks_dir = Path(a.masks).resolve()
+    names = {x['mask'] for x in stack['layers'] + stack['groups'] if x.get('mask')}
+    names = sorted(names | {x['base_tex'] for x in stack['layers'] if x.get('base_tex')})
+    masks = {n: hashlib.sha1((masks_dir / (n + '.png')).read_bytes()).hexdigest() for n in names}
+    options = {'prefix': a.resource_prefix, 'group': a.resource_group,
+               'texture_set': a.texture_set}
+    data = {'masks': masks, 'options': options, 'argv': sys.argv[1:], 'run_mark': MARK}
+    encoded = base64.b64encode(json.dumps(data).encode('utf-8')).decode('ascii')
+    token = route_guard(a.texture_set, 'sync')
+    reply = execute(SYNC_CODE.replace('__DATA__', encoded), token)
+    Path(a.state).write_text(json.dumps(reply['resources']), encoding='utf-8')
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers(dest='command', required=True)
+    s = sub.add_parser('sync')
+    s.add_argument('--stack', required=True)
+    s.add_argument('--masks', required=True)
+    s.add_argument('--state', required=True)
+    s.add_argument('--resource-prefix', default='stack_')
+    s.add_argument('--resource-group', default='layer_stack')
+    s.add_argument('--texture-set')
+    args = parser.parse_args()
+    {'sync': sync}[args.command](args)
+
+
+if __name__ == '__main__':
+    main()
+"""
+
+RUN_PY = """'''Stand-in of run.py at Assets3D 1c9a312a: two local helpers imported at import time,
+relative first, then absolute.'''
+from __future__ import annotations
+
+from pathlib import Path
+
+try:
+    from .decision_evidence import build
+    from .stage_review_evidence import collect
+except ImportError:
+    from decision_evidence import build
+    from stage_review_evidence import collect
+
+MARK = build() + '+' + collect()
+
+
+def locate(path):
+    path = Path(path).resolve()
+    for folder in [path, *path.parents]:
+        if (folder / 'Concept').is_dir() and (folder / 'Project').is_dir():
+            state = folder / 'Project' / 'production.json'
+            return ('production', state) if state.exists() else ('missing', state)
+    return ('legacy', None)
+
+
+def owner_preview_paint(path):
+    import colorsys  # noqa: F401  (inside a function: not an import-time import)
+
+    return False
+"""
+
+DECISION_EVIDENCE = """'''Stand-in helper of run.py: the standard library only at import.'''
+import hashlib
+
+
+def build():
+    return 'decision-evidence-pinned'
+"""
+
+STAGE_REVIEW_EVIDENCE = """'''Stand-in helper of run.py: the standard library only at import.'''
+import json
+
+
+def collect():
+    return 'stage-review-pinned'
+"""
+
+PRODUCTION = "Pipeline/production"
+CLOSURE = (
+    ("production-run-py", f"{PRODUCTION}/run.py", RUN_PY),
+    ("decision-evidence-py", f"{PRODUCTION}/decision_evidence.py", DECISION_EVIDENCE),
+    ("stage-review-evidence-py", f"{PRODUCTION}/stage_review_evidence.py", STAGE_REVIEW_EVIDENCE),
+)
+CURRENT_OPTIONS = {
+    "resource_prefix": "v5f_",
+    "resource_group": "faixa25_v5",
+    "texture_set": "25-Faixa-Cintura",
+}
+LAYER_STACK_PATH = "Pipeline/painting/painter_layer_stack.py"
+
+
+def current_manifest(assets: Path) -> dict[str, Any]:
+    """The stand-in Wand manifest with the current-round sync: the 1c9a312a-shaped script, its
+    import of `run` and run's two helpers, the typed options and the masks by folder."""
+    manifest = wand_manifest(assets)
+    write(assets / LAYER_STACK_PATH, CURRENT_LAYER_STACK)
+    for _, path, text in CLOSURE:
+        write(assets / path, text)
+    manifest["inputs"] = [
+        *(i for i in manifest["inputs"] if i["input_id"] != "route-check-py"),
+        *(script_run.assets3d_input(i, "pipeline_script", p, assets) for i, p, _ in CLOSURE),
+    ]
+    args = manifest["instruction_sequence"]["steps"][1]["args"]
+    del args["masks"], args["mask_files"]
+    args.update(
+        mask_folder=f"{WAND}/paint/masks",
+        imports=["production-run-py"],
+        import_closure=["decision-evidence-py", "stage-review-evidence-py"],
+        **CURRENT_OPTIONS,
+    )
+    assert validation_errors(manifest, Schema.GOLDEN_PUBLIC) == []
+    return wand_manifest_unchecked(manifest, assets)
+
+
+def test_a_legacy_sync_keeps_its_command_line_and_imports(
+    manifest: dict[str, Any], assets: Path
+) -> None:
+    """No option, no closure: the legacy `--stack --masks --state` command line, the masks of the
+    lists, and the imports loaded as named."""
+    job = script_job_from_manifest(manifest, assets)
+    assert job.sync.options == ()
+    assert job.sync.load_order == job.sync.imports
+    assert [m.input_id for m in job.sync.masks] == manifest["instruction_sequence"]["steps"][1][
+        "args"
+    ]["masks"]
+
+
+def test_a_legacy_sync_script_without_the_flag_refuses_the_option(
+    manifest: dict[str, Any], assets: Path
+) -> None:
+    changed = copy.deepcopy(manifest)
+    changed["instruction_sequence"]["steps"][1]["args"]["resource_prefix"] = "v5f_"
+    with pytest.raises(RecorderError, match="defines no --resource-prefix option"):
+        script_job_from_manifest(changed, assets)
+
+
+def test_current_sync_passes_the_options_and_runs_the_pinned_closure(
+    painter: tuple[Any, ScriptSession],
+    assets: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The exact command line with the three options, the probe and the guard for that texture
+    set, and run.py with its two helpers loaded from their pinned bytes before it: decoy modules
+    and a live helper on `sys.path` are never used, and both are as before afterwards."""
+    manifest = current_manifest(assets)
+    job = script_job_from_manifest(manifest, assets)
+    assert [m.input_id for m in job.sync.load_order] == [
+        "decision-evidence-py",
+        "stage-review-evidence-py",
+        "production-run-py",
+    ]
+    assert job.sync.options == (
+        ("--resource-prefix", "v5f_"),
+        ("--resource-group", "faixa25_v5"),
+        ("--texture-set", "25-Faixa-Cintura"),
+    )
+    live = tmp_path / "live"
+    write(live / "decision_evidence.py", "def build():\n    return 'LIVE'\n")
+    monkeypatch.syspath_prepend(str(live))
+    decoys = {name: types.ModuleType(name) for name in ("run", "decision_evidence")}
+    for name, module in decoys.items():
+        monkeypatch.setitem(sys.modules, name, module)
+    monkeypatch.delitem(sys.modules, "stage_review_evidence", raising=False)
+    path = list(sys.path)
+    run = record(painter, manifest, assets, tmp_path)
+
+    assert all(sys.modules[name] is module for name, module in decoys.items())
+    assert "stage_review_evidence" not in sys.modules and sys.path == path
+    data = json.loads((run / "record.json").read_text(encoding="utf-8"))
+    assert record_problems(data) == []
+    synced = next(
+        o["value"]
+        for r in data["recordings"]
+        for o in r["outputs"]
+        if o["output_id"] == "script/s2"
+    )
+    assert synced["run_mark"] == "decision-evidence-pinned+stage-review-pinned"
+    assert synced["options"] == {
+        "prefix": "v5f_",
+        "group": "faixa25_v5",
+        "texture_set": "25-Faixa-Cintura",
+    }
+    argv = synced["argv"]
+    assert argv[0] == "sync" and argv[1::2][:3] == ["--stack", "--masks", "--state"]
+    assert argv[7:] == [
+        "--resource-prefix",
+        "v5f_",
+        "--resource-group",
+        "faixa25_v5",
+        "--texture-set",
+        "25-Faixa-Cintura",
+    ]
+    assert synced["imported"] == ["M_iron", "M_wood", "T_base"]
+
+
+def test_a_mask_folder_carries_more_bitmaps_than_a_schema_list_holds(assets: Path) -> None:
+    """The public schema bounds a list at 16 items and the sash has 20 bitmaps: as parallel lists
+    they fail the schema, by folder they pass it and all 20 load as the sync's masks."""
+    names = [f"M_m{i:02d}" for i in range(19)] + ["T_base"]
+    stack = {
+        "title": "twenty bitmaps",
+        "groups": [{"key": "g", "name": "G", "mask": None}],
+        "layers": [
+            *(
+                {"id": f"L{i:02d}", "group": "g", "name": n, "mask": n}
+                for i, n in enumerate(names[:-1])
+            ),
+            {"id": "B", "group": "g", "name": "Base", "mask": None, "base_tex": "T_base"},
+        ],
+    }
+    manifest = current_manifest(assets)
+    write(assets / WAND / "paint/stack-wand.json", json.dumps(stack))
+    for name in names:
+        write(assets / WAND / "paint/masks" / f"{name}.png", name.encode("ascii"))
+    masks = script_run.mask_inputs(f"{WAND}/paint/masks", names, assets)
+    manifest["inputs"] = [
+        *(i for i in manifest["inputs"] if not i["input_id"].startswith("mask-")),
+        *masks,
+    ]
+    manifest = wand_manifest_unchecked(manifest, assets)
+    assert validation_errors(manifest, Schema.GOLDEN_PUBLIC) == []
+    job = script_job_from_manifest(manifest, assets)
+    assert [m.input_id for m in job.sync.masks] == sorted(m["input_id"] for m in masks)
+    assert len(job.sync.masks) == 20
+    lists = copy.deepcopy(manifest)
+    args = lists["instruction_sequence"]["steps"][1]["args"]
+    del args["mask_folder"]
+    args["masks"] = [m["input_id"] for m in masks]
+    args["mask_files"] = [f"{name}.png" for name in names]
+    assert validation_errors(lists, Schema.GOLDEN_PUBLIC)
+
+
+def repinned(manifest: dict[str, Any], assets: Path, path: str, text: str) -> dict[str, Any]:
+    write(assets / path, text)
+    return wand_manifest_unchecked(manifest, assets)
+
+
+def with_sync_args(manifest: dict[str, Any], **args: Any) -> dict[str, Any]:
+    changed = copy.deepcopy(manifest)
+    changed["instruction_sequence"]["steps"][1]["args"].update(args)
+    return changed
+
+
+def with_input(
+    manifest: dict[str, Any], assets: Path, input_id: str, kind: str, path: str, text: str
+) -> dict[str, Any]:
+    write(assets / path, text)
+    changed = copy.deepcopy(manifest)
+    changed["inputs"].append(script_run.assets3d_input(input_id, kind, path, assets))
+    return changed
+
+
+@pytest.mark.parametrize(
+    ("change", "refusal"),
+    [
+        (lambda m, a: with_sync_args(m, texture_set="../x"), r"`texture_set` must match"),
+        (lambda m, a: with_sync_args(m, resource_prefix=5), r"`resource_prefix` must match"),
+        (
+            lambda m, a: with_sync_args(m, import_closure=["decision-evidence-py"]),
+            r"run\.py line \d+ imports stage_review_evidence when imported, which is neither .*"
+            r"\(Pipeline/production/stage_review_evidence\.py\)",
+        ),
+        (
+            lambda m, a: repinned(
+                m, a, f"{PRODUCTION}/run.py", RUN_PY + "\nfrom .decision_evidence import build\n"
+            ),
+            r"run\.py line \d+ imports \.decision_evidence outside a `try` that catches",
+        ),
+        (
+            lambda m, a: repinned(
+                m,
+                a,
+                f"{PRODUCTION}/run.py",
+                RUN_PY.replace("except ImportError:", "except ModuleNotFoundError:"),
+            ),
+            r"imports \.decision_evidence outside a `try` that catches ImportError",
+        ),
+        (
+            lambda m, a: with_sync_args(
+                m, import_closure=["decision-evidence-py", "decision-evidence-py"]
+            ),
+            "name a module twice",
+        ),
+        (
+            lambda m, a: with_sync_args(
+                with_input(
+                    m,
+                    a,
+                    "unrelated-py",
+                    "pipeline_script",
+                    f"{PRODUCTION}/unrelated.py",
+                    "import os\n",
+                ),
+                import_closure=["decision-evidence-py", "stage-review-evidence-py", "unrelated-py"],
+            ),
+            r"names \['unrelated-py'\], which no pinned import imports",
+        ),
+        (
+            lambda m, a: repinned(
+                m,
+                a,
+                f"{PRODUCTION}/stage_review_evidence.py",
+                "import numpy\n\n\ndef collect():\n    return 'x'\n",
+            ),
+            r"stage_review_evidence\.py line 1 imports numpy when imported",
+        ),
+        (
+            lambda m, a: repinned(
+                m,
+                a,
+                f"{PRODUCTION}/stage_review_evidence.py",
+                "from run import locate\n\n\ndef collect():\n    return 'x'\n",
+            ),
+            "form a cycle",
+        ),
+        (
+            lambda m, a: with_sync_args(
+                with_input(
+                    m,
+                    a,
+                    "unrelated-py",
+                    "pipeline_script",
+                    "Pipeline/qa/stage_review_evidence.py",
+                    "import os\n",
+                ),
+                import_closure=["decision-evidence-py", "unrelated-py"],
+            ),
+            r"imports stage_review_evidence when imported.*\(Pipeline/production/",
+        ),
+        (
+            lambda m, a: with_input(
+                m, a, "mask-notes", "recipe_json", f"{WAND}/paint/masks/notes.json", "{}"
+            ),
+            r"the mask folder .* also holds \['mask-notes'\]",
+        ),
+        (
+            lambda m, a: {
+                **m,
+                "inputs": [i for i in m["inputs"] if i["input_id"] != "mask-t_base"],
+            },
+            "references the bitmaps",
+        ),
+    ],
+)
+def test_a_current_sync_refuses_a_wrong_option_closure_or_mask_folder(
+    assets: Path, change: Any, refusal: str
+) -> None:
+    """Refused when the job loads, before Painter: an option of another shape, a missing,
+    duplicate, unreachable, unpinned (import-time third-party), cyclic or misplaced module, a mask
+    folder holding another input, or one missing a bitmap the stack references."""
+    manifest = current_manifest(assets)
+    assert script_job_from_manifest(manifest, assets).sync.options
+    with pytest.raises(RecorderError, match=refusal):
+        script_job_from_manifest(change(manifest, assets), assets)
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        # the probe is not sent: the guard probe twice instead
+        (
+            "probe = execute(PROJECT_PROBE_CODE)",
+            "probe = execute(GUARD_CODE.replace('__TS__', 'None'))",
+        ),
+        # the guard is sent for another texture set than the command line's
+        ("token = route_guard(a.texture_set, 'sync')", "token = route_guard(None, 'sync')"),
+    ],
+)
+def test_a_current_sync_refuses_probes_other_than_its_own(
+    painter: tuple[Any, ScriptSession], assets: Path, tmp_path: Path, old: str, new: str
+) -> None:
+    manifest = current_manifest(assets)
+    assert old in CURRENT_LAYER_STACK
+    changed = repinned(manifest, assets, LAYER_STACK_PATH, CURRENT_LAYER_STACK.replace(old, new))
+    with pytest.raises(RecorderError, match=r"sync ran \d Painter calls, not its route guard's 2"):
+        record(painter, changed, assets, tmp_path)
+    assert not list((tmp_path / "work").rglob("sync-state.json"))
+
+
+@pytest.mark.parametrize(
+    ("helper", "live"),
+    [
+        # a dynamic import static resolution cannot see
+        ("import importlib\n\nimportlib.import_module('uzp_live_helper')\n", "uzp_live_helper"),
+        # a standard-library name a live file on `sys.path` shadows
+        ("import colorsys\n", "colorsys"),
+        # a live submodule added to a standard-library package's `__path__`
+        (
+            "import importlib\nimport xml\n\nxml.__path__.insert(0, __LIVE__)\n"
+            "importlib.import_module('xml.uzp_live_sub')\n",
+            "xml.uzp_live_sub",
+        ),
+    ],
+)
+def test_a_current_sync_never_loads_a_live_module(
+    painter: tuple[Any, ScriptSession],
+    assets: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    helper: str,
+    live: str,
+) -> None:
+    """The closure passes, but at run time a helper imports a module that is neither pinned nor
+    the standard library: refused before the sync code reaches Painter, the live file never
+    runs, and `sys.meta_path` is as before."""
+    import xml
+
+    manifest = current_manifest(assets)
+    folder = tmp_path / "live"
+    text = helper.replace("__LIVE__", repr(str(folder)))
+    text += "\n\ndef collect():\n    return 'stage-review-pinned'\n"
+    changed = repinned(manifest, assets, f"{PRODUCTION}/stage_review_evidence.py", text)
+    write(folder / f"{live.rpartition('.')[2]}.py", "raise AssertionError('the live module ran')\n")
+    monkeypatch.syspath_prepend(str(folder))
+    monkeypatch.setattr(xml, "__path__", list(xml.__path__))  # restored after the test
+    monkeypatch.delitem(sys.modules, live, raising=False)
+    finders = list(sys.meta_path)
+    with pytest.raises(RecorderError, match=rf"the pinned sync imports \['{live}'\]"):
+        record(painter, changed, assets, tmp_path)
+    assert live not in sys.modules and sys.meta_path == finders
+    assert not list((tmp_path / "work").rglob("sync-state.json"))
+
+
+def test_a_refused_current_sync_restores_the_modules_and_path(
+    painter: tuple[Any, ScriptSession],
+    assets: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Inside a production character's layout the guard returns an attempt token: refused, and
+    `sys.modules` and `sys.path` are as before."""
+    manifest = current_manifest(assets)
+    (tmp_path / "Concept").mkdir()
+    (tmp_path / "Project").mkdir()
+    (tmp_path / "Project" / "production.json").write_text("{}", encoding="utf-8")
+    decoy = types.ModuleType("decision_evidence")
+    monkeypatch.setitem(sys.modules, "decision_evidence", decoy)
+    monkeypatch.delitem(sys.modules, "run", raising=False)
+    path = list(sys.path)
+    with pytest.raises(RecorderError, match="attempt token"):
+        record(painter, manifest, assets, tmp_path)
+    assert sys.modules["decision_evidence"] is decoy and "run" not in sys.modules
+    assert sys.path == path
+
+
 # --- the committed manifest against the real asset repository --------------------------------
 
 
