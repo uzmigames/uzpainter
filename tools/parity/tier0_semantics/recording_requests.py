@@ -41,6 +41,7 @@ from tools.parity.schemas import Schema, validation_errors
 from tools.parity.tier0_semantics import ao_operand_control as ao_control
 from tools.parity.tier0_semantics import padding_joint_bend as joint_bend
 from tools.parity.tier0_semantics import padding_plane_control as plane_control
+from tools.parity.tier0_semantics import padding_world_offset as world_offset
 from tools.parity.tier0_semantics import request_fixtures as rf
 from tools.parity.tier0_semantics import unreal_preset_control as unreal_control
 from tools.parity.tier0_semantics.corpus import (
@@ -336,6 +337,12 @@ REQUEST_FIXTURES[joint_bend.MESH] = (
     f"{FIXTURE_DIR}/meshes/{joint_bend.MESH}.obj",
     joint_bend.mesh,
 )
+# Item 2.7's world-offset probe: exact seam pairs at growing world offsets (far-turn arithmetic).
+REQUEST_FIXTURES[world_offset.MESH] = (
+    "mesh",
+    f"{FIXTURE_DIR}/meshes/{world_offset.MESH}.obj",
+    world_offset.mesh,
+)
 
 REQUEST_FIXTURES["tau-prism"] = (
     "mesh",
@@ -428,6 +435,7 @@ MESH_SETS = {
     "tau-prism": ["uzp_tau_prism"],
     plane_control.MESH: [plane_control.MATERIAL],
     joint_bend.MESH: [joint_bend.MATERIAL],
+    world_offset.MESH: [world_offset.MATERIAL],
     "window-side": ["uzp_window_side"],
     "corner-reach": ["uzp_corner"],
     "normal-combine": list(rf.COMBINE_SETS),
@@ -2290,6 +2298,7 @@ def later_goldens() -> list[Golden]:
         padding_tau_prism_probe(),
         plane_control.request(),
         joint_bend.request(),
+        world_offset.request(),
         padding_window_side_probe(),
         padding_normal_combine_probe(),
         padding_corner_reach_probe(),

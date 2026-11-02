@@ -27,6 +27,7 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
+from tools.parity.fit import padding_far32
 from tools.parity.fit.plane_transform_diagnostic import load_module, validate_record
 from tools.parity.schemas import REPO_ROOT
 from tools.parity.store.store import OracleStore, load_oracle, locate
@@ -382,6 +383,9 @@ PATCH_AFTER: dict[str, str] = {
     "walkdev": "island",
     **{name: "miter" for name in PATCHES if name.startswith("msin")},
 }
+# Fixed float32 models of the rigidly turned far distance (`padding_far32`).
+PATCHES.update(padding_far32.PATCHES)
+PATCH_AFTER.update(padding_far32.PATCH_AFTER)
 
 
 STEPS = {45: "infinite", 46: "infinite", 47: "passthrough", 48: "passthrough"}
