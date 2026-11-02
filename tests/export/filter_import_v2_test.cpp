@@ -402,6 +402,31 @@ int RunFilterImportV2Cases(const fs::path& work) {
     Expect(verified.has_value(), verified ? "" : verified.error().reason + ": " + verified.error().detail);
     check(verified->CaptureContextSha256() == store::ObservationKey(good.receipt.at("readback")),
           "the capture context hash is computed from the validated readback");
+    {
+        // The real bridge's receipt: `"params": source["parameters"]` keeps an integral double, while
+        // `assets snapshot` stores the canonical signature of the request derived from it.
+        Case bridge = Prepare(work / "import-bridge.uzp", fixed, "6f1c2a3e-0000-4000-8000-0000000a3633", 1.0);
+        const auto& sources = std::get<json::Array>(std::get<json::Object>(bridge.receipt.at("readback").data).at("sources").data);
+        std::get<json::Object>(bridge.receipt.at("signature").data)["params"] = std::get<json::Object>(sources[0].data).at("parameters");
+        const auto entries = store::ProjectSnapshots(*bridge.document->snapshot().project);
+        const core::Project bridgeScene = Prospective(*bridge.document->snapshot().project, FilterContext());
+        const json::Object capture = bridge.HostCapture();
+        const auto result = procedural::VerifyHostCapture(*bridge.store, bridgeScene, capture, bridge.Transport());
+        check(entries.size() == 1 && !(json::WriteCanonical(entries[0].signature) == json::WriteCanonical(bridge.receipt.at("signature"))) &&
+                  result.has_value(),
+              "a bridge receipt with an integral double binds the stored canonical signature" +
+                  (result ? std::string() : ": " + result.error().reason + ": " + result.error().detail));
+        // A stored signature that is not the canonical form of the receipt's request (same key, the
+        // parameter written back as a double) still refuses at the signature comparison.
+        core::Project tampered = bridgeScene;
+        json::Object& stored = std::get<json::Object>(tampered.extra.at(std::string(store::kSnapshotsKey)).data);
+        json::Object& entry = std::get<json::Object>(stored.begin()->second.data);
+        std::get<json::Object>(std::get<json::Object>(entry.at("signature").data).at("params").data)["amount"] = 1.0;
+        const auto refused = procedural::VerifyHostCapture(*bridge.store, tampered, capture, bridge.Transport());
+        check(!refused && refused.error().reason == procedural::kHostSourceStateMismatch,
+              "a stored signature that is not the receipt request's canonical one refuses" +
+                  (refused ? std::string(": accepted") : ": " + refused.error().reason));
+    }
 
     // H refusals, each on a changed artifact.
     const auto refusedHost = [&](const std::string& label, std::string_view reason, const std::function<void(Case&)>& change) {

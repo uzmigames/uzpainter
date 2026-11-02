@@ -506,10 +506,14 @@ std::expected<VerifiedHostMigration, ImportRefusal> VerifyHostCapture(
                                         [&](const store::InventoryPlane& p) { return p.row.plane_id == snapshot->plane_id; });
         Require(plane != inventory.planes.end(), kHostSourceStateMismatch, "the census holds no plane of the host snapshot");
 
-        // Bind the already validated H artifacts to the actual stored snapshot and census.
+        // Bind the already validated H artifacts to the actual stored snapshot and census. The store
+        // holds the canonical signature of the receipt's request (`assets snapshot` records
+        // `SignatureJson(RequestFromSignature(receipt.signature))`), so that is what is compared;
+        // the receipt's raw signature keeps the bridge's observed types (an integral double).
         Require(validated->CapturedProjectUuid() == store.project_uuid(), kHostSourceStateMismatch,
                 "the receipt was recorded for another project");
-        Require(SameTyped(validated->Signature(), snapshot->signature) && SameTyped(validated->Signature(), SignatureJson(*request)),
+        const Value receiptSignature = SignatureJson(validated->Request());
+        Require(SameTyped(receiptSignature, snapshot->signature) && SameTyped(receiptSignature, SignatureJson(*request)),
                 kHostSourceStateMismatch, "the receipt's signature is not the stored host snapshot's");
         const auto& signature = std::get<Object>(snapshot->signature.data);
         Require(signature.contains("asset") &&

@@ -434,14 +434,17 @@ std::expected<ValidatedFilterDestination, ImportRefusal> ExpectedDestination(
         const auto& contexts = joined.contexts;
         const auto& steps = joined.steps;
 
-        // 3. The starting shape of `base` and H's snapshot entry.
+        // 3. The starting shape of `base` and H's snapshot entry. `assets snapshot` stores the
+        // canonical signature of the receipt's request (`SignatureJson`, an integral double
+        // parameter written as an integer), not the receipt's raw signature, which keeps the
+        // bridge's observed types.
         const std::string signature = SignatureHash(host.Request());
         std::optional<store::SnapshotEntry> entry;
         for (store::SnapshotEntry& candidate : store::ProjectSnapshots(base)) {
             if (candidate.key == signature) entry = std::move(candidate);
         }
         Require(entry && entry->error.empty() && entry->source_metadata && entry->source_metadata->typed_effective_parameters &&
-                    entry->source_metadata->observed_resource_id && SameTyped(entry->signature, host.Signature()) &&
+                    entry->source_metadata->observed_resource_id && SameTyped(entry->signature, SignatureJson(host.Request())) &&
                     SameTyped(store::SourceMetadataJson(entry->signature, *entry->source_metadata),
                               store::SourceMetadataJson(entry->signature, host.Metadata())),
                 kTargetContextUnrepresentable, filter_gate::kHostSnapshot);

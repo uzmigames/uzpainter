@@ -37,7 +37,7 @@
   - The single failed native replay was rerun once: six of six values equal, three of three old handles refused and six nonempty compared-output traces. The previously green facade result remains applicable to the same fixture and pyapi binary `fdc13a8b4a03e3f12c3dff1d5dfa65a0ff67494b42605dac8c6d5420275449fb`; both APIs now pass. Native replay JUnit SHA-256: `f47f9ea45b0aa16207e5256262e54497d4268254effda72b91dceefd19b9d0fa`; private report SHA-256: `5a46294c87d6e9c77ead75319a9b76a4d33aad3eb5c0438d51d390816e8cec90`. This completes 2.6h and 2.6i for the independent OCIO256 no-plane V1 control. The old Legacy128 snapshot-backed Filter context differs; 2.6j, parent 2.6/3.2, capability promotion and effect execution remain open. This is scoped evidence, not a green full-suite result.
   - Evidence retention (2026-10-25). `python -m tools.parity.preserve_diagnostic_evidence` preserved both closed native replay reports before another pytest run, checking their pinned source hashes, copied bytes, unchanged source inventory and ZIP roundtrip. The new archive remains private: two files, 1052 source bytes, SHA-256 `ed7bf8f40d744587d71147e82ca4a694cc2288a69acb66c9b6483485448cee45`. The reusable helper creates no directory, never overwrites an existing destination, refuses repository paths and links, and prints only status/counts/hash; a failed partial archive remains identifiable and is not reported as complete. Ten authored tests cover roundtrip, refusals, changed sources and sanitized errors; Ruff/format/mypy pass. Original reports and earlier scratch helpers are preserved.
   - Durable V1 fixture helper (2026-10-25 local): `tools/parity/filter_observation_fixture.py` replaces the reusable scratch construction flow. It copies a hash-pinned closed private base into exclusively reserved private outputs, invokes explicitly pinned native binaries, derives IDs from the native projection, uses the shared admitted-payload validator and verifies open/save/close/reopen. Source hashes and closed-state checks run before and after, including failures; partial outputs and private diagnostics remain preserved and cannot be reused. The pyapi runner accepts the absolute-path script without the pytest-only WORK argument. Fifteen mocked boundary tests, Ruff, format and mypy passed; root/control static review passed. The reported two observations are paired imported recordings, not six getter comparisons or a new real replay. Existing real V1 evidence above remains the acceptance evidence; the original scratch helper is preserved.
-- [ ] 2.6j Compare both recordings of Filter steps 16-18 strictly against the independent observed fixture and retain the existing 19-24 restrictions. Trace compared outputs only, excluding fixture bookkeeping; any later capability promotion needs decision 112 evidence and coordinator review. None of 2.6f-2.6j closes parent 2.6/3.2, certifies a procedural family or admits effect execution.
+- [x] 2.6j (2026-11-02, decision 392; see "Original-H import and strict 16-24 replay") Compare both recordings of Filter steps 16-18 strictly against the independent observed fixture and retain the existing 19-24 restrictions. Trace compared outputs only, excluding fixture bookkeeping; any later capability promotion needs decision 112 evidence and coordinator review. None of 2.6f-2.6j closes parent 2.6/3.2, certifies a procedural family or admits effect execution.
   - V2 contract accepted (2026-10-25 local, decision 363): `docs/filter-observations-v2.md` defines explicit namespace dispatch, real snapshot host, original empty Paint, complete typed projection and authoritative inventory. Historical structural validation is pure; current lookup uses one locked inventory and the same Project. Store validates serialized links without a procedural dependency; every live lookup and the gated importer enforce the complete RequestFor/signature relation. The closed paired-scalar-rgb-to-user0-frozen-host-v1 relation preserves authenticated frozen output, not a reconstructed intrinsic operand. Trusted native proof must check actual raw upload and full-chain bits plus every sample's finite, bitwise readout fixed-point property. Historical H provenance remains honest; fresh F must supply the exact setup-once/probes-twice lifecycle and complete context. Claude owns native software and authored tests; no real V2 capture/import, old16-18 comparison, capability or parent completion follows from contract acceptance alone.
   - V2 store/provider software (2026-10-25 local): explicit V1/V2 dispatch, closed V2 capture/entry/context/proof shapes, pure complete historical inventory validation and current Filter lookup over exactly one authoritative inventory are implemented. The real host snapshot keeps /3 metadata; no observation host alias or executable Filter is introduced. Pure snapshot request guards moved to `src/procedural/snapshot_request.cpp`, shared without linking the store to procedural evaluation. Review added explicit Filter preset/image-input/scalar-domain refusals, including an input naming an already inventoried mesh. Authored tests cover typed values, closed schemas, historical stale save/reopen, complete census, corrupt active/inactive bytes and resources, foreign UUID, partial observations and prospective rollback without deadlock.
   - Validation: 12 focused nodes green on final code: three initial regressions, three rerun nodes and six real snapshot-provider reopen/bundle regressions. The store case-list wrapper executes all 24 native store cases; the V2 procedural case contains 19 checks. Initial failures were a test lambda capture, a missing link dependency and the shared fixture's non-normalized `__FILE__` path. A procedural build then reported success without relinking after a header edit; changing its include comment forced compilation. That incremental-build anomaly remains undiagnosed; no cache deletion or weakened assertion was used. Root verified all 15 final source hashes and seven log hashes; Ruff/format/mypy passed. Rerun JUnit SHA-256: `a26f68e7a43a55553103f0bf6992497f1df4db503be292b44f3b678e40aba03b`; provider JUnit SHA-256: `fe96ce6809a172b9b59854b14a098d32676fca129277186781ba80683198386e`. Synthetic proof records establish structural validation only; actual native proof and fresh F evidence remain subsequent work, with 2.6j and parents open.
@@ -725,3 +725,40 @@ distinct checks in the existing native union of 333.
 No original-H import, configured private replay, capability promotion, full-suite
 claim, push, PR or archive occurred. Item 2.6j and parents 2.6/3.2 remain open;
 the existing original-H mutation authorization question remains pending.
+
+### Original-H import and strict 16-24 replay (2026-11-02, decision 392)
+
+The prepared import first ran on 2026-11-02 with the exe built at 7a4260eb. It
+refused with `TARGET_CONTEXT_UNREPRESENTABLE` / `DESTINATION_HOST_SNAPSHOT`, and H
+stayed unchanged. Root cause, a production bug: the snapshot bridge writes the
+receipt's `signature.params` as observed, so integral floats stay doubles. H's
+receipt has three of them. `assets snapshot` stores `SignatureJson` of the derived
+request, which writes them as integers. `ExpectedDestination` and
+`VerifyHostCapture` compared the raw receipt signature typed with the stored one.
+The raw form hashes to a different key; the canonical form hashes to H's stored
+key. Authored fixtures always wrote the canonical form, so the bug never showed.
+Both guards now compare `SignatureJson(host.Request())`. Every other check is
+unchanged.
+
+Regression tests use the bridge-form receipt with authored values. They check that
+it differs typed from the stored signature and that both functions accept it. They
+also check that a stored signature with the same key, changed back to a double,
+still refuses (`DESTINATION_HOST_SNAPSHOT`, `HOST_SOURCE_STATE_MISMATCH`).
+Destination checks went from 66 to 69 and transaction checks from 97 to 99. Two
+pytest nodes passed; the transaction node was re-run by node id after its new
+negative case first expected the wrong refusal reason. Ruff passed. 9router review
+of the frozen diff: gpt-6-astra, gpt-6.1-sol, grok-4.6 and kimi-k3 all gave GO.
+Kimi's suggested `VerifyHostCapture` negative case was added.
+`RequestFromSignature` keeps every parameter and refuses invalid values, so it
+drops nothing.
+
+The fixed `zig-out/bin/UzPainter.exe` (SHA-256 `5647ee27...c0c6f4`) ran the
+unchanged prepared command once. Result: `status ok`, revision 7 -> 8,
+`verified_after_reopen`, entry key `43ca3879...1738`, H SHA-256 now
+`19c6e914...81e6`. The strict private replay
+(`tests/python/test_filter_context_capture_replay.py`, configured privately under
+`%LOCALAPPDATA%\UzPainter`) passed in 1 node. It covers F getters 6/6 and
+restrictions 12/12, independent old getters 6/6 and restrictions 12/12, traced
+outputs 6/6 and stale refusals 3/3, with the project unchanged. The pre-import
+backup was deleted after the replay passed. No capability promotion, parent
+2.6/3.2 closure, full-suite claim, push or archive follows from this.

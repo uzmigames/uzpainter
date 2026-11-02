@@ -29,7 +29,7 @@ def test_filter_import_v2_transaction_on_authored_evidence(
     lines = [line for line in proc.stdout.splitlines() if line.startswith(PREFIX)]
     assert len(lines) == 1, proc.stdout
     summary = json.loads(lines[0][len(PREFIX) :])
-    assert summary == {"checks": 97}
+    assert summary == {"checks": 99}
 
 
 def test_production_never_defines_test_only_filter_access() -> None:

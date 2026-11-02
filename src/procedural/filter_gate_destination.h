@@ -115,7 +115,8 @@ std::optional<ImportRefusal> ValidateFilterHostBinding(const AdmittedFilterCaptu
 ///    succeeded, step 14 succeeded or refused with TypeError, and steps 13, 15 and pre16 read one
 ///    typed map; outputs, inputs (empty), active output and resolution equal H's.
 /// 3. `kStartingShape`, `kHostSources`, `kHostSnapshot`: `base` is inside the section 11 starting
-///    table, holds H's snapshot entry (signature and /3 metadata), and its host Fill (if any) holds
+///    table, holds H's snapshot entry (the canonical `SignatureJson` of `host.Request()`, as
+///    `assets snapshot` stores it, and /3 metadata), and its host Fill (if any) holds
 ///    the bind of the H signature plus only the approved known constructor defaults.
 /// 4. `kFContext`, `kObservations`: the F set, stack, channels, host, initial Paint and Filter
 ///    states needed by the mapping are present, unraised and typed-equal in both pre16 frames; the

@@ -143,11 +143,10 @@ void Rebind(json::Object& record) {
 json::Value HostParameters() { return json::Object{{"amount", 0.5}, {"integer", std::int64_t{1}}}; }
 
 /// The authored record made to bind the authored H: the host source identity is the step-5
-/// resource, the host source parameters (every frame, and steps 13/15) are `HostParameters()`,
-/// steps 16-18 answer the Filter's pre16 leaves.
-json::Object Bound(json::Object record, const std::string& url) {
+/// resource, the host source parameters (every frame, and steps 13/15) are `parameters`
+/// (`HostParameters()` by default), steps 16-18 answer the Filter's pre16 leaves.
+json::Object Bound(json::Object record, const std::string& url, const json::Value& parameters = HostParameters()) {
     const json::Value wrapped = Wrapped(HostIdentity(url));
-    const json::Value parameters = HostParameters();
     for (std::size_t round = 0; round < 2; ++round) {
         const json::Value filterParameters = PreLeaf(record, round, "filter", "get_parameters");
         const json::Value filterIdentity = PreLeaf(record, round, "filter", "resource_id");
@@ -363,6 +362,10 @@ struct HOptions {
                           {"painter_side_sha256", core::Sha256Hex("authored painter side")}};
     float raster = 0.5f;
     bool persist = false;
+    /// The receipt's signature as the real bridge writes it: `"params": source["parameters"]`, the
+    /// observed types (an integral double stays a double), while the store records the canonical
+    /// `SignatureJson` of the request derived from it.
+    bool bridgeSignature = false;
     std::function<void(core::Project&)> amend;
 };
 
@@ -410,6 +413,9 @@ AuthoredH RecordH(const fs::path& file, const std::string& url, const json::Valu
                                                                       {"export1/user1.exr", core::Sha256Hex(rgb)},
                                                                       {"export2/user0.exr", core::Sha256Hex(scalar)},
                                                                       {"export2/user1.exr", core::Sha256Hex(rgb)}}}};
+                                           if (options.bridgeSignature) {
+                                               std::get<json::Object>(receipt.at("signature").data)["params"] = parameters;
+                                           }
                                            auto metadata = procedural::ReceiptSourceMetadata(receipt, url, *request);
                                            if (!metadata) {
                                                failure = metadata.error();
@@ -703,6 +709,32 @@ int RunFilterGateDestinationCases(const fs::path& work) {
             .ref.params["integer"] = std::int64_t{2};
         refuses("a host bound to other parameters", procedural::kTargetContextUnrepresentable, gate::kHostSources,
                 expected(f, rebound));
+    }
+
+    // The real bridge's receipt: an integral double host parameter stays a double in the receipt's
+    // signature, while `assets snapshot` stores the canonical signature of the derived request, as
+    // in the original H. The binding compares the canonical form; a stored signature that is not the
+    // receipt request's still refuses.
+    {
+        const json::Value bridgeParameters = json::Object{{"amount", 0.5}, {"integer", std::int64_t{1}}, {"level", 15.0}};
+        HOptions bridge;
+        bridge.bridgeSignature = true;
+        const AuthoredH b = RecordH(work / "h-bridge.uzp", url, bridgeParameters, outputs, active, resolution, bridge);
+        const Slices fb = slices(Bound(authored, url, bridgeParameters));
+        const auto entries = store::ProjectSnapshots(b.base);
+        check(entries.size() == 1 &&
+                  !(json::WriteCanonical(entries[0].signature) == json::WriteCanonical(b.artifacts->Signature())) &&
+                  json::WriteCanonical(entries[0].signature) == json::WriteCanonical(procedural::SignatureJson(b.artifacts->Request())),
+              "the bridge receipt's raw signature differs from the stored canonical one");
+        const auto result = procedural::ExpectedDestination(*fb.capture, *fb.panels, *fb.trace, *fb.settings, *b.artifacts, b.base);
+        check(result.has_value(), "the bridge receipt binds the stored canonical snapshot (" + detail(result) + ")");
+        core::Project tampered = b.base;
+        json::Object& stored = std::get<json::Object>(tampered.extra.at(std::string(store::kSnapshotsKey)).data);
+        json::Object& entry = std::get<json::Object>(stored.begin()->second.data);
+        std::get<json::Object>(std::get<json::Object>(entry.at("signature").data).at("params").data)["level"] = 15.0;
+        refuses("a stored signature that is not the canonical request", procedural::kTargetContextUnrepresentable,
+                gate::kHostSnapshot,
+                procedural::ExpectedDestination(*fb.capture, *fb.panels, *fb.trace, *fb.settings, *b.artifacts, tampered));
     }
 
     // The host reference and the layers' remaining members: anything but the plain bind refuses.

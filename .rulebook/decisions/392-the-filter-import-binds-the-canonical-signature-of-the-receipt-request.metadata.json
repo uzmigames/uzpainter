@@ -1,0 +1,11 @@
+{
+  "id": 392,
+  "slug": "the-filter-import-binds-the-canonical-signature-of-the-receipt-request",
+  "title": "The Filter import binds the canonical signature of the receipt's request",
+  "status": "accepted",
+  "date": "2026-11-02",
+  "relatedTasks": [
+    "phase3.1_proc-backend-seam"
+  ],
+  "supersededBy": null
+}

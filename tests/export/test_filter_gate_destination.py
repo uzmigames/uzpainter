@@ -137,4 +137,4 @@ def test_filter_gate_destination_on_authored_evidence(
         line[len(prefix) :] for line in result.stdout.splitlines() if line.startswith(prefix)
     ]
     assert len(summaries) == 1, result.stdout
-    assert json.loads(summaries[0]) == {"checks": 66}
+    assert json.loads(summaries[0]) == {"checks": 69}
