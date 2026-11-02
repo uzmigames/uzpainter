@@ -80,8 +80,12 @@ struct CapabilityReport {
     bool softwareAdapter = false;
     std::string featureLevel;
     std::string shaderModel;
-    bool rayTracing = false;  ///< Acceleration structures (DXR Tier 1.0+).
-    bool rayQuery = false;    ///< Inline ray queries (DXR Tier 1.1 and SM 6.6, UZP-MOD-004).
+    bool rayTracing = false;  ///< Acceleration structures (DXR Tier 1.0+; Vulkan VK_KHR_acceleration_structure).
+    /// Inline ray queries (DX12: DXR Tier 1.1 and SM 6.6, UZP-MOD-004; Vulkan: the three
+    /// extensions and two features of UZP-MOD-007, enabled on the device).
+    bool rayQuery = false;
+    /// What keeps inline ray queries off, by name (`ray_query_missing`); empty when `rayQuery`.
+    std::vector<std::string> rayQueryMissing;
     std::vector<FormatCapability> formats;
     DescriptorCapacities descriptors;
     VramReport vram;

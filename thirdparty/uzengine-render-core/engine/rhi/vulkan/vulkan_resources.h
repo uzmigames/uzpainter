@@ -1,3 +1,5 @@
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-007. Original: UzEngine runtime/engine/rhi/vulkan/vulkan_resources.h at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+
 #pragma once
 
 /// Vulkan backend resource storage types.
@@ -264,6 +266,60 @@ struct VulkanPipeline {
     uint32_t             generation = 0;
     /// Backend-agnostic creation parameters for debugging and hot-reload.
     RHIGraphicsPipelineDesc desc = {};
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UZP-MOD-007: VulkanBLAS / VulkanTLAS — acceleration structures (VK_KHR_acceleration_structure)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Internal storage for a Vulkan bottom-level acceleration structure (UZP-MOD-007).
+///
+/// Owns the `VkAccelerationStructureKHR`, its storage buffer (offset 0) and a scratch buffer
+/// aligned to `minAccelerationStructureScratchOffsetAlignment`, sized for a build and, with
+/// `AllowUpdate`, for an update. The geometry descriptions and primitive counts are kept for the
+/// build commands. Destroyed only once no submitted work uses it (the caller's fence).
+struct VulkanBLAS {
+    VkAccelerationStructureKHR handle = VK_NULL_HANDLE;
+    VkBuffer             resultBuffer = VK_NULL_HANDLE;
+    VmaAllocation        resultAllocation = nullptr;
+    VkBuffer             scratchBuffer = VK_NULL_HANDLE;
+    VmaAllocation        scratchAllocation = nullptr;
+    uint64_t             scratchAddress = 0;
+    uint64_t             scratchSizeBytes = 0;   ///< Allocated: the build size, or the update size when larger.
+    uint64_t             buildScratchBytes = 0;
+    uint64_t             updateScratchBytes = 0;
+    uint64_t             resultSizeBytes = 0;
+    /// `vkGetAccelerationStructureDeviceAddressKHR` (TLAS instances reference it).
+    uint64_t             deviceAddress = 0;
+    VkBuildAccelerationStructureFlagsKHR buildFlags = 0;
+    std::vector<VkAccelerationStructureGeometryKHR> geometries;
+    std::vector<uint32_t> primitiveCounts;
+    /// A list holding a build was submitted (an update needs one first).
+    bool                 built = false;
+    uint32_t             generation = 0;
+};
+
+/// Internal storage for a Vulkan top-level acceleration structure (UZP-MOD-007), sized for
+/// `maxInstanceCount` instances of `VkAccelerationStructureInstanceKHR` (the 64-byte layout of
+/// `D3D12_RAYTRACING_INSTANCE_DESC`).
+struct VulkanTLAS {
+    VkAccelerationStructureKHR handle = VK_NULL_HANDLE;
+    VkBuffer             resultBuffer = VK_NULL_HANDLE;
+    VmaAllocation        resultAllocation = nullptr;
+    VkBuffer             scratchBuffer = VK_NULL_HANDLE;
+    VmaAllocation        scratchAllocation = nullptr;
+    uint64_t             scratchAddress = 0;
+    uint64_t             scratchSizeBytes = 0;   ///< Allocated: the build size, or the update size when larger.
+    uint64_t             buildScratchBytes = 0;
+    uint64_t             updateScratchBytes = 0;
+    uint64_t             resultSizeBytes = 0;
+    uint64_t             deviceAddress = 0;
+    uint32_t             maxInstanceCount = 0;
+    /// The instance count of the last submitted build (an update keeps it).
+    uint32_t             builtInstanceCount = 0;
+    VkBuildAccelerationStructureFlagsKHR buildFlags = 0;
+    bool                 built = false;
+    uint32_t             generation = 0;
 };
 
 } // namespace uz

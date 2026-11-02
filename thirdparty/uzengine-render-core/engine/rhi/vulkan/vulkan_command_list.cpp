@@ -1,4 +1,4 @@
-// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-011, UZP-MOD-012, UZP-MOD-013. Original: UzEngine runtime/engine/rhi/vulkan/vulkan_command_list.cpp at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-007, UZP-MOD-011, UZP-MOD-012, UZP-MOD-013. Original: UzEngine runtime/engine/rhi/vulkan/vulkan_command_list.cpp at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
 
 /// Vulkan Command List Implementation
 ///
@@ -27,7 +27,9 @@
 #include "log.h"
 #include "profiler.h"
 
+#include <algorithm>
 #include <cstring>
+#include <vector>
 
 namespace uz {
 
@@ -230,6 +232,10 @@ void VulkanCommandList::Begin() {
     m_writtenBindingsMask = 0;
     m_writtenStorageBuffersMask = 0;  // UZP-MOD-013
     m_descriptorSetFailures = 0;      // UZP-MOD-013
+    m_accelerationStructureWritten = false;  // UZP-MOD-007
+    m_accelerationStructureFailures = 0;     // UZP-MOD-007
+    m_pendingBLASBuilds.clear();             // UZP-MOD-007
+    m_pendingTLASBuilds.clear();             // UZP-MOD-007
     m_computePipelineBound = false;
 }
 
@@ -279,7 +285,20 @@ void VulkanCommandList::Execute() {
     m_lastSubmitResult = result;  // UZP-MOD-011: read back through LastSubmitResult()
     if (result != VK_SUCCESS) {
         UZ_LOG(RHI, Error, "vkQueueSubmit failed, result={}", static_cast<int>(result));
+    } else {
+        // UZP-MOD-007: a submitted list's builds count as built for every later list (queue order).
+        for (const RHIBLASHandle blas : m_pendingBLASBuilds) {
+            if (auto* data = m_device->GetBLASPool().Get(blas.index, blas.generation)) data->built = true;
+        }
+        for (const auto& [tlas, count] : m_pendingTLASBuilds) {
+            if (auto* data = m_device->GetTLASPool().Get(tlas.index, tlas.generation)) {
+                data->built = true;
+                data->builtInstanceCount = count;
+            }
+        }
     }
+    m_pendingBLASBuilds.clear();
+    m_pendingTLASBuilds.clear();
 
     // Clear pending semaphores so subsequent Execute() calls in the same frame
     // (e.g., compute or copy submissions) don't re-use them.
@@ -770,7 +789,7 @@ VkDescriptorSet VulkanCommandList::AllocateAndCopyDescriptorSet() {
     //   - Bindings 16 (s0) and 17 (s1) are immutable samplers — MUST NOT be copied (Vulkan spec §14.2.3)
     constexpr uint32_t kImmutableS0 = 16;
     constexpr uint32_t kImmutableS1 = 17;
-    VkCopyDescriptorSet copies[kTotalBindings] = {};
+    VkCopyDescriptorSet copies[kTotalBindings + 1] = {};  // UZP-MOD-007: + binding 80
     uint32_t copyCount = 0;
     uint64_t mask = m_writtenBindingsMask;
     while (mask) {
@@ -795,6 +814,16 @@ VkDescriptorSet VulkanCommandList::AllocateAndCopyDescriptorSet() {
         copies[copyCount].srcBinding      = i;
         copies[copyCount].dstSet          = newSet;
         copies[copyCount].dstBinding      = i;
+        copies[copyCount].descriptorCount = 1;
+        ++copyCount;
+    }
+    // UZP-MOD-007: the acceleration structure, when written since Begin.
+    if (m_accelerationStructureWritten) {
+        copies[copyCount].sType           = VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET;
+        copies[copyCount].srcSet          = m_descriptorSets[m_frameIndex];
+        copies[copyCount].srcBinding      = kAccelerationStructureBinding;
+        copies[copyCount].dstSet          = newSet;
+        copies[copyCount].dstBinding      = kAccelerationStructureBinding;
         copies[copyCount].descriptorCount = 1;
         ++copyCount;
     }
@@ -1436,6 +1465,202 @@ void VulkanCommandList::EndRenderPass() {
         }
         m_tempImageViewCount = 0;
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UZP-MOD-007: Acceleration-structure builds and binding
+// ─────────────────────────────────────────────────────────────────────────────
+
+void VulkanCommandList::AccelerationStructureBuildBarrier() {
+    // Every earlier command (shader reads of a structure rebuilt in place, writes of the inputs,
+    // an earlier build's scratch) before this build's reads and writes.
+    VkMemoryBarrier2 barrier = {};
+    barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
+    barrier.srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    barrier.srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT;
+    barrier.dstStageMask = VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR;
+    barrier.dstAccessMask = VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR |
+                            VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_2_SHADER_READ_BIT;
+    VkDependencyInfo dep = {};
+    dep.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dep.memoryBarrierCount = 1;
+    dep.pMemoryBarriers = &barrier;
+    vkCmdPipelineBarrier2KHR(m_commandBuffers[m_frameIndex], &dep);
+}
+
+bool VulkanCommandList::ResolveScratch(RHIBufferHandle scratchBuffer, uint64_t ownAddress, uint64_t required,
+                                       const char* what, uint64_t& address) {
+    address = ownAddress;
+    if (!scratchBuffer.IsValid()) return true;
+    const auto* buf = m_device->GetBufferPool().Get(scratchBuffer.index, scratchBuffer.generation);
+    const uint64_t alignment = std::max<uint64_t>(m_device->ScratchAlignment(), 1);
+    if (!buf || buf->buffer == VK_NULL_HANDLE || buf->desc.sizeBytes < required || buf->gpuAddress % alignment != 0 ||
+        !(HasFlag(buf->desc.usage, RHIBufferUsage::UnorderedAccess) ||
+          HasFlag(buf->desc.usage, RHIBufferUsage::StructuredBuffer))) {
+        UZ_LOG(RHI, Error, "{}: the scratch buffer is not live, smaller than {} bytes, not a storage buffer or "
+               "not aligned to {} bytes", what, required, alignment);
+        return false;
+    }
+    address = buf->gpuAddress;
+    return true;
+}
+
+void VulkanCommandList::BuildBLAS(RHIBLASHandle blas, RHIBufferHandle scratchBuffer, bool update) {
+    auto* data = m_device->GetBLASPool().Get(blas.index, blas.generation);
+    if (!data || data->handle == VK_NULL_HANDLE) {
+        UZ_LOG(RHI, Error, "BuildBLAS: invalid BLAS handle");
+        ++m_accelerationStructureFailures;
+        return;
+    }
+    if (update && ((data->buildFlags & VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR) == 0 ||
+                   !BLASBuilt(blas, data->built))) {
+        UZ_LOG(RHI, Error, "BuildBLAS: an update needs AllowUpdate and an earlier build");
+        ++m_accelerationStructureFailures;
+        return;
+    }
+    uint64_t scratch = 0;
+    if (!ResolveScratch(scratchBuffer, data->scratchAddress, update ? data->updateScratchBytes : data->buildScratchBytes,
+                        "BuildBLAS", scratch)) {
+        ++m_accelerationStructureFailures;
+        return;
+    }
+    AccelerationStructureBuildBarrier();
+    VkAccelerationStructureBuildGeometryInfoKHR info = {};
+    info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+    info.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+    info.flags = data->buildFlags;
+    info.mode = update ? VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR : VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+    info.srcAccelerationStructure = update ? data->handle : VK_NULL_HANDLE;
+    info.dstAccelerationStructure = data->handle;
+    info.geometryCount = static_cast<uint32_t>(data->geometries.size());
+    info.pGeometries = data->geometries.data();
+    info.scratchData.deviceAddress = scratch;
+    std::vector<VkAccelerationStructureBuildRangeInfoKHR> ranges(data->primitiveCounts.size());
+    for (size_t i = 0; i < ranges.size(); ++i) ranges[i].primitiveCount = data->primitiveCounts[i];
+    const VkAccelerationStructureBuildRangeInfoKHR* rangePointer = ranges.data();
+    vkCmdBuildAccelerationStructuresKHR(m_commandBuffers[m_frameIndex], 1, &info, &rangePointer);
+    m_pendingBLASBuilds.push_back(blas);
+}
+
+void VulkanCommandList::BuildTLAS(RHITLASHandle tlas, RHIBufferHandle instanceBuffer, uint32_t instanceCount,
+                                  RHIBufferHandle scratchBuffer, bool update) {
+    auto* data = m_device->GetTLASPool().Get(tlas.index, tlas.generation);
+    if (!data || data->handle == VK_NULL_HANDLE) {
+        UZ_LOG(RHI, Error, "BuildTLAS: invalid TLAS handle");
+        ++m_accelerationStructureFailures;
+        return;
+    }
+    const auto* instances = m_device->GetBufferPool().Get(instanceBuffer.index, instanceBuffer.generation);
+    if (!instances || instances->buffer == VK_NULL_HANDLE ||
+        !HasFlag(instances->desc.usage, RHIBufferUsage::AccelerationStructureBuildInput) ||
+        instances->desc.sizeBytes < uint64_t{instanceCount} * sizeof(VkAccelerationStructureInstanceKHR) ||
+        instances->gpuAddress % 16 != 0) {
+        UZ_LOG(RHI, Error, "BuildTLAS: the instance buffer is not live, lacks AccelerationStructureBuildInput, holds "
+               "fewer than {} instances or is not 16-byte aligned", instanceCount);
+        ++m_accelerationStructureFailures;
+        return;
+    }
+    if (instanceCount > data->maxInstanceCount) {
+        UZ_LOG(RHI, Error, "BuildTLAS: {} instances exceed the TLAS's {}", instanceCount, data->maxInstanceCount);
+        ++m_accelerationStructureFailures;
+        return;
+    }
+    uint32_t builtCount = 0;
+    if (update && ((data->buildFlags & VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR) == 0 ||
+                   !TLASBuilt(tlas, data->built, &builtCount) || instanceCount != builtCount)) {
+        UZ_LOG(RHI, Error, "BuildTLAS: an update needs AllowUpdate, an earlier build and its instance count");
+        ++m_accelerationStructureFailures;
+        return;
+    }
+    uint64_t scratch = 0;
+    if (!ResolveScratch(scratchBuffer, data->scratchAddress, update ? data->updateScratchBytes : data->buildScratchBytes,
+                        "BuildTLAS", scratch)) {
+        ++m_accelerationStructureFailures;
+        return;
+    }
+    AccelerationStructureBuildBarrier();
+    VkAccelerationStructureGeometryKHR geometry = {};
+    geometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+    geometry.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
+    geometry.geometry.instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
+    geometry.geometry.instances.arrayOfPointers = VK_FALSE;
+    geometry.geometry.instances.data.deviceAddress = instances->gpuAddress;
+    VkAccelerationStructureBuildGeometryInfoKHR info = {};
+    info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+    info.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+    info.flags = data->buildFlags;
+    info.mode = update ? VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR : VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+    info.srcAccelerationStructure = update ? data->handle : VK_NULL_HANDLE;
+    info.dstAccelerationStructure = data->handle;
+    info.geometryCount = 1;
+    info.pGeometries = &geometry;
+    info.scratchData.deviceAddress = scratch;
+    VkAccelerationStructureBuildRangeInfoKHR range = {};
+    range.primitiveCount = instanceCount;
+    const VkAccelerationStructureBuildRangeInfoKHR* rangePointer = &range;
+    vkCmdBuildAccelerationStructuresKHR(m_commandBuffers[m_frameIndex], 1, &info, &rangePointer);
+    m_pendingTLASBuilds.emplace_back(tlas, instanceCount);
+}
+
+bool VulkanCommandList::BLASBuilt(RHIBLASHandle blas, bool committed) const {
+    if (committed) return true;
+    return std::find(m_pendingBLASBuilds.begin(), m_pendingBLASBuilds.end(), blas) != m_pendingBLASBuilds.end();
+}
+
+bool VulkanCommandList::TLASBuilt(RHITLASHandle tlas, bool committed, uint32_t* instanceCount) const {
+    // The latest build of this list wins over the submitted one.
+    for (auto it = m_pendingTLASBuilds.rbegin(); it != m_pendingTLASBuilds.rend(); ++it) {
+        if (it->first == tlas) {
+            if (instanceCount) *instanceCount = it->second;
+            return true;
+        }
+    }
+    if (!committed) return false;
+    if (instanceCount) {
+        const auto* data = m_device->GetTLASPool().Get(tlas.index, tlas.generation);
+        *instanceCount = data ? data->builtInstanceCount : 0;
+    }
+    return true;
+}
+
+void VulkanCommandList::UAVBarrierAS() {
+    // Builds before every later read of a structure: a TLAS build reading its BLASes, ray queries.
+    VkMemoryBarrier2 barrier = {};
+    barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
+    barrier.srcStageMask = VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR;
+    barrier.srcAccessMask = VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
+    barrier.dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    barrier.dstAccessMask = VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_2_SHADER_READ_BIT;
+    VkDependencyInfo dep = {};
+    dep.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dep.memoryBarrierCount = 1;
+    dep.pMemoryBarriers = &barrier;
+    vkCmdPipelineBarrier2KHR(m_commandBuffers[m_frameIndex], &dep);
+}
+
+void VulkanCommandList::SetComputeAccelerationStructure(RHITLASHandle tlas) {
+    const auto* data = m_device->GetTLASPool().Get(tlas.index, tlas.generation);
+    if (!m_device->SupportsInlineRayQuery() || !data || data->handle == VK_NULL_HANDLE ||
+        !TLASBuilt(tlas, data->built, nullptr)) {
+        UZ_LOG(RHI, Error, "SetComputeAccelerationStructure: inline ray queries are off or the TLAS is not built");
+        ++m_accelerationStructureFailures;
+        return;
+    }
+    VkWriteDescriptorSetAccelerationStructureKHR asWrite = {};
+    asWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+    asWrite.accelerationStructureCount = 1;
+    asWrite.pAccelerationStructures = &data->handle;
+    VkWriteDescriptorSet write = {};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.pNext = &asWrite;
+    write.dstSet = m_descriptorSets[m_frameIndex];
+    write.dstBinding = kAccelerationStructureBinding;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+    vkUpdateDescriptorSets(m_device->GetVkDevice(), 1, &write, 0, nullptr);
+    UZ_STAT_INCREMENT(RHI, VkDescriptorWrites);
+    m_accelerationStructureWritten = true;
+    m_descriptorsDirty = true;
 }
 
 } // namespace uz

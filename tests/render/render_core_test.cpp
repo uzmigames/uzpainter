@@ -1736,6 +1736,8 @@ int RunReadbackKernel(const fs::path& dir) {
 int RunUvRasterCase(std::string_view mode, const fs::path& dir);
 /// The `vulkan-*` cases (tests/render/vulkan_test.cpp); -1 for any other mode.
 int RunVulkanCase(std::string_view mode, const fs::path& dir);
+/// The ray-query cases (tests/render/ray_query_test.cpp); -1 for any other mode.
+int RunRayQueryCase(std::string_view mode, const fs::path& dir);
 
 int main(int argc, char** argv) {
     const std::string_view mode = argc > 1 ? argv[1] : "";
@@ -1744,13 +1746,14 @@ int main(int argc, char** argv) {
     if (mode == "readback-layout") return RunReadbackLayout();
     if (mode == "image-reference") return RunImagePassCase(mode, {});
     if (mode == "vulkan-qualify") return RunVulkanCase(mode, {});
+    if (mode == "ray-query-reference") return RunRayQueryCase(mode, {});
     if (argc < 3) {
         std::fprintf(stderr,
                      "usage: uzp-render-tests xxhash | admission | readback-layout | kernel-cache | "
                      "dispatch | deadline | device-removed | unavailable | capabilities | "
                      "readback-pitch | readback-exact | readback-drain | readback-failure | "
                      "readback-kernel | uv-raster-* | vulkan-qualify | vulkan-device | vulkan-faults | vulkan-readback | "
-                     "vulkan-uv-raster | vulkan-image-passes | "
+                     "vulkan-uv-raster | vulkan-image-passes | ray-query-reference | vulkan-ray-query | dx12-ray-query | "
                      "image-* "
                      "<work-dir>\n");
         return 2;
@@ -1774,6 +1777,7 @@ int main(int argc, char** argv) {
     else if (mode == "readback-failure") code = RunReadbackFailure(dir);
     else if (mode == "readback-kernel") code = RunReadbackKernel(dir);
     else if (const int uv = RunUvRasterCase(mode, dir); uv >= 0) code = uv;
+    else if (const int rayQuery = RunRayQueryCase(mode, dir); rayQuery >= 0) code = rayQuery;
     else if (const int vulkan = RunVulkanCase(mode, dir); vulkan >= 0) code = vulkan;
     else if (const int image = RunImagePassCase(mode, dir); image >= 0) code = image;
     else std::fprintf(stderr, "unknown case %.*s\n", static_cast<int>(mode.size()), mode.data());

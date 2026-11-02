@@ -236,7 +236,16 @@ struct VulkanVram {
 /// descriptors one dispatch binds (`VulkanDescriptorModel`: sampled images, uniform buffers and
 /// storage images as `shaderResources`; samplers); the VRAM of `DeriveVulkanVram` (dedicated =
 /// the device-local heaps, shared = the others); and the admission of
-/// `DeriveVulkanAdmissionBudget`. No ray tracing is reported (phase3.2).
+/// `DeriveVulkanAdmissionBudget`; acceleration structures and inline ray queries from
+/// `VulkanRayQueryMissing` (phase3.2; `QueryCapabilities` also checks what the created device
+/// enabled).
+/// The items the device record lacks for inline ray queries (phase3.2_vulkan-ray-tracing item 2.5,
+/// decision 372), in order: the extensions VK_KHR_acceleration_structure,
+/// VK_KHR_deferred_host_operations and VK_KHR_ray_query, then the features accelerationStructure
+/// and rayQuery (a feature of an unexposed extension is not listed: its extension is). Empty when
+/// the vendored backend enables inline ray queries on it.
+[[nodiscard]] std::vector<std::string> VulkanRayQueryMissing(const VulkanDeviceRecord& device);
+
 [[nodiscard]] CapabilityReport VulkanCapabilityReport(const VulkanDeviceRecord& device,
                                                       const AdmissionPolicy& policy);
 

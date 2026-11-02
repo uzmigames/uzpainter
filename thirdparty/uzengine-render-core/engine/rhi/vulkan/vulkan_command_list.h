@@ -1,4 +1,4 @@
-// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-011, UZP-MOD-013. Original: UzEngine runtime/engine/rhi/vulkan/vulkan_command_list.h at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-007, UZP-MOD-011, UZP-MOD-013. Original: UzEngine runtime/engine/rhi/vulkan/vulkan_command_list.h at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
 
 #pragma once
 
@@ -28,6 +28,8 @@
 #include <vulkan/vulkan.h>
 
 #include <cstdint>
+#include <utility>
+#include <vector>
 
 // Forward declare VMA types (same pattern as vulkan_resources.h).
 struct VmaAllocation_T;
@@ -44,6 +46,10 @@ static constexpr uint32_t kVulkanFrameCount = 3;
 /// (`[[vk::binding(64 + n, 0)]]` in the shaders; no DXC register shift maps to them).
 static constexpr uint32_t kStorageBufferBindingOffset = 64;
 static constexpr uint32_t kMaxStorageBufferBindings = 16;
+/// UZP-MOD-007: the acceleration-structure binding of inline-ray-query kernels
+/// (`[[vk::binding(80, 0)]] RaytracingAccelerationStructure`), present in the layout only when
+/// the device enabled inline ray queries.
+static constexpr uint32_t kAccelerationStructureBinding = 80;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // VulkanCommandList
@@ -136,6 +142,28 @@ public:
     /// to submit the list.
     uint32_t DescriptorSetFailures() const { return m_descriptorSetFailures; }
 
+    // ── UZP-MOD-007: acceleration structures (VK_KHR_acceleration_structure) ──
+
+    /// Records a BLAS build (`update`: an in-place update, which needs `AllowUpdate` and an earlier
+    /// build) into the BLAS's own scratch, or into `scratchBuffer` (a storage buffer large enough
+    /// and aligned to `minAccelerationStructureScratchOffsetAlignment`). A barrier first orders
+    /// every earlier command before the build. Refused (logged, counted) when invalid.
+    void BuildBLAS(RHIBLASHandle blas, RHIBufferHandle scratchBuffer, bool update = false) override;
+    /// Records a TLAS build from `instanceCount` 64-byte `VkAccelerationStructureInstanceKHR`
+    /// records (the layout of `D3D12_RAYTRACING_INSTANCE_DESC`) at the start of `instanceBuffer`,
+    /// which needs `AccelerationStructureBuildInput` and a 16-byte aligned address. An update keeps
+    /// the instance count of the last build.
+    void BuildTLAS(RHITLASHandle tlas, RHIBufferHandle instanceBuffer, uint32_t instanceCount,
+                   RHIBufferHandle scratchBuffer, bool update = false) override;
+    /// Orders the builds before every later read of an acceleration structure (a TLAS build reading
+    /// its BLASes, ray queries in any stage).
+    void UAVBarrierAS() override;
+    /// Writes a built `tlas` at binding 80 (`kAccelerationStructureBinding`) for the next dispatches.
+    void SetComputeAccelerationStructure(RHITLASHandle tlas);
+    /// The acceleration-structure commands refused since `Begin` (they recorded nothing), so a
+    /// caller can refuse to submit the list.
+    uint32_t AccelerationStructureFailures() const { return m_accelerationStructureFailures; }
+
     /// Submits an indexed draw call via `vkCmdDrawIndexed`.
     void DrawIndexed(uint32_t indexCount, uint32_t instanceCount,
                      uint32_t firstIndex, int32_t vertexOffset,
@@ -199,6 +227,13 @@ private:
     /// draw call its own immutable snapshot of descriptor state.
     VkDescriptorSet AllocateAndCopyDescriptorSet();
 
+    /// UZP-MOD-007: the barrier recorded before each acceleration-structure build.
+    void AccelerationStructureBuildBarrier();
+    /// UZP-MOD-007: the scratch device address of a build: `ownAddress`, or the override buffer's
+    /// after checking it; false (logged) when the override is unusable.
+    bool ResolveScratch(RHIBufferHandle scratchBuffer, uint64_t ownAddress, uint64_t required, const char* what,
+                        uint64_t& address);
+
     VulkanDevice*        m_device = nullptr;
     VkCommandPool        m_commandPools[kVulkanFrameCount] = {};
     VkCommandBuffer      m_commandBuffers[kVulkanFrameCount] = {};
@@ -224,6 +259,18 @@ private:
     uint32_t             m_writtenStorageBuffersMask = 0;
     /// UZP-MOD-013: snapshots that could not be allocated since `Begin`.
     uint32_t             m_descriptorSetFailures = 0;
+    /// UZP-MOD-007: binding 80 was written since `Begin`.
+    bool                 m_accelerationStructureWritten = false;
+    /// UZP-MOD-007: acceleration-structure commands refused since `Begin`.
+    uint32_t             m_accelerationStructureFailures = 0;
+    /// UZP-MOD-007: the structures this list builds (a TLAS with its instance count). They count
+    /// as built for later commands of this list at once, and for other lists only once `Execute`
+    /// submitted this one.
+    std::vector<RHIBLASHandle> m_pendingBLASBuilds;
+    std::vector<std::pair<RHITLASHandle, uint32_t>> m_pendingTLASBuilds;
+    /// UZP-MOD-007: built here or by a submitted list (`instanceCount`: its count, for a TLAS).
+    bool BLASBuilt(RHIBLASHandle blas, bool committed) const;
+    bool TLASBuilt(RHITLASHandle tlas, bool committed, uint32_t* instanceCount) const;
 
     /// Temporary per-slice/mip image views created in BeginRenderPass for
     /// non-zero arraySlice or mipLevel. Destroyed in EndRenderPass.

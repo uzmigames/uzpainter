@@ -1,0 +1,11 @@
+{
+  "id": 372,
+  "slug": "vulkan-inline-ray-queries-behind-the-rhi-with-a-fixed-tlas-binding-and-cpu-known-answers",
+  "title": "Vulkan inline ray queries behind the RHI, with a fixed TLAS binding and CPU known answers",
+  "status": "accepted",
+  "date": "2026-11-02",
+  "relatedTasks": [
+    "phase3.2_vulkan-ray-tracing"
+  ],
+  "supersededBy": null
+}

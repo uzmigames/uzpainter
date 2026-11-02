@@ -1,4 +1,4 @@
-// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-012, UZP-MOD-013. Original: UzEngine runtime/engine/rhi/vulkan/vulkan_device.cpp at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-007, UZP-MOD-012, UZP-MOD-013. Original: UzEngine runtime/engine/rhi/vulkan/vulkan_device.cpp at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
 
 /// Vulkan Device Implementation
 ///
@@ -39,6 +39,9 @@
 
 #include <algorithm>
 #include <cstring>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace uz {
 
@@ -91,6 +94,17 @@ VulkanDevice::~VulkanDevice() {
     }
     for (auto& pipeline : m_pipelinePool.Slots()) {
         if (pipeline.pipeline != VK_NULL_HANDLE) vkDestroyPipeline(m_device, pipeline.pipeline, nullptr);
+    }
+    // UZP-MOD-007: acceleration structures before their buffers, both before the allocator.
+    for (auto& blas : m_blasPool.Slots()) {
+        if (blas.handle != VK_NULL_HANDLE) vkDestroyAccelerationStructureKHR(m_device, blas.handle, nullptr);
+        if (blas.resultBuffer != VK_NULL_HANDLE) vmaDestroyBuffer(m_allocator, blas.resultBuffer, blas.resultAllocation);
+        if (blas.scratchBuffer != VK_NULL_HANDLE) vmaDestroyBuffer(m_allocator, blas.scratchBuffer, blas.scratchAllocation);
+    }
+    for (auto& tlas : m_tlasPool.Slots()) {
+        if (tlas.handle != VK_NULL_HANDLE) vkDestroyAccelerationStructureKHR(m_device, tlas.handle, nullptr);
+        if (tlas.resultBuffer != VK_NULL_HANDLE) vmaDestroyBuffer(m_allocator, tlas.resultBuffer, tlas.resultAllocation);
+        if (tlas.scratchBuffer != VK_NULL_HANDLE) vmaDestroyBuffer(m_allocator, tlas.scratchBuffer, tlas.scratchAllocation);
     }
 
     // Destroy timeline semaphores for async queue synchronization
@@ -471,6 +485,63 @@ bool VulkanDevice::CreateLogicalDevice() {
         }
     }
 
+    // UZP-MOD-007: acceleration structures (VK_KHR_acceleration_structure with its required
+    // VK_KHR_deferred_host_operations, feature accelerationStructure) and inline ray queries
+    // (VK_KHR_ray_query, feature rayQuery) when the device exposes them. Feature structures are
+    // queried only for exposed extensions; every absent item is recorded by name, nothing falls
+    // back. bufferDeviceAddress and descriptor indexing (the other prerequisites) are core 1.2
+    // features enabled below.
+    VkPhysicalDeviceAccelerationStructureFeaturesKHR asFeatures = {};
+    asFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+    VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures = {};
+    rayQueryFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
+    m_rayQueryMissing.clear();
+    {
+        uint32_t extCount = 0;
+        vkEnumerateDeviceExtensionProperties(m_physicalDevice, nullptr, &extCount, nullptr);
+        std::vector<VkExtensionProperties> availableExts(extCount);
+        vkEnumerateDeviceExtensionProperties(m_physicalDevice, nullptr, &extCount, availableExts.data());
+        const auto exposed = [&](const char* name) {
+            for (const auto& ext : availableExts) {
+                if (std::strcmp(ext.extensionName, name) == 0) return true;
+            }
+            return false;
+        };
+        const bool hasAS = exposed(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+        const bool hasDeferred = exposed(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
+        const bool hasRayQuery = exposed(VK_KHR_RAY_QUERY_EXTENSION_NAME);
+
+        VkPhysicalDeviceAccelerationStructureFeaturesKHR supportedAS = {};
+        supportedAS.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+        VkPhysicalDeviceRayQueryFeaturesKHR supportedRayQuery = {};
+        supportedRayQuery.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
+        VkPhysicalDeviceFeatures2 query = {};
+        query.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        void** next = &query.pNext;
+        if (hasAS) { *next = &supportedAS; next = &supportedAS.pNext; }
+        if (hasRayQuery) { *next = &supportedRayQuery; next = &supportedRayQuery.pNext; }
+        vkGetPhysicalDeviceFeatures2(m_physicalDevice, &query);
+
+        if (!hasAS) m_rayQueryMissing.emplace_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+        if (!hasDeferred) m_rayQueryMissing.emplace_back(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
+        if (!hasRayQuery) m_rayQueryMissing.emplace_back(VK_KHR_RAY_QUERY_EXTENSION_NAME);
+        if (hasAS && supportedAS.accelerationStructure != VK_TRUE) m_rayQueryMissing.emplace_back("accelerationStructure");
+        if (hasRayQuery && supportedRayQuery.rayQuery != VK_TRUE) m_rayQueryMissing.emplace_back("rayQuery");
+
+        m_supportsAccelerationStructures = hasAS && hasDeferred && supportedAS.accelerationStructure == VK_TRUE;
+        m_supportsInlineRayQuery = m_supportsAccelerationStructures && hasRayQuery &&
+                                   supportedRayQuery.rayQuery == VK_TRUE;
+        if (m_supportsAccelerationStructures) {
+            deviceExtensions.push_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+            deviceExtensions.push_back(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
+            asFeatures.accelerationStructure = VK_TRUE;
+        }
+        if (m_supportsInlineRayQuery) {
+            deviceExtensions.push_back(VK_KHR_RAY_QUERY_EXTENSION_NAME);
+            rayQueryFeatures.rayQuery = VK_TRUE;
+        }
+    }
+
     // Enable Vulkan 1.2 features (timeline semaphores, descriptor indexing, bindless)
     VkPhysicalDeviceVulkan12Features vk12Features = {};
     vk12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
@@ -497,6 +568,12 @@ bool VulkanDevice::CreateLogicalDevice() {
     sync2Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
     sync2Features.synchronization2 = VK_TRUE;
     dynRenderingFeatures.pNext = &sync2Features;
+
+    // UZP-MOD-007: the acceleration-structure and ray-query features, only when enabled.
+    if (m_supportsAccelerationStructures) {
+        sync2Features.pNext = &asFeatures;
+        if (m_supportsInlineRayQuery) asFeatures.pNext = &rayQueryFeatures;
+    }
 
     VkPhysicalDeviceFeatures deviceFeatures = {};
     deviceFeatures.fillModeNonSolid = VK_TRUE; // Wireframe support
@@ -537,6 +614,46 @@ bool VulkanDevice::CreateLogicalDevice() {
     if (m_computeQueueFamily != UINT32_MAX) {
         vkGetDeviceQueue(m_device, m_computeQueueFamily, 0, &m_computeQueue);
     }
+
+    // UZP-MOD-007: the entry points of the enabled extensions must resolve (a feature bit alone
+    // proves none), then the limits the builds are checked against.
+    if (m_supportsAccelerationStructures) {
+        const std::pair<const char*, bool> entryPoints[] = {
+            {"vkGetAccelerationStructureBuildSizesKHR", vkGetAccelerationStructureBuildSizesKHR != nullptr},
+            {"vkCreateAccelerationStructureKHR", vkCreateAccelerationStructureKHR != nullptr},
+            {"vkDestroyAccelerationStructureKHR", vkDestroyAccelerationStructureKHR != nullptr},
+            {"vkCmdBuildAccelerationStructuresKHR", vkCmdBuildAccelerationStructuresKHR != nullptr},
+            {"vkGetAccelerationStructureDeviceAddressKHR", vkGetAccelerationStructureDeviceAddressKHR != nullptr},
+        };
+        for (const auto& [name, resolved] : entryPoints) {
+            if (!resolved) {
+                m_rayQueryMissing.push_back(std::string("entry point ") + name);
+                m_supportsAccelerationStructures = false;
+                m_supportsInlineRayQuery = false;
+            }
+        }
+    }
+    if (m_supportsAccelerationStructures) {
+        VkPhysicalDeviceAccelerationStructurePropertiesKHR asProps = {};
+        asProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
+        VkPhysicalDeviceProperties2 props2 = {};
+        props2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        props2.pNext = &asProps;
+        vkGetPhysicalDeviceProperties2(m_physicalDevice, &props2);
+        m_asScratchAlignment = asProps.minAccelerationStructureScratchOffsetAlignment;
+        m_asMaxGeometryCount = static_cast<uint32_t>(std::min<uint64_t>(asProps.maxGeometryCount, UINT32_MAX));
+        m_asMaxPrimitiveCount = asProps.maxPrimitiveCount;
+        m_asMaxInstanceCount = asProps.maxInstanceCount;
+    }
+    UZ_LOG(RHI, Info, "Acceleration structures: {}; inline ray queries: {}{}{}",
+           m_supportsAccelerationStructures ? "enabled" : "not enabled",
+           m_supportsInlineRayQuery ? "enabled" : "not enabled",
+           m_rayQueryMissing.empty() ? "" : "; missing: ",
+           [&] {
+               std::string names;
+               for (const std::string& name : m_rayQueryMissing) names += (names.empty() ? "" : ", ") + name;
+               return names;
+           }());
 
     UZ_LOG(RHI, Info, "Vulkan device created (graphicsQueue={}, transferQueue={}, computeQueue={})",
            m_graphicsQueueFamily, m_transferQueueFamily,
@@ -649,14 +766,18 @@ bool VulkanDevice::CreateDescriptorPool() {
         { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 4096 },
         { VK_DESCRIPTOR_TYPE_SAMPLER, 2048 },
         { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 8192 },
+        // UZP-MOD-007: one acceleration structure per snapshot; only with inline ray queries
+        // (the type needs VK_KHR_acceleration_structure), so it is the last entry.
+        { VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 4096 },
     };
+    const uint32_t poolSizeCount = static_cast<uint32_t>(std::size(poolSizes)) - (m_supportsInlineRayQuery ? 0u : 1u);
 
     VkDescriptorPoolCreateInfo poolCI = {};
     poolCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     poolCI.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT
                  | VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
     poolCI.maxSets = 32768;
-    poolCI.poolSizeCount = static_cast<uint32_t>(std::size(poolSizes));
+    poolCI.poolSizeCount = poolSizeCount;  // UZP-MOD-007
     poolCI.pPoolSizes = poolSizes;
 
     VkResult result = vkCreateDescriptorPool(m_device, &poolCI, nullptr, &m_descriptorPool);
@@ -769,7 +890,8 @@ bool VulkanDevice::CreateDescriptorSetLayout() {
 
     constexpr uint32_t kTotalBindings = kMaxTextureBindings + kMaxSamplerBindings + kMaxCBBindings + kMaxUAVBindings
                                       + kMaxStorageBufferBindings;  // UZP-MOD-013
-    VkDescriptorSetLayoutBinding bindings[kTotalBindings] = {};
+    // UZP-MOD-007: binding 80, the acceleration structure, follows when inline ray queries are on.
+    VkDescriptorSetLayoutBinding bindings[kTotalBindings + 1] = {};
 
     for (uint32_t i = 0; i < kMaxTextureBindings; ++i) {
         bindings[i].binding = i;
@@ -826,7 +948,7 @@ bool VulkanDevice::CreateDescriptorSetLayout() {
     // Mark all bindings as PARTIALLY_BOUND so unwritten bindings in a new
     // descriptor set snapshot are not accessed by the GPU (we only copy
     // bindings that were actually written via m_writtenBindingsMask).
-    VkDescriptorBindingFlags bindingFlags[kTotalBindings] = {};
+    VkDescriptorBindingFlags bindingFlags[kTotalBindings + 1] = {};  // UZP-MOD-007: + binding 80
     for (uint32_t i = 0; i < kTotalBindings; ++i) {
         bindingFlags[i] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
                         | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
@@ -836,16 +958,29 @@ bool VulkanDevice::CreateDescriptorSetLayout() {
     for (uint32_t i = kTotalBindings - kMaxStorageBufferBindings; i < kTotalBindings; ++i) {
         bindingFlags[i] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
     }
+    // UZP-MOD-007: the TLAS of an inline-ray-query kernel at binding 80 (compute, partially bound,
+    // not update-after-bind, so descriptorBindingAccelerationStructureUpdateAfterBind is not
+    // needed); a snapshot is written before it is bound, like the storage buffers.
+    uint32_t layoutBindingCount = kTotalBindings;
+    if (m_supportsInlineRayQuery) {
+        auto& b = bindings[kTotalBindings];
+        b.binding = kAccelerationStructureBinding;
+        b.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+        b.descriptorCount = 1;
+        b.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        bindingFlags[kTotalBindings] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+        layoutBindingCount = kTotalBindings + 1;
+    }
     VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsCI = {};
     bindingFlagsCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
-    bindingFlagsCI.bindingCount  = kTotalBindings;
+    bindingFlagsCI.bindingCount  = layoutBindingCount;  // UZP-MOD-007
     bindingFlagsCI.pBindingFlags = bindingFlags;
 
     VkDescriptorSetLayoutCreateInfo layoutCI = {};
     layoutCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     layoutCI.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
     layoutCI.pNext = &bindingFlagsCI;
-    layoutCI.bindingCount = kTotalBindings;
+    layoutCI.bindingCount = layoutBindingCount;  // UZP-MOD-007
     layoutCI.pBindings = bindings;
 
     VkResult result = vkCreateDescriptorSetLayout(m_device, &layoutCI, nullptr, &m_descriptorSetLayout);

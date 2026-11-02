@@ -90,6 +90,19 @@ below against the selected commit, and runs the covering tests.
 | Author | UzmiGames (rulebook task `phase0.3_vendor-modifications`) |
 | Covering test | `tests/vendoring/test_modifications.py::test_spirv_targets_vulkan_1_2_with_ray_query` |
 
+## UZP-MOD-007 — Vulkan acceleration structures and inline ray queries
+
+| Field | Value |
+|---|---|
+| Id | UZP-MOD-007 |
+| Files | `engine/rhi/rhi_types.h`, `engine/rhi/vulkan/vulkan_resources.h`, `engine/rhi/vulkan/vulkan_resources.cpp`, `engine/rhi/vulkan/vulkan_device.h`, `engine/rhi/vulkan/vulkan_device.cpp`, `engine/rhi/vulkan/vulkan_command_list.h`, `engine/rhi/vulkan/vulkan_command_list.cpp` |
+| Reason | capability |
+| Description | `vkCreateDevice` enables `VK_KHR_acceleration_structure` with `VK_KHR_deferred_host_operations` and feature `accelerationStructure` when the device exposes them, and `VK_KHR_ray_query` with feature `rayQuery` on top; feature structures are queried only for exposed extensions, and the five acceleration-structure entry points must resolve after `volkLoadDevice`. Every absent extension, feature or entry point is named in `VulkanDevice::RayQueryMissing()`; nothing falls back. `SupportsRayTracing()` reports acceleration structures (no ray-tracing pipeline exists on this backend), the new `SupportsInlineRayQuery()` inline ray queries, `ScratchAlignment()` `minAccelerationStructureScratchOffsetAlignment`. `CreateBLAS`, `CreateTLAS`, `DestroyBLAS`, `DestroyTLAS` and `GetBLASGPUAddress` replace the invalid-handle defaults: build-size query, a storage buffer holding the structure at offset 0, the structure and its device address, and a scratch buffer created with that alignment (sized for an update too with `AllowUpdate`); invalid descriptions are refused with the reason logged (vertex format other than RGB32F, stride below 12 or not a multiple of 4, vertex or index data past the buffer, index count not a multiple of 3, an input buffer without the new `RHIBufferUsage::AccelerationStructureBuildInput`, which adds `ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY` on Vulkan and nothing on DX12, `PreferFastTrace` with `PreferFastBuild`, counts above the device limits). The command list's `BuildBLAS` and `BuildTLAS` record `vkCmdBuildAccelerationStructuresKHR` after a barrier from every earlier command to the build (inputs, scratch reuse, reads of a structure rebuilt in place); an update needs `AllowUpdate`, an earlier build and, for a TLAS, its instance count; an override scratch buffer is checked for size and alignment. `UAVBarrierAS` orders builds before every later read of a structure. With inline ray queries the descriptor set layout gains binding 80 (`ACCELERATION_STRUCTURE_KHR`, compute, partially bound, not update-after-bind) and the pool its descriptors; `SetComputeAccelerationStructure(tlas)` writes it and descriptor snapshots copy it. A refused acceleration-structure command records nothing and is counted in `AccelerationStructureFailures()`, reset by `Begin`, so a caller can refuse to submit the list. The device destructor destroys the remaining structures before their buffers and the allocator. UzPainter's ray-query layer (`src/render/ray_query.h`, decision 372) builds through these calls; its Vulkan queue refuses a list with a refused command (`src/render/vulkan_backend.cpp`). |
+| Upstream behaviour | `engine/rhi/rhi_device.h:292-294` returns an invalid BLAS handle on Vulkan (no override); `engine/rhi/rhi_device.h:311-313` the same for a TLAS; `engine/rhi/rhi_device.h:361` reports no ray tracing; `engine/rhi/rhi_command_list.h:406-409` builds nothing; `engine/rhi/rhi_command_list.h:443` the acceleration-structure barrier is a no-op; `engine/rhi/vulkan/vulkan_device.cpp:447-453` enables no acceleration-structure or ray-query extension; `engine/rhi/vulkan/vulkan_device.cpp:744-747` lays out no acceleration-structure binding |
+| Date | 2026-11-02 |
+| Author | UzmiGames (rulebook task `phase3.2_vulkan-ray-tracing`, decisions 367 and 372) |
+| Covering test | `tests/vendoring/test_modifications.py::test_vulkan_acceleration_structures_and_ray_queries` |
+
 ## UZP-MOD-008 — IEEE-strict arithmetic on request
 
 | Field | Value |
@@ -177,5 +190,5 @@ below against the selected commit, and runs the covering tests.
   (`engine/shader/shader_compiler.cpp:122`). DXC sits beside the executable (`13-…` §5), so the
   directory is the executable's own.
 
-UZP-MOD-007 (Vulkan acceleration structures, ray queries, descriptor-indexing bindless) is
-planned for `phase3.3_vulkan-backend-ray-tracing` and not applied yet.
+UZP-MOD-007 covers acceleration structures and inline ray queries; descriptor-indexing bindless
+for sampled textures (`phase3.2_vulkan-ray-tracing` item 2.4) is not applied yet.

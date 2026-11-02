@@ -1,3 +1,5 @@
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-007. Original: UzEngine runtime/engine/rhi/vulkan/vulkan_device.h at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+
 #pragma once
 
 /// Vulkan backend implementation of `IRHIDevice`.
@@ -148,6 +150,39 @@ public:
 
     /// Returns the logical sampler index assigned at creation time.
     uint32_t GetSamplerIndex(RHISamplerHandle handle) const override;
+
+    // ── IRHIDevice: Acceleration structures (UZP-MOD-007) ────────────────
+
+    /// Creates a BLAS through `VK_KHR_acceleration_structure`: build-size query, storage buffer,
+    /// the acceleration structure and an aligned scratch buffer. Invalid when acceleration
+    /// structures are not enabled or the description is invalid (logged with the reason):
+    /// no geometry, a vertex format other than RGB32F, a stride below 12 bytes or not a
+    /// multiple of 4, an empty or non-triangle primitive count, an input buffer that is not
+    /// live, lacks `AccelerationStructureBuildInput` or is too small, `PreferFastTrace` with
+    /// `PreferFastBuild`.
+    RHIBLASHandle CreateBLAS(const RHIBLASDesc& desc) override;
+    void DestroyBLAS(RHIBLASHandle handle) override;
+    /// `vkGetAccelerationStructureDeviceAddressKHR` of the BLAS (0 for an invalid handle).
+    uint64_t GetBLASGPUAddress(RHIBLASHandle handle) const override;
+    /// Creates a TLAS for up to `maxInstanceCount` instances.
+    RHITLASHandle CreateTLAS(const RHITLASDesc& desc) override;
+    void DestroyTLAS(RHITLASHandle handle) override;
+
+    /// Acceleration structures (`VK_KHR_acceleration_structure` with
+    /// `VK_KHR_deferred_host_operations`, feature `accelerationStructure`) are enabled. Means
+    /// acceleration structures only: no ray-tracing pipeline exists on this backend.
+    bool SupportsRayTracing() const override { return m_supportsAccelerationStructures; }
+    /// Inline ray queries (`VK_KHR_ray_query`, feature `rayQuery`) are enabled as well; the
+    /// descriptor set layout then has the acceleration-structure binding.
+    [[nodiscard]] bool SupportsInlineRayQuery() const { return m_supportsInlineRayQuery; }
+    /// The extensions, features and entry points whose absence keeps inline ray queries off,
+    /// by name, in check order; empty when they are enabled.
+    [[nodiscard]] const std::vector<std::string>& RayQueryMissing() const { return m_rayQueryMissing; }
+    /// `minAccelerationStructureScratchOffsetAlignment` (0 without acceleration structures).
+    [[nodiscard]] uint32_t ScratchAlignment() const { return m_asScratchAlignment; }
+
+    ResourcePool<VulkanBLAS>& GetBLASPool() { return m_blasPool; }
+    ResourcePool<VulkanTLAS>& GetTLASPool() { return m_tlasPool; }
 
     // ── IRHIDevice: Swap chain operations ────────────────────────────────
 
@@ -358,6 +393,17 @@ private:
     ResourcePool<VulkanShader>     m_shaderPool;
     ResourcePool<VulkanSampler>    m_samplerPool;
     ResourcePool<VulkanPipeline>   m_pipelinePool;
+    ResourcePool<VulkanBLAS>       m_blasPool;   ///< UZP-MOD-007
+    ResourcePool<VulkanTLAS>       m_tlasPool;   ///< UZP-MOD-007
+
+    // ── UZP-MOD-007: acceleration structures and inline ray queries ─────
+    bool                           m_supportsAccelerationStructures = false;
+    bool                           m_supportsInlineRayQuery = false;
+    std::vector<std::string>       m_rayQueryMissing;
+    uint32_t                       m_asScratchAlignment = 0;
+    uint32_t                       m_asMaxGeometryCount = 0;
+    uint64_t                       m_asMaxPrimitiveCount = 0;
+    uint64_t                       m_asMaxInstanceCount = 0;
 
     /// Monotonically increasing SRV index counter for logical descriptor binding.
     uint32_t                       m_nextSrvIndex = 0;

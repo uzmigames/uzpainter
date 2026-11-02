@@ -3,6 +3,7 @@
 #include "render/capabilities.h"
 
 #include "render/device.h"
+#include "render/ray_query.h"
 #include "render/vulkan_backend.h"
 
 #include "dx12_device.h"
@@ -128,7 +129,9 @@ Result<CapabilityReport> QueryDx12(Dx12Device& device, const AdmissionPolicy& po
     report.featureLevel = native.GetFeatureLevel();
     report.shaderModel = uz::ShaderModelToString(native.GetShaderModel());
     report.rayTracing = native.SupportsRayTracing();
-    report.rayQuery = native.SupportsInlineRayQuery();
+    const RayQuerySupport rayQuery = QueryRayQuerySupport(device);
+    report.rayQuery = rayQuery.inlineRayQuery;
+    report.rayQueryMissing = rayQuery.missing;
 
     // The adapter of the device, by LUID. DirectX-Headers declare struct-returning methods in
     // their out-parameter form for non-MSVC compilers.
@@ -245,6 +248,9 @@ std::string CapabilityReport::ToJson() const {
     json += ",\"shader_model\":" + JsonString(shaderModel);
     json += std::string(",\"ray_tracing\":") + JsonBool(rayTracing);
     json += std::string(",\"ray_query\":") + JsonBool(rayQuery);
+    json += ",\"ray_query_missing\":[";
+    for (size_t i = 0; i < rayQueryMissing.size(); ++i) json += (i > 0 ? "," : "") + JsonString(rayQueryMissing[i]);
+    json += "]";
     json += ",\"formats\":[";
     for (size_t i = 0; i < formats.size(); ++i) {
         if (i > 0) json += ",";
@@ -278,8 +284,24 @@ std::string CapabilityReport::ToJson() const {
 
 Result<CapabilityReport> QueryCapabilities(IDevice& device, const AdmissionPolicy& policy) {
     if (device.GetBackend() == Backend::Vulkan) {
-        // The record the qualified device was created on (render/vulkan_qualification.h).
-        return VulkanCapabilityReport(static_cast<VulkanDevice&>(device).Record(), policy);
+        // The record the qualified device was created on (render/vulkan_qualification.h), then
+        // what the created device enabled: a record that qualifies but a device that did not
+        // enable inline ray queries reports them off with the device's missing items.
+        CapabilityReport report = VulkanCapabilityReport(static_cast<VulkanDevice&>(device).Record(), policy);
+        const RayQuerySupport enabled = QueryRayQuerySupport(device);
+        // The device's own missing items (an entry point, say) join the record's.
+        for (const std::string& item : enabled.missing) {
+            if (std::find(report.rayQueryMissing.begin(), report.rayQueryMissing.end(), item) ==
+                report.rayQueryMissing.end()) {
+                report.rayQueryMissing.push_back(item);
+            }
+        }
+        report.rayTracing = report.rayTracing && enabled.accelerationStructures;
+        report.rayQuery = report.rayQuery && enabled.inlineRayQuery;
+        if (!report.rayQuery && report.rayQueryMissing.empty()) {
+            report.rayQueryMissing.emplace_back("inline ray queries (device)");
+        }
+        return report;
     }
     return QueryDx12(static_cast<Dx12Device&>(device), policy);
 }

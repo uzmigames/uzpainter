@@ -19,7 +19,12 @@ import pytest
 HARDWARE_SLICE = ("dx12-device", "shader-compile", "compute-readback", "png16", "embree")
 PROBES = ("dx12-ray-query", "vulkan-availability", "vulkan-ray-query", "warp")
 # The non-mandatory Vulkan hardware slice of decision 310 (`tests/toolchain/test_selftest.py`).
-VULKAN_SLICE = ("vulkan-device", "vulkan-compute-readback", "vulkan-png16")
+VULKAN_SLICE = (
+    "vulkan-device",
+    "vulkan-compute-readback",
+    "vulkan-png16",
+    "vulkan-ray-query-trace",
+)
 CPYTHON = (
     "cpython-start",
     "cpython-uzpainter",

@@ -24,7 +24,12 @@ from tools.toolchain.dll_closure import VC_RUNTIME, check_folder
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HARDWARE_SLICE = ("dx12-device", "shader-compile", "compute-readback", "png16", "embree")
 GPU_STAGES = ("dx12-device", "compute-readback")
-VULKAN_SLICE = ("vulkan-device", "vulkan-compute-readback", "vulkan-png16")
+VULKAN_SLICE = (
+    "vulkan-device",
+    "vulkan-compute-readback",
+    "vulkan-png16",
+    "vulkan-ray-query-trace",
+)
 WIDTH, HEIGHT = 100, 64
 
 
@@ -181,6 +186,35 @@ def test_vulkan_hardware_slice_green(painter_bin: Path, tmp_path: Path) -> None:
     assert (width, height) == (WIDTH, HEIGHT)
     assert samples == [pattern_value(x, y) for y in range(HEIGHT) for x in range(WIDTH)]
     assert "selftest: Vulkan hardware slice passed (not mandatory, decision 310)" in output
+
+
+def test_vulkan_ray_query_slice_green(painter_bin: Path, tmp_path: Path) -> None:
+    """phase3.2_vulkan-ray-tracing 2.9, 3.5: the Vulkan ray-query slice reports what the device
+    enabled (nothing missing on the owner's GPU), compiles the ray-cast kernel to SPIR-V with
+    SPV_KHR_ray_query, builds a BLAS of two geometries and a TLAS of three instances, traces nine
+    inline queries and finds every record equal to its hand-computed answer and to the CPU
+    reference; it is a line of its own, apart from the `vulkan-ray-query` probe."""
+    if os.environ.get("UZP_NO_GPU") == "1":
+        pytest.skip(
+            "UZP_NO_GPU=1: no GPU on this runner (decision 028); runs on the owner's machine"
+        )
+    code, output, report = run_selftest(painter_bin / "UzPainter.exe", tmp_path)
+    assert code == 0, output
+    by_name = stages(report)
+    stage = by_name["vulkan-ray-query-trace"]
+    assert stage["status"] == "passed", stage
+    assert stage["vulkan_hardware_slice"] and not stage["mandatory"]
+    details = stage["details"]
+    assert details["acceleration_structures"] == "enabled"
+    assert details["inline_ray_query"] == "enabled"
+    assert details["missing"] == "none"
+    assert "SPV_KHR_ray_query" in details["spirv_extensions"]
+    assert details["scene"] == "1 BLAS, 3 instances"
+    assert (details["rays"], details["hits"]) == ("9", "7")
+    assert details["differs_from_known_answers"] == "0"
+    assert details["differs_from_cpu_reference"] == "0"
+    probe = by_name["vulkan-ray-query"]
+    assert probe["status"] == "passed" and not probe["vulkan_hardware_slice"]
 
 
 # ── Hosted CI: GPU stages skipped with an explicit reason ─────────────────────────────────

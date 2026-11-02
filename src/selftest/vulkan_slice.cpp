@@ -7,6 +7,7 @@
 
 #include "hardware_slice.h"
 
+#include "render/ray_query.h"
 #include "render/vulkan_backend.h"
 #include "render/vulkan_kernels.h"
 
@@ -14,6 +15,7 @@
 
 #include <windows.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <string>
@@ -51,6 +53,8 @@ void RegisterVulkanSlice(Selftest& selftest) {
     selftest.Add({"vulkan-device", false, true, false, {}, RunVulkanDevice, true});
     selftest.Add({"vulkan-compute-readback", false, true, false, {"vulkan-device"}, RunVulkanComputeReadback, true});
     selftest.Add({"vulkan-png16", false, true, false, {"vulkan-compute-readback"}, RunVulkanPng16, true});
+    selftest.Add({"vulkan-ray-query-trace", false, true, false, {"vulkan-device"}, RunVulkanRayQueryTrace,
+                  true});
 }
 
 void TeardownVulkanSlice(SelftestContext& context) {
@@ -193,6 +197,74 @@ StageOutcome RunVulkanComputeReadback(SelftestContext& context) {
 StageOutcome RunVulkanPng16(SelftestContext& context) {
     return Png16RoundTrip(context.vulkanReadback, "vulkan-readback",
                           context.options.outDir / "selftest-vulkan-pattern16.png");
+}
+
+// ── vulkan-ray-query-trace ───────────────────────────────────────────────────
+
+StageOutcome RunVulkanRayQueryTrace(SelftestContext& context) {
+    render::VulkanDevice& device = *context.vulkanDevice;
+    const render::RayQuerySupport support = render::QueryRayQuerySupport(device);
+    Details details = {
+        {"acceleration_structures", support.accelerationStructures ? "enabled" : "not enabled"},
+        {"inline_ray_query", support.inlineRayQuery ? "enabled" : "not enabled"},
+        {"missing", support.missing.empty() ? "none" : Join(support.missing)},
+        {"deadline_ms", std::to_string(std::chrono::milliseconds(kGpuDeadline).count())},
+    };
+    if (render::Result<void> required = render::RequireInlineRayQuery(device); !required) {
+        return StageOutcome::Fail("refused before any work: " + required.error().Describe(), details);
+    }
+    std::vector<std::string> failures;
+    render::Result<std::vector<uint8_t>> spirv =
+        render::CompileRayCastKernel(render::KernelTarget::Spirv, context.exeDir / "dxcompiler.dll");
+    if (!spirv) return StageOutcome::Fail(spirv.error().Describe(), details);
+    const render::SpirvFacts facts = render::InspectSpirv(*spirv);
+    const std::vector<std::string> extensions = render::SpirvExtensions(*spirv);
+    details.emplace_back("spirv_bytes", std::to_string(spirv->size()));
+    details.emplace_back("spirv_extensions", Join(extensions));
+    if (std::find(extensions.begin(), extensions.end(), "SPV_KHR_ray_query") == extensions.end()) {
+        failures.push_back("the SPIR-V does not declare SPV_KHR_ray_query");
+    }
+    if (!facts.HasCapability(render::kSpirvCapabilityRayQueryKHR)) failures.push_back("no RayQueryKHR capability");
+    if (facts.HasCapability(render::kSpirvCapabilityRayTracingKHR)) {
+        failures.push_back("the SPIR-V needs a ray-tracing pipeline (RayTracingKHR)");
+    }
+
+    render::Result<render::ComputeKernel> kernel = device.CreateComputeKernel(*spirv, "ray_cast");
+    if (!kernel) return StageOutcome::Fail(kernel.error().Describe(), details);
+    const render::RaySceneDesc desc = render::RayQueryQualificationScene();
+    render::Result<render::RayScene> scene = render::BuildRayScene(device, desc, render::Clock::now() + kGpuDeadline);
+    if (!scene) {
+        device.DestroyComputeKernel(*kernel);
+        return StageOutcome::Fail(scene.error().Describe(), details);
+    }
+    details.emplace_back("scene", std::to_string(scene->blases.size()) + " BLAS, " +
+                                      std::to_string(scene->instanceCount) + " instances");
+    const std::vector<render::CastRay> rays = render::RayQueryQualificationRays();
+    render::Result<std::vector<render::RayHit>> hits =
+        render::CastRays(device, *scene, *kernel, rays, render::Clock::now() + kGpuDeadline);
+    if (!hits) return StageOutcome::Fail(hits.error().Describe(), details);  // the failed device keeps its objects
+    render::ReleaseRayScene(device, *scene);
+    device.DestroyComputeKernel(*kernel);
+
+    constexpr double kTolerance = 1e-5;
+    const render::RayHitDiff known = render::DiffRayHits(*hits, render::RayQueryQualificationAnswers(), kTolerance);
+    const render::RayHitDiff reference = render::DiffRayHits(*hits, render::RayCastReference(desc, rays), kTolerance);
+    size_t hitCount = 0;
+    for (const render::RayHit& hit : *hits) hitCount += hit.hit;
+    details.emplace_back("rays", std::to_string(rays.size()));
+    details.emplace_back("hits", std::to_string(hitCount));
+    details.emplace_back("tolerance", "1e-05");
+    details.emplace_back("differs_from_known_answers", std::to_string(known.differing.size()));
+    details.emplace_back("differs_from_cpu_reference", std::to_string(reference.differing.size()));
+    char deltas[2][32];
+    std::snprintf(deltas[0], sizeof(deltas[0]), "%.3g", reference.maxDeltaT);
+    std::snprintf(deltas[1], sizeof(deltas[1]), "%.3g", reference.maxDeltaBarycentric);
+    details.emplace_back("max_delta_t", deltas[0]);
+    details.emplace_back("max_delta_barycentric", deltas[1]);
+    for (const std::string& line : known.differing) failures.push_back("known answer: " + line);
+    for (const std::string& line : reference.differing) failures.push_back("CPU reference: " + line);
+    if (!failures.empty()) return StageOutcome::Fail(Join(failures), details);
+    return StageOutcome::Pass(std::move(details));
 }
 
 }  // namespace uzp::selftest

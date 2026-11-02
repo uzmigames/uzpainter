@@ -361,6 +361,48 @@ def test_vulkan_compute_bindings_in_the_fixed_slot_layout() -> None:
     assert "vmaFlushAllocation(m_allocator, buf->allocation, 0, VK_WHOLE_SIZE);" in resources
 
 
+def test_vulkan_acceleration_structures_and_ray_queries() -> None:
+    """UZP-MOD-007: the Vulkan device enables the acceleration-structure, deferred-host-operations
+    and ray-query extensions with their features when exposed, naming every missing item; BLAS/TLAS
+    create, build, barrier and destroy replace the invalid-handle defaults; the layout gains the
+    acceleration-structure binding 80 only with ray queries; a refused command is counted. The
+    behaviour runs in `uzp-render-tests vulkan-ray-query` (tests/render/test_ray_query.py)."""
+    vulkan = VENDORED / "engine" / "rhi" / "vulkan"
+    types = (VENDORED / "engine" / "rhi" / "rhi_types.h").read_text(encoding="utf-8")
+    device = (vulkan / "vulkan_device.cpp").read_text(encoding="utf-8")
+    device_h = (vulkan / "vulkan_device.h").read_text(encoding="utf-8")
+    resources = (vulkan / "vulkan_resources.cpp").read_text(encoding="utf-8")
+    header = (vulkan / "vulkan_command_list.h").read_text(encoding="utf-8")
+    commands = (vulkan / "vulkan_command_list.cpp").read_text(encoding="utf-8")
+    assert "AccelerationStructureBuildInput = 1 << 10," in types
+    for name in (
+        "VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME",
+        "VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME",
+        "VK_KHR_RAY_QUERY_EXTENSION_NAME",
+    ):
+        assert f"deviceExtensions.push_back({name});" in device
+    assert "asFeatures.accelerationStructure = VK_TRUE;" in device
+    assert "rayQueryFeatures.rayQuery = VK_TRUE;" in device
+    assert "minAccelerationStructureScratchOffsetAlignment" in device
+    assert (
+        "bool SupportsRayTracing() const override { return m_supportsAccelerationStructures; }"
+        in device_h
+    )
+    assert "RayQueryMissing() const" in device_h
+    assert "RHIBLASHandle VulkanDevice::CreateBLAS(" in resources
+    assert "RHITLASHandle VulkanDevice::CreateTLAS(" in resources
+    assert "vmaCreateBufferWithAlignment(" in resources
+    assert "VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR" in resources
+    assert "static constexpr uint32_t kAccelerationStructureBinding = 80;" in header
+    assert "b.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;" in device
+    assert "void VulkanCommandList::BuildBLAS(" in commands
+    assert "void VulkanCommandList::BuildTLAS(" in commands
+    assert "void VulkanCommandList::UAVBarrierAS()" in commands
+    assert "vkCmdBuildAccelerationStructuresKHR(" in commands
+    assert "m_accelerationStructureFailures = 0;" in commands
+    assert commands.count("++m_accelerationStructureFailures;") >= 8
+
+
 # ── UZP-MOD-004 (3.4) ─────────────────────────────────────────────────────────────────────
 
 
@@ -494,10 +536,7 @@ def test_notices_log_and_manifest_agree() -> None:
     """3.7: every modified file starts with its §4(b) notice, is logged with a covering test
     that exists, and its manifest entry carries the logged ids and its current hash."""
     log = load_log(REPO_ROOT)
-    # UZP-MOD-007 (Vulkan acceleration structures) is planned for phase3.3 and not applied yet.
-    assert [m.id for m in log] == [
-        f"UZP-MOD-{n:03d}" for n in (1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13)
-    ]
+    assert [m.id for m in log] == [f"UZP-MOD-{n:03d}" for n in range(1, 14)]
     manifest = load(VENDORED / "MANIFEST.json")
     assert problems(REPO_ROOT, manifest, log) == []
     modified = {e.vendored_path for e in manifest.files if e.status == "modified"}

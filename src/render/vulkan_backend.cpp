@@ -194,6 +194,9 @@ VulkanDeviceRecord Describe(VkPhysicalDevice physical, uint32_t index) {
     auto v12 = Vk<VkPhysicalDeviceVulkan12Features>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES);
     auto dynamicRendering = Vk<VkPhysicalDeviceDynamicRenderingFeatures>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES);
     auto sync2 = Vk<VkPhysicalDeviceSynchronization2Features>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES);
+    auto accelerationStructure = Vk<VkPhysicalDeviceAccelerationStructureFeaturesKHR>(
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR);
+    auto rayQuery = Vk<VkPhysicalDeviceRayQueryFeaturesKHR>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR);
     void** next = &features.pNext;
     auto chain = [&next](bool valid, auto& structure) {
         if (!valid) return;
@@ -203,6 +206,9 @@ VulkanDeviceRecord Describe(VkPhysicalDevice physical, uint32_t index) {
     chain(api12, v12);
     chain(api13 || record.HasExtension("VK_KHR_dynamic_rendering"), dynamicRendering);
     chain(api13 || record.HasExtension("VK_KHR_synchronization2"), sync2);
+    // Inline ray queries (phase3.2, UZP-MOD-007): queried only where the extension is exposed.
+    chain(record.HasExtension("VK_KHR_acceleration_structure"), accelerationStructure);
+    chain(record.HasExtension("VK_KHR_ray_query"), rayQuery);
     if (p.apiVersion >= VK_API_VERSION_1_1) {
         vkGetPhysicalDeviceFeatures2(physical, &features);
     } else {
@@ -237,7 +243,12 @@ VulkanDeviceRecord Describe(VkPhysicalDevice physical, uint32_t index) {
         {"robustBufferAccess", f.robustBufferAccess == VK_TRUE},
         {"shaderFloat16", v12.shaderFloat16 == VK_TRUE},
         {"vulkanMemoryModel", v12.vulkanMemoryModel == VK_TRUE},
+        // Inline ray queries (VulkanRayQueryMissing); recorded only where queried.
     };
+    if (record.HasExtension("VK_KHR_acceleration_structure")) {
+        record.features.emplace_back("accelerationStructure", accelerationStructure.accelerationStructure == VK_TRUE);
+    }
+    if (record.HasExtension("VK_KHR_ray_query")) record.features.emplace_back("rayQuery", rayQuery.rayQuery == VK_TRUE);
 
     vkGetPhysicalDeviceQueueFamilyProperties(physical, &count, nullptr);
     std::vector<VkQueueFamilyProperties> families(count);
@@ -452,6 +463,15 @@ public:
                         std::to_string(missing) +
                             " dispatch(es) of the command list got no descriptor snapshot from the vendored "
                             "pool (decision 313); nothing was submitted");
+        }
+        // UZP-MOD-007: a refused acceleration-structure build or binding recorded nothing, so the
+        // list would read structures that were never built; it is not submitted either.
+        if (const uint32_t refused = static_cast<uz::VulkanCommandList*>(list)->AccelerationStructureFailures()) {
+            m_free.push_back(list);
+            return Fail(ErrorCode::RequestFailed, Backend::Vulkan,
+                        std::to_string(refused) +
+                            " acceleration-structure command(s) of the command list were refused (the render "
+                            "core log has the cause); nothing was submitted");
         }
         list->Execute();
         // UZP-MOD-011: a refused command buffer never runs, so the list is free again at once.

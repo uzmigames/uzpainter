@@ -469,6 +469,19 @@ VulkanDescriptorModel DeriveVulkanDescriptorModel(const VulkanDeviceRecord& devi
     return model;
 }
 
+std::vector<std::string> VulkanRayQueryMissing(const VulkanDeviceRecord& device) {
+    std::vector<std::string> missing;
+    for (const char* extension :
+         {"VK_KHR_acceleration_structure", "VK_KHR_deferred_host_operations", "VK_KHR_ray_query"}) {
+        if (!device.HasExtension(extension)) missing.emplace_back(extension);
+    }
+    if (device.HasExtension("VK_KHR_acceleration_structure") && device.Feature("accelerationStructure") != true) {
+        missing.emplace_back("accelerationStructure");
+    }
+    if (device.HasExtension("VK_KHR_ray_query") && device.Feature("rayQuery") != true) missing.emplace_back("rayQuery");
+    return missing;
+}
+
 VulkanVram DeriveVulkanVram(const VulkanDeviceRecord& device) {
     VulkanVram vram;
     vram.fromMemoryBudget = device.memoryBudget;
@@ -500,6 +513,11 @@ CapabilityReport VulkanCapabilityReport(const VulkanDeviceRecord& device, const 
     report.softwareAdapter = device.type == "cpu";
     report.featureLevel = "vulkan " + VulkanVersionText(device.apiVersion);
     report.shaderModel = "spirv";
+    report.rayQueryMissing = VulkanRayQueryMissing(device);
+    report.rayTracing = device.HasExtension("VK_KHR_acceleration_structure") &&
+                        device.HasExtension("VK_KHR_deferred_host_operations") &&
+                        device.Feature("accelerationStructure") == true;
+    report.rayQuery = report.rayQueryMissing.empty();
 
     // The recorded formats in the vendored RHI's terms.
     const std::pair<uint32_t, uz::RHIFormat> rhi[] = {

@@ -2,15 +2,23 @@
 - [ ] 1.1 Prerequisites accepted: phase3.1_vulkan-compute-parity
 
 ## 2. Implementation
-- [ ] 2.1 Enable `VK_KHR_acceleration_structure`, `VK_KHR_deferred_host_operations` and `VK_KHR_ray_query` with the `accelerationStructure` and `rayQuery` features at device creation when present; record their absence otherwise
-- [ ] 2.2 Implement the RHI BLAS/TLAS create and build calls on Vulkan (build-size query, scratch buffers, build commands) behind the existing interface, replacing the invalid-handle defaults
-- [ ] 2.3 Add acceleration-structure descriptors to the Vulkan descriptor layout so a compute kernel can bind a TLAS
+- [x] 2.1 Enable `VK_KHR_acceleration_structure`, `VK_KHR_deferred_host_operations` and `VK_KHR_ray_query` with the `accelerationStructure` and `rayQuery` features at device creation when present; record their absence otherwise
+  - Done (UZP-MOD-007): enabled when exposed, features queried only for exposed extensions, the five entry points checked; absent items named in `VulkanDevice::RayQueryMissing()`. `vulkan-ray-query`: the device enables exactly what its record exposes. Evidence 2026-11-02 (decision 372, RTX 4090, NVIDIA 617.14): `tests/render/test_ray_query.py` (3 passed), `tests/render/test_vulkan_qualification.py` and `test_vulkan_image_passes.py` unchanged and green with the new layout.
+- [x] 2.2 Implement the RHI BLAS/TLAS create and build calls on Vulkan (build-size query, scratch buffers, build commands) behind the existing interface, replacing the invalid-handle defaults
+  - Done (UZP-MOD-007): build-size query, storage buffer at offset 0, scratch aligned to `minAccelerationStructureScratchOffsetAlignment` (128 here), build commands with a barrier before each build; invalid input refused and a refused build submits nothing; built state published only by a submitted list. Evidence 2026-11-02 (decision 372, RTX 4090, NVIDIA 617.14): `tests/render/test_ray_query.py` (3 passed), `tests/render/test_vulkan_qualification.py` and `test_vulkan_image_passes.py` unchanged and green with the new layout.
+- [x] 2.3 Add acceleration-structure descriptors to the Vulkan descriptor layout so a compute kernel can bind a TLAS
+  - Done (UZP-MOD-007): binding 80 `ACCELERATION_STRUCTURE_KHR` (compute, partially bound, not update-after-bind) only with ray queries; `VulkanCommandList::SetComputeAccelerationStructure`. The ray-cast SPIR-V binds it at 80 and traces. No validation layer is installed on the machine.
 - [ ] 2.4 Add descriptor-indexing bindless on Vulkan for sampled textures, keeping Phase 1 kernels on the fixed-slot subset
-- [ ] 2.5 Make `SupportsRayTracing()` and the capability query report inline ray queries per backend with the list of missing extensions, features or tiers
-- [ ] 2.6 Emit SPIR-V with `SPV_KHR_ray_query` from DXC for kernels that request ray queries (UZP-MOD-006 option, `vulkan1.2` target)
+- [x] 2.5 Make `SupportsRayTracing()` and the capability query report inline ray queries per backend with the list of missing extensions, features or tiers
+  - Done: `render::QueryRayQuerySupport` / `RequireInlineRayQuery` (`src/render/ray_query.h`), `VulkanRayQueryMissing` on the record, `ray_query_missing` in the capability report (fabricated records in `ray-query-reference`; live in `vulkan-ray-query`, `dx12-ray-query`).
+- [x] 2.6 Emit SPIR-V with `SPV_KHR_ray_query` from DXC for kernels that request ray queries (UZP-MOD-006 option, `vulkan1.2` target)
+  - Done: `CompileRayCastKernel` passes `enableRayQuery` (UZP-MOD-006); the SPIR-V declares `SPV_KHR_ray_query` and `RayQueryKHR`, no `RayTracingKHR` (`vulkan-ray-query`, selftest); `tests/vendoring/test_modifications.py::test_spirv_targets_vulkan_1_2_with_ray_query` green.
 - [ ] 2.7 Write the backend-neutral acceleration-structure builder for UzPainter meshes: real vertex stride, per-geometry opacity flag, raw RHI `CreateBLAS`, same calls on DXR and Vulkan
-- [ ] 2.8 Log UZP-MOD-007 in `MODIFICATIONS.md` with modification markers in every touched vendored file; keep Apache-2.0 headers
-- [ ] 2.9 Extend `selftest` with the Vulkan ray-query qualification slice (build a BLAS/TLAS, trace one inline query, read back the hit) reported separately from the availability probe
+  - Progress 2026-11-02: `render::BuildRayScene` (`src/render/ray_query.h`) builds through the raw RHI `CreateBLAS` with each geometry's stride and opacity flag, the same calls on DXR and Vulkan (20- and 12-byte strides, a non-opaque geometry, green on both). Open: the adapter from `mesh::TexturingMesh`.
+- [x] 2.8 Log UZP-MOD-007 in `MODIFICATIONS.md` with modification markers in every touched vendored file; keep Apache-2.0 headers
+  - Done: UZP-MOD-007 logged in `thirdparty/uzengine-render-core/MODIFICATIONS.md` (7 files, upstream citations), notices and manifest updated (`python -m tools.vendoring.modifications`: 0 problems); `test_vulkan_acceleration_structures_and_ray_queries`, `test_notices_log_and_manifest_agree`, `test_log_citations_hold_at_the_selected_commit` green.
+- [x] 2.9 Extend `selftest` with the Vulkan ray-query qualification slice (build a BLAS/TLAS, trace one inline query, read back the hit) reported separately from the availability probe
+  - Done: `selftest` stage `vulkan-ray-query-trace` (Vulkan slice, apart from the `vulkan-ray-query` probe): one BLAS of two geometries, a TLAS of three instances, nine rays equal to their hand-computed answers and to the CPU reference (|delta| <= 1e-5); `tests/toolchain/test_selftest.py::test_vulkan_ray_query_slice_green` green.
 - [ ] 2.10 Author the ray-cast fixtures under `parity/manifests/`: plane, sphere and bevelled cube meshes, an opaque/non-opaque geometry pair and a fixed ray set (hits, misses, grazing rays, edge and vertex hits)
 - [ ] 2.11 Write the ray-cast kernel (inline `RayQuery`, identical HLSL for DXIL and SPIR-V) writing one record per ray: hit flag, instance id, primitive id, barycentrics, hit distance
 - [ ] 2.12 Write the cross-backend ray-cast comparison: per-fixture counts of differing records by field, max |Δ| of distance and barycentrics, list of every differing ray
@@ -18,10 +26,14 @@
 
 ## 3. Tests
 - [ ] 3.1 Unit tests: BLAS/TLAS build on Vulkan for each ray-cast fixture mesh; rebuild after a vertex change; invalid input rejected
+  - Progress 2026-11-02: build, rebuild after a vertex change and invalid input refused, on the qualification scene (`vulkan-ray-query`). Open: every ray-cast fixture mesh (2.10).
 - [ ] 3.2 Capability tests: a device without `VK_KHR_ray_query` reports unavailable with the missing list and no work is dispatched
+  - Progress 2026-11-02: a record without `VK_KHR_ray_query` reports it missing and the capability report says unavailable; `RequireInlineRayQuery` refuses before any work. Open: a live device without the extension (none on this machine) beyond the fabricated records.
 - [ ] 3.3 Repeatability: the ray-cast kernel run twice on each backend gives byte-identical records
+  - Progress 2026-11-02: the qualification scene built and traced twice gives byte-identical records on Vulkan and on DX12. Open: the ray-cast fixtures (2.10).
 - [ ] 3.4 Cross-backend run of every ray-cast fixture on DXR and Vulkan on the owner's GPU; report every difference
-- [ ] 3.5 `selftest` Vulkan ray-query slice green on the owner's machine
+- [x] 3.5 `selftest` Vulkan ray-query slice green on the owner's machine
+  - Done 2026-11-02 on the owner's machine (RTX 4090): `test_vulkan_ray_query_slice_green` and `test_vulkan_hardware_slice_green` passed.
 
 ## 4. Acceptance
 - [ ] 4.1 Acceptance: ray-cast fixtures compared with DXR and every difference reported; any divergence covered by an owner-approved exception; Vulkan ray-query slice green

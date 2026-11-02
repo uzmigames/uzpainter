@@ -377,6 +377,52 @@ UPSTREAM_CITATIONS: tuple[Citation, ...] = (
         r"requestedVersion = VK_API_VERSION_1_2",
         "Vulkan 1.2 instance requested",
     ),
+    # UZP-MOD-007
+    _cite(
+        "engine/rhi/rhi_device.h",
+        292,
+        294,
+        r"virtual RHIBLASHandle CreateBLAS\(const RHIBLASDesc& desc\) \{\s*"
+        r"\(void\)desc; return RHIBLASHandle::Invalid\(\);",
+        "the default CreateBLAS returns an invalid handle",
+    ),
+    _cite(
+        "engine/rhi/rhi_device.h",
+        311,
+        313,
+        r"virtual RHITLASHandle CreateTLAS\(const RHITLASDesc& desc\) \{\s*"
+        r"\(void\)desc; return RHITLASHandle::Invalid\(\);",
+        "the default CreateTLAS returns an invalid handle",
+    ),
+    _cite(
+        "engine/rhi/rhi_device.h",
+        361,
+        361,
+        r"virtual bool SupportsRayTracing\(\) const \{ return false; \}",
+        "the default reports no ray tracing",
+    ),
+    _cite(
+        "engine/rhi/rhi_command_list.h",
+        406,
+        409,
+        r"virtual void BuildBLAS\(RHIBLASHandle blas, RHIBufferHandle scratchBuffer,[\s\S]*"
+        r"\(void\)blas; \(void\)scratchBuffer; \(void\)update;",
+        "the default BuildBLAS records nothing",
+    ),
+    _cite(
+        "engine/rhi/rhi_command_list.h",
+        443,
+        443,
+        r"virtual void UAVBarrierAS\(\) \{\}",
+        "the default acceleration-structure barrier is a no-op",
+    ),
+    _cite(
+        "engine/rhi/vulkan/vulkan_device.cpp",
+        447,
+        453,
+        r"// Required device extensions[\s\S]*VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,\s*\};",
+        "no acceleration-structure or ray-query extension is enabled",
+    ),
     # UZP-MOD-008
     _cite(
         "engine/shader/shader_compiler.h",

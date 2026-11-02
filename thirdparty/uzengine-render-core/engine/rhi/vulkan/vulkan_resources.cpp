@@ -1,4 +1,4 @@
-// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-013. Original: UzEngine runtime/engine/rhi/vulkan/vulkan_resources.cpp at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-007, UZP-MOD-013. Original: UzEngine runtime/engine/rhi/vulkan/vulkan_resources.cpp at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
 
 /// Vulkan Resource Operations — Buffer, Texture, Shader, Pipeline, Sampler
 ///
@@ -23,6 +23,8 @@
 #include "log.h"
 #include "profiler.h"
 
+#include <algorithm>
+#include <string>
 #include <vector>
 
 namespace uz {
@@ -51,6 +53,15 @@ RHIBufferHandle VulkanDevice::CreateBuffer(const RHIBufferDesc& desc) {
     if (HasFlag(desc.usage, RHIBufferUsage::IndirectArgs))     usageFlags |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
     if (HasFlag(desc.usage, RHIBufferUsage::CopySrc))          usageFlags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
     if (HasFlag(desc.usage, RHIBufferUsage::CopyDst))          usageFlags |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    // UZP-MOD-007: BLAS vertex/index data and TLAS instance records (needs the extension enabled).
+    if (HasFlag(desc.usage, RHIBufferUsage::AccelerationStructureBuildInput)) {
+        if (!m_supportsAccelerationStructures) {
+            UZ_LOG(RHI, Error, "CreateBuffer '{}': acceleration-structure build input on a device without "
+                   "acceleration structures", desc.debugName ? desc.debugName : "");
+            return RHIBufferHandle::Invalid();
+        }
+        usageFlags |= VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR;
+    }
 
     // Always add transfer bits for flexibility
     usageFlags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
@@ -832,6 +843,296 @@ uint32_t VulkanDevice::GetSamplerIndex(RHISamplerHandle handle) const {
     const VulkanSampler* sampler = m_samplerPool.Get(handle.index, handle.generation);
     if (!sampler) return UINT32_MAX;
     return sampler->samplerIndex;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UZP-MOD-007: Acceleration structures (VK_KHR_acceleration_structure)
+// ─────────────────────────────────────────────────────────────────────────────
+
+namespace {
+
+VkBuildAccelerationStructureFlagsKHR ToVkASBuildFlags(RHIASBuildFlags flags) {
+    VkBuildAccelerationStructureFlagsKHR out = 0;
+    if (HasFlag(flags, RHIASBuildFlags::AllowUpdate))     out |= VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
+    if (HasFlag(flags, RHIASBuildFlags::AllowCompaction)) out |= VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR;
+    if (HasFlag(flags, RHIASBuildFlags::PreferFastTrace)) out |= VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+    if (HasFlag(flags, RHIASBuildFlags::PreferFastBuild)) out |= VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR;
+    return out;
+}
+
+/// Releases what `CreateASStorage` created, in reverse order, and clears the fields.
+template <class AS>
+void DestroyASStorage(VkDevice device, VmaAllocator allocator, AS& as) {
+    if (as.handle != VK_NULL_HANDLE) vkDestroyAccelerationStructureKHR(device, as.handle, nullptr);
+    if (as.resultBuffer != VK_NULL_HANDLE) vmaDestroyBuffer(allocator, as.resultBuffer, as.resultAllocation);
+    if (as.scratchBuffer != VK_NULL_HANDLE) vmaDestroyBuffer(allocator, as.scratchBuffer, as.scratchAllocation);
+    as.handle = VK_NULL_HANDLE;
+    as.resultBuffer = VK_NULL_HANDLE;
+    as.resultAllocation = nullptr;
+    as.scratchBuffer = VK_NULL_HANDLE;
+    as.scratchAllocation = nullptr;
+}
+
+/// The storage buffer (the structure at offset 0), the acceleration structure, its device address
+/// and a scratch buffer for a build and, with `allowUpdate`, an update, whose device address is a
+/// multiple of `scratchAlignment`. Empty on success; on failure nothing is left allocated.
+template <class AS>
+std::string CreateASStorage(VkDevice device, VmaAllocator allocator, uint32_t scratchAlignment,
+                            VkAccelerationStructureTypeKHR type,
+                            const VkAccelerationStructureBuildSizesInfoKHR& sizes, bool allowUpdate, AS& as) {
+    if (sizes.accelerationStructureSize == 0) return "the driver reported a zero acceleration-structure size";
+    VmaAllocationCreateInfo gpuOnly = {};
+    gpuOnly.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+
+    VkBufferCreateInfo resultCI = {};
+    resultCI.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    resultCI.size = sizes.accelerationStructureSize;
+    resultCI.usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    resultCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    VkResult result = vmaCreateBuffer(allocator, &resultCI, &gpuOnly, &as.resultBuffer, &as.resultAllocation, nullptr);
+    if (result != VK_SUCCESS) {
+        as.resultBuffer = VK_NULL_HANDLE;
+        return "the storage buffer of " + std::to_string(sizes.accelerationStructureSize) +
+               " bytes was not allocated, result=" + std::to_string(static_cast<int>(result));
+    }
+    as.resultSizeBytes = sizes.accelerationStructureSize;
+
+    VkAccelerationStructureCreateInfoKHR createCI = {};
+    createCI.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+    createCI.buffer = as.resultBuffer;
+    createCI.offset = 0;
+    createCI.size = sizes.accelerationStructureSize;
+    createCI.type = type;
+    result = vkCreateAccelerationStructureKHR(device, &createCI, nullptr, &as.handle);
+    if (result != VK_SUCCESS) {
+        as.handle = VK_NULL_HANDLE;
+        DestroyASStorage(device, allocator, as);
+        return "vkCreateAccelerationStructureKHR failed, result=" + std::to_string(static_cast<int>(result));
+    }
+    VkAccelerationStructureDeviceAddressInfoKHR addressInfo = {};
+    addressInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
+    addressInfo.accelerationStructure = as.handle;
+    as.deviceAddress = vkGetAccelerationStructureDeviceAddressKHR(device, &addressInfo);
+
+    as.buildScratchBytes = sizes.buildScratchSize;
+    as.updateScratchBytes = allowUpdate ? sizes.updateScratchSize : 0;
+    as.scratchSizeBytes = std::max<uint64_t>({sizes.buildScratchSize, as.updateScratchBytes, uint64_t{1}});
+    const uint64_t alignment = std::max<uint64_t>(scratchAlignment, 1);
+    VkBufferCreateInfo scratchCI = {};
+    scratchCI.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    scratchCI.size = as.scratchSizeBytes;
+    scratchCI.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    scratchCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    result = vmaCreateBufferWithAlignment(allocator, &scratchCI, &gpuOnly, alignment, &as.scratchBuffer,
+                                          &as.scratchAllocation, nullptr);
+    if (result != VK_SUCCESS) {
+        as.scratchBuffer = VK_NULL_HANDLE;
+        DestroyASStorage(device, allocator, as);
+        return "the scratch buffer of " + std::to_string(as.scratchSizeBytes) +
+               " bytes was not allocated, result=" + std::to_string(static_cast<int>(result));
+    }
+    VkBufferDeviceAddressInfo scratchAddress = {};
+    scratchAddress.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+    scratchAddress.buffer = as.scratchBuffer;
+    as.scratchAddress = vkGetBufferDeviceAddress(device, &scratchAddress);
+    if (as.deviceAddress == 0 || as.scratchAddress % alignment != 0) {
+        DestroyASStorage(device, allocator, as);
+        return "the scratch address is not a multiple of minAccelerationStructureScratchOffsetAlignment (" +
+               std::to_string(alignment) + ") or the structure has no device address";
+    }
+    return {};
+}
+
+bool BothPreferences(RHIASBuildFlags flags) {
+    return HasFlag(flags, RHIASBuildFlags::PreferFastTrace) && HasFlag(flags, RHIASBuildFlags::PreferFastBuild);
+}
+
+}  // namespace
+
+RHIBLASHandle VulkanDevice::CreateBLAS(const RHIBLASDesc& desc) {
+    UZ_PROFILE_FUNCTION();
+    const char* name = desc.debugName ? desc.debugName : "(unnamed)";
+    const auto refuse = [&](const std::string& why) {
+        UZ_LOG(RHI, Error, "CreateBLAS '{}': {}", name, why);
+        return RHIBLASHandle::Invalid();
+    };
+    if (!m_supportsAccelerationStructures) return refuse("acceleration structures are not enabled on this device");
+    if (!desc.geometries || desc.geometryCount == 0) return refuse("no geometry");
+    if (desc.geometryCount > m_asMaxGeometryCount) {
+        return refuse(std::to_string(desc.geometryCount) + " geometries exceed maxGeometryCount " +
+                      std::to_string(m_asMaxGeometryCount));
+    }
+    if (BothPreferences(desc.buildFlags)) return refuse("PreferFastTrace and PreferFastBuild are exclusive");
+
+    VulkanBLAS blas;
+    blas.buildFlags = ToVkASBuildFlags(desc.buildFlags);
+    uint64_t totalPrimitives = 0;
+    for (uint32_t i = 0; i < desc.geometryCount; ++i) {
+        const RHIRTGeometryDesc& src = desc.geometries[i];
+        const std::string geometry = "geometry " + std::to_string(i) + ": ";
+        if (src.vertexFormat != RHIFormat::RGB32Float) return refuse(geometry + "the vertex format is not RGB32Float");
+        if (src.vertexStride < 12 || src.vertexStride % 4 != 0) {
+            return refuse(geometry + "vertex stride " + std::to_string(src.vertexStride) +
+                          " is below 12 bytes or not a multiple of 4");
+        }
+        if (src.vertexCount == 0) return refuse(geometry + "no vertices");
+        const VulkanBuffer* vb = m_bufferPool.Get(src.vertexBuffer.index, src.vertexBuffer.generation);
+        if (!vb || vb->buffer == VK_NULL_HANDLE) return refuse(geometry + "the vertex buffer is not live");
+        if (!HasFlag(vb->desc.usage, RHIBufferUsage::AccelerationStructureBuildInput)) {
+            return refuse(geometry + "the vertex buffer lacks AccelerationStructureBuildInput");
+        }
+        const uint64_t vertexBytes = uint64_t{src.vertexCount - 1} * src.vertexStride + 12;
+        if (vertexBytes > vb->desc.sizeBytes || vb->gpuAddress % 4 != 0) {
+            return refuse(geometry + "the vertex buffer is smaller than " + std::to_string(vertexBytes) +
+                          " bytes or its address is not 4-byte aligned");
+        }
+
+        VkAccelerationStructureGeometryKHR g = {};
+        g.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+        g.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+        g.flags = src.isOpaque ? VK_GEOMETRY_OPAQUE_BIT_KHR : 0;
+        auto& tri = g.geometry.triangles;
+        tri.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+        tri.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
+        tri.vertexData.deviceAddress = vb->gpuAddress;
+        tri.vertexStride = src.vertexStride;
+        tri.maxVertex = src.vertexCount - 1;
+        tri.transformData.deviceAddress = 0;
+        uint32_t primitives = 0;
+        if (src.indexCount > 0) {
+            // As on DX12, an index buffer is used only with a non-zero index count.
+            const VulkanBuffer* ib = m_bufferPool.Get(src.indexBuffer.index, src.indexBuffer.generation);
+            if (!ib || ib->buffer == VK_NULL_HANDLE) return refuse(geometry + "the index buffer is not live");
+            if (!HasFlag(ib->desc.usage, RHIBufferUsage::AccelerationStructureBuildInput)) {
+                return refuse(geometry + "the index buffer lacks AccelerationStructureBuildInput");
+            }
+            const uint32_t indexSize = src.indexFormat == RHIIndexFormat::Uint16 ? 2 : 4;
+            if (src.indexCount % 3 != 0) return refuse(geometry + "the index count is not a multiple of 3");
+            if (uint64_t{src.indexCount} * indexSize > ib->desc.sizeBytes || ib->gpuAddress % indexSize != 0) {
+                return refuse(geometry + "the index buffer is too small or misaligned");
+            }
+            tri.indexType = indexSize == 2 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
+            tri.indexData.deviceAddress = ib->gpuAddress;
+            primitives = src.indexCount / 3;
+        } else {
+            if (src.vertexCount % 3 != 0) return refuse(geometry + "the vertex count is not a multiple of 3");
+            tri.indexType = VK_INDEX_TYPE_NONE_KHR;
+            primitives = src.vertexCount / 3;
+        }
+        totalPrimitives += primitives;
+        blas.geometries.push_back(g);
+        blas.primitiveCounts.push_back(primitives);
+    }
+    if (totalPrimitives > m_asMaxPrimitiveCount) {
+        return refuse(std::to_string(totalPrimitives) + " triangles exceed maxPrimitiveCount " +
+                      std::to_string(m_asMaxPrimitiveCount));
+    }
+
+    VkAccelerationStructureBuildGeometryInfoKHR build = {};
+    build.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+    build.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+    build.flags = blas.buildFlags;
+    build.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+    build.geometryCount = static_cast<uint32_t>(blas.geometries.size());
+    build.pGeometries = blas.geometries.data();
+    VkAccelerationStructureBuildSizesInfoKHR sizes = {};
+    sizes.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
+    vkGetAccelerationStructureBuildSizesKHR(m_device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &build,
+                                            blas.primitiveCounts.data(), &sizes);
+    const std::string error =
+        CreateASStorage(m_device, m_allocator, m_asScratchAlignment, VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
+                        sizes, HasFlag(desc.buildFlags, RHIASBuildFlags::AllowUpdate), blas);
+    if (!error.empty()) return refuse(error);
+
+    uint32_t generation = 0;
+    const uint32_t index = m_blasPool.Allocate(generation);
+    VulkanBLAS* slot = m_blasPool.Get(index, generation);
+    if (!slot) {
+        DestroyASStorage(m_device, m_allocator, blas);
+        return refuse("pool allocation failed");
+    }
+    *slot = std::move(blas);
+    slot->generation = generation;
+    UZ_LOG(RHI, Info, "Created BLAS '{}': {} geometries, result={}B, scratch={}B", name, slot->geometries.size(),
+           slot->resultSizeBytes, slot->scratchSizeBytes);
+    return {index, generation};
+}
+
+void VulkanDevice::DestroyBLAS(RHIBLASHandle handle) {
+    VulkanBLAS* blas = m_blasPool.Get(handle.index, handle.generation);
+    if (!blas || blas->handle == VK_NULL_HANDLE) return;  // invalid or already destroyed
+    DestroyASStorage(m_device, m_allocator, *blas);
+    const uint32_t generation = blas->generation;
+    *blas = VulkanBLAS{};
+    blas->generation = generation;
+    m_blasPool.Free(handle.index);
+}
+
+uint64_t VulkanDevice::GetBLASGPUAddress(RHIBLASHandle handle) const {
+    const VulkanBLAS* blas = m_blasPool.Get(handle.index, handle.generation);
+    return blas && blas->handle != VK_NULL_HANDLE ? blas->deviceAddress : 0;
+}
+
+RHITLASHandle VulkanDevice::CreateTLAS(const RHITLASDesc& desc) {
+    UZ_PROFILE_FUNCTION();
+    const char* name = desc.debugName ? desc.debugName : "(unnamed)";
+    const auto refuse = [&](const std::string& why) {
+        UZ_LOG(RHI, Error, "CreateTLAS '{}': {}", name, why);
+        return RHITLASHandle::Invalid();
+    };
+    if (!m_supportsAccelerationStructures) return refuse("acceleration structures are not enabled on this device");
+    if (desc.maxInstanceCount == 0 || desc.maxInstanceCount > m_asMaxInstanceCount) {
+        return refuse("maxInstanceCount " + std::to_string(desc.maxInstanceCount) + " is 0 or above " +
+                      std::to_string(m_asMaxInstanceCount));
+    }
+    if (BothPreferences(desc.buildFlags)) return refuse("PreferFastTrace and PreferFastBuild are exclusive");
+
+    VulkanTLAS tlas;
+    tlas.buildFlags = ToVkASBuildFlags(desc.buildFlags);
+    tlas.maxInstanceCount = desc.maxInstanceCount;
+    VkAccelerationStructureGeometryKHR g = {};
+    g.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+    g.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
+    g.geometry.instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
+    g.geometry.instances.arrayOfPointers = VK_FALSE;
+    VkAccelerationStructureBuildGeometryInfoKHR build = {};
+    build.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+    build.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+    build.flags = tlas.buildFlags;
+    build.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+    build.geometryCount = 1;
+    build.pGeometries = &g;
+    VkAccelerationStructureBuildSizesInfoKHR sizes = {};
+    sizes.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
+    vkGetAccelerationStructureBuildSizesKHR(m_device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &build,
+                                            &desc.maxInstanceCount, &sizes);
+    const std::string error =
+        CreateASStorage(m_device, m_allocator, m_asScratchAlignment, VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
+                        sizes, HasFlag(desc.buildFlags, RHIASBuildFlags::AllowUpdate), tlas);
+    if (!error.empty()) return refuse(error);
+
+    uint32_t generation = 0;
+    const uint32_t index = m_tlasPool.Allocate(generation);
+    VulkanTLAS* slot = m_tlasPool.Get(index, generation);
+    if (!slot) {
+        DestroyASStorage(m_device, m_allocator, tlas);
+        return refuse("pool allocation failed");
+    }
+    *slot = tlas;
+    slot->generation = generation;
+    UZ_LOG(RHI, Info, "Created TLAS '{}': maxInstances={}, result={}B, scratch={}B", name, desc.maxInstanceCount,
+           slot->resultSizeBytes, slot->scratchSizeBytes);
+    return {index, generation};
+}
+
+void VulkanDevice::DestroyTLAS(RHITLASHandle handle) {
+    VulkanTLAS* tlas = m_tlasPool.Get(handle.index, handle.generation);
+    if (!tlas || tlas->handle == VK_NULL_HANDLE) return;  // invalid or already destroyed
+    DestroyASStorage(m_device, m_allocator, *tlas);
+    const uint32_t generation = tlas->generation;
+    *tlas = VulkanTLAS{};
+    tlas->generation = generation;
+    m_tlasPool.Free(handle.index);
 }
 
 } // namespace uz

@@ -1,4 +1,4 @@
-// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-009. Original: UzEngine runtime/engine/rhi/rhi_types.h at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-007, UZP-MOD-009. Original: UzEngine runtime/engine/rhi/rhi_types.h at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
 
 #pragma once
 
@@ -292,6 +292,9 @@ enum class RHIBufferUsage : uint32_t {
     CopyDst          = 1 << 7,   ///< Destination for GPU copy operations.
     AccelerationStructure = 1 << 8, ///< DXR acceleration structure buffer (BLAS/TLAS result).
     ShaderBindingTable    = 1 << 9, ///< Shader binding table (SBT) for DispatchRays.
+    /// UZP-MOD-007: read by acceleration-structure builds (BLAS vertex/index data, TLAS instance
+    /// records). Vulkan adds `ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR`; DX12 needs no flag.
+    AccelerationStructureBuildInput = 1 << 10,
 };
 
 inline RHIBufferUsage operator|(RHIBufferUsage a, RHIBufferUsage b) {
