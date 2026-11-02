@@ -240,8 +240,8 @@ committed OBJ.
 
 Tool SHA-256 at freeze (the committed LF bytes; the compact predictions too):
 
-- `tools/parity/fit/padding_far32.py`: `01f9c927848c186f207b1e7476685ba669307e42ad7f254902d8f91fba177f3a`
-- `tools/parity/fit/padding_world_offset.py`: `074b31e0c8a05a7c8816bb09e3cfdd5025c8d5cb9d56d8e51cf25244267262ad`
+- `tools/parity/fit/padding_far32.py`: `7aef14fa1a7568a73cb52baee491504704eb4a92098cb95ef8b0af590204ec4f`
+- `tools/parity/fit/padding_world_offset.py`: `4ea0a45135244a5afc96a476038e5b204e93cfc6fdc2e44cfc37c7084713facd`
 - `tools/parity/tier0_semantics/padding_world_offset.py`: `eace51ab3013619b4ec124ccebb4b4488a04188c3794757219f2f9fda34ba800`
 
 ## Reading the recording
