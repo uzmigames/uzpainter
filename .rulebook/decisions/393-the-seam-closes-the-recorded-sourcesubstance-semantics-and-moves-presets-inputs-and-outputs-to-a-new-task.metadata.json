@@ -1,0 +1,13 @@
+{
+  "id": 393,
+  "slug": "the-seam-closes-the-recorded-sourcesubstance-semantics-and-moves-presets-inputs-and-outputs-to-a-new-task",
+  "title": "The seam closes on the recorded SourceSubstance semantics and moves presets, image inputs and output mapping to a new task",
+  "status": "accepted",
+  "date": "2026-11-02",
+  "relatedTasks": [
+    "phase3.1_proc-backend-seam",
+    "phase3.2_source-substance-presets-inputs",
+    "phase3.3_procedural-families"
+  ],
+  "supersededBy": null
+}

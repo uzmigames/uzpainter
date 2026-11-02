@@ -10,7 +10,7 @@ Painter's generators, filters, grunges and materials are Substance (`.sbsar`) gr
 
 ## Dependencies
 - DAG inputs: `phase0.6_procedural-feasibility` (P0-FEAS-PROC go/no-go and first residuals), `phase2.10_pilot-tunic-recovery` (P2-TUNIC).
-- Mandatory children: `phase3.1_proc-backend-seam`, `phase3.2_proc-snapshot-backend`, `phase3.2_proc-generator-families`, `phase3.2_proc-grunge-families`, `phase3.2_proc-filter-families`, `phase3.2_proc-material-families`.
+- Mandatory children: `phase3.1_proc-backend-seam`, `phase3.2_proc-snapshot-backend`, `phase3.2_proc-generator-families`, `phase3.2_proc-grunge-families`, `phase3.2_proc-filter-families`, `phase3.2_proc-material-families`, `phase3.2_source-substance-presets-inputs` (decision 393).
 - Downstream (DAG): `phase3.6_smart-presets-projections` (P3-SMART).
 
 ## Acceptance
