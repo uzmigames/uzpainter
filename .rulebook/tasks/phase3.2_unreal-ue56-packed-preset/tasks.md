@@ -750,3 +750,6 @@ in 21,845 samples. These are the predeclared finite comparisons; they do not
 establish general channel invariance or identify the cause of the differences.
 Private report SHA-256:
 `67e3bd716285700247409a72fd9a0f702285358087369ed3632901164a57ea44`.
+
+## Paused analysis (2026-11-02, front F, stopped by owner: phase 3 waits on phases 1-2)
+- Mesh-supplied AO_Mixed (mesh-float-product s2/s3) is exact on all 65,536 values with w = f32(1+v), top 12 fraction bits; the reopen behaviour is deterministic (r2 = r3 = r4 in `ao-mixed-grid-l16-reopen3`). Residual: where Painter forms a*c it lands 1-2 ulps below at a few operand pairs (L16 r1 grid 8/1/0/8; isolation r1 4-9 pairs); no single-rounding f32 form explains it. Next: a dense control of exact float operands within +-4 ulps of each 12-bit lattice point. No code change; item 2.10 open.
