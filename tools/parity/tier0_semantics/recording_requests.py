@@ -2318,6 +2318,7 @@ ADMITTED = frozenset(
     {
         "ao-mixed-mesh-float-product",
         "export-padding-plane-control",
+        "export-padding-joint-bend",
         "export-presets-unreal-packed-legacy",
         "export-presets-unreal-packed-ocio",
         "export-presets-gltf-legacy",
@@ -2435,6 +2436,7 @@ PRESERVED_REQUESTS = frozenset(
     {
         "ao-mixed-mesh-float-product",
         "export-padding-plane-control",
+        "export-padding-joint-bend",
         "export-presets-unreal-packed-legacy",
         "export-presets-unreal-packed-ocio",
         "ao-mixed-grid-l32f",
