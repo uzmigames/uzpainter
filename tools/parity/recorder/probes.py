@@ -62,6 +62,7 @@ from tools.parity.recorder.job import (
     export_step,
     sha256_bytes,
     sha256_file,
+    staged_input_name,
 )
 from tools.parity.recorder.output import (
     ensure_outside_repository,
@@ -614,12 +615,14 @@ class ProbeSession(PainterSession):
         return identity
 
 
-def stage_inputs(inputs: dict[str, Path], directory: Path) -> dict[str, Path]:
+def stage_inputs(
+    inputs: dict[str, Path], directory: Path, manifest: dict[str, Any]
+) -> dict[str, Path]:
     """Copy the inputs next to the throwaway project so Painter never reads the repository."""
     directory.mkdir(parents=True)
     staged: dict[str, Path] = {}
     for input_id, source in inputs.items():
-        target = directory / f"{input_id}{source.suffix}"
+        target = directory / staged_input_name(manifest, input_id, source)
         shutil.copyfile(source, target)
         staged[input_id] = target
     return staged
@@ -1058,7 +1061,7 @@ def record_api_probe(
     ):
         session.wait_catalog_ready()
     directory = run_directory(job, identity, work, now)
-    staged = stage_inputs(job.inputs, directory / "inputs")
+    staged = stage_inputs(job.inputs, directory / "inputs", job.manifest)
     preflight(session, job)
     try:
         session.call("probe_reset", root=directory.as_posix())
@@ -1243,7 +1246,7 @@ def record_lifecycle(
     identity = session.connect()
     require_colour_management(job, identity)
     directory = run_directory(job, identity, work, now)
-    staged = stage_inputs(job.inputs, directory / "inputs")
+    staged = stage_inputs(job.inputs, directory / "inputs", job.manifest)
     recordings: list[dict[str, Any]] = []
     try:
         session.call("events_connect", events=list(job.events))

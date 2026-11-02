@@ -10,7 +10,12 @@ from typing import Any
 
 import pytest
 
-from tools.parity.recorder.job import ASSETS3D_LICENCE, job_from_manifest, load_job
+from tools.parity.recorder.job import (
+    ASSETS3D_LICENCE,
+    job_from_manifest,
+    load_job,
+    staged_input_name,
+)
 from tools.parity.recorder.session import RecorderError
 from tools.parity.tier0_semantics import wand_kernel_probe as probe
 
@@ -46,6 +51,14 @@ def test_a_repository_input_is_never_resolved_as_an_assets3d_one(tmp_path: Path)
     mesh["provenance"] = {"origin": "uzmigames_authored", "licence": "Apache-2.0"}
     with pytest.raises(RecorderError, match="not an Assets3D input"):
         job_from_manifest(request, assets_root=tmp_path)
+
+
+def test_a_store_blob_is_staged_with_its_assets3d_extension(tmp_path: Path) -> None:
+    """A private-store blob has no suffix; Painter refuses a mesh staged without one."""
+    request = manifest("0" * 64)
+    blob = tmp_path / ("0" * 64)
+    assert staged_input_name(request, probe.MESH, blob) == f"{probe.MESH}.obj"
+    assert staged_input_name(request, probe.MESH, tmp_path / "wand.fbx") == f"{probe.MESH}.fbx"
 
 
 def test_without_a_root_a_texture_job_refuses_its_assets3d_mesh() -> None:

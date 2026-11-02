@@ -49,6 +49,7 @@ from tools.parity.recorder.job import (
     OutputMap,
     Step,
     sha256_file,
+    staged_input_name,
 )
 from tools.parity.recorder.output import ensure_outside_repository, run_name, write_run
 from tools.parity.recorder.session import (
@@ -104,7 +105,7 @@ def stage_inputs(job: Job, directory: Path) -> dict[str, Path]:
     directory.mkdir(parents=True)
     staged: dict[str, Path] = {}
     for input_id, source in job.inputs.items():
-        target = directory / f"{input_id}{source.suffix}"
+        target = directory / staged_input_name(job.manifest, input_id, source)
         shutil.copyfile(source, target)
         staged[input_id] = target
     return staged

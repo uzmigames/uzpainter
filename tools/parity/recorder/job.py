@@ -14,7 +14,7 @@ import json
 import re
 from collections import Counter
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from tools.parity.recorder import vocabulary as ps
@@ -493,6 +493,18 @@ def pinned_assets3d_file(
         f"input {item['input_id']}: {file} {state}, and the private store holds no blob "
         f"{item['sha256']} ({stored.reason if stored is not None else 'no private store here'})"
     )
+
+
+def staged_input_name(manifest: dict[str, Any], input_id: str, source: Path) -> str:
+    """The file name an input is staged under: its id with the source's suffix. A private-store
+    blob has no suffix, so an Assets3D input resolved from the store takes its `assets3d_path`'s
+    suffix; Painter picks the importer by the extension."""
+    suffix = source.suffix
+    if not suffix:
+        for item in manifest["inputs"]:
+            if item["input_id"] == input_id and "assets3d_path" in item:
+                suffix = PurePosixPath(item["assets3d_path"]).suffix
+    return f"{input_id}{suffix}"
 
 
 def load_job(path: Path, repo_root: Path = REPO_ROOT, assets_root: Path | None = None) -> Job:

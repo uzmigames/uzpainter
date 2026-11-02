@@ -197,7 +197,7 @@ def record_filter_context_golden(
     ):
         session.wait_catalog_ready()
     directory = run_directory(job, identity, work, now)
-    staged = stage_inputs(job.inputs, directory / "inputs")
+    staged = stage_inputs(job.inputs, directory / "inputs", job.manifest)
     preflight(session, job)
 
     panel_blobs: list[Path] = []
