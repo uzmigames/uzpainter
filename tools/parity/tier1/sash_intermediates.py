@@ -3,8 +3,11 @@ r"""The Sash v5 mask-generator intermediates for the current round (decision 300
     python -m tools.parity.tier1.sash_intermediates extract --blender <blender.exe>
         --assets-root <Assets3D> [--low-record <N's export-record.json>] [--run NAME]
         [--expect <earlier intermediates-record.json>] [--store DIR] [--dry-run]
+    python -m tools.parity.tier1.sash_intermediates control --blender <blender.exe>
+        [--run NAME] [--expect <earlier record>]
     python -m tools.parity.tier1.sash_intermediates ao --blender <blender.exe>
         --assets-root <Assets3D> --extraction <extract run's intermediates-record.json>
+        --control <control run's intermediates-record.json>
         [--run NAME] [--expect <earlier record>] [--store DIR] [--dry-run]
     python -m tools.parity.tier1.sash_intermediates centre
         (--derive <extract run's record> | --authored X Y --provenance TEXT | --missing REASON)
@@ -38,9 +41,13 @@ not a baseline approval (decision 300 item 8).
    Painter's final map and is never read.
 3. **ao** (Blender). Requires an accepted extraction record. The Blender side re-reads the low
    and refuses the bake unless every array's digest equals the extraction's; it bakes the
-   donor's AO with every option pinned (`CYCLES_SETTINGS`, `BAKE_OPTIONS`). The bake's
-   determinism is a claim only after an r1-repeat with `--expect` reproduces `ao.npy` byte for
-   byte.
+   donor's AO with every option pinned (`CYCLES_SETTINGS`, `BAKE_OPTIONS`). The receipt holds the
+   call's exact arguments and Blender's `operator_properties_last` before and after the call
+   (`rederived_readback`): a readback that holds values is compared with the pins; one that
+   holds no call state is accepted as `unavailable` only with a linked **control** record
+   (`control`, on the factory scene, `control_outcome`) showing `retention-unavailable` in this
+   Blender. The bake's determinism is a claim only after an r1-repeat with `--expect`
+   reproduces `ao.npy` byte for byte.
 4. **centre** (host only), separate and optional. Extraction and AO never depend on it.
    `--derive` proves the wrap's grid topology on the Authoring polygons and its angular
    correspondence with `low_gen.wrap_low`'s columns, intersects two non-parallel radial columns
@@ -94,8 +101,15 @@ DEFAULT_RUNS = {
     "extract": RUN_PREFIX + "intermediates-r1",
     "ao": RUN_PREFIX + "ao-r1",
     "centre": RUN_PREFIX + "centre-r1",
+    "control": RUN_PREFIX + "readback-control-r1",
 }
-TIMEOUTS_S = {"extract": 600, "ao": 3600}
+TIMEOUTS_S = {"extract": 600, "ao": 3600, "control": 300}
+CONTROL_OUTPUTS = frozenset({LOG_NAME, side.CONTROL_REPORT})
+RETENTION_UNAVAILABLE = "retention-unavailable"
+# The control bake's AO on a lone plane is 1.0 where baked; the operator's default type,
+# COMBINED, would give the factory world's 0.05 grey times the albedo. Half way tells them apart.
+CONTROL_AO_FLOOR = 0.5
+CONTROL_CUBE_TOLERANCE = 1e-6
 SCRIPT = Path(side.__file__).resolve()
 SUBSTITUTE = "current-round substitute made from preserved files; not the lost sashchain.sh product"
 
@@ -748,7 +762,29 @@ def load_extraction(
     return record
 
 
-def ao_report_problems(report: Any, copy: Path, expect: Mapping[str, Any], ao: Any) -> list[str]:
+def rederived_readback(document: Any, call: Mapping[str, Any]) -> dict[str, Any]:
+    """A readback the report holds, re-derived from its own evidence for exactly `call`'s names;
+    refused unless it is that derivation."""
+    if not isinstance(document, Mapping):
+        raise ExtractError("the report holds no bake readback")
+    try:
+        derived = side.readback_state(
+            call, document["values"], document["set"], document["defaults"]
+        )
+    except (KeyError, TypeError, AttributeError) as error:
+        raise ExtractError(f"a readback is malformed ({type(error).__name__}: {error})") from error
+    if dict(document) != derived:
+        raise ExtractError(f"a readback is not what its evidence shows ({derived['status']})")
+    return derived
+
+
+def ao_report_problems(
+    report: Any,
+    copy: Path,
+    expect: Mapping[str, Any],
+    ao: Any,
+    control_outcome: str | None = None,
+) -> list[str]:
     try:
         checks: list[tuple[str, Any, Any]] = [
             ("extractor", report["extractor"], side.EXTRACTOR),
@@ -761,7 +797,9 @@ def ao_report_problems(report: Any, copy: Path, expect: Mapping[str, Any], ao: A
             ("cycles", report["cycles_applied"], side.CYCLES_SETTINGS),
             ("bake options", report["bake_options"], side.BAKE_OPTIONS),
             ("colour space", report["image"]["colorspace"], side.AO_COLORSPACE),
+            ("image size", report["image"]["size"], [side.AO_RESOLUTION] * 2),
             ("pixels finite", report["pixels"]["finite"], True),
+            ("pixels grey (an AO bake)", report["pixels"]["rgb_equal"], True),
             (
                 "pixel range",
                 0.0 <= report["pixels"]["min"] <= report["pixels"]["max"] <= 1.0,
@@ -782,7 +820,29 @@ def ao_report_problems(report: Any, copy: Path, expect: Mapping[str, Any], ao: A
         for name in sorted(side.SCENE_OR_OPERATOR_OPTIONS)
         if scene_after.get(name) != side.BAKE_OPTIONS[name]
     ]
-    used = report.get("bake_options_used")
+    # The receipt: the exact arguments of the call, then Blender's own readback. "unavailable"
+    # is accepted only when its evidence re-derives it (no property set, every value the RNA
+    # default); a readback that holds other values is compared with the pins.
+    call = {name: side.BAKE_OPTIONS[name] for name in sorted(passed & set(side.BAKE_OPTIONS))}
+    if report.get("operator_call") != call:
+        problems.append(f"object.bake was called with {report.get('operator_call')!r}")
+    try:
+        derived = rederived_readback(report.get("bake_readback"), call)
+        before = rederived_readback(report.get("bake_readback_before"), call)
+    except ExtractError as error:
+        return [*problems, str(error)]
+    if report.get("bake_options_used") != derived["used"]:
+        problems.append("the report's bake_options_used is not its readback's")
+    if derived["status"] == "unavailable":
+        # Only with the control's proof, and with nothing changed by the call itself.
+        if control_outcome != RETENTION_UNAVAILABLE:
+            problems.append(f"the readback is unavailable but the control shows {control_outcome}")
+        if before["status"] != "unavailable" or (before["values"], before["set"]) != (
+            derived["values"],
+            derived["set"],
+        ):
+            problems.append("the readback changed across the call yet claims no call state")
+    used = derived["used"]
     if used is not None:
         problems += [
             f"object.bake ran with {name} {used.get(name)!r}, pinned {side.BAKE_OPTIONS[name]!r}"
@@ -807,16 +867,18 @@ def _same_option(found: Any, pinned: Any) -> bool:
 def run_ao(
     plan: Plan,
     extraction: Path,
+    control: Path,
     runner: Runner = run_blender,
     *,
     low_game_pins: Mapping[str, str] | None = None,
     triangles: int = TRIANGLES,
 ) -> dict[str, Any]:
-    """The AO substitute on the verified low."""
+    """The AO substitute on the verified low, its receipt linked to a readback control."""
     accepted = load_extraction(
         extraction, plan.source_pin.sha256, low_game_pins=low_game_pins, triangles=triangles
     )
     expect = accepted["low"]["digests"]
+    checked = load_control(control, plan.blender_sha256, plan.script_sha256)
 
     def write_expect() -> None:
         side.write_json(
@@ -827,12 +889,18 @@ def run_ao(
     source = _blender_run(plan, runner, AO_OUTPUTS, write_expect)
     report = json.loads((plan.run_dir / side.AO_REPORT).read_bytes())
     ao = np.load(plan.run_dir / side.AO_NAME, allow_pickle=False)
-    problems = ao_report_problems(report, plan.run_dir / side.SOURCE_BLEND_NAME, expect, ao)
+    copy = plan.run_dir / side.SOURCE_BLEND_NAME
+    problems = ao_report_problems(report, copy, expect, ao, checked["outcome"])
     if problems:
         raise ExtractError("; ".join(problems))
     record = {
         "schema": RECORD_SCHEMA,
         "kind": "ao",
+        "control": {
+            "record": str(control),
+            "record_sha256": sha256_file(control),
+            "outcome": checked["outcome"],
+        },
         "label": "NEW AO substitute baked now from the preserved High and the verified low; "
         "not the lost 25-Faixa-Cintura_AO_v5",
         "blender": _blender_json(plan, report["blender"]),
@@ -852,8 +920,12 @@ def run_ao(
             )
         }
         | {
-            # The receipt: what object.bake ran with, as Blender kept it (None if it did not),
+            # The receipt: the call's exact arguments; Blender's readback with its evidence
+            # (`unavailable` when it keeps no call state, then `bake_options_used` is None);
             # and the scene's bake settings afterwards.
+            "operator_call": report["operator_call"],
+            "bake_readback_before": report["bake_readback_before"],
+            "bake_readback": report["bake_readback"],
             "bake_options_used": report.get("bake_options_used"),
             "scene_bake_after": report.get("scene_bake_after"),
             "pixels": report["pixels"],
@@ -863,6 +935,123 @@ def run_ao(
         "outputs": _outputs(plan.run_dir, [side.AO_NAME, side.AO_EXPECT, side.AO_REPORT]),
     }
     _write_record(plan.run_dir, record)
+    return record
+
+
+# ----------------------------------------------------------------------- readback control
+def control_command(blender: Path, script: Path, run_dir: Path) -> tuple[str, ...]:
+    """Front N's pinned options on the factory scene: no file is opened."""
+    return (
+        str(blender),
+        *low_host.BLENDER_OPTIONS,
+        "--python-exit-code",
+        "1",
+        "--python",
+        str(script),
+        "--",
+        "control",
+        str(run_dir),
+    )
+
+
+def control_outcome(report: Any) -> tuple[str, list[str]]:
+    """`retention-unavailable` only when both control calls took effect (the cube's size and
+    location; an AO-valued bake) while their readbacks are re-derived `unavailable`, unchanged
+    across the call; `retention-observed` when any readback is a readback; else `inconclusive`,
+    with what is missing."""
+    notes: list[str] = []
+    statuses: list[str] = []
+    try:
+        if (report["extractor"], report["mode"]) != (side.EXTRACTOR, "control"):
+            return "inconclusive", ["not a control report"]
+        for name, call in (("cube", side.CONTROL_CUBE), ("bake", side.CONTROL_BAKE)):
+            entry = report[name]
+            if entry["call"] != call or entry["result"] != ["FINISHED"]:
+                notes.append(f"the {name} call is not the control's, or did not finish")
+            before = rederived_readback(entry["before"], call)
+            after = rederived_readback(entry["after"], call)
+            statuses += [before["status"], after["status"]]
+            if (before["values"], before["set"]) != (after["values"], after["set"]):
+                notes.append(f"the {name} readback changed across the call")
+        cube = report["cube"]["effect"]
+        size, location = side.CONTROL_CUBE["size"], side.CONTROL_CUBE["location"]
+        if any(abs(d - size) > CONTROL_CUBE_TOLERANCE for d in cube["dimensions"]) or any(
+            abs(a - b) > CONTROL_CUBE_TOLERANCE
+            for a, b in zip(cube["location"], location, strict=True)
+        ):
+            notes.append(f"the cube call did not take effect ({cube})")
+        bake = report["bake"]["effect"]
+        if not 0.0 <= bake["min"] <= bake["max"] <= 1.0 or bake["max"] < CONTROL_AO_FLOOR:
+            notes.append(f"the control bake is not an AO bake ({bake})")
+    except (KeyError, TypeError, ValueError, ExtractError) as error:
+        return "inconclusive", [*notes, f"the control report is malformed ({error})"]
+    if "readback" in statuses:
+        return "retention-observed", notes
+    if notes:
+        return "inconclusive", notes
+    return RETENTION_UNAVAILABLE, notes
+
+
+def run_control(
+    blender: Path,
+    run_dir: Path,
+    runner: Runner = run_blender,
+    *,
+    blender_sha256: str = low_host.BLENDER_SHA256,
+) -> dict[str, Any]:
+    """Whether the pinned Blender keeps a background Python call's last properties."""
+    ensure_outside_repository(run_dir)
+    found = sha256_file(blender)
+    if found != blender_sha256:
+        raise ExtractError(f"{blender} has SHA-256 {found}, pinned {blender_sha256}")
+    run_dir.mkdir(parents=True, exist_ok=False)
+    env = {**os.environ, **{name: str(run_dir) for name in low_host.TEMP_VARIABLES}}
+    command = control_command(blender, SCRIPT, run_dir)
+    code = runner(command, run_dir, env, run_dir / LOG_NAME, TIMEOUTS_S["control"])
+    if code != 0:
+        raise ExtractError(f"Blender exited {code}; see {run_dir / LOG_NAME}")
+    present = {path.name for path in run_dir.iterdir()}
+    if present != CONTROL_OUTPUTS:
+        raise ExtractError(
+            f"{run_dir}: holds {sorted(present)}, expected {sorted(CONTROL_OUTPUTS)}"
+        )
+    report = json.loads((run_dir / side.CONTROL_REPORT).read_bytes())
+    outcome, notes = control_outcome(report)
+    record = {
+        "schema": RECORD_SCHEMA,
+        "kind": "control",
+        "blender": {
+            "executable": str(blender),
+            "sha256": found,
+            "command": list(command),
+            "build": report.get("blender"),
+        },
+        "script": _script_json(sha256_file(SCRIPT)),
+        "outcome": outcome,
+        "notes": notes,
+        "control": {name: report.get(name) for name in ("cube", "bake")},
+        "outputs": _outputs(run_dir, [side.CONTROL_REPORT]),
+    }
+    _write_record(run_dir, record)
+    return record
+
+
+def load_control(path: Path, blender_sha256: str, script_sha256: str) -> dict[str, Any]:
+    """A control record for this Blender and this Blender-side script, its outcome re-derived
+    from its report."""
+    record: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+    if (record.get("schema"), record.get("kind")) != (RECORD_SCHEMA, "control"):
+        raise ExtractError(f"{path} is not a {RECORD_SCHEMA} control record")
+    if _get(record, ("blender", "sha256")) != blender_sha256:
+        raise ExtractError(f"{path} ran on another Blender")
+    if _get(record, ("script", "blender_side_sha256")) != script_sha256:
+        raise ExtractError(f"{path} ran another Blender-side script")
+    report_path = path.parent / side.CONTROL_REPORT
+    if sha256_file(report_path) != _get(record, ("outputs", side.CONTROL_REPORT, "sha256")):
+        raise ExtractError(f"{report_path} is not the report its record names")
+    outcome, _ = control_outcome(json.loads(report_path.read_bytes()))
+    if outcome != record.get("outcome"):
+        raise ExtractError(f"{path}: its outcome re-derives as {outcome}")
     return record
 
 
@@ -1149,7 +1338,14 @@ def run_centre(
 # ------------------------------------------------------------------------------- repeats
 REPEAT_FIELDS: dict[str, tuple[tuple[str, ...], ...]] = {
     "extract": (("low_game",), ("low",), ("normal", "digest"), ("outputs",)),
-    "ao": (("extraction", "record_sha256"), ("ao",), ("outputs",)),
+    "ao": (
+        ("extraction", "record_sha256"),
+        ("control", "record_sha256"),
+        ("control", "outcome"),
+        ("ao",),
+        ("outputs",),
+    ),
+    "control": (("outcome",), ("control",), ("outputs",)),
     "centre": (("status",), ("centre",), ("derivation",), ("outputs",)),
 }
 COMMON_FIELDS = (
@@ -1209,6 +1405,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--low-record", type=Path, help="front N's export-record.json (default: its r1)"
     )
     sub.choices["ao"].add_argument("--extraction", type=Path, required=True)
+    sub.choices["ao"].add_argument(
+        "--control", type=Path, required=True, help="a readback control's record"
+    )
+    control = sub.add_parser("control")
+    control.add_argument("--blender", type=Path, required=True, help="the pinned blender.exe")
     centre = sub.add_parser("centre")
     group = centre.add_mutually_exclusive_group(required=True)
     group.add_argument("--derive", type=Path, help="an accepted extraction record")
@@ -1239,6 +1440,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 provenance=args.provenance,
                 missing=args.missing,
             )
+        elif args.mode == "control":
+            record = run_control(args.blender.resolve(strict=True), run_dir_for(run, None))
         else:
             store = OracleStore.open(args.store) if args.store is not None else locate()
             plan = plan_blender(args.mode, args.blender, run, args.assets_root, store)
@@ -1248,13 +1451,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 _pinned_source(NORMAL, args.assets_root, store)
             else:
                 load_extraction(args.extraction)
+                load_control(args.control, plan.blender_sha256, plan.script_sha256)
             if args.dry_run:
                 print(json.dumps(plan.as_json(), indent=2))
                 return 0
             if args.mode == "extract":
                 record = run_extract(plan, low_record, args.assets_root, store)
             else:
-                record = run_ao(plan, args.extraction)
+                record = run_ao(plan, args.extraction, args.control)
     except (
         ExtractError,
         RecorderError,

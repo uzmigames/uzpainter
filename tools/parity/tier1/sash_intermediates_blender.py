@@ -32,6 +32,11 @@ attribute that `deliver.py` did not copy to `-Low-Game`.
   Blender's `image.pixels` holds them, as the donor did. The
   report holds the options passed and, when Blender keeps them, the operator's last-used ones.
 
+- **control** (factory scene, no file opened). Whether this Blender keeps the last-used
+  properties of a background Python call at all: `operator_properties_last` before and after a
+  `mesh.primitive_cube_add` and a tiny AO bake, with each call's visible effect (`_control`).
+  The AO receipt calls its own readback `unavailable` only with this control's outcome linked.
+
 Nothing is ever saved: the opened file is the private copy, and the host checks its hash after
 Blender exits. Everything above `main` is plain Python and numpy, so the host and the tests import
 it without Blender.
@@ -536,11 +541,12 @@ def _ao(bpy: Any, run_dir: Path, opened: Path) -> None:
     high.select_set(True)
     low.select_set(True)
     view_layer.objects.active = low
-    result = bpy.ops.object.bake(**bake_call_options(pins))
+    call = bake_call_options(pins)
+    readback_before = _last_properties(bpy, "object.bake", pins)
+    result = bpy.ops.object.bake(**call)
     if set(result) != {"FINISHED"}:
         raise ExtractError(f"object.bake returned {sorted(result)}")
-    last = bpy.context.window_manager.operator_properties_last("object.bake")
-    used = None if last is None else {n: _plain(getattr(last, n, None)) for n in pins}
+    readback = _last_properties(bpy, "object.bake", pins)
     pixels = np.empty(AO_RESOLUTION * AO_RESOLUTION * 4, np.float32)
     image.pixels.foreach_get(pixels)
     red = pixels[0::4]
@@ -571,11 +577,18 @@ def _ao(bpy: Any, run_dir: Path, opened: Path) -> None:
             "cycles_applied": applied,
             "bake_options": BAKE_OPTIONS,
             "operator_options": sorted(pins),
-            "bake_options_used": used,
+            "operator_call": {name: _plain(value) for name, value in call.items()},
+            "bake_readback_before": readback_before,
+            "bake_readback": readback,
+            "bake_options_used": readback["used"],
             "scene_bake_after": {
                 name: _plain(getattr(scene.render.bake, name, None)) for name in BAKE_OPTIONS
             },
-            "image": {"name": image.name, "colorspace": image.colorspace_settings.name},
+            "image": {
+                "name": image.name,
+                "colorspace": image.colorspace_settings.name,
+                "size": list(image.size),
+            },
             "pixels": {
                 "finite": bool(np.isfinite(rgba).all()),
                 "rgb_equal": bool(
@@ -590,13 +603,155 @@ def _ao(bpy: Any, run_dir: Path, opened: Path) -> None:
     )
 
 
+def readback_state(
+    names: Iterable[str],
+    values: Mapping[str, Any] | None,
+    is_set: Mapping[str, Any] | None,
+    defaults: Mapping[str, Any],
+) -> dict[str, Any]:
+    """What `operator_properties_last` says about a call, for exactly the option `names` passed.
+
+    Two kinds: `none` (the API returned no properties) and `populated` (values, `is_property_set`
+    flags and RNA defaults, each covering exactly `names`, every flag a bool; anything less
+    refuses). Status `unavailable` means Blender kept no call state: kind `none`, or populated
+    with no property set and every value its default, the pattern `control` mode measures before
+    and after a call. Any set property or non-default value is a `readback` and its values are
+    `used`, so a real disagreement is compared, never relabelled. Whether retention is really
+    unavailable in the pinned Blender is the control's to show, not this function's."""
+    wanted = sorted(names)
+    if not wanted:
+        raise ExtractError("a readback needs the names of the options passed")
+    if sorted(defaults) != wanted:
+        raise ExtractError("the readback's defaults do not cover exactly the options passed")
+    if values is None:
+        if is_set is not None:
+            raise ExtractError("a `none` readback carries no is_property_set flags")
+        kind, unavailable = "none", True
+    else:
+        if is_set is None or sorted(values) != wanted or sorted(is_set) != wanted:
+            raise ExtractError("the readback does not cover exactly the options passed")
+        if not all(isinstance(flag, bool) for flag in is_set.values()):
+            raise ExtractError("an is_property_set flag is not a bool")
+        kind = "populated"
+        unavailable = not any(is_set.values()) and all(
+            values[name] == defaults[name] for name in wanted
+        )
+    return {
+        "kind": kind,
+        "names": wanted,
+        "status": "unavailable" if unavailable else "readback",
+        "values": None if values is None else {name: values[name] for name in wanted},
+        "set": None if is_set is None else {name: is_set[name] for name in wanted},
+        "defaults": {name: defaults[name] for name in wanted},
+        "used": None if unavailable or values is None else {n: values[n] for n in wanted},
+    }
+
+
+def _rna_default(prop: Any) -> Any:
+    if prop.type == "ENUM":
+        return sorted(prop.default_flag) if prop.is_enum_flag else prop.default
+    if getattr(prop, "is_array", False):
+        return list(prop.default_array)
+    return getattr(prop, "default", None)
+
+
+def _last_properties(bpy: Any, operator: str, names: Iterable[str]) -> dict[str, Any]:
+    """`operator_properties_last(operator)` for the passed names, with `is_property_set` and the
+    operator's RNA defaults, classified by `readback_state`."""
+    names = list(names)
+    module, name = operator.split(".")
+    rna = getattr(getattr(bpy.ops, module), name).get_rna_type().properties
+    defaults = {n: _plain(_rna_default(rna[n])) for n in names}
+    last = bpy.context.window_manager.operator_properties_last(operator)
+    if last is None:
+        return readback_state(names, None, None, defaults)
+    values = {n: _plain(getattr(last, n, None)) for n in names}
+    is_set = {n: bool(last.is_property_set(n)) for n in names}
+    return readback_state(names, values, is_set, defaults)
+
+
 def _plain(value: Any) -> Any:
-    """A JSON-safe copy of an RNA value (enums are strings, sets become sorted lists)."""
+    """A JSON-safe copy of an RNA value (enums are strings, sets become sorted lists, sequences
+    such as RNA arrays and vectors lists)."""
     if isinstance(value, set | frozenset):
         return sorted(value)
     if isinstance(value, bool | int | float | str) or value is None:
         return value
-    return str(value)
+    try:
+        return [_plain(v) for v in value]
+    except TypeError:
+        return str(value)
+
+
+# The control: a simple operator whose effect shows the call applied, then a tiny AO bake on a
+# factory plane (unoccluded, so AO is 1.0 where baked; the default COMBINED would give the dim
+# factory world instead). Each call's readback is taken before and after it.
+CONTROL_REPORT = "control-report.json"
+CONTROL_CUBE: dict[str, Any] = {"size": 3.0, "location": [1.0, 2.0, 3.0]}
+CONTROL_BAKE: dict[str, Any] = {
+    "type": "AO",
+    "width": AO_RESOLUTION,
+    "height": AO_RESOLUTION,
+    "margin": 8,
+    "margin_type": "ADJACENT_FACES",
+    "max_ray_distance": 0.014,
+    "cage_extrusion": 0.006,
+    "use_clear": True,
+    "uv_layer": UV_MAP,
+}
+CONTROL_IMAGE = 32
+
+
+def _control(bpy: Any, run_dir: Path) -> None:
+    """`operator_properties_last` before and after two background Python calls (EXEC_DEFAULT,
+    as the AO bake is called), with each call's observable effect."""
+    report: dict[str, Any] = {"extractor": EXTRACTOR, "mode": "control", "blender": _blender(bpy)}
+    before = _last_properties(bpy, "mesh.primitive_cube_add", CONTROL_CUBE)
+    result = bpy.ops.mesh.primitive_cube_add("EXEC_DEFAULT", **CONTROL_CUBE)
+    after = _last_properties(bpy, "mesh.primitive_cube_add", CONTROL_CUBE)
+    cube = bpy.context.view_layer.objects.active
+    report["cube"] = {
+        "call": CONTROL_CUBE,
+        "result": sorted(result),
+        "before": before,
+        "after": after,
+        "effect": {"dimensions": _plain(cube.dimensions), "location": _plain(cube.location)},
+    }
+    for obj in list(bpy.data.objects):
+        bpy.data.objects.remove(obj)
+    bpy.ops.mesh.primitive_plane_add("EXEC_DEFAULT", size=1.0)
+    plane = bpy.context.view_layer.objects.active
+    material = bpy.data.materials.new("uzp_control")
+    if material.node_tree is None:
+        material.use_nodes = True
+    image = bpy.data.images.new(
+        "uzp_control_bake", CONTROL_IMAGE, CONTROL_IMAGE, alpha=False, float_buffer=True
+    )
+    image.colorspace_settings.name = AO_COLORSPACE
+    node = material.node_tree.nodes.new("ShaderNodeTexImage")
+    node.image = image
+    material.node_tree.nodes.active = node
+    plane.data.materials.append(material)
+    scene = bpy.context.scene
+    scene.render.engine = "CYCLES"
+    scene.cycles.device = "CPU"
+    scene.cycles.samples = 1
+    for obj in bpy.context.view_layer.objects:
+        obj.select_set(obj == plane)
+    before = _last_properties(bpy, "object.bake", CONTROL_BAKE)
+    result = bpy.ops.object.bake("EXEC_DEFAULT", **CONTROL_BAKE)
+    after = _last_properties(bpy, "object.bake", CONTROL_BAKE)
+    pixels = np.empty(CONTROL_IMAGE * CONTROL_IMAGE * 4, np.float32)
+    image.pixels.foreach_get(pixels)
+    red = pixels[0::4]
+    report["bake"] = {
+        "call": CONTROL_BAKE,
+        "result": sorted(result),
+        "before": before,
+        "after": after,
+        "effect": {"min": float(red.min()), "max": float(red.max())},
+    }
+    write_json(run_dir / CONTROL_REPORT, report)
 
 
 def main(argv: Sequence[str]) -> None:
@@ -609,6 +764,11 @@ def main(argv: Sequence[str]) -> None:
     if tuple(bpy.app.version[:2]) != BLENDER_VERSION:
         raise ExtractError(f"Blender {bpy.app.version_string}, pinned {BLENDER_VERSION}")
     opened = Path(bpy.data.filepath).resolve() if bpy.data.filepath else None
+    if mode == "control":
+        if opened is not None:
+            raise ExtractError(f"the control runs on the factory scene, not on {opened}")
+        _control(bpy, run_dir)
+        return
     if opened is None or opened != run_dir / SOURCE_BLEND_NAME:
         raise ExtractError(f"the open file is {opened}, not {run_dir / SOURCE_BLEND_NAME}")
     if mode == "extract":
@@ -616,7 +776,7 @@ def main(argv: Sequence[str]) -> None:
     elif mode == "ao":
         _ao(bpy, run_dir, opened)
     else:
-        raise ExtractError(f"mode {mode!r} is not extract or ao")
+        raise ExtractError(f"mode {mode!r} is not extract, ao or control")
 
 
 if __name__ == "__main__":

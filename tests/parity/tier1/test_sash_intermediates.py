@@ -148,7 +148,10 @@ def make_scene(root: Path, arrays: dict[str, Any]) -> NS:
     normal.write_bytes(data)
     table = game_table(arrays)
     record, pins = write_low_game(root / "low-game", table)
+    blender = root / "blender.exe"
+    blender.write_bytes(b"authored blender bytes")
     return NS(
+        blender=blender,
         root=root,
         assets=root / "assets",
         source=source,
@@ -176,13 +179,13 @@ def plan(scene: NS, mode: str, run: str) -> host.Plan:
     run_dir = scene.root / "work" / run
     return host.Plan(
         mode=mode,
-        blender=Path("blender.exe"),
-        blender_sha256=low_host.BLENDER_SHA256,
+        blender=scene.blender,
+        blender_sha256=sha256_file(scene.blender),
         script_sha256=sha256_file(host.SCRIPT),
         source=scene.source,
         source_origin="assets3d",
         run_dir=run_dir,
-        command=host.blender_command(Path("blender.exe"), host.SCRIPT, run_dir, mode),
+        command=host.blender_command(scene.blender, host.SCRIPT, run_dir, mode),
         source_pin=scene.source_pin,
     )
 
@@ -563,6 +566,112 @@ def test_run_directories_are_fresh_and_outside_the_repository(tmp_path: Path) ->
         host.run_dir_for("../r1", tmp_path)
 
 
+# object.bake's RNA defaults in Blender 5.2.3, as its readback showed them in ao-r1 and in front
+# P's control (view_from's operator default is assumed equal to the scene default).
+BAKE_DEFAULTS: dict[str, Any] = {
+    "type": "COMBINED",
+    "pass_filter": [],
+    "filepath": "",
+    "width": 512,
+    "height": 512,
+    "margin": 16,
+    "margin_type": "EXTEND",
+    "use_selected_to_active": False,
+    "max_ray_distance": 0.0,
+    "cage_extrusion": 0.0,
+    "cage_object": "",
+    "normal_space": "TANGENT",
+    "normal_r": "POS_X",
+    "normal_g": "POS_Y",
+    "normal_b": "POS_Z",
+    "target": "IMAGE_TEXTURES",
+    "save_mode": "INTERNAL",
+    "use_clear": False,
+    "use_cage": False,
+    "use_split_materials": False,
+    "use_automatic_name": False,
+    "uv_layer": "",
+    "view_from": "ABOVE_SURFACE",
+}
+
+
+def unset_readback(names: Sequence[str], defaults: Mapping[str, Any]) -> dict[str, Any]:
+    """The populated, all-unset, all-default readback Blender 5.2 gives in background."""
+    return side.readback_state(names, dict(defaults), dict.fromkeys(names, False), defaults)
+
+
+CUBE_DEFAULTS = {"size": 2.0, "location": [0.0, 0.0, 0.0]}
+
+
+def fake_control(retains: bool = False, cube_moves: bool = True) -> Runner:
+    """The control's Blender: the readbacks as measured (or retaining the call), the effects."""
+
+    def readbacks(call: Mapping[str, Any], defaults: Mapping[str, Any]) -> tuple[Any, Any]:
+        names = sorted(call)
+        before = unset_readback(names, defaults)
+        if not retains:
+            return before, before
+        after = side.readback_state(names, dict(call), dict.fromkeys(names, True), defaults)
+        return before, after
+
+    def run(
+        command: Sequence[str], cwd: Path, env: Mapping[str, str], log: Path, timeout: int
+    ) -> int:
+        assert command[-2:] == ("control", str(cwd)) and timeout == host.TIMEOUTS_S["control"]
+        assert side.SOURCE_BLEND_NAME not in " ".join(command)  # no file is opened
+        log.write_text("authored\n", encoding="utf-8")
+        cube_before, cube_after = readbacks(side.CONTROL_CUBE, CUBE_DEFAULTS)
+        bake_defaults = {n: BAKE_DEFAULTS[n] for n in side.CONTROL_BAKE}
+        bake_before, bake_after = readbacks(side.CONTROL_BAKE, bake_defaults)
+        report = {
+            "extractor": side.EXTRACTOR,
+            "mode": "control",
+            "blender": {"version": [5, 2, 3]},
+            "cube": {
+                "call": side.CONTROL_CUBE,
+                "result": ["FINISHED"],
+                "before": cube_before,
+                "after": cube_after,
+                "effect": {
+                    "dimensions": [3.0, 3.0, 3.0] if cube_moves else [2.0, 2.0, 2.0],
+                    "location": [1.0, 2.0, 3.0] if cube_moves else [0.0, 0.0, 0.0],
+                },
+            },
+            "bake": {
+                "call": side.CONTROL_BAKE,
+                "result": ["FINISHED"],
+                "before": bake_before,
+                "after": bake_after,
+                "effect": {"min": 1.0, "max": 1.0},
+            },
+        }
+        side.write_json(cwd / side.CONTROL_REPORT, report)
+        return 0
+
+    return run
+
+
+def control(scene: NS, run: str = "c1", runner: Runner | None = None) -> Path:
+    host.run_control(
+        scene.blender,
+        scene.root / "work" / run,
+        runner or fake_control(),
+        blender_sha256=sha256_file(scene.blender),
+    )
+    path: Path = scene.root / "work" / run / host.RECORD_NAME
+    return path
+
+
+def ao(scene: NS, run: str, runner: Runner, control_record: Path | None = None) -> dict[str, Any]:
+    return host.run_ao(
+        plan(scene, "ao", run),
+        scene.root / "work" / "x1" / host.RECORD_NAME,
+        control_record or control(scene, f"{run}-control"),
+        runner,
+        **accepted(scene),
+    )
+
+
 def fake_ao(
     value: float = 0.5,
     digests: Mapping[str, str] | None = None,
@@ -570,8 +679,18 @@ def fake_ao(
     view_from_on_operator: bool = True,
     scene_view_from: str = "ABOVE_SURFACE",
     pixel_max: float | None = None,
+    readback: Mapping[str, Any] | None = None,
 ) -> Runner:
     passed = sorted(n for n in side.BAKE_OPTIONS if view_from_on_operator or n != "view_from")
+    call = {name: side.BAKE_OPTIONS[name] for name in passed}
+    defaults = {name: BAKE_DEFAULTS[name] for name in passed}
+    before = unset_readback(passed, defaults)
+    if readback is None:
+        if used is None:  # what Blender 5.2 in background keeps: nothing (measured)
+            readback = before
+        else:
+            values = {name: used[name] for name in passed}
+            readback = side.readback_state(passed, values, dict.fromkeys(passed, True), defaults)
 
     def run(
         command: Sequence[str], cwd: Path, env: Mapping[str, str], log: Path, timeout: int
@@ -592,10 +711,22 @@ def fake_ao(
             "cycles_applied": side.CYCLES_SETTINGS,
             "bake_options": side.BAKE_OPTIONS,
             "operator_options": passed,
-            "bake_options_used": used,
+            "operator_call": call,
+            "bake_readback_before": before,
+            "bake_readback": readback,
+            "bake_options_used": readback["used"],
             "scene_bake_after": {"view_from": scene_view_from},
-            "image": {"name": side.AO_IMAGE, "colorspace": side.AO_COLORSPACE},
-            "pixels": {"finite": True, "min": value, "max": pixel_max or value},
+            "image": {
+                "name": side.AO_IMAGE,
+                "colorspace": side.AO_COLORSPACE,
+                "size": [side.AO_RESOLUTION] * 2,
+            },
+            "pixels": {
+                "finite": True,
+                "rgb_equal": True,
+                "min": value,
+                "max": pixel_max or value,
+            },
             "digest": side.array_digest(ao),
         }
         side.write_json(cwd / side.AO_REPORT, report)
@@ -609,16 +740,16 @@ def test_ao_bakes_on_the_accepted_low_and_reproduces(
 ) -> None:
     monkeypatch.setattr(side, "AO_RESOLUTION", 4)
     extract(scene, "x1", fake_extract(scene.arrays))
-    extraction = scene.root / "work" / "x1" / host.RECORD_NAME
-    record = host.run_ao(plan(scene, "ao", "ao1"), extraction, fake_ao(), **accepted(scene))
+    proof = control(scene)
+    record = ao(scene, "ao1", fake_ao(), proof)
     expect = json.loads((scene.root / "work" / "ao1" / side.AO_EXPECT).read_text(encoding="utf-8"))
     assert expect["low_digests"] == {k: side.array_digest(a) for k, a in scene.arrays.items()}
     assert record["kind"] == "ao" and "NEW AO substitute" in record["label"]
-    repeat = host.run_ao(plan(scene, "ao", "ao2"), extraction, fake_ao(), **accepted(scene))
+    assert record["control"]["outcome"] == host.RETENTION_UNAVAILABLE
+    assert record["control"]["record_sha256"] == sha256_file(proof)
+    repeat = ao(scene, "ao2", fake_ao(), proof)
     assert host.compare_records(repeat, record) == []
-    other = host.run_ao(
-        plan(scene, "ao", "ao3"), extraction, fake_ao(value=0.25), **accepted(scene)
-    )
+    other = ao(scene, "ao3", fake_ao(value=0.25), proof)
     assert any("outputs" in p for p in host.compare_records(other, record))
 
 
@@ -627,17 +758,11 @@ def test_ao_refuses_another_low_or_a_tampered_extraction(
 ) -> None:
     monkeypatch.setattr(side, "AO_RESOLUTION", 4)
     extract(scene, "x1", fake_extract(scene.arrays))
-    extraction = scene.root / "work" / "x1" / host.RECORD_NAME
     with pytest.raises(ExtractError, match="low digests"):
-        host.run_ao(
-            plan(scene, "ao", "ao1"),
-            extraction,
-            fake_ao(digests={"co": "0" * 64}),
-            **accepted(scene),
-        )
+        ao(scene, "ao1", fake_ao(digests={"co": "0" * 64}))
     (scene.root / "work" / "x1" / host.LOW_NPZ).write_bytes(b"changed")
     with pytest.raises(ExtractError, match="recorded"):
-        host.run_ao(plan(scene, "ao", "ao2"), extraction, fake_ao(), **accepted(scene))
+        ao(scene, "ao2", fake_ao())
 
 
 def test_an_extraction_record_is_checked_again_not_trusted(scene: NS) -> None:
@@ -663,29 +788,77 @@ def test_ao_receipt_holds_the_options_object_bake_ran_with(
 ) -> None:
     monkeypatch.setattr(side, "AO_RESOLUTION", 4)
     extract(scene, "x1", fake_extract(scene.arrays))
-    extraction = scene.root / "work" / "x1" / host.RECORD_NAME
-    # RNA keeps float options as float32: 0.014 reads back as float32(0.014).
+    # Blender 5.2 in background keeps no call state: unavailable, with the control's proof.
+    receipt = ao(scene, "ao0", fake_ao())["ao"]
+    assert receipt["bake_readback"]["status"] == "unavailable"
+    assert receipt["bake_readback"]["kind"] == "populated"
+    assert receipt["bake_options_used"] is None
+    assert receipt["operator_call"] == side.BAKE_OPTIONS
+    # A Blender that keeps the call: compared. RNA floats read back at float32.
     used = {**side.BAKE_OPTIONS, "max_ray_distance": float(np.float32(0.014))}
-    record = host.run_ao(
-        plan(scene, "ao", "ao1"), extraction, fake_ao(used=used), **accepted(scene)
-    )
+    record = ao(scene, "ao1", fake_ao(used=used))
+    assert record["ao"]["bake_readback"]["status"] == "readback"
     assert record["ao"]["bake_options_used"] == used
     assert record["ao"]["bake_options"]["use_cage"] is False
     assert record["ao"]["scene_bake_after"] == {"view_from": "ABOVE_SURFACE"}
     # view_from as a scene-only setting is accepted when the scene holds the pin.
-    host.run_ao(
-        plan(scene, "ao", "ao2"),
-        extraction,
-        fake_ao(view_from_on_operator=False),
-        **accepted(scene),
-    )
+    ao(scene, "ao2", fake_ao(view_from_on_operator=False))
+    names = sorted(side.BAKE_OPTIONS)
+    defaults = {n: BAKE_DEFAULTS[n] for n in names}
+    false_claim = {**unset_readback(names, defaults), "values": {**defaults, "margin": 8}}
+    incomplete = {**unset_readback(names, defaults), "set": {"type": False}}
     for run, runner, message in (
         ("ao3", fake_ao(used={**used, "margin": 16}), "ran with margin 16"),
         ("ao4", fake_ao(scene_view_from="ACTIVE_CAMERA"), "bake view_from"),
         ("ao5", fake_ao(pixel_max=1.0001), "pixel range"),
+        ("ao6", fake_ao(readback=false_claim), "not what its evidence shows"),
+        ("ao7", fake_ao(readback=incomplete), "cover exactly the options passed"),
     ):
         with pytest.raises(ExtractError, match=message):
-            host.run_ao(plan(scene, "ao", run), extraction, runner, **accepted(scene))
+            ao(scene, run, runner)
+
+
+def test_unavailable_needs_the_control_to_show_it(
+    scene: NS, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(side, "AO_RESOLUTION", 4)
+    extract(scene, "x1", fake_extract(scene.arrays))
+    for run, runner, outcome in (
+        ("c-retains", fake_control(retains=True), "retention-observed"),
+        ("c-no-effect", fake_control(cube_moves=False), "inconclusive"),
+    ):
+        proof = control(scene, run, runner)
+        assert json.loads(proof.read_text(encoding="utf-8"))["outcome"] == outcome
+        with pytest.raises(ExtractError, match=f"the control shows {outcome}"):
+            ao(scene, f"ao-{run}", fake_ao(), proof)
+    proof = control(scene, "c-ok")
+    record = json.loads(proof.read_text(encoding="utf-8"))
+    record["outcome"] = "inconclusive"
+    proof.write_text(json.dumps(record), encoding="utf-8")
+    with pytest.raises(ExtractError, match="re-derives as retention-unavailable"):
+        ao(scene, "ao-tampered", fake_ao(), proof)
+
+
+def test_readback_state_needs_complete_declared_evidence() -> None:
+    names = ["margin", "type"]
+    defaults = {"margin": 16, "type": "COMBINED"}
+    none = side.readback_state(names, None, None, defaults)
+    assert (none["kind"], none["status"], none["used"]) == ("none", "unavailable", None)
+    unset = side.readback_state(names, defaults, {"margin": False, "type": False}, defaults)
+    assert (unset["kind"], unset["status"]) == ("populated", "unavailable")
+    kept = side.readback_state(
+        names, {"margin": 8, "type": "AO"}, {"margin": True, "type": True}, defaults
+    )
+    assert kept["status"] == "readback" and kept["used"] == {"margin": 8, "type": "AO"}
+    for args, message in (
+        (([], {}, {}, {}), "names of the options"),
+        ((names, {}, {}, defaults), "cover exactly"),
+        ((names, defaults, {"margin": False, "type": 0}, defaults), "not a bool"),
+        ((names, None, {"margin": False, "type": False}, defaults), "carries no"),
+        ((names, defaults, {"margin": False, "type": False}, {"margin": 16}), "defaults"),
+    ):
+        with pytest.raises(ExtractError, match=message):
+            side.readback_state(*args)
 
 
 # --------------------------------------------------------------------------------- centre
