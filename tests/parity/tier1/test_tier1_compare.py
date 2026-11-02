@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -198,7 +199,7 @@ def test_rebuilds_equal_to_a_stable_golden_pass_and_are_repeatable(tmp_path: Pat
 
 
 def test_a_divergent_rebuild_fails_with_whole_region_and_normal_diagnostics(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     resolved, store = stable_golden(tmp_path)
     changed = maps()
@@ -206,7 +207,13 @@ def test_a_divergent_rebuild_fails_with_whole_region_and_normal_diagnostics(
     changed[NORMAL][0, 0] = (65535, 32768, 32768)  # +X instead of +Z: 90 degrees
     changed[NORMAL][0, 1] = (32768, 32768, 32768)  # length 1/65535: unnormalised
     runs = (candidate(tmp_path / "a", changed), candidate(tmp_path / "b", maps()))
+
+    def no_temporary_folder(*args: object, **kwargs: object) -> str:
+        raise AssertionError("the |Δ| image is staged in the private store, not a temporary folder")
+
+    monkeypatch.setattr(tempfile, "mkdtemp", no_temporary_folder)
     report = report_of(resolved, store, runs)
+    assert list(store.root.glob(".staging-*")) == []  # the staged copy is gone
     equality = report["equality_to_painter"]
     assert equality["outcome"] == "fail" and equality["structural"] == []
     assert report["uzpainter_repeatability"]["status"] == "not_repeatable"

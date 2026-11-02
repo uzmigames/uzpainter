@@ -13,6 +13,7 @@ import json
 import shutil
 import struct
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,7 @@ from tests.mesh.mesh_fixtures import (
     write_glb,
     write_gltf,
 )
+from tools.parity.polygon_triangulation import core as triangulation
 from tools.parity.polygon_triangulation.core import (
     SEMANTICS_PATH,
     OracleUnavailable,
@@ -682,3 +684,34 @@ def test_tier0_polygon_triangulation_equals_painter(mesh_tests: Path) -> None:
     study = run_study(maps, uzpainter_triangulations(mesh_tests))
     assert status(study) == "exact"
     assert semantics_document(study) == load_json(SEMANTICS_PATH)
+
+
+def test_polygon_triangulation_runs_its_importer_without_a_temporary_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A supplied importer is run as is; without one it is built into the repository's `zig-out`.
+    Neither path creates a temporary folder (the build and the import are stubbed here)."""
+    built: list[Path] = []
+    ran: list[str] = []
+
+    def no_temporary_folder(*args: object, **kwargs: object) -> str:
+        raise AssertionError("the triangulation comparison creates no temporary folder")
+
+    def build(prefix: Path) -> Path:
+        built.append(prefix)
+        return prefix / "bin" / "uzp-mesh-tests.exe"
+
+    def run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        ran.append(args[0])
+        return subprocess.CompletedProcess(args, 0, stdout='{"mesh": "stub"}', stderr="")
+
+    monkeypatch.setattr(tempfile, "mkdtemp", no_temporary_folder)
+    monkeypatch.setattr(triangulation, "build_mesh_tests", build)
+    monkeypatch.setattr(subprocess, "run", run)
+    monkeypatch.setattr(triangulation, "triangulations_of_import", lambda result: result)
+    given = tmp_path / "uzp-mesh-tests.exe"
+    assert uzpainter_triangulations(given) == {"mesh": "stub"}
+    assert built == [] and ran == [str(given)]
+    uzpainter_triangulations()
+    assert built == [REPO_ROOT / "zig-out"]
+    assert ran[1] == str(REPO_ROOT / "zig-out" / "bin" / "uzp-mesh-tests.exe")

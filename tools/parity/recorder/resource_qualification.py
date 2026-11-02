@@ -533,14 +533,16 @@ def tga_fields(data: bytes) -> dict[str, Any]:
     }
 
 
-def decoded(data: bytes) -> Any:
-    """The pixel values a file holds (numpy), or None when it cannot be decoded here."""
+def decoded(data: bytes, path: Path | None = None) -> Any:
+    """The pixel values a file holds (numpy), or None when it cannot be decoded here. An OpenEXR
+    file is read from `path`, the file `data` was read from (the binding reads only from a path;
+    without one it does not decode here)."""
     import numpy as np
 
     try:
         container = measure(data)["container"]
         if container == "exr":
-            return exr_pixels(data)
+            return None if path is None else exr_pixels(path)
         if container == "png":  # Pillow truncates 16-bit RGB to 8 bits
             from tools.parity.feasibility.png import decode
 
@@ -553,20 +555,14 @@ def decoded(data: bytes) -> Any:
         return None
 
 
-def exr_pixels(data: bytes) -> Any:
-    """OpenEXR channels stacked in name order (the binding reads from a path, so a temporary
-    copy outside the repository is decoded)."""
-    import tempfile
-
+def exr_pixels(path: Path) -> Any:
+    """OpenEXR channels stacked in name order, read from the file itself (no copy is written)."""
     import numpy as np
     import OpenEXR
 
-    with tempfile.TemporaryDirectory() as folder:
-        path = Path(folder) / "decode.exr"
-        path.write_bytes(data)
-        with OpenEXR.File(str(path), separate_channels=True) as exr:
-            channels = exr.channels()
-            return np.stack([channels[n].pixels for n in sorted(channels)], axis=-1)
+    with OpenEXR.File(str(path), separate_channels=True) as exr:
+        channels = exr.channels()
+        return np.stack([channels[n].pixels for n in sorted(channels)], axis=-1)
 
 
 # --- the run --------------------------------------------------------------------------------
@@ -940,7 +936,8 @@ def pixel_comparison(case: Case, exported: Any) -> bool | None:
     does not decode here)."""
     import numpy as np
 
-    original = decoded(original_bytes(case))
+    source = FIXTURE_DIR / case.file_name if case.committed else None
+    original = decoded(original_bytes(case), source)
     if original is None:
         return None
     return bool(exported.shape == original.shape and np.array_equal(exported, original))
@@ -968,7 +965,7 @@ def analyse(directory: Path) -> dict[str, Any]:
             status["version"] = (entry.get("shown") or {}).get("version")
             if status["status"] == RE_ENCODED:  # other bytes: re-encoded only if they decode
                 path = directory / "exports" / condition / case.case_id / "out" / status["file"]
-                exported = decoded(path.read_bytes())
+                exported = decoded(path.read_bytes(), path)
                 if exported is None:
                     status["status"] = UNDECODED
                 else:

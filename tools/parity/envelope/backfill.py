@@ -18,7 +18,6 @@ checks that the manifest differs from before only by the appended reference.
 from __future__ import annotations
 
 import copy
-import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -113,12 +112,19 @@ def backfill_manifest(
     if dry_run:
         return environment
     before = copy.deepcopy(manifest)
-    with tempfile.TemporaryDirectory(prefix="uzp-backfill-") as directory:
-        source = Path(directory) / "oracle-environment.json"
+    # Staged inside the private store, never in a temporary folder; the folder keeps the file
+    # name the store entry records.
+    directory = store.staging_path()
+    directory.mkdir()
+    source = directory / "oracle-environment.json"
+    try:
         source.write_bytes(environment_bytes(environment))
         updated = record_file(
             store, manifest_path, prefix + ENVIRONMENT_RECORD_ID, ENVIRONMENT_KIND, source
         )
+    finally:
+        source.unlink(missing_ok=True)
+        directory.rmdir()
     added = updated["private_records"][len(before["private_records"]) :]
     if (
         updated["private_records"][: len(before["private_records"])] != before["private_records"]

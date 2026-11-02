@@ -41,7 +41,6 @@ import itertools
 import json
 import math
 import subprocess
-import tempfile
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
@@ -370,12 +369,12 @@ def build_mesh_tests(prefix: Path) -> Path:
 
 
 def uzpainter_triangulations(executable: Path | None = None) -> dict[str, str]:
-    """The chords of each polygon in `uzp-mesh-tests import` of the fixture."""
-    with tempfile.TemporaryDirectory(prefix="uzp-polygons-") as temp:
-        exe = executable if executable is not None else build_mesh_tests(Path(temp))
-        proc = subprocess.run(
-            [str(exe), "import", str(FIXTURE_PATH)], capture_output=True, text=True, check=True
-        )
+    """The chords of each polygon in `uzp-mesh-tests import` of the fixture; without an
+    executable it is built into the repository's `zig-out` (never a temporary folder)."""
+    exe = executable if executable is not None else build_mesh_tests(REPO_ROOT / "zig-out")
+    proc = subprocess.run(
+        [str(exe), "import", str(FIXTURE_PATH)], capture_output=True, text=True, check=True
+    )
     return triangulations_of_import(json.loads(proc.stdout))
 
 

@@ -15,6 +15,7 @@ import importlib.util
 import json
 import shutil
 import sys
+import tempfile
 import types
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -373,7 +374,9 @@ def test_recorded_run_carries_the_environment_and_its_public_hash(repo: Repo) ->
     assert "Fake GPU" not in repo.manifests[0].read_text(encoding="utf-8")
 
 
-def test_backfill_appends_only_the_environment_reference(tmp_path: Path, repo: Repo) -> None:
+def test_backfill_appends_only_the_environment_reference(
+    tmp_path: Path, repo: Repo, monkeypatch: pytest.MonkeyPatch
+) -> None:
     # A golden recorded before environment records existed: same record without `environment`.
     seed = next((repo.inbox / "seed").rglob(RECORD_FILE)).parent
     record = load_json(seed / RECORD_FILE)
@@ -387,7 +390,13 @@ def test_backfill_appends_only_the_environment_reference(tmp_path: Path, repo: R
     path = tmp_path / "legacy-manifests" / "legacy.json"
     record_run(repo.store, path, legacy)
     before = load_json(path)
+
+    def no_temporary_folder(*args: object, **kwargs: object) -> str:
+        raise AssertionError("the back-fill stages its record in the private store")
+
+    monkeypatch.setattr(tempfile, "mkdtemp", no_temporary_folder)
     done = backfill(repo.store, [path], {"gpu_model": "Owner GPU"})
+    assert list(repo.store.root.glob(".staging-*")) == []  # the staging folder is gone
     after = load_json(path)
     assert [p for p, _ in done] == [path]
     assert after["private_records"][:-1] == before["private_records"]
@@ -401,6 +410,8 @@ def test_backfill_appends_only_the_environment_reference(tmp_path: Path, repo: R
     assert environment["painter_build"] == OLD_BUILD
     assert environment["colour_configuration_sha256"] != UNKNOWN  # Legacy mode: no file named
     assert repo.store.load(after["private_records"][-1]["sha256"]) is not None
+    entry = next((repo.store.root / "corpora").rglob("legacy/oracle-environment.json"))
+    assert json.loads(entry.read_text(encoding="utf-8"))["file_name"] == "oracle-environment.json"
     assert backfill(repo.store, [path], {}) == []  # idempotent
     with pytest.raises(Exception, match="only"):
         backfill(repo.store, [repo.manifests[0]], {"recorder_version": "x"})

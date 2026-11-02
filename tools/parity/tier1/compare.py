@@ -74,7 +74,6 @@ import hashlib
 import importlib.metadata
 import json
 import math
-import tempfile
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -369,10 +368,12 @@ def store_difference_map(
     delta = np.abs(oracle.values.astype(np.int64) - candidate.values.astype(np.int64))
     data = png.encode(delta, oracle.bits)
     sha256 = hashlib.sha256(data).hexdigest()
-    with tempfile.TemporaryDirectory(prefix="uzp-tier1-") as directory:
-        path = Path(directory) / f"{sha256}.png"
+    path = store.staging_path()  # staged inside the private store, never in a temporary folder
+    try:
         path.write_bytes(data)
         store.put_blob(path, sha256)
+    finally:
+        path.unlink(missing_ok=True)
     return sha256
 
 

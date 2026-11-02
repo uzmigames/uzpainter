@@ -9,7 +9,7 @@ r"""Command line of the Tier 0 polygon-triangulation comparison (phase1.4_mesh-i
     python -m tools.parity.polygon_triangulation check [--mesh-tests EXE]
         # re-run the comparison; exit 1 if it differs from the published semantics
 
-Without `--mesh-tests` the importer is built with `zig build mesh-tests` into a temporary prefix.
+Without `--mesh-tests` the importer is built with `zig build mesh-tests` into the repo's `zig-out`.
 `run` and `check` read the private oracle from this machine's store (owner's machine only); a
 machine without it gets `oracle_unavailable` and exit status 2.
 """

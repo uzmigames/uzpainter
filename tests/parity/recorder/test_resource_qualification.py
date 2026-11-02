@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import tempfile
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -214,13 +215,23 @@ def test_identical_bytes_in_both_conditions_qualify(tmp_path: Path) -> None:
     assert rq.CASES[0].sha256 in report
 
 
-def test_a_re_encoded_export_is_never_an_original(tmp_path: Path) -> None:
+def test_a_re_encoded_export_is_never_an_original(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     def re_encode(condition: str, data: bytes, target: Path) -> str:
         (target / "exported.bin").write_bytes(data + b"\0")
         return "Export resource"
 
-    outcome = run(tmp_path, re_encode)["analysis"]["outcome"]
+    def no_temporary_folder(*args: object, **kwargs: object) -> str:
+        raise AssertionError("an OpenEXR export is decoded from its own file")
+
+    monkeypatch.setattr(tempfile, "mkdtemp", no_temporary_folder)
+    analysis = run(tmp_path, re_encode)["analysis"]
+    outcome = analysis["outcome"]
     assert outcome["verdict"] == "RE_ENCODED" and outcome["exact_cases"] == []
+    for case in (c for c in rq.CASES if c.format_class == "exr"):
+        status = analysis["cases"][case.case_id][rq.CONDITION_B]
+        assert status["status"] == rq.RE_ENCODED and status["pixels_equal"] is True
 
 
 def test_an_export_that_needs_its_source_is_source_dependent(tmp_path: Path) -> None:
