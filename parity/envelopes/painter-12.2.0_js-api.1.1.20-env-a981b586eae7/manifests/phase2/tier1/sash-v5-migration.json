@@ -1,0 +1,201 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "phase2/tier1/sash-v5-migration",
+  "tier": "1",
+  "domain": "tier1/pilot/sash-v5-migration",
+  "description": "Tier 1 migration golden of the approved UzmiGames sash 25-Faixa-Cintura v5 of the Skeletal Mage, the phase2.9 pilot (decisions 194, 260 and 300 item 7). It is the historical side that the pinned current round phase2/tier1/sash-v5-current is compared with; phase2/tier1/sash-v5 stays the original script golden (decision 260). The sash's approved state is its Painter project, pinned here by the SHA-256 its piece manifest verifies and never read by UzPainter. The recorder copies it into its private work directory, checks the copy's hash and opens it in Painter through the documented API, reads back the project's state privately (the mesh it was last imported from, texture sets, resolution, mesh-map resources with their versions, channel formats, and every layer and effect with its sources, resource versions, blending, opacity, visibility and mask) and exports with an independently authored configuration, not recovered historical arguments: the texture set 25-Faixa-Cintura (the name round.sh and export_lows.py give it), BaseColor, Roughness, Metallic and Height from document maps and Normal from the Normal_OpenGL virtual map, as painter_export.py maps them, named 25-Faixa-Cintura_<map>, as 16-bit PNG, sizeLog2 11, infinite padding (no dilation distance: it applies to the transparent, color and diffusion algorithms only), no dithering, no shader parameters. The future current round exports with the same file. The lost masks, T_sash, low OBJ, MTL and arguments files are not inputs of this golden. Recordings: r1 (same session: open, read back, export), r1-repeat (same session, export again) and r2 (after the copy is saved under a new name, closed and reopened: read back, export again), under OCIO with Painter's substance configuration.",
+  "inputs": [
+    {
+      "input_id": "sash-v5-project",
+      "kind": "painter_project",
+      "assets3d_path": "Creatures/Undead/Skeletal Mage/Models3D/25-Faixa-Cintura/25-Faixa-Cintura-v5.spp",
+      "sha256": "0691cc12071436cb4e97bb612a73cea4fb9b2d3c08231b517fe573dd0e310b8a",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D"
+      }
+    },
+    {
+      "input_id": "sash-v5-export-config",
+      "kind": "recipe_json",
+      "path": "parity/fixtures/tier1/sash-v5/export-config.json",
+      "sha256": "983c4d30c88955baae69b2a3a5d87bf76166f610b964c45ba226830d3b0d91ec",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0",
+        "note": "An independently authored export configuration of the Sash v5 migration golden and its current round (decision 300 item 7); not recovered historical arguments."
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "painter_project_migration",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.open",
+        "args": {
+          "project": "sash-v5-project"
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "config": "sash-v5-export-config"
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "OCIO",
+      "value": "resources/ocio/substance/config.ocio",
+      "applied_by": "environment_variable"
+    },
+    {
+      "name": "export.file_format",
+      "value": "png",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.png.bit_depth",
+      "value": 16,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.size_log2",
+      "value": 11,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "infinite",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.shader_params",
+      "value": false,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "e87c5701791ffe371bb951cbbf2fce0918ce03a4c11c09ee93c99bbaae4d6ca9",
+      "size_bytes": 63960
+    },
+    {
+      "record_id": "r1-export-25-faixa-cintura_basecolor",
+      "kind": "exported_map",
+      "sha256": "61f4b0238042b747e29d6f59958690d0be6930a456527a50e831ef739cfb351a",
+      "size_bytes": 8234848
+    },
+    {
+      "record_id": "r1-export-25-faixa-cintura_roughness",
+      "kind": "exported_map",
+      "sha256": "a37458dc381ad3414526a39567efa1b3fa2f0c0d696912cb74fed8d2b6a2b271",
+      "size_bytes": 325423
+    },
+    {
+      "record_id": "r1-export-25-faixa-cintura_metallic",
+      "kind": "exported_map",
+      "sha256": "537c59bf6206c8a29d89a0f0433ae285254a2b7deac15ba730f547b6d678ca33",
+      "size_bytes": 8243
+    },
+    {
+      "record_id": "r1-export-25-faixa-cintura_height",
+      "kind": "exported_map",
+      "sha256": "d55ff8de71934c03522e760ada4a6102481f37d954dc3ac0d43f6ea0972c6d38",
+      "size_bytes": 2316146
+    },
+    {
+      "record_id": "r1-export-25-faixa-cintura_normal",
+      "kind": "exported_map",
+      "sha256": "9d31a019cad9b15f5e38079b94140002a22f3a8ec7333843086a298e05492f99",
+      "size_bytes": 12168673
+    },
+    {
+      "record_id": "r1-repeat-export-25-faixa-cintura_basecolor",
+      "kind": "exported_map",
+      "sha256": "61f4b0238042b747e29d6f59958690d0be6930a456527a50e831ef739cfb351a",
+      "size_bytes": 8234848
+    },
+    {
+      "record_id": "r1-repeat-export-25-faixa-cintura_roughness",
+      "kind": "exported_map",
+      "sha256": "a37458dc381ad3414526a39567efa1b3fa2f0c0d696912cb74fed8d2b6a2b271",
+      "size_bytes": 325423
+    },
+    {
+      "record_id": "r1-repeat-export-25-faixa-cintura_metallic",
+      "kind": "exported_map",
+      "sha256": "537c59bf6206c8a29d89a0f0433ae285254a2b7deac15ba730f547b6d678ca33",
+      "size_bytes": 8243
+    },
+    {
+      "record_id": "r1-repeat-export-25-faixa-cintura_height",
+      "kind": "exported_map",
+      "sha256": "d55ff8de71934c03522e760ada4a6102481f37d954dc3ac0d43f6ea0972c6d38",
+      "size_bytes": 2316146
+    },
+    {
+      "record_id": "r1-repeat-export-25-faixa-cintura_normal",
+      "kind": "exported_map",
+      "sha256": "9d31a019cad9b15f5e38079b94140002a22f3a8ec7333843086a298e05492f99",
+      "size_bytes": 12168673
+    },
+    {
+      "record_id": "r2-export-25-faixa-cintura_basecolor",
+      "kind": "exported_map",
+      "sha256": "61f4b0238042b747e29d6f59958690d0be6930a456527a50e831ef739cfb351a",
+      "size_bytes": 8234848
+    },
+    {
+      "record_id": "r2-export-25-faixa-cintura_roughness",
+      "kind": "exported_map",
+      "sha256": "a37458dc381ad3414526a39567efa1b3fa2f0c0d696912cb74fed8d2b6a2b271",
+      "size_bytes": 325423
+    },
+    {
+      "record_id": "r2-export-25-faixa-cintura_metallic",
+      "kind": "exported_map",
+      "sha256": "537c59bf6206c8a29d89a0f0433ae285254a2b7deac15ba730f547b6d678ca33",
+      "size_bytes": 8243
+    },
+    {
+      "record_id": "r2-export-25-faixa-cintura_height",
+      "kind": "exported_map",
+      "sha256": "d55ff8de71934c03522e760ada4a6102481f37d954dc3ac0d43f6ea0972c6d38",
+      "size_bytes": 2316146
+    },
+    {
+      "record_id": "r2-export-25-faixa-cintura_normal",
+      "kind": "exported_map",
+      "sha256": "9d31a019cad9b15f5e38079b94140002a22f3a8ec7333843086a298e05492f99",
+      "size_bytes": 12168673
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "4cd95449e169155f9d4f9844dd23cba7e50ba0061daf125508be8010a698fdd4",
+      "size_bytes": 402
+    }
+  ]
+}
