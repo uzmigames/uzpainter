@@ -14,7 +14,7 @@
 
 ## 4. Docs and review
 - [x] 4.1 `src/export/EXPORT.md` §5 (UzEngine PNG cook), `docs/architecture/08-export.md` §4, `src/export/cli.h`, usage in `src/main.cpp`
-- [ ] 4.2 External review of the frozen diff by at least two router models (decision 367 item 6)
+- [x] 4.2 External review of the frozen diff (decision 367 item 6): `cx/gpt-6-astra` found the blend decided from alpha values instead of the file's alpha channel (native rule: layout), `cx/gpt-6.1-sol` found trailing chunks unread; both fixed in `bc71ae9c` with a test each. `xai/grok-4.6` and `kimi/kimi-k3` streamed past the 180 s deadline twice without a verdict
 
 ## 5. Acceptance
 - [ ] 5.1 Child acceptance reported to `phase3.4_uzengine-preset`; that UzEngine loads the files stays with `phase3.3_uze-consumer-fixture`
@@ -27,3 +27,5 @@
 ## 7. Evidence (2026-11-02, front D)
 - `python -m pytest tests/export/test_uze_png_cook.py` plus the four `test_uze_preset.py` nodes the refactor touches (receipt gaps, `.uzmat`, canonical cook, SpecularWeight gap): 32 passed, CPU only, one `zig build export-tests` by the fixture. Ruff and mypy clean on the test file.
 - Not covered: `UzPainter.exe` itself was not built here (its dispatch is two lines calling the same `RunCookUzEngineCommand`); no Painter export was cooked, so the Assets3D files are proven by the decoded-input definition, not by a Painter sample.
+- After the review fixes: `python -m pytest tests/export/test_uze_png_cook.py`: 29 passed (rebuilt by the fixture), ruff and mypy clean.
+- `proposal.md` and `.metadata.json` are not written: the scaffolding guard (`.claude/hooks/protect-task-scaffolding.sh`) allows them only through `rulebook_task`, whose id check refuses the `phase<N>.<M>_` form (AGENTS.override.md), and the `rulebook` CLI does not start (missing `dist/index.js`). The proposal text is in decision 380.
