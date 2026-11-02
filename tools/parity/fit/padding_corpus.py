@@ -411,8 +411,10 @@ class Probe:
 
 
 def explain(probe: str, policy: str, limit: int) -> dict[str, Any]:
-    """Classify `policy`'s residual ring texels on `probe`: support or order (no levels near the
-    predicted ones reproduce the recording) or weights (the levels off by how many bins)."""
+    """Classify `policy`'s residual ring texels on `probe`: unmatched (no levels within
+    `inverse_bins`' window of the predicted ones, on the predicted taps in their order, reproduce
+    the recording; this does not prove a support or order change) or weights (the levels off by
+    how many bins)."""
     p = Probe(probe)
     recorded = next(iter(p.recorded.values()))
     classes: dict[str, int] = {}
@@ -428,7 +430,7 @@ def explain(probe: str, policy: str, limit: int) -> dict[str, Any]:
         guess = bins_of(weights, p.ref)
         found = inverse_bins(values, recorded[p.index[point]], guess, p.ref)
         if found is None:
-            label = f"{kind}-{len(taps)}tap-support"
+            label = f"{kind}-{len(taps)}tap-unmatched"
         else:
             label = f"{kind}-{len(taps)}tap-weights"
             delta = ",".join(f"{a - b:+d}" for a, b in zip(found, guess, strict=True))

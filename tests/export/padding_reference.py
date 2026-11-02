@@ -133,7 +133,11 @@ def fractions(distances: Sequence[float]) -> list[np.float32]:
     inv = [1.0 / d for d in distances]
     for level in range(len(distances) - 1):
         k, levels = LEVELS[level]
-        share = inv[level] / sum(inv[level:])
+        # padding.cpp's sequential double sum; Python's sum() of floats is compensated (3.12+).
+        total = 0.0
+        for v in inv[level:]:
+            total += v
+        share = inv[level] / total
         u = min(max(round((share - 1 / k) * k / (k - 1) * levels), 0), levels)
         out.append(F32(float(Fraction(levels + (k - 1) * u, k * levels))))
     return out

@@ -163,3 +163,18 @@ def test_native_collapsed_normalised_distances(export_tests: Path, tmp_path: Pat
     _check_native_precision(
         export_tests, tmp_path, 2.0, 42.0, 1e10, 0.0, 1060174911, positive_box=True
     )
+
+
+def test_fractions_sum_inverse_distances_in_sequence() -> None:
+    """The shares' denominators are summed in tap order, one rounding per addition, as padding.cpp's
+    `Fractions` does. Python's float sum() is compensated, and on these taps its level-1 denominator
+    is one ulp larger, which lowers that level's code from 150 to 149."""
+    distances = [1.0, 1.418721624790266, 3.72498473997065, 9.997216079858165e16]
+    inv = [1.0 / d for d in distances[1:]]
+    total = 0.0
+    for v in inv:
+        total += v
+    assert total != sum(inv)
+    k, levels = 3, 255
+    level1 = fractions(distances)[1]
+    assert level1 == F32((levels + (k - 1) * 150) / (k * levels))
