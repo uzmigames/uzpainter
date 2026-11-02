@@ -15,6 +15,7 @@ Clean-room note (decision 002, `docs/licensing-and-clean-room.md`): some of thes
 | `proc-grunge-families/` | `01-asset-inventory.md` | The grunge and noise assets the UzmiGames recipes reference, their UzPainter assets and the recorded parameter sets (phase3.2_proc-grunge-families item 2.1, 2026-10-20) |
 | `painter-recording-backlog/` | `01-inventory.md`, `02-batch-plan.json` (snapshot of `python -m tools.parity.recorder.batch plan`) | What the next Painter slot records, and the open rulebook items that wait on a recording with no request yet (decision 367 front C, 2026-11-02) |
 | `sash-v5-current-round/` | `01-input-contract.md` | What the Sash v5 current round (`phase2/tier1/sash-v5-current`) can take from the admitted migration golden and what is still missing; detail stays private (decision 300 section 7, 2026-11-02) |
+| `tunic-v10-current-round/` | `01-input-contract.md` | The Tunic v10 current round (`phase2/tier1/tunic-v10-current`): its route, its pins, the 8 preserved masks and the Normal against the 9 substitutes, and the refusal rules; detail stays private (decision 300 sections 7-8, 2026-11-02) |
 
 ## Clean-room record
 
