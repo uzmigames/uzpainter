@@ -372,6 +372,18 @@ The documented APIs cannot read back a project resource's original bytes. This r
   - **Verdicts.** `EXACT`, `PARTIAL` (some cases exact: only their forms qualify), `RE_ENCODED`, `SOURCE_DEPENDENT`, `UNAVAILABLE` and `INCONCLUSIVE`. Condition B counts only when it ran in a fresh process with every source verified absent. `RE_ENCODED` needs bytes that differ and decode as an image. A wrong version, a file before the fence, a resource that is not PROJECT, several files or undecodable bytes prove nothing: with no exact case, the run is `INCONCLUSIVE` and `unresolved_cases` names those cases.
   - **The public report.** `python -m tools.parity.recorder resource-export-qual-analyse <run> --report parity/reports/phase2/resource-export-qualification.md` re-runs the analysis without Painter and writes it. The report holds identifiers, statuses and hashes only.
 
+## 9d. Current reference against the historical golden (decision 300 items 7-8)
+
+Code: `tools/parity/tier1/current_reference.py`; tests: `tests/parity/tier1/test_current_reference.py` (authored goldens only).
+
+`python -m tools.parity.tier1.current_reference --migration <manifest.json> --current <manifest-current.json> [--store <store>]` compares a pilot's pinned current round (`phase2/tier1/<pilot>-current`, interface `uzmigames_pipeline_scripts`) with its retained migration golden (`painter_project_migration`), offline, with no Painter. The pairs are `tunic-v10` with `tunic-v10-current`, and `sash-v5-migration` with `sash-v5-current`; `phase2/tier1/sash-v5` stays the original script golden of decision 260 and is never accepted as the migration side. It is not the Tier 1 comparison: the two jobs differ by design, so their inputs and steps are never required to match.
+
+- **What it verifies.** The pilot pairing and both interfaces; every private record admitted and hash-checked in the store; each record bound to its own manifest's inputs and steps, with exactly `r1`, `r1-repeat` (same session) and `r2` (after save and reopen) and no duplicates; the environment records; every exported map measured and decoded against its own recorded format.
+- **What it compares.** Each side's stability in bytes and in decoded values. Then the two `r1` exports, paired by (texture set, map): structure first, then encoded bytes and native decoded values, reported apart.
+- **Outcome.** Exactly one of `identical` (every map byte-identical), `different` (other bytes, even with equal values, or a structural difference), `invalid` (pairing, record, map, an unstable side or an envelope mismatch) or `oracle_unavailable`. Exit codes 0, 1, 2 and 3.
+- **The report.** One aggregate JSON on stdout: manifest, record, environment and envelope hashes, per-map availability and storage keys, counts. No pixel, coordinate, map hash or readback, and nothing is written.
+- **What it never does.** It approves no baseline, records no exception, accepts no gate and completes no item. The pilot's input inventory is referenced by path and SHA-256: output equality does not prove historical input identity. The changed baseline remains the owner's yes (decision 300 item 8).
+
 ## 10. Oracle envelope: rolling refresh, stability study, canary
 
 Task `phase0.9_oracle-envelope`, decisions 034 (envelope, study, canary) and 037 (rolling oracle). Code: `tools/parity/envelope/` and `tools/parity/recorder/{environment,launcher}.py`; tests: `tests/parity/test_oracle_envelope.py` (fake Painter only); report: `parity/reports/phase0/oracle-envelope.md` (generated, numbers and hashes only).
