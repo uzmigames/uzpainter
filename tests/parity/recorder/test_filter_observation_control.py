@@ -202,6 +202,8 @@ def test_binding_dispatch_checks_selected_identity_after_mutation(
     for node in ast.walk(dispatch):
         if isinstance(node, ast.Name) and node.id.isupper():
             functions[node.id] = node.id
+    # Not a vocabulary constant: painter_side's one-shot own-creation state (2daad902).
+    functions["OWN_PROJECT_CREATION"] = {"pending": True}
     bound = resource.identifier()
 
     def mutate(*args: Any) -> Any:
@@ -237,6 +239,8 @@ def test_binding_dispatch_checks_selected_identity_after_mutation(
             functions[dispatch.name](*invocation)
     else:
         assert functions[dispatch.name](*invocation) is (effect if filter_effect else None)
+    # Any ordinary edit consumes a pending own creation; the P22-B dispatch never reads it.
+    assert functions["OWN_PROJECT_CREATION"] == ({"pending": True} if filter_effect else {})
 
 
 @pytest.mark.parametrize("count", [0, 1, 2])

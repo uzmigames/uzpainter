@@ -66,6 +66,9 @@ ROUTED = {
     f"{SP}event.BakingProcessAboutToStart": BAKERS,
     f"{SP}event.BakingProcessProgress": BAKERS,
     f"{SP}event.BakingProcessEnded": BAKERS,
+    # Field-level readbacks indexed by 7604e4e1; the bake probe settles them too.
+    f"{SP}event.BakingProcessAboutToStart.stop_source": BAKERS,
+    f"{SP}event.BakingProcessProgress.progress": BAKERS,
     f"{SP}async_utils": BAKERS,
     f"{SP}async_utils.StopSource": BAKERS,
     f"{SP}async_utils.StopSource.request_stop": BAKERS,

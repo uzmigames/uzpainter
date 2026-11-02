@@ -212,18 +212,15 @@ def test_baking_job_routes_match_the_inventory_evidence_owner() -> None:
 def test_resolution_fields_have_compared_individual_trace_evidence() -> None:
     entries = {e["symbol"]: e for e in load_json(INVENTORY)["entries"] if e["context"] == "any"}
     golden = "tier0/api-probes/source-resolution-values"
-    trace = load_json(INVENTORY.with_name("tier0-trace.json"))
-    exercised_fields = {
-        symbol
-        for replay in trace.values()
-        if replay["golden"] == golden
-        for symbol in replay["symbols"]
-    }
+    traced: dict[str, set[str]] = {}
+    for replay in load_json(INVENTORY.with_name("tier0-trace.json")).values():
+        traced.setdefault(replay["golden"], set()).update(replay["symbols"])
     for symbol in RESOLUTION_FIELDS:
         entry = entries[symbol]
         assert entry["status"] == "supported"
-        assert entry["tier_evidence"] == [golden]
-        assert symbol in exercised_fields
+        # 0d3bef9b added the strict /3 replay, which traces each field too.
+        assert entry["tier_evidence"] == [golden, "tier0/api-probes/source-substance-single-output"]
+        assert all(symbol in traced[g] for g in entry["tier_evidence"]), symbol
 
 
 def test_a_blocked_export_path_is_only_an_export_probe_argument() -> None:
