@@ -39,6 +39,7 @@ from tools.parity.recorder import vocabulary as ps
 from tools.parity.recorder.job import EXPORT
 from tools.parity.schemas import Schema, validation_errors
 from tools.parity.tier0_semantics import ao_operand_control as ao_control
+from tools.parity.tier0_semantics import padding_joint_bend as joint_bend
 from tools.parity.tier0_semantics import padding_plane_control as plane_control
 from tools.parity.tier0_semantics import request_fixtures as rf
 from tools.parity.tier0_semantics import unreal_preset_control as unreal_control
@@ -329,6 +330,12 @@ REQUEST_FIXTURES[plane_control.MESH] = (
     f"{FIXTURE_DIR}/meshes/{plane_control.MESH}.obj",
     plane_control.mesh,
 )
+# Item 2.7's joint-bend probe: island corners whose seam strip starts just past a sample.
+REQUEST_FIXTURES[joint_bend.MESH] = (
+    "mesh",
+    f"{FIXTURE_DIR}/meshes/{joint_bend.MESH}.obj",
+    joint_bend.mesh,
+)
 
 REQUEST_FIXTURES["tau-prism"] = (
     "mesh",
@@ -420,6 +427,7 @@ MESH_SETS = {
     **{hinge_mesh(p): ["uzp_hinge"] for p in rf.HINGE_PROBES},
     "tau-prism": ["uzp_tau_prism"],
     plane_control.MESH: [plane_control.MATERIAL],
+    joint_bend.MESH: [joint_bend.MATERIAL],
     "window-side": ["uzp_window_side"],
     "corner-reach": ["uzp_corner"],
     "normal-combine": list(rf.COMBINE_SETS),
@@ -2281,6 +2289,7 @@ def later_goldens() -> list[Golden]:
         *padding_hinge_probes(),
         padding_tau_prism_probe(),
         plane_control.request(),
+        joint_bend.request(),
         padding_window_side_probe(),
         padding_normal_combine_probe(),
         padding_corner_reach_probe(),

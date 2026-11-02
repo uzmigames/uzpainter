@@ -177,6 +177,188 @@ PATCHES: dict[str, list[tuple[str, str]]] = {
             "                continue\n",
         )
     ],
+    # Diagnostic (2026-11-02, unaccepted; apply after `island`): before the rigid turn from the
+    # window's J, an own-island far tap is developed from its triangle's face into the face of the
+    # window walk's last triangle S (decision 365's stages), hinge by hinge past the gate.
+    "walkdev": [
+        (
+            "        window_js: list[int] = []\n",
+            "        window_js: list[int] = []\n        window_ends: list[int] = []\n",
+        ),
+        (
+            "                window_js.append(jw)\n",
+            "                window_js.append(jw)\n"
+            "                window_ends.append(stages[-1][1])\n",
+        ),
+        (
+            "                        norm(sub(q, plane_rotation(P, self.tris[window_js[w]], T)))\n",
+            "                        norm(sub(q, plane_rotation(self.develop(P, K.face,"
+            " self.tris[window_ends[w]].face), self.tris[window_js[w]], T)))\n",
+        ),
+        (
+            "    def folded(self, a: int, b: int) -> bool:\n",
+            "    def develop(self, p, src, dst):\n"
+            "        paths = self._paths(src, dst)\n"
+            "        if src == dst or not paths:\n"
+            "            return p\n"
+            "        for a, b in itertools.pairwise(paths[0]):\n"
+            "            i, j, va, vb = self.links[b][a]\n"
+            "            if self.folded(i, j):\n"
+            "                p = unfold(hinge(self.tris[i], self.tris[j], va, vb), p)\n"
+            "        return p\n\n"
+            "    def folded(self, a: int, b: int) -> bool:\n",
+        ),
+    ],
+    # Diagnostic (2026-11-02, unaccepted): the strip map's straight ends leave a wedge uncovered on
+    # the outer side of a joint (two seams of one island sharing a UV end at an angle). A sample in
+    # that wedge, within half a texel of a strip's line, goes to the strip on its side of the
+    # joint's bisector (a mitred join); overlaps keep the last strip drawn.
+    "miter": [
+        (
+            "                    if strip_covers(a, b, x + dx + 0.5, y + dy + 0.5):\n"
+            "                        winner = (e, edge, j)\n"
+            "                if winner is not None:\n"
+            "                    winners.add(winner)\n"
+            "        return winners\n\n"
+            "    def seam_runs(",
+            "                    if strip_covers(a, b, x + dx + 0.5, y + dy + 0.5):\n"
+            "                        winner = (e, edge, j)\n"
+            "                if winner is None:\n"
+            "                    winner = self.mitred(x + dx + 0.5, y + dy + 0.5, grid.get((x + dx,"
+            " y + dy), []))\n"
+            "                if winner is not None:\n"
+            "                    winners.add(winner)\n"
+            "        return winners\n\n"
+            "    def mitred(self, px, py, cell):\n"
+            "        MITER_SIN = 1.0\n"
+            "        ends = self.__dict__.get('_seam_ends')\n"
+            "        if ends is None:\n"
+            "            ends = {}\n"
+            "            for s in sorted(s for lst in self.seams.values() for s in lst):\n"
+            "                t = self.tris[s[0]]\n"
+            "                for k in (1, 2):\n"
+            "                    ends.setdefault((t.chart, t.t[(s[1] + k) % 3]), []).append(s)\n"
+            "            self.__dict__['_seam_ends'] = ends\n"
+            "        found = None\n"
+            "        for s in cell:\n"
+            "            t = self.tris[s[0]]\n"
+            "            a, b = t.t[(s[1] + 1) % 3], t.t[(s[1] + 2) % 3]\n"
+            "            ex, ey = b[0] - a[0], b[1] - a[1]\n"
+            "            length = math.sqrt(ex * ex + ey * ey)\n"
+            "            along = ((px - a[0]) * ex + (py - a[1]) * ey) / length\n"
+            "            perp = ((px - a[0]) * ey - (py - a[1]) * ex) / length\n"
+            "            if abs(perp) > 0.5 or 0.0 <= along <= length"
+            " or abs(along - length / 2) > length / 2 + 0.5:\n"
+            "                continue\n"
+            "            v, us = (a, (ex / length, ey / length)) if along < 0"
+            " else (b, (-ex / length, -ey / length))\n"
+            "            for o in ends.get((t.chart, v), []):\n"
+            "                if o == s:\n"
+            "                    continue\n"
+            "                to = self.tris[o[0]]\n"
+            "                c, d = to.t[(o[1] + 1) % 3], to.t[(o[1] + 2) % 3]\n"
+            "                w = d if c == v else c\n"
+            "                fx, fy = w[0] - v[0], w[1] - v[1]\n"
+            "                fl = math.sqrt(fx * fx + fy * fy)\n"
+            "                if abs(us[0] * fy - us[1] * fx) / fl > MITER_SIN:\n"
+            "                    continue\n"
+            "                if (px - v[0]) * (us[0] - fx / fl)"
+            " + (py - v[1]) * (us[1] - fy / fl) > 0:\n"
+            "                    found = s\n"
+            "        return found\n\n"
+            "    def seam_runs(",
+        )
+    ],
+    # `miter` only at joints whose UV |sin| is at most the tag (apply after `miter`; default 1).
+    **{
+        f"msin{tag}": [("> MITER_SIN:", f"> {value}:")]
+        for tag, value in (("05", "0.05"), ("1", "0.1"), ("2", "0.2"), ("4", "0.4"))
+    },
+    # Each seam strip reaches the tag (texels) past both UV ends, ends inclusive.
+    **{
+        f"eps{tag}": [
+            (
+                "    if along < 0 or along > length2 or abs(cross) > half:\n        return False\n",
+                f"    reach = {value} * math.sqrt(length2)\n"
+                "    if along < -reach or along > length2 + reach or abs(cross) > half:\n"
+                "        return False\n"
+                "    if along < 0 or along > length2:\n"
+                "        return True\n",
+            )
+        ]
+        for tag, value in (("002", "0.002"), ("005", "0.005"), ("01", "0.01"), ("02", "0.02"))
+    },
+    # Each seam strip's UV ends snapped to the nearest 1/tag texel (a rasterizer's fixed-point
+    # vertex positions) before the coverage test.
+    **{
+        f"snap{tag}": [
+            (
+                "    ex, ey = b[0] - a[0], b[1] - a[1]\n    length2 = ex * ex + ey * ey\n",
+                f"    a = (round(a[0] * {tag}) / {tag}, round(a[1] * {tag}) / {tag})\n"
+                f"    b = (round(b[0] * {tag}) / {tag}, round(b[1] * {tag}) / {tag})\n"
+                "    ex, ey = b[0] - a[0], b[1] - a[1]\n    length2 = ex * ex + ey * ey\n",
+            )
+        ]
+        for tag in ("16", "256", "512")
+    },
+    # Each seam strip rasterized as a quad: its four corners a +- n/2, b +- n/2 (n the unit normal)
+    # snapped to the nearest 1/256 texel, a sample covered inside it or on an edge whose outward
+    # normal points to -u, or to -v for an edge with no u component (the top-left rule).
+    "quadsnap256": [
+        (
+            "    ex, ey = b[0] - a[0], b[1] - a[1]\n    length2 = ex * ex + ey * ey\n",
+            "    ex, ey = b[0] - a[0], b[1] - a[1]\n"
+            "    span = math.sqrt(ex * ex + ey * ey)\n"
+            "    nx, ny = -ey / span * 0.5, ex / span * 0.5\n"
+            "    quad = [\n"
+            "        (round(c[0] * 256) / 256, round(c[1] * 256) / 256)\n"
+            "        for c in ((a[0] + nx, a[1] + ny), (b[0] + nx, b[1] + ny),\n"
+            "                  (b[0] - nx, b[1] - ny), (a[0] - nx, a[1] - ny))\n"
+            "    ]\n"
+            "    area = sum(quad[i][0] * quad[(i + 1) % 4][1] - quad[(i + 1) % 4][0] * quad[i][1]\n"
+            "               for i in range(4))\n"
+            "    if area == 0:\n"
+            "        return False\n"
+            "    if area < 0:\n"
+            "        quad.reverse()\n"
+            "    for i in range(4):\n"
+            "        (x0, y0), (x1, y1) = quad[i], quad[(i + 1) % 4]\n"
+            "        w = (x1 - x0) * (py - y0) - (y1 - y0) * (px - x0)\n"
+            "        if w < 0:\n"
+            "            return False\n"
+            "        if w == 0:\n"
+            "            ox, oy = y1 - y0, x0 - x1\n"
+            "            if not (ox < 0 or (ox == 0 and oy < 0)):\n"
+            "                return False\n"
+            "    return True\n"
+            "    length2 = ex * ex + ey * ey\n",
+        )
+    ],
+    # Every triangle corner's texel-space position snapped to the nearest 1/tag texel (a
+    # rasterizer's fixed-point vertices), for every barycentric, strip and reach.
+    **{
+        f"uvsnap{tag}": [
+            (
+                "        self.t = [(u * width, (1.0 - v) * height) for u, v in uv]\n",
+                "        self.t = [\n"
+                f"            (round(u * width * {tag}) / {tag},"
+                f" round((1.0 - v) * height * {tag}) / {tag})\n"
+                "            for u, v in uv\n"
+                "        ]\n",
+            )
+        ]
+        for tag in ("16", "256", "512")
+    },
+    # Seam runs joined up to a UV |sin| of the tag instead of COLLINEAR (decision 339 (b)).
+    **{
+        f"run{tag}": [
+            (
+                "                    if abs(ex * fy - ey * fx) <= COLLINEAR * lengths:\n",
+                f"                    if abs(ex * fy - ey * fx) <= {value} * lengths:\n",
+            )
+        ]
+        for tag, value in (("05", "0.05"), ("1", "0.1"), ("2", "0.2"))
+    },
     "snapcol": [
         (
             "                col0, row0 = math.floor(fu - 0.5), math.ceil(fv - 0.5)\n",
@@ -193,6 +375,12 @@ PATCHES: dict[str, list[tuple[str, str]]] = {
             "                col0, row0 = math.floor(fu - 0.5), math.ceil(mv)\n",
         )
     ],
+}
+
+# Patches written against another patch's text: each applies after the named one.
+PATCH_AFTER: dict[str, str] = {
+    "walkdev": "island",
+    **{name: "miter" for name in PATCHES if name.startswith("msin")},
 }
 
 

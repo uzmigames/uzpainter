@@ -65,7 +65,11 @@ def test_inverse_bins_finds_the_chain_levels_of_a_recording() -> None:
 
 
 def test_every_named_patch_applies_once_to_the_current_reference() -> None:
-    text = (REPO_ROOT / "tests/export/padding_reference.py").read_text("utf-8")
+    reference = (REPO_ROOT / "tests/export/padding_reference.py").read_text("utf-8")
     for name, edits in corpus.PATCHES.items():
+        text = reference
+        if name in corpus.PATCH_AFTER:
+            for before, after in corpus.PATCHES[corpus.PATCH_AFTER[name]]:
+                text = text.replace(before, after)
         for old, _ in edits:
             assert text.count(old) == 1, name
