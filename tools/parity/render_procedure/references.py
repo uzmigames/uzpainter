@@ -35,8 +35,14 @@ Python API on the template's OpenPBR channels (`BaseColor` in sRGB, `BaseMetalne
 Painter's default instance at its defaults (decision 038). The values are a proposal to the owner
 (task item 2.7), not ratified.
 
-The manifests (`parity/envelopes/<current>/manifests/phase0/iray-references/<golden>.json`) are
-generated from the same table; `write_manifests` keeps the `private_records` the store merged in.
+The manifests admitted under Painter 12.1.5 (`parity/envelopes/painter-12.1.5_js-api.1.1.20/
+manifests/phase0/iray-references/<golden>.json`, `MANIFEST_DIR`) were generated from the same table;
+the render fits read them, and `write_manifests` keeps the `private_records` the store merged in.
+They are `stale` under any later envelope (CONTRACT.md section 5). `write_requests` re-requests
+every reference, the stability probes and the qualification sphere under the current envelope of
+`parity/envelopes/registry.json` (decision 385): the same golden ids, inputs, steps and settings,
+the current envelope's Painter identity, no private records, under its `requests/` root
+(`<golden_id>.json`), where the batch compiler schedules them. The 12.1.5 files are left untouched.
 
 `STABILITY_FIXTURES` are the nine goldens of decision 052's capture request
 (`phase0/iray-stability/<golden>`): the plane and the cube turned by +-1 degree, repeats of
@@ -56,6 +62,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from tools.parity.envelope.registry import current_envelope, manifest_root
 from tools.parity.recorder import vocabulary as ps
 from tools.parity.recorder.iray import PROCEDURE_VERSION, SAVE_RENDER
 from tools.parity.recorder.iray_probe import (
@@ -668,7 +675,7 @@ def description(fixture: Fixture) -> str:
     )
 
 
-def manifest(fixture: Fixture) -> dict[str, Any]:
+def manifest(fixture: Fixture, painter: dict[str, str] | None = None) -> dict[str, Any]:
     inputs = [mesh_input(fixture)]
     extra = fixture.perturbation
     if extra is not None and extra.bitmap is not None:
@@ -696,7 +703,7 @@ def manifest(fixture: Fixture) -> dict[str, Any]:
         "applied_settings": operator_sheet(fixture) + capture_sheet(fixture),
         "uncontrolled_settings": ["random_seed"],
         "expectations": [],
-        "software": {"painter": dict(PAINTER), "uzpainter_build_hash": None},
+        "software": {"painter": dict(painter or PAINTER), "uzpainter_build_hash": None},
         "private_records": [],
     }
 
@@ -797,6 +804,56 @@ def write_template_default_manifest(path: Path = TEMPLATE_DEFAULT_MANIFEST) -> P
 def reference_manifests() -> list[Path]:
     """Every manifest of the Iray reference set: the fixtures and the qualification sphere."""
     return [QUALIFICATION_MANIFEST, *(manifest_path(f) for f in FIXTURES)]
+
+
+def current_painter(root: Path = REPO_ROOT) -> dict[str, str]:
+    """The Painter identity of the current envelope (decision 385)."""
+    entry = current_envelope(root)
+    return {
+        "product": PAINTER["product"],
+        "version": str(entry["painter_version"]),
+        "build_id": str(entry["painter_build"]),
+    }
+
+
+def requests_root(root: Path = REPO_ROOT) -> Path:
+    """The current envelope's request root (the batch compiler's `requests_root`)."""
+    return manifest_root(current_envelope(root), root).parent / "requests"
+
+
+def request_path(golden_id: str, root: Path = REPO_ROOT) -> Path:
+    return requests_root(root) / f"{golden_id}.json"
+
+
+def re_request(admitted: Path, root: Path = REPO_ROOT) -> dict[str, Any]:
+    """An admitted 12.1.5 reference manifest as a current-envelope request: the same content,
+    the current Painter identity, no private records (decision 385)."""
+    document: dict[str, Any] = json.loads(admitted.read_text(encoding="utf-8"))
+    document["software"] = {**document["software"], "painter": current_painter(root)}
+    document["private_records"] = []
+    return document
+
+
+def admitted_tier3_manifests() -> list[Path]:
+    """The 12.1.5 references, stability probes and qualification sphere (the stale Tier 3)."""
+    return [*reference_manifests(), *stability_manifests()]
+
+
+def tier3_requests(root: Path = REPO_ROOT) -> list[dict[str, Any]]:
+    """Every Tier 3 reference request of the current envelope, cloned from its admitted manifest
+    so that only the Painter identity and the private records differ."""
+    return [re_request(path, root) for path in admitted_tier3_manifests()]
+
+
+def write_requests(root: Path = REPO_ROOT) -> list[Path]:
+    """Write the Tier 3 requests under the current envelope; earlier envelopes are untouched."""
+    written = []
+    for document in tier3_requests(root):
+        path = request_path(document["golden_id"], root)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8", newline="\n")
+        written.append(path)
+    return written
 
 
 def stability_manifests() -> list[Path]:

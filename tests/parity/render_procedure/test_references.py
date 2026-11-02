@@ -285,3 +285,29 @@ def test_an_ocio_manifest_is_recorded_only_in_an_ocio_session(
             require_colour_management(job, identity)
     else:
         require_colour_management(job, identity)
+
+
+def test_tier3_requests_re_request_every_reference_under_the_current_envelope() -> None:
+    """Decision 385: each admitted 12.1.5 reference, stability probe and the qualification sphere
+    is requested again under the current envelope with only its Painter identity changed."""
+    requests = refs.tier3_requests()
+    old = refs.admitted_tier3_manifests()
+    assert len(requests) == len(old) == 32
+    tables = {refs.manifest_path(f): f for f in (*refs.FIXTURES, *refs.STABILITY_FIXTURES)}
+    current = refs.current_painter()
+    for document, path in zip(requests, old, strict=True):
+        admitted = json.loads(path.read_text(encoding="utf-8"))
+        assert admitted["private_records"] and admitted["software"]["painter"] == refs.PAINTER
+        assert document["private_records"] == []
+        assert document["software"]["painter"] == current != refs.PAINTER
+        same = {k: v for k, v in document.items() if k not in ("software", "private_records")}
+        assert same == {k: admitted[k] for k in same} and set(same) | {
+            "software",
+            "private_records",
+        } == set(admitted)
+        if path in tables:  # the generator's table still describes the admitted reference
+            assert refs.manifest(tables[path], current) == document
+        request = refs.request_path(document["golden_id"])
+        assert json.loads(request.read_text(encoding="utf-8")) == document
+        assert validation_errors(document, Schema.GOLDEN_PUBLIC) == []
+        settings_sheet(load_job(request))

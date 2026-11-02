@@ -24,3 +24,6 @@
 - [ ] 5.1 Update or create documentation covering the implementation
 - [ ] 5.2 Write tests covering the new behavior
 - [ ] 5.3 Run tests and confirm they pass
+
+## 6. Recording requests (2026-11-02, decision 385)
+- Item 3.3's analytic Iray references are re-requested under the current envelope: `parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/requests/phase0/iray-references/` (22), `phase0/iray-stability/` (9) and `tier3/render-procedure/qualification-sphere.json`. Not yet recorded.
