@@ -1,0 +1,12 @@
+{
+  "id": 367,
+  "slug": "three-coordinated-fronts-with-a-native-lock-and-a-model-panel",
+  "title": "Three coordinated fronts with a native lock and a model panel",
+  "status": "accepted",
+  "date": "2026-11-02",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase3.2_vulkan-ray-tracing"
+  ],
+  "supersededBy": null
+}
