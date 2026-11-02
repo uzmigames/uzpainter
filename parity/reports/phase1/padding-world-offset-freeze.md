@@ -253,6 +253,17 @@ Validate the capture as `padding_joint_bend_score` does:
 - covered source kept;
 - the four `infinite` exports identical on the ring.
 
+The scorer is `python -m tools.parity.fit.padding_world_offset_score`. It refuses unless:
+
+- the recomputed predictions hash to the freeze's SHA-256, and the compact file hashes to
+  its own and equals them;
+- the capture validates as above;
+- every predicted texel is a ring texel of the recording.
+
+It reports matches separately for the scored set, the excluded set, the whole ring of the
+copies, the discriminating texels and the mask's pairs. A pair counts when both of its
+texels match.
+
 Scoring is limited to the scored set and to these eight fixed models. It compares recorded
 output bits with the frozen predicted bits directly. No fraction is decoded for a verdict.
 

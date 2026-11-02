@@ -3,6 +3,7 @@ Painter recordings."""
 
 from __future__ import annotations
 
+import json
 import math
 import types
 from typing import Any
@@ -175,3 +176,61 @@ def test_a_tap_on_the_turn_axis_is_still_turned() -> None:
 def test_far_hook_patches_compile_and_select_each_model() -> None:
     names = {m: fit.module(m).FAR_MODEL for m in far32.MODELS}
     assert names == {m: m for m in far32.MODELS}
+
+
+def _scored_row(role: str, slot: list[int], bits: dict[str, int]) -> dict[str, Any]:
+    texel: dict[str, Any] = {
+        m: {"taps": [[1.0, True, [slot[0] + 5, 2]]], "fractions": [7], "bits": [bits.get(m, 0)]}
+        for m in far32.MODELS
+    }
+    texel["undecided"] = []
+    return {
+        "copy": f"c{slot[0]}",
+        "role": role,
+        "shape": "s",
+        "offset": [float(slot[0]), 0.0, 0.0],
+        "turn": "none",
+        "scale": 1,
+        "slot": slot,
+        "texels": {"1,1": texel},
+    }
+
+
+def test_the_scorer_compares_output_bits_per_set_and_follows_the_frozen_verdict() -> None:
+    from tools.parity.fit import padding_world_offset_score as scorer
+
+    # Two copies: every model predicts 0 except pos32n (5) at the translated copy.
+    found = {
+        "copies": [
+            _scored_row("base", [0, 0], {}),
+            _scored_row("offset", [30, 0], {"pos32n": 5}),
+        ]
+    }
+    recorded = {(1, 1): [[0]] * 4, (31, 1): [[5]] * 4}
+    result = scorer.score(found, lambda x, y: recorded.get((x, y)))
+    assert result["sizes"]["scored"] == 2 and result["sizes"]["discriminating"] == 1
+    assert result["sizes"]["mask_pairs"] == 1
+    assert result["matches"]["pos32n"]["scored"] == 2
+    assert result["matches"]["double"]["scored"] == 1
+    assert result["matches"]["pos32n"]["mask_pairs"] == 1
+    assert result["verdict"] == "candidate:pos32n"
+    # One of four exports differing is a miss for every model: none fits.
+    recorded[(31, 1)] = [[5], [5], [5], [6]]
+    assert scorer.score(found, lambda x, y: recorded.get((x, y)))["verdict"] == "none_fits"
+    # A predicted texel that is not a ring texel of the recording refuses the score.
+    assert "refused" in scorer.score(found, lambda x, y: None)
+
+
+def test_the_scorer_refuses_predictions_other_than_the_freeze() -> None:
+    from tools.parity.fit import padding_world_offset_score as scorer
+
+    assert (
+        fit.digest(json.loads(scorer.COMPACT_PATH.read_bytes())) != scorer.FROZEN_PREDICTIONS_SHA256
+    )
+    problems = scorer.frozen_problems(
+        {"copies": [], "mesh_sha256": "", "reference": "", "models": []}
+    )
+    assert problems == [
+        "the predictions differ from the freeze",
+        "the compact predictions differ from the predictions",
+    ]
