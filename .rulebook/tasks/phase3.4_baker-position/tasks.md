@@ -28,3 +28,6 @@
 - Thread counts: `position_threads_in_process` and `test_bytes_equal_across_thread_counts[position-32]`: identical bytes at 1, 4 and N threads on the one qualified ISA (AVX2). Not 3.3, which repeats 3.1's Tier 2b comparison.
 - Run: `python -m pytest tests/bake/test_bake_feasibility.py tests/bake/test_baking_project.py -k "position or capability_errors or parameters or bake_settings or linked_groups or roundtrip or transactions or invalid"`, 16 passed, exit 0 (log `tmp/scratch/bakers-simple/pytest-pos.log`). CPU only.
 - Still open: 1.1 (prerequisites not accepted); 2.2 (BBox, BSphere and NormalizationScale wait on a golden; binding and receipt publication); 2.3 (manifests under `parity/manifests/`, outside this slice); 3.1-3.3 and 4.1 (Tier 2b against private goldens); the task-wide tails 5.1-5.3. No parity is claimed.
+
+## 7. Recording requests (2026-11-02, decision 384)
+- Item 3.1's Painter recordings are requested: `parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/requests/tier2b/bakes/position-<scene>-*.json` (27: All axis x Normalization x NormalizationScale, One axis x Axis). Not yet recorded; 3.2 has no request.

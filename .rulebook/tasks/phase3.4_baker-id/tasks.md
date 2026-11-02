@@ -29,3 +29,6 @@
 - Thread counts: `id_threads_in_process` and `test_bytes_equal_across_thread_counts[id-32]`: identical bytes at 1, 4 and N threads on the one qualified ISA (AVX2). Not 3.3, which repeats 3.1's Tier 2b comparison.
 - Run: `python -m pytest tests/bake/test_bake_feasibility.py tests/bake/test_baking_project.py -k "id_ or id- or capability_errors or parameters or bake_settings or linked_groups or roundtrip or transactions or invalid"`, 17 passed, exit 0 (log `tmp/scratch/bakers-simple/pytest-id.log`). CPU only.
 - Still open: 1.1 (prerequisites not accepted); 2.1 (only Mesh ID / Polygroup; the other sources need bake-mesh inputs and goldens); 2.2 (generators and the recorded palette wait on goldens); 2.4 (manifests); 3.1-3.3 and 4.1 (Tier 2b); the task-wide tails 5.1-5.3. No parity is claimed.
+
+## 7. Recording requests (2026-11-02, decision 384)
+- Item 3.1's Painter recordings are requested for ColorSource Mesh ID / Polygroup: `parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/requests/tier2b/bakes/id-<scene>-mesh-id-<generator>.json` (9). Other sources and 3.2 have no request (`docs/analysis/painter-recording-backlog/03-bake-and-iray-requests.md` §3).

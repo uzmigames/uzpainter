@@ -21,3 +21,6 @@
 - [ ] 5.1 Update or create documentation covering the implementation
 - [ ] 5.2 Write tests covering the new behavior
 - [ ] 5.3 Run tests and confirm they pass
+
+## 6. Recording requests (2026-11-02, decision 384)
+- Item 3.1's Painter recordings are requested: `parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/requests/tier2b/bakes/curvature-<scene>-{from-mesh,from-normal-map}.json` (6; the recorder now sets `set_curvature_method`). Not yet recorded; 3.2 has no request.

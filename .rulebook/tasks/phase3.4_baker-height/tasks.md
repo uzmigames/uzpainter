@@ -29,3 +29,6 @@
 - Thread counts: `height_threads_in_process` and `test_bytes_equal_across_thread_counts[height-32]`: identical bytes at 1, 4 and N threads on the one qualified ISA (AVX2). Not 3.3, which repeats 3.1's Tier 2b comparison.
 - Run: `python -m pytest tests/bake/test_bake_feasibility.py -k "height or capability_errors"`, 9 passed, exit 0 (log `tmp/scratch/bakers-more/pytest-height.log`); `python -m pytest tests/bake/test_baking_project.py`, 4 passed, exit 0 (log `tmp/scratch/bakers-more/pytest-baking-project.log`). CPU only.
 - Still open: 1.1 (prerequisites not accepted); 2.1 (the signed distance in project units is baked, but Painter's map is always normalised and every `MaximizeRange` is refused, and the item's `NbSecondary`, `Spread` and `Distribution` are not Painter keys; the item's text needs the owner's amendment before it can close); 2.2 (`MaximizeRange` and `Divisor` wait on a golden; binding and receipt publication); 2.3 (manifests under `parity/manifests/`); 3.1-3.3 and 4.1 (Tier 2b against private goldens); the task-wide tails 5.1-5.3. No parity is claimed.
+
+## 7. Recording requests (2026-11-02, decision 384)
+- No Painter request: Height has no documented export map name, and the `Divisor` values and inflated sphere are not chosen (`docs/analysis/painter-recording-backlog/03-bake-and-iray-requests.md` §3).

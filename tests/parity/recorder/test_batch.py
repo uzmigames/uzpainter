@@ -401,7 +401,15 @@ def test_a_recorded_run_of_a_blocked_request_is_still_admitted(root: Path, tmp_p
         ("tier0/defaults-templates/template-pbr.json", "x", batch.TEMPLATES),
         ("phase2/tier1/sash-v5.json", "uzmigames_pipeline_scripts", batch.SCRIPT),
         ("phase2/tier1/tunic-v10-saved.json", "painter_project_migration", batch.MIGRATION),
-        ("phase0/iray-references/plane.json", "substance_painter_documented_python_api", ""),
+        (
+            "phase0/iray-references/plane.json",
+            "substance_painter_documented_python_api",
+            batch.IRAY,
+        ),
+        ("phase0/iray-stability/plane--repeat.json", "x", batch.IRAY),
+        ("tier3/render-procedure/qualification-sphere.json", "x", batch.IRAY),
+        ("tier2b/bakes/normal-plane.json", "x", batch.TEXTURE),
+        ("phase1/iray-references/plane.json", "x", ""),
     ],
 )
 def test_each_family_routes_to_its_recorder_command(
@@ -418,3 +426,31 @@ def test_the_current_repository_compiles(tmp_path: Path) -> None:
         for item in session["items"]:
             assert (REPO_ROOT / item["request"]).is_file()
     assert plan["schema"] == batch.PLAN_SCHEMA
+
+
+def test_tier3_requests_form_one_ocio_operator_series(tmp_path: Path) -> None:
+    """Decision 385: every stale Tier 3 reference is requested under the current envelope and
+    scheduled in one operator series; a stability repeat is not merged into its parent."""
+    plan = batch.build_plan(REPO_ROOT, assets_root=tmp_path)
+    assert not [n for n in plan["needs_request"] if "iray" in n["golden_id"]]
+    (series,) = [s for s in plan["sessions"] if s["items"][0]["kind"] == batch.IRAY]
+    assert series["owned_process"] and series["colour_management"] == "ocio"
+    assert {item["kind"] for item in series["items"]} == {batch.IRAY}
+    by_id = {item["golden_id"]: item for item in series["items"]}
+    assert "phase0/iray-stability/plane-mid-grey--repeat" in by_id
+    assert "phase0/iray-references/plane-mid-grey" in by_id
+    reference = by_id["phase0/iray-references/cube-saturated--ref-match-180"]
+    assert reference["command"][-2:] == ["--session-file", batch.REF_MATCH_HDRI]
+    assert [c["condition"] for c in reference["expected_artifacts"]["iray_conditions"]] == [
+        "separate_session",
+        "k_times_samples",
+    ]
+    k_run = reference["expected_artifacts"]["iray_conditions"][1]["command"]
+    assert k_run[k_run.index("--condition") : k_run.index("--condition") + 4] == [
+        "--condition",
+        "k_times_samples",
+        "--k",
+        "4",
+    ]
+    same = by_id["phase0/iray-stability/plane-mid-grey--same-session"]
+    assert same["command"][same["command"].index("--condition") + 1] == "same_session"

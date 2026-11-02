@@ -133,6 +133,7 @@ BAKING_TEXTURESET_ENABLED = "substance_painter.baking.BakingParameters.is_textur
 # Baking jobs (phase0.9_normal-convention-fixture): parameters, enabled bakers, the bake itself.
 BAKING_SET = "substance_painter.baking.BakingParameters.set"
 BAKING_SET_ENABLED_BAKERS = "substance_painter.baking.BakingParameters.set_enabled_bakers"
+BAKING_SET_CURVATURE_METHOD = "substance_painter.baking.BakingParameters.set_curvature_method"
 BAKE = "substance_painter.baking.bake_async"
 GET_PROPERTY_VALUE = "substance_painter.properties.Property.value"
 # Arguments of a `BakingParameters.set` step: the parameter, its value (exactly one of `value`,
@@ -338,6 +339,12 @@ MESH_MAP_USAGES = {
     "Height": lambda: substance_painter.textureset.MeshMapUsage.Height,
     "BentNormals": lambda: substance_painter.textureset.MeshMapUsage.BentNormals,
     "Opacity": lambda: substance_painter.textureset.MeshMapUsage.Opacity,
+}
+
+# baking.CurvatureMethod members.
+CURVATURE_METHODS = {
+    "FromMesh": lambda: substance_painter.baking.CurvatureMethod.FromMesh,
+    "FromNormalMap": lambda: substance_painter.baking.CurvatureMethod.FromNormalMap,
 }
 
 # layerstack.MaskBackground members.
@@ -1138,6 +1145,11 @@ def apply_step(args: dict[str, Any]) -> dict[str, Any]:
         for texture_set in texture_sets_of(params):
             baking = substance_painter.baking.BakingParameters.from_texture_set(texture_set)
             baking.set_enabled_bakers(usages)
+    elif call == BAKING_SET_CURVATURE_METHOD:
+        method = member(CURVATURE_METHODS, "CurvatureMethod", params["method"])
+        for texture_set in texture_sets_of(params):
+            baking = substance_painter.baking.BakingParameters.from_texture_set(texture_set)
+            baking.set_curvature_method(method)
     elif call == BAKE:
         result = start_bake(params)
     else:
@@ -1299,6 +1311,13 @@ def readback(args: dict[str, Any]) -> Any:
         }
     if call == BAKING_ENABLED_BAKERS:
         return {ts.name(): enabled_bakers(ts) for ts in texture_sets_of(params)}
+    if call == BAKING_CURVATURE_METHOD:
+        return {
+            ts.name(): substance_painter.baking.BakingParameters.from_texture_set(ts)
+            .get_curvature_method()
+            .name
+            for ts in texture_sets_of(params)
+        }
     if call == LIST_PREDEFINED_PRESETS:
         return [
             json_value({"name": preset.name, "url": preset.url})

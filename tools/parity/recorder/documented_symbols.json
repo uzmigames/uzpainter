@@ -59,8 +59,20 @@
       "documented_as": "substance_painter.baking.BakingParameters.set",
       "page": "substance_painter/baking.html"
     },
+    "substance_painter.baking.BakingParameters.set_curvature_method": {
+      "documented_as": "substance_painter.baking.BakingParameters.set_curvature_method",
+      "page": "substance_painter/baking.html"
+    },
     "substance_painter.baking.BakingParameters.set_enabled_bakers": {
       "documented_as": "substance_painter.baking.BakingParameters.set_enabled_bakers",
+      "page": "substance_painter/baking.html"
+    },
+    "substance_painter.baking.CurvatureMethod.FromMesh": {
+      "documented_as": "substance_painter.baking.CurvatureMethod",
+      "page": "substance_painter/baking.html"
+    },
+    "substance_painter.baking.CurvatureMethod.FromNormalMap": {
+      "documented_as": "substance_painter.baking.CurvatureMethod",
       "page": "substance_painter/baking.html"
     },
     "substance_painter.baking.bake_async": {

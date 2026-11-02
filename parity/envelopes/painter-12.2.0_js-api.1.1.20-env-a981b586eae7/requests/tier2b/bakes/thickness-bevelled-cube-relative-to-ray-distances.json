@@ -1,0 +1,240 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier2b/bakes/thickness-bevelled-cube-relative-to-ray-distances",
+  "tier": "2b",
+  "domain": "bake_map/thickness",
+  "description": "Tier 2b bake golden of phase3.4_baker-thickness (decision 384) on the analytic fixture bevelled-cube: the bevelled cube with highs matched by name: chamfered cube, knob under an _ignorebf cover, unmatched decoy (CaseMatchByName). Painter bakes Thickness at 512 px (OutputSize 9, DilationWidth 0, FilterMethod By mesh name, RelativeScale False, MaxHeight 0.05, MaxDepth 0.04; Thickness MaximizeRange Relative to ray distances; every other baking parameter at Painter's default; normal map format OpenGL, tangent space the project default). The baked maps are exported as PNG 16 and OpenEXR 32f, padding passthrough, no dithering; recorded twice (same session; after save and reopen). Bake backend uncontrolled.",
+  "inputs": [
+    {
+      "input_id": "bevelled-cube-low",
+      "kind": "mesh",
+      "path": "parity/fixtures/tier2b-bakes/bevelled-cube-low.obj",
+      "sha256": "21525e38d3312ce49f4b4d3a4549851bf85fd57f4c1cb4a7a1019b6e3f9dd103",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    },
+    {
+      "input_id": "bevelled-cube-high",
+      "kind": "mesh",
+      "path": "parity/fixtures/tier2b-bakes/bevelled-cube-high.obj",
+      "sha256": "7e645c4f6dbbfd158cc0197121dca555f7423cbacfd1504a03a94436c933272a",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "bevelled-cube-low",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 512
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "OutputSize",
+          "value": [
+            9,
+            9
+          ]
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "DilationWidth",
+          "value": 0
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "FilterMethod",
+          "enum_label": "By mesh name"
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "RelativeScale",
+          "value": false
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "MaxHeight",
+          "value": 0.05
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "MaxDepth",
+          "value": 0.04
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "HipolyMesh",
+          "input": "bevelled-cube-high"
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "MaximizeRange",
+          "usage": "Thickness",
+          "enum_label": "Relative to ray distances"
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.baking.BakingParameters.set_enabled_bakers",
+        "args": {
+          "usages": [
+            "Thickness"
+          ]
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.baking.bake_async",
+        "args": {}
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "meshMap/thickness:L"
+          ],
+          "file_format": "png",
+          "bit_depth": 16,
+          "padding": "passthrough",
+          "dithering": false
+        }
+      },
+      {
+        "step": 13,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "meshMap/thickness:L"
+          ],
+          "file_format": "exr",
+          "bit_depth": "32f",
+          "padding": "passthrough",
+          "dithering": false
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 512,
+      "applied_by": "recorder_api",
+      "unit": "px"
+    },
+    {
+      "name": "baking.common.OutputSize",
+      "value": 9,
+      "applied_by": "recorder_api",
+      "unit": "log2 px"
+    },
+    {
+      "name": "baking.common.DilationWidth",
+      "value": 0,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "baking.common.FilterMethod",
+      "value": "By mesh name",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "baking.common.RelativeScale",
+      "value": false,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "baking.common.MaxHeight",
+      "value": 0.05,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "baking.common.MaxDepth",
+      "value": 0.04,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "baking.Thickness.MaximizeRange",
+      "value": "Relative to ray distances",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "baking.enabled_bakers",
+      "value": "Thickness",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.png.bit_depth",
+      "value": 16,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.exr.bit_depth",
+      "value": "32f",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "passthrough",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "uncontrolled_settings": [
+    "preferences.bake_backend"
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": []
+}

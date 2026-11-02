@@ -18,3 +18,6 @@
 - [ ] 5.1 Update or create documentation covering the implementation
 - [ ] 5.2 Write tests covering the new behavior
 - [ ] 5.3 Run tests and confirm they pass
+
+## 6. Recording requests (2026-11-02, decision 384)
+- No Painter request: BentNormals has no documented export map name (`docs/analysis/painter-recording-backlog/03-bake-and-iray-requests.md` §3).

@@ -29,3 +29,6 @@
 - Thread counts: `opacity_threads_in_process` and `test_bytes_equal_across_thread_counts[opacity-32]`: identical bytes at 1, 4 and N threads on the one qualified ISA (AVX2). Not 3.3, which repeats 3.1's Tier 2b comparison.
 - Run: `python -m pytest tests/bake/test_bake_feasibility.py -k "opacity or capability_errors"`, 8 passed, exit 0 (log `tmp/scratch/bakers-more/pytest-opacity.log`). CPU only.
 - Still open: 1.1 (prerequisites not accepted); 2.2 (the channel format waits on the goldens; nothing publishes a receipt yet, `phase3.3_baker-evidence-publication`); 2.4 (manifests under `parity/manifests/`); 3.1-3.3 and 4.1 (Tier 2b against private goldens); the task-wide tails 5.1-5.3. No parity is claimed.
+
+## 7. Recording requests (2026-11-02, decision 384)
+- No Painter request: Opacity has no documented export map name (`docs/analysis/painter-recording-backlog/03-bake-and-iray-requests.md` §3).

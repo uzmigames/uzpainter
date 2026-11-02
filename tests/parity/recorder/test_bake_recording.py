@@ -26,6 +26,7 @@ MakeSession = Callable[[Any], PainterSession]
 PLANE = REPO_ROOT / "parity" / "fixtures" / "meshes" / "plane.obj"
 BAKING_SET = "substance_painter.baking.BakingParameters.set"
 SET_ENABLED = "substance_painter.baking.BakingParameters.set_enabled_bakers"
+SET_CURVATURE = "substance_painter.baking.BakingParameters.set_curvature_method"
 BAKE = "substance_painter.baking.bake_async"
 EXPORT = "substance_painter.export.export_project_textures"
 
@@ -180,6 +181,16 @@ def test_malformed_enabled_bakers_and_bake_steps_are_refused(sample_job: Job, re
     refused(sample_job, repo, with_step(6, {"call": BAKE, "args": {"usage": "Normal"}}), "only an")
 
 
+@pytest.mark.parametrize(
+    "args", [{}, {"method": "FromHeight"}, {"method": "FromMesh", "usage": "Curvature"}]
+)
+def test_malformed_curvature_method_steps_are_refused(
+    sample_job: Job, repo: Path, args: dict[str, Any]
+) -> None:
+    step = {"call": SET_CURVATURE, "args": args}
+    refused(sample_job, repo, with_step(1, step), "set_curvature_method takes `method`")
+
+
 def test_bake_ordering_rules(sample_job: Job, repo: Path) -> None:
     # Baking settings after the last bake would not describe the baked maps.
     late = {"call": BAKING_SET, "args": {"parameter": "fake_size", "value": [4, 4]}}
@@ -188,6 +199,12 @@ def test_bake_ordering_rules(sample_job: Job, repo: Path) -> None:
         sample_job,
         repo,
         with_step(7, {"call": SET_ENABLED, "args": {"usages": ["AO"]}}),
+        "must precede the last bake_async",
+    )
+    refused(
+        sample_job,
+        repo,
+        with_step(7, {"call": SET_CURVATURE, "args": {"method": "FromNormalMap"}}),
         "must precede the last bake_async",
     )
     # A bake is a state step: it cannot follow an export.
@@ -266,6 +283,27 @@ def test_bake_golden_is_recorded_with_readbacks_in_both_recordings(
         assert exported["export_settings"]["encoding_basis"] == "baked_mesh_map"
         assert exported["export_settings"]["map_type"] == "meshMap"
     assert not world.project_open
+
+
+def test_curvature_method_is_set_and_read_back_in_both_recordings(
+    fake: types.ModuleType,
+    make_session: MakeSession,
+    sample_job: Job,
+    repo: Path,
+    work: Path,
+    inbox: Path,
+) -> None:
+    assert SET_CURVATURE in documented_symbols() and SET_CURVATURE in STATE_CALLS
+    steps = with_step(5, {"call": SET_CURVATURE, "args": {"method": "FromNormalMap"}})
+    steps[6]["args"]["usages"] = ["Normal", "Curvature"]
+    job = job_from_manifest(bake_manifest(sample_job, repo, steps), repo_root=repo)
+    world = fake.FakeWorld()
+    record = record_of(record_texture_golden(make_session(world), job, work, inbox))
+    assert world.curvature_method is fake.CurvatureMethod.FromNormalMap
+    for recording in record["recordings"]:
+        found = readbacks(recording)
+        assert found["readback/get_curvature_method"]["value"] == {"uzp_plane": "FromNormalMap"}
+        assert found["readback/get_curvature_method"]["call"] == ps.BAKING_CURVATURE_METHOD
 
 
 def test_unknown_enum_label_refuses_the_golden(

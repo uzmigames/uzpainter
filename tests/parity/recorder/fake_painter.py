@@ -561,6 +561,7 @@ class FakeWorld:
         self.template_channels: dict[str, dict[ChannelType, ChannelFormat]] = {}
         self.baking = fake_baking_parameters()
         self.enabled_bakers = [MeshMapUsage.Normal, MeshMapUsage.AO]
+        self.curvature_method = CurvatureMethod.FromMesh
         # A bake ends after `bake_polls` busy polls with `bake_status` (BakingProcessEnded).
         self.bake_polls = 3
         self.bake_status = BakingStatus.Success
@@ -1204,7 +1205,12 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
             return dict(world.baking[baked_map.name])
 
         def get_curvature_method(self) -> CurvatureMethod:
-            return CurvatureMethod.FromMesh
+            return world.curvature_method
+
+        def set_curvature_method(self, method: CurvatureMethod) -> None:
+            if not isinstance(method, CurvatureMethod):
+                raise TypeError("set_curvature_method takes a CurvatureMethod member")
+            world.curvature_method = method
 
         def get_enabled_bakers(self) -> list[MeshMapUsage]:
             return list(world.enabled_bakers)

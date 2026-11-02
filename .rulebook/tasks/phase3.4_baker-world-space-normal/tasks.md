@@ -25,3 +25,6 @@
 - Thread counts: `world_normal_threads_in_process` and the cross-process `test_bytes_equal_across_thread_counts[world_normal-32]` give identical bytes at 1, 4 and N threads on the one qualified ISA (AVX2). This is not 3.3, which repeats the Tier 2b comparison of 3.1.
 - Run: `python -m pytest tests/bake/test_bake_feasibility.py -k "world_normal or capability_errors"`, 8 passed, exit 0 (log `tmp/scratch/bakers-simple/pytest-wsn.log`). CPU only.
 - Still open: 1.1 (prerequisites not accepted); 2.2 (Painter's channel format and value mapping come from the goldens; none exists, so nothing is encoded); 2.3 (manifests under `parity/manifests/`, outside this slice); 3.1-3.3 and 4.1 (Tier 2b against private goldens, owner's machine); the task-wide tails 5.1-5.3. No parity is claimed; the result's status stays `pending-evidence`.
+
+## 7. Recording requests (2026-11-02, decision 384)
+- Item 3.1's Painter recordings are requested: `parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/requests/tier2b/bakes/world-space-normal-<scene>.json` (3). Not yet recorded; 3.2 has no request.

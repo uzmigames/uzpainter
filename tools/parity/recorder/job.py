@@ -39,7 +39,11 @@ SESSION_FILE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\.(exr|hdr)")
 SHA256_HEX = re.compile(r"[0-9a-f]{64}")
 
 # Baking-configuration steps: they must come before the last `bake_async` of the job.
-BAKING_SETTINGS = frozenset({ps.BAKING_SET, ps.BAKING_SET_ENABLED_BAKERS})
+BAKING_SETTINGS = frozenset(
+    {ps.BAKING_SET, ps.BAKING_SET_ENABLED_BAKERS, ps.BAKING_SET_CURVATURE_METHOD}
+)
+# `baking.CurvatureMethod` members a `set_curvature_method` step may name.
+CURVATURE_METHODS = ("FromMesh", "FromNormalMap")
 
 # Common baking parameter naming the high-poly mesh: only an `input` may set it, so that the
 # file Painter bakes from is a hashed, staged input.
@@ -78,6 +82,7 @@ STATE_CALLS = frozenset(
         ps.SET_PARAMETERS,
         ps.BAKING_SET,
         ps.BAKING_SET_ENABLED_BAKERS,
+        ps.BAKING_SET_CURVATURE_METHOD,
         ps.BAKE,
     }
 )
@@ -284,10 +289,12 @@ def export_probe(step: Step, inputs: dict[str, Path]) -> ExportProbe:
 
 def baking_readback(step: Step) -> dict[str, Any]:
     """Readback of a baking-configuration step, per texture set: the `Property.value()` of the
-    parameter it set, or the enabled bakers."""
+    parameter it set, the enabled bakers, or the curvature method."""
     scope = {"texture_set": step.args["texture_set"]} if "texture_set" in step.args else {}
     if step.call == ps.BAKING_SET_ENABLED_BAKERS:
         return {"call": ps.BAKING_ENABLED_BAKERS, "args": scope}
+    if step.call == ps.BAKING_SET_CURVATURE_METHOD:
+        return {"call": ps.BAKING_CURVATURE_METHOD, "args": scope}
     args = {k: step.args[k] for k in ("parameter", "usage") if k in step.args}
     return {"call": ps.GET_PROPERTY_VALUE, "args": args | scope}
 
@@ -316,6 +323,13 @@ def check_baking_step(step: Step) -> None:
         unknown = sorted(str(u) for u in usages if u not in ps.BAKER_USAGES)
         if unknown:
             raise RecorderError(f"{where}: {unknown} are not MeshMapUsage members")
+        return
+    if step.call == ps.BAKING_SET_CURVATURE_METHOD:
+        if args.get("method") not in CURVATURE_METHODS or set(args) - {"method", "texture_set"}:
+            raise RecorderError(
+                f"{where}: set_curvature_method takes `method` (one of {list(CURVATURE_METHODS)}) "
+                "and an optional `texture_set`"
+            )
         return
     unknown = sorted(set(args) - set(ps.BAKING_SET_ARGS))
     if unknown:

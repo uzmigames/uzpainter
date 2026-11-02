@@ -68,6 +68,7 @@ from tools.parity.envelope.registry import (
     manifest_root,
 )
 from tools.parity.recorder.defaults import check_baking_job, check_template_job
+from tools.parity.recorder.iray import settings_sheet
 from tools.parity.recorder.job import (
     ASSETS3D_LICENCE,
     EXPORT,
@@ -110,6 +111,13 @@ RAW_CAPABILITY, RAW_EXPORT, FILTER_CONTEXT = (
     "filter-context",
 )
 OWNED = frozenset({RAW_CAPABILITY, RAW_EXPORT, FILTER_CONTEXT})  # start their own Painter
+# Tier 3 Iray references (decision 385): an operator series, one fresh Painter per reference
+# (`recorder iray --launch`), in Painter's substance OCIO configuration (decision 038).
+IRAY = "iray-reference"
+IRAY_FAMILIES = ("phase0/iray-references", "phase0/iray-stability", "tier3/render-procedure")
+IRAY_STABILITY = "phase0/iray-stability"
+IRAY_OCIO = r"<Painter install>\resources\ocio\substance\config.ocio"
+REF_MATCH_HDRI = ASSETS + r"\Pipeline\render\HDRI\TOS-RefMatch-Skeletal-Mage.exr"
 
 # Durations documented by earlier batches (parity/RECORDER.md section 11), by golden-name prefix:
 # the mean recording time of one golden of that family, and where the figure comes from. Any
@@ -253,6 +261,10 @@ def kind_of(request: Request) -> str:
         return MIGRATION
     family = "/".join(request.relative.split("/")[:2])
     name = request.name
+    if family in IRAY_FAMILIES:
+        return IRAY
+    if family == "tier2b/bakes":  # bake goldens (decision 384): the texture recorder bakes
+        return TEXTURE
     if family == "tier0/api-probes":
         if name.startswith("ocio16-raw-readout-"):
             return RAW_EXPORT if "-export" in name else RAW_CAPABILITY
@@ -270,6 +282,32 @@ def capability_manifest(item: Item, admit_root: str) -> str:
     """The admitted capability golden a Raw export request depends on (same state and version)."""
     family = item.request.relative.rsplit("/", 1)[0]
     return f"{admit_root}/{family}/{item.request.name.replace('-export', '-capability')}.json"
+
+
+def iray_conditions(item: Item) -> list[dict[str, Any]]:
+    """The `iray --condition` runs a reference needs (`iray.py`): two separate sessions and a
+    k*S render; a stability probe two separate sessions, or two renders of one session."""
+    if item.request.relative.startswith(IRAY_STABILITY + "/"):
+        if item.request.name.endswith("--same-session"):
+            return [{"condition": "same_session", "runs": 1}]
+        return [{"condition": "separate_session", "runs": 2}]
+    return [
+        {"condition": "separate_session", "runs": 2},
+        {"condition": "k_times_samples", "k": 4, "runs": 1},
+    ]
+
+
+def iray_command(item: Item, path: str, run: dict[str, Any] | None = None) -> list[str]:
+    """The series command of one `iray_conditions` entry (the first when none is given)."""
+    steps = item.request.manifest.get("instruction_sequence", {}).get("steps", [])
+    hdri = any("session_environment" in s.get("args", {}) for s in steps)
+    run = run or iray_conditions(item)[0]
+    return [
+        *("python", "-m", "tools.parity.recorder", "iray", path, "--condition", run["condition"]),
+        *(("--k", str(run["k"])) if "k" in run else ()),
+        *("--launch", "--operator", "ui", "--operator-id", "<operator id>"),
+        *(("--session-file", REF_MATCH_HDRI) if hdri else ()),
+    ]
 
 
 def command(item: Item, path: str, admit_root: str) -> list[str]:
@@ -295,6 +333,8 @@ def command(item: Item, path: str, admit_root: str) -> list[str]:
         ],
         FILTER_CONTEXT: ["python", "-m", "tools.parity.recorder.filter_context_run", *owned],
     }
+    if item.kind == IRAY:
+        return iray_command(item, path)
     return commands[item.kind]
 
 
@@ -353,6 +393,7 @@ def job_problems(
         TEMPLATES: lambda: template_check(job_from_manifest(manifest, root)),
         SCRIPT: lambda: script_job_from_manifest(manifest, assets_root or root, store, root),
         MIGRATION: lambda: migration_job_from_manifest(manifest, assets_root or root, store, root),
+        IRAY: lambda: settings_sheet(job_from_manifest(manifest, root)),
     }
     check = checks.get(item.kind, lambda: probe_job_from_manifest(manifest, root))
     try:
@@ -478,7 +519,8 @@ def deduplicate(items: list[Item]) -> None:
                 item.problems = []
     first: dict[str, Item] = {}
     for item in items:
-        if item.status != "pending" or item.problems:
+        # A stability repeat keeps its parent's scene on purpose (decision 062).
+        if item.status != "pending" or item.problems or item.kind == IRAY:
             continue
         key = f"{item.kind}:{item.request.content_key}"
         if key in first:
@@ -512,6 +554,9 @@ def expected_artifacts(item: Item) -> dict[str, Any]:
     }
     if item.kind in OWNED:
         artifacts["inbox_run"] = "the runner's own private output prefix and report"
+    if item.kind == IRAY:
+        artifacts["recordings"] = []
+        artifacts["iray_conditions"] = iray_conditions(item)
     return artifacts
 
 
@@ -527,6 +572,9 @@ def plan_item(order: int, item: Item, request_root: str, admit_root: str) -> dic
     seconds, basis = estimate(item.request.name)
     request = f"{request_root}/{item.request.relative}"
     mark = checkpoint(item, admit_root)
+    artifacts = expected_artifacts(item)
+    for run in artifacts.get("iray_conditions", []):
+        run["command"] = iray_command(item, request, run)
     return {
         "order": order,
         "golden_id": item.request.golden_id,
@@ -548,14 +596,21 @@ def plan_item(order: int, item: Item, request_root: str, admit_root: str) -> dic
             "--run",
             "<run>",
         ],
-        "expected_artifacts": expected_artifacts(item),
+        "expected_artifacts": artifacts,
         "estimated_seconds": seconds,
         "estimate_basis": basis,
         "checkpoint": mark,
     }
 
 
-def preamble(colour: str | None, owned: bool, first_request: str) -> list[str]:
+def preamble(colour: str | None, owned: bool, first_request: str, iray: bool = False) -> list[str]:
+    if iray:
+        return [
+            "close any other Painter: the series starts and stops one fresh Painter per reference",
+            f'$env:OCIO = "{IRAY_OCIO}"',
+            "run each command of an item's iray_conditions `runs` times, one Painter each (a "
+            "series skips a condition already staged); the operator applies the settings sheet",
+        ]
     if owned:
         return ["the runner starts, checks and stops its own Painter; close any other Painter"]
     if colour is None:
@@ -651,12 +706,15 @@ def build_plan(
     for item in scheduled:
         colour = colour_session(item.request.manifest)
         key = f"owned:{item.request.relative}" if item.kind in OWNED else f"colour:{colour}"
+        key = IRAY if item.kind == IRAY else key
         groups.setdefault(key, []).append(item)
     sessions: list[dict[str, Any]] = []
     order = 0
     for members in groups.values():  # insertion order is the order of each session's first item
         colour = colour_session(members[0].request.manifest)
-        owned = members[0].kind in OWNED
+        iray = members[0].kind == IRAY
+        owned = members[0].kind in OWNED or iray
+        colour = IRAY_OCIO if iray else colour
         entries = []
         for item in members:
             order += 1
@@ -668,7 +726,7 @@ def build_plan(
                 "colour_management": "legacy" if colour is None else "ocio",
                 "ocio_configuration": colour,
                 "owned_process": owned,
-                "preamble": preamble(colour, owned, entries[0]["request"]),
+                "preamble": preamble(colour, owned, entries[0]["request"], iray),
                 "items": entries,
                 "estimated_seconds": (0 if owned else SESSION_SECONDS[0]) + sum(known_seconds),
                 "unestimated_items": len(entries) - len(known_seconds),

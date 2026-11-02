@@ -1,0 +1,21 @@
+{
+  "id": 384,
+  "slug": "tier-2b-bake-requests-on-the-analytic-fixtures",
+  "title": "Tier 2b bake requests on the analytic fixtures",
+  "status": "accepted",
+  "date": "2026-11-02",
+  "relatedTasks": [
+    "phase3.2_baker-normal",
+    "phase3.4_baker-ao",
+    "phase3.4_baker-curvature",
+    "phase3.4_baker-id",
+    "phase3.4_baker-position",
+    "phase3.4_baker-thickness",
+    "phase3.4_baker-world-space-normal",
+    "phase3.4_baker-height",
+    "phase3.4_baker-opacity",
+    "phase3.4_baker-bent-normals",
+    "phase3.5_embree-bakers"
+  ],
+  "supersededBy": null
+}

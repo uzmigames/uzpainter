@@ -1,0 +1,17 @@
+# UzPainter Tier 2b bake fixture plane-high.obj (tools/parity/tier2b_bakes/fixtures.py, decision 384).
+# Authored by UzmiGames (Apache-2.0): tests/bake/bake_fixtures.h geometry, float32.
+o normal_high
+v -2 -2 0.005
+v 2 -2 0.005
+v 2 2 0.005
+v -2 2 0.005
+vt 0.25 0.25
+vt 0.75 0.25
+vt 0.75 0.75
+vt 0.25 0.75
+vn 0 0 1
+vn 0 0 1
+vn 0 0 1
+vn 0 0 1
+f 1/1/1 2/2/2 3/3/3
+f 1/1/1 3/3/3 4/4/4
