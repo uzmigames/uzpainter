@@ -23,12 +23,6 @@ using evaluator::DagList;
 using evaluator::DagSource;
 using evaluator::DiagnosticSource;
 
-/// The gap a consumer must close itself (08-export.md §4, §5.1 rows 2 and 8): SpecularWeight has
-/// no slot in the consumers' materials, and its stated mapping belongs to the consumer.
-constexpr std::string_view kSpecularWeightGap =
-    "SpecularWeight has no slot in the consumer's material: its mapping (Specular = 0.5 x "
-    "SpecularWeight in the hat v8 report) belongs to the consumer and is not applied by the export";
-
 /// The gap of a normal derivative routed to RGBA8 (decision 316): the file keeps Z's sign in B, but
 /// UzEngine's fixed G-buffer path reconstructs a non-negative Z from X and Y
 /// (`docs/analysis/reviews/assets3d-pipeline-astra-review.md` C09).
@@ -59,22 +53,6 @@ int ManifestBitDepth(BitDepth depth) {
     }
     return 0;
 }
-
-/// The gaps of the UzEngine consumer at U-UZE-RUNTIME a703c95 (08-export.md §4; uzmat_writer.h):
-/// the SM5 route never reads albedo alpha as opacity, and no `.uzmat` pin or inline scene key binds
-/// a height map (its `heightmapSrvIndex` has no verified route).
-constexpr std::string_view kSm5OpacityGap =
-    "opacity is carried in albedo alpha, which the bindless fixed-PBR path reads; the SM5 route never reads "
-    "albedo alpha as opacity, so opacity is unsupported there (08-export.md §4)";
-constexpr std::string_view kHeightGap =
-    "no .uzmat pin and no inline scene-material key binds a height map in the pinned UzEngine format "
-    "(U-UZE-RUNTIME a703c95); the heightmap slot has no verified route";
-constexpr std::string_view kNoSlotGap = "the UzEngine material has no slot for this texture";
-/// The `.uzmat` blend is an authored rule (write.h `EncodedUzMaterial`), not an engine fact.
-constexpr std::string_view kBlendGap =
-    "the blend is UzPainter's authored rule (Masked when the albedo derivative holds an alpha, Opaque "
-    "otherwise): an alpha channel alone does not tell a cutout from a translucent surface, so no engine "
-    "opacity behaviour is claimed; the consumer fixture (phase3.3_uze-consumer-fixture) decides it";
 
 /// The channel mapping of a written file (its encoded layout `layout`: a dropped all-opaque alpha
 /// is not a channel of the file). Each channel of an image file also states its `transfer`: `sRGB`

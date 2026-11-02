@@ -2197,6 +2197,7 @@ int main(int argc, char** argv) {
         }
         if (args.size() == 3 && args[0] == "fixed-copy") return RunFixedCopy(args[1], args[2]);
         if (args.size() == 3 && args[0] == "project") return RunProject(args[1], args[2]);
+        if (!args.empty() && args[0] == "cook-uzengine") return exporter::RunCookUzEngineCommand(args, stdout, stderr);
         if (!args.empty() && args[0] == "cli") {
             std::vector<std::string> verb(args);
             verb[0] = "export";

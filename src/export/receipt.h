@@ -51,6 +51,28 @@
 
 namespace uzp::exporter {
 
+/// The gap a consumer must close itself (08-export.md §4, §5.1 rows 2 and 8): SpecularWeight has
+/// no slot in the consumers' materials, and its stated mapping belongs to the consumer.
+inline constexpr std::string_view kSpecularWeightGap =
+    "SpecularWeight has no slot in the consumer's material: its mapping (Specular = 0.5 x "
+    "SpecularWeight in the hat v8 report) belongs to the consumer and is not applied by the export";
+/// The gaps of the UzEngine consumer at U-UZE-RUNTIME a703c95 (08-export.md §4; uzmat_writer.h):
+/// the SM5 route never reads albedo alpha as opacity, and no `.uzmat` pin or inline scene key binds
+/// a height map (its `heightmapSrvIndex` has no verified route). Shared by the export receipt and
+/// the `cook-uzengine` receipt (cli.h).
+inline constexpr std::string_view kSm5OpacityGap =
+    "opacity is carried in albedo alpha, which the bindless fixed-PBR path reads; the SM5 route never reads "
+    "albedo alpha as opacity, so opacity is unsupported there (08-export.md §4)";
+inline constexpr std::string_view kHeightGap =
+    "no .uzmat pin and no inline scene-material key binds a height map in the pinned UzEngine format "
+    "(U-UZE-RUNTIME a703c95); the heightmap slot has no verified route";
+inline constexpr std::string_view kNoSlotGap = "the UzEngine material has no slot for this texture";
+/// The `.uzmat` blend is an authored rule (write.h `EncodedUzMaterial`), not an engine fact.
+inline constexpr std::string_view kBlendGap =
+    "the blend is UzPainter's authored rule (Masked when the albedo derivative holds an alpha, Opaque "
+    "otherwise): an alpha channel alone does not tell a cutout from a translucent surface, so no engine "
+    "opacity behaviour is claimed; the consumer fixture (phase3.3_uze-consumer-fixture) decides it";
+
 /// The receipt's JSON schema id.
 inline constexpr std::string_view kReceiptSchema = "uzpainter/export-receipt/1";
 /// `non_conformant.mode` of a diagnostic measure generation (decision 286), and its open item.

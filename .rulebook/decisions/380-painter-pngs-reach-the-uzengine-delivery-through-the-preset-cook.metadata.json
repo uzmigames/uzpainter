@@ -1,0 +1,13 @@
+{
+  "id": 380,
+  "slug": "painter-pngs-reach-the-uzengine-delivery-through-the-preset-cook",
+  "title": "Painter PNGs reach the UzEngine delivery through the preset's own cook",
+  "status": "accepted",
+  "date": "2026-11-02",
+  "relatedTasks": [
+    "phase3.3_uze-png-cook-cli",
+    "phase3.2_uze-uzmat-preset",
+    "phase3.4_uzengine-preset"
+  ],
+  "supersededBy": null
+}

@@ -446,6 +446,7 @@ const export_sources = [_][]const u8{
     "procedural/filter_observation_source.cpp",
     "export/cli.cpp",
     "export/config.cpp",
+    "export/cook_uzengine.cpp",
     "export/encode.cpp",
     "export/exr_writer.cpp",
     "export/fixed_names.cpp",

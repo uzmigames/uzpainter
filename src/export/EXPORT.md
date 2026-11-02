@@ -150,6 +150,31 @@ Task `phase1.17_export-presets`. Local run report: `parity/reports/phase1/export
 - **Tests.** `tests/export/test_uze_preset.py`, CPU only. It covers the shipped preset with its ORM maps filtered out and a test-only variant whose ORM R reads `ambientOcclusion`. Neither is shipped-preset or wand v1 acceptance. The normal's convention is checked against `Normal_OpenGL` through the PNG route: red and blue are equal and green is mirrored. `tests/export/test_specularweight_base.py` publishes the shipped SpecularWeight output as PNG16 and BC4 with hashes and its consumer gap. Its empty-channel base is observed on default and Alpha-blend projects at L8, L16 and L32F; other template/format combinations remain refused. Missing channels are skipped.
 - **Height sidecar.** The table's "sidecar" is read as the BC4 `.uztexture` companion: the engine probes a cooked companion before its file-name rule, and the companion's header states the format. The receipt also records that format. No engine sidecar format exists in the approved source.
 
+### UzEngine PNG cook (phase3.3_uze-png-cook-cli, decision 380)
+
+`UzPainter.exe cook-uzengine` gives a texture set painted elsewhere (Substance Painter in the Assets3D pipeline) the same UzEngine delivery as the preset above, from its exported PNGs. No project is read.
+
+```
+UzPainter.exe cook-uzengine --set <name> --out <dir> --normal-convention opengl|directx
+    --albedo <png> --normal <png> (--orm <png> | --ao <png> --roughness <png> --metallic <png>)
+    [--emissive <png>] [--height <png>] [--specularweight <png>]
+```
+
+- **One code path** (`cook_uzengine.cpp`). The targets (binding, format, colour space, mip class, negative-Z policy, file names) come from the shipped `uzengine` preset. Each texture is cooked by write.h `CookUzEngineDerivative` and the `.uzmat` written by `WriteUzEngineMaterial`, the two functions `EncodeExport` cooks the preset with. The verb adds the input side only: decoding and checking the PNGs.
+- **Equality.** It is defined on the decoded input: two runs, or a run and a native export, give the same bytes when their 16-bit RGBA images (below) and options are equal, with the same encoder (etcpak 2.1, fixed settings, recorded per file). The receipt records each input's `decoded_rgba16_sha256` (little-endian samples, R, G, B, A, rows top first) so a consumer can check it.
+- **Input contract.** Refused with `refused: ...; nothing was written` (exit 1), before any file is written:
+  - Every input is an 8- or 16-bit PNG, grey, grey+alpha, RGB or RGBA. Palette, 1/2/4-bit and tRNS images are refused. An 8-bit code enters as code * 257, a grey PNG as R = G = B, a missing alpha as 1. Colour chunks (gAMA, iCCP, sRGB) are not applied: the codes are read as stored.
+  - `--albedo` and `--emissive` are sRGB-encoded colour; every other map is linear.
+  - Every map has the albedo's size, a power of two on both sides (the mip chain's 2x2 box).
+  - Only the albedo may carry an alpha below 1; it is the opacity, as in the preset. An albedo without alpha, or with an alpha of 1 everywhere, is opacity 1 (`Opaque`); the receipt's `uzmat.opacity` says which.
+  - `--normal` is RGB, in the convention `--normal-convention` names (required, no default). The preset stores `Normal_DirectX` (green = -v): an OpenGL map's green is mirrored (65535 - G). A texel with negative Z (B <= 32767) is refused, the preset's policy `fail`.
+  - `--orm` packs R = AO, G = roughness, B = metallic; or `--ao`, `--roughness` and `--metallic` give them as grey maps (R = G = B). `--height` and `--specularweight` are grey too.
+  - The set name is one file-name stem (no `/`, `\`, `:` or `..`), checked again as a delivery path by `WriteUzMaterial` (device names, control characters).
+  - Dithering is the exporter's concern: export the PNGs without it.
+- **Optional maps.** Without `--emissive` the emissive texture is black (0, 0, 0), what the preset cooks for a black emissive channel, because the `.uzmat` binds four textures; the receipt marks it `synthesized`. `--height` adds the BC4 `heightmap` texture and the `.uzmat`'s height gap; `--specularweight` adds the BC4 texture without a slot (SpecularWeight gap).
+- **Output.** `<dir>/<name>_{albedo,normal,orm,emissive[,height][,specularweight]}.uztexture` and `<dir>/<name>.uzmat`, written only after everything is cooked (a write failure can leave the files before it). The receipt is printed on stdout as canonical JSON: {verb, set, out, preset, inputs: [{map, path, sha256, bit_depth, channels, colour_space, decoded_rgba16_sha256, convention, stored_convention, green_mirrored (normal)} or {map: emissive, path: null, synthesized}], files: [{path, format, bytes, sha256, colour_space, uztexture: {binding, format, srgb, size, mips, mip_filter, layout, encoder, encoder_settings, alpha_coverage_threshold (masked albedo), negative_z (normal)} or uzmat: {blend, two_sided, opacity, albedo, normal, orm, emissive, height, inline_material}, consumer_gaps}]}. The consumer gaps are the preset receipt's.
+- **Tests.** `tests/export/test_uze_png_cook.py`, CPU only: a native export's canonical PNG 16 maps cook to its five `.uztexture` files and `.uzmat` byte for byte; the Assets3D three-PNG case (8-bit BaseColor without alpha, OpenGL normal, packed ORM) and its receipt; equal bytes from 16-bit, DirectX, opaque-alpha and separate-ORM forms of the same decoded images; determinism; every refusal writes nothing.
+
 ### Unreal Engine (Packed) preset (phase3.2_unreal-ue56-packed-preset, decision 322)
 
 `assets/export-presets/unreal-engine-packed.json` is `08-export.md` §4's layout in the configuration form, written by hand from that section, decision 023 and the UE 5.6 texture documentation (X-CONSUMERS). It answers to `Unreal Engine (Packed)` through the alias table. Its provenance record has layout `unconfirmed`, pending recording R-322 (item 2.1), so every reference to it is refused before anything is planned.

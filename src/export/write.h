@@ -41,6 +41,7 @@
 #include <string>
 #include <vector>
 
+#include "export/mips.h"
 #include "export/padding.h"
 #include "export/plan.h"
 
@@ -83,7 +84,18 @@ struct EncodedUzTexture {
     bool routed = false;
     /// The block encoder, for the receipt ("etcpak 2.1").
     std::string encoder;
+    /// The encoder's fixed settings of the stored format (`BcEncoder::Settings`); empty for RGBA8.
+    std::string settings;
 };
+
+/// The `.uztexture` derivative `output` of the canonical map `canonicalPath`, whose PNG 16 samples
+/// expand to `image` (R, G, B, A; an L file as R = G = B = L, a missing alpha as 65535) and whose
+/// written layout is `layout`: the cook of `EncodedUzTexture` above, negative-Z guard included.
+/// `EncodeExport` and the `cook-uzengine` verb (cli.h) both cook through it, so equal images and
+/// outputs give equal bytes (decision 380).
+[[nodiscard]] render::Result<EncodedUzTexture> CookUzEngineDerivative(const UzTextureOutput& output,
+                                                                      const std::string& canonicalPath,
+                                                                      const Rgba16Image& image, FileLayout layout);
 
 /// Explicit DDS companion, cooked from the canonical PNG16 samples after padding/encoding.
 /// The canonical file remains unchanged. BC5 negative Z fails before any file is published;
@@ -112,6 +124,11 @@ struct EncodedUzMaterial {
     /// The writer's consumer gaps: {binding, path, reason}.
     std::vector<std::array<std::string, 3>> gaps;
 };
+
+/// The `.uzmat` of `material` (its derivative paths), blending `Masked` when `alpha` (the albedo
+/// derivative holds an alpha), `Opaque` otherwise: the rule of `EncodedUzMaterial` above, shared by
+/// `EncodeExport` and the `cook-uzengine` verb. Throws std::invalid_argument as `WriteUzMaterial`.
+[[nodiscard]] EncodedUzMaterial WriteUzEngineMaterial(const UzMaterialOutput& material, bool alpha);
 
 /// A planned file's bytes, encoded in memory.
 struct EncodedFile {

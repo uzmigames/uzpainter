@@ -2,7 +2,7 @@
 // `selftest` command (docs/architecture/13-engine-integration.md §4.2); the project store adds
 // `inspect` (with the recipe dump, src/python/recipe.h), `export-bundle` and `store-census`
 // (src/store/cli.h), the export of a project and
-// its publication's recovery `export` (src/export/cli.h), the Python API the script host `run`
+// its publication's recovery `export` and the PNG cook `cook-uzengine` (src/export/cli.h), the Python API the script host `run`
 // (src/python/run.h) and `capabilities` (src/python/capabilities.h), the supervisor and worker
 // roles `--mcp` and `--worker` (src/supervisor/), the preview window `--preview` (src/preview/cli.h),
 // the asset library's `assets list` (src/procedural/cli.h);
@@ -64,6 +64,10 @@ constexpr const char* kUsage =
     "                                  [--edits N]\n"
     "       UzPainter.exe export <file.uzp> --config <config.json> --app-version <version> --build <id>\n"
     "       UzPainter.exe export --recover <exportPath> [--fixed-names <dir>]...\n"
+    "       UzPainter.exe cook-uzengine --set <name> --out <dir> --normal-convention opengl|directx\n"
+    "                                   --albedo <png> --normal <png>\n"
+    "                                   (--orm <png> | --ao <png> --roughness <png> --metallic <png>)\n"
+    "                                   [--emissive <png>] [--height <png>] [--specularweight <png>]\n"
     "       UzPainter.exe run <script.py> [args...] [--gpu-backend dx12|vulkan] [-- args...]\n"
     "                         [--diagnostic-measure-export]   (non-conformant, decision 286)\n"
     "                         [--test-gpu-unavailable]       (Debug-only device failure fixture)\n"
@@ -174,6 +178,9 @@ int main() {
     }
     if (!args.empty() && uzp::exporter::IsExportCommand(args.front())) {
         return uzp::exporter::RunExportCommand(args, stdout, stderr);
+    }
+    if (!args.empty() && uzp::exporter::IsCookUzEngineCommand(args.front())) {
+        return uzp::exporter::RunCookUzEngineCommand(args, stdout, stderr);
     }
     if (!args.empty() && uzp::python::IsRunCommand(args.front())) {
         const int status = uzp::python::RunRunCommand(args, stdout, stderr);

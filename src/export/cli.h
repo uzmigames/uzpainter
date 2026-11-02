@@ -19,6 +19,18 @@
 //       [{generation, problem}], damaged: {generation, problem} | null, removed_staging_pointer,
 //       fixed_names: [{directory, rolled_forward}]}
 //
+//   cook-uzengine --set <name> --out <dir> --normal-convention opengl|directx --albedo <png>
+//       --normal <png> (--orm <png> | --ao <png> --roughness <png> --metallic <png>)
+//       [--emissive <png>] [--height <png>] [--specularweight <png>]
+//       (decision 380, cook_uzengine.cpp; no project) a texture set exported as PNG, 8 or 16 bits,
+//       cooked into the UzEngine delivery of the shipped `uzengine` preset: `<name>_<map>.uztexture`
+//       and `<name>.uzmat` in <dir>, through write.h `CookUzEngineDerivative` and
+//       `WriteUzEngineMaterial`, so equal decoded inputs give the native preset's bytes. Prints
+//       {verb, set, out, preset, inputs: [{map, path, sha256, bit_depth, channels, colour_space,
+//       decoded_rgba16_sha256, ...}], files: [{path, format, bytes, sha256, colour_space, uztexture |
+//       uzmat, consumer_gaps}]} as canonical JSON; a refused input prints "refused: ..." and writes
+//       nothing (src/export/EXPORT.md §5, input contract).
+//
 // Exit status: 0 success (a damaged selected generation is reported, exit 1), 1 failure or
 // refusal (the message names it), 2 usage error.
 
@@ -38,5 +50,11 @@ bool IsExportCommand(std::string_view verb);
 
 /// Runs `args` (the verb first) and prints to `out` / `err`.
 int RunExportCommand(const std::vector<std::string>& args, std::FILE* out, std::FILE* err);
+
+/// True for `cook-uzengine`.
+bool IsCookUzEngineCommand(std::string_view verb);
+
+/// Runs `cook-uzengine` (`args`, the verb first) and prints to `out` / `err`.
+int RunCookUzEngineCommand(const std::vector<std::string>& args, std::FILE* out, std::FILE* err);
 
 }  // namespace uzp::exporter

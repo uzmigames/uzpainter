@@ -107,8 +107,31 @@ render::Result<EncodedUzTexture> CookDerivative(const PlannedFile& file, const P
             default: image.rgba.insert(image.rgba.end(), {v[0], v[1], v[2], v[3]}); break;
         }
     }
+    return CookUzEngineDerivative(output, canonicalFile.relativePath, image, canonical.layout);
+}
+
+/// The `.uzmat` `index` of `plan` over the cooked derivatives of its files.
+EncodedUzMaterial WriteMaterial(const ExportPlan& plan, size_t index, const std::vector<EncodedFile>& encoded) {
+    const UzMaterialOutput& material = plan.materials[index];
+    bool alpha = false;
+    for (size_t i = 0; i < plan.files.size(); ++i) {
+        const PlannedFile& file = plan.files[i];
+        if (file.uztexture && file.uztexture->relativePath == material.albedo && encoded[i].uztexture) {
+            const FileLayout layout = encoded[i].uztexture->layout;
+            alpha = layout == FileLayout::RGBA || layout == FileLayout::LA;
+        }
+    }
+    EncodedUzMaterial out = WriteUzEngineMaterial(material, alpha);
+    out.index = index;
+    return out;
+}
+
+}  // namespace
+
+render::Result<EncodedUzTexture> CookUzEngineDerivative(const UzTextureOutput& output, const std::string& canonicalPath,
+                                                        const Rgba16Image& image, FileLayout layout) {
     EncodedUzTexture cooked;
-    cooked.layout = canonical.layout;
+    cooked.layout = layout;
     cooked.policy = output.negativeZ;
     UzTextureSpec spec;
     spec.binding = output.binding;
@@ -129,7 +152,7 @@ render::Result<EncodedUzTexture> CookDerivative(const PlannedFile& file, const P
     if (output.mips == DerivativeMips::normal) {
         const NegativeZ negative = FindNegativeZ(image);
         if (negative.count != 0 && output.negativeZ == NegativeZPolicy::fail) {
-            return ExportFail(std::string(NegativeZNormal(canonicalFile.relativePath, negative).what()) +
+            return ExportFail(std::string(NegativeZNormal(canonicalPath, negative).what()) +
                               "; the negative-Z policy is fail (decision 316): nothing is published");
         }
         cooked.negativeTexels = negative.count;
@@ -146,20 +169,18 @@ render::Result<EncodedUzTexture> CookDerivative(const PlannedFile& file, const P
     cooked.format = std::string(UzTextureStorageName(stored));
     cooked.mips = static_cast<uint32_t>(texture.metadata.mips.size());
     cooked.encoder = std::string(encoder.Name());
+    switch (stored) {
+        case UzTextureStorage::BC4: cooked.settings = std::string(encoder.Settings(BcFormat::Bc4)); break;
+        case UzTextureStorage::BC5: cooked.settings = std::string(encoder.Settings(BcFormat::Bc5)); break;
+        case UzTextureStorage::BC7:
+            cooked.settings = std::string(encoder.Settings(output.srgb ? BcFormat::Bc7Srgb : BcFormat::Bc7));
+            break;
+        case UzTextureStorage::RGBA8: break;
+    }
     return cooked;
 }
 
-/// The `.uzmat` `index` of `plan` over the cooked derivatives of its files.
-EncodedUzMaterial WriteMaterial(const ExportPlan& plan, size_t index, const std::vector<EncodedFile>& encoded) {
-    const UzMaterialOutput& material = plan.materials[index];
-    bool alpha = false;
-    for (size_t i = 0; i < plan.files.size(); ++i) {
-        const PlannedFile& file = plan.files[i];
-        if (file.uztexture && file.uztexture->relativePath == material.albedo && encoded[i].uztexture) {
-            const FileLayout layout = encoded[i].uztexture->layout;
-            alpha = layout == FileLayout::RGBA || layout == FileLayout::LA;
-        }
-    }
+EncodedUzMaterial WriteUzEngineMaterial(const UzMaterialOutput& material, bool alpha) {
     UzMaterialSpec spec;
     spec.name = material.relativePath.substr(0, material.relativePath.size() - std::string_view(".uzmat").size());
     spec.materialPath = material.relativePath;
@@ -171,7 +192,6 @@ EncodedUzMaterial WriteMaterial(const ExportPlan& plan, size_t index, const std:
     spec.blend = alpha ? UzMaterialBlend::Masked : UzMaterialBlend::Opaque;
     UzMaterial written = WriteUzMaterial(spec);
     EncodedUzMaterial out;
-    out.index = index;
     out.bytes = std::move(written.bytes);
     out.inlineMaterial = std::move(written.inlineMaterial);
     out.blend = alpha ? "Masked" : "Opaque";
@@ -180,8 +200,6 @@ EncodedUzMaterial WriteMaterial(const ExportPlan& plan, size_t index, const std:
     }
     return out;
 }
-
-}  // namespace
 
 std::optional<Coverage> CoverageOf(const core::TextureSet& set, const SourceInputs& inputs) {
     if (!inputs.geometry) return std::nullopt;
