@@ -1,7 +1,7 @@
 """The adapter's entry: Assets3D's `painter_layer_stack.py`, byte-unchanged, over UzPainter.
 
-    python -m adapters.assets3d --production-round REQUEST [--pin FILE=SHA256]... SCRIPT ARGS
-    python -m adapters.assets3d --diagnostic-import [--pin FILE=SHA256]... SCRIPT ARGS
+    python -m adapters.assets3d --production-round REQUEST [--pin|--import FILE=SHA]... SCRIPT ARGS
+    python -m adapters.assets3d --diagnostic-import [--pin|--import FILE=SHA]... SCRIPT ARGS
 
 replaces `"$MCP" "$LS" <its arguments>` (`MIGRATIONS.md` M1, M2). The script's bytes are read once
 and compiled with their real path under a module name other than `__main__`; only its two
@@ -12,6 +12,15 @@ included, is the script's.
 
 - `--pin FILE=SHA256` (repeatable) refuses the call before anything runs when FILE's bytes do not
   hash to SHA256: the wand fixture pins the layer-stack script and the files it `run`s.
+- `--import FILE=SHA256` (repeatable, dependencies first) closes the script's imports to a pinned
+  import closure (decision 300 item 7): each FILE is refused like a pin, then loaded from the
+  bytes checked as module `<stem>` before the script runs, in place of any module of that name
+  already loaded. While the script runs, an import of a
+  module not loaded yet that is not the standard library is refused, the call refuses with
+  `UnpinnedImport` even when the script catches the error, and no Painter call starts after the
+  refusal (its `execute` is called through a check of that, its only other rebinding).
+  `sys.path`, the loaded modules' entries and `sys.meta_path` are restored after. Without
+  `--import` the script imports as it always did.
 - A subcommand that needs a capability UzPainter does not have yet is refused before any call
   reaches UzPainter, because its code mutates before the missing call (`GATES`, read from the
   shipped capability manifest: the gate opens by itself once the manifest marks the capability
@@ -23,10 +32,17 @@ included, is the script's.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
+import importlib.abc
+import importlib.machinery
+import importlib.util
 import json
 import os
 import sys
+import sysconfig
+import types
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -66,29 +82,157 @@ class Refused(Exception):
         }
 
 
-def parse(argv: list[str]) -> tuple[dict[Path, str], Path, list[str]]:
+USAGE = "usage: python -m adapters.assets3d [--pin|--import FILE=SHA256]... SCRIPT ARGS"
+
+
+def parse(argv: list[str]) -> tuple[dict[Path, str], list[tuple[Path, str]], Path, list[str]]:
+    """The pins, the pinned imports in their order, the script and its arguments."""
     pins: dict[Path, str] = {}
+    imports: list[tuple[Path, str]] = []
     rest = list(argv)
-    while rest and rest[0] == "--pin":
+    while rest and rest[0] in ("--pin", "--import"):
         if len(rest) < 2 or "=" not in rest[1]:
-            raise SystemExit(
-                "usage: python -m adapters.assets3d [--pin FILE=SHA256]... SCRIPT ARGS"
-            )
+            raise SystemExit(USAGE)
         file, sha = rest[1].rsplit("=", 1)
-        pins[Path(file).resolve()] = sha.lower()
+        if rest[0] == "--pin":
+            pins[Path(file).resolve()] = sha.lower()
+        else:
+            imports.append((Path(file).resolve(), sha.lower()))
         rest = rest[2:]
     if not rest:
-        raise SystemExit("usage: python -m adapters.assets3d [--pin FILE=SHA256]... SCRIPT ARGS")
-    return pins, Path(rest[0]).resolve(), rest[1:]
+        raise SystemExit(USAGE)
+    return pins, imports, Path(rest[0]).resolve(), rest[1:]
+
+
+def check_sha(file: Path, data: bytes, sha: str) -> None:
+    actual = hashlib.sha256(data).hexdigest()
+    if actual != sha:
+        raise Refused("PinMismatch", f"{file} has SHA-256 {actual}, not its pinned {sha}: refused")
 
 
 def check_pins(pins: dict[Path, str], script: Path, data: bytes) -> None:
     for file, sha in pins.items():
-        actual = hashlib.sha256(data if file == script else file.read_bytes()).hexdigest()
-        if actual != sha:
+        check_sha(file, data if file == script else file.read_bytes(), sha)
+
+
+def pinned_imports(imports: list[tuple[Path, str]]) -> list[tuple[Path, bytes]]:
+    """Each `--import` file's bytes, read once and checked against its pin."""
+    checked = []
+    for file, sha in imports:
+        data = file.read_bytes()
+        check_sha(file, data, sha)
+        checked.append((file, data))
+    if len({file.stem for file, _ in checked}) != len(checked):
+        raise Refused("AdapterError", "two `--import` files give one module name: refused")
+    return checked
+
+
+STANDARD_ROOTS = tuple(
+    Path(p).resolve()
+    for p in sorted(
+        {
+            sysconfig.get_path("stdlib"),
+            sysconfig.get_path("platstdlib"),
+            str(Path(sys.base_exec_prefix) / "DLLs"),
+        }
+    )
+)
+
+
+def standard_library(fullname: str, path: Sequence[str] | None) -> bool:
+    """Whether an import is the interpreter's own standard library: a built-in or frozen module, or
+    a module of a standard-library name whose file lies under the standard library's directories
+    outside site-packages (the recorder's rule, `tools.parity.recorder.script_run`). A same-named
+    file elsewhere on `sys.path` is not."""
+    top = fullname.partition(".")[0]
+    if top in sys.builtin_module_names:
+        return True
+    if top not in sys.stdlib_module_names:
+        return False
+    if importlib.machinery.FrozenImporter.find_spec(fullname) is not None:
+        return True
+    spec = importlib.machinery.PathFinder.find_spec(fullname, path)
+    if spec is None:
+        return True  # nothing to load: the import fails as it would
+    if spec.origin is None:
+        return False
+    origin = Path(spec.origin).resolve()
+    return "site-packages" not in origin.parts and any(
+        origin.is_relative_to(root) for root in STANDARD_ROOTS
+    )
+
+
+class ClosedImports(importlib.abc.MetaPathFinder):
+    """Refuses (and records) every import of a module not loaded yet that is not the standard
+    library, so neither a live file on `sys.path` nor any other unpinned code is loaded."""
+
+    def __init__(self) -> None:
+        self.refused: list[str] = []
+
+    def find_spec(
+        self,
+        fullname: str,
+        path: Sequence[str] | None,
+        target: types.ModuleType | None = None,
+    ) -> None:
+        if not standard_library(fullname, path):
+            self.refused.append(fullname)
+            raise ImportError(f"{fullname} is neither a pinned import nor the standard library")
+        return None
+
+    def check(self) -> None:
+        if self.refused:
+            modules = sorted(set(self.refused))
             raise Refused(
-                "PinMismatch", f"{file} has SHA-256 {actual}, not its pinned {sha}: refused"
+                "UnpinnedImport",
+                f"the script imports {modules}, which are neither `--import` files nor the "
+                "standard library: refused",
+                modules=modules,
             )
+
+
+def pinned_module(file: Path, data: bytes) -> types.ModuleType:
+    """The module an import of `file` gives (its stem), executed from its checked bytes; it is in
+    `sys.modules` while it executes, as an import puts it (`dataclasses` looks it up there)."""
+    spec = importlib.util.spec_from_file_location(file.stem, file)
+    assert spec is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[file.stem] = module
+    exec(compile(data, str(file), "exec", dont_inherit=True), vars(module))
+    return module
+
+
+@contextlib.contextmanager
+def closed_imports(modules: list[tuple[Path, bytes]]) -> Iterator[ClosedImports | None]:
+    """With `modules`, removes every module of their names already loaded, loads each
+    (dependencies first) and refuses every other import while the block runs; `sys.path`, their
+    `sys.modules` entries and `sys.meta_path` are restored after.
+    Without, nothing changes (None)."""
+    if not modules:
+        yield None
+        return
+    guard = ClosedImports()
+    saved_path = list(sys.path)
+    saved_modules = {file.stem: sys.modules.get(file.stem) for file, _ in modules}
+    sys.meta_path.insert(0, guard)
+    try:
+        for name in saved_modules:  # a cached module of a pinned name is never what loads
+            sys.modules.pop(name, None)
+        for file, data in modules:
+            sys.modules[file.stem] = pinned_module(file, data)
+        yield guard
+        guard.check()
+    except BaseException:
+        guard.check()  # a refused import is the cause, whatever the script raised then
+        raise
+    finally:
+        sys.meta_path.remove(guard)
+        sys.path[:] = saved_path
+        for name, module in saved_modules.items():
+            if module is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
 
 
 def capability_statuses() -> dict[tuple[str, str], str]:
@@ -123,28 +267,45 @@ def check_gate(arguments: list[str]) -> None:
 
 
 def run_script(argv: list[str]) -> int:
-    pins, script, arguments = parse(argv)
+    pins, imports, script, arguments = parse(argv)
     data = script.read_bytes()
     check_pins(pins, script, data)
+    modules = pinned_imports(imports)
     check_gate(arguments)
-    namespace: dict[str, Any] = {"__name__": MODULE_NAME, "__file__": str(script)}
-    exec(compile(data, str(script), "exec", dont_inherit=True), namespace)
-    if not callable(namespace.get("main")) or not callable(namespace.get("execute")):
-        raise Refused("AdapterError", f"{script} defines no `main()` and `execute(code)`")
-    for name in ("CLIENT", "MCP_PYTHON"):
-        if name not in namespace:
-            raise Refused("AdapterError", f"{script} defines no transport global `{name}`")
-    namespace["CLIENT"] = client.RUNNER.with_name("client.py")
-    namespace["MCP_PYTHON"] = client.windowless_python()
-    if "ROOT" in namespace:
-        os.environ.setdefault(ROOT_ENV, str(namespace["ROOT"]))
-    saved = sys.argv
-    sys.argv = [str(script), *arguments]
-    try:
-        namespace["main"]()
-    finally:
-        sys.argv = saved
+    with closed_imports(modules) as guard:
+        namespace: dict[str, Any] = {"__name__": MODULE_NAME, "__file__": str(script)}
+        exec(compile(data, str(script), "exec", dont_inherit=True), namespace)
+        if guard is not None:
+            guard.check()  # before main(): nothing has reached UzPainter yet
+        if not callable(namespace.get("main")) or not callable(namespace.get("execute")):
+            raise Refused("AdapterError", f"{script} defines no `main()` and `execute(code)`")
+        for name in ("CLIENT", "MCP_PYTHON"):
+            if name not in namespace:
+                raise Refused("AdapterError", f"{script} defines no transport global `{name}`")
+        namespace["CLIENT"] = client.RUNNER.with_name("client.py")
+        namespace["MCP_PYTHON"] = client.windowless_python()
+        if guard is not None:
+            namespace["execute"] = checked_execute(namespace["execute"], guard)
+        if "ROOT" in namespace:
+            os.environ.setdefault(ROOT_ENV, str(namespace["ROOT"]))
+        saved = sys.argv
+        sys.argv = [str(script), *arguments]
+        try:
+            namespace["main"]()
+        finally:
+            sys.argv = saved
     return 0
+
+
+def checked_execute(execute: Any, guard: ClosedImports) -> Any:
+    """The script's own `execute`, called only while no import was refused: a refused import the
+    script caught never lets a later Painter call start."""
+
+    def checked(*args: Any, **kwargs: Any) -> Any:
+        guard.check()
+        return execute(*args, **kwargs)
+
+    return checked
 
 
 def run(argv: list[str]) -> int:

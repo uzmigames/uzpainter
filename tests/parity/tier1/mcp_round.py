@@ -11,10 +11,14 @@ sync`, `painter_export.py`), sent as typed tool calls to `UzPainter.exe --mcp` s
 1. `project_create` from the staged mesh with the manifest's applied project settings (OpenGL
    normals, the default resolution, no cameras), then `set_list`;
 2. `set_mesh_maps`: the staged Normal and AO on the first texture set, as the create script binds
-   them to `all_texture_sets()[0]`;
+   them to `all_texture_sets()[0]`; a sync `texture_set` must name exactly that set, or the round
+   fails before this first edit of a set (`mesh_maps_set`);
 3. `project_save_as` (`full`), as the create script's `save_as(..., Full)`;
 4. `sync_stack` with the staged stack JSON and its bitmaps' folder (the masks and the `base_tex`
-   colour bitmaps), the command `painter_layer_stack.py sync` runs;
+   colour bitmaps), the command `painter_layer_stack.py sync` runs, and the sync's typed options
+   (`resource_prefix`, `resource_group`, `texture_set`, decision 300 item 7) under the tool's
+   arguments of the same names; a legacy sync gives none, so the tool's defaults apply as
+   before. The sync's import closure has no counterpart: the round runs no Python;
 5. `project_save` (`full`), as the export script saves before exporting;
 6. `export` with the configuration the export script builds (`pipeline_export_config`).
 
@@ -37,7 +41,12 @@ from typing import Any
 from tests.adapters.assets3d.wand import ASSETS3D
 from tests.supervisor.conftest import Mcp
 from tools.parity.recorder.job import canonical_json, sha256_bytes, sha256_file
-from tools.parity.recorder.script_run import ScriptJob, load_script_job, stage_inputs
+from tools.parity.recorder.script_run import (
+    SYNC_OPTIONS,
+    ScriptJob,
+    load_script_job,
+    stage_inputs,
+)
 from tools.parity.schemas import load_json
 from tools.parity.tier1.compare import CandidateRun
 from tools.parity.tier1.mcp_round import SCHEMA_ID, equality
@@ -199,12 +208,41 @@ def run_round(painter: Path, work: Path, manifest: Path, backend: str = BACKEND)
         session.close()
 
 
+def sync_stack_arguments(job: ScriptJob, staged: dict[str, Path]) -> dict[str, Any]:
+    """`sync_stack`'s arguments: the staged stack JSON, its bitmaps' folder (the job's validated
+    masks, from the `masks` list or the `mask_folder`) and each typed option the sync gives."""
+    arguments: dict[str, Any] = {
+        "stack_json": str(staged[job.sync.args["stack"]]),
+        "masks_dir": str(staged[job.sync.masks[0].input_id].parent),
+    }
+    given = dict(job.sync.options)
+    for key, (flag, _) in SYNC_OPTIONS.items():
+        if flag in given:
+            arguments[key] = given[flag]
+    return arguments
+
+
+def mesh_maps_set(job: ScriptJob, sets: list[str]) -> str:
+    """The texture set `set_mesh_maps` binds: the first, as the create script binds the maps to
+    `all_texture_sets()[0]`. A sync `texture_set` must name that set, once: the create script's
+    maps are never moved to another set."""
+    if not sets:
+        raise RoundFailed("the project has no texture set: refused before set_mesh_maps")
+    named = dict(job.sync.options).get(SYNC_OPTIONS["texture_set"][0])
+    if named is not None and (named != sets[0] or sets.count(named) != 1):
+        raise RoundFailed(
+            f"contract mismatch: the sync's texture_set {named!r} is not exactly the first of "
+            f"the project's texture sets {sets}, to which the create script binds the mesh "
+            "maps: refused before set_mesh_maps"
+        )
+    return sets[0]
+
+
 def drive(driver: Driver, job: ScriptJob, staged: dict[str, Path], work: Path) -> None:
     log = driver.log
     assert job.create.arguments is not None and job.export.arguments is not None
     applied = {s["name"]: s["value"] for s in job.manifest["applied_settings"]}
     settings = {key: applied[name] for name, key in PROJECT_SETTINGS.items() if name in applied}
-    masks = staged[job.sync.args["masks"][0]].parent
     out = work / "out" / "export"
     steps: list[tuple[str, Any]] = [
         ("project_create", {"mesh": str(staged[job.create.args["mesh"]]), "settings": settings}),
@@ -214,10 +252,7 @@ def drive(driver: Driver, job: ScriptJob, staged: dict[str, Path], work: Path) -
             "project_save_as",
             {"path": str(work / "project" / f"{job.create.arguments['name']}.uzp"), "mode": "full"},
         ),
-        (
-            "sync_stack",
-            {"stack_json": str(staged[job.sync.args["stack"]]), "masks_dir": str(masks)},
-        ),
+        ("sync_stack", sync_stack_arguments(job, staged)),
         ("project_save", {"mode": "full"}),
         ("export", None),  # with the texture sets set_list returns
     ]
@@ -228,7 +263,12 @@ def drive(driver: Driver, job: ScriptJob, staged: dict[str, Path], work: Path) -
                 usage: {"path": str(staged[job.create.args[key]])}
                 for usage, key in (("Normal", "normal"), ("AO", "ao"))
             }
-            arguments = {"texture_set": sets[0], "maps": maps}
+            try:
+                texture_set = mesh_maps_set(job, sets)
+            except RoundFailed:
+                log.outcome = "failed"
+                raise
+            arguments = {"texture_set": texture_set, "maps": maps}
         elif tool == "export":
             prefix = str(job.export.arguments["prefix"])
             arguments = {"config": pipeline_export_config(prefix, out, sets)}

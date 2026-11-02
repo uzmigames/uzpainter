@@ -397,7 +397,7 @@ def _evidence(
         wand, first = rebuild(painter, work / "run-1", manifest, diagnostic)
     _, second = rebuild(painter, work / "run-2", manifest, diagnostic)
     stack = load_json(wand.stack)
-    masks = wand.staged[wand.job.sync.args["masks"][0]].parent
+    masks = wand.masks
     assert wand.job.export.arguments is not None
     meshes = [
         wand.staged[item.input_id]

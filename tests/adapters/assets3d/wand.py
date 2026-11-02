@@ -33,7 +33,12 @@ from typing import Any
 
 from adapters.assets3d.client import DIAGNOSTIC_ENV
 from adapters.assets3d.runner import under_root
-from tools.parity.recorder.script_run import ScriptJob, load_script_job, stage_inputs
+from tools.parity.recorder.script_run import (
+    IMPORT_CLOSURE,
+    ScriptJob,
+    load_script_job,
+    stage_inputs,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ASSETS3D = Path(os.environ.get("UZP_TEST_ASSETS3D", r"E:\UzmiGames\Assets3D"))
@@ -115,10 +120,23 @@ class Wand:
                 out += ["--pin", f"{self.staged[item.input_id]}={item.sha256}"]
         return out
 
+    def imports(self) -> list[str]:
+        """`--import` for each module of the sync's pinned import closure, dependencies first
+        (decision 300 item 7): the adapter loads them from their pinned bytes and refuses any
+        other import, as the recorder runs them. None without a closure: the script then imports
+        from the staged mirror, as it always did."""
+        if IMPORT_CLOSURE not in self.job.sync.args:
+            return []
+        out = []
+        for item in self.job.sync.load_order:
+            out += ["--import", f"{self.staged[item.input_id]}={item.sha256}"]
+        return out
+
     def call(
         self, *arguments: str, pins: list[str] | None = None, diagnostic: bool = False
     ) -> Call:
-        """`python layer_stack.py --pin ... <painter_layer_stack.py> <arguments>`; `diagnostic`
+        """`python layer_stack.py --pin ... [--import ...] <painter_layer_stack.py> <arguments>`
+        (`pins` replaces the pins only); `diagnostic`
         runs UzPainter with `--diagnostic-measure-export` (adapter client, decision 286): its
         exports are NOT conformant."""
         process = subprocess.run(
@@ -127,6 +145,7 @@ class Wand:
                 str(ENTRY),
                 "--diagnostic-import",
                 *(self.pins() if pins is None else pins),
+                *self.imports(),
                 str(self.script("painter-layer-stack-py")),
                 *arguments,
             ],
@@ -165,16 +184,25 @@ class Wand:
         """The staged stack JSON the sync step names (`wand-stack`, `belt-stack`)."""
         return self.staged[self.job.sync.args["stack"]]
 
+    @property
+    def masks(self) -> Path:
+        """The staged folder of the sync's bitmaps (`--masks`): the job's validated masks, from
+        the `masks` list or the `mask_folder`."""
+        return self.staged[self.job.sync.masks[0].input_id].parent
+
     def sync(self, *extra: str) -> Call:
-        masks = self.staged[self.job.sync.args["masks"][0]].parent
+        """The recorder's sync command line: `--stack --masks --state`, then the step's typed
+        options in order (`--resource-prefix`, `--resource-group`, `--texture-set`; none for a
+        legacy sync), then `extra`."""
         return self.call(
             "sync",
             "--stack",
             str(self.stack),
             "--masks",
-            str(masks),
+            str(self.masks),
             "--state",
             str(self.state),
+            *(part for option in self.job.sync.options for part in option),
             *extra,
         )
 
