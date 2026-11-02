@@ -2,11 +2,15 @@
 
 The frozen predictions come from `padding_joint_bend.predictions()`; their model part (every
 copy's taps and output bits per model) must hash to the freeze's SHA-256, or nothing is scored.
-The recording is loaded as every kernel probe is (`padding_corpus.Probe`): the template's
-RGB32F user channels (`validate_record`), every export keeping the covered source bit for bit,
-and the four `infinite` exports (r1 and r2, each export twice) compared with each other. A copy
-matches a model when T's 24 recorded components equal the model's prediction bit for bit in all
-four. Stdout carries counts per model and stratum only.
+Nothing is scored unless the capture validates (`validate_capture`):
+- each recording (exactly r1 same session and r2 after save and reopen) has one template capture
+  of the one texture set at 512 x 512 whose user0..7 channels are RGB32F (32-bit floating);
+- its exported maps are exactly user0..7 at steps 45 and 46 (`infinite`) and 47 and 48
+  (`passthrough`);
+- every export keeps the covered source bit for bit (`padding_corpus.exports`, through `Probe`);
+- the four `infinite` exports are identical on every ring texel.
+A copy matches a model when T's 24 recorded components equal the model's prediction bit for bit.
+Stdout carries counts per model and stratum only.
 
     python -m tools.parity.fit.padding_joint_bend_score
 """
@@ -23,7 +27,9 @@ from typing import Any
 import numpy as np
 
 from tools.parity.fit import padding_joint_bend as frozen
-from tools.parity.fit.padding_corpus import Probe
+from tools.parity.fit.padding_corpus import STEPS, Probe, manifest_path
+from tools.parity.store.store import load_oracle, locate
+from tools.parity.tier0_semantics import padding_joint_bend as jb
 
 # The model part of the freeze (`padding-joint-bend-freeze.md`): `model_part` of the output of
 # 824d542f's helper (whose whole output hashed to 23de550c...8650), equal to today's.
@@ -75,14 +81,71 @@ def strata(name: str, decisive: bool) -> list[str]:
     return out
 
 
+def validate_capture(material: str) -> list[str]:
+    """The capture's problems (template precision, recordings, export groups); empty when
+    valid."""
+    store = locate()
+    if store is None:
+        return ["store unavailable"]
+    manifest = json.loads(manifest_path("joint-bend").read_text("utf-8"))
+    refs = [r for r in manifest["private_records"] if r["record_id"] == "golden-record"]
+    if len(refs) != 1 or (raw := load_oracle(store, refs[0])) is None:
+        return ["private record unavailable"]
+    record = json.loads(raw)
+    problems = []
+    conditions = sorted((r["recording_id"], r["condition"]) for r in record["recordings"])
+    if conditions != [("r1", "same_session"), ("r2", "after_save_reopen")]:
+        problems.append(f"recordings {conditions}")
+    for recording in record["recordings"]:
+        rid = recording["recording_id"]
+        templates = [o for o in recording["outputs"] if o["kind"] == "template_capture"]
+        if len(templates) != 1:
+            problems.append(f"{rid}: {len(templates)} template captures")
+            continue
+        sets = templates[0]["values"]["texture_sets"]
+        if set(sets) != {material}:
+            problems.append(f"{rid}: texture sets {sorted(sets)}")
+            continue
+        texture = sets[material]
+        if texture["resolution"] != [512, 512] or set(texture["stacks"]) != {""}:
+            problems.append(f"{rid}: resolution or stacks")
+            continue
+        channels = {key.lower(): value for key, value in texture["stacks"][""].items()}
+        for i in range(8):
+            c = channels.get(f"user{i}")
+            if (
+                c is None
+                or c["format"] != "RGB32F"
+                or c["bit_depth"] != 32
+                or c["is_floating"] is not True
+            ):
+                problems.append(f"{rid}: user{i} not RGB32F")
+        groups = collections.Counter(
+            (o["export_settings"]["step"], o["export_settings"]["paddingAlgorithm"], o["map"])
+            for o in recording["outputs"]
+            if o["kind"] == "exported_map" and o["texture_set"] == material
+        )
+        expected = {(step, mode, f"user{i}") for step, mode in STEPS.items() for i in range(8)}
+        if set(groups) != expected or any(n != 1 for n in groups.values()):
+            problems.append(f"{rid}: export groups differ from steps 45-48 x user0..7")
+    return problems
+
+
 def main() -> int:
     found = frozen.predictions()
     text = json.dumps(model_part(found), sort_keys=True)
     if hashlib.sha256(text.encode()).hexdigest() != FROZEN_MODELS_SHA256:
         print(json.dumps({"refused": "the model predictions differ from the freeze"}))
         return 1
+    problems = validate_capture(jb.MATERIAL)
+    if problems:
+        print(json.dumps({"refused": problems}))
+        return 1
     probe = Probe("joint-bend")
     print(json.dumps({"ring": len(probe.points), "unstable_infinite": probe.unstable}))
+    if probe.unstable or len(probe.recorded) != 4:
+        print(json.dumps({"refused": "the infinite exports differ or are incomplete"}))
+        return 1
     totals: dict[str, int] = collections.Counter()
     by: dict[str, dict[str, int]] = collections.defaultdict(collections.Counter)
     for row in found["copies"]:
