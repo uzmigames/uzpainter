@@ -120,7 +120,8 @@ PATCHES: dict[str, list[tuple[str, str]]] = {
     # The far tie comparator's positions with the fused UV determinant (q_E, P or both).
     "fuseq": [
         (
-            "                        q_e = position32(E.uv, E.normalised, self.width, self.height, x, y)\n",
+            "                        q_e = position32("
+            "E.uv, E.normalised, self.width, self.height, x, y)\n",
             "                        q_e = position32(\n"
             "                            E.uv, E.normalised, self.width, self.height, x, y,"
             " fused_determinant=True\n"
@@ -129,7 +130,8 @@ PATCHES: dict[str, list[tuple[str, str]]] = {
     ],
     "fusep": [
         (
-            "                        p = position32(k.uv, k.normalised, self.width, self.height, tx, ty)\n",
+            "                        p = position32("
+            "k.uv, k.normalised, self.width, self.height, tx, ty)\n",
             "                        p = position32(\n"
             "                            k.uv, k.normalised, self.width, self.height, tx, ty,"
             " fused_determinant=True\n"
@@ -139,7 +141,8 @@ PATCHES: dict[str, list[tuple[str, str]]] = {
     # The far tie comparator's q through tau (fused determinant) instead of through E.
     "qtau": [
         (
-            "                        q_e = position32(E.uv, E.normalised, self.width, self.height, x, y)\n",
+            "                        q_e = position32("
+            "E.uv, E.normalised, self.width, self.height, x, y)\n",
             "                        Tq = self.tris[self.tau(x, y, self._own)]\n"
             "                        q_e = position32(\n"
             "                            Tq.uv, Tq.normalised, self.width, self.height, x, y,"
