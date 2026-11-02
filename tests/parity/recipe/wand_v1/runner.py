@@ -18,8 +18,11 @@ each a separate `UzPainter.exe run` process), then:
 The report (`tools.parity.recipe_rebuild`) compares the two digests and the two exports' files.
 The job is the R9 request (decision 099), or the golden admitted from it once it is. An export
 UzPainter refuses before writing (while phase1.25 item 2.7 is open) is recorded as refused on the
-side it happened; any other failed call stops the run. Nothing is written under the Assets3D root
-or into the repository except the report, when `UZP_RECIPE_REBUILD_REPORT` names it.
+side it happened; any other failed call stops the run, and so does an export whose receipt is
+marked `non_conformant` (`checked_export` of the Tier 1 runner): the diagnostic measure export,
+which `UZP_ASSETS3D_DIAGNOSTIC_MEASURE_EXPORT` in the environment turns on, is never compared.
+Nothing is written under the Assets3D root or into the repository except the report, when
+`UZP_RECIPE_REBUILD_REPORT` names it.
 """
 
 from __future__ import annotations
@@ -37,8 +40,7 @@ from tests.parity.tier1.wand_v1.runner import (
     REFUSAL,
     RunError,
     built,
-    exported,
-    refusal,
+    checked_export,
 )
 from tools.parity.recipe_rebuild import Side, report, sha256_of
 from tools.parity.tier1.compare import CandidateRun
@@ -111,8 +113,7 @@ def run(painter: Path, work: Path) -> Scenario:
     """The original wand, its rebuild from the dump, both exports and the report."""
     manifest = job_manifest()
     wand = built(painter, work / "original", manifest)
-    first_call = wand.export()
-    first = exported(wand, first_call)
+    first = checked_export(wand)
     original = wand.probe("dump-original", DUMP)
     recipe = work / "recipe.json"
     recipe.write_text(json.dumps(original), encoding="utf-8")
@@ -137,8 +138,7 @@ def run(painter: Path, work: Path) -> Scenario:
     arguments = json.loads(arguments_file.read_text(encoding="utf-8"))
     arguments["out"] = str(work / "rebuilt" / "out")
     arguments_file.write_text(json.dumps(arguments), encoding="utf-8")
-    second_call = wand.export()
-    second = exported(wand, second_call)
+    second = checked_export(wand)
     rebuilt = wand.probe("dump-rebuilt", DUMP)
     document = report(
         GOLDEN_ID,
@@ -147,9 +147,5 @@ def run(painter: Path, work: Path) -> Scenario:
         side(original, first),
         side(rebuilt, second),
     )
-    refusals = tuple(
-        refusal(call)
-        for call, candidate in ((first_call, first), (second_call, second))
-        if candidate.refused
-    )
+    refusals = tuple(candidate.refusal for candidate in (first, second) if candidate.refused)
     return Scenario(document, original, rebuilt, refusals)
