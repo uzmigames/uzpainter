@@ -173,6 +173,8 @@ The candidates are in the preserved `.blend` (`f6243a57…`):
 - the colour-space setting of the packed `Source_v6_HighNormal`, which the extract reads through Blender's pixels;
 - the evaluated counts.
 
+**Inspection result (2026-11-02, commit 5d8e601b, private report `61ec5736…`).** The low has an identity world matrix, no modifiers and no shape keys; authored and evaluated counts agree (5,392 vertices, 11,000 triangles, one UV layer). `LiningMask` is a POINT FLOAT attribute in [0, 1] with 2,475 crossings of 0.5; `Source_Lining` is an attribute on the low, not an image. The packed `Source_v6_HighNormal` equals the `5815e078…` pin: RGB 16-bit, 4096, Non-Color. The low's single material slot is literally named `DefaultMaterial.001`, not `DefaultMaterial`. As in the Sash exporter, the source slot `DefaultMaterial.001` is pinned and only the exported OBJ copy gets a new material named `DefaultMaterial`; that is an authored name remap recorded in the export receipt, not a recovered historical material.
+
 **What the round requires of the meshes.**
 - **The OBJ exporter.** The round's OBJ comes from a committed, deterministic exporter of `18-Tunica-Low` on the model of `tools/parity/tier1/sash_low_export.py`.
 - **One source for both.** The OBJ and `low.npz` come from the same private copy and the same evaluated object.
