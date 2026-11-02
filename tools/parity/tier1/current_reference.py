@@ -60,7 +60,10 @@ over `oracle_unavailable` when both are found. None of them approves a baseline,
 exception, accepts a gate or completes an acceptance item: the changed baseline is the owner's
 yes of decision 300 item 8. The report holds identifiers, hashes of the manifests, records and
 environments, storage keys, shapes and counts; never a pixel, coordinate, map hash or readback.
-Nothing is written anywhere.
+No baseline, store, manifest or report is written or changed. One disclosure: decoding an
+OpenEXR map goes through `tools.parity.fit.decode.decode_exr`, which writes the blob to a
+temporary file (`tempfile.mkstemp`) for the OpenEXR binding and deletes it at once; PNG and TGA
+maps are decoded in memory.
 """
 
 from __future__ import annotations
@@ -891,7 +894,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         prog="python -m tools.parity.tier1.current_reference",
         description=(
             "Compare a pilot's current reference golden with its retained historical golden "
-            "(decision 300 item 7). Prints one aggregate JSON report; writes nothing. Exit "
+            "(decision 300 item 7). Prints one aggregate JSON report; changes no baseline, "
+            "store or report (an OpenEXR map passes through a deleted temporary file). Exit "
             "0 identical, 1 different, 2 invalid, 3 oracle_unavailable."
         ),
     )

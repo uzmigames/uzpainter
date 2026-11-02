@@ -8,15 +8,21 @@ from __future__ import annotations
 
 import hashlib
 import json
+import struct
 import types
+import zlib
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from tools.parity.feasibility import png as png_module
 from tools.parity.recorder import script_run, tunic
 from tools.parity.recorder import session as session_module
 from tools.parity.recorder.migration import (
+    check_after_open,
+    check_declared,
+    declared_maps,
     load_migration_job,
     migration_job_from_manifest,
     record_migration_golden,
@@ -46,7 +52,8 @@ COMMITTED = (
     / "tunic-v10.json"
 )
 MESH = "E:/UzmiGames/Assets3D/_tmp/astra-tunica/tunic_low.obj"
-# A configuration the fake Painter exports (it resolves no shipped preset): an inline preset.
+# A configuration the fake Painter exports (it resolves no shipped preset): an inline preset,
+# with RGB channels because the fake writes every map as RGB (the declared-map check counts them).
 FAKE_CONFIG = {
     "exportShaderParams": False,
     "defaultExportPreset": "tunic",
@@ -58,11 +65,12 @@ FAKE_CONFIG = {
                     "fileName": f"$textureSet_{name}",
                     "channels": [
                         {
-                            "destChannel": "L",
-                            "srcChannel": "L",
+                            "destChannel": c,
+                            "srcChannel": c,
                             "srcMapType": "documentMap",
                             "srcMapName": name.lower(),
                         }
+                        for c in "RGB"
                     ],
                 }
                 for name in ("BaseColor", "Height")
@@ -563,3 +571,461 @@ def test_real_rebuild_waits_on_exactly_the_nine_lost_masks(monkeypatch: pytest.M
     with pytest.raises(MissingInputs) as refused:
         tunic_rebuild(REAL_ASSETS, store)
     assert refused.value.missing == [f"{LOST_FOLDER}/{name}.png" for name in lost]
+
+
+# --- the Sash v5 migration request (decision 300 item 7) -----------------------------------------
+
+CURRENT_BUILD = "12.2.0+js-api.1.1.20"
+SASH_REQUEST = (
+    REPO_ROOT
+    / "parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/requests/phase2/tier1"
+    / "sash-v5-migration.json"
+)
+SASH_PROJECT = "Creatures/Undead/Skeletal Mage/Models3D/25-Faixa-Cintura/25-Faixa-Cintura-v5.spp"
+SASH_PIN = "0691cc12071436cb4e97bb612a73cea4fb9b2d3c08231b517fe573dd0e310b8a"
+SASH_CONFIG = "parity/fixtures/tier1/sash-v5/export-config.json"
+
+
+def rgb(file_name: str, source_type: str, source: str) -> dict[str, Any]:
+    return {
+        "fileName": file_name,
+        "channels": [
+            {"destChannel": c, "srcChannel": c, "srcMapType": source_type, "srcMapName": source}
+            for c in "RGB"
+        ],
+    }
+
+
+# The Sash configuration's shape over the fake's texture set (the fake writes RGB maps only).
+SASH_FAKE_CONFIG = {
+    "exportShaderParams": False,
+    "defaultExportPreset": "sash-fake",
+    "exportPresets": [
+        {
+            "name": "sash-fake",
+            "maps": [
+                rgb("uzp_plane_BaseColor", "documentMap", "basecolor"),
+                rgb("uzp_plane_Normal", "virtualMap", "Normal_OpenGL"),
+            ],
+        }
+    ],
+    "exportList": [{"rootPath": "uzp_plane"}],
+    "exportParameters": [
+        {
+            "parameters": {
+                "fileFormat": "png",
+                "bitDepth": "16",
+                "paddingAlgorithm": "infinite",
+                "dithering": False,
+            }
+        }
+    ],
+}
+
+
+def sash_request() -> dict[str, Any]:
+    request: dict[str, Any] = load_json(SASH_REQUEST)
+    return request
+
+
+@pytest.fixture
+def sash_assets(tmp_path: Path, fake: types.ModuleType) -> tuple[Path, dict[str, Any]]:
+    """A stand-in asset repository holding a fake project at the sash's path, and the committed
+    request re-pinned to it. Nothing else of the sash (no mask, no low OBJ) is present."""
+    root = tmp_path / "sash-assets"
+    project = fake_project(fake)
+    write(root / SASH_PROJECT, project)
+    request = sash_request()
+    request["inputs"][0]["sha256"] = sha256(project)
+    return root, request
+
+
+def test_sash_request_is_a_two_input_two_step_migration_of_the_current_envelope() -> None:
+    from tools.parity.envelope.registry import current_envelope
+
+    request = sash_request()
+    assert validation_errors(request, Schema.GOLDEN_PUBLIC) == []
+    assert request["golden_id"] == "phase2/tier1/sash-v5-migration"  # never the script sash-v5
+    assert request["private_records"] == []
+    assert request["software"]["painter"]["build_id"] == current_envelope()["painter_build"]
+    assert len(request["inputs"]) == 2
+    project, config = request["inputs"]
+    assert (project["kind"], project["assets3d_path"], project["sha256"]) == (
+        "painter_project",
+        SASH_PROJECT,
+        SASH_PIN,
+    )
+    assert (config["kind"], config["path"]) == ("recipe_json", SASH_CONFIG)
+    assert config["sha256"] == sha256((REPO_ROOT / SASH_CONFIG).read_bytes())
+    sequence = request["instruction_sequence"]
+    assert sequence["interface"] == "painter_project_migration"
+    assert [(s["step"], s["call"], s["args"]) for s in sequence["steps"]] == [
+        (1, "substance_painter.project.open", {"project": project["input_id"]}),
+        (2, "substance_painter.export.export_project_textures", {"config": config["input_id"]}),
+    ]
+
+
+def test_sash_export_configuration_states_every_field() -> None:
+    config = load_json(REPO_ROOT / SASH_CONFIG)
+    assert "exportPath" not in config  # the recorder owns the private destination
+    assert config["exportShaderParams"] is False
+    assert config["exportList"] == [{"rootPath": "25-Faixa-Cintura"}]
+    (preset,) = config["exportPresets"]
+    assert config["defaultExportPreset"] == preset["name"]
+    names = [m["fileName"] for m in preset["maps"]]
+    assert names == [
+        f"25-Faixa-Cintura_{m}" for m in ("BaseColor", "Roughness", "Metallic", "Height", "Normal")
+    ]
+    sources = [{(c["srcMapType"], c["srcMapName"]) for c in m["channels"]} for m in preset["maps"]]
+    assert sources[-1] == {("virtualMap", "Normal_OpenGL")}
+    assert config["exportParameters"] == [
+        {
+            "parameters": {
+                "fileFormat": "png",
+                "bitDepth": "16",
+                "sizeLog2": 11,
+                "paddingAlgorithm": "infinite",
+                "dithering": False,
+            }
+        }
+    ]
+
+
+def test_sash_request_resolves_without_the_lost_masks_or_the_low_obj(
+    sash_assets: tuple[Path, dict[str, Any]],
+) -> None:
+    root, request = sash_assets
+    job = migration_job_from_manifest(request, root)
+    assert job.project_file == root / SASH_PROJECT
+    assert job.config == load_json(REPO_ROOT / SASH_CONFIG)
+
+
+def sash_refusal(how: str, request: dict[str, Any], root: Path) -> dict[str, Any]:
+    changed: dict[str, Any] = json.loads(json.dumps(request))
+    if how == "bad pin":
+        changed["inputs"][0]["sha256"] = "0" * 64
+    elif how == "missing project":
+        (root / SASH_PROJECT).unlink()
+    elif how == "config hash":
+        changed["inputs"][1]["sha256"] = "1" * 64
+    elif how == "extra input":
+        changed["inputs"].append({**changed["inputs"][1], "input_id": "sash-v5-lost-mask"})
+    elif how == "extra step":
+        steps = changed["instruction_sequence"]["steps"]
+        steps.append({**steps[1], "step": 3})
+    return changed
+
+
+@pytest.mark.parametrize(
+    ("how", "refusal"),
+    [
+        ("bad pin", "not the pinned one, and the private store holds no blob"),
+        ("missing project", "does not exist, and the private store holds no blob"),
+        ("config hash", "is missing or not the pinned bytes"),
+        ("extra input", "every input is the project or the export configuration"),
+        ("extra step", "runs step 1 substance_painter.project.open, step 2"),
+    ],
+)
+def test_sash_request_refuses_before_painter(
+    sash_assets: tuple[Path, dict[str, Any]], tmp_path: Path, how: str, refusal: str
+) -> None:
+    root, request = sash_assets
+    changed = sash_refusal(how, request, root)
+    empty = OracleStore.init(tmp_path / "empty-store")  # the project is in no store either
+    with pytest.raises(RecorderError, match=refusal):
+        migration_job_from_manifest(changed, root, empty)
+
+
+def test_sash_request_refuses_an_export_path(
+    sash_assets: tuple[Path, dict[str, Any]], tmp_path: Path
+) -> None:
+    root, request = sash_assets
+    repo_root = tmp_path / "sash-repo"
+    config = {**load_json(REPO_ROOT / SASH_CONFIG), "exportPath": "C:/out"}
+    write(repo_root / SASH_CONFIG, json.dumps(config))
+    request["inputs"][1]["sha256"] = sha256((repo_root / SASH_CONFIG).read_bytes())
+    with pytest.raises(RecorderError, match="the recorder sets `exportPath`"):
+        migration_job_from_manifest(request, root, repo_root=repo_root)
+
+
+@pytest.fixture
+def painter_current(
+    fake: types.ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> tuple[Any, PainterSession]:
+    """A fake Painter of the current envelope (12.2.0) under the substance OCIO configuration."""
+    monkeypatch.setattr(session_module, "envelope_builds", lambda: frozenset({CURRENT_BUILD}))
+    monkeypatch.setenv("OCIO", OCIO)
+    monkeypatch.delenv("PAINTER_ACE_CONFIG", raising=False)
+    world = fake.FakeWorld()
+    world.version, world.version_info = "12.2.0", (12, 2, 0)
+    return world, PainterSession(fake.LocalTransport(world), sleep=lambda seconds: None)
+
+
+def test_sash_request_records_three_exports_from_a_private_copy(
+    painter_current: tuple[Any, PainterSession],
+    sash_assets: tuple[Path, dict[str, Any]],
+    tmp_path: Path,
+) -> None:
+    """The fake Painter knows only its own texture set and writes RGB maps, so the export
+    configuration is the Sash's shape (inline preset, literal names, PNG 16) over that set, at
+    the Sash fixture's path: the declared-map check runs on every export. The request is
+    otherwise the committed one."""
+    root, request = sash_assets
+    repo_root = tmp_path / "sash-repo"
+    write(repo_root / SASH_CONFIG, json.dumps(SASH_FAKE_CONFIG, indent=2))
+    request["inputs"][1]["sha256"] = sha256((repo_root / SASH_CONFIG).read_bytes())
+    before = tree_state(root)
+    job = migration_job_from_manifest(request, root, repo_root=repo_root)
+    run = record_migration_golden(painter_current[1], job, tmp_path / "work", tmp_path / "inbox")
+    assert tree_state(root) == before  # the original project is never opened or saved
+    data = json.loads((run / "record.json").read_text(encoding="utf-8"))
+    assert record_problems(data) == []
+    assert data["golden_id"] == "phase2/tier1/sash-v5-migration"
+    assert data["key"]["painter_build"]["build_id"] == CURRENT_BUILD
+    recordings = {r["recording_id"]: r for r in data["recordings"]}
+    assert {k: r["condition"] for k, r in recordings.items()} == {
+        "r1": "same_session",
+        "r1-repeat": "same_session",
+        "r2": "after_save_reopen",
+    }
+    for rid, recording in recordings.items():
+        outputs = {o["output_id"]: o for o in recording["outputs"]}
+        assert sorted(o["map"] for o in outputs.values() if o["kind"] == "exported_map") == [
+            "uzp_plane_BaseColor",
+            "uzp_plane_Normal",
+        ]
+        if rid != "r1-repeat":
+            state = outputs["migration/state"]["value"]
+            assert Path(state["file_path"]).is_relative_to(tmp_path / "work")  # the copy
+    published = json.loads((run / "manifest.json").read_text(encoding="utf-8"))
+    assert validation_errors(published, Schema.GOLDEN_PUBLIC) == []
+    assert published["inputs"] == request["inputs"]
+
+
+def test_committed_sash_request_resolves_in_the_real_assets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The pin resolves to the preserved project (Assets3D or the owner's store), read only."""
+    monkeypatch.undo()
+    if not (REAL_ASSETS / "AGENTS.md").is_file():
+        pytest.skip(f"the UzmiGames asset repository is not at {REAL_ASSETS}")
+    job = load_migration_job(SASH_REQUEST, REAL_ASSETS, locate_store())
+    assert job.project_sha256 == SASH_PIN
+    assert job.config == load_json(REPO_ROOT / SASH_CONFIG)
+
+
+# --- the opened-project and declared-map checks (any migration golden) ---------------------------
+
+
+def test_the_committed_sash_configuration_is_refused_before_any_export_on_another_project(
+    painter_current: tuple[Any, PainterSession],
+    sash_assets: tuple[Path, dict[str, Any]],
+    tmp_path: Path,
+) -> None:
+    """The fake project holds the texture set uzp_plane, not 25-Faixa-Cintura: the run stops
+    after the open and its readback, before an export, and nothing reaches the inbox."""
+    root, request = sash_assets
+    job = migration_job_from_manifest(request, root)
+    with pytest.raises(RecorderError, match=r"has no texture set \['25-Faixa-Cintura'\]"):
+        record_migration_golden(painter_current[1], job, tmp_path / "work", tmp_path / "inbox")
+    assert not list((tmp_path / "work").rglob("fence"))  # no export was started
+    assert not (tmp_path / "inbox").exists()
+
+
+def opened_job(sash_assets: tuple[Path, dict[str, Any]]) -> Any:
+    root, request = sash_assets
+    return migration_job_from_manifest(request, root)
+
+
+SESSION_COLOUR = {"mode": "ocio", "OCIO": OCIO, "PAINTER_ACE_CONFIG": None}
+
+
+@pytest.mark.parametrize(
+    ("after_open", "sets", "refusal"),
+    [
+        ({**SESSION_COLOUR, "mode": "legacy", "OCIO": None}, ["25-Faixa-Cintura"], "mode changed"),
+        ({**SESSION_COLOUR, "OCIO": "other.ocio"}, ["25-Faixa-Cintura"], "OCIO changed"),
+        ({**SESSION_COLOUR, "PAINTER_ACE_CONFIG": "ace.ocio"}, ["25-Faixa-Cintura"], "ACE_CONFIG"),
+        (SESSION_COLOUR, ["DefaultMaterial"], "has no texture set"),
+    ],
+    ids=["mode", "ocio", "ace", "texture-set"],
+)
+def test_the_colour_environment_is_stable_across_the_open_and_the_exported_sets_exist(
+    sash_assets: tuple[Path, dict[str, Any]],
+    after_open: dict[str, Any],
+    sets: list[str],
+    refusal: str,
+) -> None:
+    """The colour check compares `hello`'s environment variables before and after the open, so it
+    proves environment stability only, never the opened project's own saved colour mode."""
+    job = opened_job(sash_assets)
+    with pytest.raises(RecorderError, match=refusal):
+        check_after_open(job, SESSION_COLOUR, after_open, {name: {} for name in sets})
+    check_after_open(job, SESSION_COLOUR, dict(SESSION_COLOUR), {"25-Faixa-Cintura": {}})
+
+
+def png_header(width: int, height: int, bits: int, channels: int) -> bytes:
+    """The PNG signature and IHDR of a map: all the size check reads (no 2048 px encode)."""
+    colour_type = {1: 0, 2: 4, 3: 2, 4: 6}[channels]
+    body = struct.pack(">IIBBBBB", width, height, bits, colour_type, 0, 0, 0)
+    crc = zlib.crc32(b"IHDR" + body) & 0xFFFFFFFF
+    return (
+        png_module.SIGNATURE
+        + struct.pack(">I", len(body))
+        + b"IHDR"
+        + body
+        + struct.pack(">I", crc)
+    )
+
+
+def declared_exports(
+    directory: Path, maps: dict[str, tuple[int, int, int]], repeat: str | None = None
+) -> list[dict[str, Any]]:
+    """The outputs of one config export as the recorder reports them, its readback included:
+    name -> (channels, bits, size); `repeat` lists one file twice in the readback."""
+    files: list[str] = []
+    outputs: list[dict[str, Any]] = []
+    for name, (channels, bits, size) in maps.items():
+        path = directory / f"{name}.png"
+        write(path, png_header(size, size, bits, channels))
+        files.append(path.as_posix())
+        outputs.append(
+            {
+                "kind": "exported_map",
+                "texture_set": "25-Faixa-Cintura",
+                "map": name,
+                "storage_format": {
+                    "container": "png",
+                    "sample_type": "uint",
+                    "bits_per_channel": bits,
+                    "channels": channels,
+                    "encoding": "undetermined",
+                },
+            }
+        )
+    if repeat is not None:
+        files.append((directory / f"{repeat}.png").as_posix())
+    readback = {
+        "output_id": "export/s2",
+        "kind": "api_readback",
+        "call": "substance_painter.export.export_project_textures",
+        "value": {"textures": [{"texture_set": "25-Faixa-Cintura", "stack": "", "files": files}]},
+    }
+    return [readback, *outputs]
+
+
+SASH_MAPS = {
+    "25-Faixa-Cintura_BaseColor": (3, 16, 2048),
+    "25-Faixa-Cintura_Roughness": (1, 16, 2048),
+    "25-Faixa-Cintura_Metallic": (1, 16, 2048),
+    "25-Faixa-Cintura_Height": (1, 16, 2048),
+    "25-Faixa-Cintura_Normal": (3, 16, 2048),
+}
+
+
+@pytest.mark.parametrize(
+    ("change", "repeat", "refusal"),
+    [
+        ({}, None, None),
+        ({"25-Faixa-Cintura_Normal": None}, None, "not the declared"),
+        ({"25-Faixa-Cintura_Extra": (1, 16, 2048)}, None, "not the declared"),
+        ({}, "25-Faixa-Cintura_Height", "once each"),
+        ({"25-Faixa-Cintura_Height": (1, 8, 2048)}, None, "is .*'bits_per_channel': 8"),
+        ({"25-Faixa-Cintura_Roughness": (3, 16, 2048)}, None, "is .*'channels': 3"),
+        ({"25-Faixa-Cintura_Metallic": (1, 16, 1024)}, None, "is 1024x1024, not the declared 2048"),
+    ],
+    ids=["exact", "missing", "extra", "listed-twice", "depth", "channels", "size"],
+)
+def test_an_export_must_write_exactly_the_declared_maps(
+    sash_assets: tuple[Path, dict[str, Any]],
+    tmp_path: Path,
+    change: dict[str, tuple[int, int, int] | None],
+    repeat: str | None,
+    refusal: str | None,
+) -> None:
+    job = opened_job(sash_assets)
+    maps = {**SASH_MAPS, **change}
+    present = {name: spec for name, spec in maps.items() if spec is not None}
+    outputs = declared_exports(tmp_path / "export", present, repeat)
+    if refusal is None:
+        check_declared(job, outputs)
+        return
+    with pytest.raises(RecorderError, match=refusal):
+        check_declared(job, outputs)
+
+
+def test_declared_maps_of_the_committed_and_fake_configurations() -> None:
+    shipped = load_json(REPO_ROOT / EXPORT_CONFIG)  # the Tunic's shipped Blender preset
+    assert declared_maps(shipped) is None  # Painter names a shipped preset's maps
+    fake = declared_maps(FAKE_CONFIG)
+    assert fake is not None
+    assert fake[0] == {("uzp_plane", f"uzp_plane_{m}"): 3 for m in ("BaseColor", "Height")}
+    sash = declared_maps(load_json(REPO_ROOT / SASH_CONFIG))
+    assert sash is not None
+    assert sash[0] == {("25-Faixa-Cintura", name): spec[0] for name, spec in SASH_MAPS.items()}
+    assert sash[1]["sizeLog2"] == 11
+
+
+def reshaped(how: str) -> dict[str, Any]:
+    config: dict[str, Any] = json.loads(json.dumps(SASH_FAKE_CONFIG))
+    preset = config["exportPresets"][0]
+    rule = config["exportParameters"][0]
+    if how == "entry preset":
+        config["exportList"][0]["exportPreset"] = "resource://starter_assets/PBR Metallic Roughness"
+    elif how == "two rules":
+        config["exportParameters"].append({"parameters": {"bitDepth": "8"}})
+    elif how == "filtered rule":
+        rule["filter"] = {"outputMaps": ["uzp_plane_Normal"]}
+    elif how == "map parameters":
+        preset["maps"][0]["parameters"] = {"bitDepth": "8"}
+    elif how == "other token":
+        preset["maps"][0]["fileName"] = "$mesh_BaseColor"
+    elif how in ("exr 16f", "exr 32f"):
+        rule["parameters"].update(fileFormat="exr", bitDepth=how.split()[1])
+    elif how == "no depth":
+        del rule["parameters"]["bitDepth"]
+    elif how == "size text":
+        rule["parameters"]["sizeLog2"] = "11"
+    elif how == "repeated name":
+        preset["maps"][1]["fileName"] = preset["maps"][0]["fileName"]
+    return config
+
+
+@pytest.mark.parametrize(
+    "how",
+    [
+        "entry preset",
+        "two rules",
+        "filtered rule",
+        "map parameters",
+        "other token",
+        "exr 16f",
+        "exr 32f",
+        "no depth",
+        "size text",
+    ],
+)
+def test_a_configuration_outside_the_checked_scope_keeps_the_generic_behaviour(
+    sash_assets: tuple[Path, dict[str, Any]], tmp_path: Path, how: str
+) -> None:
+    """Only one unfiltered PNG 8/16 inline preset is checked against its declared maps; any other
+    valid configuration (OpenEXR 16f or 32f among them) loads and is exported as before."""
+    root, request = sash_assets
+    config = reshaped(how)
+    assert declared_maps(config) is None
+    repo_root = tmp_path / "sash-repo"
+    write(repo_root / SASH_CONFIG, json.dumps(config))
+    request["inputs"][1]["sha256"] = sha256((repo_root / SASH_CONFIG).read_bytes())
+    job = migration_job_from_manifest(request, root, repo_root=repo_root)
+    check_declared(job, [])  # nothing is checked: Painter's own export check stands
+
+
+def test_a_checked_preset_that_declares_a_map_twice_is_refused_before_painter(
+    sash_assets: tuple[Path, dict[str, Any]], tmp_path: Path
+) -> None:
+    root, request = sash_assets
+    repo_root = tmp_path / "sash-repo"
+    write(repo_root / SASH_CONFIG, json.dumps(reshaped("repeated name")))
+    request["inputs"][1]["sha256"] = sha256((repo_root / SASH_CONFIG).read_bytes())
+    with pytest.raises(RecorderError, match="is declared twice"):
+        migration_job_from_manifest(request, root, repo_root=repo_root)

@@ -32,6 +32,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from tools.parity.feasibility import png
 from tools.parity.recorder.job import Job, canonical_json, sha256_bytes, sha256_file
 from tools.parity.recorder.output import ensure_outside_repository, run_name, write_run
 from tools.parity.recorder.script_run import (
@@ -120,6 +121,8 @@ def migration_job_from_manifest(
         raise RecorderError(f"{golden_id}: every input is the project or the export configuration")
     if "assets3d_path" not in project or project["provenance"]["licence"] != ASSETS3D_LICENCE:
         raise RecorderError(f"input {project['input_id']}: the project is an Assets3D input")
+    exported = export_config(config, repo_root)
+    declared_maps(exported)  # a supported preset that declares a map twice is refused here
     file = input_file(project, assets_root.resolve(), store or locate())
     return MigrationJob(
         manifest,
@@ -128,7 +131,7 @@ def migration_job_from_manifest(
         PurePosixPath(project["assets3d_path"]).name,
         file,
         config["input_id"],
-        export_config(config, repo_root),
+        exported,
     )
 
 
@@ -169,12 +172,146 @@ def open_project(session: PainterSession, project: Path) -> None:
         raise RecorderError(f"Painter opened {opened.file_path}, not {project}")
 
 
+COLOUR_ENVIRONMENT = ("mode", "OCIO", "PAINTER_ACE_CONFIG")
+
+
+def check_after_open(
+    job: MigrationJob,
+    environment_before: dict[str, Any],
+    environment_after: dict[str, Any],
+    texture_sets: dict[str, Any],
+) -> None:
+    """Refused before any export of an opened project, on two checks.
+
+    - The session's colour-management environment is unchanged across the open: `hello`'s
+      `colour_management` (the `OCIO` and `PAINTER_ACE_CONFIG` variables and the mode they
+      select for `project.create`). That is environment stability only. It is not the opened
+      project's own saved colour mode, which no documented call the recorder makes reads: that
+      mode stays unconfirmed.
+    - The project's state readback holds every texture set the configuration's `exportList`
+      names (a real readback of the opened project)."""
+    for key in COLOUR_ENVIRONMENT:
+        if environment_after.get(key) != environment_before.get(key):
+            raise RecorderError(
+                f"{job.golden_id}: the session's colour-management environment {key} changed "
+                f"across the open, from {environment_before.get(key)!r} to "
+                f"{environment_after.get(key)!r}"
+            )
+    held = set(texture_sets)
+    named = {str(entry["rootPath"]).split("/")[0] for entry in job.config["exportList"]}
+    if named - held:
+        raise RecorderError(
+            f"{job.golden_id}: the opened project has no texture set {sorted(named - held)}; it "
+            f"holds {sorted(held)}"
+        )
+
+
+Declared = tuple[dict[tuple[str, str], int], dict[str, Any]]
+
+
+PNG_DEPTHS = {"8": 8, "16": 16}
+
+
+def declared_maps(config: dict[str, Any]) -> Declared | None:
+    """The maps a supported inline preset declares, by (texture set, file stem), with each map's
+    channel count, and its one parameter rule. Supported means a default preset defined in the
+    configuration and exported by one unfiltered `exportParameters` rule as PNG at `bitDepth`
+    "8" or "16" (`sizeLog2` an integer or absent), `exportList` entries that name only their
+    `rootPath`, and maps that name only `fileName` and `channels`, whose only token is
+    `$textureSet`. Any other configuration (a shipped preset, OpenEXR, several or filtered rules,
+    a per-entry preset) returns None and keeps the generic migration behaviour. A supported
+    preset that repeats a file name is refused, before Painter."""
+    if any(set(entry) != {"rootPath"} for entry in config["exportList"]):
+        return None
+    presets = {p["name"]: p for p in config.get("exportPresets", [])}
+    preset = presets.get(config.get("defaultExportPreset"))
+    rules = config["exportParameters"]
+    if preset is None or len(rules) != 1 or set(rules[0]) != {"parameters"}:
+        return None
+    parameters: dict[str, Any] = rules[0]["parameters"]
+    size = parameters.get("sizeLog2")
+    if (
+        parameters.get("fileFormat") != "png"
+        or parameters.get("bitDepth") not in PNG_DEPTHS
+        or (size is not None and (isinstance(size, bool) or not isinstance(size, int)))
+        or any(
+            set(item) != {"fileName", "channels"}
+            or "$" in str(item["fileName"]).replace("$textureSet", "")
+            for item in preset["maps"]
+        )
+    ):
+        return None
+    maps: dict[tuple[str, str], int] = {}
+    for entry in config["exportList"]:
+        root = str(entry["rootPath"])
+        for item in preset["maps"]:
+            name = str(item["fileName"]).replace("$textureSet", root)
+            if (root, name) in maps:
+                raise RecorderError(f"export configuration: {root}/{name} is declared twice")
+            maps[root, name] = len(item["channels"])
+    return maps, parameters
+
+
+def exported_files(outputs: list[dict[str, Any]]) -> dict[tuple[str, str], list[Path]]:
+    """Each exported file by (texture set, file stem), from the export call's own readback."""
+    files: dict[tuple[str, str], list[Path]] = {}
+    for output in outputs:
+        if output["kind"] != "api_readback" or output.get("call") != EXPORT:
+            continue
+        for entry in output["value"]["textures"]:
+            texture_set = entry["texture_set"] + (f"/{entry['stack']}" if entry["stack"] else "")
+            for file_name in entry["files"]:
+                files.setdefault((texture_set, Path(file_name).stem), []).append(Path(file_name))
+    return files
+
+
+def check_declared(job: MigrationJob, outputs: list[dict[str, Any]]) -> None:
+    """Refused before admission: a supported inline preset's export (`declared_maps`) wrote
+    exactly its declared maps, once each, every one a PNG of the declared depth, channel count
+    and (when stated) size. Other configurations are not checked here."""
+    declared = declared_maps(job.config)
+    if declared is None:
+        return
+    expected, parameters = declared
+    files = exported_files(outputs)
+    maps = [(o["texture_set"], o["map"]) for o in outputs if o["kind"] == "exported_map"]
+    if sorted(maps) != sorted(expected) or any(len(f) != 1 for f in files.values()):
+        raise RecorderError(
+            f"{job.golden_id}: the export wrote {sorted(maps)}, not the declared "
+            f"{sorted(expected)} once each"
+        )
+    found = {(o["texture_set"], o["map"]): o for o in outputs if o["kind"] == "exported_map"}
+    size = parameters.get("sizeLog2")
+    for key, channels in sorted(expected.items()):
+        stored = found[key]["storage_format"]
+        want = {
+            "container": "png",
+            "bits_per_channel": PNG_DEPTHS[parameters["bitDepth"]],
+            "channels": channels,
+        }
+        got = {name: stored[name] for name in want}
+        if got != want:
+            raise RecorderError(f"{job.golden_id}: {key[1]} is {got}, not the declared {want}")
+        if size is not None:
+            (path,) = files[key]
+            header = png.chunks(path.read_bytes()[:64])[0][1]
+            width, height = int.from_bytes(header[0:4], "big"), int.from_bytes(header[4:8], "big")
+            if (width, height) != (1 << size, 1 << size):
+                raise RecorderError(
+                    f"{job.golden_id}: {key[1]} is {width}x{height}, not the declared "
+                    f"{1 << size} px"
+                )
+
+
 def run_export(
     session: PainterSession, job: MigrationJob, directory: Path, name: str
 ) -> tuple[list[dict[str, Any]], list[Path]]:
-    """One export into a fresh directory, verified like a texture golden's export."""
+    """One export into a fresh directory, verified like a texture golden's export and against
+    the maps its configuration declares."""
     export = ConfigExport(2, job.config_id, job.config)
-    return run_config_export(session, export, directory / name, "migration_export")
+    outputs, files = run_config_export(session, export, directory / name, "migration_export")
+    check_declared(job, outputs)
+    return outputs, files
 
 
 def record_migration_golden(
@@ -197,6 +334,8 @@ def record_migration_golden(
         open_project(session, project)
         after_open = session.call("hello")["colour_management"]
         first = [state_readback(session), template_output(session)]
+        sets = first[0]["value"]["texture_sets"]
+        check_after_open(job, identity.colour_management, after_open, sets)
         exported, first_blobs = run_export(session, job, directory, R1)
         repeat, repeat_blobs = run_export(session, job, directory, R1_REPEAT)
         saved = directory / "reopen" / f"reopened-{job.project_name}"
@@ -207,6 +346,9 @@ def record_migration_golden(
         session.wait_closed()
         open_project(session, saved)
         second = [state_readback(session), template_output(session)]
+        after_reopen = session.call("hello")["colour_management"]
+        sets = second[0]["value"]["texture_sets"]
+        check_after_open(job, identity.colour_management, after_reopen, sets)
         reopened, second_blobs = run_export(session, job, directory, R2)
     finally:
         close_quietly(session)

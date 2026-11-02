@@ -1,0 +1,106 @@
+{
+  "exportShaderParams": false,
+  "defaultExportPreset": "sash-v5-png16",
+  "exportPresets": [
+    {
+      "name": "sash-v5-png16",
+      "maps": [
+        {
+          "fileName": "25-Faixa-Cintura_BaseColor",
+          "channels": [
+            {
+              "destChannel": "R",
+              "srcChannel": "R",
+              "srcMapType": "documentMap",
+              "srcMapName": "basecolor"
+            },
+            {
+              "destChannel": "G",
+              "srcChannel": "G",
+              "srcMapType": "documentMap",
+              "srcMapName": "basecolor"
+            },
+            {
+              "destChannel": "B",
+              "srcChannel": "B",
+              "srcMapType": "documentMap",
+              "srcMapName": "basecolor"
+            }
+          ]
+        },
+        {
+          "fileName": "25-Faixa-Cintura_Roughness",
+          "channels": [
+            {
+              "destChannel": "L",
+              "srcChannel": "L",
+              "srcMapType": "documentMap",
+              "srcMapName": "roughness"
+            }
+          ]
+        },
+        {
+          "fileName": "25-Faixa-Cintura_Metallic",
+          "channels": [
+            {
+              "destChannel": "L",
+              "srcChannel": "L",
+              "srcMapType": "documentMap",
+              "srcMapName": "metallic"
+            }
+          ]
+        },
+        {
+          "fileName": "25-Faixa-Cintura_Height",
+          "channels": [
+            {
+              "destChannel": "L",
+              "srcChannel": "L",
+              "srcMapType": "documentMap",
+              "srcMapName": "height"
+            }
+          ]
+        },
+        {
+          "fileName": "25-Faixa-Cintura_Normal",
+          "channels": [
+            {
+              "destChannel": "R",
+              "srcChannel": "R",
+              "srcMapType": "virtualMap",
+              "srcMapName": "Normal_OpenGL"
+            },
+            {
+              "destChannel": "G",
+              "srcChannel": "G",
+              "srcMapType": "virtualMap",
+              "srcMapName": "Normal_OpenGL"
+            },
+            {
+              "destChannel": "B",
+              "srcChannel": "B",
+              "srcMapType": "virtualMap",
+              "srcMapName": "Normal_OpenGL"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "exportList": [
+    {
+      "rootPath": "25-Faixa-Cintura"
+    }
+  ],
+  "exportParameters": [
+    {
+      "parameters": {
+        "fileFormat": "png",
+        "bitDepth": "16",
+        "sizeLog2": 11,
+        "paddingAlgorithm": "infinite",
+        "dithering": false
+      }
+    }
+  ]
+}

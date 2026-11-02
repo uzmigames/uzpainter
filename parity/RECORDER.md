@@ -346,6 +346,26 @@ Code: `tools/parity/recorder/migration.py` (host) and `migration_readback` in `p
 
   Until the nine masks that only the Painter project holds are back at `_tmp/claude/<name>.png`, the command refuses and lists them.
 
+**Sash v5 (phase2.9, decision 300 item 7).**
+- **The request.** It is committed by hand, with no generator: `parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/requests/phase2/tier1/sash-v5-migration.json`. Its golden is `phase2/tier1/sash-v5-migration`, on the current envelope's build. `phase2/tier1/sash-v5` stays the original script golden of decision 260.
+  - It has two inputs: the preserved `25-Faixa-Cintura-v5.spp` (`0691cc120714…`, 74,544,892 bytes, the pin its piece manifest `manifests/v5.json` verifies, also in the private store) and `parity/fixtures/tier1/sash-v5/export-config.json`.
+  - It has two steps: `project.open`, then `export.export_project_textures`.
+  - The lost masks, `T_sash`, the low OBJ, its MTL and the arguments files are not inputs, so the request resolves without them.
+- **The export configuration.** It is authored independently, not recovered from historical arguments, and the future `sash-v5-current` round exports with the same file.
+  - The texture set is `25-Faixa-Cintura`, the name `round.sh` and `export_lows.py` give it.
+  - The maps are BaseColor, Roughness, Metallic and Height from document maps, and Normal from `Normal_OpenGL`, as `painter_export.py` maps them. They are named `25-Faixa-Cintura_<map>`.
+  - The format is 16-bit PNG at `sizeLog2` 11, with `infinite` padding, no dilation distance (it applies to `transparent`, `color` and `diffusion` only), no dithering and no shader parameters. It has no `exportPath`.
+- **The recording.** `python -m tools.parity.recorder record-migration <request> --assets-root E:\UzmiGames\Assets3D`, under OCIO with Painter's substance configuration, on Painter `12.2.0`.
+
+**Checks of every migration recording** (`check_after_open`, `check_declared` in `migration.py`).
+- **After each open (r1 and the reopen for r2), before any export.** If either check fails, the run stops and nothing reaches the inbox.
+  - **Colour environment.** The session's colour-management environment must be unchanged across the open. That is what `hello` reports: the `OCIO` and `PAINTER_ACE_CONFIG` variables and the mode they select. This proves environment stability only. No documented call the recorder makes reads the opened project's own saved colour mode, so that mode stays unconfirmed; the record's `colour_management_after_open` is the same environment readback.
+  - **Texture sets.** The project's state readback must hold every texture set the configuration's `exportList` names. For the Sash, that means `25-Faixa-Cintura`.
+- **After each export, for a supported inline preset.** That is a default preset defined in the configuration, one unfiltered `exportParameters` rule, PNG at `bitDepth` 8 or 16, `exportList` entries naming only `rootPath`, and file names whose only token is `$textureSet`.
+  - The export must write exactly the declared maps, each once, bound by texture set and file name.
+  - Each map must have the declared depth and channel count, and the `sizeLog2` size when one is given. For the Sash, that is five maps at 2048 px.
+- **Other configurations.** A shipped preset (the Tunic's), OpenEXR, several or filtered rules, or a per-entry preset keep the generic behaviour: only the export's own current-output check applies. A supported preset that declares a map twice is refused when the job is loaded.
+
 ## 9c. Export resource qualification (decision 300)
 
 Code: `tools/parity/recorder/resource_qualification.py` (host), `painter_resources.py` (inside Painter, loaded like `painter_scripts.py`), and `PainterUi.export_resource` in `painter_ui.py`. Tests: `tests/parity/recorder/test_resource_qualification.py`.
@@ -381,7 +401,7 @@ Code: `tools/parity/tier1/current_reference.py`; tests: `tests/parity/tier1/test
 - **What it verifies.** The pilot pairing and both interfaces; every private record admitted and hash-checked in the store; each record bound to its own manifest's inputs and steps, with exactly `r1`, `r1-repeat` (same session) and `r2` (after save and reopen) and no duplicates; the environment records; every exported map measured and decoded against its own recorded format.
 - **What it compares.** Each side's stability in bytes and in decoded values. Then the two `r1` exports, paired by (texture set, map): structure first, then encoded bytes and native decoded values, reported apart.
 - **Outcome.** Exactly one of `identical` (every map byte-identical), `different` (other bytes, even with equal values, or a structural difference), `invalid` (pairing, record, map, an unstable side or an envelope mismatch) or `oracle_unavailable`. Exit codes 0, 1, 2 and 3.
-- **The report.** One aggregate JSON on stdout: manifest, record, environment and envelope hashes, per-map availability and storage keys, counts. No pixel, coordinate, map hash or readback, and nothing is written.
+- **The report.** One aggregate JSON on stdout: manifest, record, environment and envelope hashes, per-map availability and storage keys, counts. No pixel, coordinate, map hash or readback. No baseline, store, manifest or report is changed; decoding an OpenEXR map writes the blob to a temporary file that the shared decoder deletes at once (PNG and TGA decode in memory).
 - **What it never does.** It approves no baseline, records no exception, accepts no gate and completes no item. The pilot's input inventory is referenced by path and SHA-256: output equality does not prove historical input identity. The changed baseline remains the owner's yes (decision 300 item 8).
 
 ## 10. Oracle envelope: rolling refresh, stability study, canary
