@@ -99,6 +99,13 @@ InputPng ReadPng(const std::string& flag, const std::string& path) {
     if (const int e = spng_decode_image(ctx.get(), decoded.data(), size, format, 0)) {
         throw Refusal(what + ": cannot decode: " + spng_strerror(e));
     }
+    // The chunks after the image data, through IEND: a truncated or corrupt tail is refused too.
+    if (const int e = spng_decode_chunks(ctx.get())) {
+        throw Refusal(what + ": cannot read the chunks after the image: " + spng_strerror(e));
+    }
+    if (spng_get_trns(ctx.get(), &trns) == 0) {
+        throw Refusal(what + ": a tRNS transparency chunk; opacity must be an alpha channel");
+    }
     InputPng png;
     png.path = path;
     png.sha256 = core::Sha256Hex(bytes);
@@ -299,7 +306,11 @@ int Cook(const Arguments& a, std::FILE* out) {
     for (const char* role : {"height", "specularweight"}) {
         if (inputs.contains(role)) images[role] = inputs.at(role).image;
     }
-    const bool albedoAlpha = !OpaqueAlpha(images.at("albedo"));
+    // The preset's rule on its canonical file's layout (write.cpp `WriteMaterial`): the albedo holds
+    // an alpha when its file has an alpha channel. The native export drops an alpha that is exactly
+    // 1 everywhere before writing the file, as Painter does (encode.cpp), so a written alpha channel
+    // is an opacity even where all its codes are 65535.
+    const bool albedoAlpha = albedo.channels == "RGBA" || albedo.channels == "LA";
 
     // 3. Every texture cooked through the preset's derivative cook, then the material.
     std::vector<Cooked> cooked;
@@ -429,10 +440,7 @@ int Cook(const Arguments& a, std::FILE* out) {
     for (const std::array<std::string, 3>& g : material.gaps) materialGaps.emplace_back(g[0], g[2] + " (" + g[1] + ")");
     materialGaps.emplace_back("blend", kBlendGap);
     json::Value inlineMaterial = json::Parse(material.inlineMaterial);
-    const std::string opacity = albedoAlpha ? "albedo alpha"
-                                : albedo.channels == "RGBA" || albedo.channels == "LA"
-                                    ? "1: the albedo alpha is 1 everywhere"
-                                    : "1: the albedo PNG has no alpha";
+    const std::string opacity = albedoAlpha ? "albedo alpha" : "1: the albedo PNG has no alpha";
     files.push_back(json::Object{{"path", planned.relativePath},
                                  {"format", "uzmat"},
                                  {"bytes", static_cast<std::int64_t>(material.bytes.size())},

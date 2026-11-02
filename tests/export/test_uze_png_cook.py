@@ -274,16 +274,18 @@ def test_equal_decoded_inputs_give_equal_bytes(
     painter_cooked: tuple[dict[str, Any], dict[str, bytes]],
     tmp_path: Path,
 ) -> None:
-    """16-bit PNGs of the codes * 257, a DirectX normal holding the mirrored green, an albedo with
-    an alpha of 1 everywhere and a grey AO, roughness and metallic in place of the packed ORM decode
-    to the same images and give the same bytes."""
+    """16-bit PNGs of the codes * 257, a DirectX normal holding the mirrored green and a grey AO,
+    roughness and metallic in place of the packed ORM decode to the same images and give the same
+    bytes. An alpha channel of codes 65535 everywhere decodes to the same image too, so the
+    textures are equal; the `.uzmat` follows the preset's layout rule (an alpha channel is the
+    opacity, as in the native canonical file, whose all-1 alpha is dropped before writing) and
+    blends Masked."""
     _, files = painter_cooked
     albedo, normal, orm = painter_set["albedo"], painter_set["normal"], painter_set["orm"]
     directx = normal.copy()
     directx[..., 1] = 255 - directx[..., 1]
-    opaque = np.concatenate([albedo, np.full((SIZE, SIZE, 1), 255, np.int64)], axis=2)
     maps = {
-        "albedo": write_png(tmp_path / "albedo16.png", opaque * 257, 16),
+        "albedo": write_png(tmp_path / "albedo16.png", albedo * 257, 16),
         "normal": write_png(tmp_path / "normal-dx.png", directx, 8),
         "ao": write_png(tmp_path / "ao.png", orm[..., 0], 8),
         "roughness": write_png(tmp_path / "roughness.png", orm[..., 1] * 257, 16),
@@ -291,9 +293,18 @@ def test_equal_decoded_inputs_give_equal_bytes(
     }
     receipt = cooked(export_tests, tmp_path / "out", maps, "directx")
     assert written(tmp_path / "out") == files
-    assert receipt["files"][-1]["uzmat"]["opacity"] == "1: the albedo alpha is 1 everywhere"
+    assert receipt["files"][-1]["uzmat"]["opacity"] == "1: the albedo PNG has no alpha"
     inputs = {i["map"]: i for i in receipt["inputs"]}
     assert inputs["normal"]["green_mirrored"] is False and inputs["albedo"]["bit_depth"] == 16
+    opaque = np.concatenate([albedo, np.full((SIZE, SIZE, 1), 255, np.int64)], axis=2)
+    alpha = {**painter_set["maps"], "albedo": write_png(tmp_path / "rgba1.png", opaque, 8)}
+    masked = cooked(export_tests, tmp_path / "alpha", alpha, "opengl")
+    textures = written(tmp_path / "alpha")
+    assert {n: d for n, d in textures.items() if n != "s.uzmat"} == {
+        n: d for n, d in files.items() if n != "s.uzmat"
+    }
+    assert masked["files"][-1]["uzmat"]["blend"] == "Masked"
+    assert masked["files"][-1]["uzmat"]["opacity"] == "albedo alpha"
 
 
 def test_albedo_alpha_masks_the_material_and_height_is_bc4(
@@ -383,6 +394,11 @@ def refusal_case(
         (root / "trns.png").write_bytes(with_trns(base["albedo"].read_bytes()))
         maps["albedo"] = root / "trns.png"
         return maps, "tRNS"
+    if name == "no-iend":
+        data = base["orm"].read_bytes()
+        (root / "no-iend.png").write_bytes(data[: data.rindex(b"IEND") - 4])
+        maps["orm"] = root / "no-iend.png"
+        return maps, "cannot read the chunks after the image"
     if name == "not-png":
         (root / "text.png").write_bytes(b"not a png")
         maps["orm"] = root / "text.png"
@@ -403,6 +419,7 @@ def refusal_case(
         "grey-normal",
         "4-bit",
         "trns",
+        "no-iend",
         "not-png",
         "missing-file",
     ],

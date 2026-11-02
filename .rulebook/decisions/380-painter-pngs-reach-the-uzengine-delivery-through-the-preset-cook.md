@@ -17,11 +17,11 @@ The panel (`cx/gpt-6-astra`, `cx/gpt-6.1-sol`, `xai/grok-4.6`, `kimi/kimi-k3`) a
 1. **One code path.** `UzPainter.exe cook-uzengine` cooks each texture with write.h `CookUzEngineDerivative`, and writes the `.uzmat` with `WriteUzEngineMaterial`. Both functions are extracted from `EncodeExport`, which now calls them too. The targets are read from the shipped `uzengine` preset: binding, format, colour space, mip class, negative-Z policy and file names. There is no second implementation.
 2. **Equality.** Equality is defined on the decoded input pixels, the options and the encoder version. Each input becomes a 16-bit RGBA image: an 8-bit code becomes code * 257, grey becomes R = G = B, and a missing alpha becomes 1. Equal images give equal bytes. The receipt records each image's hash (`decoded_rgba16_sha256`) and each file's encoder, `etcpak 2.1`, with its fixed settings.
 3. **Input contract.**
-   - PNG 8 or 16 bits: grey, grey + alpha, RGB or RGBA. Palette, sub-8-bit and tRNS images are refused. Colour chunks are not applied.
+   - PNG 8 or 16 bits: grey, grey + alpha, RGB or RGBA. Palette, sub-8-bit and tRNS images, and a file whose chunks do not read through IEND (review by `cx/gpt-6.1-sol`), are refused. Colour chunks are not applied.
    - BaseColor and emissive are sRGB-encoded. Every other map is linear.
    - The normal convention must be stated (`--normal-convention opengl|directx`). The preset stores `Normal_DirectX`, so an OpenGL green is mirrored (65535 - G). Dithering is off on the exporting side.
 4. **Mip filters are the preset's.** sRGB-aware masked colour for the albedo (alpha coverage at its cutoff 0.5), linear per channel for ORM, height and SpecularWeight, renormalised normal, and sRGB colour for emissive.
-5. **Opacity follows the preset.** It is the albedo alpha. No alpha, or an alpha of 1 everywhere, means opacity 1 and `Opaque`, and the receipt says which. Neither the blend nor two-sidedness is an option, because that would change the preset's semantics.
+5. **Opacity follows the preset.** It is the albedo alpha, and the blend follows the preset's rule on its canonical file's layout: an albedo PNG with an alpha channel is `Masked`, one without is opacity 1 and `Opaque`, and the receipt says which. The native export drops an alpha that is exactly 1 everywhere before writing, as Painter does, so a written alpha channel is an opacity even when all its codes are 65535 (review by `cx/gpt-6-astra`). Neither the blend nor two-sidedness is an option, because that would change the preset's semantics.
 6. **Maps.**
    - The ORM comes either packed (`--orm`) or as three grey maps (`--ao`, `--roughness`, `--metallic`).
    - Without `--emissive`, the emissive texture is black, which is what the preset cooks for a black emissive channel. The `.uzmat` binds four textures. The receipt marks the emissive `synthesized`.
@@ -40,7 +40,7 @@ The panel (`cx/gpt-6-astra`, `cx/gpt-6.1-sol`, `xai/grok-4.6`, `kimi/kimi-k3`) a
 
 The Assets3D pipeline can deliver UzEngine's standard files from its Painter exports. `tests/export/test_uze_png_cook.py` shows four things:
 - a native export's canonical PNG 16 maps cook to its own `.uztexture` and `.uzmat` bytes;
-- 8/16-bit, OpenGL/DirectX, opaque-alpha and separate-ORM forms of one decoded image give equal bytes;
+- 8/16-bit, OpenGL/DirectX and separate-ORM forms of one decoded image give equal bytes, and an alpha channel of 1 everywhere gives equal textures with a `Masked` material;
 - runs are deterministic;
 - every refusal writes nothing.
 
