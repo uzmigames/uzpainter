@@ -1,0 +1,292 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier2b/bakes/position-plane-all-axis-bsphere-per-material",
+  "tier": "2b",
+  "domain": "bake_map/position",
+  "description": "Tier 2b bake golden of phase3.4_baker-position (decision 384) on the analytic fixture plane: the low plane under a wider flat high 0.005 above it (CaseNormalPlane). Painter bakes Position at 512 px (OutputSize 9, DilationWidth 0, RelativeScale False, MaxHeight 0.05, MaxDepth 0.05; Position Mode All axis, Position Normalization BSphere, Position NormalizationScale Per Material; every other baking parameter at Painter's default; normal map format OpenGL, tangent space the project default). The baked maps are exported as PNG 16 and OpenEXR 32f, padding passthrough, no dithering; recorded twice (same session; after save and reopen). Bake backend uncontrolled.",
+  "inputs": [
+    {
+      "input_id": "plane-low",
+      "kind": "mesh",
+      "path": "parity/fixtures/tier2b-bakes/plane-low.obj",
+      "sha256": "68827bcbe48df255d230687d9041f6f146dc4ed4787ce1bcdc42bbb914619dc2",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    },
+    {
+      "input_id": "plane-high",
+      "kind": "mesh",
+      "path": "parity/fixtures/tier2b-bakes/plane-high.obj",
+      "sha256": "5da4a5d58e25a85ca0e7fff77894db77f1291773206031bb0d70e69e47003ff4",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane-low",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 512
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "OutputSize",
+          "value": [
+            9,
+            9
+          ]
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "DilationWidth",
+          "value": 0
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "RelativeScale",
+          "value": false
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "MaxHeight",
+          "value": 0.05
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "MaxDepth",
+          "value": 0.05
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "HipolyMesh",
+          "input": "plane-high"
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "Mode",
+          "usage": "Position",
+          "enum_label": "All axis"
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "Normalization",
+          "usage": "Position",
+          "enum_label": "BSphere"
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "NormalizationScale",
+          "usage": "Position",
+          "enum_label": "Per Material"
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.baking.BakingParameters.set_enabled_bakers",
+        "args": {
+          "usages": [
+            "Position"
+          ]
+        }
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.baking.bake_async",
+        "args": {}
+      },
+      {
+        "step": 13,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "meshMap/position:RGB"
+          ],
+          "file_format": "png",
+          "bit_depth": 16,
+          "padding": "passthrough",
+          "dithering": false
+        }
+      },
+      {
+        "step": 14,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "meshMap/position:RGB"
+          ],
+          "file_format": "exr",
+          "bit_depth": "32f",
+          "padding": "passthrough",
+          "dithering": false
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 512,
+      "applied_by": "recorder_api",
+      "unit": "px"
+    },
+    {
+      "name": "baking.common.OutputSize",
+      "value": 9,
+      "applied_by": "recorder_api",
+      "unit": "log2 px"
+    },
+    {
+      "name": "baking.common.DilationWidth",
+      "value": 0,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "baking.common.RelativeScale",
+      "value": false,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "baking.common.MaxHeight",
+      "value": 0.05,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "baking.common.MaxDepth",
+      "value": 0.05,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "baking.Position.Mode",
+      "value": "All axis",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "baking.Position.Normalization",
+      "value": "BSphere",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "baking.Position.NormalizationScale",
+      "value": "Per Material",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "baking.enabled_bakers",
+      "value": "Position",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.png.bit_depth",
+      "value": 16,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.exr.bit_depth",
+      "value": "32f",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "passthrough",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "uncontrolled_settings": [
+    "preferences.bake_backend"
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "2b5ee841ff2e49bccc6c0347c2f1daf4eeab5b0a2a76e0c52d8842d4f25d9d31",
+      "size_bytes": 10634
+    },
+    {
+      "record_id": "r1-uzp_plane-position-step13",
+      "kind": "exported_map",
+      "sha256": "aec933d3de1e55373ae06613c8fef5b2fdfe7f521297a3d3f59fe5437c6ac4a6",
+      "size_bytes": 2756
+    },
+    {
+      "record_id": "r1-uzp_plane-position-step14",
+      "kind": "exported_map",
+      "sha256": "82df9758951de1b2a74889a20f3317060ee05aac84ef7e5fd19c19aacf1c42be",
+      "size_bytes": 102583
+    },
+    {
+      "record_id": "r2-uzp_plane-position-step13",
+      "kind": "exported_map",
+      "sha256": "aec933d3de1e55373ae06613c8fef5b2fdfe7f521297a3d3f59fe5437c6ac4a6",
+      "size_bytes": 2756
+    },
+    {
+      "record_id": "r2-uzp_plane-position-step14",
+      "kind": "exported_map",
+      "sha256": "82df9758951de1b2a74889a20f3317060ee05aac84ef7e5fd19c19aacf1c42be",
+      "size_bytes": 102583
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "99122799a014f447d843d274047c97a343b9e9e412b048aafa186b1a5311e9db",
+      "size_bytes": 402
+    }
+  ]
+}
