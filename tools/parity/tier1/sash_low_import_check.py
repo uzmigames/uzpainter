@@ -24,12 +24,23 @@ inspector that control qualified (pinned by SHA-256).
    creates a project from the copy with `CREATE_SETTINGS`, reads back the texture sets, the scene
    bounding box and the migration readback, exports the BaseMesh as OBJ twice, saves (Full),
    closes, reopens, reads back again and exports a third time. Each export goes to a fresh path.
+   The project is this run's own: the UUID its create recorded (and, after the save, its path)
+   is checked at create, before the save, after it, at the reopen, before each export and at
+   cleanup, which closes only that project and leaves any other one open (and refuses).
+   Every directory and file it writes is checked to stay under the private root, with no link
+   or junction below it, and outside the repository. The final hashes of the originals and of
+   the staged copy must equal the pins and the first reads, or the run is refused.
 5. **Comparison.** Each export against the source, as a multiset of the 4038 oriented triangles,
    each corner its position, UV and material name. Face order, index order and a cyclic
    rotation of a triangle's corners are allowed; reversed winding, welding, fitting and scale
    normalisation are not. Positions, UVs and materials must be exactly equal (float32 as the
    inspector parses them); normals are then paired by triangle and must be within
    `NORMAL_COMPONENT_BOUND`, a bound for this comparison only, never a parity tolerance.
+6. **Verdict.** `status: complete` says only that the capture completed. `verdict` evaluates
+   each observation: texture sets exactly `[25-Faixa-Cintura]` and its resolution, the scene
+   bounds against the source, each export against the source, the repeat and the reopen
+   against `r1`, and the exported UV tiles. Any failed check is listed as a difference and the
+   mesh is not called consistent.
 
 Nothing here observes Painter's internal UV or axis representation: an import conversion that
 the BaseMesh export undoes is not observable through this route, and neither are per-object
@@ -47,6 +58,7 @@ import subprocess
 import sys
 import time
 from collections import Counter, defaultdict
+from collections.abc import Callable
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
@@ -56,6 +68,7 @@ from tools.parity.envelope.colour_sessions import matches
 from tools.parity.envelope.registry import current_envelope, load_registry
 from tools.parity.recorder.environment import capture_host_environment
 from tools.parity.recorder.output import ensure_outside_repository, work_root
+from tools.parity.recorder.probes import ProbeSession
 from tools.parity.recorder.session import HttpTransport, PainterSession, RecorderError
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -105,6 +118,13 @@ OCIO_CONFIG = "resources/ocio/substance/config.ocio"
 NORMAL_COMPONENT_BOUND = 6.5e-05
 # The export report's float32 Blender bounds against the OBJ's 6-decimal positions.
 SOURCE_BOUNDS_TOLERANCE = 1.0e-06
+# Painter's scene bounding box against the source's float32 bounds: the source values are
+# about 1.25 at most (float32 step 1.2e-07), and a centre or a size adds one rounding.
+SCENE_CENTER_TOLERANCE = 1.0e-06
+SCENE_DIMENSION_TOLERANCE = 1.0e-06
+# Read through the probe extension's owned-project form (decision 295): the UUID this run's
+# own create recorded and the open project's.
+GET_UUID = "substance_painter.project.get_uuid"
 
 Vector = tuple[float, ...]
 CornerKey = tuple[Vector, Vector, str]
@@ -335,6 +355,13 @@ def scene_versus_source(box: dict[str, Any], source: dict[str, list[float]]) -> 
     }
 
 
+def envelope_entry() -> dict[str, Any]:
+    if load_registry(REPO_ROOT)["candidate"] is not None:
+        raise RecorderError("an envelope refresh is active")
+    entry: dict[str, Any] = current_envelope(REPO_ROOT)
+    return entry
+
+
 def verify(session: PainterSession, entry: dict[str, Any], colour: str) -> None:
     if current_envelope(REPO_ROOT)["envelope_id"] != entry["envelope_id"]:
         raise RecorderError("the current envelope changed during the check")
@@ -344,6 +371,57 @@ def verify(session: PainterSession, entry: dict[str, Any], colour: str) -> None:
         raise RecorderError("the Painter build is not the current envelope's")
     if not matches(identity, colour):
         raise RecorderError(f"the Painter session is not under {colour}")
+
+
+def guarded(path: Path, root: Path) -> Path:
+    """`path` itself, refused unless it stays under the private root and outside the
+    repository: no existing component below the root may be a link or a junction, and the
+    resolved path must lie under the resolved root."""
+    base = root.resolve()
+    if base.is_relative_to(REPO_ROOT.resolve()):
+        raise RecorderError(f"the private root {base} is inside the repository")
+    relative = path.relative_to(root)
+    current = root
+    for part in relative.parts:
+        current = current / part
+        if current.is_symlink() or current.is_junction():
+            raise RecorderError(f"{current} is a link or a junction")
+    resolved = path.resolve()
+    if not resolved.is_relative_to(base) or resolved.is_relative_to(REPO_ROOT.resolve()):
+        raise RecorderError(f"{resolved} leaves the private root {base}")
+    return path
+
+
+def same_path(left: str | None, right: str | None) -> bool:
+    if left is None or right is None:
+        return left == right
+    return Path(left).resolve() == Path(right).resolve()
+
+
+def own_project(session: PainterSession, expected: dict[str, Any]) -> dict[str, Any]:
+    """This run's project, by the UUID its own create recorded and the path it should have;
+    refused when the open project is any other one."""
+    state = session.state()
+    if not state.is_open:
+        raise RecorderError("no project is open")
+    outcome = session.call("probe_step", step=0, call=GET_UUID, args={"owned_project": True})
+    if "raised" in outcome or not isinstance(outcome.get("value"), dict):
+        raise RecorderError(f"the project UUID cannot be read: {outcome}")
+    value = outcome["value"]
+    found = {
+        "created_uuid": value["created_project_uuid"],
+        "uuid": value["current_project_uuid"],
+        "file_path": state.file_path,
+    }
+    if expected.get("uuid") is None:
+        if found["created_uuid"] != found["uuid"]:
+            raise RecorderError("the open project is not the one this run created")
+        expected.update(uuid=found["uuid"], file_path=found["file_path"])
+    if found["created_uuid"] != expected["uuid"] or found["uuid"] != expected["uuid"]:
+        raise RecorderError(f"the open project UUID differs from this run's: {found}")
+    if not same_path(found["file_path"], expected["file_path"]):
+        raise RecorderError(f"the open project path differs from this run's: {found}")
+    return found
 
 
 def readbacks(session: PainterSession) -> dict[str, Any]:
@@ -356,20 +434,26 @@ def readbacks(session: PainterSession) -> dict[str, Any]:
 
 
 def run_painter(
-    run_dir: Path, staged: Path, source_doc: dict[str, Any], report: dict[str, Any]
+    session: PainterSession,
+    run_dir: Path,
+    root: Path,
+    staged: Path,
+    source_doc: dict[str, Any],
+    report: dict[str, Any],
 ) -> None:
-    registry = load_registry(REPO_ROOT)
-    if registry["candidate"] is not None:
-        raise RecorderError("an envelope refresh is active")
-    entry = current_envelope(REPO_ROOT)
+    entry = envelope_entry()
     colour = "ocio:" + OCIO_CONFIG
-    session = PainterSession(HttpTransport(), verify_calls=True)
     report["identity"] = asdict(session.connect())
     verify(session, entry, colour)
     if session.state().is_open:
         raise RecorderError("a project is open in Painter; this check only creates its own")
     source_bounds = report["source"]["bounds"]
     documents: dict[str, dict[str, Any]] = {}
+    expected: dict[str, Any] = {"uuid": None}
+    project = guarded(run_dir / "project" / "sash-low-import.spp", root)
+    checks: list[dict[str, Any]] = []
+    report["project_checks"] = checks
+    created = False
     try:
         report["create"] = session.call(
             "apply_step",
@@ -378,17 +462,24 @@ def run_painter(
             args=CREATE_SETTINGS,
             resolved={"mesh": staged.as_posix()},
         )
+        created = True
+        session.wait_ready()
+        checks.append({"at": "create", **own_project(session, expected)})
         for phase in PHASES:
             if phase == "reopen":
-                project = run_dir / "project" / "sash-low-import.spp"
+                checks.append({"at": "save", **own_project(session, expected)})
                 project.parent.mkdir()
                 report["save"] = session.call("save_as", path=project.as_posix())
                 saved = session.wait_ready()
                 if saved.file_path is None or Path(saved.file_path).resolve() != project.resolve():
                     raise RecorderError("the saved project path differs")
+                expected["file_path"] = saved.file_path
+                checks.append({"at": "saved", **own_project(session, expected)})
                 session.call("close_project")
                 session.wait_closed()
                 session.call("open_project", path=project.as_posix())
+                session.wait_ready()
+                checks.append({"at": "reopen", **own_project(session, expected)})
             if phase != "repeat":
                 read = readbacks(session)
                 read["scene_versus_source"] = scene_versus_source(
@@ -396,9 +487,10 @@ def run_painter(
                 )
                 report["readbacks"][phase] = read
             verify(session, entry, colour)
-            destination = run_dir / phase / "base-mesh.obj"
+            destination = guarded(run_dir / phase / "base-mesh.obj", root)
             destination.parent.mkdir()
             exported: dict[str, Any] = {"state_before": asdict(session.wait_ready())}
+            checks.append({"at": f"export {phase}", **own_project(session, expected)})
             exported["result"] = session.call("export_base_mesh", path=destination.as_posix())
             exported["state_after"] = asdict(session.wait_ready())
             report["exports"][phase] = exported
@@ -406,7 +498,7 @@ def run_painter(
                 raise RecorderError(f"{phase}: BaseMesh export did not succeed: {exported}")
             exported["sha256"] = digest(destination)
             exported["size_bytes"] = destination.stat().st_size
-            document = inspect(destination, run_dir / phase / "inspection")
+            document = inspect(destination, guarded(run_dir / phase / "inspection", root))
             documents[phase] = document
             exported["uv_tiles"] = uv_tiles(document)
             exported["inspector_flags"] = document["report"]["flags"]
@@ -416,16 +508,106 @@ def run_painter(
                 exported["versus_r1"] = compare(documents["r1"], document, 0.0)
             save(run_dir / "report.json", report)
     finally:
-        if session.state().is_open:
-            session.call("close_project")
-            session.wait_closed()
+        report["cleanup"] = cleanup(session, expected, created)
+
+
+def cleanup(session: PainterSession, expected: dict[str, Any], created: bool) -> dict[str, Any]:
+    """Close the project only when it is provably this run's; an unrelated one stays open."""
+    try:
+        if not session.state().is_open:
+            return {"closed": False, "open_project": None}
+        if not created or expected.get("uuid") is None:
+            return {"closed": False, "open_project": "not this run's (no identity recorded)"}
+        try:
+            found = own_project(session, expected)
+        except RecorderError as error:
+            return {"closed": False, "open_project": f"not this run's: {error}"}
+        session.call("close_project")
+        session.wait_closed()
+        return {"closed": True, "open_project": found}
+    except (RecorderError, OSError, ValueError, KeyError) as error:
+        return {"closed": False, "error": f"{type(error).__name__}: {error}"}
+
+
+def final_hash_problems(report: dict[str, Any]) -> list[str]:
+    """The final hashes against the pins and the first reads; any difference refuses the run."""
+    pins = {OBJ_NAME: OBJ_SHA256, MTL_NAME: MTL_SHA256, EXPORT_REPORT_NAME: EXPORT_REPORT_SHA256}
+    problems = []
+    before = report.get("source_hashes_before")
+    after = report.get("source_hashes_after")
+    if after != pins or before != pins:
+        problems.append(f"source hashes {after} differ from the pins or the first read {before}")
+    staged = report.get("staged_hashes_after")
+    if staged != {OBJ_NAME: OBJ_SHA256, MTL_NAME: MTL_SHA256}:
+        problems.append(f"staged hashes {staged} differ from the pins")
+    return problems
+
+
+def max_abs(values: list[float]) -> float:
+    return max((abs(v) for v in values), default=math.inf)
+
+
+def verdict(report: dict[str, Any]) -> dict[str, Any]:
+    """What the observations support, check by check. A failed check is a recorded difference;
+    the mesh is called consistent only when every check holds."""
+    reads, exports = report.get("readbacks", {}), report.get("exports", {})
+    checks: dict[str, bool] = {}
+    for phase in ("r1", "reopen"):
+        read = reads.get(phase)
+        if read is None:
+            checks[f"{phase}: readbacks captured"] = False
+            continue
+        names = [s["name"] for s in read["texture_sets"]]
+        checks[f"{phase}: texture sets == [{TEXTURE_SET}]"] = names == [TEXTURE_SET]
+        sets = read["migration_readback"]["texture_sets"]
+        resolution = CREATE_SETTINGS["default_texture_resolution"]
+        checks[f"{phase}: resolution == {resolution}"] = sets.get(TEXTURE_SET, {}).get(
+            "resolution"
+        ) == [resolution, resolution]
+        scene = read["scene_versus_source"]
+        checks[f"{phase}: scene centre within {SCENE_CENTER_TOLERANCE}"] = (
+            max_abs(scene["center_delta"]) <= SCENE_CENTER_TOLERANCE
+        )
+        dimension_delta = [
+            p - s
+            for p, s in zip(scene["painter"]["dimensions"], scene["source_dimensions"], strict=True)
+        ]
+        checks[f"{phase}: scene dimensions within {SCENE_DIMENSION_TOLERANCE}"] = (
+            max_abs(dimension_delta) <= SCENE_DIMENSION_TOLERANCE
+        )
+    for phase in PHASES:
+        exported = exports.get(phase)
+        if exported is None or "versus_source" not in exported:
+            checks[f"{phase}: export compared"] = False
+            continue
+        checks[f"{phase}: export versus source within bounds"] = exported["versus_source"][
+            "within_bounds"
+        ]
+        checks[f"{phase}: export UV tiles == [1001]"] = exported["uv_tiles"] == [1001]
+        if phase != "r1":
+            checks[f"{phase}: export equal to r1"] = exported["versus_r1"]["full_multiset_equal"]
+    differences = sorted(name for name, held in checks.items() if not held)
+    return {
+        "checks": checks,
+        "differences": differences,
+        "import_consistent": report.get("status") == "complete" and not differences,
+        "settings_passed": CREATE_SETTINGS,
+        "settings_read_back": "texture-set resolution only; no documented getter reads the "
+        "normal format, import_cameras or mesh_unit_scale (scene bounds are their only trace)",
+        "not_observed": [
+            "an import conversion that the BaseMesh export undoes",
+            "per-object transforms (an OBJ has none)",
+            "UV tiles other than through the exported UVs (TextureSet.has_uv_tiles is not read)",
+            "the historical round's OBJ and any baseline",
+        ],
+    }
 
 
 def prepare(root: Path, check_only: bool) -> tuple[Path, dict[str, Any]]:
     """Every check that needs no Painter; returns the fresh run directory and its report."""
     if digest(INSPECTOR) != INSPECTOR_SHA256:
         raise RecorderError("the mesh inspector differs from its pin")
-    source_dir = root / SOURCE_RUN
+    source_dir = guarded(root / SOURCE_RUN, root)
     report: dict[str, Any] = {
         "status": "running",
         "golden": False,
@@ -435,19 +617,66 @@ def prepare(root: Path, check_only: bool) -> tuple[Path, dict[str, Any]]:
         "create_settings": CREATE_SETTINGS,
         "normal_component_bound": NORMAL_COMPONENT_BOUND,
         "source_hashes_before": check_sources(source_dir),
-        "controls": check_controls(root / CONTROL_RUN),
+        "controls": check_controls(guarded(root / CONTROL_RUN, root)),
         "readbacks": {},
         "exports": {},
         "started_at": time.time(),
     }
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    run_dir = root / "sash-low-import-check" / f"{'check' if check_only else 'run'}-{stamp}"
-    staged_dir = run_dir / "source"
+    run_dir = guarded(
+        root / "sash-low-import-check" / f"{'check' if check_only else 'run'}-{stamp}", root
+    )
+    staged_dir = guarded(run_dir / "source", root)
     staged_dir.mkdir(parents=True)
+    guarded(staged_dir, root)
     for name in (OBJ_NAME, MTL_NAME):
-        shutil.copyfile(source_dir / name, staged_dir / name)
+        shutil.copyfile(source_dir / name, guarded(staged_dir / name, root))
     if digest(staged_dir / OBJ_NAME) != OBJ_SHA256 or digest(staged_dir / MTL_NAME) != MTL_SHA256:
         raise RecorderError("the staged copy differs from the pins")
+    return run_dir, report
+
+
+def execute(
+    root: Path, check_only: bool, session_factory: Callable[[], PainterSession]
+) -> tuple[Path | None, dict[str, Any] | None]:
+    """The whole check; the report is written even when a step or the final reads fail."""
+    try:
+        run_dir, report = prepare(root, check_only)
+    except (RecorderError, OSError, ValueError, KeyError) as error:
+        print(f"refused before the run: {type(error).__name__}: {error}", file=sys.stderr)
+        return None, None
+    staged = run_dir / "source" / OBJ_NAME
+    try:
+        source_doc = inspect(staged, guarded(run_dir / "source-inspection", root))
+        export_report = json.loads(
+            (root / SOURCE_RUN / EXPORT_REPORT_NAME).read_text(encoding="utf-8")
+        )
+        report["source"] = source_binding(source_doc, export_report)
+        save(run_dir / "report.json", report)
+        if not check_only:
+            run_painter(session_factory(), run_dir, root, staged, source_doc, report)
+            if not report["cleanup"].get("closed"):
+                raise RecorderError(f"the project was not closed: {report['cleanup']}")
+        report["status"] = "complete"
+    except (RecorderError, OSError, ValueError, KeyError) as error:
+        report["status"] = "refused"
+        report["error"] = f"{type(error).__name__}: {error}"
+    finally:
+        try:
+            report["staged_hashes_after"] = {
+                name: digest(run_dir / "source" / name) for name in (OBJ_NAME, MTL_NAME)
+            }
+            report["source_hashes_after"] = source_hashes(root / SOURCE_RUN)
+        except OSError as error:
+            report["final_hash_error"] = f"{type(error).__name__}: {error}"
+        problems = final_hash_problems(report)
+        if problems:
+            report["status"] = "refused"
+            report["final_hash_problems"] = problems
+        if not check_only:
+            report["verdict"] = verdict(report)
+        report["finished_at"] = time.time()
+        save(run_dir / "report.json", report)
     return run_dir, report
 
 
@@ -456,33 +685,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--check-only", action="store_true", help="no Painter call")
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
     root = ensure_outside_repository(work_root(REPO_ROOT))
-    try:
-        run_dir, report = prepare(root, args.check_only)
-    except (RecorderError, OSError, ValueError, KeyError) as error:
-        print(f"refused before the run: {type(error).__name__}: {error}", file=sys.stderr)
+    run_dir, report = execute(
+        root, args.check_only, lambda: ProbeSession(HttpTransport(), verify_calls=True)
+    )
+    if run_dir is None or report is None:
         return 2
-    staged = run_dir / "source" / OBJ_NAME
-    try:
-        source_doc = inspect(staged, run_dir / "source-inspection")
-        export_report = json.loads(
-            (root / SOURCE_RUN / EXPORT_REPORT_NAME).read_text(encoding="utf-8")
-        )
-        report["source"] = source_binding(source_doc, export_report)
-        save(run_dir / "report.json", report)
-        if not args.check_only:
-            run_painter(run_dir, staged, source_doc, report)
-        report["status"] = "complete"
-    except (RecorderError, OSError, ValueError, KeyError) as error:
-        report["status"] = "refused"
-        report["error"] = f"{type(error).__name__}: {error}"
-    finally:
-        report["staged_hashes_after"] = {
-            name: digest(run_dir / "source" / name) for name in (OBJ_NAME, MTL_NAME)
-        }
-        report["source_hashes_after"] = source_hashes(root / SOURCE_RUN)
-        report["finished_at"] = time.time()
-        save(run_dir / "report.json", report)
     print(f"{report['status']}: {run_dir / 'report.json'}")
+    if "verdict" in report:
+        print(f"import consistent: {report['verdict']['import_consistent']}")
     return 0 if report["status"] == "complete" else 2
 
 
