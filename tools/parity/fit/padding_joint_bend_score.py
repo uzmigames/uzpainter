@@ -91,7 +91,12 @@ def validate_capture(material: str) -> list[str]:
     refs = [r for r in manifest["private_records"] if r["record_id"] == "golden-record"]
     if len(refs) != 1 or (raw := load_oracle(store, refs[0])) is None:
         return ["private record unavailable"]
-    record = json.loads(raw)
+    return record_problems(json.loads(raw), material)
+
+
+def record_problems(record: dict[str, Any], material: str) -> list[str]:
+    """The problems of a private record: its recordings, template precision and export groups;
+    empty when valid."""
     problems = []
     conditions = sorted((r["recording_id"], r["condition"]) for r in record["recordings"])
     if conditions != [("r1", "same_session"), ("r2", "after_save_reopen")]:
@@ -131,6 +136,12 @@ def validate_capture(material: str) -> list[str]:
     return problems
 
 
+def stable(probe: Any) -> bool:
+    """Whether the probe's four `infinite` exports are all there and agree on every ring
+    texel."""
+    return probe.unstable == 0 and len(probe.recorded) == 4
+
+
 def main() -> int:
     found = frozen.predictions()
     text = json.dumps(model_part(found), sort_keys=True)
@@ -143,7 +154,7 @@ def main() -> int:
         return 1
     probe = Probe("joint-bend")
     print(json.dumps({"ring": len(probe.points), "unstable_infinite": probe.unstable}))
-    if probe.unstable or len(probe.recorded) != 4:
+    if not stable(probe):
         print(json.dumps({"refused": "the infinite exports differ or are incomplete"}))
         return 1
     totals: dict[str, int] = collections.Counter()

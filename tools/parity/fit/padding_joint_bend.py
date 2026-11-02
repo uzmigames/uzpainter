@@ -35,6 +35,9 @@ from tools.parity.tier0_semantics.recording_requests import REQUEST_FIXTURES, ke
 # The committed fixture (`python -m tools.parity.tier0_semantics write`), checked against the
 # generator before use.
 MESH_PATH = REPO_ROOT / REQUEST_FIXTURES[jb.MESH][1]
+# The reference the five models were frozen on (824d542f, before decision 368 made `snap256` the
+# reference's strip rule): every model is that reference plus its patches.
+FROZEN_REFERENCE = "824d542f"
 HYPOTHESES = (
     "baseline",
     "baseline+snap256",
@@ -46,7 +49,7 @@ NEIGHBOURS = ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 
 
 
 def ring(policy: str, mesh: Path) -> tuple[Any, Any]:
-    text = reference_text(None)
+    text = reference_text(FROZEN_REFERENCE)
     for name in policy.split("+")[1:]:
         for old, new in PATCHES[name]:
             if text.count(old) != 1:

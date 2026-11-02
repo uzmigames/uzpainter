@@ -107,3 +107,64 @@ def test_phase_pairs_find_an_inside_loss_whatever_the_pair_order() -> None:
     for members in ([taken, unowned, owned], [owned, unowned, taken]):
         family = {"n-b1-a0.22-d-0.0015-none-s1": members}
         assert phase_pairs(family, "baseline+snap256")[1] == ["n-b1-a0.22-d-0.0015-none-s1"]
+
+
+def _record(material: str = "uzp_joint_bend") -> dict[str, Any]:
+    """A valid authored record: r1 and r2, an RGB32F user0..7 template, steps 45-48 x 8 maps."""
+    steps = {45: "infinite", 46: "infinite", 47: "passthrough", 48: "passthrough"}
+    channel = {"format": "RGB32F", "bit_depth": 32, "is_floating": True}
+
+    def recording(rid: str, condition: str) -> dict[str, Any]:
+        template = {
+            "kind": "template_capture",
+            "values": {
+                "texture_sets": {
+                    material: {
+                        "resolution": [512, 512],
+                        "stacks": {"": {f"User{i}": dict(channel) for i in range(8)}},
+                    }
+                }
+            },
+        }
+        maps = [
+            {
+                "kind": "exported_map",
+                "texture_set": material,
+                "map": f"user{i}",
+                "export_settings": {"step": step, "paddingAlgorithm": mode},
+            }
+            for step, mode in steps.items()
+            for i in range(8)
+        ]
+        return {"recording_id": rid, "condition": condition, "outputs": [template, *maps]}
+
+    return {"recordings": [recording("r1", "same_session"), recording("r2", "after_save_reopen")]}
+
+
+def test_the_scorer_refuses_a_capture_whose_template_or_exports_differ() -> None:
+    from tools.parity.fit.padding_joint_bend_score import record_problems
+
+    assert record_problems(_record(), "uzp_joint_bend") == []
+    wrong = _record()
+    stack = wrong["recordings"][0]["outputs"][0]["values"]["texture_sets"]["uzp_joint_bend"]
+    stack["stacks"][""]["User3"]["format"] = "RGB16F"
+    assert record_problems(wrong, "uzp_joint_bend") == ["r1: user3 not RGB32F"]
+    missing = _record()
+    missing["recordings"][1]["outputs"].pop()
+    duplicate = _record()
+    duplicate["recordings"][1]["outputs"].append(duplicate["recordings"][1]["outputs"][1])
+    for record in (missing, duplicate):
+        assert record_problems(record, "uzp_joint_bend") == [
+            "r2: export groups differ from steps 45-48 x user0..7"
+        ]
+
+
+def test_the_scorer_refuses_unstable_or_incomplete_infinite_exports() -> None:
+    from types import SimpleNamespace
+
+    from tools.parity.fit.padding_joint_bend_score import stable
+
+    four = {k: None for k in range(4)}
+    assert stable(SimpleNamespace(unstable=0, recorded=four))
+    assert not stable(SimpleNamespace(unstable=1, recorded=four))
+    assert not stable(SimpleNamespace(unstable=0, recorded={k: None for k in range(3)}))
