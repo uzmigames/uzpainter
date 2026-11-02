@@ -1345,6 +1345,475 @@ def test_a_refused_current_sync_restores_the_modules_and_path(
     assert sys.path == path
 
 
+# --- a native job: the recorder's own create, the sync with an override, the config export ----
+
+TUNIC_SET = "DefaultMaterial"
+NATIVE_ARGS: dict[str, Any] = {
+    "mesh": "wand-mesh",
+    "mesh_material_library": "wand-mesh-mtl",
+    "normal": "wand-normal",
+    "texture_set": TUNIC_SET,
+    "normal_name": "Tunic_v6_HighNormal",
+    "normal_group": "tunica18_v10c_mesh_maps",
+    "normal_map_format": "OpenGL",
+    "tangent_space_mode": "PerFragment",
+    "project_workflow": "Default",
+    "default_texture_resolution": 4096,
+    "import_cameras": False,
+    "mesh_unit_scale": 1.0,
+}
+REPORT_PATH = "Creatures/stand-in/18-Tunica/report.json"
+RECIPE_KEYS = ["painting_v10", "painter_stack_recipe"]
+OVERRIDE = {"override_layer": "C02", "override_mask": "M_iron"}  # the stand-in's F03
+
+
+def recipe_of(stack: dict[str, Any]) -> dict[str, Any]:
+    """The recipe the override applies to: the stack with C02 binding its older mask."""
+    recipe = copy.deepcopy(stack)
+    next(x for x in recipe["layers"] if x["id"] == "C02")["mask"] = "M_iron_v9"
+    return recipe
+
+
+def native_manifest(assets: Path, repo: Path) -> dict[str, Any]:
+    """A Tunic-shaped native job over the stand-in Wand: the native create, the current-round
+    sync with the C02 override of the recipe, and the closing config export only."""
+    current = current_manifest(assets)
+    write(
+        assets / REPORT_PATH,
+        json.dumps({"painting_v10": {"painter_stack_recipe": recipe_of(STACK)}}),
+    )
+    dropped = {
+        "painter-create-py",
+        "painter-export-py",
+        "painter-create-args",
+        "painter-export-args",
+        "wand-ao",
+    }
+    inputs = [i for i in current["inputs"] if i["input_id"] not in dropped]
+    inputs.append(script_run.assets3d_input("tunic-report", "recipe_json", REPORT_PATH, assets))
+    sync = {
+        **current["instruction_sequence"]["steps"][1]["args"],
+        "recipe": "tunic-report",
+        "recipe_keys": RECIPE_KEYS,
+        **OVERRIDE,
+        # the Tunic's sync options: one texture set, the created project's
+        "resource_prefix": "v10c_",
+        "resource_group": "tunica18_v10c",
+        "texture_set": TUNIC_SET,
+    }
+    with_config = with_config_export(current, repo, TUNIC_SET, "DefaultMaterial_Displacement_Raw")
+    config = next(i for i in with_config["inputs"] if i["input_id"] == "float-config")
+    manifest = copy.deepcopy(current)
+    manifest["inputs"] = [*inputs, config]
+    manifest["instruction_sequence"]["steps"] = [
+        {"step": 1, "call": script_run.NATIVE_CREATE, "args": dict(NATIVE_ARGS)},
+        {"step": 2, "call": RUN_SCRIPT, "args": sync},
+        {"step": 3, "call": CONFIG_EXPORT, "args": {"config": "float-config"}},
+    ]
+    return manifest
+
+
+@pytest.fixture
+def native_assets(tmp_path: Path) -> Path:
+    """A stand-in asset repository of its own: the native job rewrites its sync script."""
+    return make_assets(tmp_path / "native-assets")
+
+
+@pytest.fixture
+def native(native_assets: Path, tmp_path: Path) -> dict[str, Any]:
+    return native_manifest(native_assets, tmp_path / "repo")
+
+
+def native_job(manifest: dict[str, Any], assets: Path, tmp_path: Path) -> script_run.NativeJob:
+    job = script_run.pipeline_job_from_manifest(manifest, assets, repo_root=tmp_path / "repo")
+    assert isinstance(job, script_run.NativeJob)
+    return job
+
+
+def test_a_native_manifest_is_valid_under_the_one_new_call(native: dict[str, Any]) -> None:
+    """Depends on Codex root's approval of the schema change (one enum value,
+    `substance_painter.project.create`, under `uzmigames_pipeline_scripts`): the Tunic-shaped
+    native manifest validates; any other documented call there still does not."""
+    assert validation_errors(native, Schema.GOLDEN_PUBLIC) == []
+    other = copy.deepcopy(native)
+    other["instruction_sequence"]["steps"][0]["call"] = "substance_painter.project.open"
+    assert validation_errors(other, Schema.GOLDEN_PUBLIC)
+
+
+def test_a_native_job_creates_binds_only_the_normal_syncs_and_exports_its_config(
+    painter: tuple[Any, ScriptSession], native: dict[str, Any], native_assets: Path, tmp_path: Path
+) -> None:
+    """The exact settings and no template; the one texture set; the Normal imported under its
+    name and group and bound alone; the project saved after the sync; r1, r1-repeat and r2 each
+    export only the configuration."""
+    world, session = painter
+    world.texture_set = world.imported_texture_set = TUNIC_SET
+    job = native_job(native, native_assets, tmp_path)
+    assert job.create.settings == {k: NATIVE_ARGS[k] for k in script_run.NATIVE_SETTINGS}
+    run = record_script_golden(session, job, tmp_path / "work", tmp_path / "inbox")
+
+    data = json.loads((run / "record.json").read_text(encoding="utf-8"))
+    assert record_problems(data) == []
+    recordings = {r["recording_id"]: r for r in data["recordings"]}
+    assert set(recordings) == {"r1", "r1-repeat", "r2"}
+    for recorded in recordings.values():
+        maps = [o for o in recorded["outputs"] if o["kind"] == "exported_map"]
+        assert [m["map"] for m in maps] == ["DefaultMaterial_Displacement_Raw"]
+        assert all(m["export_settings"]["config"] == "float-config" for m in maps)
+    created = next(o for o in recordings["r1"]["outputs"] if o["output_id"] == "create/s1")
+    assert created["call"] == script_run.NATIVE_CREATE
+    value = created["value"]
+    assert value["requested_settings"] == job.create.settings
+    assert value["requested_normal"] == {
+        "name": "Tunic_v6_HighNormal",
+        "group": "tunica18_v10c_mesh_maps",
+    }
+    assert value["texture_sets"] == [TUNIC_SET] and len(value["mesh_maps"]) == 10
+    bound = {k: v for k, v in value["mesh_maps"].items() if v is not None}
+    assert list(bound) == ["Normal"] and bound["Normal"] == value["resource"]
+    assert value["resource"]["name"] == "Tunic_v6_HighNormal.image"
+    assert [(n, g) for _, n, g in world.named_resources] == [
+        ("Tunic_v6_HighNormal", "tunica18_v10c_mesh_maps")
+    ]
+    assert Path(value["saved"]).name == "native-create.spp"
+    synced = next(o for o in recordings["r1"]["outputs"] if o["output_id"] == "script/s2")
+    assert synced["value"]["options"] == {
+        "prefix": "v10c_",
+        "group": "tunica18_v10c",
+        "texture_set": TUNIC_SET,
+    }
+    normal_bytes = (
+        native_assets / WAND / "bake/11-Varinha-Madeira_Normal_OpenGL_v1.png"
+    ).read_bytes()
+    for rid in ("r1", "r2"):  # the slots read again after the sync, and after the reopen
+        (slots,) = [
+            o for o in recordings[rid]["outputs"] if o["output_id"] == f"create/mesh-maps-{rid}"
+        ]
+        assert slots["call"] == "substance_painter.textureset.TextureSet.get_mesh_map_resource"
+        assert slots["value"]["mesh_maps"]["Normal"] == value["resource"]
+        sha1 = hashlib.sha1(normal_bytes).hexdigest()
+        assert slots["value"]["normal_pinned_bytes_sha1"] == sha1
+
+
+def hooked(
+    session: ScriptSession, monkeypatch: pytest.MonkeyPatch, operation: str, change: Any
+) -> None:
+    """`session.call(operation, ...)` returns `change(reply, nth call)` instead of the reply."""
+    call = session.call
+    seen: list[int] = []
+
+    def wrapped(called: str, /, **args: Any) -> Any:
+        reply = call(called, **args)
+        if called != operation:
+            return reply
+        seen.append(1)
+        return change(copy.deepcopy(reply), len(seen))
+
+    monkeypatch.setattr(session, "call", wrapped)
+
+
+def drop_slot(reply: dict[str, Any], nth: int) -> dict[str, Any]:
+    del reply["mesh_maps"]["Opacity"]
+    return reply
+
+
+def extra_slot(reply: dict[str, Any], nth: int) -> dict[str, Any]:
+    reply["mesh_maps"]["Displacement"] = None
+    return reply
+
+
+def new_version(reply: dict[str, Any], nth: int) -> dict[str, Any]:
+    if nth == 2:  # the readback after the reopen
+        reply["mesh_maps"]["Normal"]["version"] = "0" * 40 + ".image"
+    return reply
+
+
+def new_slot(reply: dict[str, Any], nth: int) -> dict[str, Any]:
+    if nth == 2:
+        reply["mesh_maps"]["AO"] = {**reply["mesh_maps"]["Normal"], "name": "baked_AO"}
+    return reply
+
+
+def new_context(reply: dict[str, Any], nth: int) -> dict[str, Any]:
+    if nth == 2:  # a reopen may move the resource to another project context only
+        normal = reply["mesh_maps"]["Normal"]
+        normal["url"] = normal["url"].replace("project0", "project1")
+        normal["context"] = "project1"
+    return reply
+
+
+def shelf_context(reply: dict[str, Any], nth: int) -> dict[str, Any]:
+    if nth == 2:  # a context other than projectN is part of the identity
+        normal = reply["mesh_maps"]["Normal"]
+        normal["url"] = normal["url"].replace("project0", "starter_assets")
+        normal["context"] = "starter_assets"
+    return reply
+
+
+def swapped(reply: dict[str, Any], nth: int) -> dict[str, Any]:
+    """Another resource bound as the Normal after the sync, and still there after the reopen:
+    stable from r1 to r2, but not the one the create imported."""
+    reply["mesh_maps"]["Normal"] = {
+        "url": "resource://project0/Tunic_v6_HighNormal.image?version=other",
+        "context": "project0",
+        "name": "Tunic_v6_HighNormal.image",
+        "version": "other",
+    }
+    return reply
+
+
+def renamed(reply: dict[str, Any], nth: int) -> dict[str, Any]:
+    """A name sharing the requested name's prefix is another resource."""
+    for value in (reply["resource"], reply["mesh_maps"]["Normal"]):
+        value["name"] = "Tunic_v6_HighNormal_v2.image"
+    return reply
+
+
+def untyped(reply: dict[str, Any], nth: int) -> dict[str, Any]:
+    reply["mesh_maps"]["Normal"]["version"] = 5
+    return reply
+
+
+@pytest.mark.parametrize(
+    ("operation", "change", "refusal"),
+    [
+        ("bind_mesh_map", drop_slot, "not the ten slots"),
+        ("bind_mesh_map", extra_slot, "not the ten slots"),
+        ("bind_mesh_map", renamed, r"not 'Tunic_v6_HighNormal\.image'"),
+        ("bind_mesh_map", untyped, "reads back .*, not a resource or None"),
+        ("mesh_maps", drop_slot, "not the ten slots"),
+        ("mesh_maps", swapped, "after the sync the Normal is .*, not the imported"),
+        ("mesh_maps", new_version, "after the reopen the Normal is .*, not the imported"),
+        ("mesh_maps", shelf_context, "after the reopen the Normal is"),
+        ("mesh_maps", new_slot, r"mesh maps bound are \['AO', 'Normal'\]"),
+        ("mesh_maps", new_context, None),
+    ],
+)
+def test_a_native_job_refuses_slot_readbacks_that_omit_add_or_change(
+    painter: tuple[Any, ScriptSession],
+    native: dict[str, Any],
+    native_assets: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+    change: Any,
+    refusal: str | None,
+) -> None:
+    """Every slot readback (the create's, after the sync, after the reopen) must hold exactly the
+    ten slots with only the Normal bound; after the reopen the Normal must be the same resource,
+    its project context aside."""
+    world, session = painter
+    world.texture_set = world.imported_texture_set = TUNIC_SET
+    job = native_job(native, native_assets, tmp_path)
+    hooked(session, monkeypatch, operation, change)
+    if refusal is None:
+        assert record_script_golden(session, job, tmp_path / "work", tmp_path / "inbox")
+        return
+    with pytest.raises(RecorderError, match=refusal):
+        record_script_golden(session, job, tmp_path / "work", tmp_path / "inbox")
+
+
+def native_with(native: dict[str, Any], step: int, **args: Any) -> dict[str, Any]:
+    changed = copy.deepcopy(native)
+    changed["instruction_sequence"]["steps"][step - 1]["args"].update(args)
+    return changed
+
+
+def native_without(native: dict[str, Any], step: int, key: str) -> dict[str, Any]:
+    changed = copy.deepcopy(native)
+    del changed["instruction_sequence"]["steps"][step - 1]["args"][key]
+    return changed
+
+
+@pytest.mark.parametrize(
+    ("change", "refusal"),
+    [
+        (lambda m: native_without(m, 1, "mesh_unit_scale"), r"missing \['mesh_unit_scale'\]"),
+        (lambda m: native_with(m, 1, template="pbr"), r"unknown \['template'\]"),
+        (
+            lambda m: native_with(m, 1, default_texture_resolution=3000),
+            "`default_texture_resolution`",
+        ),
+        (
+            lambda m: native_with(m, 1, default_texture_resolution=True),
+            "`default_texture_resolution`",
+        ),
+        (lambda m: native_with(m, 1, import_cameras=None), "`import_cameras`"),
+        (lambda m: native_with(m, 1, normal_map_format="Vulkan"), "`normal_map_format`"),
+        (lambda m: native_with(m, 1, mesh_unit_scale=0), "`mesh_unit_scale`"),
+        (lambda m: native_with(m, 1, normal_group="../x"), "`normal_group` must match"),
+        (lambda m: native_with(m, 1, normal="wand-mesh"), "`normal` must be a image input"),
+        (lambda m: native_with(m, 1, mesh_material_library="wand-normal"), "must be a mesh input"),
+        (lambda m: native_with(m, 2, override_layer="C09"), r"has 0 layers 'C09'"),
+        (lambda m: native_with(m, 2, override_mask="M_iron_v9"), "already binds M_iron_v9"),
+        (lambda m: native_with(m, 2, override_layer="C01"), "not the recipe with C01 alone"),
+        (lambda m: native_without(m, 2, "override_mask"), "an override names all of"),
+        (lambda m: native_with(m, 2, recipe_keys=["painting_v9"]), "holds no painting_v9"),
+        (lambda m: native_with(m, 2, recipe="wand-normal"), "`recipe` must be a recipe_json"),
+        (
+            lambda m: native_with(m, 2, texture_set="25-Faixa-Cintura"),
+            r"the sync's texture set '25-Faixa-Cintura' is not the created project's",
+        ),
+        (lambda m: native_without(m, 2, "texture_set"), "the sync's texture set None"),
+    ],
+)
+def test_a_native_job_refuses_a_wrong_create_or_override(
+    native: dict[str, Any], native_assets: Path, tmp_path: Path, change: Any, refusal: str
+) -> None:
+    """Refused when the job loads, before Painter: a setting missing, extra or of another type,
+    a name of another shape, an input of another kind; an override naming no layer, changing
+    nothing, or leaving the stack other than the recipe with that one layer changed."""
+    native_job(native, native_assets, tmp_path)
+    with pytest.raises(RecorderError, match=refusal):
+        script_run.pipeline_job_from_manifest(
+            change(native), native_assets, repo_root=tmp_path / "repo"
+        )
+
+
+def test_a_stack_that_differs_from_the_overridden_recipe_elsewhere_is_refused(
+    native: dict[str, Any], native_assets: Path, tmp_path: Path
+) -> None:
+    recipe = recipe_of(STACK)
+    recipe["layers"][1]["base"] = [0.1, 0.1, 0.1]  # C02's colour differs too
+    write(
+        native_assets / REPORT_PATH, json.dumps({"painting_v10": {"painter_stack_recipe": recipe}})
+    )
+    changed = copy.deepcopy(native)
+    report = next(i for i in changed["inputs"] if i["input_id"] == "tunic-report")
+    report["sha256"] = hashlib.sha256((native_assets / REPORT_PATH).read_bytes()).hexdigest()
+    with pytest.raises(RecorderError, match="not the recipe with C02 alone binding M_iron"):
+        script_run.pipeline_job_from_manifest(changed, native_assets, repo_root=tmp_path / "repo")
+
+
+@pytest.mark.parametrize(
+    ("steps", "refusal"),
+    [
+        # no config export: a native job's only export is its configuration
+        (lambda s: s[:2], "only the configuration of a closing"),
+        # a script export besides the config export
+        (lambda s: [s[0], s[1], {**s[1], "step": 3}, {**s[2], "step": 4}], "a native job runs"),
+        # the native create not first
+        (
+            lambda s: [{**s[1], "step": 1}, {**s[0], "step": 2}, s[2]],
+            r"is not uzmigames\.pipeline\.run_script",
+        ),
+    ],
+)
+def test_a_native_job_runs_create_sync_and_config_export_only(
+    native: dict[str, Any], native_assets: Path, tmp_path: Path, steps: Any, refusal: str
+) -> None:
+    changed = copy.deepcopy(native)
+    changed["instruction_sequence"]["steps"] = steps(changed["instruction_sequence"]["steps"])
+    with pytest.raises(RecorderError, match=refusal):
+        script_run.pipeline_job_from_manifest(changed, native_assets, repo_root=tmp_path / "repo")
+
+
+def test_script_job_loading_refuses_a_native_manifest_by_name(
+    native: dict[str, Any], native_assets: Path, tmp_path: Path
+) -> None:
+    with pytest.raises(RecorderError, match=r"is a native job \(pipeline_job_from_manifest\)"):
+        script_job_from_manifest(native, native_assets, repo_root=tmp_path / "repo")
+
+
+@pytest.mark.parametrize(
+    ("prepare", "refusal"),
+    [
+        (lambda w: setattr(w, "other_texture_sets", ["Extra"]), r"not exactly DefaultMaterial"),
+        (
+            lambda w: setattr(w, "texture_set", "uzp_plane"),
+            r"texture sets are \['uzp_plane'\], not exactly DefaultMaterial",
+        ),
+    ],
+)
+def test_a_native_create_refuses_other_texture_sets(
+    painter: tuple[Any, ScriptSession],
+    native: dict[str, Any],
+    native_assets: Path,
+    tmp_path: Path,
+    prepare: Any,
+    refusal: str,
+) -> None:
+    """The created project must hold exactly the named texture set: nothing is imported or bound
+    otherwise, and no sync runs."""
+    world, session = painter
+    world.texture_set = world.imported_texture_set = TUNIC_SET
+    world.other_resolutions = {"Extra": (4096, 4096)}
+    prepare(world)
+    job = native_job(native, native_assets, tmp_path)
+    with pytest.raises(RecorderError, match=refusal):
+        record_script_golden(session, job, tmp_path / "work", tmp_path / "inbox")
+    assert world.named_resources == []
+    assert not list((tmp_path / "work").rglob("sync-state.json"))
+
+
+def test_a_native_create_refuses_a_second_bound_mesh_map(
+    painter: tuple[Any, ScriptSession],
+    native: dict[str, Any],
+    native_assets: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A slot other than the Normal bound after the create (here an AO map left by a bake) is
+    refused, before the sync."""
+    world, session = painter
+    world.texture_set = world.imported_texture_set = TUNIC_SET
+    job = native_job(native, native_assets, tmp_path)
+    call = session.call
+
+    def with_ao(operation: str, **args: Any) -> Any:
+        if operation == "bind_mesh_map":
+            world.baked_maps[next(u for u in world.enabled_bakers if u.name == "AO")] = (
+                "resource://project0/baked_AO"
+            )
+        return call(operation, **args)
+
+    monkeypatch.setattr(session, "call", with_ao)
+    with pytest.raises(RecorderError, match=r"mesh maps bound are \['AO', 'Normal'\]"):
+        record_script_golden(session, job, tmp_path / "work", tmp_path / "inbox")
+    assert not list((tmp_path / "work").rglob("sync-state.json"))
+
+
+def test_record_script_command_records_script_and_native_manifests(
+    painter: tuple[Any, ScriptSession],
+    manifest: dict[str, Any],
+    assets: Path,
+    native: dict[str, Any],
+    native_assets: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`record-script` loads either job: a script manifest exactly as before (the Wand), and a
+    native one."""
+    from tools.parity.recorder import __main__ as cli
+
+    world, session = painter
+    monkeypatch.setenv("UZP_ORACLE_WORK", str(tmp_path / "work"))
+    monkeypatch.setenv("UZP_ORACLE_INBOX", str(tmp_path / "inbox"))
+    monkeypatch.setattr(cli, "ScriptSession", lambda *args, **kwargs: session)
+    loaded: list[Any] = []
+    load = script_run.load_pipeline_job
+
+    def loader(path: Path, assets_root: Path, store: Any = None) -> Any:
+        loaded.append(
+            script_run.pipeline_job_from_manifest(
+                load_json(path), assets_root, store, tmp_path / "repo"
+            )
+        )
+        return loaded[-1]
+
+    script = tmp_path / "wand-v1.json"
+    script.write_text(json.dumps(manifest), encoding="utf-8")
+    monkeypatch.setattr(cli, "load_pipeline_job", load)
+    assert cli.main(["record-script", str(script), "--assets-root", str(assets)]) == 0
+    monkeypatch.setattr(cli, "load_pipeline_job", loader)
+    world.texture_set = world.imported_texture_set = TUNIC_SET
+    path = tmp_path / "tunic-current.json"
+    path.write_text(json.dumps(native), encoding="utf-8")
+    assert cli.main(["record-script", str(path), "--assets-root", str(native_assets)]) == 0
+    assert isinstance(loaded[0], script_run.NativeJob)
+    assert len(list((tmp_path / "inbox").rglob("READY"))) == 2
+
+
 # --- the committed manifest against the real asset repository --------------------------------
 
 

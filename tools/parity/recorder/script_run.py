@@ -69,6 +69,8 @@ from __future__ import annotations
 import argparse
 import ast
 import base64
+import copy
+import hashlib
 import importlib.abc
 import importlib.machinery
 import importlib.util
@@ -113,6 +115,7 @@ INTERFACE = "uzmigames_pipeline_scripts"
 RUN_SCRIPT = "uzmigames.pipeline.run_script"
 ASSETS3D_LICENCE = "LicenseRef-UzmiGames-Assets3D"
 PAINTER_SCRIPTS = Path(__file__).with_name("painter_scripts.py")
+PAINTER_NATIVE = Path(__file__).with_name("painter_native.py")  # the native create's mesh map
 
 # Step argument names of each step; an input argument names the kinds its input may have.
 CREATE_INPUTS = {
@@ -143,6 +146,50 @@ CONFIG_EXPORT = "substance_painter.export.export_project_textures"
 CONFIG_KEYS = frozenset(
     {"exportShaderParams", "defaultExportPreset", "exportPresets", "exportList", "exportParameters"}
 )
+
+# The recorder-native create (decision 300 item 7, the Tunic): `project.create` from a staged
+# mesh with every `project.Settings` field the recorder passes given explicitly, no template, one
+# texture set, and one mesh map, the named Normal, imported as a project resource and bound.
+NATIVE_CREATE = "substance_painter.project.create"
+NATIVE_INPUTS = {"mesh": ("mesh",), "mesh_material_library": ("mesh",), "normal": ("image",)}
+NATIVE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
+NATIVE_NAMES = ("texture_set", "normal_name", "normal_group")
+# Each setting and the values it may take (painter_side.py's documented members).
+NATIVE_SETTINGS: dict[str, Callable[[Any], bool]] = {
+    "normal_map_format": lambda v: v in ("OpenGL", "DirectX"),
+    "tangent_space_mode": lambda v: v in ("PerVertex", "PerFragment"),
+    "project_workflow": lambda v: v in ("Default", "TextureSetPerUVTile", "UVTile"),
+    "default_texture_resolution": lambda v: (
+        type(v) is int and v in (128, 256, 512, 1024, 2048, 4096, 8192)
+    ),
+    "import_cameras": lambda v: type(v) is bool,
+    "mesh_unit_scale": lambda v: type(v) in (int, float) and v > 0,
+}
+NATIVE_ARGS = frozenset({*NATIVE_INPUTS, *NATIVE_NAMES, *NATIVE_SETTINGS})
+NORMAL_USAGE = "Normal"  # the one mesh-map slot the native create binds
+# The ten `textureset.MeshMapUsage` slots a readback must hold (painter_side.MESH_MAP_USAGES),
+# and the fields of a resource readback (painter_side.resource_id_value).
+MESH_MAP_SLOTS = frozenset(
+    {
+        "Normal",
+        "WorldSpaceNormal",
+        "ID",
+        "AO",
+        "Curvature",
+        "Position",
+        "Thickness",
+        "Height",
+        "BentNormals",
+        "Opacity",
+    }
+)
+RESOURCE_FIELDS = frozenset({"url", "context", "name", "version"})
+PROJECT_CONTEXT = re.compile(r"project[0-9]+")  # the context a reopen may renumber
+IMAGE_SUFFIX = ".image"  # the resource name Painter gives an imported image: its name + this
+GET_MESH_MAP = "substance_painter.textureset.TextureSet.get_mesh_map_resource"
+# The optional F03-style override of a sync's stack: the stack must be the recipe (a recipe_json
+# input, at `recipe_keys`) with exactly one layer's mask replaced, nothing else (decision 194).
+SYNC_OVERRIDE = ("recipe", "recipe_keys", "override_layer", "override_mask")
 
 # Keys of the two arguments files: the repointed ones and those kept as authored.
 CREATE_KEYS = frozenset({"mesh", "normal", "ao", "dst", "name"})
@@ -188,6 +235,20 @@ class ScriptStep:
 
 
 @dataclass(frozen=True)
+class NativeCreate:
+    """The recorder-native create step: the staged mesh, the Normal, the settings and names."""
+
+    step: int
+    args: dict[str, Any]
+    mesh: PinnedInput
+    normal: PinnedInput
+
+    @property
+    def settings(self) -> dict[str, Any]:
+        return {key: self.args[key] for key in NATIVE_SETTINGS}
+
+
+@dataclass(frozen=True)
 class ConfigExport:
     """The closing recorder export: an authored `json_config` (a repository file)."""
 
@@ -204,6 +265,25 @@ class ScriptJob:
     sync: ScriptStep
     export: ScriptStep
     config_export: ConfigExport | None = None
+
+    @property
+    def golden_id(self) -> str:
+        return str(self.manifest["golden_id"])
+
+    def input_hashes(self) -> list[dict[str, str]]:
+        return [{"input_id": i["input_id"], "sha256": i["sha256"]} for i in self.manifest["inputs"]]
+
+
+@dataclass(frozen=True)
+class NativeJob:
+    """A current round the recorder creates itself (decision 300 item 7, the Tunic): the native
+    create, the unchanged sync, and the closing config export as the only export."""
+
+    manifest: dict[str, Any]
+    inputs: dict[str, PinnedInput]
+    create: NativeCreate
+    sync: ScriptStep
+    config_export: ConfigExport
 
     @property
     def golden_id(self) -> str:
@@ -321,7 +401,8 @@ def script_step(raw: dict[str, Any], inputs: dict[str, PinnedInput]) -> tuple[st
         arguments = arguments_file(file, EXPORT_KEYS, step)
         path = hard_coded_args_path(script, file, step)
         return "export", ScriptStep(step, args, script, path, arguments)
-    if set(args) - set(SYNC_OPTIONS) - {IMPORT_CLOSURE} in (SYNC_ARGS, SYNC_FOLDER_ARGS):
+    optional = {*SYNC_OPTIONS, IMPORT_CLOSURE, *SYNC_OVERRIDE}
+    if set(args) - optional in (SYNC_ARGS, SYNC_FOLDER_ARGS):
         return "sync", sync_step(step, args, inputs)
     raise RecorderError(f"step {step}: arguments {sorted(args)} are no create, sync or export")
 
@@ -331,9 +412,12 @@ def sync_step(step: int, args: dict[str, Any], inputs: dict[str, PinnedInput]) -
     if args["command"] != SYNC_COMMAND:
         raise RecorderError(f"step {step}: only the `{SYNC_COMMAND}` command is recorded")
     stack = input_of(inputs, step, "stack", args["stack"], ("recipe_json",))
+    stack_json = json.loads(stack.file.read_bytes().decode("utf-8"))
+    if any(key in args for key in SYNC_OVERRIDE):
+        stack_override(step, args, inputs, stack_json)
     files = sync_masks(step, args, inputs)
     names = [f.name for f in files]
-    referenced = stack_bitmaps(json.loads(stack.file.read_bytes().decode("utf-8")))
+    referenced = stack_bitmaps(stack_json)
     if sorted(referenced) != sorted(PurePosixPath(n).stem for n in names):
         raise RecorderError(
             f"step {step}: the stack references the bitmaps {sorted(referenced)}, not the "
@@ -359,6 +443,43 @@ def sync_step(step: int, args: dict[str, Any], inputs: dict[str, PinnedInput]) -
         options=sync_options(step, args, script),
         load_order=load_order,
     )
+
+
+def stack_override(
+    step: int, args: dict[str, Any], inputs: dict[str, PinnedInput], stack: Any
+) -> None:
+    """The stack is the recipe (the `recipe` input at `recipe_keys`) with exactly one layer,
+    `override_layer`, binding `override_mask` instead of its own mask, and nothing else changed
+    (the Tunic's F03 override, decision 194); refused otherwise."""
+    if not all(key in args for key in SYNC_OVERRIDE):
+        raise RecorderError(f"step {step}: an override names all of {list(SYNC_OVERRIDE)}")
+    source = input_of(inputs, step, "recipe", args["recipe"], ("recipe_json",))
+    keys, layer_id, mask = args["recipe_keys"], args["override_layer"], args["override_mask"]
+    if not isinstance(keys, list) or not keys or not all(isinstance(k, str) for k in keys):
+        raise RecorderError(f"step {step}: `recipe_keys` must be a list of keys")
+    for key, value in (("override_layer", layer_id), ("override_mask", mask)):
+        if not isinstance(value, str) or not NATIVE_NAME.fullmatch(value):
+            raise RecorderError(f"step {step}: `{key}` must match {NATIVE_NAME.pattern}")
+    recipe: Any = json.loads(source.file.read_bytes().decode("utf-8"))
+    for key in keys:
+        if not isinstance(recipe, dict) or key not in recipe:
+            raise RecorderError(f"step {step}: {source.name} holds no {'.'.join(keys)}")
+        recipe = recipe[key]
+    if not isinstance(recipe, dict) or not isinstance(recipe.get("layers"), list):
+        raise RecorderError(f"step {step}: {'.'.join(keys)} is no stack with layers")
+    derived = copy.deepcopy(recipe)
+    layers = [x for x in derived["layers"] if isinstance(x, dict) and x.get("id") == layer_id]
+    if len(layers) != 1:
+        raise RecorderError(
+            f"step {step}: the recipe has {len(layers)} layers {layer_id!r}, not exactly one"
+        )
+    if layers[0].get("mask") == mask:
+        raise RecorderError(f"step {step}: {layer_id} already binds {mask}: nothing to override")
+    layers[0]["mask"] = mask
+    if derived != stack:
+        raise RecorderError(
+            f"step {step}: the stack is not the recipe with {layer_id} alone binding {mask}"
+        )
 
 
 def sync_masks(
@@ -597,7 +718,29 @@ def script_job_from_manifest(
 ) -> ScriptJob:
     """The job of a pipeline-script manifest; refused before Painter is touched on any input
     neither Assets3D nor the private store (`store`, default: this machine's) holds, or any step
-    the recorder does not know."""
+    the recorder does not know. A native-create manifest is refused here
+    (`pipeline_job_from_manifest` loads it)."""
+    if is_native(manifest):
+        raise RecorderError(
+            f"{manifest['golden_id']}: a {NATIVE_CREATE} job is a native job "
+            "(pipeline_job_from_manifest)"
+        )
+    inputs, steps, config_export = job_parts(manifest, assets_root, store, repo_root)
+    roles = [script_step(raw, inputs) for raw in steps]
+    if [role for role, _ in roles] != ["create", "sync", "export"]:
+        raise RecorderError("a pipeline-script golden runs create, sync and export, in order")
+    return ScriptJob(manifest, inputs, roles[0][1], roles[1][1], roles[2][1], config_export)
+
+
+def is_native(manifest: dict[str, Any]) -> bool:
+    steps = manifest["instruction_sequence"]["steps"]
+    return bool(steps) and steps[0]["call"] == NATIVE_CREATE
+
+
+def job_parts(
+    manifest: dict[str, Any], assets_root: Path, store: OracleStore | None, repo_root: Path
+) -> tuple[dict[str, PinnedInput], list[dict[str, Any]], ConfigExport | None]:
+    """The pinned inputs, the steps before a closing config export, and that export."""
     if manifest["instruction_sequence"]["interface"] != INTERFACE:
         raise RecorderError(f"{manifest['golden_id']}: the interface is not {INTERFACE}")
     if manifest["tier"] != "1":
@@ -616,18 +759,89 @@ def script_job_from_manifest(
             f"{manifest['golden_id']}: a repository-file input is only the configuration of a "
             f"closing {CONFIG_EXPORT}"
         )
-    roles = [script_step(raw, inputs) for raw in steps]
-    if [role for role, _ in roles] != ["create", "sync", "export"]:
-        raise RecorderError("a pipeline-script golden runs create, sync and export, in order")
-    return ScriptJob(manifest, inputs, roles[0][1], roles[1][1], roles[2][1], config_export)
+    return inputs, steps, config_export
 
 
-def load_script_job(path: Path, assets_root: Path, store: OracleStore | None = None) -> ScriptJob:
-    manifest = load_json(path)
+def native_create_step(raw: dict[str, Any], inputs: dict[str, PinnedInput]) -> NativeCreate:
+    """The native create's arguments, refused before Painter is touched unless they are exactly
+    the mesh and its material library (the one the OBJ's `mtllib` names, next to it), the Normal,
+    the three names and every setting, each of its type."""
+    step, args = raw["step"], dict(raw.get("args", {}))
+    if set(args) != NATIVE_ARGS:
+        raise RecorderError(
+            f"step {step}: {NATIVE_CREATE} takes exactly {sorted(NATIVE_ARGS)}; missing "
+            f"{sorted(NATIVE_ARGS - set(args))}, unknown {sorted(set(args) - NATIVE_ARGS)}"
+        )
+    found = {k: input_of(inputs, step, k, args[k], kinds) for k, kinds in NATIVE_INPUTS.items()}
+    mesh, library = found["mesh"], found["mesh_material_library"]
+    if PurePosixPath(library.assets3d_path).parent != PurePosixPath(mesh.assets3d_path).parent:
+        raise RecorderError(f"step {step}: the material library must lie next to the mesh")
+    if material_library(mesh.file) != library.name:
+        raise RecorderError(f"step {step}: {mesh.name}'s `mtllib` does not name {library.name}")
+    for key in NATIVE_NAMES:
+        if not isinstance(args[key], str) or not NATIVE_NAME.fullmatch(args[key]):
+            raise RecorderError(f"step {step}: `{key}` must match {NATIVE_NAME.pattern}")
+    for key, valid in NATIVE_SETTINGS.items():
+        if not valid(args[key]):
+            raise RecorderError(f"step {step}: `{key}` is not a value the recorder passes")
+    return NativeCreate(step, args, mesh, found["normal"])
+
+
+def native_job_from_manifest(
+    manifest: dict[str, Any],
+    assets_root: Path,
+    store: OracleStore | None = None,
+    repo_root: Path = REPO_ROOT,
+) -> NativeJob:
+    """The job of a native-create manifest: the native create, one sync and the closing config
+    export, in that order and nothing else; refused before Painter is touched like a script job."""
+    inputs, steps, config_export = job_parts(manifest, assets_root, store, repo_root)
+    if config_export is None or len(steps) != 2 or steps[0]["call"] != NATIVE_CREATE:
+        raise RecorderError(
+            f"{manifest['golden_id']}: a native job runs {NATIVE_CREATE}, sync and "
+            f"{CONFIG_EXPORT}, in order"
+        )
+    create = native_create_step(steps[0], inputs)
+    role, sync = script_step(steps[1], inputs)
+    if role != "sync":
+        raise RecorderError(f"step {steps[1]['step']}: a native job's second step is the sync")
+    if sync.args.get("texture_set") != create.args["texture_set"]:
+        raise RecorderError(
+            f"step {sync.step}: the sync's texture set {sync.args.get('texture_set')!r} is not "
+            f"the created project's {create.args['texture_set']!r}"
+        )
+    return NativeJob(manifest, inputs, create, sync, config_export)
+
+
+def pipeline_job_from_manifest(
+    manifest: dict[str, Any],
+    assets_root: Path,
+    store: OracleStore | None = None,
+    repo_root: Path = REPO_ROOT,
+) -> ScriptJob | NativeJob:
+    """A native job when the first step is the native create, else a script job."""
+    if is_native(manifest):
+        return native_job_from_manifest(manifest, assets_root, store, repo_root)
+    return script_job_from_manifest(manifest, assets_root, store, repo_root)
+
+
+def load_manifest(path: Path) -> dict[str, Any]:
+    manifest: dict[str, Any] = load_json(path)
     problems = validation_errors(manifest, Schema.GOLDEN_PUBLIC)
     if problems:
         raise RecorderError(f"{path}: not a valid public manifest: {problems}")
-    return script_job_from_manifest(manifest, assets_root, store)
+    return manifest
+
+
+def load_script_job(path: Path, assets_root: Path, store: OracleStore | None = None) -> ScriptJob:
+    return script_job_from_manifest(load_manifest(path), assets_root, store)
+
+
+def load_pipeline_job(
+    path: Path, assets_root: Path, store: OracleStore | None = None
+) -> ScriptJob | NativeJob:
+    """The job `record-script` records: a script job or a native job."""
+    return pipeline_job_from_manifest(load_manifest(path), assets_root, store)
 
 
 def extension_code(source: str) -> str:
@@ -642,11 +856,13 @@ def extension_code(source: str) -> str:
 
 
 class ScriptSession(PainterSession):
-    """A recorder session with the script operation loaded next to `painter_side.py`."""
+    """A recorder session with the script operation and the native create's mesh-map operation
+    loaded next to `painter_side.py`."""
 
     def connect(self) -> PainterIdentity:
         identity = super().connect()
         self.transport.run(extension_code(PAINTER_SCRIPTS.read_text(encoding="utf-8")))
+        self.transport.run(extension_code(PAINTER_NATIVE.read_text(encoding="utf-8")))
         return identity
 
 
@@ -671,7 +887,7 @@ def run_in_painter(
 STAGED_ROOT_MARKER = "AGENTS.md"  # the file the pipeline scripts find their Assets3D root by
 
 
-def stage_inputs(job: ScriptJob, root: Path) -> dict[str, Path]:
+def stage_inputs(job: ScriptJob | NativeJob, root: Path) -> dict[str, Path]:
     """Copy every input to `root/<assets3d_path>` (file names and folders kept) and check each
     copy's hash: Painter reads only these copies, never the asset repository. A root marker makes
     a script run from its staged copy find `root` as its Assets3D root, so what it imports from
@@ -808,7 +1024,7 @@ class PinnedImports(importlib.abc.MetaPathFinder):
 
 
 def run_sync(
-    session: PainterSession, job: ScriptJob, staged: dict[str, Path], directory: Path
+    session: PainterSession, job: ScriptJob | NativeJob, staged: dict[str, Path], directory: Path
 ) -> Any:
     """Run the sync command line host-side from the pinned bytes, with the script's Assets3D
     imports loaded from their pinned bytes (an import closure's helpers first, under
@@ -1104,35 +1320,203 @@ def recording(
     }
 
 
+def run_native_create(
+    session: PainterSession, job: NativeJob, staged: dict[str, Path], directory: Path
+) -> tuple[dict[str, Any], Path]:
+    """The recorder-native create: `project.create` from the staged mesh with exactly the step's
+    settings and no template; then, on the one texture set the step names, the Normal imported as
+    a TEXTURE project resource under its name and group and bound as the Normal mesh map, every
+    slot read back: refused unless the Normal is the only bound slot. Saved in full in the work
+    directory, so r2 reopens it. Returns the readback and the project."""
+    step = job.create
+    project = directory / "project" / "native-create.spp"
+    project.parent.mkdir(parents=True)
+    created = session.call(
+        "apply_step",
+        step=step.step,
+        call=NATIVE_CREATE,
+        args=step.settings,
+        resolved={"mesh": str(staged[step.mesh.input_id])},
+    )
+    session.wait_ready()
+    bound = session.call(
+        "bind_mesh_map",
+        texture_set=step.args["texture_set"],
+        path=str(staged[step.normal.input_id]),
+        name=step.args["normal_name"],
+        group=step.args["normal_group"],
+        usage=NORMAL_USAGE,
+    )
+    normal = only_normal(bound, step)
+    if normal != bound.get("resource"):
+        raise RecorderError(f"the Normal slot holds {normal}, not the imported {bound['resource']}")
+    session.wait_ready()
+    saved = save_project(session, project)
+    value = {
+        # What the recorder asked for; Painter's API reads no project setting back (the template
+        # capture reads the resolution and channels), and no resource group.
+        "requested_settings": step.settings,
+        "requested_normal": {"name": step.args["normal_name"], "group": step.args["normal_group"]},
+        **created,
+        **bound,
+        "saved": saved,
+    }
+    return value, project
+
+
+def only_normal(reply: dict[str, Any], step: NativeCreate) -> dict[str, Any]:
+    """The Normal's resource from a mesh-map readback, refused unless it holds exactly the one
+    named texture set and all ten slots, each empty or a resource readback, and the Normal is the
+    only bound slot, under the requested name."""
+    if reply.get("texture_sets") != [step.args["texture_set"]]:
+        raise RecorderError(
+            f"the created project's texture sets are {reply.get('texture_sets')}, not exactly "
+            f"{step.args['texture_set']}"
+        )
+    maps = reply.get("mesh_maps")
+    if not isinstance(maps, dict) or set(maps) != MESH_MAP_SLOTS:
+        found = sorted(maps) if isinstance(maps, dict) else maps
+        raise RecorderError(f"the mesh-map readback holds {found}, not the ten slots")
+    for slot, value in maps.items():
+        if value is not None and not is_resource(value):
+            raise RecorderError(f"the {slot} slot reads back {value!r}, not a resource or None")
+    bound = sorted(slot for slot, value in maps.items() if value is not None)
+    if bound != [NORMAL_USAGE]:
+        raise RecorderError(
+            f"the mesh maps bound are {bound}, not only the Normal {step.args['normal_name']}"
+        )
+    normal: dict[str, Any] = maps[NORMAL_USAGE]
+    expected = step.args["normal_name"] + IMAGE_SUFFIX  # an imported image's resource name
+    if normal["name"] != expected:
+        raise RecorderError(f"the Normal is {normal['name']!r}, not {expected!r}")
+    return normal
+
+
+def is_resource(value: Any) -> bool:
+    """A resource readback: exactly `url`, `context` and `name` as strings, and `version` as a
+    string or None."""
+    return (
+        isinstance(value, dict)
+        and set(value) == RESOURCE_FIELDS
+        and all(isinstance(value[key], str) for key in ("url", "context", "name"))
+        and (value["version"] is None or isinstance(value["version"], str))
+    )
+
+
+def resource_identity(value: dict[str, Any]) -> dict[str, Any]:
+    """A resource readback as a reopen must keep it: a project context `projectN`, and only that,
+    is replaced by `projectN` in the context and the URL (a reopen renumbers it); any other
+    context, a shelf's included, stays as read. Name and version are kept literally."""
+    url, context = value["url"], value["context"]
+    prefix = f"resource://{context}/"
+    if PROJECT_CONTEXT.fullmatch(context) and url.startswith(prefix):
+        context, url = "projectN", "resource://projectN/" + url[len(prefix) :]
+    return {"url": url, "context": context, "name": value["name"], "version": value["version"]}
+
+
+def mesh_map_output(
+    session: PainterSession, job: NativeJob, staged: dict[str, Path], recording: str
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The slots read again (after the sync in r1, after the reopen in r2), checked like the
+    create's, as a readback with the Normal's version beside the SHA-1 of its pinned bytes
+    (evidence only: never normalised, never compared, and no rule makes a version a SHA-1).
+    Returns the output and the Normal's identity."""
+    step = job.create
+    reply = session.call("mesh_maps", texture_set=step.args["texture_set"])
+    normal = only_normal(reply, step)
+    pinned = hashlib.sha1(staged[step.normal.input_id].read_bytes()).hexdigest()
+    output = {
+        "output_id": f"create/mesh-maps-{recording}",
+        "kind": "api_readback",
+        "call": GET_MESH_MAP,
+        "args": {"texture_set": step.args["texture_set"]},
+        "value": {**reply, "normal_pinned_bytes_sha1": pinned},
+    }
+    return output, resource_identity(normal)
+
+
+def save_project(session: PainterSession, project: Path) -> str:
+    """`save_as` Full to `project`, refused unless Painter reports that file."""
+    session.call("save_as", path=str(project))
+    saved = session.wait_ready()
+    if saved.file_path is None or Path(saved.file_path).resolve() != project.resolve():
+        raise RecorderError(
+            f"the project was not saved to {project} (Painter reports {saved.file_path})"
+        )
+    return str(saved.file_path)
+
+
+def native_readback(step: NativeCreate, value: Any) -> dict[str, Any]:
+    return {
+        "output_id": f"create/s{step.step}",
+        "kind": "api_readback",
+        "call": NATIVE_CREATE,
+        "args": {"step": step.step},
+        "value": value,
+    }
+
+
 def record_script_golden(
     session: PainterSession,
-    job: ScriptJob,
+    job: ScriptJob | NativeJob,
     work: Path,
     inbox: Path,
     now: Now = utc_now,
     *,
     record_prefix: str = "",
 ) -> Path:
-    """Run the pinned scripts, record r1, r1-repeat and r2, and write the run to the inbox."""
+    """Run the pinned scripts, record r1, r1-repeat and r2, and write the run to the inbox. A
+    native job creates the project itself, saves it after the sync (no script saves it), and
+    exports only its configuration."""
     identity = session.connect()
     require_colour_management(Job(job.manifest, {}, (), ()), identity)
     directory = ensure_outside_repository(work) / job.golden_id.replace("/", "__")
     directory = directory / run_name(identity.session_id, now())
     staged = stage_inputs(job, directory / "inputs")
+
+    def exports(recording: str) -> tuple[list[dict[str, Any]], list[Path]]:
+        if isinstance(job, NativeJob):
+            return run_config_export(
+                session, job.config_export, directory / recording / "config", "config_export"
+            )
+        return run_exports(session, job, directory, recording)
+
     try:
-        created, project = run_create(session, job, staged, directory)
+        baseline: dict[str, Any] | None = None  # the imported Normal, as the create bound it
+        if isinstance(job, NativeJob):
+            native, project = run_native_create(session, job, staged, directory)
+            created = native_readback(job.create, native)
+            baseline = resource_identity(native["resource"])
+        else:
+            script_created, project = run_create(session, job, staged, directory)
+            created = readback(job.create, script_created)
         after_create = session.call("hello")["colour_management"]
         synced = run_sync(session, job, staged, directory)
-        first = [readback(job.create, created), readback(job.sync, synced)]
+        first = [created, readback(job.sync, synced)]
+        if isinstance(job, NativeJob):
+            save_project(session, project)
+            slots_r1, identity_r1 = mesh_map_output(session, job, staged, R1)
+            if identity_r1 != baseline:
+                raise RecorderError(
+                    f"after the sync the Normal is {identity_r1}, not the imported {baseline}"
+                )
+            first.append(slots_r1)
         first.append(template_output(session))
-        exported, first_blobs = run_exports(session, job, directory, R1)
-        repeat, repeat_blobs = run_exports(session, job, directory, R1_REPEAT)
+        exported, first_blobs = exports(R1)
+        repeat, repeat_blobs = exports(R1_REPEAT)
         session.call("close_project")
         session.wait_closed()
         session.call("open_project", path=project.as_posix())
         session.wait_ready()
         second = [template_output(session)]
-        reopened, second_blobs = run_exports(session, job, directory, R2)
+        if isinstance(job, NativeJob):
+            slots_r2, identity_r2 = mesh_map_output(session, job, staged, R2)
+            if identity_r2 != baseline:
+                raise RecorderError(
+                    f"after the reopen the Normal is {identity_r2}, not the imported {baseline}"
+                )
+            second.append(slots_r2)
+        reopened, second_blobs = exports(R2)
     finally:
         close_quietly(session)
     record = {

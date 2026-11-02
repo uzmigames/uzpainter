@@ -87,7 +87,7 @@ from tools.parity.recorder.launcher import PainterLauncher, default_painter_exe
 from tools.parity.recorder.migration import load_migration_job, record_migration_golden
 from tools.parity.recorder.output import inbox_root, work_root
 from tools.parity.recorder.provenance import check_files, inventory_problems, recorder_sources
-from tools.parity.recorder.script_run import ScriptSession, load_script_job, record_script_golden
+from tools.parity.recorder.script_run import ScriptSession, load_pipeline_job, record_script_golden
 from tools.parity.recorder.session import (
     REMOTE_HOST,
     REMOTE_PORT,
@@ -295,7 +295,7 @@ def run_record_script(args: argparse.Namespace, launcher: Launcher | None = None
         if args.command == "record-migration":
             migration = load_migration_job(args.manifest, args.assets_root)
         else:
-            job = load_script_job(args.manifest, args.assets_root)
+            job = load_pipeline_job(args.manifest, args.assets_root)
         if args.launch and launcher is None:
             launcher = PainterLauncher(
                 args.painter_exe or default_painter_exe(), host=args.host, port=args.port

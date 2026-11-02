@@ -568,6 +568,8 @@ class FakeWorld:
         self.bake_running: dict[str, Any] | None = None
         self.bakes: list[str] = []  # texture sets in the order their bakes were launched
         self.baked_maps: dict[MeshMapUsage, str] = {}  # resource URL of each baked mesh map
+        # Project resources imported with a name (and group): (path, name, group), in order.
+        self.named_resources: list[tuple[str, str, str | None]] = []
         self.event_handlers: dict[type, list[Callable[[Any], None]]] = {}
         self.active_stacks: list[str] = []  # texture sets made active (set_active_stack)
         self.version = "12.1.0"
@@ -804,6 +806,9 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
         def get_mesh_map_resource(self, usage: MeshMapUsage) -> ResourceID | None:
             url = world.baked_maps.get(usage)
             return None if url is None else ResourceID.from_url(url)
+
+        def set_mesh_map_resource(self, usage: MeshMapUsage, rid: ResourceID) -> None:
+            world.baked_maps[usage] = rid.url()
 
         def get_stack(self) -> Stack:
             return Stack(self.set_name, "")
@@ -1168,16 +1173,26 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
         def application_shelf() -> Shelf:
             return Shelf()
 
+    def import_project_resource(
+        path: str, usage: Usage, name: str | None = None, group: str | None = None
+    ) -> Resource:
+        """Without a name, as before; with one (and a group), the resource takes that name."""
+        if name is None:
+            return Resource(
+                ResourceID(Path(path).stem + ".image", image=True)
+                if usage == Usage.TEXTURE
+                else ResourceID(Path(path).stem)
+            )
+        world.named_resources.append((path, name, group))
+        image = usage == Usage.TEXTURE
+        return Resource(ResourceID(name + ".image" if image else name, image=image))
+
     resource = module(
         "substance_painter.resource",
         Usage=Usage,
         ResourceID=ResourceID,
         Shelves=Shelves,
-        import_project_resource=lambda path, usage: Resource(
-            ResourceID(Path(path).stem + ".image", image=True)
-            if usage == Usage.TEXTURE
-            else ResourceID(Path(path).stem)
-        ),
+        import_project_resource=import_project_resource,
         import_session_resource=lambda path, usage: Resource(
             ResourceID(Path(path).stem, "session")
         ),

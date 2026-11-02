@@ -184,7 +184,7 @@
       "if": { "properties": { "interface": { "const": "uzmigames_pipeline_scripts" } } },
       "then": {
         "properties": {
-          "steps": { "items": { "properties": { "call": { "enum": ["uzmigames.pipeline.run_script", "substance_painter.export.export_project_textures"] } } } }
+          "steps": { "items": { "properties": { "call": { "enum": ["uzmigames.pipeline.run_script", "substance_painter.export.export_project_textures", "substance_painter.project.create"] } } } }
         }
       },
       "else": {
