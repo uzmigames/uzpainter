@@ -562,6 +562,7 @@ class Probe:
             [image(REPO_ROOT / inputs[key]["path"], size) for key in kernel_bitmaps(size)], axis=-1
         )
         row = next(r for r in manifest["inputs"] if r["kind"] == "mesh")
+        self.mesh_sha256: str = row["sha256"]
         if "path" in row:
             self.mesh = REPO_ROOT / row["path"]
         else:  # an Assets3D mesh, held in the store by its SHA-256
@@ -808,12 +809,22 @@ def infer(probe: str, policy: str, limit: int, dump: Path | None = None) -> dict
 def native(probe: str, exe: Path) -> dict[str, Any]:
     """UzPainter's ring (`uzp-export-tests ring`) on `probe`'s mesh with the 24 kernel components
     as values, against the reference's chains and against Painter's recording, bit for bit on every
-    ring texel. The values and the native output are throwaway files in `tmp/scratch`."""
+    ring texel. The values and the native output are throwaway files in `tmp/scratch`, and so is
+    a flat `.obj` copy of an Assets3D mesh held in the store by its SHA-256 (the native reader
+    takes OBJ names only), checked against the manifest's pin."""
     p = Probe(probe)
     scratch = REPO_ROOT / "tmp" / "scratch"
     cases = scratch / f"native-{probe}-cases.json"
     groups = range(0, p.source.shape[-1], 4)  # the command pads at most four channels
     files = []
+    mesh = p.mesh
+    if mesh.suffix.lower() != ".obj":
+        mesh = scratch / f"native-{probe}-mesh.obj"
+        mesh.write_bytes(p.mesh.read_bytes())
+        files.append(mesh)
+        if hashlib.sha256(mesh.read_bytes()).hexdigest() != p.mesh_sha256:
+            mesh.unlink()
+            raise ValueError("the staged mesh differs from its pin")
     entries: list[dict[str, Any]] = []
     for first in groups:
         values = scratch / f"native-{probe}-{first}-values.f32"
@@ -822,7 +833,7 @@ def native(probe: str, exe: Path) -> dict[str, Any]:
         files += [values, result]
         entries.append(
             {
-                "mesh": str(p.mesh),
+                "mesh": str(mesh),
                 "material": p.material,
                 "width": p.size,
                 "height": p.size,

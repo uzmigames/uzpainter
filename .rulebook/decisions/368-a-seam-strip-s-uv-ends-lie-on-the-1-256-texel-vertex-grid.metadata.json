@@ -1,0 +1,11 @@
+{
+  "id": 368,
+  "slug": "a-seam-strip-s-uv-ends-lie-on-the-1-256-texel-vertex-grid",
+  "title": "A seam strip's UV ends lie on the 1/256-texel vertex grid",
+  "status": "accepted",
+  "date": "2026-11-02",
+  "relatedTasks": [
+    "phase1.25_pilot-wand"
+  ],
+  "supersededBy": null
+}

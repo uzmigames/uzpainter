@@ -1632,3 +1632,85 @@ def test_far_tap_takes_the_least_distance_over_its_open_windows(
     chosen = [values[ty, tx] for _, _, (tx, ty) in cands[:n]]
     value = [chain([v[c] for v in chosen], t) for c in range(3)]
     assert out[y, x].view(np.uint32).tolist() == np.array(value, F32).view(np.uint32).tolist()
+
+
+def test_seam_strip_ends_lie_on_the_vertex_grid(export_tests: Path, tmp_path: Path) -> None:
+    """Decision 368: a seam strip's UV ends are rounded to decision 281's 1/256-texel grid before
+    its coverage test. On the joint-bend fixture (512 x 512), ring texel T = (59, 20) beside
+    border edge e1 discovers seam e2 only through the sample G = (59, 21), 0.0005 texel before
+    e2's straight strip starts: the rounded strip covers G, so T takes B2's tap (64, 22). At
+    T = (448, 262), G = (448, 263) lies 0.0015 texel inside e2's straight strip, and the rounded
+    end leaves it out, so T takes no far tap. Painter's recording of the probe agrees on all 470
+    copies. UzPainter's taps, their distances and the ring values equal `padding_reference`'s."""
+    from tests.export.padding_reference import strip_covers
+
+    mesh = (
+        Path(__file__).resolve().parents[2]
+        / "parity/fixtures/tier0-semantics/meshes/padding-joint-bend.obj"
+    )
+    size = 512
+    values = np.random.default_rng(368).random((size, size, 3)).astype(F32)
+    raw, result = tmp_path / "values.f32", tmp_path / "result.f32"
+    raw.write_bytes(values.tobytes())
+    cases = tmp_path / "cases.json"
+    cases.write_text(
+        json.dumps(
+            [
+                dict(
+                    mesh=str(mesh),
+                    material="uzp_joint_bend",
+                    width=size,
+                    height=size,
+                    channels=3,
+                    values=str(raw),
+                    out=str(result),
+                )
+            ]
+        )
+    )
+    process = subprocess.run(
+        [str(export_tests), "ring", str(cases)],
+        capture_output=True,
+        text=True,
+        timeout=600,
+        check=False,
+    )
+    assert process.returncode == 0, process.stdout + process.stderr
+    native = {(r["x"], r["y"]): r for r in json.loads(process.stdout)["ring"]}
+    out = np.frombuffer(result.read_bytes(), F32).reshape(size, size, 3)
+    reference = Ring(mesh, "uzp_joint_bend", size, size)
+
+    def analytic(a: tuple[float, float], b: tuple[float, float], px: float, py: float) -> bool:
+        ex, ey = b[0] - a[0], b[1] - a[1]
+        along = (px - a[0]) * ex + (py - a[1]) * ey
+        cross = (px - a[0]) * ey - (py - a[1]) * ex
+        return 0 <= along <= ex * ex + ey * ey and abs(cross) <= 0.5 * math.hypot(ex, ey)
+
+    for (x, y), g, far in (((59, 20), (59, 21), [(64, 22)]), ((448, 262), (448, 263), [])):
+        ends = [
+            (reference.tris[e].t[(edge + 1) % 3], reference.tris[e].t[(edge + 2) % 3])
+            for lst in reference.seams.values()
+            for e, edge, _ in lst
+        ]
+        rounded = [s for s in ends if strip_covers(*s, g[0] + 0.5, g[1] + 0.5)]
+        straight = [s for s in ends if analytic(*s, g[0] + 0.5, g[1] + 0.5)]
+        assert bool(rounded) == bool(far) != bool(straight)
+        own = [
+            ((x + dx) % size, y + dy)
+            for dy, dx in NEIGHBOURS
+            if 0 <= y + dy < size and reference.owner[y + dy, (x + dx) % size] >= 0
+        ]
+        cands, _ = reference.candidates(x, y, own, reference.tau(x, y, own))
+        n = tap_count(cands)
+        assert [c[2] for c in cands[:n] if c[1]] == far
+        r = native[(x, y)]
+        assert r["taps"] == n
+        assert [((c[0], c[1]), bool(c[3])) for c in r["candidates"][:n]] == [
+            (c[2], c[1]) for c in cands[:n]
+        ]
+        for c, ref_c in zip(r["candidates"][:n], cands[:n], strict=True):
+            assert math.isclose(c[2], ref_c[0], rel_tol=1e-12)
+        t = reference.chain_fractions(x, y, cands[:n])
+        chosen = [values[ty, tx] for _, _, (tx, ty) in cands[:n]]
+        value = [chain([v[c] for v in chosen], t) for c in range(3)]
+        assert out[y, x].view(np.uint32).tolist() == np.array(value, F32).view(np.uint32).tolist()

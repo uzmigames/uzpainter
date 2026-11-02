@@ -195,7 +195,11 @@ def seam_gate(
 def strip_covers(a: tuple[float, float], b: tuple[float, float], px: float, py: float) -> bool:
     """Whether the one-texel seam strip of the UV segment a b (straight ends) covers the sample
     point (px, py): inside, or on an edge of the strip whose outward normal points to -u, or to -v
-    (up the tile) for an edge with no u component (the top-left fill rule)."""
+    (up the tile) for an edge with no u component (the top-left fill rule). The segment's ends are
+    first rounded to the nearest 1/256 texel (ties to even), decision 281's vertex grid (decision
+    368)."""
+    a = (round(a[0] * SUB_TEXEL) / SUB_TEXEL, round(a[1] * SUB_TEXEL) / SUB_TEXEL)
+    b = (round(b[0] * SUB_TEXEL) / SUB_TEXEL, round(b[1] * SUB_TEXEL) / SUB_TEXEL)
     ex, ey = b[0] - a[0], b[1] - a[1]
     length2 = ex * ex + ey * ey
     along = (px - a[0]) * ex + (py - a[1]) * ey
