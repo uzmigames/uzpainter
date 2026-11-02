@@ -2367,6 +2367,7 @@ ADMITTED = frozenset(
         "export-presets-legacy",
         # Batch of decision 198 (Painter sessions of 2026-10-13, 00:02, Legacy).
         "srgb-bitmap-minification",
+        "srgb-bitmap-minification-random",
         "export-l8-material",
         "resample-uv-heldout-128px",
         "resample-uv-heldout-32px",
@@ -2437,6 +2438,7 @@ PRESERVED_REQUESTS = frozenset(
         "export-presets-gltf-predefined-ocio",
         "export-presets-gltf-predefined-padding-legacy",
         "export-presets-gltf-predefined-padding-ocio",
+        "srgb-bitmap-minification-random",
     }
 )
 
