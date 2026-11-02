@@ -69,11 +69,11 @@ UVs, decision 281's snapped ownership, and the eight kernel maps' predicted floa
 These are model predictions; the recording decides.
 
 - Every T is a ring texel (470 of 470).
-- At 380 copies, G is the only route to e2 in these models:
+- At 388 copies, G is the only route to e2 in these models:
   - under straight ends, e2 wins no sample of T's 3 x 3;
   - under every one of the five models, e2 wins at most G (per-sample strip winners);
   - giving G alone to e2 changes T's predicted output bits.
-- The other 90 copies are the negative bends and interior deficits, kept as controls.
+- The other 82 copies are the negative bends and interior deficits, kept as controls.
 
 Copies whose predicted output bits differ, per pair of models. This separates these five fixed
 models only; `eps005` is one tolerance, not the whole family of constant tolerances.
@@ -98,13 +98,17 @@ relation to straight ends is the same at both.
 - `snap256`: 10 families. These are the deficits 0.001 and 0.0017 at 1 and 2.8 degrees, and
   -0.0015 at 1 degree, each for both e1 kinds.
 - `quadsnap256`: 2 families, the deficit 0.001 at 1 degree.
-- No family shows a predicted loss of G at an interior deficit: no phase where straight ends
-  give G to e2 and the snap takes it away.
+- Predicted loss of G inside the strip: `snap256` at the deficit -0.0015 at 1 degree, for both
+  e1 kinds. In one phase of the pair, straight ends give each copy's own G to e2 and the snap
+  takes it away; in the other phase, the snap's bits equal straight ends. `quadsnap256` predicts
+  no such loss.
 
 The canonical model predictions (five models, every copy's taps and output bits) hash to
-SHA-256 `23de550c86d5ead42947f48c5db34d596dc3884899296d9e9e96fd4412488650`. With the per-sample
-e2 winners and the decisive test added (the same model predictions), the helper's full output
-hashes to `2a8078b909354b21007ac54a179157019946fd4d78db1483ec87f50faddbfbe4`.
+SHA-256 `5d8a35d285f65599e8a9bb591a619bca6f58dab3ffa63ef66b9eee4b9210bd57`
+(`padding_joint_bend_score.model_part`). They are the same as at the first freeze (824d542f,
+whose helper output, with its tap-based decisive flag, hashed to `23de550c...8650`). The helper's
+full output, with the per-sample e2 winners, G found under every turn and the decisive test,
+hashes to `4eab167402a94e0db46f9ad584dcae76166d2ae1509bc53ecf995cf513514c8e`.
 
 ## Reading the recording
 

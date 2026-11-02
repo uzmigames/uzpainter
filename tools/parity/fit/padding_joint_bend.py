@@ -112,13 +112,28 @@ def sample_winners(m: Any, r: Any, x: int, y: int) -> dict[tuple[int, int], Any]
     return out
 
 
+def corner_v(copy: Any) -> tuple[tuple[float, float], tuple[float, float]]:
+    """V and W2 in the copy's layout, whatever its turn: F1 = (V, W1, C) and F2 = (V, C, W2)
+    share V and C, and a mirror reverses each triangle's corners. C - W2 is F2's border edge and
+    V - W2 its seam e2, so V is the shared corner nearer T's centre (V is about one texel from T,
+    C four)."""
+    f1, f2 = copy.tris[0][1], copy.tris[1][1]
+    shared = [c for c in f2 if c in f1]
+    if len(shared) != 2:
+        raise ValueError(f"{copy.name}: F1 and F2 share {len(shared)} corners")
+    centre = (copy.target[0] + 0.5, copy.target[1] + 0.5)
+    v = min(shared, key=lambda c: math.dist(c, centre))
+    (w2,) = [c for c in f2 if c not in shared]
+    return v, w2
+
+
 def e2_of(
     r: Any, copy: Any, column: float, row: float
 ) -> tuple[tuple[int, int, int] | None, tuple[float, float]]:
     """The seam of A's triangle F2 = (V, C, W2) whose UV ends are V and W2, and V, in texel
     space."""
-    uvs = copy.tris[1][1]
-    v, w2 = (uvs[0][0] + column, uvs[0][1] + row), (uvs[2][0] + column, uvs[2][1] + row)
+    (vc, vr), (wc, wr) = corner_v(copy)
+    v, w2 = (vc + column, vr + row), (wc + column, wr + row)
     for lst in r.seams.values():
         for s in lst:
             t = r.tris[s[0]].t
@@ -197,29 +212,44 @@ def table(found: dict[str, Any]) -> dict[str, Any]:
         phased = row["copy"].startswith(("n-b1-", "n-b2.8-", "ge-b1-", "ge-b2.8-"))
         if phased and phase.isdigit() and all(row[p] is not None for p in HYPOTHESES):
             families[family].append(row)
-
-    def differs(row: dict[str, Any], h: str) -> bool:
-        return bool(row[h]["bits"] != row["baseline"]["bits"])
-
-    eps = "baseline+eps005"
     for h in ("baseline+snap256", "baseline+quadsnap256"):
-        found_pairs, inside = [], []
-        for family, members in sorted(families.items()):
-            for i, j in itertools.permutations(members, 2):
-                if differs(i, h) and not differs(j, h) and differs(i, eps) == differs(j, eps):
-                    found_pairs.append(family)
-                    g = i["g"]
-                    if (
-                        "-d-" in family
-                        and g in i["baseline"]["e2_samples"]
-                        and g in j["baseline"]["e2_samples"]
-                        and g not in i[h]["e2_samples"]
-                    ):
-                        inside.append(family)
-                    break
+        found_pairs, inside = phase_pairs(families, h)
         out[f"phase_pairs_{h.removeprefix('baseline+')}"] = found_pairs
         out[f"inside_loss_{h.removeprefix('baseline+')}"] = inside
     return out
+
+
+def phase_pairs(families: dict[str, list[dict[str, Any]]], h: str) -> tuple[list[str], list[str]]:
+    """The families holding a phase pair (i, j) for model `h`: its output bits differ from
+    straight ends at i and equal them at j, while eps005's relation to straight ends is the same
+    at both; and those holding such a pair at a negative deficit where straight ends give each
+    copy's own G to e2 and `h` takes G from e2 at i. Every pair is examined (no order effect);
+    each copy's G is its own (copies sit in different slots)."""
+
+    def differs(row: dict[str, Any], model: str) -> bool:
+        return bool(row[model]["bits"] != row["baseline"]["bits"])
+
+    eps = "baseline+eps005"
+    found_pairs, inside = [], []
+    for family, members in sorted(families.items()):
+        paired = lost = False
+        for i, j in itertools.permutations(members, 2):
+            if not (differs(i, h) and not differs(j, h) and differs(i, eps) == differs(j, eps)):
+                continue
+            paired = True
+            if (
+                "-d-" in family
+                and i["g"] in i["baseline"]["e2_samples"]
+                and j["g"] in j["baseline"]["e2_samples"]
+                and i["g"] not in i[h]["e2_samples"]
+            ):
+                lost = True
+                break
+        if paired:
+            found_pairs.append(family)
+        if lost:
+            inside.append(family)
+    return found_pairs, inside
 
 
 def main(argv: list[str] | None = None) -> int:

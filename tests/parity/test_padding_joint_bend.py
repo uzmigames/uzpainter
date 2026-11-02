@@ -1,6 +1,7 @@
 """Authored invariants of the joint-bend padding probe, independent of Painter recordings."""
 
 import math
+from typing import Any
 
 import pytest
 
@@ -52,3 +53,57 @@ def test_layout_is_deterministic_and_the_request_is_registered() -> None:
         ("exr", "32f", "passthrough"),
         ("exr", "32f", "passthrough"),
     ]
+
+
+def test_corner_v_is_the_corner_one_texel_from_t_under_every_turn() -> None:
+    from tools.parity.fit.padding_joint_bend import corner_v
+
+    plain = jb.JointCopy(2.8, 0.22, 0.0017)
+    mirrored = jb.JointCopy(2.8, 0.22, 0.0017, "mirror")
+    turned = jb.JointCopy(2.8, 0.22, 0.0017, "r90")
+    (vx, vy), _ = corner_v(plain)
+    (mx, my), _ = corner_v(mirrored)
+    # The mirror reverses each triangle's corners; V keeps its place mirrored about T's centre.
+    assert mx - (mirrored.target[0] + 0.5) == pytest.approx((plain.target[0] + 0.5) - vx)
+    assert my - mirrored.target[1] == pytest.approx(vy - plain.target[1])
+    for copy in (plain, mirrored, turned):
+        v, w2 = corner_v(copy)
+        assert v in copy.tris[0][1] and v in copy.tris[1][1] and w2 in copy.tris[1][1]
+        centre = (copy.target[0] + 0.5, copy.target[1] + 0.5)
+        assert math.dist(v, centre) == pytest.approx(math.dist((vx, vy), (5.5, 4.5)))
+
+
+def _row(
+    g: list[int], base: list[list[int]], snap: list[list[int]], snapped: int
+) -> dict[str, Any]:
+    def model(bits: int, samples: list[list[int]]) -> dict[str, Any]:
+        return {"bits": [bits], "e2_samples": samples}
+
+    return {
+        "g": g,
+        "baseline": model(0, base),
+        "baseline+snap256": model(snapped, snap),
+        "baseline+eps005": model(0, base),
+    }
+
+
+def test_phase_pairs_read_each_copys_own_g_in_its_own_slot() -> None:
+    from tools.parity.fit.padding_joint_bend import phase_pairs
+
+    i = _row([10, 10], [[10, 10]], [], 1)
+    j = _row([50, 50], [[50, 50]], [[50, 50]], 0)
+    assert phase_pairs({"n-b1-a0.22-d-0.0015-none-s1": [i, j]}, "baseline+snap256") == (
+        ["n-b1-a0.22-d-0.0015-none-s1"],
+        ["n-b1-a0.22-d-0.0015-none-s1"],
+    )
+
+
+def test_phase_pairs_find_an_inside_loss_whatever_the_pair_order() -> None:
+    from tools.parity.fit.padding_joint_bend import phase_pairs
+
+    taken = _row([10, 10], [[10, 10]], [], 1)
+    unowned = _row([30, 30], [], [], 0)  # an eligible pair first, without the inside condition
+    owned = _row([50, 50], [[50, 50]], [[50, 50]], 0)
+    for members in ([taken, unowned, owned], [owned, unowned, taken]):
+        family = {"n-b1-a0.22-d-0.0015-none-s1": members}
+        assert phase_pairs(family, "baseline+snap256")[1] == ["n-b1-a0.22-d-0.0015-none-s1"]
