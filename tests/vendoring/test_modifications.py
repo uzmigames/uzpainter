@@ -18,8 +18,6 @@ import re
 import shutil
 import struct
 import subprocess
-import uuid
-from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -37,6 +35,7 @@ from tools.vendoring.modifications import (
 )
 from tools.vendoring.subset import HEADER_ONLY, INCLUDE_DIRS, VENDORED_DIR, expand_seeds
 from tools.vendoring.thirdparty import LIBRARY_BY_NAME, compiled_sources
+from tools.vendoring.vendor_check import protected_tokens
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 VENDORED = REPO_ROOT / VENDORED_DIR
@@ -49,65 +48,84 @@ EXIT_SKIP = 77
 ADAPTER_CASES = frozenset({"factory", "fence", "submit-results", "khr-entry-points", "agility"})
 NO_GPU_ENV = "UZP_NO_GPU"
 TEST_SOURCE = REPO_ROOT / "tests" / "native" / "vendor_modifications_test.cpp"
-ABSOLUTE_PATH_RE = re.compile(r"[A-Za-z]:[\\/][^\s\"'<>|]*")
+# An absolute path inside one argument (`protected_tokens` keeps known spaced folders whole).
+ABSOLUTE_PATH_RE = re.compile(r"[A-Za-z]:[\\/][^\"'<>|]*")
 
 
 @dataclass(frozen=True)
 class Build:
     log: str
+    cache: Path
     prefix: Path
 
     @property
     def exe(self) -> Path:
         return self.prefix / "bin" / "uzp-vendor-tests.exe"
 
-    def compile_commands(self) -> list[list[str]]:
+    def roots(self, toolchain: list[Path]) -> list[Path]:
+        """The folders whose paths may have spaces and must stay whole when a line is split:
+        the repository, the toolchain, and this build's cache and prefix under `tmp_path`."""
+        return [REPO_ROOT, *toolchain, self.cache, self.prefix]
+
+    def lines(self, roots: list[Path]) -> list[list[str]]:
+        """The arguments of every log line, split as the `build-path` rule splits them."""
+        return [
+            protected_tokens(line.removeprefix("error: ").strip(), roots)
+            for line in self.log.splitlines()
+        ]
+
+    def compile_commands(self, roots: list[Path]) -> list[list[str]]:
         """Token lists of the `zig clang` commands in the `--verbose-cc` log."""
-        commands = []
-        for line in self.log.splitlines():
-            tokens = line.removeprefix("error: ").split()
-            if (
-                len(tokens) > 2
-                and tokens[0].lower().endswith(("zig.exe", "zig"))
-                and (tokens[1] in ("clang", "clang++"))
-            ):
-                commands.append(tokens)
-        return commands
+        return [
+            tokens
+            for tokens in self.lines(roots)
+            if len(tokens) > 2
+            and tokens[0].lower().endswith(("zig.exe", "zig"))
+            and tokens[1] in ("clang", "clang++")
+        ]
+
+    def absolute_paths(self, roots: list[Path]) -> list[str]:
+        """Every absolute path the log names, one argument at a time."""
+        return [
+            match.group(0)
+            for tokens in self.lines(roots)
+            for token in tokens
+            for match in ABSOLUTE_PATH_RE.finditer(token)
+        ]
 
 
 @pytest.fixture(scope="module")
-def build() -> Iterator[Build]:
-    """`zig build render-core native-tests` from a fresh local cache inside the repository."""
+def build(tmp_path_factory: pytest.TempPathFactory) -> Build:
+    """`zig build render-core native-tests` from a fresh cache under pytest's own `tmp_path`
+    (`<basetemp>/standalone0/cache` and `out`; pytest keeps only the latest run,
+    `tmp_path_retention_count = 1`, so nothing here deletes it)."""
     if ZIG is None:
         pytest.skip("zig is not on PATH")
-    work = REPO_ROOT / ".zig-cache" / f"standalone-{uuid.uuid4().hex[:12]}"
-    try:
-        proc = subprocess.run(
-            [
-                ZIG,
-                "build",
-                "render-core",
-                "native-tests",
-                "--cache-dir",
-                str(work / "cache"),
-                "--prefix",
-                str(work / "out"),
-                "--verbose-cc",
-                "--verbose-link",
-            ],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=1800,
-            check=False,
-        )
-        log = proc.stdout + proc.stderr
-        assert proc.returncode == 0, log[-6000:]
-        yield Build(log=log, prefix=work / "out")
-    finally:
-        shutil.rmtree(work, ignore_errors=True)
+    work = tmp_path_factory.mktemp("standalone")
+    proc = subprocess.run(
+        [
+            ZIG,
+            "build",
+            "render-core",
+            "native-tests",
+            "--cache-dir",
+            str(work / "cache"),
+            "--prefix",
+            str(work / "out"),
+            "--verbose-cc",
+            "--verbose-link",
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=1800,
+        check=False,
+    )
+    log = proc.stdout + proc.stderr
+    assert proc.returncode == 0, log[-6000:]
+    return Build(log=log, cache=work / "cache", prefix=work / "out")
 
 
 def _toolchain_dirs() -> list[Path]:
@@ -175,10 +193,44 @@ def test_zig_release_is_pinned() -> None:
     assert version == PINNED_ZIG
 
 
+def test_log_split_keeps_a_spaced_tmp_path_whole() -> None:
+    """Under a user name with spaces (`C:\\Users\\Ana Silva\\...`), the cache and prefix paths
+    stay whole when the log is split: neither the outside-path scan nor the `-I` tokens see
+    `C:\\Users\\Ana`. No build runs; the log is authored."""
+    work = Path(r"C:\Users\Ana Silva\AppData\Local\Temp\pytest-of-Ana Silva\pytest-1\standalone0")
+    cache, prefix = work / "cache", work / "out"
+    tree = cache / "o" / ("a" * 32)
+    source = REPO_ROOT / "thirdparty" / "spdlog" / "src" / "async.cpp"
+    log = "\n".join(
+        [
+            f"C:\\zig\\zig.exe clang {source} -I {tree} -I{REPO_ROOT / 'src'} -c "
+            f"-o {cache / 'tmp' / 'async.obj'}",
+            f"lld-link -OUT:{prefix / 'bin' / 'x.exe'} {cache / 'o' / 'b' / 'async.obj'}",
+        ]
+    )
+    build = Build(log=log, cache=cache, prefix=prefix)
+    roots = build.roots([Path(r"C:\zig")])
+    assert build.absolute_paths(roots) == [
+        r"C:\zig\zig.exe",
+        str(source),
+        str(tree),
+        str(REPO_ROOT / "src"),
+        str(cache / "tmp" / "async.obj"),
+        str(prefix / "bin" / "x.exe"),
+        str(cache / "o" / "b" / "async.obj"),
+    ]
+    (tokens,) = build.compile_commands(roots)
+    assert tokens[2] == str(source)
+    assert [tokens[i + 1] for i, t in enumerate(tokens) if t == "-I"] == [str(tree)]
+
+
 def test_standalone_static_library_build(build: Build) -> None:
     """3.1: the static library and the test executable build from UzPainter's own build.zig;
     every source, include and library path in the build log is inside the repository (or is
-    the pinned Zig toolchain itself), and nothing names a UzEngine checkout."""
+    the pinned Zig toolchain itself, or the build's own cache and prefix under pytest's
+    `tmp_path`), and nothing names a UzEngine checkout. The only include folder the cache may
+    supply is Zig's empty emitted include tree of a linked library, `<cache>/o/<32 hex>`
+    (`tools/vendoring/vendor_check.py`)."""
     assert (build.prefix / "lib" / "uzrendercore.lib").is_file()
     assert build.exe.is_file()
     assert not (REPO_ROOT / ".gitmodules").exists()
@@ -186,23 +238,33 @@ def test_standalone_static_library_build(build: Build) -> None:
 
     repo = REPO_ROOT.resolve()
     toolchain = _toolchain_dirs()
+    roots = build.roots(toolchain)
     uzengine = UZENGINE_REPO.resolve()
     outside: set[str] = set()
-    for match in ABSOLUTE_PATH_RE.finditer(build.log):
-        path = Path(match.group(0).rstrip(".,;:)")).resolve()
+    for spelled in build.absolute_paths(roots):
+        path = Path(spelled.rstrip(".,;:)")).resolve()
         assert not _inside(path, [uzengine]), f"build log names the UzEngine checkout: {path}"
-        if not _inside(path, [repo, *toolchain]):
+        if not _inside(path, [repo, *toolchain, build.cache.resolve(), build.prefix.resolve()]):
             outside.add(str(path))
     assert outside == set()
 
-    commands = build.compile_commands()
+    def include_tree(path: Path) -> bool:
+        return (
+            path.parent == build.cache.resolve() / "o"
+            and re.fullmatch(r"[0-9a-f]{32}", path.name) is not None
+            and not any(path.iterdir())
+        )
+
+    commands = build.compile_commands(roots)
     compiled: set[Path] = set()
     for tokens in commands:
         source = Path(tokens[2]).resolve()
         compiled.add(source)
         includes = [Path(tokens[i + 1]).resolve() for i, t in enumerate(tokens) if t == "-I"]
         assert includes, f"no include path for {source}"
-        assert all(_inside(p, [repo]) and p.is_dir() for p in includes), includes
+        assert all(p.is_dir() and (_inside(p, [repo]) or include_tree(p)) for p in includes), (
+            includes
+        )
         assert not any(t.startswith(("-DTRACY_ENABLE", "-DUZ_PROFILING_ENABLED")) for t in tokens)
         if source.suffix == ".cpp":
             assert "-std=c++23" in tokens, source

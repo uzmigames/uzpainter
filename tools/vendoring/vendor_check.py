@@ -2,9 +2,16 @@
 
 Run locally, in the coordinator's full gate before the owner pushes (decision 200):
 
-    python -m tools.vendoring.vendor_check              # folder rules + a fresh verbose build
     python -m tools.vendoring.vendor_check --no-build   # folder rules only
-    python -m tools.vendoring.vendor_check --build-log build.log
+    python -m tools.vendoring.vendor_check --build-log <work>/build.log \
+        --build-cache <work>/cache --build-out <work>/out
+
+The check never builds by itself. It reads the log that `verbose_build` and `write_build_log` made
+(the session fixture `fresh_verbose_build` of `tests/conftest.py`, under pytest's own `tmp_path`).
+The log's first line binds it to its run: command, commit, the digest of the build inputs
+(`build_inputs_digest`) before and after the build, exit code and SHA-256 of the log. A log of
+another commit, of inputs changed during or since the build, of a failed build, edited, or naming
+other directories than the flags fails, with an instruction to rerun the build.
 
 Each failure is printed as `[<rule>] <message>` and the exit code is 1; a clean tree exits 0.
 Rules:
@@ -20,20 +27,23 @@ Rules:
 - `conflict-marker`: a git merge-conflict marker in any file of the folder;
 - `build-path`: an include or library path of the build (from `zig build --verbose-cc
   --verbose-link`) outside the repository, other than the pinned Zig toolchain's directories and
-  the Windows SDK; a path into a UzEngine checkout is named as such.
+  the Windows SDK; a path into a UzEngine checkout is named as such. The build's own cache and
+  prefix (`--build-cache`, `--build-out`) supply only linker inputs (objects, libraries, the
+  compiled manifest resource) and the empty `-I` include trees Zig adds for linked libraries.
+  An argument that may continue an unquoted path with spaces fails as ambiguous.
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
 import shutil
 import subprocess
 import sys
-import uuid
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -65,6 +75,36 @@ COMPILE_PATH_FLAGS = (
 LINKERS = frozenset({"lld-link", "ld.lld", "ld", "lld", "ar", "llvm-ar", "llvm-lib", "lib"})
 LIBPATH_RE = re.compile(r"^[-/]libpath:(.+)$", re.IGNORECASE)
 LINK_INPUT_SUFFIXES = (".lib", ".a", ".obj", ".o", ".res", ".def", ".dll")
+# What the build's own cache and prefix may supply to the linker: objects, libraries and the
+# resource Zig compiles from `.win32_manifest` (`src/UzPainter.manifest`).
+BUILD_ARTIFACT_SUFFIXES = (".obj", ".o", ".lib", ".a", ".res")
+ARTIFACT_KINDS = "linker objects, libraries and resources, and Zig's empty -I include trees"
+ZIG_CACHE_ENTRY_RE = re.compile(r"[0-9a-f]{32}")
+EVIDENCE_TAG = "uzpainter-build-evidence"
+RERUN = "rerun the fresh verbose build (the fresh_verbose_build fixture of tests/conftest.py)"
+# What `zig build` reads, as git pathspecs (`build_input_pathspecs` adds the generator's own
+# references): build.zig and its package file; the native sources and the packages they build
+# (`src/`, `thirdparty/`); the `#embed` and default assets; the Python facade it installs
+# (`python/`); the C and C++ files of the native tests; the capability generator and its JSON
+# inputs (`tools/capabilities/`), which also read `docs/prd.md` and the envelope registry with
+# its manifests (`parity/envelopes/`); and the snapshot mesh it installs.
+# Ignored files count where the build still reads them (an ignored header is still compiled).
+IGNORED_INPUT_SCOPE = (
+    "build.zig",
+    "build.zig.zon",
+    "src",
+    "thirdparty",
+    "assets",
+    "python",
+    *(f":(glob)tests/**/*.{suffix}" for suffix in ("c", "cc", "cpp", "h", "hpp", "inl")),
+)
+BUILD_INPUT_SCOPE = (
+    *IGNORED_INPUT_SCOPE,
+    "tools/capabilities",
+    "docs/prd.md",
+    "parity/envelopes",
+    "parity/fixtures/meshes/plane.obj",
+)
 
 # A UzEngine checkout: a folder named UzEngine, or one holding UzEngine's runtime RHI.
 UZENGINE_NAME = "uzengine"
@@ -252,7 +292,7 @@ class BuildPath:
 
 
 def _protect(line: str, spaced: Sequence[str]) -> tuple[str, dict[str, str]]:
-    """Replace allowed roots that contain spaces by space-free placeholders, so a whitespace
+    """Replace folders whose path contains spaces by space-free placeholders, so a whitespace
     split keeps them whole (Zig prints argv joined with spaces, unquoted)."""
     table: dict[str, str] = {}
     for index, root in enumerate(spaced):
@@ -288,20 +328,64 @@ def _command_kind(tokens: list[str]) -> tuple[str, int] | None:
     return None
 
 
+def _commands(log: str, spaced_roots: Sequence[str]) -> Iterator[tuple[str, str, list[str]]]:
+    """`(kind, program, arguments)` of every compiler and linker invocation in the log, split
+    at whitespace with the spaced roots kept whole."""
+    for raw in log.splitlines():
+        line, table = _protect(raw.removeprefix("error: ").strip(), spaced_roots)
+        tokens = [_restore(t, table) for t in line.split()]
+        kind = _command_kind(tokens)
+        if kind is not None:
+            what, start = kind
+            program = Path(tokens[start - 1]).name.lower().removesuffix(".exe")
+            yield what, program, tokens[start:]
+
+
+def _joined_path_flag(token: str) -> bool:
+    """An include or library path flag joined to its value (`-I<dir>`, `-LIBPATH:<dir>`)."""
+    if LIBPATH_RE.match(token):
+        return True
+    for flag in COMPILE_PATH_FLAGS:
+        joined = f"{flag}=" if flag.startswith("--") else flag
+        if token.startswith(joined) and len(token) > len(joined):
+            return True
+    return False
+
+
+def ambiguous_tokens(log: str, spaced_roots: Sequence[str] = ()) -> list[tuple[str, str, str]]:
+    """`(kind, previous, token)` for every argument that may continue an unquoted path with
+    spaces (Zig prints argv joined with spaces): a relative argument that follows a path value
+    (`-I <dir>`, `-I<dir>`, `-LIBPATH:<dir>`) or another argument that no option explains,
+    unless it is one more linker input after a linker input. Such an argument cannot be told
+    apart from the tail of `<path value> <rest>`, so the rule refuses it rather than checking
+    only the head."""
+    found: list[tuple[str, str, str]] = []
+    for what, program, args in _commands(log, spaced_roots):
+        for index in range(1, len(args)):
+            token, previous = args[index], args[index - 1]
+            if token.startswith("-") or Path(token).is_absolute():
+                continue
+            if previous.startswith("-") and not _joined_path_flag(previous):
+                continue  # The value of an option, or an input after a flag.
+            if index == 1 and program in ("ar", "llvm-ar"):
+                continue  # `ar <operation> <archive> ...`
+            if (
+                what == "link"
+                and not Path(previous).is_absolute()
+                and all(t.lower().endswith(LINK_INPUT_SUFFIXES) for t in (token, previous))
+            ):
+                continue  # A run of relative inputs; a relative tail after an absolute head fails.
+            found.append((what, previous, token))
+    return found
+
+
 def collect_build_paths(log: str, spaced_roots: Sequence[str] = ()) -> tuple[list[BuildPath], int]:
     """Include and library paths of every compiler and linker invocation in a `--verbose-cc
     --verbose-link` log (relative paths are left relative), and the number of compiler
     invocations seen."""
     found: list[BuildPath] = []
     compiles = 0
-    for raw in log.splitlines():
-        line, table = _protect(raw.removeprefix("error: ").strip(), spaced_roots)
-        tokens = [_restore(t, table) for t in line.split()]
-        kind = _command_kind(tokens)
-        if kind is None:
-            continue
-        what, start = kind
-        args = tokens[start:]
+    for what, _, args in _commands(log, spaced_roots):
         if what == "compile":
             compiles += 1
             for index, token in enumerate(args):
@@ -349,6 +433,58 @@ def uzengine_checkout(path: Path, repo_root: Path, known: Sequence[Path] = ()) -
     return None
 
 
+def _build_artifact(item: BuildPath, path: Path) -> bool:
+    """A linker input object, library or compiled resource (`BUILD_ARTIFACT_SUFFIXES`)."""
+    return (
+        item.kind == "link"
+        and item.flag == "input"
+        and path.suffix.lower() in BUILD_ARTIFACT_SUFFIXES
+    )
+
+
+def _empty_include_tree(item: BuildPath, raw: Path, path: Path, cache: Path | None) -> bool:
+    """The one include path the build's own cache may supply: Zig 0.15.2's `Module.linkLibrary`
+    passes `-I` of the linked library's emitted include tree (std/Build/Module.zig:655 and :184;
+    `Compile.getEmittedIncludeTree`, a write-files folder), which stays empty because build.zig
+    installs no header. Bounded to exactly that shape: the `-I` flag (never `-isystem` or a
+    library search path), a folder `<cache>/o/<32 hex digits>` spelled with no `..` or link,
+    itself a real folder (not a link or junction), with no entry at all. Anything that could
+    supply a header fails."""
+    if cache is None or item.kind != "compile" or item.flag != "-I":
+        return False
+    if path.parent != cache.resolve() / "o" or not ZIG_CACHE_ENTRY_RE.fullmatch(path.name):
+        return False
+    if ".." in raw.parts or Path(os.path.normpath(raw)) != path:
+        return False
+    if path.is_symlink() or path.is_junction():
+        return False
+    return path.is_dir() and not any(path.iterdir())
+
+
+def _spaced_prefix(root: Path) -> str | None:
+    """`root` up to its deepest folder whose name has a space, or None. Kept whole in a log
+    line, it also keeps whole the paths beside `root` (siblings, `..` escapes) that the rule must
+    see to refuse."""
+    for candidate in (root, *root.parents):
+        if " " in candidate.name:
+            return str(candidate)
+    return None
+
+
+def spaced_prefixes(roots: Iterable[Path]) -> list[str]:
+    """The `_spaced_prefix` of each root that has one, longest first (for `_protect`)."""
+    prefixes = {_spaced_prefix(Path(root)) for root in roots}
+    return sorted((p for p in prefixes if p is not None), key=len, reverse=True)
+
+
+def protected_tokens(line: str, roots: Iterable[Path]) -> list[str]:
+    """The whitespace-separated arguments of one log line, with each known folder whose path
+    has spaces (`roots`: the repository, the toolchain, the build's cache and prefix) kept whole,
+    as the `build-path` rule splits them."""
+    protected, table = _protect(line, spaced_prefixes(roots))
+    return [_restore(token, table) for token in protected.split()]
+
+
 def build_path_violations(
     log: str,
     cwd: Path,
@@ -356,24 +492,46 @@ def build_path_violations(
     allowed_roots: Sequence[Path],
     denied_roots: Sequence[Path] = (),
     uzengine_roots: Sequence[Path] = (),
+    build_artifact_roots: Sequence[Path] = (),
+    include_tree_cache: Path | None = None,
 ) -> list[Violation]:
     """The `build-path` rule over a verbose build log run in `cwd`.
 
-    A path passes when it is inside `repo_root` or one of `allowed_roots` (the Zig toolchain,
-    the Windows SDK) and not inside `denied_roots` (packages Zig fetched into its global cache).
-    A path into a UzEngine checkout always fails, by name."""
+    In order: a path into a UzEngine checkout fails, by name; a path inside `denied_roots`
+    (packages Zig fetched into its global cache) fails; a path spelled under one of
+    `build_artifact_roots` (exactly the build's `--cache-dir` and `--prefix`) that resolves
+    outside that same root (`..`, a link) fails; inside those roots only linker inputs
+    (`_build_artifact`) and, under `include_tree_cache` (the `--cache-dir`), Zig's empty
+    library include trees (`_empty_include_tree`) pass, and every other include path and every
+    library search path fails, even when the root lies inside an allowed one;
+    anything else passes when it is inside `repo_root` or one of `allowed_roots` (the Zig
+    toolchain, the Windows SDK). Apart from these, an argument that may continue an unquoted path
+    with spaces (`ambiguous_tokens`) fails."""
     repo = repo_root.resolve()
-    spaced = [str(r) for r in allowed_roots if " " in str(r)]
+    artifact_roots = [root.resolve() for root in build_artifact_roots]
+    # Absolute but unresolved, so a spelling through a linked parent folder still matches.
+    spelled_roots = [root.absolute() for root in build_artifact_roots]
+    # The repository and the working folder may have spaces too (`D:\projects\UzPainter work`).
+    spaced = spaced_prefixes([*allowed_roots, *artifact_roots, repo, cwd.resolve()])
     paths, compiles = collect_build_paths(log, spaced)
     if compiles == 0:
         return [Violation("build-path", "the build log has no compiler invocation to inspect")]
     found: list[Violation] = []
+    # Each spelling is checked, so an allowed spelling of a path cannot mask an escaping one.
     reported: set[tuple[str, Path]] = set()
     for item in paths:
-        path = (item.path if item.path.is_absolute() else cwd / item.path).resolve()
-        if (item.flag, path) in reported:
+        raw = item.path if item.path.is_absolute() else cwd / item.path
+        path = raw.resolve()
+        if (item.flag, raw) in reported:
             continue
-        reported.add((item.flag, path))
+        reported.add((item.flag, raw))
+        # The cache or prefix root the path is spelled under (before `..` and links resolve);
+        # it must stay inside that same root.
+        named = [
+            resolved
+            for given, resolved in zip(spelled_roots, artifact_roots, strict=True)
+            if raw.is_relative_to(given) or raw.is_relative_to(resolved)
+        ]
         checkout = uzengine_checkout(path, repo, uzengine_roots)
         if checkout is not None:
             found.append(
@@ -390,6 +548,26 @@ def build_path_violations(
                     "outside the repository",
                 )
             )
+        elif named and not any(_inside(path, r) for r in named):
+            found.append(
+                Violation(
+                    "build-path",
+                    f"{item.kind} {item.flag} {raw} escapes the build's own cache or prefix "
+                    f"to {path}",
+                )
+            )
+        elif any(_inside(path, r) for r in artifact_roots):
+            admitted = _build_artifact(item, path) or _empty_include_tree(
+                item, raw, path, include_tree_cache
+            )
+            if path in artifact_roots or not admitted:
+                found.append(
+                    Violation(
+                        "build-path",
+                        f"{item.kind} {item.flag} {path} is in the build's own cache or prefix, "
+                        f"which supply only {ARTIFACT_KINDS}",
+                    )
+                )
         elif not (_inside(path, repo) or any(_inside(path, r) for r in allowed_roots)):
             found.append(
                 Violation(
@@ -398,7 +576,15 @@ def build_path_violations(
                     "toolchain and the Windows SDK",
                 )
             )
-    return found
+    found += [
+        Violation(
+            "build-path",
+            f"{kind} argument {token!r} after {previous!r} is ambiguous: Zig prints the command "
+            "unquoted, so it may continue a path with spaces",
+        )
+        for kind, previous, token in ambiguous_tokens(log, spaced)
+    ]
+    return list(dict.fromkeys(found))
 
 
 def zig_toolchain(zig: str) -> tuple[list[Path], list[Path]]:
@@ -440,24 +626,151 @@ def windows_sdk_roots() -> list[Path]:
     return roots
 
 
+@dataclass(frozen=True)
+class BuildEvidence:
+    """One verbose build: its command, the commit it built, the digest of its inputs before and
+    after it ran (`build_inputs_digest`), its exit code and its log."""
+
+    command: tuple[str, ...]
+    commit: str
+    inputs_before: str
+    inputs_after: str
+    exit_code: int
+    log: str
+
+    def fields(self) -> dict[str, object]:
+        """Every field but the log, as the evidence line records them."""
+        return {
+            "command": list(self.command),
+            "commit": self.commit,
+            "inputs_before": self.inputs_before,
+            "inputs_after": self.inputs_after,
+            "exit_code": self.exit_code,
+        }
+
+    @property
+    def sha256(self) -> str:
+        """SHA-256 over the canonical fields and the log, so an edit to either shows."""
+        fields = json.dumps(self.fields(), sort_keys=True)
+        return sha256_hex(f"{fields}\n{self.log}".encode())
+
+
+def _git(repo_root: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", *args],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+        timeout=120,
+    ).stdout
+
+
+def git_head(repo_root: Path) -> str:
+    """The commit `HEAD` of `repo_root`."""
+    return _git(repo_root, "rev-parse", "HEAD").strip()
+
+
+def build_input_pathspecs(repo_root: Path) -> list[str]:
+    """`BUILD_INPUT_SCOPE` plus what the capability generator reads beyond it, found with its own
+    rules: the current envelope's Tier 0 manifests (`current_tier0_dir`), and every
+    architecture-evidence Markdown file (`ARCH_ANCHOR`) and matrix-fixture Python test
+    (`FIXTURE`) that its JSON inputs name."""
+    from tools.capabilities.generate_capabilities import (
+        ARCH_ANCHOR,
+        FIXTURE,
+        GenerationError,
+        current_tier0_dir,
+    )
+
+    named: set[str] = set()
+    # No readable registry: the registry itself is in scope, and the build fails.
+    with contextlib.suppress(GenerationError, ValueError):
+        named.add(current_tier0_dir(repo_root).relative_to(repo_root).as_posix())
+
+    def walk(value: object) -> None:
+        if isinstance(value, str):
+            for pattern in (ARCH_ANCHOR, FIXTURE):
+                match = pattern.match(value)
+                if match:
+                    named.add(match.group(1))
+        elif isinstance(value, dict):
+            for item in value.values():
+                walk(item)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+
+    for source in sorted((repo_root / "tools" / "capabilities").glob("*.json")):
+        # The file itself is in scope; a broken one fails the build.
+        with contextlib.suppress(OSError, ValueError):
+            walk(json.loads(source.read_text(encoding="utf-8")))
+    return [*BUILD_INPUT_SCOPE, *(f":(literal){path}" for path in sorted(named))]
+
+
+def build_inputs_digest(repo_root: Path) -> str:
+    """SHA-256 over the path and the git blob id of the on-disk bytes of every file of
+    `build_input_pathspecs`, tracked (a deleted one counts as `deleted`) or untracked and not
+    ignored, plus the ignored files of `IGNORED_INPUT_SCOPE`; Python bytecode never counts.
+
+    Git only lists the files; every one is hashed from disk, so index flags (`assume-unchanged`,
+    `skip-worktree`) and clean filters cannot hide an edit. Only the digest leaves this function,
+    never file contents."""
+    listed = _git(
+        repo_root,
+        "ls-files",
+        "--cached",
+        "--others",
+        "--exclude-standard",
+        "-z",
+        "--",
+        *build_input_pathspecs(repo_root),
+    )
+    ignored = _git(
+        repo_root,
+        "ls-files",
+        "--others",
+        "--ignored",
+        "--exclude-standard",
+        "-z",
+        "--",
+        *IGNORED_INPUT_SCOPE,
+    )
+    lines: list[str] = []
+    for path in sorted(set(filter(None, f"{listed}\0{ignored}".split("\0")))):
+        if "__pycache__" in path.split("/") or path.endswith((".pyc", ".pyo")):
+            continue
+        file = repo_root / path
+        blob = git_blob_sha1(file.read_bytes()) if file.is_file() else "deleted"
+        lines.append(f"{path}\0{blob}\n")
+    return sha256_hex("".join(lines).encode("utf-8"))
+
+
 def verbose_build(
     repo_root: Path, zig: str, work: Path, steps: Sequence[str] = BUILD_STEPS
-) -> tuple[int, str]:
-    """`zig build <steps> --verbose-cc --verbose-link` with the local cache `work/cache`, which
-    must start empty so that every compile and link is printed, and the prefix `work/out`; returns
-    the exit code and the log. The caller owns `work` (it stays after the build)."""
+) -> BuildEvidence:
+    """`zig build <steps> --verbose-cc --verbose-link` with the local cache `work/cache` and the
+    prefix `work/out`. The cache must be missing or empty, so that every compile and link runs and
+    is printed; anything else raises `ValueError`. The caller owns `work`."""
+    cache = work / "cache"
+    if cache.exists() and (not cache.is_dir() or any(cache.iterdir())):
+        raise ValueError(f"{cache} is not an empty directory; the build log would not be fresh")
+    command = (
+        zig,
+        "build",
+        *steps,
+        "--cache-dir",
+        str(cache),
+        "--prefix",
+        str(work / "out"),
+        "--verbose-cc",
+        "--verbose-link",
+    )
+    commit = git_head(repo_root)
+    before = build_inputs_digest(repo_root)
     proc = subprocess.run(
-        [
-            zig,
-            "build",
-            *steps,
-            "--cache-dir",
-            str(work / "cache"),
-            "--prefix",
-            str(work / "out"),
-            "--verbose-cc",
-            "--verbose-link",
-        ],
+        command,
         cwd=repo_root,
         capture_output=True,
         text=True,
@@ -466,38 +779,126 @@ def verbose_build(
         timeout=3600,
         check=False,
     )
-    return proc.returncode, proc.stdout + proc.stderr
+    after = build_inputs_digest(repo_root)
+    return BuildEvidence(command, commit, before, after, proc.returncode, proc.stdout + proc.stderr)
 
 
-def run_build(repo_root: Path, zig: str) -> tuple[int, str, Path]:
-    """`zig build render-core native-tests painter render-tests --verbose-cc --verbose-link` from a
-    fresh local cache inside the repository (so every compile and link is printed); returns the exit
-    code, the log and the build's working directory."""
-    work = repo_root / ".zig-cache" / f"vendor-check-{uuid.uuid4().hex[:12]}"
+def write_build_log(path: Path, build: BuildEvidence) -> None:
+    """The log, after a first line naming its command, commit, input digests, exit code and the
+    SHA-256 over those and the log."""
+    header = build.fields() | {"sha256": build.sha256}
+    path.write_bytes(f"{EVIDENCE_TAG} {json.dumps(header)}\n{build.log}".encode())
+
+
+def read_build_log(path: Path) -> BuildEvidence:
+    """What `write_build_log` wrote, or `ValueError` when the file cannot be read, has no evidence
+    line, or its fields or log no longer match the recorded SHA-256. The checksum shows an
+    accidental edit; it is not a signature."""
     try:
-        code, log = verbose_build(repo_root, zig, work)
-    finally:
-        shutil.rmtree(work, ignore_errors=True)
-    return code, log, repo_root
+        text = path.read_bytes().decode("utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        raise ValueError(f"{type(error).__name__}: {error}") from error
+    first, _, log = text.partition("\n")
+    if not first.startswith(f"{EVIDENCE_TAG} "):
+        raise ValueError(f"no {EVIDENCE_TAG} line: not a log written by write_build_log")
+    try:
+        header = json.loads(first.removeprefix(f"{EVIDENCE_TAG} "))
+        command = tuple(str(arg) for arg in header["command"])
+        build = BuildEvidence(
+            command,
+            str(header["commit"]),
+            str(header["inputs_before"]),
+            str(header["inputs_after"]),
+            int(header["exit_code"]),
+            log,
+        )
+        recorded = str(header["sha256"])
+    except (ValueError, KeyError, TypeError) as error:
+        raise ValueError(f"malformed {EVIDENCE_TAG} line: {error!r}") from error
+    if build.sha256 != recorded:
+        raise ValueError(
+            f"evidence sha256 {build.sha256} != recorded {recorded}: the log was edited"
+        )
+    return build
+
+
+def _option(command: Sequence[str], flag: str) -> str | None:
+    """The value of `flag` when the command passes it exactly once."""
+    values = [command[i + 1] for i, arg in enumerate(command[:-1]) if arg == flag]
+    return values[0] if len(values) == 1 else None
+
+
+def evidence_problems(
+    build: BuildEvidence, log_path: Path, cache: Path, out: Path, commit: str, inputs: str
+) -> list[str]:
+    """Why `build` is not a successful verbose build of `BUILD_STEPS` at `commit` with the build
+    inputs `inputs` (`build_inputs_digest` now), into exactly `cache` and `out`, the `cache` and
+    `out` folders next to the log. Each problem ends with the rerun instruction."""
+    problems: list[str] = []
+    work = log_path.resolve().parent
+    if build.commit != commit:
+        problems.append(f"the log built commit {build.commit}, HEAD is {commit}")
+    if build.inputs_before != build.inputs_after:
+        problems.append("the build inputs changed while the build ran")
+    elif build.inputs_after != inputs:
+        problems.append(
+            f"the build inputs changed since the build (digest {build.inputs_after}, now {inputs})"
+        )
+    if build.exit_code != 0:
+        problems.append(f"the logged build failed with exit code {build.exit_code}")
+    command = build.command
+    if len(command) < 2 or command[1] != "build":
+        problems.append(f"the logged command is not `zig build`: {list(command)}")
+    missing = [s for s in (*BUILD_STEPS, "--verbose-cc", "--verbose-link") if s not in command]
+    if missing:
+        problems.append(f"the logged command lacks {', '.join(missing)}")
+    for flag, name, given in (("--cache-dir", "cache", cache), ("--prefix", "out", out)):
+        if given.resolve() != work / name:
+            problems.append(f"{given} is not {work / name}, next to the log")
+        logged = _option(command, flag)
+        if logged is None or Path(logged).resolve() != given.resolve():
+            problems.append(f"the logged {flag} {logged} is not {given}")
+    return [f"{problem}; {RERUN}" for problem in problems]
 
 
 def build_violations(
-    repo_root: Path, build_log: Path | None, uzengine_roots: Sequence[Path]
+    repo_root: Path,
+    build_log: Path,
+    build_cache: Path,
+    build_out: Path,
+    uzengine_roots: Sequence[Path],
 ) -> list[Violation]:
-    """Run (or read) the verbose build and apply the `build-path` rule."""
+    """Read the verbose build log, check its evidence and apply the `build-path` rule."""
     zig = shutil.which("zig")
     if zig is None:
         return [Violation("build-path", "zig is not on PATH; the build paths cannot be collected")]
-    if build_log is None:
-        code, log, cwd = run_build(repo_root, zig)
-        if code != 0:
-            tail = "\n".join(log.splitlines()[-20:])
-            return [Violation("build-path", f"zig build failed with exit code {code}:\n{tail}")]
-    else:
-        log, cwd = build_log.read_text(encoding="utf-8", errors="replace"), repo_root
+    try:
+        build = read_build_log(build_log)
+    except ValueError as error:
+        return [Violation("build-path", f"{build_log}: {error}; {RERUN}")]
+    problems = evidence_problems(
+        build,
+        build_log,
+        build_cache,
+        build_out,
+        git_head(repo_root),
+        build_inputs_digest(repo_root),
+    )
+    if problems:
+        return [Violation("build-path", f"{build_log}: {p}") for p in problems]
     allowed, denied = zig_toolchain(zig)
+    logged = [_option(build.command, flag) for flag in ("--cache-dir", "--prefix")]
     return build_path_violations(
-        log, cwd, repo_root, [*allowed, *windows_sdk_roots()], denied, uzengine_roots
+        build.log,
+        repo_root,
+        repo_root,
+        [*allowed, *windows_sdk_roots()],
+        denied,
+        uzengine_roots,
+        # The flags' spelling and the logged one: both resolve to the same folders (checked
+        # above), and either may be how the log spells a path.
+        [build_cache, build_out, *(Path(value) for value in logged if value is not None)],
+        include_tree_cache=build_cache,
     )
 
 
@@ -510,16 +911,28 @@ def main(argv: Sequence[str] | None = None) -> int:
     build = parser.add_mutually_exclusive_group()
     build.add_argument("--no-build", action="store_true", help="skip the build-path rule")
     build.add_argument(
-        "--build-log", type=Path, help="read the verbose build log instead of building"
+        "--build-log", type=Path, help="the verbose build log that write_build_log wrote"
     )
+    parser.add_argument("--build-cache", type=Path, help="that build's --cache-dir")
+    parser.add_argument("--build-out", type=Path, help="that build's --prefix")
     args = parser.parse_args(argv)
+    if args.no_build and (args.build_cache or args.build_out):
+        parser.error("--build-cache and --build-out go with --build-log, not with --no-build")
+    if not args.no_build and not (args.build_log and args.build_cache and args.build_out):
+        parser.error(
+            "the build-path rule needs --build-log, --build-cache and --build-out of a fresh "
+            "verbose build (the fresh_verbose_build fixture of tests/conftest.py); the check "
+            "does not build by itself; --no-build runs the folder rules only"
+        )
     repo_root = args.repo_root.resolve()
 
     found = folder_violations(repo_root)
     if not args.no_build:
         env_repo = os.environ.get("UZENGINE_REPO")
         known = [Path(env_repo).resolve()] if env_repo else []
-        found += build_violations(repo_root, args.build_log, known)
+        found += build_violations(
+            repo_root, args.build_log, args.build_cache, args.build_out, known
+        )
 
     for violation in found:
         print(f"vendoring check {violation}", file=sys.stderr)
