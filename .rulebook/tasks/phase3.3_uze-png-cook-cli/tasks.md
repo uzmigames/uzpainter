@@ -10,7 +10,7 @@
 ## 3. Tests
 - [x] 3.1 `tests/export/test_uze_png_cook.py::test_canonical_maps_of_a_native_export_cook_to_its_bytes`: a native export's canonical PNG 16 maps cook to its five `.uztexture` files and `.uzmat` byte for byte
 - [x] 3.2 `test_equal_decoded_inputs_give_equal_bytes`, `test_runs_are_deterministic`, `test_three_png_set_cooks_with_its_receipt`, `test_albedo_alpha_masks_the_material_and_height_is_bc4`
-- [x] 3.3 `test_contract_violations_are_refused_and_write_nothing` (10 cases), `test_unsafe_set_names_are_refused` (6), `test_usage_errors_exit_2` (7)
+- [x] 3.3 `test_contract_violations_are_refused_and_write_nothing` (11 cases), `test_unsafe_set_names_are_refused` (6), `test_usage_errors_exit_2` (7)
 
 ## 4. Docs and review
 - [x] 4.1 `src/export/EXPORT.md` §5 (UzEngine PNG cook), `docs/architecture/08-export.md` §4, `src/export/cli.h`, usage in `src/main.cpp`
