@@ -1,0 +1,324 @@
+{
+ "schema": "uzpainter/parity/recording-batch/1",
+ "envelope_id": "painter-12.2.0+js-api.1.1.20-env-a981b586eae7",
+ "painter_build": "12.2.0+js-api.1.1.20",
+ "requests_root": "parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/requests",
+ "summary": {
+  "requests": 52,
+  "admitted": 40,
+  "scheduled": 2,
+  "scheduled_by_priority": {
+   "g1-wand": 1,
+   "other": 1
+  },
+  "blocked": 0,
+  "not_scheduled": 10,
+  "sessions": 1,
+  "estimated_seconds": 113,
+  "unestimated_items": 1,
+  "estimate_note": "session overhead 105 s (decision 266 session: Painter open 197 s for 92 s of recording (start, checks, stop)); unestimated items are not counted"
+ },
+ "sessions": [
+  {
+   "session": 1,
+   "colour_management": "legacy",
+   "ocio_configuration": null,
+   "owned_process": false,
+   "preamble": [
+    "close Painter first if it runs: the colour configuration is fixed at its start",
+    "Remove-Item Env:OCIO, Env:PAINTER_ACE_CONFIG -ErrorAction SilentlyContinue",
+    "& $exe --enable-remote-scripting  # wait until no project is open",
+    "python -m tools.parity.envelope check  # must exit 0"
+   ],
+   "items": [
+    {
+     "order": 1,
+     "golden_id": "tier0/semantics/export-padding-kernel-wand-2048",
+     "request": "parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/requests/tier0/assets3d/export-padding-kernel-wand-2048.json",
+     "request_sha256": "1c8bc92eb7b3fdb1c26739405b9e0cda6345e6ff6ef19753db38e219294cb75c",
+     "kind": "texture",
+     "priority": {
+      "class": "g1-wand",
+      "cited_tasks": [
+       "phase1.25_pilot-wand"
+      ],
+      "open_items": 9
+     },
+     "command": [
+      "python",
+      "-m",
+      "tools.parity.recorder",
+      "record",
+      "parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/requests/tier0/assets3d/export-padding-kernel-wand-2048.json",
+      "--assets-root",
+      "$assets"
+     ],
+     "admit": [
+      "python",
+      "-m",
+      "tools.parity.store",
+      "record",
+      "parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/manifests/tier0/assets3d/export-padding-kernel-wand-2048.json",
+      "--run",
+      "<run>"
+     ],
+     "expected_artifacts": {
+      "inbox_run": [
+       "record.json",
+       "manifest.json",
+       "blobs/",
+       "READY"
+      ],
+      "recordings": [
+       "r1",
+       "r2"
+      ],
+      "export_steps": 4,
+      "exported_maps_per_recording": 32
+     },
+     "estimated_seconds": 8,
+     "estimate_basis": "decision 266 batch: 13 kernel-code probes (512 and 2048 px) recorded in 92 s",
+     "checkpoint": {
+      "admitted_manifest": "parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/manifests/tier0/assets3d/export-padding-kernel-wand-2048.json",
+      "inbox_dir": "tier0__semantics__export-padding-kernel-wand-2048"
+     }
+    },
+    {
+     "order": 2,
+     "golden_id": "tier0/semantics/srgb-bitmap-minification-random",
+     "request": "parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/requests/tier0/semantics/srgb-bitmap-minification-random.json",
+     "request_sha256": "11ff112c319a15e58913d6b3394764f871f0aef1573480ab0f0ede19366e2ef6",
+     "kind": "texture",
+     "priority": {
+      "class": "other",
+      "cited_tasks": [
+       "phase1.15_compositor-colour-fits"
+      ],
+      "open_items": 0
+     },
+     "command": [
+      "python",
+      "-m",
+      "tools.parity.recorder",
+      "record",
+      "parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/requests/tier0/semantics/srgb-bitmap-minification-random.json"
+     ],
+     "admit": [
+      "python",
+      "-m",
+      "tools.parity.store",
+      "record",
+      "parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/manifests/tier0/semantics/srgb-bitmap-minification-random.json",
+      "--run",
+      "<run>"
+     ],
+     "expected_artifacts": {
+      "inbox_run": [
+       "record.json",
+       "manifest.json",
+       "blobs/",
+       "READY"
+      ],
+      "recordings": [
+       "r1",
+       "r2"
+      ],
+      "export_steps": 6,
+      "exported_maps_per_recording": 6
+     },
+     "estimated_seconds": null,
+     "estimate_basis": "no documented timing for this family; the recorder keeps none",
+     "checkpoint": {
+      "admitted_manifest": "parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/manifests/tier0/semantics/srgb-bitmap-minification-random.json",
+      "inbox_dir": "tier0__semantics__srgb-bitmap-minification-random"
+     }
+    }
+   ],
+   "estimated_seconds": 113,
+   "unestimated_items": 1
+  }
+ ],
+ "blocked": [],
+ "not_scheduled": [
+  {
+   "request": "parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/requests/tier0/api-probes/ocio16-raw-readout-calibration-float-export-v2.json",
+   "status": "superseded",
+   "reason": "tier0/api-probes/ocio16-raw-readout-calibration-float-export-v3 replaces it"
+  },
+  {
+   "request": "parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/requests/tier0/api-probes/ocio16-raw-readout-calibration-float-export.json",
+   "status": "superseded",
+   "reason": "tier0/api-probes/ocio16-raw-readout-calibration-float-export-v3 replaces it"
+  },
+  {
+   "request": "parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/requests/tier0/api-probes/ocio16-raw-readout-normalization-float-capability-v2.json",
+   "status": "superseded",
+   "reason": "tier0/api-probes/ocio16-raw-readout-normalization-float-capability-v3 replaces it"
+  },
+  {
+   "request": "parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/requests/tier0/api-probes/ocio16-raw-readout-normalization-float-capability.json",
+   "status": "superseded",
+   "reason": "tier0/api-probes/ocio16-raw-readout-normalization-float-capability-v3 replaces it"
+  },
+  {
+   "request": "parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/requests/tier0/api-probes/ocio16-raw-readout-normalization-float-export-v2.json",
+   "status": "superseded",
+   "reason": "tier0/api-probes/ocio16-raw-readout-normalization-float-export-v3 replaces it"
+  },
+  {
+   "request": "parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/requests/tier0/api-probes/ocio16-raw-readout-normalization-float-export.json",
+   "status": "superseded",
+   "reason": "tier0/api-probes/ocio16-raw-readout-normalization-float-export-v3 replaces it"
+  },
+  {
+   "request": "parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/requests/tier0/api-probes/ocio16-raw-readout-normalization-png16-capability-v2.json",
+   "status": "superseded",
+   "reason": "tier0/api-probes/ocio16-raw-readout-normalization-png16-capability-v3 replaces it"
+  },
+  {
+   "request": "parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/requests/tier0/api-probes/ocio16-raw-readout-normalization-png16-capability.json",
+   "status": "superseded",
+   "reason": "tier0/api-probes/ocio16-raw-readout-normalization-png16-capability-v3 replaces it"
+  },
+  {
+   "request": "parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/requests/tier0/api-probes/ocio16-raw-readout-normalization-png16-export-v2.json",
+   "status": "superseded",
+   "reason": "tier0/api-probes/ocio16-raw-readout-normalization-png16-export-v3 replaces it"
+  },
+  {
+   "request": "parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/requests/tier0/api-probes/ocio16-raw-readout-normalization-png16-export.json",
+   "status": "superseded",
+   "reason": "tier0/api-probes/ocio16-raw-readout-normalization-png16-export-v3 replaces it"
+  }
+ ],
+ "needs_request": [
+  {
+   "golden_id": "phase0/iray-references/base-light-grey",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-references/base-saturated",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-references/cube-mid-grey",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-references/cube-saturated--ref-match-000",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-references/cube-saturated--ref-match-180",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-references/emission",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-references/height-stripes",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-references/metal0-rough010",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-references/metal0-rough050",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-references/metal0-rough090",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-references/metal1-rough010",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-references/metal1-rough050",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-references/metal1-rough090",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-references/neutral-grey-diffuse",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-references/neutral-grey-diffuse--ref-match-000",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-references/neutral-grey-diffuse--ref-match-180",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-references/neutral-reflective",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-references/neutral-reflective--ref-match-000",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-references/neutral-reflective--ref-match-180",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-references/normal-ridges",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-references/opacity-stripes",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-references/plane-mid-grey",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-stability/cube-mid-grey--yaw-m1",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-stability/cube-mid-grey--yaw-p1",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-stability/cube-saturated--ref-match-180--repeat",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-stability/plane-mid-grey--ref-match-000",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-stability/plane-mid-grey--ref-match-180",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-stability/plane-mid-grey--repeat",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-stability/plane-mid-grey--same-session",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-stability/plane-mid-grey--yaw-m1",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "phase0/iray-stability/plane-mid-grey--yaw-p1",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  },
+  {
+   "golden_id": "tier3/render-procedure/qualification-sphere",
+   "reason": "Tier 3 reference of a superseded envelope (CONTRACT.md section 5); no current-envelope request"
+  }
+ ]
+}

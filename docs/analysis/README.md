@@ -13,6 +13,7 @@ Clean-room note (decision 002, `docs/licensing-and-clean-room.md`): some of thes
 | `uzengine-renderer/` | `01-module-map.md` … `09-gaps-and-risks.md`, `10-review-response.md` | What UzEngine provides and lacks for a texturing tool |
 | `technology-options/` | `01-python-embedding-and-packaging.md`, `02-texture-compression-and-containers.md`, `03-project-container-format.md`, `04-mcp-server-options.md`, `05-review-response.md` | Python embedding, compression, containers, MCP |
 | `proc-grunge-families/` | `01-asset-inventory.md` | The grunge and noise assets the UzmiGames recipes reference, their UzPainter assets and the recorded parameter sets (phase3.2_proc-grunge-families item 2.1, 2026-10-20) |
+| `painter-recording-backlog/` | `01-inventory.md`, `02-batch-plan.json` (snapshot of `python -m tools.parity.recorder.batch plan`) | What the next Painter slot records, and the open rulebook items that wait on a recording with no request yet (decision 367 front C, 2026-11-02) |
 
 ## Clean-room record
 

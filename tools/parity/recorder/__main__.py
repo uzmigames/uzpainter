@@ -11,6 +11,7 @@ r"""Command line of the Painter oracle recorder (operator guide: `parity/RECORDE
     python -m tools.parity.recorder list-templates
     python -m tools.parity.recorder record-script <manifest.json> --assets-root <dir> [--launch]
     python -m tools.parity.recorder record-migration <manifest.json> --assets-root <dir> [--launch]
+    python -m tools.parity.recorder.batch plan|check|status   (every pending request, offline)
     python -m tools.parity.recorder record-templates <manifest.json>
     python -m tools.parity.recorder check [--python-doc <objects.inv>]
     python -m tools.parity.recorder iray-probe --ref-match-hdri <exr> [--operator ui]
