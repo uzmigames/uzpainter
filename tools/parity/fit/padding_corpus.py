@@ -11,9 +11,11 @@ optional private `--out` file, never into the repository. No capture, fitting or
 from __future__ import annotations
 
 import argparse
+import hashlib
 import itertools
 import json
 import os
+import re
 import subprocess
 import sys
 import types
@@ -33,6 +35,8 @@ from tools.parity.tier0_semantics.recording_requests import kernel_bitmaps
 MANIFEST_ROOT = REPO_ROOT / (
     "parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/manifests/tier0/semantics"
 )
+# Kernel probes on Assets3D meshes (`wand_kernel_probe.py`): their mesh is a store blob by SHA-256.
+ASSETS3D_ROOT = MANIFEST_ROOT.parent / "assets3d"
 POLICIES = ("baseline",)
 # Ring.far32: the far point of seam (e, edge, j) for ring texel (x, y) in float32: decision 273's
 # box-normalised position through E, fold32 into J, barycentrics in J and J's float32 UVs.
@@ -172,8 +176,15 @@ type Image = npt.NDArray[np.float32]
 type Point = tuple[int, int]
 
 
+def manifest_path(probe: str) -> Path:
+    """The probe's manifest: under the semantics manifests, else under the Assets3D ones."""
+    path = MANIFEST_ROOT / f"export-padding-{probe}.json"
+    return path if path.is_file() else ASSETS3D_ROOT / f"export-padding-{probe}.json"
+
+
 def probes() -> list[str]:
-    """The kernel probes: every padding manifest whose inputs are the eight kernel maps."""
+    """The kernel probes: every semantics padding manifest whose inputs are the eight kernel maps
+    (the Assets3D ones are named explicitly with --probe)."""
     out = []
     for path in sorted(MANIFEST_ROOT.glob("export-padding-*.json")):
         manifest = json.loads(path.read_text(encoding="utf-8"))
@@ -200,11 +211,10 @@ def image(path: Path, size: int) -> Image:
 
 
 def material_of(manifest: dict[str, Any]) -> str:
-    names = {
-        word
-        for word in json.dumps(manifest["instruction_sequence"]).replace('"', " ").split()
-        if word.startswith("uzp_")
-    }
+    sequence = json.dumps(manifest["instruction_sequence"])
+    names = {word for word in sequence.replace('"', " ").split() if word.startswith("uzp_")}
+    if not names:
+        names = set(re.findall(r'"texture_set": "([^"]+)"', sequence))
     if len(names) != 1:
         raise ValueError("expected one material")
     return names.pop()
@@ -326,8 +336,7 @@ class Probe:
         self.name = probe
         self.ref = load_module(REPO_ROOT / "tests/export/padding_reference.py", f"ref_{probe}")
         self.patched: dict[str, Any] = {}
-        path = MANIFEST_ROOT / f"export-padding-{probe}.json"
-        manifest = json.loads(path.read_text("utf-8"))
+        manifest = json.loads(manifest_path(probe).read_text("utf-8"))
         refs = [r for r in manifest["private_records"] if r["record_id"] == "golden-record"]
         if len(refs) != 1 or (raw := load_oracle(store, refs[0])) is None:
             raise ValueError("private record unavailable")
@@ -339,8 +348,13 @@ class Probe:
         self.source = np.concatenate(
             [image(REPO_ROOT / inputs[key]["path"], size) for key in kernel_bitmaps(size)], axis=-1
         )
-        mesh = next(r["path"] for r in manifest["inputs"] if r["path"].endswith(".obj"))
-        self.mesh = REPO_ROOT / mesh
+        row = next(r for r in manifest["inputs"] if r["kind"] == "mesh")
+        if "path" in row:
+            self.mesh = REPO_ROOT / row["path"]
+        else:  # an Assets3D mesh, held in the store by its SHA-256
+            self.mesh = store.blob_path(row["sha256"])
+            if hashlib.sha256(self.mesh.read_bytes()).hexdigest() != row["sha256"]:
+                raise ValueError("mesh blob differs from its pin")
         self.material = material_of(manifest)
         covered = self.ring("baseline").owner >= 0
         self.covered = covered
