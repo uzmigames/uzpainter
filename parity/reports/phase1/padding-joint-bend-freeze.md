@@ -66,11 +66,17 @@ flat:
 `python -m tools.parity.fit.padding_joint_bend` computes these from the committed OBJ: float32
 UVs, decision 281's snapped ownership, and the eight kernel maps' predicted float32 values at T.
 
-- Every T is a ring texel (470 of 470).
-- G is decisive for e2 at 388 of them. There e2 owns no other sample of T's 3 x 3, and owning G
-  changes T's taps. The other 82 are the negative bends and interior deficits, kept as controls.
+These are model predictions; the recording decides.
 
-Copies whose predicted kernel values differ, per pair of hypotheses:
+- Every T is a ring texel (470 of 470).
+- At 380 copies, G is the only route to e2 in these models:
+  - under straight ends, e2 wins no sample of T's 3 x 3;
+  - under every one of the five models, e2 wins at most G (per-sample strip winners);
+  - giving G alone to e2 changes T's predicted output bits.
+- The other 90 copies are the negative bends and interior deficits, kept as controls.
+
+Copies whose predicted output bits differ, per pair of models. This separates these five fixed
+models only; `eps005` is one tolerance, not the whole family of constant tolerances.
 
 | Pair | Copies |
 | --- | ---: |
@@ -85,26 +91,30 @@ Copies whose predicted kernel values differ, per pair of hypotheses:
 | quadsnap256 / miter | 63 |
 | eps005 / miter | 222 |
 
-Phase flips at a fixed deficit (some phases take e2 and others do not):
+Predicted phase pairs at a fixed deficit: two phases of one family where the model's output
+bits differ from straight ends at one phase and equal them at the other, while `eps005`'s
+relation to straight ends is the same at both.
 
-- `snap256`: 10 families. They include the interior deficit -0.0015 at 1 degree, for both e1
-  kinds: the snap loses a sample inside the strip. They also include the exterior deficits 0.001
-  and 0.0017: the snap gains one outside.
-- `quadsnap256`: 2 families, the exterior deficit 0.001 at 1 degree.
-- A constant tolerance predicts no phase dependence.
+- `snap256`: 10 families. These are the deficits 0.001 and 0.0017 at 1 and 2.8 degrees, and
+  -0.0015 at 1 degree, each for both e1 kinds.
+- `quadsnap256`: 2 families, the deficit 0.001 at 1 degree.
+- No family shows a predicted loss of G at an interior deficit: no phase where straight ends
+  give G to e2 and the snap takes it away.
 
-The canonical predictions (all five hypotheses, every copy's taps and value bits) hash to SHA-256
-`23de550c86d5ead42947f48c5db34d596dc3884899296d9e9e96fd4412488650`.
+The canonical model predictions (five models, every copy's taps and output bits) hash to
+SHA-256 `23de550c86d5ead42947f48c5db34d596dc3884899296d9e9e96fd4412488650`. With the per-sample
+e2 winners and the decisive test added (the same model predictions), the helper's full output
+hashes to `2a8078b909354b21007ac54a179157019946fd4d78db1483ec87f50faddbfbe4`.
 
 ## Reading the recording
 
-For each hypothesis, count the copies whose recorded `infinite` value at T equals the prediction
-bit for bit. The phase families and the deficit sweep then bracket the rule:
+For each model, count the copies whose recorded `infinite` value at T equals the prediction bit
+for bit, per stratum (e1 kind, bend sign, deficit side, phase families, controls). That scores
+these five fixed models; the following are diagnostic leads, not conclusions:
 
-- a phase-dependent switch at a fixed deficit means grid snapping, and which families flip names
-  the grid and the snapped primitive;
-- one deficit threshold that holds across bends and phases means a tolerance;
-- a bend dependence means a joint rule.
+- a phase-dependent switch at a fixed deficit points to grid snapping;
+- one deficit threshold that holds across bends and phases points to a tolerance;
+- a dependence on the bend points to a joint rule.
 
 A rule is accepted only with zero new misses on the 30 probes, the Wand maps and this probe.
 

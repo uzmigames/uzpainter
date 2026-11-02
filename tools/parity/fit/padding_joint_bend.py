@@ -4,11 +4,10 @@ From the committed OBJ (float32 UVs, decision 281's snapped ownership), for ever
 texel T, the chain and the eight kernel maps' values predicted by the reference under each
 strip-end hypothesis: straight ends (`baseline`, the current reference), strip ends snapped to
 1/256 texel (`snap256`), the strip's four quad corners snapped to 1/256 texel (`quadsnap256`), a
-0.005-texel end tolerance (`eps005`) and mitred joins (`miter+msin1`). Also, under straight ends:
-whether T is a ring texel, and whether e2 (A's seam edge from the corner V) reaches T only through
-G (absent from T's strip winners, and T's chain changes when e2 owns G). Authored geometry only;
-no Painter data. Prints the discrimination table (copies whose predicted values differ, per
-hypothesis pair), the phase pairs, and the SHA-256 of the canonical predictions.
+0.005-texel end tolerance (`eps005`) and mitred joins (`miter+msin1`), with the samples of T's
+3 x 3 that e2 (A's seam edge from the corner V) owns in each. Authored geometry only; no Painter
+data. Prints the discrimination table (`table`), which separates these fixed models only, and the
+SHA-256 of the canonical predictions.
 
     python -m tools.parity.fit.padding_joint_bend [--out predictions.json]
 """
@@ -20,6 +19,7 @@ import collections
 import hashlib
 import itertools
 import json
+import math
 import sys
 import types
 from pathlib import Path
@@ -66,13 +66,22 @@ def own_of(r: Any, x: int, y: int) -> list[tuple[int, int]]:
     ]
 
 
-def chain(ref: Any, r: Any, source: Any, x: int, y: int) -> dict[str, Any] | None:
+def chain(
+    ref: Any, r: Any, source: Any, x: int, y: int, winners: set[Any] | None = None
+) -> dict[str, Any] | None:
     """T's taps in tap order (distance to 12 digits, far, texel) and the 24 predicted kernel
-    components' float32 bits; None when T is not a ring texel."""
+    components' float32 bits, with T's strip winners replaced by `winners` when given; None when
+    T is not a ring texel."""
     own = own_of(r, x, y)
     if r.owner[y, x] >= 0 or not own:
         return None
-    cands, _ = r.candidates(x, y, own, r.tau(x, y, own))
+    original = r.global_winners
+    if winners is not None:
+        r.global_winners = lambda xx, yy: winners
+    try:
+        cands, _ = r.candidates(x, y, own, r.tau(x, y, own))
+    finally:
+        r.global_winners = original
     taps = cands[: ref.tap_count(cands)]
     weights = r.chain_fractions(x, y, taps)
     values = np.asarray([source[ty, tx] for _, _, (tx, ty) in taps], np.float32)
@@ -83,8 +92,31 @@ def chain(ref: Any, r: Any, source: Any, x: int, y: int) -> dict[str, Any] | Non
     }
 
 
-def e2_of(r: Any, copy: Any, column: float, row: float) -> tuple[int, int, int] | None:
-    """The seam of A's triangle F2 = (V, C, W2) whose UV ends are V and W2, in texel space."""
+def sample_winners(m: Any, r: Any, x: int, y: int) -> dict[tuple[int, int], Any]:
+    """The strip winner of each sample of T's 3 x 3, as the hypothesis's `global_winners` draws
+    it (the last covering seam; under `miter`, the mitred owner of an uncovered sample)."""
+    r.global_winners(x, y)
+    grid = r.__dict__["_seam_grid"]
+    out = {}
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            sx, sy = x + dx, y + dy
+            winner = None
+            for s in grid.get((sx, sy), []):
+                t = r.tris[s[0]].t
+                if m.strip_covers(t[(s[1] + 1) % 3], t[(s[1] + 2) % 3], sx + 0.5, sy + 0.5):
+                    winner = s
+            if winner is None and hasattr(r, "mitred"):
+                winner = r.mitred(sx + 0.5, sy + 0.5, grid.get((sx, sy), []))
+            out[(sx, sy)] = winner
+    return out
+
+
+def e2_of(
+    r: Any, copy: Any, column: float, row: float
+) -> tuple[tuple[int, int, int] | None, tuple[float, float]]:
+    """The seam of A's triangle F2 = (V, C, W2) whose UV ends are V and W2, and V, in texel
+    space."""
     uvs = copy.tris[1][1]
     v, w2 = (uvs[0][0] + column, uvs[0][1] + row), (uvs[2][0] + column, uvs[2][1] + row)
     for lst in r.seams.values():
@@ -92,27 +124,14 @@ def e2_of(r: Any, copy: Any, column: float, row: float) -> tuple[int, int, int] 
             t = r.tris[s[0]].t
             ends = (t[(s[1] + 1) % 3], t[(s[1] + 2) % 3])
             if all(min(abs(a[0] - b[0]) + abs(a[1] - b[1]) for b in ends) < 1e-3 for a in (v, w2)):
-                return (int(s[0]), int(s[1]), int(s[2]))
-    return None
-
-
-def decisive(ref: Any, r: Any, x: int, y: int, e2: tuple[int, int, int] | None) -> bool:
-    """Under straight ends: e2 owns no sample of T's 3 x 3, and T's chain changes when it does."""
-    if e2 is None or e2 in r.global_winners(x, y):
-        return False
-    own = own_of(r, x, y)
-    tau = r.tau(x, y, own)
-    plain, _ = r.candidates(x, y, own, tau)
-    original = r.global_winners
-    r.global_winners = lambda xx, yy: original(xx, yy) | {e2}
-    try:
-        forced, _ = r.candidates(x, y, own, tau)
-    finally:
-        r.global_winners = original
-    return bool(plain[: ref.tap_count(plain)] != forced[: ref.tap_count(forced)])
+                return (int(s[0]), int(s[1]), int(s[2])), v
+    return None, v
 
 
 def predictions() -> dict[str, Any]:
+    """Per copy: T, G (the sample of T's 3 x 3 nearest V), and per hypothesis T's chain and the
+    samples of T's 3 x 3 that e2 owns; `decisive` when, under straight ends, e2 owns none of
+    them, every hypothesis gives e2 at most G, and e2 owning G alone changes T's output bits."""
     if MESH_PATH.read_bytes() != jb.mesh():
         raise ValueError(f"{MESH_PATH} differs from its generator")
     source = np.concatenate(
@@ -128,21 +147,37 @@ def predictions() -> dict[str, Any]:
     rows = []
     for copy, (column, row), _ in placed:
         x, y = int(column + copy.target[0]), int(row + copy.target[1])
-        rows.append(
-            {
-                "copy": copy.name,
-                "texel": [x, y],
-                "decisive": decisive(ref, straight, x, y, e2_of(straight, copy, column, row)),
-                **{p: chain(m, r, source, x, y) for p, (m, r) in rings.items()},
-            }
+        e2, v = e2_of(straight, copy, column, row)
+        g = min(
+            ((x + dx, y + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1)),
+            key=lambda s: math.dist((s[0] + 0.5, s[1] + 0.5), v),
         )
+        entry: dict[str, Any] = {"copy": copy.name, "texel": [x, y], "g": list(g)}
+        owned = {}
+        for policy, (m, r) in rings.items():
+            winners = sample_winners(m, r, x, y)
+            owned[policy] = sorted(k for k, w in winners.items() if e2 is not None and w == e2)
+            entry[policy] = chain(m, r, source, x, y)
+            if entry[policy] is not None:
+                entry[policy]["e2_samples"] = [list(k) for k in owned[policy]]
+        decisive = False
+        unique = all(set(o) <= {g} for o in owned.values())
+        if e2 is not None and entry["baseline"] is not None and not owned["baseline"] and unique:
+            others = {w for k, w in sample_winners(ref, straight, x, y).items() if k != g}
+            forced = chain(ref, straight, source, x, y, {w for w in others if w} | {e2})
+            decisive = forced is not None and forced["bits"] != entry["baseline"]["bits"]
+        entry["decisive"] = decisive
+        rows.append(entry)
     return {"mesh_sha256": hashlib.sha256(jb.mesh()).hexdigest(), "copies": rows}
 
 
 def table(found: dict[str, Any]) -> dict[str, Any]:
-    """Valid and decisive copies, the copies whose predicted values differ per hypothesis pair,
-    and per phase family (copy name without its phase) whether `snap256` and `quadsnap256` take
-    e2 (T's chain differs from straight ends) at some phases and not at others."""
+    """Ring-valid and decisive copies; per hypothesis pair, the copies whose predicted output bits
+    differ (this separates these fixed models only); and per hypothesis H of `snap256` and
+    `quadsnap256`, the phase families (one bend, e1 kind and deficit at PHASES) holding a phase
+    pair (i, j) where H's bits differ from straight ends at i and equal them at j while eps005's
+    relation to straight ends is the same at i and j; `inside_loss`, those of them at a negative
+    deficit where straight ends give G to e2 at both phases and H takes G from e2 at i."""
     rows = found["copies"]
     out: dict[str, Any] = {
         "copies": len(rows),
@@ -156,19 +191,34 @@ def table(found: dict[str, Any]) -> dict[str, Any]:
             1 for row in rows if row[a] and row[b] and row[a]["bits"] != row[b]["bits"]
         )
     out["values_differ"] = pairs
-    families: dict[str, dict[str, set[bool]]] = collections.defaultdict(
-        lambda: {"snap256": set(), "quadsnap256": set()}
-    )
+    families: dict[str, list[dict[str, Any]]] = collections.defaultdict(list)
     for row in rows:
-        if not row["copy"].startswith(("n-b1-", "n-b2.8-", "ge-b1-", "ge-b2.8-")):
-            continue
-        family = row["copy"].rsplit("-p", 1)[0]
-        for h in ("snap256", "quadsnap256"):
-            families[family][h].add(row[f"baseline+{h}"] != row["baseline"])
-    out["phase_flips"] = {
-        h: sorted(f for f, v in families.items() if len(v[h]) == 2)
-        for h in ("snap256", "quadsnap256")
-    }
+        family, _, phase = row["copy"].rpartition("-p")
+        phased = row["copy"].startswith(("n-b1-", "n-b2.8-", "ge-b1-", "ge-b2.8-"))
+        if phased and phase.isdigit() and all(row[p] is not None for p in HYPOTHESES):
+            families[family].append(row)
+
+    def differs(row: dict[str, Any], h: str) -> bool:
+        return bool(row[h]["bits"] != row["baseline"]["bits"])
+
+    eps = "baseline+eps005"
+    for h in ("baseline+snap256", "baseline+quadsnap256"):
+        found_pairs, inside = [], []
+        for family, members in sorted(families.items()):
+            for i, j in itertools.permutations(members, 2):
+                if differs(i, h) and not differs(j, h) and differs(i, eps) == differs(j, eps):
+                    found_pairs.append(family)
+                    g = i["g"]
+                    if (
+                        "-d-" in family
+                        and g in i["baseline"]["e2_samples"]
+                        and g in j["baseline"]["e2_samples"]
+                        and g not in i[h]["e2_samples"]
+                    ):
+                        inside.append(family)
+                    break
+        out[f"phase_pairs_{h.removeprefix('baseline+')}"] = found_pairs
+        out[f"inside_loss_{h.removeprefix('baseline+')}"] = inside
     return out
 
 
