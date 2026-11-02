@@ -1,0 +1,11 @@
+{
+  "id": 373,
+  "slug": "ray-cast-fixtures-are-authored-in-code-and-their-cross-backend-report-is-numbers-only",
+  "title": "Ray-cast fixtures are authored in code and their cross-backend report is numbers only",
+  "status": "accepted",
+  "date": "2026-11-02",
+  "relatedTasks": [
+    "phase3.2_vulkan-ray-tracing"
+  ],
+  "supersededBy": null
+}

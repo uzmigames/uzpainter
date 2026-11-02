@@ -1747,13 +1747,14 @@ int main(int argc, char** argv) {
     if (mode == "image-reference") return RunImagePassCase(mode, {});
     if (mode == "vulkan-qualify") return RunVulkanCase(mode, {});
     if (mode == "ray-query-reference") return RunRayQueryCase(mode, {});
+    if (mode == "ray-query-mesh") return RunRayQueryCase(mode, {});
     if (argc < 3) {
         std::fprintf(stderr,
                      "usage: uzp-render-tests xxhash | admission | readback-layout | kernel-cache | "
                      "dispatch | deadline | device-removed | unavailable | capabilities | "
                      "readback-pitch | readback-exact | readback-drain | readback-failure | "
                      "readback-kernel | uv-raster-* | vulkan-qualify | vulkan-device | vulkan-faults | vulkan-readback | "
-                     "vulkan-uv-raster | vulkan-image-passes | ray-query-reference | vulkan-ray-query | dx12-ray-query | "
+                     "vulkan-uv-raster | vulkan-image-passes | ray-query-reference | ray-query-mesh | vulkan-ray-query | dx12-ray-query | ray-cast-fixtures | "
                      "image-* "
                      "<work-dir>\n");
         return 2;

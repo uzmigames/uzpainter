@@ -5,6 +5,7 @@
 #include "render/ray_query.h"
 
 #include "render/device.h"
+#include "mesh/texturing_mesh.h"
 #include "render/vulkan_backend.h"
 
 #include "dx12_device.h"
@@ -528,14 +529,19 @@ RayHitDiff DiffRayHits(std::span<const RayHit> a, std::span<const RayHit> b, dou
             ++counter;
             line += (line.empty() ? "" : "; ") + what;
         };
-        field(x.hit != y.hit, diff.hit, "hit " + std::to_string(x.hit) + " vs " + std::to_string(y.hit));
-        field(x.instanceId != y.instanceId, diff.instanceId,
+        std::vector<std::string> fields;
+        const auto named = [&](bool differs, const char* name) {
+            if (differs) fields.emplace_back(name);
+            return differs;
+        };
+        field(named(x.hit != y.hit, "hit"), diff.hit, "hit " + std::to_string(x.hit) + " vs " + std::to_string(y.hit));
+        field(named(x.instanceId != y.instanceId, "instance_id"), diff.instanceId,
               "instance id " + std::to_string(x.instanceId) + " vs " + std::to_string(y.instanceId));
-        field(x.primitiveId != y.primitiveId, diff.primitiveId,
+        field(named(x.primitiveId != y.primitiveId, "primitive_id"), diff.primitiveId,
               "primitive " + std::to_string(x.primitiveId) + " vs " + std::to_string(y.primitiveId));
-        field(x.geometryIndex != y.geometryIndex, diff.geometryIndex,
+        field(named(x.geometryIndex != y.geometryIndex, "geometry_index"), diff.geometryIndex,
               "geometry " + std::to_string(x.geometryIndex) + " vs " + std::to_string(y.geometryIndex));
-        field(x.instanceIndex != y.instanceIndex, diff.instanceIndex,
+        field(named(x.instanceIndex != y.instanceIndex, "instance_index"), diff.instanceIndex,
               "instance index " + std::to_string(x.instanceIndex) + " vs " + std::to_string(y.instanceIndex));
         if (x.hit == 1 && y.hit == 1) {
             const double du = std::fabs(double{x.u} - double{y.u});
@@ -546,14 +552,313 @@ RayHitDiff DiffRayHits(std::span<const RayHit> a, std::span<const RayHit> b, dou
             // A non-finite value never equals another.
             const bool finite = std::isfinite(x.u) && std::isfinite(x.v) && std::isfinite(x.t) &&
                                 std::isfinite(y.u) && std::isfinite(y.v) && std::isfinite(y.t);
-            field(!finite || !(du <= tolerance) || !(dv <= tolerance), diff.barycentrics,
+            field(named(!finite || !(du <= tolerance) || !(dv <= tolerance), "barycentrics"), diff.barycentrics,
                   "barycentrics (" + Float(x.u) + ", " + Float(x.v) + ") vs (" + Float(y.u) + ", " + Float(y.v) + ")");
-            field(!finite || !(dt <= tolerance * std::max(1.0, std::fabs(double{y.t}))), diff.t,
+            field(named(!finite || !(dt <= tolerance * std::max(1.0, std::fabs(double{y.t}))), "t"), diff.t,
                   "t " + Float(x.t) + " vs " + Float(y.t));
         }
-        if (!line.empty()) diff.differing.push_back("ray " + std::to_string(i) + ": " + line);
+        if (!line.empty()) {
+            diff.differing.push_back("ray " + std::to_string(i) + ": " + line);
+            diff.differences.push_back({i, std::move(fields)});
+        }
     }
     return diff;
+}
+
+// ── Ray-cast fixtures (item 2.10) ────────────────────────────────────────────
+
+namespace {
+
+struct FixtureBuilder {
+    RayCastFixture fixture;
+
+    void Ray(RayKind kind, std::array<float, 3> origin, std::array<float, 3> direction, float tMin = 0,
+             float tMax = 1000) {
+        fixture.rays.push_back(CastRay{origin, tMin, direction, tMax});
+        fixture.kinds.push_back(kind);
+    }
+    /// A ray from `origin` towards `target`, with the direction `target - origin` (t = 1 there).
+    void Towards(RayKind kind, std::array<float, 3> origin, std::array<float, 3> target) {
+        Ray(kind, origin, {target[0] - origin[0], target[1] - origin[1], target[2] - origin[2]});
+    }
+};
+
+RayGeometry Geometry(const std::vector<float>& xyz, uint32_t stride, std::vector<uint32_t> indices, bool opaque) {
+    RayGeometry geometry;
+    geometry.vertexStride = stride;
+    geometry.vertexCount = static_cast<uint32_t>(xyz.size() / 3);
+    geometry.vertices = PackPositions(xyz, stride);
+    geometry.indices = std::move(indices);
+    geometry.opaque = opaque;
+    return geometry;
+}
+
+RayInstance Translated(float x, float y, float z, uint32_t id, uint8_t flags = 0, uint8_t mask = 0xFF) {
+    RayInstance instance;
+    instance.transform = {1, 0, 0, x, 0, 1, 0, y, 0, 0, 1, z};
+    instance.instanceId = id;
+    instance.flags = flags;
+    instance.mask = mask;
+    return instance;
+}
+
+/// A 4 x 4 grid of unit cells on z = 0 over [0, 4]^2, 16-byte stride, each cell split along its
+/// diagonal from (i, j) to (i + 1, j + 1).
+RayCastFixture PlaneFixture() {
+    FixtureBuilder b;
+    b.fixture.id = "plane";
+    std::vector<float> xyz;
+    for (int j = 0; j <= 4; ++j) {
+        for (int i = 0; i <= 4; ++i) xyz.insert(xyz.end(), {float(i), float(j), 0});
+    }
+    std::vector<uint32_t> indices;
+    for (uint32_t j = 0; j < 4; ++j) {
+        for (uint32_t i = 0; i < 4; ++i) {
+            const uint32_t a = j * 5 + i, c = a + 6;
+            indices.insert(indices.end(), {a, a + 1, c, a, c, a + 5});
+        }
+    }
+    b.fixture.scene.meshes.push_back({{Geometry(xyz, 16, indices, true)}});
+    b.fixture.scene.instances = {Translated(0, 0, 0, 1)};
+    for (int j = 0; j < 4; ++j) {
+        for (int i = 0; i < 4; ++i) {
+            b.Ray(RayKind::Interior, {i + 0.7f, j + 0.2f, 1}, {0, 0, -1});   // below the diagonal
+            b.Ray(RayKind::Interior, {i + 0.15f, j + 0.65f, 1}, {0, 0, -1});  // above it
+        }
+    }
+    b.Ray(RayKind::Interior, {0.3f, 0.1f, 2}, {0.25f, 0.125f, -1});
+    b.Ray(RayKind::Interior, {3.6f, 2.2f, -2}, {-0.0625f, 0.25f, 1});  // from below
+    b.Ray(RayKind::Miss, {5, 5, 1}, {0, 0, -1});
+    b.Ray(RayKind::Miss, {-1, 2, 1}, {0, 0, -1});
+    b.Ray(RayKind::Miss, {2.3f, 4.5f, 1}, {0, 0, -1});
+    b.Ray(RayKind::Miss, {2.3f, 1.7f, 1}, {0, 0, 1});         // pointing away
+    b.Ray(RayKind::Miss, {2.3f, 1.7f, 1}, {0, 0, -1}, 0, 0.5f);  // tMax before the plane
+    b.Ray(RayKind::Edge, {1, 0.5f, 1}, {0, 0, -1});            // shared vertical edge
+    b.Ray(RayKind::Edge, {2.5f, 2, 1}, {0, 0, -1});            // shared horizontal edge
+    b.Ray(RayKind::Edge, {0.5f, 0.5f, 1}, {0, 0, -1});         // cell diagonal
+    b.Ray(RayKind::Boundary, {0, 1.5f, 1}, {0, 0, -1});        // border edge
+    b.Ray(RayKind::Vertex, {1, 1, 1}, {0, 0, -1});
+    b.Ray(RayKind::Vertex, {2, 3, 1}, {0, 0, -1});
+    b.Ray(RayKind::Boundary, {0, 0, 1}, {0, 0, -1});  // border corners
+    b.Ray(RayKind::Boundary, {4, 4, 1}, {0, 0, -1});
+    b.Ray(RayKind::Grazing, {-1, 1.7f, 0.001f}, {1, 0, -0.0004f});  // meets z = 0 at x = 1.5
+    b.Ray(RayKind::Grazing, {-1, 2.6f, 0.0001f}, {1, 0.001f, -0.00002f});
+    b.Ray(RayKind::Grazing, {-1, 2.5f, 0}, {1, 0, 0});  // in the plane
+    return b.fixture;
+}
+
+/// A UV sphere of radius 1 at the origin (12 rings, 16 segments, single pole vertices), 32-byte
+/// stride, and one instance translated to (10, 0, 0).
+RayCastFixture SphereFixture() {
+    constexpr int kRings = 12, kSegments = 16;
+    constexpr double kPi = 3.14159265358979323846;
+    FixtureBuilder b;
+    b.fixture.id = "sphere";
+    std::vector<float> xyz = {0, 0, 1};
+    for (int r = 1; r < kRings; ++r) {
+        const double theta = kPi * r / kRings;
+        for (int s = 0; s < kSegments; ++s) {
+            const double phi = 2 * kPi * s / kSegments;
+            xyz.insert(xyz.end(), {float(std::sin(theta) * std::cos(phi)), float(std::sin(theta) * std::sin(phi)),
+                                   float(std::cos(theta))});
+        }
+    }
+    xyz.insert(xyz.end(), {0, 0, -1});
+    const auto ring = [](int r, int s) { return uint32_t(1 + (r - 1) * kSegments + (s % kSegments)); };
+    const uint32_t south = uint32_t(1 + (kRings - 1) * kSegments);
+    std::vector<uint32_t> indices;
+    for (int s = 0; s < kSegments; ++s) indices.insert(indices.end(), {0, ring(1, s), ring(1, s + 1)});
+    for (int r = 1; r < kRings - 1; ++r) {
+        for (int s = 0; s < kSegments; ++s) {
+            indices.insert(indices.end(), {ring(r, s), ring(r + 1, s), ring(r + 1, s + 1)});
+            indices.insert(indices.end(), {ring(r, s), ring(r + 1, s + 1), ring(r, s + 1)});
+        }
+    }
+    for (int s = 0; s < kSegments; ++s) indices.insert(indices.end(), {ring(kRings - 1, s), south, ring(kRings - 1, s + 1)});
+    b.fixture.scene.meshes.push_back({{Geometry(xyz, 32, indices, true)}});
+    b.fixture.scene.instances = {Translated(0, 0, 0, 11), Translated(10, 0, 0, 12)};
+    // Towards the centre from directions off every vertex, edge and pole.
+    const std::array<std::array<float, 3>, 8> dirs = {{{0.6123f, 0.2171f, 0.7604f},
+                                                       {-0.4417f, 0.8113f, 0.3829f},
+                                                       {0.1373f, -0.9214f, -0.3637f},
+                                                       {-0.7731f, -0.3049f, 0.5561f},
+                                                       {0.9037f, 0.1291f, -0.4083f},
+                                                       {-0.2389f, 0.4471f, -0.8622f},
+                                                       {0.3313f, 0.6619f, 0.6724f},
+                                                       {-0.5512f, -0.7343f, -0.3961f}}};
+    for (const auto& d : dirs) {
+        b.Towards(RayKind::Interior, {3 * d[0], 3 * d[1], 3 * d[2]}, {0, 0, 0});
+        b.Towards(RayKind::Interior, {10 + 3 * d[0], 3 * d[1], 3 * d[2]}, {10, 0, 0});
+        b.Ray(RayKind::Interior, {0, 0, 0}, d);  // from inside: the inner faces
+    }
+    b.Ray(RayKind::Miss, {-3, 1.5f, 0.1f}, {1, 0, 0});
+    b.Ray(RayKind::Miss, {5, 0, 0}, {0, 0, 1});
+    b.Ray(RayKind::Vertex, {0, 0, 3}, {0, 0, -1});  // the north pole
+    b.Ray(RayKind::Vertex, {0, 0, -3}, {0, 0, 1});  // the south pole
+    b.Ray(RayKind::Grazing, {-3, 0.97f, 0.05f}, {1, 0, 0});
+    b.Ray(RayKind::Grazing, {-3, 0.0f, 0.995f}, {1, 0, 0});
+    b.Ray(RayKind::Grazing, {7, 0.999f, 0.01f}, {1, 0, 0});
+    return b.fixture;
+}
+
+/// A cube of half-size 1 at the origin with 0.25 bevels (6 inset faces, 12 edge quads, 8 corner
+/// triangles, 44 triangles over 24 shared vertices), 12-byte stride.
+RayCastFixture BevelledCubeFixture() {
+    constexpr float kIn = 0.75f;
+    FixtureBuilder b;
+    b.fixture.id = "bevelled-cube";
+    std::vector<float> xyz;
+    // Face corner (axis a, sign s, corner signs u, v of the other two axes in order).
+    const auto corner = [&](int a, int s, int u, int v) {
+        std::array<float, 3> p{};
+        const int o1 = (a + 1) % 3, o2 = (a + 2) % 3;
+        p[a] = float(s);
+        p[o1] = kIn * u;
+        p[o2] = kIn * v;
+        for (size_t i = 0; i < xyz.size(); i += 3) {
+            if (xyz[i] == p[0] && xyz[i + 1] == p[1] && xyz[i + 2] == p[2]) return uint32_t(i / 3);
+        }
+        xyz.insert(xyz.end(), p.begin(), p.end());
+        return uint32_t(xyz.size() / 3 - 1);
+    };
+    const auto at = [&](int a, int s, std::array<int, 3> signs) {
+        // The corner of face (a, s) in the octant of `signs` (the face axis's sign is s).
+        return corner(a, s, signs[(a + 1) % 3], signs[(a + 2) % 3]);
+    };
+    std::vector<uint32_t> indices;
+    const auto quad = [&](uint32_t p, uint32_t q, uint32_t r, uint32_t t) {
+        indices.insert(indices.end(), {p, q, r, p, r, t});
+    };
+    for (int a = 0; a < 3; ++a) {
+        for (int s : {-1, 1}) quad(corner(a, s, -1, -1), corner(a, s, 1, -1), corner(a, s, 1, 1), corner(a, s, -1, 1));
+    }
+    for (int a = 0; a < 3; ++a) {
+        const int c = (a + 1) % 3, w = (a + 2) % 3;  // edge between faces a and c, along axis w
+        for (int sa : {-1, 1}) {
+            for (int sc : {-1, 1}) {
+                std::array<int, 3> lo{}, hi{};
+                lo[a] = hi[a] = sa;
+                lo[c] = hi[c] = sc;
+                lo[w] = -1;
+                hi[w] = 1;
+                quad(at(a, sa, lo), at(a, sa, hi), at(c, sc, hi), at(c, sc, lo));
+            }
+        }
+    }
+    for (int sx : {-1, 1}) {
+        for (int sy : {-1, 1}) {
+            for (int sz : {-1, 1}) {
+                const std::array<int, 3> o = {sx, sy, sz};
+                indices.insert(indices.end(), {at(0, sx, o), at(1, sy, o), at(2, sz, o)});
+            }
+        }
+    }
+    b.fixture.scene.meshes.push_back({{Geometry(xyz, 12, indices, true)}});
+    b.fixture.scene.instances = {Translated(0, 0, 0, 21)};
+    b.Ray(RayKind::Interior, {3, 0.1f, 0.2f}, {-1, 0, 0});
+    b.Ray(RayKind::Interior, {0.15f, -3, -0.35f}, {0, 1, 0});
+    b.Ray(RayKind::Interior, {-0.4f, 0.3f, 3}, {0, 0, -1});
+    b.Ray(RayKind::Interior, {3, 3, 0.1f}, {-1, -1, 0});        // the +x+y bevel
+    b.Ray(RayKind::Interior, {-3, 0.3f, -3}, {1, 0, 1});        // the -x-z bevel
+    b.Ray(RayKind::Interior, {3, 3.05f, 2.95f}, {-1, -1, -1});  // the +x+y+z corner triangle
+    b.Ray(RayKind::Interior, {0.05f, 0.02f, 0.01f}, {0.3f, 0.9f, 0.1f});  // from inside
+    b.Ray(RayKind::Miss, {3, 1.5f, 1.5f}, {-1, 0, 0});
+    b.Ray(RayKind::Miss, {3, 3, 3}, {1, 1, 1});
+    b.Ray(RayKind::Edge, {3, 0, kIn}, {-1, 0, 0});   // face +x / bevel edge
+    b.Ray(RayKind::Edge, {3, kIn, 0.3f}, {-1, 0, 0}); // face +x / bevel +x+y border
+    b.Ray(RayKind::Vertex, {3, kIn, kIn}, {-1, 0, 0});
+    b.Ray(RayKind::Vertex, {-kIn, -3, kIn}, {0, 1, 0});
+    b.Ray(RayKind::Grazing, {3, 1.0f, 0.3f}, {-1, 0.00001f, 0});
+    return b.fixture;
+}
+
+/// An opaque/non-opaque pair: a non-opaque quad at z = 0 (geometry 0) over an opaque quad at
+/// z = -1 (geometry 1), instanced plain, forced opaque, forced non-opaque and with mask 0.
+RayCastFixture OpacityFixture() {
+    FixtureBuilder b;
+    b.fixture.id = "opacity-pair";
+    const std::vector<float> front = {0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0};
+    const std::vector<float> back = {0, 0, -1, 1, 0, -1, 1, 1, -1, 0, 1, -1};
+    const std::vector<uint32_t> quad = {0, 1, 2, 0, 2, 3};
+    b.fixture.scene.meshes.push_back({{Geometry(front, 12, quad, false), Geometry(back, 12, quad, true)}});
+    b.fixture.scene.meshes.push_back({{Geometry(back, 20, quad, true)}});
+    b.fixture.scene.instances = {Translated(0, 0, 0, 31), Translated(2, 0, 0, 32, kRayInstanceForceOpaque),
+                                 Translated(4, 0, 0, 33, kRayInstanceForceNonOpaque), Translated(6, 0, 0, 34, 0, 0)};
+    b.fixture.scene.instances[2].mesh = 1;
+    for (const float x : {0.f, 2.f, 4.f, 6.f}) {
+        // Instance 2 forces its opaque quad non-opaque: the odd triangle is passed, nothing is behind.
+        b.Ray(x == 6 ? RayKind::Miss : RayKind::Interior, {x + 0.75f, 0.25f, 1}, {0, 0, -1});  // even triangle
+        b.Ray(x >= 4 ? RayKind::Miss : RayKind::Interior, {x + 0.25f, 0.75f, 1}, {0, 0, -1});  // odd triangle
+    }
+    b.Ray(RayKind::Interior, {0.6f, 0.3f, -3}, {0, 0, 1});  // from below: the opaque back first
+    return b.fixture;
+}
+
+}  // namespace
+
+std::string_view RayKindName(RayKind kind) {
+    switch (kind) {
+        case RayKind::Interior: return "interior";
+        case RayKind::Miss: return "miss";
+        case RayKind::Edge: return "edge";
+        case RayKind::Vertex: return "vertex";
+        case RayKind::Boundary: return "boundary";
+        case RayKind::Grazing: return "grazing";
+    }
+    return "unknown";
+}
+
+std::vector<RayCastFixture> RayCastFixtures() {
+    return {PlaneFixture(), SphereFixture(), BevelledCubeFixture(), OpacityFixture()};
+}
+
+RaySceneDesc RaySceneFromMesh(const mesh::TexturingMesh& source, std::span<const uint32_t> nonOpaqueMaterials) {
+    RaySceneDesc desc;
+    for (size_t o = 0; o < source.objects.size(); ++o) {
+        const mesh::Object& object = source.objects[o];
+        // One geometry per material the object's triangles use, in material order.
+        std::vector<uint32_t> materials;
+        for (const mesh::Triangle& triangle : object.triangles) {
+            const uint32_t material = source.corners[triangle.corners[0]].material;
+            if (std::find(materials.begin(), materials.end(), material) == materials.end()) {
+                materials.push_back(material);
+            }
+        }
+        std::sort(materials.begin(), materials.end());
+        RayMesh rayMesh;
+        for (const uint32_t material : materials) {
+            std::vector<float> xyz;
+            std::vector<uint32_t> indices;
+            std::vector<uint32_t> remap(source.positions.size(), UINT32_MAX);
+            for (const mesh::Triangle& triangle : object.triangles) {
+                if (source.corners[triangle.corners[0]].material != material) continue;
+                for (const uint32_t corner : triangle.corners) {
+                    const uint32_t position = source.corners[corner].position;
+                    if (remap[position] == UINT32_MAX) {
+                        remap[position] = static_cast<uint32_t>(xyz.size() / 3);
+                        const mesh::Float3& p = source.positions[position];
+                        xyz.insert(xyz.end(), {p.x, p.y, p.z});
+                    }
+                    indices.push_back(remap[position]);
+                }
+            }
+            const bool opaque = std::find(nonOpaqueMaterials.begin(), nonOpaqueMaterials.end(), material) ==
+                                nonOpaqueMaterials.end();
+            rayMesh.geometries.push_back(
+                Geometry(xyz, static_cast<uint32_t>(sizeof(mesh::Float3)), std::move(indices), opaque));
+        }
+        if (rayMesh.geometries.empty()) continue;  // an object without triangles has nothing to hit
+        RayInstance instance;
+        instance.mesh = static_cast<uint32_t>(desc.meshes.size());
+        // Column-major 4x4 (element [c * 4 + r]) to row-major 3x4.
+        for (int r = 0; r < 3; ++r) {
+            for (int c = 0; c < 4; ++c) instance.transform[r * 4 + c] = static_cast<float>(object.transform[c * 4 + r]);
+        }
+        instance.instanceId = static_cast<uint32_t>(o) & 0xFFFFFFu;
+        desc.meshes.push_back(std::move(rayMesh));
+        desc.instances.push_back(instance);
+    }
+    return desc;
 }
 
 // ── Qualification slice ──────────────────────────────────────────────────────

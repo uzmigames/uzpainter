@@ -13,25 +13,29 @@
   - Done: `render::QueryRayQuerySupport` / `RequireInlineRayQuery` (`src/render/ray_query.h`), `VulkanRayQueryMissing` on the record, `ray_query_missing` in the capability report (fabricated records in `ray-query-reference`; live in `vulkan-ray-query`, `dx12-ray-query`).
 - [x] 2.6 Emit SPIR-V with `SPV_KHR_ray_query` from DXC for kernels that request ray queries (UZP-MOD-006 option, `vulkan1.2` target)
   - Done: `CompileRayCastKernel` passes `enableRayQuery` (UZP-MOD-006); the SPIR-V declares `SPV_KHR_ray_query` and `RayQueryKHR`, no `RayTracingKHR` (`vulkan-ray-query`, selftest); `tests/vendoring/test_modifications.py::test_spirv_targets_vulkan_1_2_with_ray_query` green.
-- [ ] 2.7 Write the backend-neutral acceleration-structure builder for UzPainter meshes: real vertex stride, per-geometry opacity flag, raw RHI `CreateBLAS`, same calls on DXR and Vulkan
-  - Progress 2026-11-02: `render::BuildRayScene` (`src/render/ray_query.h`) builds through the raw RHI `CreateBLAS` with each geometry's stride and opacity flag, the same calls on DXR and Vulkan (20- and 12-byte strides, a non-opaque geometry, green on both). Open: the adapter from `mesh::TexturingMesh`.
+- [x] 2.7 Write the backend-neutral acceleration-structure builder for UzPainter meshes: real vertex stride, per-geometry opacity flag, raw RHI `CreateBLAS`, same calls on DXR and Vulkan
+  - Done: `render::BuildRayScene` builds through the raw RHI `CreateBLAS` with each geometry's stride and opacity flag, the same calls on DXR and Vulkan; `render::RaySceneFromMesh` turns a `mesh::TexturingMesh` into a scene (one BLAS per object, one geometry per material at the 12-byte `Float3` stride, opacity per material, the object transform; decision 373). `ray-query-mesh` and the mesh trace in `vulkan-ray-query`/`dx12-ray-query` equal the CPU reference; `tests/render/test_ray_query.py` (6 passed, RTX 4090, 2026-11-02).
 - [x] 2.8 Log UZP-MOD-007 in `MODIFICATIONS.md` with modification markers in every touched vendored file; keep Apache-2.0 headers
   - Done: UZP-MOD-007 logged in `thirdparty/uzengine-render-core/MODIFICATIONS.md` (7 files, upstream citations), notices and manifest updated (`python -m tools.vendoring.modifications`: 0 problems); `test_vulkan_acceleration_structures_and_ray_queries`, `test_notices_log_and_manifest_agree`, `test_log_citations_hold_at_the_selected_commit` green.
 - [x] 2.9 Extend `selftest` with the Vulkan ray-query qualification slice (build a BLAS/TLAS, trace one inline query, read back the hit) reported separately from the availability probe
   - Done: `selftest` stage `vulkan-ray-query-trace` (Vulkan slice, apart from the `vulkan-ray-query` probe): one BLAS of two geometries, a TLAS of three instances, nine rays equal to their hand-computed answers and to the CPU reference (|delta| <= 1e-5); `tests/toolchain/test_selftest.py::test_vulkan_ray_query_slice_green` green.
-- [ ] 2.10 Author the ray-cast fixtures under `parity/manifests/`: plane, sphere and bevelled cube meshes, an opaque/non-opaque geometry pair and a fixed ray set (hits, misses, grazing rays, edge and vertex hits)
-- [ ] 2.11 Write the ray-cast kernel (inline `RayQuery`, identical HLSL for DXIL and SPIR-V) writing one record per ray: hit flag, instance id, primitive id, barycentrics, hit distance
-- [ ] 2.12 Write the cross-backend ray-cast comparison: per-fixture counts of differing records by field, max |Δ| of distance and barycentrics, list of every differing ray
+- [x] 2.10 Author the ray-cast fixtures under `parity/manifests/`: plane, sphere and bevelled cube meshes, an opaque/non-opaque geometry pair and a fixed ray set (hits, misses, grazing rays, edge and vertex hits)
+  - Done, authored in code instead of `parity/manifests/` (decision 373: that folder admits Painter golden manifests only): `RayCastFixtures` in `src/render/ray_query.cpp` (`plane` 50 rays, `sphere` 31, `bevelled-cube` 14, `opacity-pair` 9; interior, miss, edge, vertex, boundary and grazing rays).
+- [x] 2.11 Write the ray-cast kernel (inline `RayQuery`, identical HLSL for DXIL and SPIR-V) writing one record per ray: hit flag, instance id, primitive id, barycentrics, hit distance
+  - Done: `src/render/shaders/ray_cast.hlsl` (one file, `__spirv__` picks the bindings; record adds geometry and instance index; decision 372); traced on DXR and Vulkan, `tests/render/test_ray_query.py` (6 passed, RTX 4090, 2026-11-02).
+- [x] 2.12 Write the cross-backend ray-cast comparison: per-fixture counts of differing records by field, max |Δ| of distance and barycentrics, list of every differing ray
+  - Done: `uzp-render-tests ray-cast-fixtures` and `python -m tools.parity.raycast` (`parity/reports/phase3/ray-cast.json`, guard rule `ray-cast.json`; decision 373): per fixture and backend the CPU comparison, DX12 vs Vulkan exact per field with every differing ray. `test_ray_cast_fixtures_on_both_backends`, `test_committed_ray_cast_report_is_valid`, `tests/parity/test_guard.py` green.
 - [ ] 2.13 Add Vulkan ray-query entries to the capability manifest (`capabilities.json`) with their tier evidence
 
 ## 3. Tests
-- [ ] 3.1 Unit tests: BLAS/TLAS build on Vulkan for each ray-cast fixture mesh; rebuild after a vertex change; invalid input rejected
-  - Progress 2026-11-02: build, rebuild after a vertex change and invalid input refused, on the qualification scene (`vulkan-ray-query`). Open: every ray-cast fixture mesh (2.10).
+- [x] 3.1 Unit tests: BLAS/TLAS build on Vulkan for each ray-cast fixture mesh; rebuild after a vertex change; invalid input rejected
+  - Done 2026-11-02: every ray-cast fixture mesh builds and traces on Vulkan (`ray-cast-fixtures`); rebuild after a vertex change and invalid input refused (`vulkan-ray-query`); `tests/render/test_ray_query.py` (6 passed, RTX 4090, 2026-11-02).
 - [ ] 3.2 Capability tests: a device without `VK_KHR_ray_query` reports unavailable with the missing list and no work is dispatched
   - Progress 2026-11-02: a record without `VK_KHR_ray_query` reports it missing and the capability report says unavailable; `RequireInlineRayQuery` refuses before any work. Open: a live device without the extension (none on this machine) beyond the fabricated records.
-- [ ] 3.3 Repeatability: the ray-cast kernel run twice on each backend gives byte-identical records
-  - Progress 2026-11-02: the qualification scene built and traced twice gives byte-identical records on Vulkan and on DX12. Open: the ray-cast fixtures (2.10).
-- [ ] 3.4 Cross-backend run of every ray-cast fixture on DXR and Vulkan on the owner's GPU; report every difference
+- [x] 3.3 Repeatability: the ray-cast kernel run twice on each backend gives byte-identical records
+  - Done 2026-11-02: every fixture and the qualification scene, built and traced twice, give byte-identical records on DX12 and on Vulkan (`ray-cast-fixtures`, `vulkan-ray-query`, `dx12-ray-query`).
+- [x] 3.4 Cross-backend run of every ray-cast fixture on DXR and Vulkan on the owner's GPU; report every difference
+  - Done 2026-11-02 (RTX 4090, NVIDIA 617.14): 0 differing rays on every fixture and field (`parity/reports/phase3/ray-cast.json`, outcome pass).
 - [x] 3.5 `selftest` Vulkan ray-query slice green on the owner's machine
   - Done 2026-11-02 on the owner's machine (RTX 4090): `test_vulkan_ray_query_slice_green` and `test_vulkan_hardware_slice_green` passed.
 

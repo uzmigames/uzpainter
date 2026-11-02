@@ -1,0 +1,467 @@
+{
+  "schema": "uzpainter/parity/ray-cast-report/1",
+  "task": "phase3.2_vulkan-ray-tracing",
+  "kernel_sha256": "64a8331a3177098fec62b007d6420a8a53dcd11f1847ef00d53f3c50237a1b51",
+  "tolerance": 1e-05,
+  "backends": [
+    {
+      "backend": "dx12",
+      "adapter_sha256": "e7d862260256f76774c412d3a8659310c8fc1373f5edc571f010c9a270054e65",
+      "driver_sha256": "0d4a994517527cf2e05c37cdea47f0d1e4835db1b5edb9bb2917f5189a719f87"
+    },
+    {
+      "backend": "vulkan",
+      "adapter_sha256": "e7d862260256f76774c412d3a8659310c8fc1373f5edc571f010c9a270054e65",
+      "driver_sha256": "6289d4f1bb5a1f80da50714a9c677e157be7eb867af934cfcbe1742f44275504"
+    }
+  ],
+  "fixtures": [
+    {
+      "id": "plane",
+      "rays": 50,
+      "triangles": 32,
+      "instances": 1,
+      "kinds": {
+        "interior": 34,
+        "miss": 5,
+        "edge": 3,
+        "vertex": 2,
+        "boundary": 3,
+        "grazing": 3
+      },
+      "runs": [
+        {
+          "backend": "dx12",
+          "repeatable": true,
+          "strict_differing": 0,
+          "shared_rays": 5,
+          "shared_wrong": 0,
+          "versus_cpu": {
+            "differing_rays": 7,
+            "hit": 3,
+            "instance_id": 3,
+            "primitive_id": 6,
+            "geometry_index": 0,
+            "instance_index": 0,
+            "barycentrics": 4,
+            "t": 0,
+            "max_delta_t": 0,
+            "max_delta_barycentric": 1,
+            "differences": [
+              {
+                "ray": 40,
+                "fields": [
+                  "primitive_id",
+                  "barycentrics"
+                ]
+              },
+              {
+                "ray": 41,
+                "fields": [
+                  "primitive_id",
+                  "barycentrics"
+                ]
+              },
+              {
+                "ray": 42,
+                "fields": [
+                  "hit",
+                  "instance_id",
+                  "primitive_id"
+                ]
+              },
+              {
+                "ray": 43,
+                "fields": [
+                  "primitive_id",
+                  "barycentrics"
+                ]
+              },
+              {
+                "ray": 44,
+                "fields": [
+                  "primitive_id",
+                  "barycentrics"
+                ]
+              },
+              {
+                "ray": 45,
+                "fields": [
+                  "hit",
+                  "instance_id"
+                ]
+              },
+              {
+                "ray": 46,
+                "fields": [
+                  "hit",
+                  "instance_id",
+                  "primitive_id"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "backend": "vulkan",
+          "repeatable": true,
+          "strict_differing": 0,
+          "shared_rays": 5,
+          "shared_wrong": 0,
+          "versus_cpu": {
+            "differing_rays": 7,
+            "hit": 3,
+            "instance_id": 3,
+            "primitive_id": 6,
+            "geometry_index": 0,
+            "instance_index": 0,
+            "barycentrics": 4,
+            "t": 0,
+            "max_delta_t": 0,
+            "max_delta_barycentric": 1,
+            "differences": [
+              {
+                "ray": 40,
+                "fields": [
+                  "primitive_id",
+                  "barycentrics"
+                ]
+              },
+              {
+                "ray": 41,
+                "fields": [
+                  "primitive_id",
+                  "barycentrics"
+                ]
+              },
+              {
+                "ray": 42,
+                "fields": [
+                  "hit",
+                  "instance_id",
+                  "primitive_id"
+                ]
+              },
+              {
+                "ray": 43,
+                "fields": [
+                  "primitive_id",
+                  "barycentrics"
+                ]
+              },
+              {
+                "ray": 44,
+                "fields": [
+                  "primitive_id",
+                  "barycentrics"
+                ]
+              },
+              {
+                "ray": 45,
+                "fields": [
+                  "hit",
+                  "instance_id"
+                ]
+              },
+              {
+                "ray": 46,
+                "fields": [
+                  "hit",
+                  "instance_id",
+                  "primitive_id"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "cross_backend": {
+        "differing_rays": 0,
+        "hit": 0,
+        "instance_id": 0,
+        "primitive_id": 0,
+        "geometry_index": 0,
+        "instance_index": 0,
+        "barycentrics": 0,
+        "t": 0,
+        "max_delta_t": 0,
+        "max_delta_barycentric": 0,
+        "differences": []
+      }
+    },
+    {
+      "id": "sphere",
+      "rays": 31,
+      "triangles": 352,
+      "instances": 2,
+      "kinds": {
+        "interior": 24,
+        "miss": 2,
+        "edge": 0,
+        "vertex": 2,
+        "boundary": 0,
+        "grazing": 3
+      },
+      "runs": [
+        {
+          "backend": "dx12",
+          "repeatable": true,
+          "strict_differing": 0,
+          "shared_rays": 2,
+          "shared_wrong": 0,
+          "versus_cpu": {
+            "differing_rays": 2,
+            "hit": 0,
+            "instance_id": 0,
+            "primitive_id": 2,
+            "geometry_index": 0,
+            "instance_index": 0,
+            "barycentrics": 0,
+            "t": 0,
+            "max_delta_t": 2.38418579e-07,
+            "max_delta_barycentric": 2.98023224e-07,
+            "differences": [
+              {
+                "ray": 26,
+                "fields": [
+                  "primitive_id"
+                ]
+              },
+              {
+                "ray": 27,
+                "fields": [
+                  "primitive_id"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "backend": "vulkan",
+          "repeatable": true,
+          "strict_differing": 0,
+          "shared_rays": 2,
+          "shared_wrong": 0,
+          "versus_cpu": {
+            "differing_rays": 2,
+            "hit": 0,
+            "instance_id": 0,
+            "primitive_id": 2,
+            "geometry_index": 0,
+            "instance_index": 0,
+            "barycentrics": 0,
+            "t": 0,
+            "max_delta_t": 2.38418579e-07,
+            "max_delta_barycentric": 2.98023224e-07,
+            "differences": [
+              {
+                "ray": 26,
+                "fields": [
+                  "primitive_id"
+                ]
+              },
+              {
+                "ray": 27,
+                "fields": [
+                  "primitive_id"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "cross_backend": {
+        "differing_rays": 0,
+        "hit": 0,
+        "instance_id": 0,
+        "primitive_id": 0,
+        "geometry_index": 0,
+        "instance_index": 0,
+        "barycentrics": 0,
+        "t": 0,
+        "max_delta_t": 0,
+        "max_delta_barycentric": 0,
+        "differences": []
+      }
+    },
+    {
+      "id": "bevelled-cube",
+      "rays": 14,
+      "triangles": 44,
+      "instances": 1,
+      "kinds": {
+        "interior": 7,
+        "miss": 2,
+        "edge": 2,
+        "vertex": 2,
+        "boundary": 0,
+        "grazing": 1
+      },
+      "runs": [
+        {
+          "backend": "dx12",
+          "repeatable": true,
+          "strict_differing": 0,
+          "shared_rays": 4,
+          "shared_wrong": 0,
+          "versus_cpu": {
+            "differing_rays": 3,
+            "hit": 0,
+            "instance_id": 0,
+            "primitive_id": 3,
+            "geometry_index": 0,
+            "instance_index": 0,
+            "barycentrics": 1,
+            "t": 0,
+            "max_delta_t": 2.38418579e-07,
+            "max_delta_barycentric": 1,
+            "differences": [
+              {
+                "ray": 9,
+                "fields": [
+                  "primitive_id"
+                ]
+              },
+              {
+                "ray": 11,
+                "fields": [
+                  "primitive_id",
+                  "barycentrics"
+                ]
+              },
+              {
+                "ray": 12,
+                "fields": [
+                  "primitive_id"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "backend": "vulkan",
+          "repeatable": true,
+          "strict_differing": 0,
+          "shared_rays": 4,
+          "shared_wrong": 0,
+          "versus_cpu": {
+            "differing_rays": 3,
+            "hit": 0,
+            "instance_id": 0,
+            "primitive_id": 3,
+            "geometry_index": 0,
+            "instance_index": 0,
+            "barycentrics": 1,
+            "t": 0,
+            "max_delta_t": 2.38418579e-07,
+            "max_delta_barycentric": 1,
+            "differences": [
+              {
+                "ray": 9,
+                "fields": [
+                  "primitive_id"
+                ]
+              },
+              {
+                "ray": 11,
+                "fields": [
+                  "primitive_id",
+                  "barycentrics"
+                ]
+              },
+              {
+                "ray": 12,
+                "fields": [
+                  "primitive_id"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "cross_backend": {
+        "differing_rays": 0,
+        "hit": 0,
+        "instance_id": 0,
+        "primitive_id": 0,
+        "geometry_index": 0,
+        "instance_index": 0,
+        "barycentrics": 0,
+        "t": 0,
+        "max_delta_t": 0,
+        "max_delta_barycentric": 0,
+        "differences": []
+      }
+    },
+    {
+      "id": "opacity-pair",
+      "rays": 9,
+      "triangles": 6,
+      "instances": 4,
+      "kinds": {
+        "interior": 6,
+        "miss": 3,
+        "edge": 0,
+        "vertex": 0,
+        "boundary": 0,
+        "grazing": 0
+      },
+      "runs": [
+        {
+          "backend": "dx12",
+          "repeatable": true,
+          "strict_differing": 0,
+          "shared_rays": 0,
+          "shared_wrong": 0,
+          "versus_cpu": {
+            "differing_rays": 0,
+            "hit": 0,
+            "instance_id": 0,
+            "primitive_id": 0,
+            "geometry_index": 0,
+            "instance_index": 0,
+            "barycentrics": 0,
+            "t": 0,
+            "max_delta_t": 0,
+            "max_delta_barycentric": 0,
+            "differences": []
+          }
+        },
+        {
+          "backend": "vulkan",
+          "repeatable": true,
+          "strict_differing": 0,
+          "shared_rays": 0,
+          "shared_wrong": 0,
+          "versus_cpu": {
+            "differing_rays": 0,
+            "hit": 0,
+            "instance_id": 0,
+            "primitive_id": 0,
+            "geometry_index": 0,
+            "instance_index": 0,
+            "barycentrics": 0,
+            "t": 0,
+            "max_delta_t": 0,
+            "max_delta_barycentric": 0,
+            "differences": []
+          }
+        }
+      ],
+      "cross_backend": {
+        "differing_rays": 0,
+        "hit": 0,
+        "instance_id": 0,
+        "primitive_id": 0,
+        "geometry_index": 0,
+        "instance_index": 0,
+        "barycentrics": 0,
+        "t": 0,
+        "max_delta_t": 0,
+        "max_delta_barycentric": 0,
+        "differences": []
+      }
+    }
+  ],
+  "outcome": "pass"
+}

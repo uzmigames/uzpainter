@@ -30,6 +30,10 @@
 #include <string>
 #include <vector>
 
+namespace uzp::mesh {
+struct TexturingMesh;
+}
+
 namespace uzp::render {
 
 // ── Capability ───────────────────────────────────────────────────────────────
@@ -174,6 +178,13 @@ inline constexpr uint32_t kSpirvCapabilityRayTracingKHR = 4479;
 /// How two record sets differ: per field, the rays whose field differs (floats beyond
 /// `tolerance`), the largest |delta| of t and of the barycentrics over rays both hit, and one line
 /// per differing ray.
+/// One differing ray: its index and the fields that differ ("hit", "instance_id",
+/// "primitive_id", "geometry_index", "instance_index", "barycentrics", "t").
+struct RayDifference {
+    size_t ray = 0;
+    std::vector<std::string> fields;
+};
+
 struct RayHitDiff {
     size_t rays = 0;
     size_t hit = 0;
@@ -186,11 +197,44 @@ struct RayHitDiff {
     double maxDeltaT = 0;
     double maxDeltaBarycentric = 0;
     std::vector<std::string> differing;  ///< "ray <i>: <field> <a> vs <b>; ...".
+    std::vector<RayDifference> differences;  ///< The same, as fields.
 
     [[nodiscard]] bool Equal() const { return differing.empty(); }
 };
 
 [[nodiscard]] RayHitDiff DiffRayHits(std::span<const RayHit> a, std::span<const RayHit> b, double tolerance);
+
+// ── Meshes and fixtures ───────────────────────────────────────────────────────
+
+/// The ray scene of a UzPainter mesh (item 2.7): one BLAS per object with triangles, one geometry
+/// per material its triangles use (in material order), holding the positions those triangles use
+/// at the mesh's own 12-byte `Float3` stride with their indices, opaque unless the material is in
+/// `nonOpaqueMaterials`; one instance per object with its transform (the glTF column-major 4x4 as
+/// the 3x4 row-major instance transform, in the file's scene space) and the object's index as id.
+[[nodiscard]] RaySceneDesc RaySceneFromMesh(const mesh::TexturingMesh& source,
+                                            std::span<const uint32_t> nonOpaqueMaterials);
+
+/// What a fixture ray is aimed at, which decides how strictly it is checked against the CPU
+/// reference: `Interior` and `Miss` field by field; `Edge` and `Vertex` (inside the mesh, shared by
+/// several triangles, exactly one of which watertight hardware reports) by hit and distance;
+/// `Boundary` (an edge or vertex on an open mesh's border, which hardware may or may not report)
+/// and `Grazing` reported only.
+enum class RayKind : uint8_t { Interior, Miss, Edge, Vertex, Boundary, Grazing };
+[[nodiscard]] std::string_view RayKindName(RayKind kind);
+
+/// One ray-cast fixture (item 2.10): an independently authored scene and a fixed ray set.
+struct RayCastFixture {
+    std::string id;
+    RaySceneDesc scene;
+    std::vector<CastRay> rays;
+    std::vector<RayKind> kinds;  ///< One per ray.
+};
+
+/// The ray-cast fixtures, authored here (decision 373): `plane` (a 4 x 4 grid, 16-byte stride),
+/// `sphere` (a UV sphere, 32-byte stride, two instances), `bevelled-cube` (44 triangles,
+/// 12-byte stride) and `opacity-pair` (a non-opaque quad over an opaque one; instances plain,
+/// forced opaque, forced non-opaque, mask 0), each with hits, misses, edge, vertex and grazing rays.
+[[nodiscard]] std::vector<RayCastFixture> RayCastFixtures();
 
 // ── Qualification slice ──────────────────────────────────────────────────────
 

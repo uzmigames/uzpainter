@@ -25,7 +25,9 @@ Checks the content of files, never only their names or signatures:
   `tools/parity/settling/mcp_contract.py`), and a pilot's MCP-only round report
   (`parity/reports/<phase>/<pilot>-mcp-round.json`, `tools/parity/tier1/mcp_round.py`). The
   procedural held-out ledger (`parity/reports/<phase>/held-out-ledger.json`,
-  `tools/parity/proc_cert/ledger.py`) holds held-out pins and candidate SHA-256 digests only. The
+  `tools/parity/proc_cert/ledger.py`) holds held-out pins and candidate SHA-256 digests only; the
+  cross-backend ray-cast report (`parity/reports/<phase>/ray-cast.json`, `tools/parity/raycast.py`)
+  counts, field names, numbers and digests only. The
   procedural certification reports (`parity/reports/<phase>/proc-cert/<asset>@<version>/<pin>.json`)
   and batches (`parity/manifests/phase3/proc-cert/**`) have rules of their own
   (`tools/parity/proc_cert/report.py`): hashes, integer statistics and case outcomes, no path.
@@ -607,6 +609,12 @@ def _mcp_round(path: str, document: Any, data: bytes, ctx: _Context) -> list[str
     return report_problems(document)
 
 
+def _ray_cast_report(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
+    from tools.parity.raycast import report_problems
+
+    return report_problems(document)
+
+
 def _held_out_ledger(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
     from tools.parity.proc_cert.ledger import ledger_problems
 
@@ -732,6 +740,11 @@ PATH_RULES: tuple[tuple[re.Pattern[str], str, _Rule], ...] = (
         ),
         "procedural certification report (hashes, statistics and outcomes only)",
         _proc_cert_report,
+    ),
+    (
+        re.compile(r"^parity/reports/[^/]+/ray-cast\.json$"),
+        "ray-cast report (numbers, identifiers and digests only)",
+        _ray_cast_report,
     ),
     (
         re.compile(r"^parity/reports/[^/]+/held-out-ledger\.json$"),

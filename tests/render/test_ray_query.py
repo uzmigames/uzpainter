@@ -9,11 +9,17 @@ code 77). They qualify the ray-query path; they are no parity evidence for a Pai
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
 from tests.render.test_core_device_kernels import NO_GPU, run_case
+from tools.parity.raycast import build_report, kernel_sha256, report_problems
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+COMMITTED_REPORT = REPO_ROOT / "parity" / "reports" / "phase3" / "ray-cast.json"
+FIXTURES = ("plane", "sphere", "bevelled-cube", "opacity-pair")
 
 
 def _gpu(exe: Path, case: str, work: Path) -> set[str]:
@@ -59,6 +65,7 @@ def _shared(backend: str) -> set[str]:
         f"{backend}: an index count that is not a multiple of 3 is refused",
         f"{backend}: an index past the vertices is refused",
         f"{backend}: an instance of an unknown mesh is refused",
+        f"{backend}: a UzPainter mesh's scene traces as the CPU reference",
         f"{backend}: a singular instance transform is refused",
         f"{backend}: an instance forced both opaque and non-opaque is refused",
     }
@@ -104,3 +111,49 @@ def test_dx12_ray_query(render_tests: Path, tmp_path: Path) -> None:
     answers, twice byte-identical; the DX12 capability query reports inline ray queries."""
     passed = _gpu(render_tests, "dx12-ray-query", tmp_path)
     assert {"the DX12 capability query reports inline ray queries"} | _shared("dx12") <= passed
+
+
+def test_mesh_scene(render_tests: Path) -> None:
+    """2.7: a UzPainter mesh gives one BLAS per object with triangles and one geometry per material
+    at the 12-byte position stride with the material's opacity; the column-major object transform
+    becomes the instance transform; the reference traces it."""
+    passed, _ = run_case(render_tests, "ray-query-mesh")
+    assert {
+        "a mesh gives one BLAS per object with triangles and one geometry per material",
+        "each geometry holds its own positions at the 12-byte Float3 stride and its material's "
+        "opacity",
+        "an object's column-major transform becomes the row-major instance transform, its index "
+        "the id",
+        "the reference traces the mesh scene: materials, opacity, the translated object, a miss",
+    } <= passed
+
+
+def test_ray_cast_fixtures_on_both_backends(render_tests: Path, tmp_path: Path) -> None:
+    """2.10, 2.12, 3.1, 3.3, 3.4: every ray-cast fixture builds and traces on DX12 and Vulkan,
+    twice byte-identical on each; interior and miss rays equal the CPU reference, edge and vertex
+    rays hit at its distance; the DX12 and Vulkan records are compared field by field and every
+    differing ray is listed in a report of numbers, identifiers and digests only."""
+    passed = _gpu(render_tests, "ray-cast-fixtures", tmp_path)
+    raw = json.loads((tmp_path / "ray-cast-raw.json").read_text(encoding="utf-8"))
+    report = build_report(raw, kernel_sha256(), "phase3.2_vulkan-ray-tracing")
+    assert report_problems(report) == []
+    assert [f["id"] for f in report["fixtures"]] == list(FIXTURES)
+    for fixture in FIXTURES:
+        for backend in ("dx12", "vulkan"):
+            assert {
+                f"{backend} {fixture}: two builds and traces give byte-identical records",
+                f"{backend} {fixture}: interior and miss rays equal the CPU reference",
+                f"{backend} {fixture}: edge and vertex rays hit at the reference distance",
+            } <= passed
+        assert f"{fixture}: DX12 and Vulkan give the same records" in passed
+    assert report["outcome"] == "pass"
+
+
+def test_committed_ray_cast_report_is_valid() -> None:
+    """2.12: the committed report `parity/reports/phase3/ray-cast.json` passes the guard's check,
+    names the current kernel and every fixture, and passes."""
+    report = json.loads(COMMITTED_REPORT.read_text(encoding="utf-8"))
+    assert report_problems(report) == []
+    assert report["kernel_sha256"] == kernel_sha256()
+    assert [f["id"] for f in report["fixtures"]] == list(FIXTURES)
+    assert report["outcome"] == "pass"
