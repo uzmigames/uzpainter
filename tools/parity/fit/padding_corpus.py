@@ -155,6 +155,28 @@ PATCHES: dict[str, list[tuple[str, str]]] = {
             "        q = T.point(T.bary(x + 0.5, y + 0.5))\n",
         ),
     ],
+    # Diagnostic (2026-11-02, unaccepted): a far tap of tau's own island (decision 356's window
+    # texels that are not own neighbours) is measured as the far taps of other islands are
+    # (decision 364): turned rigidly from the J of each open window that holds it, at any reach,
+    # the least over them, instead of the face-path development.
+    "island": [
+        (
+            "            if K.chart == T.chart or pool[texel][2]:\n"
+            "                continue\n"
+            "            P = K.point(K.bary(texel[0] + 0.5, texel[1] + 0.5))\n",
+            "            if pool[texel][2]:\n"
+            "                continue\n"
+            "            P = K.point(K.bary(texel[0] + 0.5, texel[1] + 0.5))\n"
+            "            if K.chart == T.chart:\n"
+            "                opened = [w for w in held_by if not edges[w][0][0]]\n"
+            "                if opened:\n"
+            "                    pool[texel][0] = min(\n"
+            "                        norm(sub(q, plane_rotation(P, self.tris[window_js[w]], T)))\n"
+            "                        for w in opened\n"
+            "                    )\n"
+            "                continue\n",
+        )
+    ],
     "snapcol": [
         (
             "                col0, row0 = math.floor(fu - 0.5), math.ceil(fv - 0.5)\n",
