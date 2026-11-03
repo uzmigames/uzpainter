@@ -45,11 +45,26 @@ script. Its round sends the recorder's own steps as typed calls instead:
 
 A settings value (`project_create`) or a configuration (`export`) that UzPainter refuses as a
 release gap ends the round as `refused`, naming it; any other failed call fails the round.
+
+With a state scenario (`state`, the Tunic current round's `tunic_state.TUNIC_CURRENT`), the native
+round also checks the state before its export (`tunic_state`), every step a typed call. The
+scenario is checked against the job before any call. After the sync it sets
+`shader_set {double_sided: true}` (decision 196) before the save. After the save and the Normal
+check it reads `layer_list`, `project_recipe`, `shader_get` and `display_get` and checks them, the
+two snapshots at the revision `shader_set` committed. Then `project_close` and `project_open` of
+the saved project, the Normal check again, and the same reads and checks at the revision the
+open reports, which must be the saved one; each reopened read must equal the first literally.
+Only then the export, unchanged. Without a scenario the round is exactly as above.
+
+`run_tunic_current` is the Tunic current round's entrypoint: `run_round` with `TUNIC_CURRENT`,
+refused before UzPainter starts unless the manifest is `phase2/tier1/tunic-v10-current`'s and its
+pinned job fits the scenario. No other round turns the state check on.
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -57,6 +72,8 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from tests.adapters.assets3d.wand import ASSETS3D, native_ocio_sha256
+from tests.parity.tier1 import tunic_state
+from tests.parity.tier1.tunic_state import StateMismatch, StateScenario
 from tests.supervisor.conftest import Mcp
 from tools.parity.recorder.job import canonical_json, sha256_bytes, sha256_file
 from tools.parity.recorder.script_run import (
@@ -219,19 +236,49 @@ def refusal_of(
     return refusal
 
 
-def run_round(painter: Path, work: Path, manifest: Path, backend: str = BACKEND) -> Round:
-    """The round over the manifest's inputs staged in `work` (a fresh directory)."""
+def run_round(
+    painter: Path,
+    work: Path,
+    manifest: Path,
+    backend: str = BACKEND,
+    state: StateScenario | None = None,
+) -> Round:
+    """The round over the manifest's inputs staged in `work` (a fresh directory); a native job's
+    with the `state` scenario's checks, if one is given."""
     job = load_pipeline_job(manifest, ASSETS3D)
     staged = stage_inputs(job, work / "assets")
+    if state is not None:  # refused before UzPainter starts
+        if not isinstance(job, NativeJob):
+            raise RoundFailed(f"a state scenario applies to a native job, not {job.golden_id}")
+        expected_of(state, job, staged, native_ocio_sha256(job))
     session = Mcp(painter, work, "--gpu-backend", backend)
     try:
         tools = {tool["name"] for tool in session.request("tools/list", {})["tools"]}
         log = Round(len(tools), "run_python" in tools)
         driver = Driver(session, log)
-        drive(driver, job, staged, work)
+        drive(driver, job, staged, work, state)
         return log
     finally:
         session.close()
+
+
+def run_tunic_current(painter: Path, work: Path, manifest: Path, backend: str = BACKEND) -> Round:
+    """The Tunic current round (`phase2/tier1/tunic-v10-current`) with its state checks before
+    the export (`tunic_state.TUNIC_CURRENT`); refused before UzPainter starts unless the manifest
+    is that golden's and its pinned job fits the scenario."""
+    return run_round(painter, work, manifest, backend, tunic_state.TUNIC_CURRENT)
+
+
+def expected_of(
+    state: StateScenario, job: NativeJob, staged: dict[str, Path], ocio: str
+) -> tunic_state.Expected:
+    """What `state` expects of `job` over its staged, pinned stack; `RoundFailed` (a contract
+    mismatch) unless the scenario fits the job."""
+    stack = json.loads(staged[job.sync.args["stack"]].read_bytes().decode("utf-8"))
+    try:
+        return tunic_state.expected_state(state, job, stack, ocio)
+    except StateMismatch as error:
+        raise RoundFailed(f"contract mismatch: {error}") from error
 
 
 def sync_stack_arguments(job: ScriptJob | NativeJob, staged: dict[str, Path]) -> dict[str, Any]:
@@ -264,10 +311,18 @@ def mesh_maps_set(job: ScriptJob, sets: list[str]) -> str:
     return sets[0]
 
 
-def drive(driver: Driver, job: ScriptJob | NativeJob, staged: dict[str, Path], work: Path) -> None:
+def drive(
+    driver: Driver,
+    job: ScriptJob | NativeJob,
+    staged: dict[str, Path],
+    work: Path,
+    state: StateScenario | None = None,
+) -> None:
     if isinstance(job, NativeJob):
-        drive_native(driver, job, staged, work)
+        drive_native(driver, job, staged, work, state)
         return
+    if state is not None:
+        raise RoundFailed(f"a state scenario applies to a native job, not {job.golden_id}")
     log = driver.log
     assert job.create.arguments is not None and job.export.arguments is not None
     applied = {s["name"]: s["value"] for s in job.manifest["applied_settings"]}
@@ -317,11 +372,25 @@ def drive(driver: Driver, job: ScriptJob | NativeJob, staged: dict[str, Path], w
                 log.files[(root, PurePosixPath(path.as_posix()).stem)] = path
 
 
-def drive_native(driver: Driver, job: NativeJob, staged: dict[str, Path], work: Path) -> None:
+def drive_native(
+    driver: Driver,
+    job: NativeJob,
+    staged: dict[str, Path],
+    work: Path,
+    state: StateScenario | None = None,
+) -> None:
     """A native job's round (the module's docstring): its create's settings and Normal binding
-    through the typed tools, each checked, then the sync and the closing config export."""
+    through the typed tools, each checked, then the sync and the closing config export; with
+    `state`, the scenario's state checks before the export."""
     ocio = native_ocio_sha256(job)  # refused before any call
     log = driver.log
+    expected = None
+    if state is not None:  # refused before any call
+        try:
+            expected = expected_of(state, job, staged, ocio)
+        except RoundFailed:
+            log.outcome = "failed"
+            raise
     create = job.create
     texture_set = str(create.args["texture_set"])
     pinned = create.normal.sha256
@@ -389,9 +458,59 @@ def drive_native(driver: Driver, job: NativeJob, staged: dict[str, Path], work: 
     check_normal(baseline)
     project = work / "project" / "native-create.uzp"
     send("project_save_as", {"path": str(project), "mode": "full"})
-    send("sync_stack", sync_stack_arguments(job, staged))
+    synced = send("sync_stack", sync_stack_arguments(job, staged))
+    revision: Any = None
+    if expected is not None:
+        send("shader_set", {"parameters": {"double_sided": True}})
+        if log.calls[-1]["outcome"] != "committed":
+            raise fail(
+                f"shader_set double_sided true was {log.calls[-1]['outcome']}, not committed"
+            )
+        revision = log.calls[-1].get("committed_revision")
     send("project_save", {"mode": "full"})
     check_normal(baseline)  # after the sync and its save, before the export
+    if expected is not None:
+        reply = synced.get("returned", {}).get("sync") if isinstance(synced, dict) else None
+        if not isinstance(reply, dict):
+            raise fail("sync_stack returned no sync report")
+
+        def observe(at: Any, fresh_uids: bool) -> dict[str, Any]:
+            """The scenario's reads, checked, both snapshots at the revision `at`."""
+            assert expected is not None and isinstance(reply, dict)
+            reads = {
+                tool: send(tool, arguments)
+                for tool, arguments in (
+                    ("layer_list", {"texture_set": texture_set}),
+                    ("project_recipe", {}),
+                    ("shader_get", {}),
+                    ("display_get", {}),
+                )
+            }
+            listing, dump = reads["layer_list"] or {}, reads["project_recipe"] or {}
+            if type(at) is not int or listing.get("revision") != at or dump.get("revision") != at:
+                raise fail(
+                    f"the state reads are at revisions {listing.get('revision')} and "
+                    f"{dump.get('revision')}, not the committed {at}"
+                )
+            try:
+                tunic_state.check_listing(expected, listing, reply, fresh_uids)
+                tunic_state.check_recipe(expected, dump)
+                tunic_state.check_shader(reads["shader_get"] or {}, reads["display_get"] or {})
+            except StateMismatch as error:
+                raise fail(f"revision {at}: {error}") from error
+            return reads
+
+        saved = observe(revision, fresh_uids=True)
+        send("project_close", {})
+        opened = send("project_open", {"path": str(project), "wait": True})
+        check_normal(baseline)  # after the reopen
+        reopened_at = opened.get("revision") if isinstance(opened, dict) else None
+        if reopened_at != revision:
+            raise fail(f"the reopened project is at revision {reopened_at}, not {revision}")
+        reopened = observe(reopened_at, fresh_uids=False)
+        changed = [tool for tool in saved if reopened[tool] != saved[tool]]
+        if changed:
+            raise fail(f"after the reopen {changed} differ from the saved project's")
     config = {**job.config_export.config, "exportPath": str(work / "out" / "export")}
     exported = send("export", {"config": config})
     if exported is None:
