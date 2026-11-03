@@ -1184,8 +1184,7 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
                 else ResourceID(Path(path).stem)
             )
         world.named_resources.append((path, name, group))
-        image = usage == Usage.TEXTURE
-        return Resource(ResourceID(name + ".image" if image else name, image=image))
+        return Resource(ResourceID(name, image=usage == Usage.TEXTURE))
 
     resource = module(
         "substance_painter.resource",

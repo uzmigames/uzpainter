@@ -185,7 +185,6 @@ MESH_MAP_SLOTS = frozenset(
 )
 RESOURCE_FIELDS = frozenset({"url", "context", "name", "version"})
 PROJECT_CONTEXT = re.compile(r"project[0-9]+")  # the context a reopen may renumber
-IMAGE_SUFFIX = ".image"  # the resource name Painter gives an imported image: its name + this
 GET_MESH_MAP = "substance_painter.textureset.TextureSet.get_mesh_map_resource"
 # The optional F03-style override of a sync's stack: the stack must be the recipe (a recipe_json
 # input, at `recipe_keys`) with exactly one layer's mask replaced, nothing else (decision 194).
@@ -1386,7 +1385,8 @@ def only_normal(reply: dict[str, Any], step: NativeCreate) -> dict[str, Any]:
             f"the mesh maps bound are {bound}, not only the Normal {step.args['normal_name']}"
         )
     normal: dict[str, Any] = maps[NORMAL_USAGE]
-    expected = step.args["normal_name"] + IMAGE_SUFFIX  # an imported image's resource name
+    # A named import keeps its name literally; `.image` ends only the version (decision 107).
+    expected = step.args["normal_name"]
     if normal["name"] != expected:
         raise RecorderError(f"the Normal is {normal['name']!r}, not {expected!r}")
     return normal

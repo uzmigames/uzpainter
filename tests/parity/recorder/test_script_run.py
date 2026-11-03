@@ -1471,7 +1471,7 @@ def test_a_native_job_creates_binds_only_the_normal_syncs_and_exports_its_config
     assert value["texture_sets"] == [TUNIC_SET] and len(value["mesh_maps"]) == 10
     bound = {k: v for k, v in value["mesh_maps"].items() if v is not None}
     assert list(bound) == ["Normal"] and bound["Normal"] == value["resource"]
-    assert value["resource"]["name"] == "Tunic_v6_HighNormal.image"
+    assert value["resource"]["name"] == "Tunic_v6_HighNormal"
     assert [(n, g) for _, n, g in world.named_resources] == [
         ("Tunic_v6_HighNormal", "tunica18_v10c_mesh_maps")
     ]
@@ -1554,9 +1554,9 @@ def swapped(reply: dict[str, Any], nth: int) -> dict[str, Any]:
     """Another resource bound as the Normal after the sync, and still there after the reopen:
     stable from r1 to r2, but not the one the create imported."""
     reply["mesh_maps"]["Normal"] = {
-        "url": "resource://project0/Tunic_v6_HighNormal.image?version=other",
+        "url": "resource://project0/Tunic_v6_HighNormal?version=other",
         "context": "project0",
-        "name": "Tunic_v6_HighNormal.image",
+        "name": "Tunic_v6_HighNormal",
         "version": "other",
     }
     return reply
@@ -1565,7 +1565,14 @@ def swapped(reply: dict[str, Any], nth: int) -> dict[str, Any]:
 def renamed(reply: dict[str, Any], nth: int) -> dict[str, Any]:
     """A name sharing the requested name's prefix is another resource."""
     for value in (reply["resource"], reply["mesh_maps"]["Normal"]):
-        value["name"] = "Tunic_v6_HighNormal_v2.image"
+        value["name"] = "Tunic_v6_HighNormal_v2"
+    return reply
+
+
+def suffixed(reply: dict[str, Any], nth: int) -> dict[str, Any]:
+    """A name with `.image` appended is not the requested name: no suffix is normalised."""
+    for value in (reply["resource"], reply["mesh_maps"]["Normal"]):
+        value["name"] += ".image"
     return reply
 
 
@@ -1579,7 +1586,8 @@ def untyped(reply: dict[str, Any], nth: int) -> dict[str, Any]:
     [
         ("bind_mesh_map", drop_slot, "not the ten slots"),
         ("bind_mesh_map", extra_slot, "not the ten slots"),
-        ("bind_mesh_map", renamed, r"not 'Tunic_v6_HighNormal\.image'"),
+        ("bind_mesh_map", renamed, r"not 'Tunic_v6_HighNormal'"),
+        ("bind_mesh_map", suffixed, r"not 'Tunic_v6_HighNormal'"),
         ("bind_mesh_map", untyped, "reads back .*, not a resource or None"),
         ("mesh_maps", drop_slot, "not the ten slots"),
         ("mesh_maps", swapped, "after the sync the Normal is .*, not the imported"),
