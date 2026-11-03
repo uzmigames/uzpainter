@@ -518,6 +518,39 @@ def test_the_diagnostic_measure_export_is_passed_only_when_asked(
     assert len(calls) == 2
 
 
+def test_the_gpu_deadline_is_passed_only_when_set(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`UZP_ASSETS3D_GPU_DEADLINE_MS` passes `--gpu-deadline-ms <value>` to `UzPainter.exe run`
+    before `--` (the host's flag, not the script's); unset or empty, nothing is passed and the
+    run keeps its default deadline."""
+    calls: list[list[str]] = []
+
+    def fake_run(argv: list[str]) -> Any:
+        calls.append(argv)
+        host: dict[str, Any] = {"status": "ok", "result": None, "stdout": "", "stderr": ""}
+        return type("Done", (), {"returncode": 0, "stdout": client.JSON_PREFIX + json.dumps(host)})
+
+    monkeypatch.setattr(client, "run_painter", fake_run)
+    monkeypatch.setattr(client, "painter_exe", lambda: tmp_path / "UzPainter.exe")
+    monkeypatch.setenv(client.SESSION_ENV, str(tmp_path / "session.json"))
+    monkeypatch.setenv(client.SCRATCH_ENV, str(tmp_path))
+    monkeypatch.setenv(client.IMPORT_DIAGNOSTIC_ENV, "1")
+    monkeypatch.delenv(client.PRODUCTION_ENV, raising=False)
+    monkeypatch.delenv(client.DIAGNOSTIC_ENV, raising=False)
+    for value in (None, ""):
+        if value is None:
+            monkeypatch.delenv(client.GPU_DEADLINE_ENV, raising=False)
+        else:
+            monkeypatch.setenv(client.GPU_DEADLINE_ENV, value)
+        assert client.execute_python("result = None")[1] == client.OK
+        assert client.GPU_DEADLINE_FLAG not in calls[-1]
+    monkeypatch.setenv(client.GPU_DEADLINE_ENV, "600000")
+    assert client.execute_python("result = None")[1] == client.OK
+    flag = calls[-1].index(client.GPU_DEADLINE_FLAG)
+    assert calls[-1][flag + 1] == "600000" and flag < calls[-1].index("--")
+
+
 def test_a_non_conformant_export_gets_no_manifest(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

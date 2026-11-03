@@ -69,7 +69,8 @@ refuses the Tunic's islanded export (decisions 245 and 259), so with `diagnostic
 send no export and each project is exported instead by `measured_export`, a separate
 `UzPainter.exe run --diagnostic-measure-export` process of `MEASURE` that opens the saved project
 (the original after its session, the rebuilt one after its save and reopen) and exports the job's
-`config_export.config`, only its `exportPath` changed. Its report must name the measure mode, its
+`config_export.config`, only its `exportPath` changed, with `--gpu-deadline-ms` `GPU_DEADLINE_MS`
+(the 4096 px export outlasts the default 60 s). Its report must name the measure mode, its
 receipt must be marked `non_conformant` with every bypassed refusal one of the Tier 1 runner's
 `DECIDED_REFUSALS`, and the receipt must list exactly the files the export returned, each name
 once and with its SHA-256, or the run fails. A refusal is kept as the side's refusal, never
@@ -156,6 +157,11 @@ result = {
 """
 MEASURE_MODE = "diagnostic-measure"  # the `run` report's `diagnostic` (src/python/run.cpp)
 TIMEOUT = 1800  # seconds, for `export-bundle`, the rebuild and a measure export
+# `--gpu-deadline-ms` of the Tunic's 4096 px exports, the measure exports here and the Tier 1
+# rebuilds' (`test_mcp_round.tunic_tier1`): one GPU request of them outlasts the `run` verb's
+# default of 60 s. 600 s is the Assets3D adapter's limit per call (`wand.Wand.call`), which
+# bounds each Tier 1 export anyway; every other `run` keeps the default.
+GPU_DEADLINE_MS = 600_000
 
 
 class RecipeFailed(RuntimeError):
@@ -485,15 +491,23 @@ def measured_export(
 ) -> Export:
     """The diagnostic measure export of the saved `project` (the module's docstring) into
     `folder/export`, `folder` a new directory: its files by name, checked against its receipt,
-    or its explicit refusal."""
-    return measured_config_export(painter, project, job.config_export.config, folder, backend)
+    or its explicit refusal. Its GPU requests are bounded by `GPU_DEADLINE_MS`."""
+    return measured_config_export(
+        painter, project, job.config_export.config, folder, backend, GPU_DEADLINE_MS
+    )
 
 
 def measured_config_export(
-    painter: Path, project: Path, config: dict[str, Any], folder: Path, backend: str = BACKEND
+    painter: Path,
+    project: Path,
+    config: dict[str, Any],
+    folder: Path,
+    backend: str = BACKEND,
+    gpu_deadline_ms: int | None = None,
 ) -> Export:
     """`measured_export` of the export configuration `config`, only its `exportPath` changed:
-    also the MCP round's measure mode (`mcp_round.measured_round`)."""
+    also the MCP round's measure mode (`mcp_round.measured_round`). `gpu_deadline_ms` is passed
+    as `--gpu-deadline-ms`; None keeps the `run` verb's default."""
     out = folder / "export"
     out.mkdir(parents=True)
     configuration = folder / "config.json"
@@ -508,6 +522,7 @@ def measured_config_export(
             "--gpu-backend",
             backend,
             "--diagnostic-measure-export",
+            *([] if gpu_deadline_ms is None else ["--gpu-deadline-ms", str(gpu_deadline_ms)]),
             "--",
             str(project),
             str(configuration),

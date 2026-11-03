@@ -10,7 +10,7 @@
     "hardware": "AMD Radeon(TM) Graphics | NVIDIA GeForce RTX 4090",
     "driver": "32.0.11024.2 | 32.0.16.1714",
     "backend": "dx12",
-    "uzpainter_build_hash": "20982dff60eafe05207f66c38b334631b360b630f47557169a38a420b3321209",
+    "uzpainter_build_hash": "7386579a5e9d5eb63c51978eb44283851b44b44d071ac8102f7e5acd9d6671f3",
     "painter_build_id": "12.2.0+js-api.1.1.20",
     "resource_hashes": [
       "0772c83624e1a5b5b75141c1efc1774098be3d6b89462f9ce1b6634b1348a49e",
@@ -43,8 +43,184 @@
     ]
   },
   "uzpainter_repeatability": {
-    "status": "not_measured",
-    "maps": []
+    "status": "repeatable",
+    "maps": [
+      {
+        "output_id": "DefaultMaterial/DefaultMaterial_BaseColor_sRGB",
+        "storage_format": {
+          "container": "png",
+          "sample_type": "uint",
+          "bits_per_channel": 16,
+          "channels": 3,
+          "encoding": "undetermined"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 50331648
+        },
+        "regions": [
+          {
+            "region": "M_lining",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 22502049
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "DefaultMaterial/DefaultMaterial_Displacement_Raw",
+        "storage_format": {
+          "container": "png",
+          "sample_type": "uint",
+          "bits_per_channel": 16,
+          "channels": 3,
+          "encoding": "undetermined"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 50331648
+        },
+        "regions": [
+          {
+            "region": "M_lining",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 22502049
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "DefaultMaterial/DefaultMaterial_Metallic_Raw",
+        "storage_format": {
+          "container": "png",
+          "sample_type": "uint",
+          "bits_per_channel": 16,
+          "channels": 3,
+          "encoding": "undetermined"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 50331648
+        },
+        "regions": [
+          {
+            "region": "M_lining",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 22502049
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "DefaultMaterial/DefaultMaterial_Normal_Raw",
+        "storage_format": {
+          "container": "png",
+          "sample_type": "uint",
+          "bits_per_channel": 16,
+          "channels": 3,
+          "encoding": "undetermined"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 50331648
+        },
+        "regions": [
+          {
+            "region": "M_lining",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 22502049
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "DefaultMaterial/DefaultMaterial_Roughness_Raw",
+        "storage_format": {
+          "container": "png",
+          "sample_type": "uint",
+          "bits_per_channel": 16,
+          "channels": 3,
+          "encoding": "undetermined"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 50331648
+        },
+        "regions": [
+          {
+            "region": "M_lining",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 22502049
+            }
+          }
+        ]
+      }
+    ]
   },
   "oracle_stability": {
     "status": "stable",
@@ -403,13 +579,704 @@
   },
   "equality_to_painter": {
     "outcome": "fail",
-    "exceptions_relied_on": [],
-    "maps": [],
-    "structural": [
+    "exceptions_relied_on": [
       {
-        "output_id": "export",
-        "reason": "candidate_export_refused"
+        "exception_id": "EXC-011",
+        "version": 1
       }
-    ]
+    ],
+    "maps": [
+      {
+        "output_id": "DefaultMaterial/DefaultMaterial_BaseColor_sRGB",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 27512,
+          "mean": 148.04014591375986,
+          "p99": 4368
+        },
+        "differing": {
+          "count": 2707311,
+          "percent": 5.378943681716919,
+          "total": 50331648
+        },
+        "regions": [
+          {
+            "region": "M_lining",
+            "abs_diff": {
+              "max": 13869,
+              "mean": 117.2624016150707,
+              "p99": 4368
+            },
+            "differing": {
+              "count": 1249855,
+              "percent": 5.5544052899360405,
+              "total": 22502049
+            }
+          }
+        ],
+        "private_difference_map_sha256": "25fe5f4bc520f50a2a45608f1c54caef77068e794fe9cec11ba264a4a8872066",
+        "flip_mean": 0.00962170958518982,
+        "padding": {
+          "covered_texels": 4222248,
+          "uncovered_texels": 12554968,
+          "covered": {
+            "abs_diff": {
+              "max": 1042,
+              "mean": 0.0002653404852896688,
+              "p99": 0
+            },
+            "differing": {
+              "count": 5,
+              "percent": 3.947344321476774e-05,
+              "total": 12666744
+            }
+          },
+          "edge_texels": 305405,
+          "edge": {
+            "abs_diff": {
+              "max": 1042,
+              "mean": 0.0036683529520909392,
+              "p99": 0
+            },
+            "differing": {
+              "count": 5,
+              "percent": 0.0005457234382759505,
+              "total": 916215
+            }
+          },
+          "uncovered": {
+            "abs_diff": {
+              "max": 27512,
+              "mean": 197.82610233123123,
+              "p99": 4867
+            },
+            "differing": {
+              "count": 2707306,
+              "percent": 7.187874420176406,
+              "total": 37664904
+            }
+          },
+          "bands": [
+            {
+              "within_texels": 1,
+              "texels": 307803,
+              "abs_diff": {
+                "max": 27512,
+                "mean": 14.272100445198173,
+                "p99": 259
+              },
+              "differing": {
+                "count": 13384,
+                "percent": 1.4494119073996463,
+                "total": 923409
+              }
+            },
+            {
+              "within_texels": 2,
+              "texels": 600321,
+              "abs_diff": {
+                "max": 27512,
+                "mean": 14.185408028926746,
+                "p99": 257
+              },
+              "differing": {
+                "count": 23715,
+                "percent": 1.316795514399796,
+                "total": 1800963
+              }
+            },
+            {
+              "within_texels": 4,
+              "texels": 1157357,
+              "abs_diff": {
+                "max": 27512,
+                "mean": 17.538702981592255,
+                "p99": 259
+              },
+              "differing": {
+                "count": 49754,
+                "percent": 1.432977609040829,
+                "total": 3472071
+              }
+            },
+            {
+              "within_texels": 8,
+              "texels": 2202548,
+              "abs_diff": {
+                "max": 27512,
+                "mean": 25.679141461010914,
+                "p99": 491
+              },
+              "differing": {
+                "count": 121464,
+                "percent": 1.8382346264417393,
+                "total": 6607644
+              }
+            }
+          ]
+        }
+      },
+      {
+        "output_id": "DefaultMaterial/DefaultMaterial_Displacement_Raw",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 1806,
+          "mean": 15.78564339876175,
+          "p99": 494
+        },
+        "differing": {
+          "count": 4188339,
+          "percent": 8.321481943130493,
+          "total": 50331648
+        },
+        "regions": [
+          {
+            "region": "M_lining",
+            "abs_diff": {
+              "max": 1679,
+              "mean": 17.403574314499092,
+              "p99": 494
+            },
+            "differing": {
+              "count": 2197392,
+              "percent": 9.765297373585845,
+              "total": 22502049
+            }
+          }
+        ],
+        "private_difference_map_sha256": "741c206ba69a85a7270a28468c0a54684df8951dda9acebb48183a051686ae77",
+        "flip_mean": 0.001826259889639914,
+        "padding": {
+          "covered_texels": 4222248,
+          "uncovered_texels": 12554968,
+          "covered": {
+            "abs_diff": {
+              "max": 192,
+              "mean": 5.352598899922506e-05,
+              "p99": 0
+            },
+            "differing": {
+              "count": 9,
+              "percent": 7.105219778658194e-05,
+              "total": 12666744
+            }
+          },
+          "edge_texels": 305405,
+          "edge": {
+            "abs_diff": {
+              "max": 192,
+              "mean": 0.0007400009823021889,
+              "p99": 0
+            },
+            "differing": {
+              "count": 9,
+              "percent": 0.000982302188896711,
+              "total": 916215
+            }
+          },
+          "uncovered": {
+            "abs_diff": {
+              "max": 1806,
+              "mean": 21.09435268970817,
+              "p99": 494
+            },
+            "differing": {
+              "count": 4188330,
+              "percent": 11.119980552718255,
+              "total": 37664904
+            }
+          },
+          "bands": [
+            {
+              "within_texels": 1,
+              "texels": 307803,
+              "abs_diff": {
+                "max": 1806,
+                "mean": 1.9669788793481544,
+                "p99": 45
+              },
+              "differing": {
+                "count": 37317,
+                "percent": 4.041221170683847,
+                "total": 923409
+              }
+            },
+            {
+              "within_texels": 2,
+              "texels": 600321,
+              "abs_diff": {
+                "max": 1806,
+                "mean": 2.0199143458249837,
+                "p99": 41
+              },
+              "differing": {
+                "count": 64905,
+                "percent": 3.6039052440277786,
+                "total": 1800963
+              }
+            },
+            {
+              "within_texels": 4,
+              "texels": 1157357,
+              "abs_diff": {
+                "max": 1806,
+                "mean": 2.5331639243552333,
+                "p99": 52
+              },
+              "differing": {
+                "count": 125640,
+                "percent": 3.6185895968141204,
+                "total": 3472071
+              }
+            },
+            {
+              "within_texels": 8,
+              "texels": 2202548,
+              "abs_diff": {
+                "max": 1806,
+                "mean": 3.729012035152015,
+                "p99": 91
+              },
+              "differing": {
+                "count": 270597,
+                "percent": 4.095211545900475,
+                "total": 6607644
+              }
+            }
+          ]
+        }
+      },
+      {
+        "output_id": "DefaultMaterial/DefaultMaterial_Metallic_Raw",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 50331648
+        },
+        "regions": [
+          {
+            "region": "M_lining",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 22502049
+            }
+          }
+        ],
+        "flip_mean": 0.0,
+        "padding": {
+          "covered_texels": 4222248,
+          "uncovered_texels": 12554968,
+          "covered": {
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 12666744
+            }
+          },
+          "edge_texels": 305405,
+          "edge": {
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 916215
+            }
+          },
+          "uncovered": {
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 37664904
+            }
+          },
+          "bands": [
+            {
+              "within_texels": 1,
+              "texels": 307803,
+              "abs_diff": {
+                "max": 0,
+                "mean": 0,
+                "p99": 0
+              },
+              "differing": {
+                "count": 0,
+                "percent": 0.0,
+                "total": 923409
+              }
+            },
+            {
+              "within_texels": 2,
+              "texels": 600321,
+              "abs_diff": {
+                "max": 0,
+                "mean": 0,
+                "p99": 0
+              },
+              "differing": {
+                "count": 0,
+                "percent": 0.0,
+                "total": 1800963
+              }
+            },
+            {
+              "within_texels": 4,
+              "texels": 1157357,
+              "abs_diff": {
+                "max": 0,
+                "mean": 0,
+                "p99": 0
+              },
+              "differing": {
+                "count": 0,
+                "percent": 0.0,
+                "total": 3472071
+              }
+            },
+            {
+              "within_texels": 8,
+              "texels": 2202548,
+              "abs_diff": {
+                "max": 0,
+                "mean": 0,
+                "p99": 0
+              },
+              "differing": {
+                "count": 0,
+                "percent": 0.0,
+                "total": 6607644
+              }
+            }
+          ]
+        }
+      },
+      {
+        "output_id": "DefaultMaterial/DefaultMaterial_Normal_Raw",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 37072,
+          "mean": 61.83682439724604,
+          "p99": 1611
+        },
+        "differing": {
+          "count": 2645893,
+          "percent": 5.256917079289754,
+          "total": 50331648
+        },
+        "regions": [
+          {
+            "region": "M_lining",
+            "abs_diff": {
+              "max": 26197,
+              "mean": 58.31917053420335,
+              "p99": 1034
+            },
+            "differing": {
+              "count": 959095,
+              "percent": 4.262256294971182,
+              "total": 22502049
+            }
+          }
+        ],
+        "normal": {
+          "angular_max_deg": 85.4043966867926,
+          "angular_mean_deg": 0.27618803262331,
+          "non_finite_count": 0,
+          "unnormalised_count": 9,
+          "negative_z_count": 52153
+        },
+        "private_difference_map_sha256": "1fdedcae4f05efc55ae8055d1b5d331e5edd824c8a939f10427bc0fb1a024ce7",
+        "flip_mean": 0.00918042752891779,
+        "padding": {
+          "covered_texels": 4222248,
+          "uncovered_texels": 12554968,
+          "covered": {
+            "abs_diff": {
+              "max": 28674,
+              "mean": 1.1190145628584582,
+              "p99": 0
+            },
+            "differing": {
+              "count": 25431,
+              "percent": 0.20076982687895167,
+              "total": 12666744
+            }
+          },
+          "edge_texels": 305405,
+          "edge": {
+            "abs_diff": {
+              "max": 28674,
+              "mean": 15.470463810350191,
+              "p99": 127
+            },
+            "differing": {
+              "count": 25431,
+              "percent": 2.7756585517591397,
+              "total": 916215
+            }
+          },
+          "uncovered": {
+            "abs_diff": {
+              "max": 37072,
+              "mean": 82.2562831435864,
+              "p99": 2606
+            },
+            "differing": {
+              "count": 2620462,
+              "percent": 6.9573043382773525,
+              "total": 37664904
+            }
+          },
+          "bands": [
+            {
+              "within_texels": 1,
+              "texels": 307803,
+              "abs_diff": {
+                "max": 37072,
+                "mean": 27.17929541514107,
+                "p99": 346
+              },
+              "differing": {
+                "count": 35027,
+                "percent": 3.793227053234266,
+                "total": 923409
+              }
+            },
+            {
+              "within_texels": 2,
+              "texels": 600321,
+              "abs_diff": {
+                "max": 37072,
+                "mean": 24.986574404915594,
+                "p99": 261
+              },
+              "differing": {
+                "count": 62894,
+                "percent": 3.492242761233851,
+                "total": 1800963
+              }
+            },
+            {
+              "within_texels": 4,
+              "texels": 1157357,
+              "abs_diff": {
+                "max": 37072,
+                "mean": 27.760845904360828,
+                "p99": 296
+              },
+              "differing": {
+                "count": 123732,
+                "percent": 3.5636368035100663,
+                "total": 3472071
+              }
+            },
+            {
+              "within_texels": 8,
+              "texels": 2202548,
+              "abs_diff": {
+                "max": 37072,
+                "mean": 35.7912243758895,
+                "p99": 453
+              },
+              "differing": {
+                "count": 257590,
+                "percent": 3.898363773835273,
+                "total": 6607644
+              }
+            }
+          ]
+        }
+      },
+      {
+        "output_id": "DefaultMaterial/DefaultMaterial_Roughness_Raw",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 14649,
+          "mean": 53.67978751659393,
+          "p99": 771
+        },
+        "differing": {
+          "count": 1420317,
+          "percent": 2.821916341781616,
+          "total": 50331648
+        },
+        "regions": [
+          {
+            "region": "M_lining",
+            "abs_diff": {
+              "max": 12593,
+              "mean": 5.011831722524469,
+              "p99": 257
+            },
+            "differing": {
+              "count": 268101,
+              "percent": 1.191451498483538,
+              "total": 22502049
+            }
+          }
+        ],
+        "private_difference_map_sha256": "0f447b4064eb58bf1f79353fac2f75330b60fcf91e11b6e78baa9cdffd364e7d",
+        "flip_mean": 0.0031275860965251923,
+        "padding": {
+          "covered_texels": 4222248,
+          "uncovered_texels": 12554968,
+          "covered": {
+            "abs_diff": {
+              "max": 771,
+              "mean": 0.00018260414831151558,
+              "p99": 0
+            },
+            "differing": {
+              "count": 3,
+              "percent": 2.3684065928860646e-05,
+              "total": 12666744
+            }
+          },
+          "edge_texels": 305405,
+          "edge": {
+            "abs_diff": {
+              "max": 771,
+              "mean": 0.002524516625464547,
+              "p99": 0
+            },
+            "differing": {
+              "count": 3,
+              "percent": 0.0003274340629655703,
+              "total": 916215
+            }
+          },
+          "uncovered": {
+            "abs_diff": {
+              "max": 14649,
+              "mean": 71.73229107393982,
+              "p99": 1028
+            },
+            "differing": {
+              "count": 1420314,
+              "percent": 3.7709215985257787,
+              "total": 37664904
+            }
+          },
+          "bands": [
+            {
+              "within_texels": 1,
+              "texels": 307803,
+              "abs_diff": {
+                "max": 14649,
+                "mean": 8.787844822824988,
+                "p99": 257
+              },
+              "differing": {
+                "count": 9870,
+                "percent": 1.0688654756451366,
+                "total": 923409
+              }
+            },
+            {
+              "within_texels": 2,
+              "texels": 600321,
+              "abs_diff": {
+                "max": 14649,
+                "mean": 9.107918930039096,
+                "p99": 0
+              },
+              "differing": {
+                "count": 16998,
+                "percent": 0.9438283851472795,
+                "total": 1800963
+              }
+            },
+            {
+              "within_texels": 4,
+              "texels": 1157357,
+              "abs_diff": {
+                "max": 14649,
+                "mean": 11.592520717462287,
+                "p99": 0
+              },
+              "differing": {
+                "count": 34203,
+                "percent": 0.9850893026093073,
+                "total": 3472071
+              }
+            },
+            {
+              "within_texels": 8,
+              "texels": 2202548,
+              "abs_diff": {
+                "max": 14649,
+                "mean": 17.25975551951649,
+                "p99": 257
+              },
+              "differing": {
+                "count": 80064,
+                "percent": 1.211687554595859,
+                "total": 6607644
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "structural": []
+  },
+  "flip_tool": {
+    "version": "1.7",
+    "sha256": "2081f715ea8190a5f58bc578b0cccd36a9a3f3cf78ad13fe6f86e5a75615bda7"
   }
 }

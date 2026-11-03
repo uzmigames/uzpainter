@@ -30,6 +30,9 @@ Environment:
   `UzPainter.exe run`, whose exports are then NOT conformant (their receipts say
   `non_conformant`, the reply `diagnostic`). Any other value is a host error; never set it in a
   production pipeline.
+- `UZP_ASSETS3D_GPU_DEADLINE_MS`: test fixture only (the Tunic's 4096 px Tier 1 run): passes
+  `--gpu-deadline-ms <value>` to `UzPainter.exe run`, which validates it; unset or empty, the
+  run's default deadline of 60 s applies.
 """
 
 from __future__ import annotations
@@ -59,6 +62,8 @@ DIAGNOSTIC_FLAG = "--diagnostic-measure-export"
 PRODUCTION_ENV = "UZP_ASSETS3D_PRODUCTION_REQUEST"
 IMPORT_DIAGNOSTIC_ENV = "UZP_ASSETS3D_DIAGNOSTIC_IMPORT"
 SCRATCH_ENV = "UZP_ASSETS3D_SCRATCH"
+GPU_DEADLINE_ENV = "UZP_ASSETS3D_GPU_DEADLINE_MS"
+GPU_DEADLINE_FLAG = "--gpu-deadline-ms"
 PRODUCTION_FLAG = "--assets3d-production-required"
 OK, FAILED, USAGE, HOST_ERROR = 0, 1, 2, 3
 TOOL = "execute_python"
@@ -233,6 +238,13 @@ def diagnostic_flags() -> list[str]:
     return [DIAGNOSTIC_FLAG] if value == "1" else []
 
 
+def deadline_flags() -> list[str]:
+    """`--gpu-deadline-ms <value>` when `UZP_ASSETS3D_GPU_DEADLINE_MS` is set (above), none when
+    it is unset or empty; UzPainter refuses a value outside 1 to 86400000 (a host error)."""
+    value = os.environ.get(GPU_DEADLINE_ENV, "")
+    return [GPU_DEADLINE_FLAG, value] if value else []
+
+
 def report_line(stdout: str) -> dict[str, Any] | None:
     lines = [line for line in stdout.splitlines() if line.startswith(JSON_PREFIX)]
     return json.loads(lines[-1][len(JSON_PREFIX) :]) if lines else None
@@ -254,6 +266,7 @@ def execute_python(code: str) -> tuple[dict[str, Any], int]:
                 "run",
                 str(RUNNER),
                 *diagnostic,
+                *deadline_flags(),
                 *([PRODUCTION_FLAG] if policy is not None else []),
                 "--",
                 str(code_file),

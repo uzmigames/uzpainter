@@ -275,13 +275,15 @@ DECIDED = "the Height outside the UV islands; decision 245"
 def measure_process(world: World, args: list[str]) -> subprocess.CompletedProcess[str]:
     """`run --diagnostic-measure-export` of the fake UzPainter: the saved project's export, its
     receipt marked `non_conformant` with a decided refusal bypassed, unless a fault is authored."""
-    assert args[1] == "run" and args[3:7] == [
+    assert args[1] == "run" and args[3:9] == [
         "--gpu-backend",
         "vulkan",
         "--diagnostic-measure-export",
+        "--gpu-deadline-ms",
+        str(tunic_recipe.GPU_DEADLINE_MS),
         "--",
     ], args
-    project_file, configuration = args[7:]
+    project_file, configuration = args[9:]
     config = json.loads(Path(configuration).read_text(encoding="utf-8"))
     out = Path(config["exportPath"])
     mode = world.measure.get("mode", tunic_recipe.MEASURE_MODE)
@@ -601,13 +603,13 @@ def test_the_measure_mode_exports_each_saved_project_in_its_own_process(
     assert tools(original)[-1] == tools(rebuilt)[-1] == "project_close"
     work = tmp_path / "work"
     measures = [args for args in world.processes if "--diagnostic-measure-export" in args]
-    assert [args[7] for args in measures] == [
+    assert [args[9] for args in measures] == [
         world.saved,
         str(work / "rebuild" / "tunic-rebuilt.uzp"),
     ]
     for side, args in zip(("original", "rebuilt"), measures, strict=True):
         folder = work / side / "measure"
-        assert args[2] == str(folder / "measure.py") and args[8] == str(folder / "config.json")
+        assert args[2] == str(folder / "measure.py") and args[10] == str(folder / "config.json")
         config = json.loads((folder / "config.json").read_text(encoding="utf-8"))
         assert config == {
             **world.job.config_export.config,

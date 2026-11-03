@@ -19,16 +19,22 @@ import os
 import shutil
 import subprocess
 import traceback
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from adapters.assets3d.client import GPU_DEADLINE_ENV
 from python.uzpainter_facade.bitmap_defaults import PAINTER_OCIO_CONFIG_SHA256
 from tests.adapters.assets3d.wand import ASSETS3D, PAINTER_OCIO, REPO_ROOT
 from tests.parity.tier1.mcp_round import round_report, run_round, run_tunic_current
-from tests.parity.tier1.tunic_recipe import RecipeMismatch, RecipeRound, run_tunic_recipe
+from tests.parity.tier1.tunic_recipe import (
+    GPU_DEADLINE_MS,
+    RecipeMismatch,
+    RecipeRound,
+    run_tunic_recipe,
+)
 from tests.parity.tier1.wand_v1 import runner as wand_runner
 from tools.parity.recorder.launcher import default_painter_exe
 from tools.parity.schemas import Schema, validation_errors
@@ -329,18 +335,6 @@ def _needs_the_tunic[T: Callable[..., None]](test: T) -> T:
 REPORT_ENV = "UZP_TIER1_REPORT"  # repository-relative path of the report to write
 # The only exception the Tunic's equality may rely on (decision 398).
 EXC011 = {"exception_id": "EXC-011", "version": 1}
-# The capability gap the Tunic's 4096-px Normal meets in every export, the measure mode included
-# (src/evaluator/height_to_normal.cpp; decision 398, Result).
-HEIGHT_NORMAL_GAP = (
-    "the height-to-normal scaling is recorded on square sets of 256, 512, 1024 and 2048 texels only"
-)
-
-
-def xfail_on_the_height_normal_gap(refusals: Sequence[str]) -> None:
-    """An expected failure naming the gap when every export was refused by it alone (decision
-    398); any other refusal, or a mix of refused and written exports, is left to fail."""
-    if refusals and all(HEIGHT_NORMAL_GAP in refusal for refusal in refusals):
-        pytest.xfail(f"decision 398: the Tunic's 4096-px Normal is refused: {HEIGHT_NORMAL_GAP}")
 
 
 def painter_ocio() -> Path:
@@ -365,9 +359,11 @@ TunicEvidence = tuple[
 def tunic_tier1(fast_painter: Path, tmp_path_factory: pytest.TempPathFactory) -> TunicEvidence:
     """The Tunic current round's Tier 1 evidence through the Wand's runner (its native route):
     two rebuilds and the first one's save/reopen export, every export the diagnostic measure
-    export (decisions 286, 398), from one run for both Tier 1 tests, under the manifest's `OCIO`."""
+    export (decisions 286, 398), from one run for both Tier 1 tests, under the manifest's `OCIO`,
+    each `run` with the Tunic's GPU deadline (`tunic_recipe.GPU_DEADLINE_MS`)."""
     with pytest.MonkeyPatch.context() as patch:
         patch.setenv("OCIO", str(painter_ocio()))
+        patch.setenv(GPU_DEADLINE_ENV, str(GPU_DEADLINE_MS))
         return wand_runner.reopened_compared(
             fast_painter, tmp_path_factory.mktemp("tunic-tier1"), TUNIC_CURRENT, diagnostic=True
         )
@@ -379,14 +375,11 @@ def test_tunic_current_tier1_maps_equal_painter_under_exc011(tunic_tier1: TunicE
     EXC-011 (decision 398, EXC-010's terms: covered interior texels exact on every map, covered
     texels exact on every map but the Normal, the padding and the Normal's island-edge texels
     published per band); the two rebuilds, each in its own processes and work directory, are
-    byte-identical. The report is written to `UZP_TIER1_REPORT` when that is set. While the
-    4096-px Normal is refused (`HEIGHT_NORMAL_GAP`) the test is an expected failure naming it."""
+    byte-identical. The report is written to `UZP_TIER1_REPORT` when that is set."""
     report, runs, _ = tunic_tier1
     assert validation_errors(report, Schema.COMPARISON_REPORT) == []
     if os.environ.get(REPORT_ENV):
         write_report(report, REPO_ROOT / os.environ[REPORT_ENV])
-    if all(r.refused for r in runs):
-        xfail_on_the_height_normal_gap([r.refusal for r in runs])
     assert not any(r.refused for r in runs), [r.refusal for r in runs]
     equality = report["equality_to_painter"]
     assert equality["structural"] == []
@@ -402,11 +395,8 @@ def test_tunic_current_saved_and_reopened_project_exports_the_first_maps(
 ) -> None:
     """Item 3.1's save/reopen: the first rebuild's project keeps one file and UUID from its first
     export through the save to the reopen in a fresh process, and exports again every file of its
-    first export, byte for byte, in the measure mode. An expected failure while the 4096-px Normal
-    is refused, as the maps test."""
+    first export, byte for byte, in the measure mode."""
     _, runs, reopen = tunic_tier1
-    if all(r.refused for r in runs):
-        xfail_on_the_height_normal_gap([r.refusal for r in runs])
     assert not any(r.refused for r in runs), [r.refusal for r in runs]
     assert reopen is not None
     assert reopen.first, "the first export wrote no file"
@@ -427,8 +417,7 @@ def test_tunic_current_recipe_rebuild_exports_identical_bytes_in_the_measure_mod
     `double_sided` read through freshly resolved handles, after the reopen and after the rebuilt
     project's save and reopen); the outcome must be `pass`: equal recipe digests and
     byte-identical exports. The aggregate is recorded as `tunic_current_recipe_measure`, with no
-    private value, as the production test's. While the 4096-px Normal is refused
-    (`HEIGHT_NORMAL_GAP`) on both sides, with the digests equal, it is an expected failure."""
+    private value, as the production test's."""
     manifest = resolve_golden(TUNIC_CURRENT)
     assert manifest is not None
     aggregate: dict[str, Any] = {
@@ -449,8 +438,6 @@ def test_tunic_current_recipe_rebuild_exports_identical_bytes_in_the_measure_mod
     assert not any(log.run_python_listed for log in result.logs.values()), aggregate
     assert result.report is not None, aggregate
     assert result.report["equality"]["digests_equal"], aggregate
-    if result.outcome == "export_refused" and len(result.export_refusals) == 2:
-        xfail_on_the_height_normal_gap(result.export_refusals)
     assert result.outcome == "pass", aggregate
     assert result.report["equality"]["files"] == "identical", aggregate
 
