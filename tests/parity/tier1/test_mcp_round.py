@@ -151,7 +151,7 @@ def _measure_mode_report() -> dict[str, Any]:
     path = REPO_ROOT / "parity/reports/phase2/sash-v5-mcp-round.json"
     report: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
     report["calls"] = [call for call in report["calls"] if call["tool"] != "export"]
-    report.pop("refusal")
+    report.pop("refusal", None)
     report["maps"] = [{**m, "sha256": m["tier1_sha256"]} for m in report["maps"]]
     measured = {"outcome": "completed", "export_mode": "diagnostic_measure"}
     return {**report, **measured, "equal_to_tier1": "equal"}
