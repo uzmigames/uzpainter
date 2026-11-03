@@ -379,7 +379,7 @@ def main() -> None:
     parser.parse_args()
     path = request_path()
     require(path.parent.is_dir(), "request parent must already exist")
-    path.write_text(json.dumps(request(), indent=2) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(request(), indent=2) + "\n", encoding="utf-8", newline="\n")
 
 
 if __name__ == "__main__":

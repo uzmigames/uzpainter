@@ -22,7 +22,7 @@ envelope's `requests/tier0/api-probes/`, `export-padding-normal-empty-height`:
 
 | Pin | SHA-256 |
 | --- | --- |
-| Request bytes | `c3802e556893edebb468912581242cd33412dc6b196828e09241e60c986aa1c8` |
+| Request bytes, as committed (LF) | `bb2ea0297ebfcfd6ad1e3b48d41f8d18e0201c9fd2a55f2c3a74ebf33cff844a` |
 | Request, canonical JSON | `c384d9290da406a8e0dd632dd8ac245867a17005f38644e0fe40df41f3381d06` |
 | Instruction sequence, canonical JSON | `343e75b5174ba515e1eccf24e6622b80eeab994a6ed400d362929a475feae559` |
 | `sphere`, `parity/fixtures/tier0-semantics/meshes/sphere.obj` | `d263a715bce05810252aebbffec801645fb60a991d2311536935503c79640476` |
