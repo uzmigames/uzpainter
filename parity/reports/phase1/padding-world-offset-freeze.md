@@ -255,14 +255,20 @@ Validate the capture as `padding_joint_bend_score` does:
 
 The scorer is `python -m tools.parity.fit.padding_world_offset_score`. It refuses unless:
 
-- the recomputed predictions hash to the freeze's SHA-256, and the compact file hashes to
-  its own and equals them;
+- the recomputed predictions hash to the freeze's SHA-256, and the compact file's exact bytes
+  hash to its own and equal them;
+- the capture is of the frozen request (`identity_problems`), checked before any score:
+  - the request's exact bytes hash to `4e2c2646...3c3f`;
+  - the admitted manifest is that request plus private records (inputs, instruction sequence,
+    settings and identity fields);
+  - the mesh is `2c8eb824...b429`;
+  - the record's golden id, input hashes and instruction-sequence hash are the request's;
 - the capture validates as above;
 - every predicted texel is a ring texel of the recording.
 
 It reports matches separately for the scored set, the excluded set, the whole ring of the
-copies, the discriminating texels and the mask's pairs. A pair counts when both of its
-texels match.
+copies, the discriminating texels (in all and split into scored and excluded ones) and the
+mask's pairs. A pair counts when both of its texels match.
 
 Scoring is limited to the scored set and to these eight fixed models. It compares recorded
 output bits with the frozen predicted bits directly. No fraction is decoded for a verdict.

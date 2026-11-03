@@ -3,6 +3,7 @@ Painter recordings."""
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import types
@@ -209,6 +210,8 @@ def test_the_scorer_compares_output_bits_per_set_and_follows_the_frozen_verdict(
     recorded = {(1, 1): [[0]] * 4, (31, 1): [[5]] * 4}
     result = scorer.score(found, lambda x, y: recorded.get((x, y)))
     assert result["sizes"]["scored"] == 2 and result["sizes"]["discriminating"] == 1
+    assert result["sizes"]["scored_discriminating"] == 1
+    assert "excluded_discriminating" not in result["sizes"]
     assert result["sizes"]["mask_pairs"] == 1
     assert result["matches"]["pos32n"]["scored"] == 2
     assert result["matches"]["double"]["scored"] == 1
@@ -219,6 +222,83 @@ def test_the_scorer_compares_output_bits_per_set_and_follows_the_frozen_verdict(
     assert scorer.score(found, lambda x, y: recorded.get((x, y)))["verdict"] == "none_fits"
     # A predicted texel that is not a ring texel of the recording refuses the score.
     assert "refused" in scorer.score(found, lambda x, y: None)
+    # An undecided discriminating texel is counted as excluded, apart from the scored ones.
+    found["copies"][1]["texels"]["1,1"]["undecided"] = ["window-side"]
+    sizes = scorer.score(found, lambda x, y: recorded.get((x, y)))["sizes"]
+    assert sizes["excluded_discriminating"] == 1 and "scored_discriminating" not in sizes
+
+
+def _frozen_capture() -> tuple[bytes, dict[str, Any], dict[str, Any], dict[str, Any]]:
+    from tools.parity.fit import padding_world_offset_score as scorer
+    from tools.parity.recorder.job import canonical_json
+
+    (path,) = [p for p in rr_paths(scorer.GOLDEN) if p.is_file()]
+    request = path.read_bytes()
+    frozen = json.loads(request)
+    manifest = {**frozen, "private_records": [{"record_id": "golden-record"}]}
+    record = {
+        "golden_id": frozen["golden_id"],
+        "key": {
+            "instruction_sequence_sha256": hashlib.sha256(
+                canonical_json(frozen["instruction_sequence"])
+            ).hexdigest(),
+            "inputs": [
+                {"input_id": r["input_id"], "sha256": r["sha256"]} for r in frozen["inputs"]
+            ],
+        },
+    }
+    return request, manifest, record, {"mesh_sha256": scorer.FROZEN_MESH_SHA256}
+
+
+def rr_paths(name: str) -> list[Any]:
+    from tools.parity.tier0_semantics.recording_requests import preserved_request_paths
+
+    return preserved_request_paths(REPO_ROOT, name)
+
+
+def test_the_scorer_accepts_only_a_capture_of_the_frozen_request() -> None:
+    from tools.parity.fit import padding_world_offset_score as scorer
+
+    request, manifest, record, found = _frozen_capture()
+    assert scorer.identity_problems(request, manifest, record, found) == []
+    # An extra field, or no private record, is not the request with private records added.
+    assert scorer.identity_problems(request, {**manifest, "note": 1}, record, found) == [
+        "the admitted manifest differs from the frozen request"
+    ]
+    unrecorded = {**manifest, "private_records": []}
+    assert scorer.identity_problems(request, unrecorded, record, found) == [
+        "the admitted manifest is not the request with private records added"
+    ]
+    # A changed mesh (another OBJ hash under the same golden) fails before any score.
+    other = json.loads(json.dumps(manifest))
+    mesh = next(r for r in other["inputs"] if r["kind"] == "mesh")
+    mesh["sha256"] = "0" * 64
+    moved = json.loads(json.dumps(record))
+    moved["key"]["inputs"][0]["sha256"] = "0" * 64
+    assert scorer.identity_problems(request, other, moved, found) == [
+        "the admitted manifest differs from the frozen request",
+        "the record is not of the frozen request",
+    ]
+    assert scorer.identity_problems(request, manifest, record, {"mesh_sha256": "0" * 64}) == [
+        "the mesh differs from the freeze"
+    ]
+    # Another instruction sequence under the same golden fails too.
+    other = json.loads(json.dumps(manifest))
+    other["instruction_sequence"]["steps"] = other["instruction_sequence"]["steps"][:-1]
+    from tools.parity.recorder.job import canonical_json
+
+    resequenced = json.loads(json.dumps(record))
+    resequenced["key"]["instruction_sequence_sha256"] = hashlib.sha256(
+        canonical_json(other["instruction_sequence"])
+    ).hexdigest()
+    assert scorer.identity_problems(request, other, resequenced, found) == [
+        "the admitted manifest differs from the frozen request",
+        "the record is not of the frozen request",
+    ]
+    # A request whose bytes differ from the freeze (even one line end) is refused outright.
+    assert scorer.identity_problems(request.replace(b"\n", b"\r\n"), manifest, record, found) == [
+        "the request differs from the freeze"
+    ]
 
 
 def test_the_scorer_refuses_predictions_other_than_the_freeze() -> None:
