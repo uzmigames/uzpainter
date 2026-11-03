@@ -1,0 +1,589 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "phase2/tier1/sash-v5-current",
+  "tier": "1",
+  "domain": "tier1/pilot/sash-v5-current",
+  "description": "Tier 1 current round of the UzmiGames sash 25-Faixa-Cintura v5 (decision 300 items 7-8): a current reference, not the historical round and not an approved baseline. The waist-v5 scripts run byte-unchanged in Painter under decision 099's two adaptations, each the raw git blob of one Assets3D snapshot pinned by SHA-256: painter_create.py (the low under OCIO with Painter's substance config, OpenGL normals, 2048 px, no cameras; the Normal and AO mesh maps; save_as Full), painter_layer_stack.py sync with stack-sash.json (20 fills, 19 masks and the T_sash base colour, resource prefix v5f_, group faixa25_v5, texture set 25-Faixa-Cintura; its import run.py and run's two import-time helpers loaded from their pinned bytes) and painter_export.py with the authored prefix 25-Faixa-Cintura (BaseColor, Roughness, Metallic, Height and Normal as 16-bit PNG, sizeLog2 11, infinite padding, no dithering; no fourth step). Both arguments files are authored for the round. Every other input is a named substitute made now (the low, the Normal, the AO, the masks, T_sash), pinned by hash under the receipt its note names; the historical inputs stay missing. Recordings: r1 (create, sync, export), r1-repeat (export again) and r2 (after save, close and reopen, export again), which must be byte-identical.",
+  "inputs": [
+    {
+      "input_id": "painter-create-py",
+      "kind": "pipeline_script",
+      "assets3d_path": "Pipeline/retopology/waist-v5/painter_create.py",
+      "sha256": "f3e01482efaa117b9bb7299c9bce6f384e3385b59baeaece5b503200b7e41b05",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Raw git blob of Assets3D 1c9a312a Pipeline/retopology/waist-v5/painter_create.py (LF), read from Assets3D's object database into the private store: the committed file the current round runs. Which bytes the historical round ran is unestablished."
+      }
+    },
+    {
+      "input_id": "painter-layer-stack-py",
+      "kind": "pipeline_script",
+      "assets3d_path": "Pipeline/painting/painter_layer_stack.py",
+      "sha256": "834c4bca3d32ebdeb9cd705e699782ee86fb86eb6dcff277345fae7bd63827aa",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Raw git blob of Assets3D 1c9a312a Pipeline/painting/painter_layer_stack.py (LF), read from Assets3D's object database into the private store: the committed file the current round runs. Which bytes the historical round ran is unestablished."
+      }
+    },
+    {
+      "input_id": "production-run-py",
+      "kind": "pipeline_script",
+      "assets3d_path": "Pipeline/production/run.py",
+      "sha256": "7d8017d256a2359d5062fcc6e9e06881fee5d2bbb113e8000f8fba819a85b0a2",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Raw git blob of Assets3D 1c9a312a Pipeline/production/run.py (LF), read from Assets3D's object database into the private store: the committed file the current round runs. Which bytes the historical round ran is unestablished."
+      }
+    },
+    {
+      "input_id": "decision-evidence-py",
+      "kind": "pipeline_script",
+      "assets3d_path": "Pipeline/production/decision_evidence.py",
+      "sha256": "a1f11c9a6938a8c77284e63c3e515b78a892424df480d8931a90f825a1967d60",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Raw git blob of Assets3D 1c9a312a Pipeline/production/decision_evidence.py (LF), read from Assets3D's object database into the private store: the committed file the current round runs. Which bytes the historical round ran is unestablished."
+      }
+    },
+    {
+      "input_id": "stage-review-evidence-py",
+      "kind": "pipeline_script",
+      "assets3d_path": "Pipeline/production/stage_review_evidence.py",
+      "sha256": "598c774ade15d7893bec154aead7065ddb515fd5799ab42fcf8f6e97735f502a",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Raw git blob of Assets3D 1c9a312a Pipeline/production/stage_review_evidence.py (LF), read from Assets3D's object database into the private store: the committed file the current round runs. Which bytes the historical round ran is unestablished."
+      }
+    },
+    {
+      "input_id": "painter-export-py",
+      "kind": "pipeline_script",
+      "assets3d_path": "Pipeline/retopology/waist-v5/painter_export.py",
+      "sha256": "48c294a43cbce1073e647f6299576fedd66f31f8fb4370f8175f3df2ac64d038",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Raw git blob of Assets3D 1c9a312a Pipeline/retopology/waist-v5/painter_export.py (LF), read from Assets3D's object database into the private store: the committed file the current round runs. Which bytes the historical round ran is unestablished."
+      }
+    },
+    {
+      "input_id": "sash-stack",
+      "kind": "recipe_json",
+      "assets3d_path": "Pipeline/retopology/waist-v5/stack-sash.json",
+      "sha256": "cfa13264ab5ac83efdbeb7f7d669a6cd2f2f6e6ed563bd282d6fea1985ecf35b",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Raw git blob of Assets3D 1c9a312a Pipeline/retopology/waist-v5/stack-sash.json (LF), read from Assets3D's object database into the private store: the committed file the current round runs. Which bytes the historical round ran is unestablished."
+      }
+    },
+    {
+      "input_id": "painter-create-args",
+      "kind": "recipe_json",
+      "assets3d_path": "_tmp/claude/cintura-v5/painter_create_args.json",
+      "sha256": "e9f571e947b32a71ab1d8889a390c655dca5707ab1966aeb3de736228ff1b9a4",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Authored for the current round (decision 300 item 7), not the lost round's arguments: the piece name and export prefix 25-Faixa-Cintura; the recorder repoints its paths into the private work directory."
+      }
+    },
+    {
+      "input_id": "painter-export-args",
+      "kind": "recipe_json",
+      "assets3d_path": "_tmp/claude/cintura-v5/painter_export_args.json",
+      "sha256": "33ac3f00681c73b25081b680e0ad7aaf6813b1bed187ae8e9001a464f91b0ce7",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Authored for the current round (decision 300 item 7), not the lost round's arguments: the piece name and export prefix 25-Faixa-Cintura; the recorder repoints its paths into the private work directory."
+      }
+    },
+    {
+      "input_id": "sash-mesh",
+      "kind": "mesh",
+      "assets3d_path": "_tmp/claude/cintura-v5/lows/25-Faixa-Cintura-v5-low.obj",
+      "sha256": "646bba8546ad9dcd6475eb366fced896f35f592b088e1286d1a30ec957249944",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the round's lost low: front N's deterministic export (sash_low_export) from the preserved .blend 4c770d1dcf1fd4296386155e1ae12d60126a3d9de1fcfeaadf82636353624a3b, receipt uzpainter/parity/sash-low-export-record/1 record sha256 4a9b753b8ab9d52e875eb10b906ae96a933ad3c670235e7a981d47fb0312471c."
+      }
+    },
+    {
+      "input_id": "sash-mesh-mtl",
+      "kind": "mesh",
+      "assets3d_path": "_tmp/claude/cintura-v5/lows/25-Faixa-Cintura-v5-low.mtl",
+      "sha256": "2e9174ad995c854491ac0c4e02ccc58144fe62128ee64097c5268216a575c061",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the round's lost low: front N's deterministic export (sash_low_export) from the preserved .blend 4c770d1dcf1fd4296386155e1ae12d60126a3d9de1fcfeaadf82636353624a3b, receipt uzpainter/parity/sash-low-export-record/1 record sha256 4a9b753b8ab9d52e875eb10b906ae96a933ad3c670235e7a981d47fb0312471c."
+      }
+    },
+    {
+      "input_id": "sash-normal",
+      "kind": "image",
+      "assets3d_path": "Creatures/Undead/Skeletal Mage/Models3D/25-Faixa-Cintura/Textures/25-Faixa-Cintura_Normal_OpenGL_bake_v5.png",
+      "sha256": "ec05be82d5c551926b81f2e443faf227d297b37b0fba6aed14da63b397d58276",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Named substitute for the Normal mesh map: the surviving bake under the piece's Textures. Its identity with the historical Normal is unestablished."
+      }
+    },
+    {
+      "input_id": "sash-ao",
+      "kind": "image",
+      "assets3d_path": "_tmp/claude/cintura-v5/bake/25-Faixa-Cintura_AO_v5.png",
+      "sha256": "cfcb22a61ca2f790162758425b16379478da40925ef01b8dabf18c90f826f145",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical AO mesh map: made by tools/parity/tier1/sash_ao_map.py (014d10aff80c57f3514d29dcdc06a4276f627c0a03694d58cf1111969a61e655), receipt uzpainter/parity/sash-ao-map-record/1 ao-map record sha256 a1395597a9853a4fa7b83e3d0427bb0cccf004c66f2bf22cefefd4bbc7bc9502, from front P's ao.npy 58440cda9c742ba3768d75965209e78f8df83c10f8ced3c29d66c0e98443413c (receipt uzpainter/parity/sash-intermediates-record/1 ao record sha256 baf257aed8145859abb5f86fe90be27f2546034b9328e00bd8665865b2d775f4)."
+      }
+    },
+    {
+      "input_id": "mask-m_band",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/cintura-v5/paint/masks-sash/M_band.png",
+      "sha256": "94f9b78cf2ebf47d2c12e0fe61848b66343fed235fdba8d29841908ff5d43437",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical M_band: written by Pipeline/retopology/waist-v5/waist_masks.py sash (959eca0bc3e2660149806c288d002d4d0db0816dc284093e643d6ffd5837a066, masks only) through front T's sash_masks, receipt uzpainter/parity/sash-masks-record/1 masks record sha256 83821efbe840cd59b5de8e4ada5297601295bc3a8153525757745f849031b9ca (an independent repeat of 7098023b58faec593026c1858825b4f593defbc86fce346ca0f1ef72f1f4f407, byte-identical), from front P's low.npz 0bcd14b9596a1d655f9bfd5a80deb05e67c9e251bb33d7adf1a6929df32dfdc4, highnormal.npy 9dad3d438e8eef97699f57391722d3aabccbdc6338662433026492b56663d169, ao.npy 58440cda9c742ba3768d75965209e78f8df83c10f8ced3c29d66c0e98443413c, construction-centre.npz 26ca2a1fd4f9ec83f96f376f7b7d6546d0fbd338ed4c3ab1b0bfcd2ca4d47c79 (receipts uzpainter/parity/sash-intermediates-record/1 extract record sha256 b6fbfcd4ffc73491dedfe09b4b21da5a04b8e838e6978268e8fea68a1cbf21cb; uzpainter/parity/sash-intermediates-record/1 ao record sha256 baf257aed8145859abb5f86fe90be27f2546034b9328e00bd8665865b2d775f4; uzpainter/parity/sash-intermediates-record/1 centre record sha256 12cd35ffcb85ad3e921759861cb0a7e11be85870959654c80f9da2e8c5c0ecf9)."
+      }
+    },
+    {
+      "input_id": "mask-m_band_seam",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/cintura-v5/paint/masks-sash/M_band_seam.png",
+      "sha256": "171682eee23920d45dface8d9bc444d7a8b884fceaef0b05223199f6081967f9",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical M_band_seam: written by Pipeline/retopology/waist-v5/waist_masks.py sash (959eca0bc3e2660149806c288d002d4d0db0816dc284093e643d6ffd5837a066, masks only) through front T's sash_masks, receipt uzpainter/parity/sash-masks-record/1 masks record sha256 83821efbe840cd59b5de8e4ada5297601295bc3a8153525757745f849031b9ca (an independent repeat of 7098023b58faec593026c1858825b4f593defbc86fce346ca0f1ef72f1f4f407, byte-identical), from front P's low.npz 0bcd14b9596a1d655f9bfd5a80deb05e67c9e251bb33d7adf1a6929df32dfdc4, highnormal.npy 9dad3d438e8eef97699f57391722d3aabccbdc6338662433026492b56663d169, ao.npy 58440cda9c742ba3768d75965209e78f8df83c10f8ced3c29d66c0e98443413c, construction-centre.npz 26ca2a1fd4f9ec83f96f376f7b7d6546d0fbd338ed4c3ab1b0bfcd2ca4d47c79 (receipts uzpainter/parity/sash-intermediates-record/1 extract record sha256 b6fbfcd4ffc73491dedfe09b4b21da5a04b8e838e6978268e8fea68a1cbf21cb; uzpainter/parity/sash-intermediates-record/1 ao record sha256 baf257aed8145859abb5f86fe90be27f2546034b9328e00bd8665865b2d775f4; uzpainter/parity/sash-intermediates-record/1 centre record sha256 12cd35ffcb85ad3e921759861cb0a7e11be85870959654c80f9da2e8c5c0ecf9)."
+      }
+    },
+    {
+      "input_id": "mask-m_band_stitch",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/cintura-v5/paint/masks-sash/M_band_stitch.png",
+      "sha256": "a40246630088bc6274ed5bc662bed512223507a5a2019d10d9c2ef060c6279ce",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical M_band_stitch: written by Pipeline/retopology/waist-v5/waist_masks.py sash (959eca0bc3e2660149806c288d002d4d0db0816dc284093e643d6ffd5837a066, masks only) through front T's sash_masks, receipt uzpainter/parity/sash-masks-record/1 masks record sha256 83821efbe840cd59b5de8e4ada5297601295bc3a8153525757745f849031b9ca (an independent repeat of 7098023b58faec593026c1858825b4f593defbc86fce346ca0f1ef72f1f4f407, byte-identical), from front P's low.npz 0bcd14b9596a1d655f9bfd5a80deb05e67c9e251bb33d7adf1a6929df32dfdc4, highnormal.npy 9dad3d438e8eef97699f57391722d3aabccbdc6338662433026492b56663d169, ao.npy 58440cda9c742ba3768d75965209e78f8df83c10f8ced3c29d66c0e98443413c, construction-centre.npz 26ca2a1fd4f9ec83f96f376f7b7d6546d0fbd338ed4c3ab1b0bfcd2ca4d47c79 (receipts uzpainter/parity/sash-intermediates-record/1 extract record sha256 b6fbfcd4ffc73491dedfe09b4b21da5a04b8e838e6978268e8fea68a1cbf21cb; uzpainter/parity/sash-intermediates-record/1 ao record sha256 baf257aed8145859abb5f86fe90be27f2546034b9328e00bd8665865b2d775f4; uzpainter/parity/sash-intermediates-record/1 centre record sha256 12cd35ffcb85ad3e921759861cb0a7e11be85870959654c80f9da2e8c5c0ecf9)."
+      }
+    },
+    {
+      "input_id": "mask-m_band_top",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/cintura-v5/paint/masks-sash/M_band_top.png",
+      "sha256": "dd717411247e2a2dcf297f4cf80eee0be843a90a4c47e3f5e620f3e9244183ea",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical M_band_top: written by Pipeline/retopology/waist-v5/waist_masks.py sash (959eca0bc3e2660149806c288d002d4d0db0816dc284093e643d6ffd5837a066, masks only) through front T's sash_masks, receipt uzpainter/parity/sash-masks-record/1 masks record sha256 83821efbe840cd59b5de8e4ada5297601295bc3a8153525757745f849031b9ca (an independent repeat of 7098023b58faec593026c1858825b4f593defbc86fce346ca0f1ef72f1f4f407, byte-identical), from front P's low.npz 0bcd14b9596a1d655f9bfd5a80deb05e67c9e251bb33d7adf1a6929df32dfdc4, highnormal.npy 9dad3d438e8eef97699f57391722d3aabccbdc6338662433026492b56663d169, ao.npy 58440cda9c742ba3768d75965209e78f8df83c10f8ced3c29d66c0e98443413c, construction-centre.npz 26ca2a1fd4f9ec83f96f376f7b7d6546d0fbd338ed4c3ab1b0bfcd2ca4d47c79 (receipts uzpainter/parity/sash-intermediates-record/1 extract record sha256 b6fbfcd4ffc73491dedfe09b4b21da5a04b8e838e6978268e8fea68a1cbf21cb; uzpainter/parity/sash-intermediates-record/1 ao record sha256 baf257aed8145859abb5f86fe90be27f2546034b9328e00bd8665865b2d775f4; uzpainter/parity/sash-intermediates-record/1 centre record sha256 12cd35ffcb85ad3e921759861cb0a7e11be85870959654c80f9da2e8c5c0ecf9)."
+      }
+    },
+    {
+      "input_id": "mask-m_beltgrime",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/cintura-v5/paint/masks-sash/M_beltgrime.png",
+      "sha256": "0536fb8fe4c97780658dbb2f0405bb4d0bcb0f2122410ad22626a11c85d44eea",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical M_beltgrime: written by Pipeline/retopology/waist-v5/waist_masks.py sash (959eca0bc3e2660149806c288d002d4d0db0816dc284093e643d6ffd5837a066, masks only) through front T's sash_masks, receipt uzpainter/parity/sash-masks-record/1 masks record sha256 83821efbe840cd59b5de8e4ada5297601295bc3a8153525757745f849031b9ca (an independent repeat of 7098023b58faec593026c1858825b4f593defbc86fce346ca0f1ef72f1f4f407, byte-identical), from front P's low.npz 0bcd14b9596a1d655f9bfd5a80deb05e67c9e251bb33d7adf1a6929df32dfdc4, highnormal.npy 9dad3d438e8eef97699f57391722d3aabccbdc6338662433026492b56663d169, ao.npy 58440cda9c742ba3768d75965209e78f8df83c10f8ced3c29d66c0e98443413c, construction-centre.npz 26ca2a1fd4f9ec83f96f376f7b7d6546d0fbd338ed4c3ab1b0bfcd2ca4d47c79 (receipts uzpainter/parity/sash-intermediates-record/1 extract record sha256 b6fbfcd4ffc73491dedfe09b4b21da5a04b8e838e6978268e8fea68a1cbf21cb; uzpainter/parity/sash-intermediates-record/1 ao record sha256 baf257aed8145859abb5f86fe90be27f2546034b9328e00bd8665865b2d775f4; uzpainter/parity/sash-intermediates-record/1 centre record sha256 12cd35ffcb85ad3e921759861cb0a7e11be85870959654c80f9da2e8c5c0ecf9)."
+      }
+    },
+    {
+      "input_id": "mask-m_cav",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/cintura-v5/paint/masks-sash/M_cav.png",
+      "sha256": "bc6858a658d1ca1117bc9fe360930d9723e6469b36c17eb067b804a63a560153",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical M_cav: written by Pipeline/retopology/waist-v5/waist_masks.py sash (959eca0bc3e2660149806c288d002d4d0db0816dc284093e643d6ffd5837a066, masks only) through front T's sash_masks, receipt uzpainter/parity/sash-masks-record/1 masks record sha256 83821efbe840cd59b5de8e4ada5297601295bc3a8153525757745f849031b9ca (an independent repeat of 7098023b58faec593026c1858825b4f593defbc86fce346ca0f1ef72f1f4f407, byte-identical), from front P's low.npz 0bcd14b9596a1d655f9bfd5a80deb05e67c9e251bb33d7adf1a6929df32dfdc4, highnormal.npy 9dad3d438e8eef97699f57391722d3aabccbdc6338662433026492b56663d169, ao.npy 58440cda9c742ba3768d75965209e78f8df83c10f8ced3c29d66c0e98443413c, construction-centre.npz 26ca2a1fd4f9ec83f96f376f7b7d6546d0fbd338ed4c3ab1b0bfcd2ca4d47c79 (receipts uzpainter/parity/sash-intermediates-record/1 extract record sha256 b6fbfcd4ffc73491dedfe09b4b21da5a04b8e838e6978268e8fea68a1cbf21cb; uzpainter/parity/sash-intermediates-record/1 ao record sha256 baf257aed8145859abb5f86fe90be27f2546034b9328e00bd8665865b2d775f4; uzpainter/parity/sash-intermediates-record/1 centre record sha256 12cd35ffcb85ad3e921759861cb0a7e11be85870959654c80f9da2e8c5c0ecf9)."
+      }
+    },
+    {
+      "input_id": "mask-m_crest",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/cintura-v5/paint/masks-sash/M_crest.png",
+      "sha256": "c61c7917465fcbc029cc6562e725089477d9258f44be3e6c17c529ffc60e579d",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical M_crest: written by Pipeline/retopology/waist-v5/waist_masks.py sash (959eca0bc3e2660149806c288d002d4d0db0816dc284093e643d6ffd5837a066, masks only) through front T's sash_masks, receipt uzpainter/parity/sash-masks-record/1 masks record sha256 83821efbe840cd59b5de8e4ada5297601295bc3a8153525757745f849031b9ca (an independent repeat of 7098023b58faec593026c1858825b4f593defbc86fce346ca0f1ef72f1f4f407, byte-identical), from front P's low.npz 0bcd14b9596a1d655f9bfd5a80deb05e67c9e251bb33d7adf1a6929df32dfdc4, highnormal.npy 9dad3d438e8eef97699f57391722d3aabccbdc6338662433026492b56663d169, ao.npy 58440cda9c742ba3768d75965209e78f8df83c10f8ced3c29d66c0e98443413c, construction-centre.npz 26ca2a1fd4f9ec83f96f376f7b7d6546d0fbd338ed4c3ab1b0bfcd2ca4d47c79 (receipts uzpainter/parity/sash-intermediates-record/1 extract record sha256 b6fbfcd4ffc73491dedfe09b4b21da5a04b8e838e6978268e8fea68a1cbf21cb; uzpainter/parity/sash-intermediates-record/1 ao record sha256 baf257aed8145859abb5f86fe90be27f2546034b9328e00bd8665865b2d775f4; uzpainter/parity/sash-intermediates-record/1 centre record sha256 12cd35ffcb85ad3e921759861cb0a7e11be85870959654c80f9da2e8c5c0ecf9)."
+      }
+    },
+    {
+      "input_id": "mask-m_dust",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/cintura-v5/paint/masks-sash/M_dust.png",
+      "sha256": "678e92d4f27b8c95903d0147479befc44ee5bc9d06c821e8a4a60e7ec14a3102",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical M_dust: written by Pipeline/retopology/waist-v5/waist_masks.py sash (959eca0bc3e2660149806c288d002d4d0db0816dc284093e643d6ffd5837a066, masks only) through front T's sash_masks, receipt uzpainter/parity/sash-masks-record/1 masks record sha256 83821efbe840cd59b5de8e4ada5297601295bc3a8153525757745f849031b9ca (an independent repeat of 7098023b58faec593026c1858825b4f593defbc86fce346ca0f1ef72f1f4f407, byte-identical), from front P's low.npz 0bcd14b9596a1d655f9bfd5a80deb05e67c9e251bb33d7adf1a6929df32dfdc4, highnormal.npy 9dad3d438e8eef97699f57391722d3aabccbdc6338662433026492b56663d169, ao.npy 58440cda9c742ba3768d75965209e78f8df83c10f8ced3c29d66c0e98443413c, construction-centre.npz 26ca2a1fd4f9ec83f96f376f7b7d6546d0fbd338ed4c3ab1b0bfcd2ca4d47c79 (receipts uzpainter/parity/sash-intermediates-record/1 extract record sha256 b6fbfcd4ffc73491dedfe09b4b21da5a04b8e838e6978268e8fea68a1cbf21cb; uzpainter/parity/sash-intermediates-record/1 ao record sha256 baf257aed8145859abb5f86fe90be27f2546034b9328e00bd8665865b2d775f4; uzpainter/parity/sash-intermediates-record/1 centre record sha256 12cd35ffcb85ad3e921759861cb0a7e11be85870959654c80f9da2e8c5c0ecf9)."
+      }
+    },
+    {
+      "input_id": "mask-m_fibers",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/cintura-v5/paint/masks-sash/M_fibers.png",
+      "sha256": "34c6da71c08a848f06e47e1a434bf79d9bd257db100b69551635adebec53eee9",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical M_fibers: written by Pipeline/retopology/waist-v5/waist_masks.py sash (959eca0bc3e2660149806c288d002d4d0db0816dc284093e643d6ffd5837a066, masks only) through front T's sash_masks, receipt uzpainter/parity/sash-masks-record/1 masks record sha256 83821efbe840cd59b5de8e4ada5297601295bc3a8153525757745f849031b9ca (an independent repeat of 7098023b58faec593026c1858825b4f593defbc86fce346ca0f1ef72f1f4f407, byte-identical), from front P's low.npz 0bcd14b9596a1d655f9bfd5a80deb05e67c9e251bb33d7adf1a6929df32dfdc4, highnormal.npy 9dad3d438e8eef97699f57391722d3aabccbdc6338662433026492b56663d169, ao.npy 58440cda9c742ba3768d75965209e78f8df83c10f8ced3c29d66c0e98443413c, construction-centre.npz 26ca2a1fd4f9ec83f96f376f7b7d6546d0fbd338ed4c3ab1b0bfcd2ca4d47c79 (receipts uzpainter/parity/sash-intermediates-record/1 extract record sha256 b6fbfcd4ffc73491dedfe09b4b21da5a04b8e838e6978268e8fea68a1cbf21cb; uzpainter/parity/sash-intermediates-record/1 ao record sha256 baf257aed8145859abb5f86fe90be27f2546034b9328e00bd8665865b2d775f4; uzpainter/parity/sash-intermediates-record/1 centre record sha256 12cd35ffcb85ad3e921759861cb0a7e11be85870959654c80f9da2e8c5c0ecf9)."
+      }
+    },
+    {
+      "input_id": "mask-m_hem",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/cintura-v5/paint/masks-sash/M_hem.png",
+      "sha256": "6eb0d92300cdf189f57ec5ccdefe32bcf485a3a5abb784361dcbe87ffd4df3c2",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical M_hem: written by Pipeline/retopology/waist-v5/waist_masks.py sash (959eca0bc3e2660149806c288d002d4d0db0816dc284093e643d6ffd5837a066, masks only) through front T's sash_masks, receipt uzpainter/parity/sash-masks-record/1 masks record sha256 83821efbe840cd59b5de8e4ada5297601295bc3a8153525757745f849031b9ca (an independent repeat of 7098023b58faec593026c1858825b4f593defbc86fce346ca0f1ef72f1f4f407, byte-identical), from front P's low.npz 0bcd14b9596a1d655f9bfd5a80deb05e67c9e251bb33d7adf1a6929df32dfdc4, highnormal.npy 9dad3d438e8eef97699f57391722d3aabccbdc6338662433026492b56663d169, ao.npy 58440cda9c742ba3768d75965209e78f8df83c10f8ced3c29d66c0e98443413c, construction-centre.npz 26ca2a1fd4f9ec83f96f376f7b7d6546d0fbd338ed4c3ab1b0bfcd2ca4d47c79 (receipts uzpainter/parity/sash-intermediates-record/1 extract record sha256 b6fbfcd4ffc73491dedfe09b4b21da5a04b8e838e6978268e8fea68a1cbf21cb; uzpainter/parity/sash-intermediates-record/1 ao record sha256 baf257aed8145859abb5f86fe90be27f2546034b9328e00bd8665865b2d775f4; uzpainter/parity/sash-intermediates-record/1 centre record sha256 12cd35ffcb85ad3e921759861cb0a7e11be85870959654c80f9da2e8c5c0ecf9)."
+      }
+    },
+    {
+      "input_id": "mask-m_hem_crack",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/cintura-v5/paint/masks-sash/M_hem_crack.png",
+      "sha256": "831fbf81fcd14f56469eed020de445fe64c125493eaa00f64b6de0c503e08c86",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical M_hem_crack: written by Pipeline/retopology/waist-v5/waist_masks.py sash (959eca0bc3e2660149806c288d002d4d0db0816dc284093e643d6ffd5837a066, masks only) through front T's sash_masks, receipt uzpainter/parity/sash-masks-record/1 masks record sha256 83821efbe840cd59b5de8e4ada5297601295bc3a8153525757745f849031b9ca (an independent repeat of 7098023b58faec593026c1858825b4f593defbc86fce346ca0f1ef72f1f4f407, byte-identical), from front P's low.npz 0bcd14b9596a1d655f9bfd5a80deb05e67c9e251bb33d7adf1a6929df32dfdc4, highnormal.npy 9dad3d438e8eef97699f57391722d3aabccbdc6338662433026492b56663d169, ao.npy 58440cda9c742ba3768d75965209e78f8df83c10f8ced3c29d66c0e98443413c, construction-centre.npz 26ca2a1fd4f9ec83f96f376f7b7d6546d0fbd338ed4c3ab1b0bfcd2ca4d47c79 (receipts uzpainter/parity/sash-intermediates-record/1 extract record sha256 b6fbfcd4ffc73491dedfe09b4b21da5a04b8e838e6978268e8fea68a1cbf21cb; uzpainter/parity/sash-intermediates-record/1 ao record sha256 baf257aed8145859abb5f86fe90be27f2546034b9328e00bd8665865b2d775f4; uzpainter/parity/sash-intermediates-record/1 centre record sha256 12cd35ffcb85ad3e921759861cb0a7e11be85870959654c80f9da2e8c5c0ecf9)."
+      }
+    },
+    {
+      "input_id": "mask-m_hem_grain",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/cintura-v5/paint/masks-sash/M_hem_grain.png",
+      "sha256": "4ceec2c2e89a55a3f79d899b1a09223241998e38106f0b273db7cb43274aa007",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical M_hem_grain: written by Pipeline/retopology/waist-v5/waist_masks.py sash (959eca0bc3e2660149806c288d002d4d0db0816dc284093e643d6ffd5837a066, masks only) through front T's sash_masks, receipt uzpainter/parity/sash-masks-record/1 masks record sha256 83821efbe840cd59b5de8e4ada5297601295bc3a8153525757745f849031b9ca (an independent repeat of 7098023b58faec593026c1858825b4f593defbc86fce346ca0f1ef72f1f4f407, byte-identical), from front P's low.npz 0bcd14b9596a1d655f9bfd5a80deb05e67c9e251bb33d7adf1a6929df32dfdc4, highnormal.npy 9dad3d438e8eef97699f57391722d3aabccbdc6338662433026492b56663d169, ao.npy 58440cda9c742ba3768d75965209e78f8df83c10f8ced3c29d66c0e98443413c, construction-centre.npz 26ca2a1fd4f9ec83f96f376f7b7d6546d0fbd338ed4c3ab1b0bfcd2ca4d47c79 (receipts uzpainter/parity/sash-intermediates-record/1 extract record sha256 b6fbfcd4ffc73491dedfe09b4b21da5a04b8e838e6978268e8fea68a1cbf21cb; uzpainter/parity/sash-intermediates-record/1 ao record sha256 baf257aed8145859abb5f86fe90be27f2546034b9328e00bd8665865b2d775f4; uzpainter/parity/sash-intermediates-record/1 centre record sha256 12cd35ffcb85ad3e921759861cb0a7e11be85870959654c80f9da2e8c5c0ecf9)."
+      }
+    },
+    {
+      "input_id": "mask-m_hem_grime",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/cintura-v5/paint/masks-sash/M_hem_grime.png",
+      "sha256": "ba466d5b912025fc25113de369ba94020014cb7fb9020e08ef243e0d2df44c5c",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical M_hem_grime: written by Pipeline/retopology/waist-v5/waist_masks.py sash (959eca0bc3e2660149806c288d002d4d0db0816dc284093e643d6ffd5837a066, masks only) through front T's sash_masks, receipt uzpainter/parity/sash-masks-record/1 masks record sha256 83821efbe840cd59b5de8e4ada5297601295bc3a8153525757745f849031b9ca (an independent repeat of 7098023b58faec593026c1858825b4f593defbc86fce346ca0f1ef72f1f4f407, byte-identical), from front P's low.npz 0bcd14b9596a1d655f9bfd5a80deb05e67c9e251bb33d7adf1a6929df32dfdc4, highnormal.npy 9dad3d438e8eef97699f57391722d3aabccbdc6338662433026492b56663d169, ao.npy 58440cda9c742ba3768d75965209e78f8df83c10f8ced3c29d66c0e98443413c, construction-centre.npz 26ca2a1fd4f9ec83f96f376f7b7d6546d0fbd338ed4c3ab1b0bfcd2ca4d47c79 (receipts uzpainter/parity/sash-intermediates-record/1 extract record sha256 b6fbfcd4ffc73491dedfe09b4b21da5a04b8e838e6978268e8fea68a1cbf21cb; uzpainter/parity/sash-intermediates-record/1 ao record sha256 baf257aed8145859abb5f86fe90be27f2546034b9328e00bd8665865b2d775f4; uzpainter/parity/sash-intermediates-record/1 centre record sha256 12cd35ffcb85ad3e921759861cb0a7e11be85870959654c80f9da2e8c5c0ecf9)."
+      }
+    },
+    {
+      "input_id": "mask-m_hem_top",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/cintura-v5/paint/masks-sash/M_hem_top.png",
+      "sha256": "b38bc043c09f48f885fefb3864d6fe6313d419b7601a9a236502bb57a47f5ad4",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical M_hem_top: written by Pipeline/retopology/waist-v5/waist_masks.py sash (959eca0bc3e2660149806c288d002d4d0db0816dc284093e643d6ffd5837a066, masks only) through front T's sash_masks, receipt uzpainter/parity/sash-masks-record/1 masks record sha256 83821efbe840cd59b5de8e4ada5297601295bc3a8153525757745f849031b9ca (an independent repeat of 7098023b58faec593026c1858825b4f593defbc86fce346ca0f1ef72f1f4f407, byte-identical), from front P's low.npz 0bcd14b9596a1d655f9bfd5a80deb05e67c9e251bb33d7adf1a6929df32dfdc4, highnormal.npy 9dad3d438e8eef97699f57391722d3aabccbdc6338662433026492b56663d169, ao.npy 58440cda9c742ba3768d75965209e78f8df83c10f8ced3c29d66c0e98443413c, construction-centre.npz 26ca2a1fd4f9ec83f96f376f7b7d6546d0fbd338ed4c3ab1b0bfcd2ca4d47c79 (receipts uzpainter/parity/sash-intermediates-record/1 extract record sha256 b6fbfcd4ffc73491dedfe09b4b21da5a04b8e838e6978268e8fea68a1cbf21cb; uzpainter/parity/sash-intermediates-record/1 ao record sha256 baf257aed8145859abb5f86fe90be27f2546034b9328e00bd8665865b2d775f4; uzpainter/parity/sash-intermediates-record/1 centre record sha256 12cd35ffcb85ad3e921759861cb0a7e11be85870959654c80f9da2e8c5c0ecf9)."
+      }
+    },
+    {
+      "input_id": "mask-m_inner",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/cintura-v5/paint/masks-sash/M_inner.png",
+      "sha256": "8267722cc7f13cd2bc644282aa58d90174be4c5cbd0ea2490533f3a8e2489d48",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical M_inner: written by Pipeline/retopology/waist-v5/waist_masks.py sash (959eca0bc3e2660149806c288d002d4d0db0816dc284093e643d6ffd5837a066, masks only) through front T's sash_masks, receipt uzpainter/parity/sash-masks-record/1 masks record sha256 83821efbe840cd59b5de8e4ada5297601295bc3a8153525757745f849031b9ca (an independent repeat of 7098023b58faec593026c1858825b4f593defbc86fce346ca0f1ef72f1f4f407, byte-identical), from front P's low.npz 0bcd14b9596a1d655f9bfd5a80deb05e67c9e251bb33d7adf1a6929df32dfdc4, highnormal.npy 9dad3d438e8eef97699f57391722d3aabccbdc6338662433026492b56663d169, ao.npy 58440cda9c742ba3768d75965209e78f8df83c10f8ced3c29d66c0e98443413c, construction-centre.npz 26ca2a1fd4f9ec83f96f376f7b7d6546d0fbd338ed4c3ab1b0bfcd2ca4d47c79 (receipts uzpainter/parity/sash-intermediates-record/1 extract record sha256 b6fbfcd4ffc73491dedfe09b4b21da5a04b8e838e6978268e8fea68a1cbf21cb; uzpainter/parity/sash-intermediates-record/1 ao record sha256 baf257aed8145859abb5f86fe90be27f2546034b9328e00bd8665865b2d775f4; uzpainter/parity/sash-intermediates-record/1 centre record sha256 12cd35ffcb85ad3e921759861cb0a7e11be85870959654c80f9da2e8c5c0ecf9)."
+      }
+    },
+    {
+      "input_id": "mask-m_seam",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/cintura-v5/paint/masks-sash/M_seam.png",
+      "sha256": "30dfdc76815bffd24f14e275d3fc9d05a5f37b0304db74f4528f47ac4b6ee2f4",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical M_seam: written by Pipeline/retopology/waist-v5/waist_masks.py sash (959eca0bc3e2660149806c288d002d4d0db0816dc284093e643d6ffd5837a066, masks only) through front T's sash_masks, receipt uzpainter/parity/sash-masks-record/1 masks record sha256 83821efbe840cd59b5de8e4ada5297601295bc3a8153525757745f849031b9ca (an independent repeat of 7098023b58faec593026c1858825b4f593defbc86fce346ca0f1ef72f1f4f407, byte-identical), from front P's low.npz 0bcd14b9596a1d655f9bfd5a80deb05e67c9e251bb33d7adf1a6929df32dfdc4, highnormal.npy 9dad3d438e8eef97699f57391722d3aabccbdc6338662433026492b56663d169, ao.npy 58440cda9c742ba3768d75965209e78f8df83c10f8ced3c29d66c0e98443413c, construction-centre.npz 26ca2a1fd4f9ec83f96f376f7b7d6546d0fbd338ed4c3ab1b0bfcd2ca4d47c79 (receipts uzpainter/parity/sash-intermediates-record/1 extract record sha256 b6fbfcd4ffc73491dedfe09b4b21da5a04b8e838e6978268e8fea68a1cbf21cb; uzpainter/parity/sash-intermediates-record/1 ao record sha256 baf257aed8145859abb5f86fe90be27f2546034b9328e00bd8665865b2d775f4; uzpainter/parity/sash-intermediates-record/1 centre record sha256 12cd35ffcb85ad3e921759861cb0a7e11be85870959654c80f9da2e8c5c0ecf9)."
+      }
+    },
+    {
+      "input_id": "mask-m_tab_edge",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/cintura-v5/paint/masks-sash/M_tab_edge.png",
+      "sha256": "768c098fcd7ab9347c820ecd4157c9a90afa73e604d3d3be703d0ddbf4f63fb2",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical M_tab_edge: written by Pipeline/retopology/waist-v5/waist_masks.py sash (959eca0bc3e2660149806c288d002d4d0db0816dc284093e643d6ffd5837a066, masks only) through front T's sash_masks, receipt uzpainter/parity/sash-masks-record/1 masks record sha256 83821efbe840cd59b5de8e4ada5297601295bc3a8153525757745f849031b9ca (an independent repeat of 7098023b58faec593026c1858825b4f593defbc86fce346ca0f1ef72f1f4f407, byte-identical), from front P's low.npz 0bcd14b9596a1d655f9bfd5a80deb05e67c9e251bb33d7adf1a6929df32dfdc4, highnormal.npy 9dad3d438e8eef97699f57391722d3aabccbdc6338662433026492b56663d169, ao.npy 58440cda9c742ba3768d75965209e78f8df83c10f8ced3c29d66c0e98443413c, construction-centre.npz 26ca2a1fd4f9ec83f96f376f7b7d6546d0fbd338ed4c3ab1b0bfcd2ca4d47c79 (receipts uzpainter/parity/sash-intermediates-record/1 extract record sha256 b6fbfcd4ffc73491dedfe09b4b21da5a04b8e838e6978268e8fea68a1cbf21cb; uzpainter/parity/sash-intermediates-record/1 ao record sha256 baf257aed8145859abb5f86fe90be27f2546034b9328e00bd8665865b2d775f4; uzpainter/parity/sash-intermediates-record/1 centre record sha256 12cd35ffcb85ad3e921759861cb0a7e11be85870959654c80f9da2e8c5c0ecf9)."
+      }
+    },
+    {
+      "input_id": "mask-m_tab_var",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/cintura-v5/paint/masks-sash/M_tab_var.png",
+      "sha256": "24c8e0a0e553a7f2ebb6c5b1fae201167d2ab8e573310edcff9e372ee075c8aa",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical M_tab_var: written by Pipeline/retopology/waist-v5/waist_masks.py sash (959eca0bc3e2660149806c288d002d4d0db0816dc284093e643d6ffd5837a066, masks only) through front T's sash_masks, receipt uzpainter/parity/sash-masks-record/1 masks record sha256 83821efbe840cd59b5de8e4ada5297601295bc3a8153525757745f849031b9ca (an independent repeat of 7098023b58faec593026c1858825b4f593defbc86fce346ca0f1ef72f1f4f407, byte-identical), from front P's low.npz 0bcd14b9596a1d655f9bfd5a80deb05e67c9e251bb33d7adf1a6929df32dfdc4, highnormal.npy 9dad3d438e8eef97699f57391722d3aabccbdc6338662433026492b56663d169, ao.npy 58440cda9c742ba3768d75965209e78f8df83c10f8ced3c29d66c0e98443413c, construction-centre.npz 26ca2a1fd4f9ec83f96f376f7b7d6546d0fbd338ed4c3ab1b0bfcd2ca4d47c79 (receipts uzpainter/parity/sash-intermediates-record/1 extract record sha256 b6fbfcd4ffc73491dedfe09b4b21da5a04b8e838e6978268e8fea68a1cbf21cb; uzpainter/parity/sash-intermediates-record/1 ao record sha256 baf257aed8145859abb5f86fe90be27f2546034b9328e00bd8665865b2d775f4; uzpainter/parity/sash-intermediates-record/1 centre record sha256 12cd35ffcb85ad3e921759861cb0a7e11be85870959654c80f9da2e8c5c0ecf9)."
+      }
+    },
+    {
+      "input_id": "mask-m_weave",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/cintura-v5/paint/masks-sash/M_weave.png",
+      "sha256": "3df0e27eef4f9c5af844878d9be5845f28774074e14da1b919ca8b14b88a1bd1",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical M_weave: written by Pipeline/retopology/waist-v5/waist_masks.py sash (959eca0bc3e2660149806c288d002d4d0db0816dc284093e643d6ffd5837a066, masks only) through front T's sash_masks, receipt uzpainter/parity/sash-masks-record/1 masks record sha256 83821efbe840cd59b5de8e4ada5297601295bc3a8153525757745f849031b9ca (an independent repeat of 7098023b58faec593026c1858825b4f593defbc86fce346ca0f1ef72f1f4f407, byte-identical), from front P's low.npz 0bcd14b9596a1d655f9bfd5a80deb05e67c9e251bb33d7adf1a6929df32dfdc4, highnormal.npy 9dad3d438e8eef97699f57391722d3aabccbdc6338662433026492b56663d169, ao.npy 58440cda9c742ba3768d75965209e78f8df83c10f8ced3c29d66c0e98443413c, construction-centre.npz 26ca2a1fd4f9ec83f96f376f7b7d6546d0fbd338ed4c3ab1b0bfcd2ca4d47c79 (receipts uzpainter/parity/sash-intermediates-record/1 extract record sha256 b6fbfcd4ffc73491dedfe09b4b21da5a04b8e838e6978268e8fea68a1cbf21cb; uzpainter/parity/sash-intermediates-record/1 ao record sha256 baf257aed8145859abb5f86fe90be27f2546034b9328e00bd8665865b2d775f4; uzpainter/parity/sash-intermediates-record/1 centre record sha256 12cd35ffcb85ad3e921759861cb0a7e11be85870959654c80f9da2e8c5c0ecf9)."
+      }
+    },
+    {
+      "input_id": "mask-t_sash",
+      "kind": "image",
+      "assets3d_path": "_tmp/claude/cintura-v5/paint/masks-sash/T_sash.png",
+      "sha256": "c58e85785e29f69328098918eb7f16ed98ee51f03fb6a288b63e017f94a4d68c",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical T_sash: written by Pipeline/retopology/waist-v5/waist_masks.py sash (959eca0bc3e2660149806c288d002d4d0db0816dc284093e643d6ffd5837a066, colour only) through front W's sash_colour, receipt uzpainter/parity/sash-colour-record/1 colour record sha256 401bf383c4f273130610e58b5e08e8827dbe70de94536d39ca1e398e312d0466 (an independent repeat of e5cc5b8f253bcd0a5a2fd1c7359829bff10263fb15c46a8a3e8c51adb215d245, byte-identical), its masks identical to receipt uzpainter/parity/sash-masks-record/1 masks record sha256 83821efbe840cd59b5de8e4ada5297601295bc3a8153525757745f849031b9ca, from the swatches sash-cloth-BaseColor-v1.png ab5168c6928a8d07f207c1c2f2bd3072dc794bba605139d120862a51d3dd890d (current-round substitute, receipt uzpainter/parity/sash-swatch-provenance/1 swatch record sha256 dd652a5c06fb30c5beb72c88ad616019bfee3f6dfd9cc7e1e540fa5968985e2a); hem-leather-BaseColor-v1.png 2d69035ff642b926ba3cc4b48b9bbe5579b2cf6e51d224b36d30b65147b86b31 (current-round substitute, receipt uzpainter/parity/sash-swatch-provenance/1 swatch record sha256 3bdc807550ef29d621073c5982e44307dddd634530c3c005800345622c2f245f)."
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "uzmigames_pipeline_scripts",
+    "steps": [
+      {
+        "step": 1,
+        "call": "uzmigames.pipeline.run_script",
+        "args": {
+          "script": "painter-create-py",
+          "args_file": "painter-create-args",
+          "mesh": "sash-mesh",
+          "mesh_material_library": "sash-mesh-mtl",
+          "normal": "sash-normal",
+          "ao": "sash-ao"
+        }
+      },
+      {
+        "step": 2,
+        "call": "uzmigames.pipeline.run_script",
+        "args": {
+          "script": "painter-layer-stack-py",
+          "command": "sync",
+          "stack": "sash-stack",
+          "mask_folder": "_tmp/claude/cintura-v5/paint/masks-sash",
+          "imports": [
+            "production-run-py"
+          ],
+          "import_closure": [
+            "decision-evidence-py",
+            "stage-review-evidence-py"
+          ],
+          "resource_prefix": "v5f_",
+          "resource_group": "faixa25_v5",
+          "texture_set": "25-Faixa-Cintura"
+        }
+      },
+      {
+        "step": 3,
+        "call": "uzmigames.pipeline.run_script",
+        "args": {
+          "script": "painter-export-py",
+          "args_file": "painter-export-args"
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "OCIO",
+      "value": "resources/ocio/substance/config.ocio",
+      "applied_by": "environment_variable"
+    },
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "project.default_texture_resolution",
+      "value": 2048,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "project.import_cameras",
+      "value": false,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "project.save_mode",
+      "value": "Full",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.file_format",
+      "value": "png",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.png.bit_depth",
+      "value": 16,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.size_log2",
+      "value": 11,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "infinite",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.shader_params",
+      "value": false,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "2cc1ba7ee67aca08798a9d8fcb001eda7fff3212903624ccd5867d3f95a0ed8b",
+      "size_bytes": 22853
+    },
+    {
+      "record_id": "r1-export-25-faixa-cintura_basecolor",
+      "kind": "exported_map",
+      "sha256": "a0413b12d4aac024749dfc6bebeb29bed0f09577155f2eb7f884fa25cb80c37f",
+      "size_bytes": 7866617
+    },
+    {
+      "record_id": "r1-export-25-faixa-cintura_roughness",
+      "kind": "exported_map",
+      "sha256": "8ebd013b44945339bc03871031d21fb99fe7d0c450ee53757d7788bc2f396ca8",
+      "size_bytes": 325420
+    },
+    {
+      "record_id": "r1-export-25-faixa-cintura_metallic",
+      "kind": "exported_map",
+      "sha256": "537c59bf6206c8a29d89a0f0433ae285254a2b7deac15ba730f547b6d678ca33",
+      "size_bytes": 8243
+    },
+    {
+      "record_id": "r1-export-25-faixa-cintura_height",
+      "kind": "exported_map",
+      "sha256": "7afca7830fd0b4babc49fa0731d0fb63bcd781939328de3e22fdc0a8b24c0181",
+      "size_bytes": 2316151
+    },
+    {
+      "record_id": "r1-export-25-faixa-cintura_normal",
+      "kind": "exported_map",
+      "sha256": "af8e353615d78f922a6a2e7845db14ab2aac67ecc9ad8296f60aceaf7c28b1b1",
+      "size_bytes": 12168678
+    },
+    {
+      "record_id": "r1-repeat-export-25-faixa-cintura_basecolor",
+      "kind": "exported_map",
+      "sha256": "a0413b12d4aac024749dfc6bebeb29bed0f09577155f2eb7f884fa25cb80c37f",
+      "size_bytes": 7866617
+    },
+    {
+      "record_id": "r1-repeat-export-25-faixa-cintura_roughness",
+      "kind": "exported_map",
+      "sha256": "8ebd013b44945339bc03871031d21fb99fe7d0c450ee53757d7788bc2f396ca8",
+      "size_bytes": 325420
+    },
+    {
+      "record_id": "r1-repeat-export-25-faixa-cintura_metallic",
+      "kind": "exported_map",
+      "sha256": "537c59bf6206c8a29d89a0f0433ae285254a2b7deac15ba730f547b6d678ca33",
+      "size_bytes": 8243
+    },
+    {
+      "record_id": "r1-repeat-export-25-faixa-cintura_height",
+      "kind": "exported_map",
+      "sha256": "7afca7830fd0b4babc49fa0731d0fb63bcd781939328de3e22fdc0a8b24c0181",
+      "size_bytes": 2316151
+    },
+    {
+      "record_id": "r1-repeat-export-25-faixa-cintura_normal",
+      "kind": "exported_map",
+      "sha256": "af8e353615d78f922a6a2e7845db14ab2aac67ecc9ad8296f60aceaf7c28b1b1",
+      "size_bytes": 12168678
+    },
+    {
+      "record_id": "r2-export-25-faixa-cintura_basecolor",
+      "kind": "exported_map",
+      "sha256": "a0413b12d4aac024749dfc6bebeb29bed0f09577155f2eb7f884fa25cb80c37f",
+      "size_bytes": 7866617
+    },
+    {
+      "record_id": "r2-export-25-faixa-cintura_roughness",
+      "kind": "exported_map",
+      "sha256": "8ebd013b44945339bc03871031d21fb99fe7d0c450ee53757d7788bc2f396ca8",
+      "size_bytes": 325420
+    },
+    {
+      "record_id": "r2-export-25-faixa-cintura_metallic",
+      "kind": "exported_map",
+      "sha256": "537c59bf6206c8a29d89a0f0433ae285254a2b7deac15ba730f547b6d678ca33",
+      "size_bytes": 8243
+    },
+    {
+      "record_id": "r2-export-25-faixa-cintura_height",
+      "kind": "exported_map",
+      "sha256": "7afca7830fd0b4babc49fa0731d0fb63bcd781939328de3e22fdc0a8b24c0181",
+      "size_bytes": 2316151
+    },
+    {
+      "record_id": "r2-export-25-faixa-cintura_normal",
+      "kind": "exported_map",
+      "sha256": "af8e353615d78f922a6a2e7845db14ab2aac67ecc9ad8296f60aceaf7c28b1b1",
+      "size_bytes": 12168678
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "3a4e5b6289718c7d15c3d6109bfd91961efe6022d390a158856a9ba459b24ac7",
+      "size_bytes": 402
+    }
+  ]
+}
