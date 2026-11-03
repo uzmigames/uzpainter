@@ -1,8 +1,11 @@
-"""The Wand v1 rebuild-from-dump runner refuses a diagnostic export (phase2.2_recipe-and-diagnostics
-item 3.1): an export whose receipt is marked `non_conformant`, as `--diagnostic-measure-export`
-writes when `UZP_ASSETS3D_DIAGNOSTIC_MEASURE_EXPORT` is inherited from the environment, stops the
-run on either side, and a conformant pair still gives its report. Nothing here starts UzPainter:
-a stand-in wand writes each export's files, `current.json` and receipt the way the export does.
+"""The Wand v1 rebuild-from-dump runner keeps each export's mode (phase2.2_recipe-and-diagnostics
+item 3.1): by default an export whose receipt is marked `non_conformant`, as
+`--diagnostic-measure-export` writes when `UZP_ASSETS3D_DIAGNOSTIC_MEASURE_EXPORT` is inherited
+from the environment, stops the run on either side, and a conformant pair still gives its report.
+With `diagnostic=True` (decision 395) both exports are the measure export: a pair whose receipts
+are marked and bypass only decided refusals gives its report, and a conformant receipt or an
+undecided bypassed refusal stops the run. Nothing here starts UzPainter: a stand-in wand writes
+each export's files, `current.json` and receipt the way the export does.
 """
 
 from __future__ import annotations
@@ -21,15 +24,21 @@ from tools.parity.recipe_rebuild import Side
 
 MESSAGE = "the export's receipt is marked non_conformant"
 ARGS = "painter-export-args"
+# The refusal each marked stand-in receipt names as bypassed: decision 259's (`CheckPadding`).
+DECIDED = (
+    'the padding "infinite" on a texture set whose UV islands do not cover the whole tile is not '
+    "exact"
+)
 
 
 class StandIn:
     """The parts of `Wand` the runner uses. `plan` holds, per export in order, `True` for a
     receipt marked `non_conformant`, `False` for a conformant one, or `None` for a refusal."""
 
-    def __init__(self, work: Path, plan: list[bool | None]) -> None:
+    def __init__(self, work: Path, plan: list[bool | None], bypassed: str = DECIDED) -> None:
         self.work = work
         self.plan = plan
+        self.bypassed = bypassed  # the refusal a marked receipt names as bypassed
         self.exports: list[bool] = []  # each export's `diagnostic` argument
         self.probes: list[str] = []
         work.mkdir()
@@ -55,7 +64,7 @@ class StandIn:
         image.write_bytes(b"map")
         receipt: dict[str, Any] = {"files": [image.name]}
         if marked:
-            receipt["non_conformant"] = True
+            receipt["non_conformant"] = {"bypassed": [{"refusal": self.bypassed}]}
         (out / "receipt.json").write_text(json.dumps(receipt), "utf-8")
         (out / "current.json").write_text(json.dumps({"receipt": "receipt.json"}), "utf-8")
         result = {"status": "ExportStatus.Success", "files": {"('Wand', '')": [str(image)]}}
@@ -69,10 +78,13 @@ class StandIn:
 
 
 def scenario(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, plan: list[bool | None]
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    plan: list[bool | None],
+    bypassed: str = DECIDED,
 ) -> tuple[StandIn, list[tuple[Side, Side]]]:
     """A stand-in wand for `plan` in `runner.run`, and the sides each report was built from."""
-    wand = StandIn(tmp_path / "work", plan)
+    wand = StandIn(tmp_path / "work", plan, bypassed)
     sides: list[tuple[Side, Side]] = []
 
     def report(*arguments: Any) -> dict[str, Any]:
@@ -146,3 +158,38 @@ def test_refused_export_keeps_its_refusal(
     ((original, rebuilt),) = sides
     assert original.files is None
     assert rebuilt.files is not None
+
+
+def test_diagnostic_pair_is_reported(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, painter: Path
+) -> None:
+    wand, sides = scenario(tmp_path, monkeypatch, [True, True])
+    result = runner.run(painter, wand.work, diagnostic=True)
+    assert result.report == {"report": True}
+    assert result.refusals == ()
+    assert wand.exports == [True, True]
+    assert wand.probes == ["dump-original", "rebuild", "dump-rebuilt"]
+    ((original, rebuilt),) = sides
+    assert original.files is not None and rebuilt.files is not None
+
+
+def test_diagnostic_run_stops_on_a_conformant_receipt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, painter: Path
+) -> None:
+    wand, sides = scenario(tmp_path, monkeypatch, [True, False])
+    with pytest.raises(RunError) as raised:
+        runner.run(painter, wand.work, diagnostic=True)
+    assert str(raised.value) == "the export's receipt is not marked non_conformant"
+    assert wand.exports == [True, True]
+    assert sides == []
+
+
+def test_diagnostic_run_stops_on_an_undecided_bypassed_refusal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, painter: Path
+) -> None:
+    wand, sides = scenario(tmp_path, monkeypatch, [True, True], bypassed="an undecided refusal")
+    with pytest.raises(RunError) as raised:
+        runner.run(painter, wand.work, diagnostic=True)
+    assert "bypassed refusals no decision names" in str(raised.value)
+    assert wand.exports == [True]
+    assert sides == []

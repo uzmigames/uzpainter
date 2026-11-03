@@ -17,10 +17,15 @@ each a separate `UzPainter.exe run` process), then:
 
 The report (`tools.parity.recipe_rebuild`) compares the two digests and the two exports' files.
 The job is the R9 request (decision 099), or the golden admitted from it once it is. An export
-UzPainter refuses before writing (while phase1.25 item 2.7 is open) is recorded as refused on the
-side it happened; any other failed call stops the run, and so does an export whose receipt is
-marked `non_conformant` (`checked_export` of the Tier 1 runner): the diagnostic measure export,
-which `UZP_ASSETS3D_DIAGNOSTIC_MEASURE_EXPORT` in the environment turns on, is never compared.
+UzPainter refuses before writing is recorded as refused on the side it happened; any other failed
+call stops the run. Each export's receipt is checked by the Tier 1 runner's `checked_receipt`
+(`checked_export`): with `diagnostic` False (the default) an export marked `non_conformant` stops
+the run, so the diagnostic measure export, which `UZP_ASSETS3D_DIAGNOSTIC_MEASURE_EXPORT` in the
+environment turns on, is never compared by accident. With `diagnostic` True both exports are the
+diagnostic measure export (decision 286), as in the Wand's Tier 1 test since decision 395: each
+receipt must be marked `non_conformant` and name only the decided refusals it bypassed (decisions
+245 and 259). Production keeps both refusals, so a pass then shows the rebuild reproduces the
+same bytes, not a conformant delivery.
 Nothing is written under the Assets3D root or into the repository except the report, when
 `UZP_RECIPE_REBUILD_REPORT` names it.
 """
@@ -109,11 +114,12 @@ def job_manifest() -> Path:
     return resolved.manifest_path if resolved is not None else REQUEST
 
 
-def run(painter: Path, work: Path) -> Scenario:
-    """The original wand, its rebuild from the dump, both exports and the report."""
+def run(painter: Path, work: Path, diagnostic: bool = False) -> Scenario:
+    """The original wand, its rebuild from the dump, both exports and the report. `diagnostic`:
+    both exports in the diagnostic measure mode (above)."""
     manifest = job_manifest()
     wand = built(painter, work / "original", manifest)
-    first = checked_export(wand)
+    first = checked_export(wand, diagnostic)
     original = wand.probe("dump-original", DUMP)
     recipe = work / "recipe.json"
     recipe.write_text(json.dumps(original), encoding="utf-8")
@@ -138,7 +144,7 @@ def run(painter: Path, work: Path) -> Scenario:
     arguments = json.loads(arguments_file.read_text(encoding="utf-8"))
     arguments["out"] = str(work / "rebuilt" / "out")
     arguments_file.write_text(json.dumps(arguments), encoding="utf-8")
-    second = checked_export(wand)
+    second = checked_export(wand, diagnostic)
     rebuilt = wand.probe("dump-rebuilt", DUMP)
     document = report(
         GOLDEN_ID,

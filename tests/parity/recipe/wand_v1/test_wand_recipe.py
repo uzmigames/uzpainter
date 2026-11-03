@@ -1,16 +1,20 @@
 """Recipe and diagnostics on Wand v1 (phase2.2_recipe-and-diagnostics items 3.1, 3.2; P2-RECIPE).
 
 3.1 rebuilds Wand v1 from its recipe dump (`runner.py`) and compares the two projects' digests and
-exports; the report goes to `UZP_RECIPE_REBUILD_REPORT` when that is set. 3.2 runs the diagnostics
-on the wand: `isolate` on each root group, and `material_views` on each material group of the
-stack, compared with OpenEXR 32f exports of the same project (padding `passthrough`).
+exports; the report goes to `UZP_RECIPE_REBUILD_REPORT` when that is set. Both exports are the
+diagnostic measure export (decision 286), as in the Wand's Tier 1 test since decision 395:
+production still refuses the wand's virtual Normal and its `infinite` padding on UV islands
+(decisions 245, 259), and the measure mode writes past exactly those refusals, marking each receipt
+`non_conformant` (`runner.run(..., diagnostic=True)`). Any refusal then fails 3.1. 3.2 runs the
+diagnostics on the wand: `isolate` on each root group, and `material_views` on each material group
+of the stack, compared with OpenEXR 32f exports of the same project (padding `passthrough`).
 
 Local run on the owner's machine (decision 028): it needs the UzmiGames asset repository
 (`UZP_TEST_ASSETS3D`, default `E:\\UzmiGames\\Assets3D`) and `zig` for a fresh `zig build
-painter`. No Painter golden is read: UzPainter is compared with itself. CPU only: the export and
-the diagnostics run on the CPU evaluator. A comparison whose evaluation UzPainter refuses before
-writing (`NotYetSupported`: an export processing or a source that is still a gap) is skipped with
-the refusal as the reason; the refusal must be the same on both sides of the rebuild.
+painter -Doptimize=ReleaseFast`. No Painter golden is read: UzPainter is compared with itself. CPU
+only: the export and the diagnostics run on the CPU evaluator. A 3.2 comparison whose evaluation
+UzPainter refuses before writing (`NotYetSupported`: a source that is still a gap) is skipped with
+the refusal as the reason.
 """
 
 from __future__ import annotations
@@ -43,13 +47,15 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture(scope="module")
 def painter(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """`UzPainter.exe` of a fresh `zig build painter` install."""
+    """`UzPainter.exe` of a fresh `zig build painter -Doptimize=ReleaseFast` install, as the Wand's
+    Tier 1 test builds it: in a Debug build the five-map export takes longer than the adapter's
+    600 s per call (decision 223)."""
     zig = shutil.which("zig")
     if zig is None:
         pytest.skip("zig is not on PATH; UzPainter.exe cannot be built")
     prefix = tmp_path_factory.mktemp("painter")
     build = subprocess.run(
-        [zig, "build", "painter", "--prefix", str(prefix)],
+        [zig, "build", "painter", "-Doptimize=ReleaseFast", "--prefix", str(prefix)],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -64,7 +70,7 @@ def painter(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 @pytest.fixture(scope="module")
 def scenario(painter: Path, tmp_path_factory: pytest.TempPathFactory) -> Scenario:
-    return run(painter, tmp_path_factory.mktemp("rebuild"))
+    return run(painter, tmp_path_factory.mktemp("rebuild"), diagnostic=True)
 
 
 @pytest.fixture(scope="module")
@@ -91,9 +97,9 @@ def test_wand_rebuilt_from_its_dump_has_the_same_recipe(scenario: Scenario) -> N
 
 
 def test_wand_rebuilt_from_its_dump_exports_byte_identical_files(scenario: Scenario) -> None:
-    """3.1, 4.1: every file of the wand's export configuration is byte-identical."""
-    if scenario.refusals:
-        pytest.skip(f"UzPainter refuses the wand's export before writing: {scenario.refusals[0]}")
+    """3.1, 4.1: every file of the wand's export configuration, both written by the diagnostic
+    measure export, is byte-identical."""
+    assert scenario.refusals == ()
     report = scenario.report
     if os.environ.get(REPORT_ENV):
         write_report(report, REPO_ROOT / os.environ[REPORT_ENV])
