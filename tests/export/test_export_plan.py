@@ -342,6 +342,96 @@ def test_wildcards_and_groups(export_tests: Path, tmp_path: Path) -> None:
     assert paths(saved[0]) == ["golden_x.png"]
 
 
+# Painter's substance config, `evaluator::kPainterOcioConfigSha256` (decision 190).
+OCIO_CONFIG_SHA256 = "15059d4b4e52893863f2063dfccb3902d182b522ad233564db32a5e30a43b7f4"
+BLENDER_PRESET = REPO_ROOT / "assets" / "export-presets" / "blender-principled-bsdf.json"
+
+
+def test_ocio_colour_space_of_normal_opengl_png16(export_tests: Path, tmp_path: Path) -> None:
+    """3.1 (decision 190): under OCIO with Painter's substance config, `$colorSpace` of a PNG 16
+    RGB file whose R, G and B read R, G and B of virtualMap Normal_OpenGL is `Raw`, as Painter
+    names it (`export-presets-ocio` step 35, `tunic-v10`): through the shipped Blender preset's
+    maps given inline, and through its Normal map as Painter's readback lists it (s31). Not
+    recorded, so refused: that file at PNG 8, as OpenEXR, as L, with its channels swapped or read
+    as luma, Normal_DirectX, another virtual map, and Normal_OpenGL mixed with a document channel.
+    The document channels keep their names, and under Legacy the wildcard stays empty. This pins
+    names only, not pixel parity."""
+    channels = {"BaseColor": "sRGB8", "Height": "L16F", "Normal": "RGB16F"}
+    ocio = project(
+        texture_set("s0", channels), color_management="ocio", config_hash=OCIO_CONFIG_SHA256
+    )
+    legacy = project(texture_set("s0", channels))
+    shipped = json.loads(BLENDER_PRESET.read_text(encoding="utf-8"))
+    normal = rgb("virtualMap", "Normal_OpenGL")
+    name = "$textureSet_Normal(_$colorSpace)"
+
+    def rule(**parameters: Any) -> list[dict[str, Any]]:
+        return [{"parameters": dict(PARAMS, **parameters)}]
+
+    cases = [
+        (ocio, config(shipped["maps"], ["s0"])),
+        (
+            ocio,
+            config(
+                [
+                    mapping(
+                        "$textureSet_Normal(_$colorSpace)(.$udim)",
+                        normal,
+                        bitDepth="16",
+                        dithering=False,
+                        fileFormat="png",
+                    )
+                ],
+                ["s0"],
+            ),
+        ),
+        (legacy, config([mapping(name, normal)], ["s0"])),
+        (ocio, config([mapping(name, normal)], ["s0"], rule(bitDepth="8"))),
+        (ocio, config([mapping(name, normal)], ["s0"], rule(fileFormat="exr", bitDepth="32f"))),
+        (ocio, config([mapping(name, [chan("L", "R", "virtualMap", "Normal_OpenGL")])], ["s0"])),
+        (
+            ocio,
+            config(
+                [
+                    mapping(
+                        name,
+                        [
+                            chan("R", "G", "virtualMap", "Normal_OpenGL"),
+                            chan("G", "R", "virtualMap", "Normal_OpenGL"),
+                            chan("B", "B", "virtualMap", "Normal_OpenGL"),
+                        ],
+                    )
+                ],
+                ["s0"],
+            ),
+        ),
+        (
+            ocio,
+            config(
+                [mapping(name, [chan(c, "L", "virtualMap", "Normal_OpenGL") for c in "RGB"])],
+                ["s0"],
+            ),
+        ),
+        (ocio, config([mapping(name, rgb("virtualMap", "Normal_DirectX"))], ["s0"])),
+        (
+            ocio,
+            config([mapping("$textureSet_d(_$colorSpace)", rgb("virtualMap", "Diffuse"))], ["s0"]),
+        ),
+        (
+            ocio,
+            config([mapping(name, [*normal[:2], chan("B", "L", "documentMap", "height")])], ["s0"]),
+        ),
+    ]
+    r = plan_many(export_tests, cases, tmp_path)
+    assert paths(r[0]) == ["s0_BaseColor_sRGB.png", "s0_Normal_Raw.png", "s0_Displacement_Raw.png"]
+    assert paths(r[1]) == ["s0_Normal_Raw.png"]
+    assert paths(r[2]) == ["s0_Normal.png"]
+    for refusal in (r[3], *r[5:9], r[10]):
+        refused(refusal, "NotYetSupported", "$colorSpace under OCIO", "is not recorded")
+    refused(r[4], "NotYetSupported", "$colorSpace under OCIO is recorded for PNG files only")
+    refused(r[9], "NotYetSupported", '"Diffuse"', "R-092")
+
+
 # ── 3.2 Filters ──────────────────────────────────────────────────────────────
 
 

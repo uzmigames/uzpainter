@@ -5,6 +5,8 @@ decision 095).
 The CPU cases run `uzp-export-tests.exe` (`presets`, `aliases`, `plan`, `export`, `receipt`) on
 every lane, with the shipped presets installed beside it: the provenance record of every preset,
 the alias table, the refusal of presets whose layout no recording confirms (recording R-095),
+the Blender preset's layout as R-095's admitted readbacks record it (`export-presets-ocio` s31,
+`export-presets-legacy` s34) and the files it plans,
 the glTF preset's recorded layout and retained AO_Mixed refusal (R-314, decision 314),
 packing, and the Assets3D five-map preset planning what the pipeline's own inline configuration
 plans. The Tier 0 case reads the private oracle store and skips, saying so, on a machine without
@@ -15,6 +17,7 @@ byte-identical to Painter's files.
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 import shutil
 import subprocess
@@ -30,6 +33,8 @@ from tests.export.encoders_tier0 import _mesh_of, _painter_files, write_export
 from tests.export.test_export_encoders import GRID, export, files_under, spec
 from tests.export.test_export_plan import (
     FULL_CHANNELS,
+    OCIO_CONFIG_SHA256,
+    paths,
     pipeline_inline_preset,
     plan_many,
     project,
@@ -45,10 +50,8 @@ from tools.parity.store.store import default_root, locate
 PRESETS = REPO_ROOT / "assets" / "export-presets"
 SCHEMA = REPO_ROOT / "src" / "export" / "preset-provenance.schema.json"
 FIVE_MAP = "assets3d-inline-five-map"
-UNCONFIRMED = {
-    "PBR Metallic Roughness": "pbr-metallic-roughness",
-    "Blender (Principled BSDF)": "blender-principled-bsdf",
-}
+UNCONFIRMED = {"PBR Metallic Roughness": "pbr-metallic-roughness"}
+BLENDER = "blender-principled-bsdf"
 BLENDER_URL = "resource://starter_assets/Blender (Principled BSDF)"
 BLENDER_VERSION = "13120355637414252359"
 GLTF = "gltf-pbr-metal-roughness"
@@ -208,17 +211,18 @@ def test_painter_names_resolve_to_shipped_presets(export_tests: Path, tmp_path: 
     )
     assert obsolete["id"] is None
 
-    # defaultExportPreset "Blender (Principled BSDF)" reaches the shipped preset via ParseConfig.
+    # defaultExportPreset "Blender (Principled BSDF)" reaches the shipped preset via ParseConfig;
+    # with its own parameters, which set no padding, it is refused as Painter refuses it (R-095).
     [planned] = plan_many(
         export_tests, [(ONE_SET, shipped_config("Blender (Principled BSDF)"))], tmp_path
     )
-    refused(planned, "NotYetSupported", '(shipped preset "blender-principled-bsdf")', "R-095")
+    refused(planned, "ValueError", "paddingAlgorithm is undefined")
 
 
 def test_unconfirmed_presets_are_refused_naming_r095(export_tests: Path, tmp_path: Path) -> None:
-    """Decision 095: a preset written from public sources whose layout no recording confirms is
-    refused before anything is planned, whether named by `defaultExportPreset` or by an
-    `exportList` entry, by its Painter name, its URL or its id."""
+    """Decision 095: a preset written from public sources whose layout no recording confirms
+    (`pbr-metallic-roughness`) is refused before anything is planned, whether named by
+    `defaultExportPreset` or by an `exportList` entry, by its Painter name, its URL or its id."""
     cases = []
     for painter_name, preset_id in UNCONFIRMED.items():
         for reference in (painter_name, f"resource://starter_assets/{painter_name}", preset_id):
@@ -468,6 +472,208 @@ def test_gltf_layout_matches_private_r314_and_pipeline_repeats(suffix: str, dept
                     == depth
                 )
                 assert golden.map_sha256("r1", output_id) == golden.map_sha256("r2", output_id)
+
+
+# ── The Blender preset (R-095: `export-presets-ocio` s31, `export-presets-legacy` s34) ───────
+
+# Each map as R-095's readbacks list it: its name, its sources ("RGB": R, G, B from R, G, B; "L":
+# R, G, B each from L), the map it reads and its PNG bit depth; no dithering, no padding.
+BLENDER_LAYOUT = [
+    ("BaseColor", "RGB", "documentMap", "baseColor", "8"),
+    ("Normal", "RGB", "virtualMap", "Normal_OpenGL", "16"),
+    ("Metallic", "L", "documentMap", "metallic", "8"),
+    ("Roughness", "L", "documentMap", "roughness", "8"),
+    ("Emission", "RGB", "documentMap", "emissive", "8"),
+    ("Alpha", "L", "documentMap", "opacity", "8"),
+    ("Displacement", "L", "documentMap", "height", "8"),
+]
+BLENDER_RECORDS = {
+    "18ca9d7dbf8a82ab3a74ce79cf76c82547d3bcce5267115aea5075dab825dbc0",  # ocio, 12.2.0
+    "9e84c5d35661be308385a64d74be8b9003f038a975d744f1e138ff95ff6d3aec",  # ocio, 12.1.5
+    "4970d2b0c3619fba4bdca9538a8e04659c2c6d0c3256ad129185d7c245a98d98",  # legacy, 12.2.0
+    "59ef801eaf67c74879e3f5ec51dc526da110ce80fc364c4e366f2ba2582701bf",  # tunic-v10
+}
+# The stack of the R-095 cube under OCIO and of the Tunic; the Legacy cube adds two channels.
+FIVE_CHANNELS = {
+    "BaseColor": "sRGB8",
+    "BaseMetalness": "L8",
+    "Height": "L16F",
+    "Normal": "RGB16F",
+    "SpecularRoughness": "L8",
+}
+SEVEN_CHANNELS = {**FIVE_CHANNELS, "EmissionColor": "sRGB8", "Opacity": "L8"}
+CUBE = "uzp_bevelled_cube"
+# The files Painter wrote through the pipeline's PNG 16 infinite rule (R6/R7 `blender-pipeline`):
+# OCIO step 35 and Legacy step 38; and the Tunic's (configuration 7167a93e, export step 2).
+OCIO_FILES = [
+    f"{CUBE}_{m}.png"
+    for m in ("BaseColor_sRGB", "Normal_Raw", "Metallic_Raw", "Roughness_Raw", "Displacement_Raw")
+]
+LEGACY_FILES = [f"{CUBE}_{m[0]}.png" for m in BLENDER_LAYOUT]
+TUNIC_FILES = [
+    "DefaultMaterial_BaseColor_sRGB.png",
+    "DefaultMaterial_Normal_Raw.png",
+    "DefaultMaterial_Metallic_Raw.png",
+    "DefaultMaterial_Roughness_Raw.png",
+    "DefaultMaterial_Displacement_Raw.png",
+]
+TUNIC_CONFIG = REPO_ROOT / "parity" / "fixtures" / "tier1" / "tunic-v10" / "export-config.json"
+PROBE = "probe-presets-bevelled-cube-blender-{}"
+
+
+def blender_map(label: str, sources: str, kind: str, name: str, depth: str) -> dict[str, Any]:
+    return {
+        "fileName": f"$textureSet_{label}(_$colorSpace)(.$udim)",
+        "channels": [
+            {
+                "destChannel": c,
+                "srcChannel": c if sources == "RGB" else "L",
+                "srcMapType": kind,
+                "srcMapName": name,
+            }
+            for c in "RGB"
+        ],
+        "parameters": {"fileFormat": "png", "bitDepth": depth, "dithering": False},
+    }
+
+
+def blender_packing(label: str) -> list[tuple[str, str, str, str]]:
+    [(_, sources, kind, name, _)] = [m for m in BLENDER_LAYOUT if m[0] == label]
+    return [(c, c if sources == "RGB" else "L", kind, name) for c in "RGB"]
+
+
+def test_blender_preset_is_painters_layout(export_tests: Path, tmp_path: Path) -> None:
+    """R-095 (decision 095): the shipped Blender preset is, map for map and field for field, the
+    layout Painter's readbacks list: seven maps named with `(.$udim)`; Metallic, Roughness, Alpha
+    and Displacement RGB from L; PNG without dithering, Normal 16-bit and the others 8-bit; no
+    padding. Its layout is confirmed, so it loads by its Painter name, URL and id; its pixel
+    parity stays pending; the PBR preset stays unconfirmed."""
+    preset = json.loads((PRESETS / f"{BLENDER}.json").read_text(encoding="utf-8"))
+    assert preset == {"name": BLENDER, "maps": [blender_map(*m) for m in BLENDER_LAYOUT]}
+    installed = export_tests.parent / "assets" / "export-presets"
+    references = ["Blender (Principled BSDF)", BLENDER_URL, BLENDER, "PBR Metallic Roughness"]
+    *blender, pbr = resolve(export_tests, installed, references, tmp_path)
+    for x in blender:
+        assert x["id"] == x["name"] == BLENDER and x["layout"] == "confirmed", x
+        assert x["pending"] == ["R-095"] and x["maps"] == [m["fileName"] for m in preset["maps"]]
+    assert pbr["id"] == "pbr-metallic-roughness" and pbr["layout"] == "unconfirmed", pbr
+    record = json.loads((PRESETS / f"{BLENDER}.provenance.json").read_text(encoding="utf-8"))
+    assert {r["record_sha256"] for r in record["privateRecords"]} == BLENDER_RECORDS
+    assert all(p["status"] == "confirmed" for p in record["packing"])
+    assert record["parity"]["layout"] == "confirmed" and record["parity"]["status"] == "pending"
+
+
+def test_blender_preset_plans_painters_files(export_tests: Path, tmp_path: Path) -> None:
+    """R-095 R6/R7 and the Tunic (decisions 095 and 190): through the pipeline's PNG 16 infinite
+    rule the Blender preset plans, by name and in order, the files Painter wrote: five under OCIO,
+    on the cube's stack and on the Tunic (its real configuration 7167a93e, given an export path),
+    the absent Emission and Alpha omitted; seven under Legacy. With its own parameters and a
+    padding rule each map keeps its PNG depth, without dithering; with its own parameters alone
+    it is refused, as Painter refuses it (s34, s37: no padding). Under OCIO, `$colorSpace` of an
+    sRGB8 Emission (Painter lists `_Emission_sRGB`) is not admitted, so it is refused."""
+    assert hashlib.sha256(TUNIC_CONFIG.read_bytes()).hexdigest().startswith("7167a93e")
+    tunic = json.loads(TUNIC_CONFIG.read_text(encoding="utf-8"))
+    tunic["exportPath"] = "C:/export"
+    ocio = {"color_management": "ocio", "config_hash": OCIO_CONFIG_SHA256}
+    tunic_set = project(
+        texture_set("DefaultMaterial", FIVE_CHANNELS, resolution=(4096, 4096)), **ocio
+    )
+    five = project(texture_set(CUBE, FIVE_CHANNELS), **ocio)
+    seven = project(texture_set(CUBE, SEVEN_CHANNELS))
+    seven_ocio = project(texture_set(CUBE, SEVEN_CHANNELS), **ocio)
+    rule = {"fileFormat": "png", "bitDepth": "16", "paddingAlgorithm": "infinite"}
+    pipeline = [{"parameters": {**rule, "dithering": False}}]
+    padding = [{"parameters": {"paddingAlgorithm": "infinite"}}]
+    cube = [{"rootPath": CUBE}]
+    r = plan_many(
+        export_tests,
+        [
+            (tunic_set, tunic),
+            (five, shipped_config(BLENDER_URL, exportList=cube, exportParameters=pipeline)),
+            (seven, shipped_config(BLENDER_URL, exportList=cube, exportParameters=pipeline)),
+            (seven, shipped_config(BLENDER_URL, exportList=cube, exportParameters=padding)),
+            (seven, shipped_config(BLENDER_URL, exportList=cube)),
+            (five, shipped_config(BLENDER_URL, exportList=cube)),
+            (seven_ocio, shipped_config(BLENDER_URL, exportList=cube, exportParameters=pipeline)),
+        ],
+        tmp_path,
+    )
+    assert paths(r[0]) == TUNIC_FILES
+    assert paths(r[1]) == OCIO_FILES
+    assert paths(r[2]) == LEGACY_FILES
+    for result in r[:3]:
+        for f in result["plan"]["files"]:
+            label = f["fileName"].removeprefix("$textureSet_").partition("(")[0]
+            assert f["layout"] == "RGB" and packing(f) == blender_packing(label), f
+            assert {k: f["parameters"][k] for k in (*rule, "dithering")} == pipeline[0][
+                "parameters"
+            ], f
+    assert {f["parameters"]["sizeLog2"] for f in r[0]["plan"]["files"]} == {12}
+    assert paths(r[3]) == LEGACY_FILES
+    assert [f["parameters"]["bitDepth"] for f in r[3]["plan"]["files"]] == [
+        m[4] for m in BLENDER_LAYOUT
+    ]
+    assert not any(f["parameters"]["dithering"] for f in r[3]["plan"]["files"])
+    for result in r[4:6]:
+        refused(result, "ValueError", "paddingAlgorithm is undefined")
+    refused(r[6], "NotYetSupported", "$colorSpace under OCIO", "is not recorded")
+
+
+def test_blender_layout_matches_private_r095_readback() -> None:
+    """R-095 confirms the layout, the names and the channel counts; this does not claim pixel
+    parity. In r1 and r2 of `export-presets-ocio` and `export-presets-legacy`, Painter's readback
+    of the Blender preset is the shipped preset exactly; its own parameters raise for want of a
+    padding algorithm; the pipeline rule writes the files `test_blender_preset_plans_painters_files`
+    plans, each RGB at 16 bits. The Tunic's files are the five it plans, each RGB. Each record is
+    one the provenance cites."""
+    needs_store()
+    preset = json.loads((PRESETS / f"{BLENDER}.json").read_text(encoding="utf-8"))
+    root = manifest_root(current_envelope())
+
+    def one(outputs: list[dict[str, Any]], call: str, key: str, value: str) -> dict[str, Any]:
+        [found] = [
+            o
+            for o in outputs
+            if o.get("call", "").endswith(call) and o.get("args", {}).get(key) == value
+        ]
+        return found
+
+    for name, files in (
+        ("export-presets-ocio", OCIO_FILES),
+        ("export-presets-legacy", LEGACY_FILES),
+    ):
+        golden = load(locate(), root / "tier0" / "semantics" / f"{name}.json")
+        assert golden.record_sha256 in BLENDER_RECORDS
+        assert set(golden.recordings) == {"r1", "r2"}
+        for recording in golden.recordings.values():
+            outputs = list(recording.outputs.values())
+            layout = one(outputs, "ResourceExportPreset.list_output_maps", "preset", BLENDER_URL)
+            assert layout["value"] == preset["maps"], name
+            own = one(outputs, "export.list_project_textures", "config", PROBE.format("own"))
+            assert own["raised"]["type"] == "ValueError"
+            assert "padding algorithm could not be resolved" in own["raised"]["message"]
+            written = one(
+                outputs, "export.export_project_textures", "config", PROBE.format("pipeline")
+            )
+            assert written["value"]["textures"] == {CUBE: files}, name
+            step = written["output_id"].removesuffix("export")
+            maps = {
+                o["map"]: o["storage_format"]
+                for o in outputs
+                if o["kind"] == "exported_map" and o["output_id"].startswith(step)
+            }
+            assert sorted(maps) == sorted(files), name
+            assert all(s["channels"] == 3 and s["bits_per_channel"] == 16 for s in maps.values())
+    tunic = load(locate(), root / "phase2" / "tier1" / "tunic-v10.json")
+    assert tunic.record_sha256 in BLENDER_RECORDS
+    for recording in tunic.recordings.values():
+        maps = {
+            o["map"]: o["storage_format"]
+            for o in recording.outputs.values()
+            if o["kind"] == "exported_map"
+        }
+        assert sorted(maps) == sorted(f.removesuffix(".png") for f in TUNIC_FILES)
+        assert all(s["channels"] == 3 for s in maps.values())
 
 
 # ── The Assets3D five-map preset ─────────────────────────────────────────────

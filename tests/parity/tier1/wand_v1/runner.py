@@ -186,8 +186,9 @@ def preset_maps(config: Mapping[str, Any]) -> list[Any]:
 
 def map_name(file_name: str, root: str) -> str:
     """A normal map's file name for the export root `root`: `$textureSet` the root, `$colorSpace`
-    Raw, and each `( ... )` group kept without its parentheses (none of these tokens is empty);
-    any other token is refused."""
+    Raw, `$udim` empty (a native job is in the Default workflow, `src/export/EXPORT.md`), and each
+    `( ... )` group kept without its parentheses, or dropped when its only tokens are `$udim`; a
+    group mixing `$udim` with another token, and any other token, are refused."""
 
     def expand(text: str) -> str:
         def value(match: re.Match[str]) -> str:
@@ -196,11 +197,19 @@ def map_name(file_name: str, root: str) -> str:
                 return root
             if token == "colorSpace":
                 return NORMAL_COLOUR_SPACE
+            if token == "udim":
+                return ""
             raise NativeSubjectRefused(f"the map name {file_name!r} has another token ${token}")
 
         return TOKEN.sub(value, text)
 
-    name = expand(OPTIONAL.sub(lambda group: group.group(1), file_name))
+    def group(match: re.Match[str]) -> str:
+        tokens = set(TOKEN.findall(match.group(1)))
+        if "udim" in tokens and tokens != {"udim"}:
+            raise NativeSubjectRefused(f"the map name {file_name!r} mixes $udim with another token")
+        return "" if tokens == {"udim"} else match.group(1)
+
+    name = expand(OPTIONAL.sub(group, file_name))
     if any(c in name for c in "$()"):
         raise NativeSubjectRefused(f"the map name {file_name!r} is not one the runner expands")
     return name

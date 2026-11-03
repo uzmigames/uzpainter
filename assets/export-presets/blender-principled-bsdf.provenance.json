@@ -1,9 +1,9 @@
 {
   "schema": "uzpainter/export-preset-provenance/1",
-  "version": 1,
+  "version": 2,
   "author": "UzmiGames",
   "licence": "Apache-2.0",
-  "date": "2026-10-12",
+  "date": "2026-11-02",
   "reviewer": null,
   "preset": "blender-principled-bsdf",
   "answersTo": [
@@ -20,7 +20,7 @@
       "kind": "public-documentation",
       "page": "Adobe Substance 3D Painter Python API documentation, export.html (substance_painter.export)",
       "section": "Full json_config dict possibilities; Export path wildcards",
-      "facts": "The preset form {name, maps[].{fileName, channels[].{destChannel, srcChannel, srcMapType, srcMapName}, parameters}}; the documentMap and virtualMap names used here; the $textureSet and $colorSpace wildcards and ( ... ) optional groups."
+      "facts": "The preset form {name, maps[].{fileName, channels[].{destChannel, srcChannel, srcMapType, srcMapName}, parameters}}; the documentMap and virtualMap names used here; the $textureSet, $colorSpace and $udim wildcards and ( ... ) optional groups."
     },
     {
       "kind": "consumer-specification",
@@ -48,72 +48,91 @@
       "facts": "Delivered files named <TextureSet>_<Map>_sRGB.png or _Raw.png (for example 18-Tunica DefaultMaterial_Normal_Raw.png, 13-Grimorio Grimorio_BaseColor_sRGB.png): the colour-space suffix appears on OCIO projects."
     }
   ],
-  "privateRecords": [],
+  "privateRecords": [
+    {
+      "golden_id": "tier0/semantics/export-presets-ocio",
+      "record_sha256": "18ca9d7dbf8a82ab3a74ce79cf76c82547d3bcce5267115aea5075dab825dbc0"
+    },
+    {
+      "golden_id": "tier0/semantics/export-presets-ocio",
+      "record_sha256": "9e84c5d35661be308385a64d74be8b9003f038a975d744f1e138ff95ff6d3aec"
+    },
+    {
+      "golden_id": "tier0/semantics/export-presets-legacy",
+      "record_sha256": "4970d2b0c3619fba4bdca9538a8e04659c2c6d0c3256ad129185d7c245a98d98"
+    },
+    {
+      "golden_id": "phase2/tier1/tunic-v10",
+      "record_sha256": "59ef801eaf67c74879e3f5ec51dc526da110ce80fc364c4e366f2ba2582701bf"
+    }
+  ],
   "packing": [
     {
-      "fileName": "$textureSet_BaseColor(_$colorSpace)",
-      "decision": "RGB from documentMap basecolor",
-      "source": "name: Assets3D deliveries; content: Principled BSDF Base Color",
-      "status": "hypothesis"
+      "fileName": "$textureSet_BaseColor(_$colorSpace)(.$udim)",
+      "decision": "RGB from documentMap baseColor; PNG 8, no dithering",
+      "source": "R-095 readback: export-presets-ocio s31 (12.2.0 and 12.1.5) and export-presets-legacy s34, r1 and r2; files: export-presets-ocio s35 <set>_BaseColor_sRGB, tunic-v10 DefaultMaterial_BaseColor_sRGB",
+      "status": "confirmed"
     },
     {
-      "fileName": "$textureSet_Normal(_$colorSpace)",
-      "decision": "RGB from virtualMap Normal_OpenGL",
-      "source": "name: Assets3D deliveries; convention: Render-Comparison-Standard texture_contract (OpenGL)",
-      "status": "hypothesis"
+      "fileName": "$textureSet_Normal(_$colorSpace)(.$udim)",
+      "decision": "RGB from virtualMap Normal_OpenGL; PNG 16, no dithering",
+      "source": "R-095 readback: export-presets-ocio s31 (12.2.0 and 12.1.5) and export-presets-legacy s34, r1 and r2; files: export-presets-ocio s35 <set>_Normal_Raw, tunic-v10 DefaultMaterial_Normal_Raw",
+      "status": "confirmed"
     },
     {
-      "fileName": "$textureSet_Metallic(_$colorSpace)",
-      "decision": "L from documentMap metallic",
-      "source": "name: Assets3D deliveries; content: Principled BSDF Metallic",
-      "status": "hypothesis"
+      "fileName": "$textureSet_Metallic(_$colorSpace)(.$udim)",
+      "decision": "R, G and B each from L of documentMap metallic; PNG 8, no dithering",
+      "source": "R-095 readback: export-presets-ocio s31 (12.2.0 and 12.1.5) and export-presets-legacy s34, r1 and r2; files: tunic-v10 DefaultMaterial_Metallic_Raw, three channels",
+      "status": "confirmed"
     },
     {
-      "fileName": "$textureSet_Roughness(_$colorSpace)",
-      "decision": "L from documentMap roughness",
-      "source": "name: Assets3D deliveries; content: Principled BSDF Roughness",
-      "status": "hypothesis"
+      "fileName": "$textureSet_Roughness(_$colorSpace)(.$udim)",
+      "decision": "R, G and B each from L of documentMap roughness; PNG 8, no dithering",
+      "source": "R-095 readback: export-presets-ocio s31 (12.2.0 and 12.1.5) and export-presets-legacy s34, r1 and r2; files: tunic-v10 DefaultMaterial_Roughness_Raw, three channels",
+      "status": "confirmed"
     },
     {
-      "fileName": "$textureSet_Emission(_$colorSpace)",
-      "decision": "RGB from documentMap emissive",
-      "source": "name: Assets3D hat report; content: Principled BSDF Emission Color",
-      "status": "hypothesis"
+      "fileName": "$textureSet_Emission(_$colorSpace)(.$udim)",
+      "decision": "RGB from documentMap emissive; PNG 8, no dithering",
+      "source": "R-095 readback: export-presets-ocio s31 (12.2.0 and 12.1.5) and export-presets-legacy s34, r1 and r2; files: export-presets-legacy s38 <set>_Emission (present when the stack has an emission channel)",
+      "status": "confirmed"
     },
     {
-      "fileName": "$textureSet_Alpha(_$colorSpace)",
-      "decision": "L from documentMap opacity",
-      "source": "name: Assets3D hat report; content: Principled BSDF Alpha",
-      "status": "hypothesis"
+      "fileName": "$textureSet_Alpha(_$colorSpace)(.$udim)",
+      "decision": "R, G and B each from L of documentMap opacity; PNG 8, no dithering",
+      "source": "R-095 readback: export-presets-ocio s31 (12.2.0 and 12.1.5) and export-presets-legacy s34, r1 and r2; files: export-presets-legacy s38 <set>_Alpha (present when the stack has an opacity channel)",
+      "status": "confirmed"
     },
     {
-      "fileName": "$textureSet_Displacement(_$colorSpace)",
-      "decision": "L from documentMap height",
-      "source": "name: Assets3D deliveries; content: Material Output Displacement",
-      "status": "hypothesis"
+      "fileName": "$textureSet_Displacement(_$colorSpace)(.$udim)",
+      "decision": "R, G and B each from L of documentMap height; PNG 8, no dithering",
+      "source": "R-095 readback: export-presets-ocio s31 (12.2.0 and 12.1.5) and export-presets-legacy s34, r1 and r2; files: export-presets-ocio s35 <set>_Displacement_Raw, tunic-v10 DefaultMaterial_Displacement_Raw",
+      "status": "confirmed"
     },
     {
       "fileName": "(all)",
-      "decision": "No per-map parameters: file format, bit depth, padding and dithering come from exportParameters until the recording shows what the preset itself sets",
-      "source": "decision 095",
-      "status": "hypothesis"
+      "decision": "Seven maps in this order, each name ending in the optional (.$udim) (empty in the Default workflow). The preset sets fileFormat, bitDepth and dithering per map and no paddingAlgorithm or sizeLog2: through its own parameters Painter raises ValueError because the padding algorithm cannot be resolved, so padding must be supplied (exportParameters). Pipeline parameters override the map parameters. A map whose source channel the stack lacks is not written (Emission and Alpha on a stack without them).",
+      "source": "R-095: export-presets-ocio s34 and export-presets-legacy s37 (ValueError, padding), export-presets-ocio s35 (five files) and export-presets-legacy s38 (seven files) through a PNG 16 infinite rule; tunic-v10 export s2 (five files, config 7167a93e)",
+      "status": "confirmed"
     }
   ],
   "parity": {
-    "layout": "unconfirmed",
+    "layout": "confirmed",
     "status": "pending",
     "pending": [
       {
         "recording": "R-095",
-        "owner": "phase1.18_export-engine item 6.2",
-        "what": "Painter's files and dry run for resource://starter_assets/Blender (Principled BSDF) on a UzmiGames fixture with every channel the preset reads filled distinctly, with and without an exportParameters rule, under legacy and OCIO colour management: confirms or corrects every map, its channels, its name and the preset's own parameters."
+        "owner": "phase3.3_unreal-gltf-presets item 3.5",
+        "what": "Layout, names and per-map parameters confirmed by the admitted R-095 readbacks (export-presets-ocio s31, 12.2.0 and 12.1.5; export-presets-legacy s34) and corroborated by tunic-v10. Decoded pixel parity of every file against those goldens remains pending; $colorSpace under OCIO is admitted only for the cases src/export/plan.cpp names (an sRGB8 BaseColor, non-sRGB8 document channels, the PNG 16 Normal_OpenGL)."
       }
     ],
     "tests": [
       "tests/export/test_export_presets.py::test_painter_names_resolve_to_shipped_presets",
-      "tests/export/test_export_presets.py::test_unconfirmed_presets_are_refused_naming_r095",
       "tests/export/test_export_presets.py::test_provenance_records_are_complete",
-      "tests/export/test_export_presets.py::test_shipped_presets_pass_the_guard"
+      "tests/export/test_export_presets.py::test_shipped_presets_pass_the_guard",
+      "tests/export/test_export_presets.py::test_blender_preset_is_painters_layout",
+      "tests/export/test_export_presets.py::test_blender_preset_plans_painters_files",
+      "tests/export/test_export_presets.py::test_blender_layout_matches_private_r095_readback"
     ]
   }
 }

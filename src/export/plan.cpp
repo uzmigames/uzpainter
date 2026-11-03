@@ -402,15 +402,44 @@ std::string MeshFileName(const core::Project& project, const std::string& what) 
     Invalid(what, "$mesh needs the imported mesh's file name, and the project has none");
 }
 
-/// `$colorSpace` of `file` under OCIO with Painter's substance config (decision 190), as the
-/// probes of `export-ocio-encode` (steps 50 and 51, PNG 16 and 8) name it: "sRGB" for a PNG of an
-/// sRGB8 BaseColor, "Raw" for a PNG whose every channel reads a document channel that is not
-/// sRGB8. Any other file is not recorded and is refused.
+/// True when `file` is a PNG 16 RGB file whose R, G and B read R, G and B of virtualMap
+/// Normal_OpenGL, the one virtual-map file whose `$colorSpace` under OCIO is recorded.
+bool OcioNormalOpenGlPng16(const PlannedFile& file) {
+    if (file.parameters->bitDepth != BitDepth::u16 || file.layout != FileLayout::RGB || file.channels.size() != 3) {
+        return false;
+    }
+    constexpr std::array<ChannelLetter, 3> rgb{ChannelLetter::R, ChannelLetter::G, ChannelLetter::B};
+    for (size_t i = 0; i < rgb.size(); ++i) {
+        const PlannedChannel& channel = file.channels[i];
+        if (channel.dest != rgb[i] || channel.src != rgb[i] || channel.source.type != SourceType::virtualMap ||
+            channel.source.virtualMap != VirtualMap::Normal_OpenGL) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// `$colorSpace` of `file` under OCIO with Painter's substance config (decision 190), as Painter
+/// names it:
+/// - the probes of `export-ocio-encode` (steps 50 and 51, PNG 16 and 8): "sRGB" for a PNG of an
+///   sRGB8 BaseColor, "Raw" for a PNG whose every channel reads a document channel that is not
+///   sRGB8;
+/// - "Raw" for a PNG 16 RGB file whose R, G and B read R, G and B of virtualMap Normal_OpenGL
+///   (`OcioNormalOpenGlPng16`): `export-presets-ocio` record
+///   18ca9d7dbf8a82ab3a74ce79cf76c82547d3bcce5267115aea5075dab825dbc0, step 35 (the starter Blender
+///   preset, its Normal map so bound at PNG 16 by readback s31), `uzp_bevelled_cube_Normal_Raw.png`
+///   in r1 and r2, and `tunic-v10` record 59ef801eaf67c74879e3f5ec51dc526da110ce80fc364c4e366f2ba2582701bf,
+///   `DefaultMaterial_Normal_Raw` in r1, r1-repeat and r2. This is the name only: it says nothing
+///   of the file's pixels.
+/// Any other file is refused: a Normal_OpenGL file at another depth, layout or mapping, every other
+/// virtual map and a file mixing sources. Normal_DirectX too: the same record's step 33 names its
+/// PNG 16 `Raw`, but that case is not admitted here.
 std::string OcioColourSpace(const PlannedFile& file, const Root& root, const std::string& what) {
     constexpr std::string_view owner = "Session O, export-ocio-encode; phase1.15_compositor-colour-fits, decision 190";
     if (!file.parameters || file.parameters->fileFormat != FileFormat::png || file.channels.empty()) {
         Gap(what, "$colorSpace under OCIO is recorded for PNG files only", owner);
     }
+    if (OcioNormalOpenGlPng16(file)) return "Raw";
     bool srgb = true;
     bool raw = true;
     for (const PlannedChannel& channel : file.channels) {
@@ -427,8 +456,8 @@ std::string OcioColourSpace(const PlannedFile& file, const Root& root, const std
     }
     if (srgb) return "sRGB";
     if (raw) return "Raw";
-    Gap(what, "$colorSpace under OCIO of a file that is not one sRGB8 BaseColor or only non-sRGB8 document channels "
-              "is not recorded",
+    Gap(what, "$colorSpace under OCIO of a file that is not one sRGB8 BaseColor, only non-sRGB8 document channels or "
+              "a PNG 16 RGB of Normal_OpenGL is not recorded",
         owner);
 }
 

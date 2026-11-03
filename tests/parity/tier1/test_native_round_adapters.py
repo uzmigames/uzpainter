@@ -588,6 +588,12 @@ def test_the_runner_takes_a_native_jobs_normal_maps_from_its_configuration() -> 
     token = [{"fileName": "$mesh_Normal", "channels": channels("virtualMap", "Normal_DirectX")}]
     with pytest.raises(runner.NativeSubjectRefused, match=r"another token \$mesh"):
         runner.normal_maps_of(config("inline", token))
+    # `$udim` is empty in a native job (the Default workflow): its group is dropped.
+    udim = [{**maps[0], "fileName": "$textureSet_Normal(_$colorSpace)(.$udim)"}]
+    assert runner.normal_maps_of(config("inline", udim)) == {f"{TUNIC_SET}_Normal_Raw"}
+    mixed = [{**maps[0], "fileName": "$textureSet_Normal(_$colorSpace.$udim)"}]
+    with pytest.raises(runner.NativeSubjectRefused, match=r"mixes \$udim"):
+        runner.normal_maps_of(config("inline", mixed))
     blender = "resource://starter_assets/Blender (Principled BSDF)"
     shadow = [{"fileName": "Own_Normal", "channels": channels("virtualMap", "Normal_OpenGL")}]
     inline_first = config(blender, shadow)

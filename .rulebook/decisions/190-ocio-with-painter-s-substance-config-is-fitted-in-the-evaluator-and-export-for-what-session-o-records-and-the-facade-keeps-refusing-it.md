@@ -71,3 +71,15 @@ The model panel was not consulted. Each rule is what the recording shows; facts 
 ### Negative
 - The PNG 16 encode under OCIO is a 257-entry measured table, not a formula.
 - The facade, and so the Wand pilot, still refuse OCIO until item 2.6 is recorded and fitted.
+
+## Amendment (2026-11-02, Tunic v10 current round, front S3)
+
+Decision item 5 kept a virtual map named with `$colorSpace` under OCIO refused. The Tunic v10 current-round rebuild names its normal through the Blender preset's `$textureSet_Normal(_$colorSpace)`, so it stopped at plan time. Codex root gave the GO for one case, on admitted records (names and hashes read from the private store, no values):
+
+- `export-presets-ocio` (12.2.0 envelope), record `18ca9d7dbf8a82ab3a74ce79cf76c82547d3bcce5267115aea5075dab825dbc0`. Readback s31 gives the starter Blender preset's Normal map as R, G and B of virtualMap Normal_OpenGL, PNG 16, no dithering. Step 35 (that preset, the pipeline's PNG 16 parameters) writes `uzp_bevelled_cube_Normal_Raw.png`, 16-bit RGB PNG, `18651397cc8debcdb0182bc56ce61545add60cb6b1ffa99046000b4ebec6dd65`, in r1 and r2. Step 36's inline `uzp_staff_Normal.png` has the same hash. The 12.1.5 record `9e84c5d35661be308385a64d74be8b9003f038a975d744f1e138ff95ff6d3aec` gives the same name and hash.
+- `tunic-v10`, record `59ef801eaf67c74879e3f5ec51dc526da110ce80fc364c4e366f2ba2582701bf` (decision 215), export configuration `7167a93e…`: `DefaultMaterial_Normal_Raw`, 16-bit RGB PNG, `f372fdf3efbdddf2d5de0139d8b47c81c97e36c9d07154d9b3821b6c1d94c540`, in r1, r1-repeat and r2.
+- Both ran under `OCIO` = `resources/ocio/substance/config.ocio` (`15059d4b4e52893863f2063dfccb3902d182b522ad233564db32a5e30a43b7f4`; `8f384af9…` is the records' aggregate colour-configuration hash, not this file's).
+
+The rule: `OcioColourSpace` (`src/export/plan.cpp`) also gives `Raw` for a PNG 16 RGB file whose R, G and B read R, G and B of virtualMap Normal_OpenGL (`OcioNormalOpenGlPng16`), under the same profile guard (`PainterOcio`). Everything else stays refused: that file at PNG 8, as OpenEXR, as L, swapped or as luma, every other virtual map, and a file mixing it with document channels. Normal_DirectX stays refused too, although step 33 of the same record (the starter PBR Metallic Roughness preset) names its PNG 16 `Raw`. The test is `tests/export/test_export_plan.py::test_ocio_colour_space_of_normal_opengl_png16`.
+
+This settles the name only. The encode of that file is already covered: `export-ocio-encode` record `20e36255ea7282c406a0aae1d5203c00e9d304b2cd02a4908d62dc4969fddde1`, step 49, through `test_export_encoders.py::test_ocio_encode_equals_painter_files`. It does not prove the Tunic's pixel parity. The shipped Blender preset itself is still refused before planning, because its layout is `unconfirmed` (R-095, decision 095).

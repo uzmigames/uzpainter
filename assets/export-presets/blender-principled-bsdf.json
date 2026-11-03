@@ -2,30 +2,35 @@
   "name": "blender-principled-bsdf",
   "maps": [
     {
-      "fileName": "$textureSet_BaseColor(_$colorSpace)",
+      "fileName": "$textureSet_BaseColor(_$colorSpace)(.$udim)",
       "channels": [
         {
           "destChannel": "R",
           "srcChannel": "R",
           "srcMapType": "documentMap",
-          "srcMapName": "basecolor"
+          "srcMapName": "baseColor"
         },
         {
           "destChannel": "G",
           "srcChannel": "G",
           "srcMapType": "documentMap",
-          "srcMapName": "basecolor"
+          "srcMapName": "baseColor"
         },
         {
           "destChannel": "B",
           "srcChannel": "B",
           "srcMapType": "documentMap",
-          "srcMapName": "basecolor"
+          "srcMapName": "baseColor"
         }
-      ]
+      ],
+      "parameters": {
+        "fileFormat": "png",
+        "bitDepth": "8",
+        "dithering": false
+      }
     },
     {
-      "fileName": "$textureSet_Normal(_$colorSpace)",
+      "fileName": "$textureSet_Normal(_$colorSpace)(.$udim)",
       "channels": [
         {
           "destChannel": "R",
@@ -45,32 +50,71 @@
           "srcMapType": "virtualMap",
           "srcMapName": "Normal_OpenGL"
         }
-      ]
+      ],
+      "parameters": {
+        "fileFormat": "png",
+        "bitDepth": "16",
+        "dithering": false
+      }
     },
     {
-      "fileName": "$textureSet_Metallic(_$colorSpace)",
+      "fileName": "$textureSet_Metallic(_$colorSpace)(.$udim)",
       "channels": [
         {
-          "destChannel": "L",
+          "destChannel": "R",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "metallic"
+        },
+        {
+          "destChannel": "G",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "metallic"
+        },
+        {
+          "destChannel": "B",
           "srcChannel": "L",
           "srcMapType": "documentMap",
           "srcMapName": "metallic"
         }
-      ]
+      ],
+      "parameters": {
+        "fileFormat": "png",
+        "bitDepth": "8",
+        "dithering": false
+      }
     },
     {
-      "fileName": "$textureSet_Roughness(_$colorSpace)",
+      "fileName": "$textureSet_Roughness(_$colorSpace)(.$udim)",
       "channels": [
         {
-          "destChannel": "L",
+          "destChannel": "R",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "roughness"
+        },
+        {
+          "destChannel": "G",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "roughness"
+        },
+        {
+          "destChannel": "B",
           "srcChannel": "L",
           "srcMapType": "documentMap",
           "srcMapName": "roughness"
         }
-      ]
+      ],
+      "parameters": {
+        "fileFormat": "png",
+        "bitDepth": "8",
+        "dithering": false
+      }
     },
     {
-      "fileName": "$textureSet_Emission(_$colorSpace)",
+      "fileName": "$textureSet_Emission(_$colorSpace)(.$udim)",
       "channels": [
         {
           "destChannel": "R",
@@ -90,29 +134,68 @@
           "srcMapType": "documentMap",
           "srcMapName": "emissive"
         }
-      ]
+      ],
+      "parameters": {
+        "fileFormat": "png",
+        "bitDepth": "8",
+        "dithering": false
+      }
     },
     {
-      "fileName": "$textureSet_Alpha(_$colorSpace)",
+      "fileName": "$textureSet_Alpha(_$colorSpace)(.$udim)",
       "channels": [
         {
-          "destChannel": "L",
+          "destChannel": "R",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "opacity"
+        },
+        {
+          "destChannel": "G",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "opacity"
+        },
+        {
+          "destChannel": "B",
           "srcChannel": "L",
           "srcMapType": "documentMap",
           "srcMapName": "opacity"
         }
-      ]
+      ],
+      "parameters": {
+        "fileFormat": "png",
+        "bitDepth": "8",
+        "dithering": false
+      }
     },
     {
-      "fileName": "$textureSet_Displacement(_$colorSpace)",
+      "fileName": "$textureSet_Displacement(_$colorSpace)(.$udim)",
       "channels": [
         {
-          "destChannel": "L",
+          "destChannel": "R",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "height"
+        },
+        {
+          "destChannel": "G",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "height"
+        },
+        {
+          "destChannel": "B",
           "srcChannel": "L",
           "srcMapType": "documentMap",
           "srcMapName": "height"
         }
-      ]
+      ],
+      "parameters": {
+        "fileFormat": "png",
+        "bitDepth": "8",
+        "dithering": false
+      }
     }
   ]
 }
