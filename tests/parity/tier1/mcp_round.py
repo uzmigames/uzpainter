@@ -173,6 +173,9 @@ class Round:
     calls: list[dict[str, Any]] = field(default_factory=list)
     outcome: str = "completed"
     refusal: dict[str, str] | None = None
+    # The refusal's own reason (`details.reason`, else `message`): kept for the test's identity
+    # check only, never written to the public report, whose fields are identifiers only.
+    refusal_reason: str = ""
     files: dict[tuple[str, str], Path] = field(default_factory=dict)
 
 
@@ -234,6 +237,13 @@ def refusal_of(
     if isinstance(kind, str):
         refusal["type"] = kind
     return refusal
+
+
+def reason_of(reply: dict[str, Any]) -> str:
+    """A failed call's own reason: `capability_gap`'s `details.reason`, else its `message`."""
+    error = reply["error"]
+    reason = (error.get("details") or {}).get("reason")
+    return str(reason if isinstance(reason, str) else error.get("message", ""))
 
 
 def run_round(
@@ -359,6 +369,7 @@ def drive(
         reply = driver.call(tool, arguments)
         if "error" in reply:
             log.refusal = refusal_of(tool, reply)
+            log.refusal_reason = reason_of(reply)
             log.outcome = "refused" if log.refusal is not None else "failed"
             if log.refusal is None:
                 raise RoundFailed(f"{tool} failed: {reply['error']}")
@@ -406,6 +417,7 @@ def drive_native(
             result: dict[str, Any] = reply["result"]
             return result
         log.refusal = refusal_of(tool, reply, NATIVE_REFUSABLE)
+        log.refusal_reason = reason_of(reply)
         if log.refusal is None:
             raise fail(f"{tool} failed: {reply['error']}")
         log.outcome = "refused"
