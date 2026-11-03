@@ -13,6 +13,8 @@ tested on its own and runs everywhere.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import shutil
 import subprocess
 from collections.abc import Callable
@@ -22,7 +24,7 @@ from typing import Any
 import pytest
 
 from tests.adapters.assets3d.wand import ASSETS3D, REPO_ROOT
-from tests.parity.tier1.mcp_round import round_report, run_round
+from tests.parity.tier1.mcp_round import round_report, run_round, run_tunic_current
 from tests.parity.tier1.wand_v1 import runner as wand_runner
 from tools.parity.store.store import locate
 from tools.parity.tier1.mcp_round import equality, report_problems
@@ -145,3 +147,51 @@ def test_wand_round_runs_through_typed_tools_with_python_disabled(
         assert report["equal_to_tier1"] == "not_measured"
     else:
         assert report["outcome"] == "completed" and report["equal_to_tier1"] == "equal", report
+
+
+TUNIC_CURRENT = "phase2/tier1/tunic-v10-current"
+
+
+@pytest.mark.skipif(
+    not (ASSETS3D / "AGENTS.md").is_file(),
+    reason=f"the UzmiGames asset repository is not at {ASSETS3D} (local run, decision 028)",
+)
+@pytest.mark.skipif(locate() is None, reason="no private oracle store on this machine")
+@pytest.mark.skipif(
+    resolve_golden(TUNIC_CURRENT) is None, reason=f"{TUNIC_CURRENT} is not admitted"
+)
+def test_tunic_current_round_checks_its_state_before_the_export(
+    painter: Path, tmp_path: Path, record_property: Callable[[str, object], None]
+) -> None:
+    """The real Tunic current round through typed tools, as a state-check test: every state check
+    after the sync and after the reopen passes before the one export, and a failed check raises
+    before the export is sent. The export either writes or is refused before writing as an
+    explicit capability refusal; which refusal fired is not proved here. The round's aggregate
+    (hashes, calls, outcome, refusal) is recorded as the `tunic_current_round` property."""
+    manifest = resolve_golden(TUNIC_CURRENT)
+    assert manifest is not None
+    log = run_tunic_current(painter, tmp_path / "round", manifest.manifest_path)
+    record_property(
+        "tunic_current_round",
+        json.dumps(
+            {
+                "manifest_sha256": hashlib.sha256(manifest.manifest_path.read_bytes()).hexdigest(),
+                "exe_sha256": hashlib.sha256(painter.read_bytes()).hexdigest(),
+                "tools_listed": log.tools_listed,
+                "run_python_listed": log.run_python_listed,
+                "calls": log.calls,
+                "outcome": log.outcome,
+                "refusal": log.refusal,
+            },
+            sort_keys=True,
+        ),
+    )
+    assert not log.run_python_listed
+    tools = [call["tool"] for call in log.calls]
+    assert tools[-1] == "export", log.calls
+    assert all(call["outcome"] != "error" for call in log.calls[:-1]), log.calls
+    assert tools.count("layer_list") == 2 and "project_open" in tools, tools
+    if log.outcome == "refused":
+        assert log.refusal is not None and log.refusal["tool"] == "export", log.refusal
+    else:
+        assert log.outcome == "completed", log.calls
