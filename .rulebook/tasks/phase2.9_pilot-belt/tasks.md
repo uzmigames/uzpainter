@@ -12,18 +12,18 @@
 - [x] 2.8 At the inventory checkpoint, verify restored originals against known reference hashes/resource versions and provenance. Original restoration needs no new scope decision. If originals remain unavailable, prepare one owner decision package for recovery versus a new reference, replacement or exclusion; link any existing pending question instead of duplicating it. A changed baseline requires an explicit recorded owner scope decision before recording or claiming Sash v5 parity; unresolved inputs keep this task open while independent work continues
 
 ## 3. Tests
-- [ ] 3.1 Tier 1: every exported Sash v5 map equals the private golden in native decoded values; save/reopen preserves equality
+- [x] 3.1 Tier 1: every exported Sash v5 map equals the private golden in native decoded values; save/reopen preserves equality — done under EXC-012 (decision 399) after decision 400's mesh-map decode (7d35eb99, §19 below): `pass`, Normal covered interior 0, the save/reopen export byte-identical
 - [x] 3.2 Repeatability: two UzPainter runs produce byte-identical exports
 - [x] 3.3 MCP-only round: `run_python` absent from the tool list, every call typed, round completed, maps equal to the Tier 1 run — done in the measure mode (§18 below): not conformant, like the Tier 1 maps it equals
 - [x] 3.4 Every divergence is listed with the owner-approved exception that covers it, or the test fails
 
 ## 4. Acceptance
-- [ ] 4.1 DAG gate met: equal maps and the Python-disabled MCP integration round completed; reports written to `parity/reports/phase2/`; the input inventory and preservation records are complete, and the reports identify the original reference or an explicitly owner-authorized changed baseline (items 2.6-2.8)
+- [x] 4.1 DAG gate met: equal maps and the Python-disabled MCP integration round completed; reports written to `parity/reports/phase2/`; the input inventory and preservation records are complete, and the reports identify the original reference or an explicitly owner-authorized changed baseline (items 2.6-2.8) — done (§19): 3.1 passes under the owner's EXC-012, the MCP-only round completed in the measure mode (3.3), both reports refreshed, the changed baseline is the owner's re-run (decision 399). The maps are the measure export's, not a conformant delivery (decisions 286, 396 §4)
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [x] 5.1 Update or create documentation covering the implementation
 - [x] 5.2 Write tests covering the new behavior
-- [ ] 5.3 Run tests and confirm they pass
+- [x] 5.3 Run tests and confirm they pass — `tests/parity/tier1/sash_v5` on 7d35eb99: 4 passed, 1 xfailed (the production round's expected islanded refusal, decision 259), §19
 
 ## 6. Notes (decision 260; 2026-10-18, branch `wt/pilot-skeleton-mage`)
 - The pilot is Sash v5 (`25-Faixa-Cintura` v5), which the owner chose to replace Belt v5 with on 2026-10-18 ("outra peça do skeleton mage"). It was painted in the belt's waist-v5 round through the same pinned scripts, at 2048 px with one texture set and 61 UV islands, and its stack uses only the Wand's features. It is a named stand-in for the second pilot, not restored Belt parity. The directory keeps its name.
@@ -175,3 +175,10 @@
 - Tests run once (2026-11-03): `tests/parity/tier1/sash_v5` (GPU, native lock): 2 passed, 2 failed (3.1; the round's BaseColor, then fixed), 1 xfailed. The failed round case alone, re-run after the fix: 1 passed. Host: the new round tests in `test_current_round_adapters.py` and `test_mcp_round.py`, `test_only_the_islanded_export_refusal_is_expected` (now ungated): passed. ruff, `ruff format --check` and mypy clean.
 - Still open: 3.1 (the native decode), 4.1, 5.3. Not archived.
 
+## 19. Tier 1 passes under EXC-012 after decision 400's mesh-map decode (2026-11-03)
+- The native fix of §18: the Normal mesh map is decoded with z floored at float32(0.001) before the normalise, on the CPU (`height_to_normal.cpp` `MeshDecode`, in `VirtualNormalTexel` and `MeshOnPaddedNormal`), in `evaluator_blend.hlsl`'s `V_FLAG_MESH_TILE` decode and in `tools/parity/fit/normal.py` `mesh_decode` (decision 400 §4, commit 7d35eb99). The Normal channel's `arith::DecodeNormal` is unchanged.
+- Run (one `zig build painter -Doptimize=ReleaseFast`, `UzPainter.exe` `4900af06…`, DX12, measure export, the native lock held): `tests/parity/tier1/sash_v5` 4 passed, 1 xfailed in 232 s.
+  - **3.1 `pass` under EXC-012** (`parity/reports/phase2/tier1-sash-v5.json`): oracle `stable`, rebuilds `repeatable`, no structural item. BaseColor, Roughness, Metallic and Height: every covered texel equal. Normal: covered interior **0** values (was 196), island edge 880 values, max 653 (was 1,059), padding 66,753 values, max 3,648 (was 66,880). The save/reopen export equals the first one byte for byte.
+  - The MCP-only round in the measure mode completed with all five maps byte-identical to the Tier 1 run's (`parity/reports/phase2/sash-v5-mcp-round.json` refreshed: the Normal's hash, the receipts and the build). The production round stays the expected failure on decision 259's islanded padding.
+- The Wand's Tier 1 on the same build is unchanged (2 passed; `tier1-wand-v1.json` differs only in its build hash), as §18 predicted: its mesh map has no covered texel with z ≤ 0.
+- 3.1, 4.1 and 5.3 checked. The task is not archived: archiving waits for the coordinated full suite.

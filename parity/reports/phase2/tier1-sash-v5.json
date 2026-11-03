@@ -10,7 +10,7 @@
     "hardware": "AMD Radeon(TM) Graphics | NVIDIA GeForce RTX 4090",
     "driver": "32.0.11024.2 | 32.0.16.1714",
     "backend": "dx12",
-    "uzpainter_build_hash": "35ab4c44696b9e497ce3de272599e1e88aefd3280864a22f9df3fad789cd8281",
+    "uzpainter_build_hash": "4900af0674a2d137b5c610bd4217ee3f0ec8952130455cddb89b5940b583152b",
     "painter_build_id": "12.2.0+js-api.1.1.20",
     "resource_hashes": [
       "0536fb8fe4c97780658dbb2f0405bb4d0bcb0f2122410ad22626a11c85d44eea",
@@ -584,7 +584,7 @@
     ]
   },
   "equality_to_painter": {
-    "outcome": "fail",
+    "outcome": "pass",
     "exceptions_relied_on": [
       {
         "exception_id": "EXC-012",
@@ -1010,12 +1010,12 @@
         },
         "abs_diff": {
           "max": 3648,
-          "mean": 0.11575206120808919,
+          "mean": 0.11488986015319824,
           "p99": 0
         },
         "differing": {
-          "count": 68135,
-          "percent": 0.5414883295694987,
+          "count": 67633,
+          "percent": 0.5374987920125326,
           "total": 12582912
         },
         "regions": [
@@ -1023,37 +1023,37 @@
             "region": "M_hem",
             "abs_diff": {
               "max": 732,
-              "mean": 0.1482053916001866,
+              "mean": 0.1466562486122469,
               "p99": 0
             },
             "differing": {
-              "count": 49684,
-              "percent": 0.7094443747146851,
+              "count": 49182,
+              "percent": 0.7022762506484511,
               "total": 7003227
             }
           }
         ],
         "normal": {
           "angular_max_deg": 7.857369846997597,
-          "angular_mean_deg": 0.0005504570900948341,
+          "angular_mean_deg": 0.0005460396342629443,
           "non_finite_count": 0,
           "unnormalised_count": 2,
-          "negative_z_count": 172
+          "negative_z_count": 161
         },
-        "private_difference_map_sha256": "6e557eae9a3087be1b90cdfcd28ed87cf58c60928d701d95aa751e78bedd39c2",
-        "flip_mean": 5.6166118156397715e-05,
+        "private_difference_map_sha256": "9d522e41c19bff9948085012fa6012988dad7708f9020c41120f7ceb8b3d0474",
+        "flip_mean": 5.5250533478101715e-05,
         "padding": {
           "covered_texels": 1810502,
           "uncovered_texels": 2383802,
           "covered": {
             "abs_diff": {
               "max": 653,
-              "mean": 0.003697685319688499,
+              "mean": 0.0021905526754458157,
               "p99": 0
             },
             "differing": {
-              "count": 1255,
-              "percent": 0.023105930473058485,
+              "count": 880,
+              "percent": 0.016201767981108738,
               "total": 5431506
             }
           },
@@ -1061,24 +1061,24 @@
           "edge": {
             "abs_diff": {
               "max": 653,
-              "mean": 0.1206398679928496,
+              "mean": 0.09089242333959756,
               "p99": 0
             },
             "differing": {
-              "count": 1059,
-              "percent": 0.809002154283357,
+              "count": 880,
+              "percent": 0.6722586362316848,
               "total": 130902
             }
           },
           "uncovered": {
             "abs_diff": {
               "max": 3648,
-              "mean": 0.20085756563115,
+              "mean": 0.20048519130364015,
               "p99": 0
             },
             "differing": {
-              "count": 66880,
-              "percent": 0.935200714377005,
+              "count": 66753,
+              "percent": 0.9334248398147161,
               "total": 7151406
             }
           },
@@ -1088,12 +1088,12 @@
               "texels": 44119,
               "abs_diff": {
                 "max": 2539,
-                "mean": 0.16753175124851727,
+                "mean": 0.1474119238121142,
                 "p99": 0
               },
               "differing": {
-                "count": 1194,
-                "percent": 0.9021056687594914,
+                "count": 1067,
+                "percent": 0.8061530557507347,
                 "total": 132357
               }
             },
@@ -1102,12 +1102,12 @@
               "texels": 88698,
               "abs_diff": {
                 "max": 2539,
-                "mean": 0.16152186821198525,
+                "mean": 0.15151412658684524,
                 "p99": 0
               },
               "differing": {
-                "count": 2314,
-                "percent": 0.8696175035889573,
+                "count": 2187,
+                "percent": 0.8218900087938849,
                 "total": 266094
               }
             },
@@ -1116,12 +1116,12 @@
               "texels": 179216,
               "abs_diff": {
                 "max": 3648,
-                "mean": 0.18079114959973813,
+                "mean": 0.17583809481296314,
                 "p99": 0
               },
               "differing": {
-                "count": 4654,
-                "percent": 0.8656221170728804,
+                "count": 4527,
+                "percent": 0.8420007142219444,
                 "total": 537648
               }
             },
@@ -1130,12 +1130,12 @@
               "texels": 365540,
               "abs_diff": {
                 "max": 3648,
-                "mean": 0.17990279221608213,
+                "mean": 0.1774744214039503,
                 "p99": 0
               },
               "differing": {
-                "count": 10122,
-                "percent": 0.92301800076599,
+                "count": 9995,
+                "percent": 0.9114369608433186,
                 "total": 1096620
               }
             }

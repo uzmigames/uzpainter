@@ -4,7 +4,7 @@
       "admission": "executed",
       "committed_revision": 1,
       "outcome": "committed",
-      "receipt_sha256": "c0dd78d07524b492c99cce40e069d5a811d96e207f9d363e351ebaf405e15f51",
+      "receipt_sha256": "c06c20a73d2a7f152d1d2cd794e91bf3fe5dd9a41738a71cc1984fe227693e72",
       "seconds": 0.06,
       "step": 1,
       "tool": "project_create",
@@ -13,7 +13,7 @@
     {
       "committed_revision": 1,
       "outcome": "returned",
-      "receipt_sha256": "727e52a76ff1482487a535d1a5079f198988a375c623caa85fef3d12edaee9e8",
+      "receipt_sha256": "68fe47c74155f2d7c751d786de54a15e0e7f54b599a8963cc7aa9ae05d6e6b6c",
       "seconds": 0.006,
       "step": 2,
       "tool": "set_list",
@@ -23,8 +23,8 @@
       "admission": "executed",
       "committed_revision": 2,
       "outcome": "committed",
-      "receipt_sha256": "a24d455093b4a76c48d342ee7b73e6b6eaead8ea1de38dcebd98eabe9b1275e5",
-      "seconds": 0.243,
+      "receipt_sha256": "b31d4cb461ec950e0adc2ecb008511ff34dd0cbf03e8c97217742eda974d7b45",
+      "seconds": 0.23,
       "step": 3,
       "tool": "set_mesh_maps",
       "typed": true
@@ -32,8 +32,8 @@
     {
       "committed_revision": 2,
       "outcome": "returned",
-      "receipt_sha256": "554e1390ca60f13e8ddb71f05a245fc3b9e059bceceb200e5c9da7fe34a0d177",
-      "seconds": 0.19,
+      "receipt_sha256": "0f143930043d2ac7a5d58df26929f1a1cde00b872010b9d5cd44e585dd9cb31f",
+      "seconds": 0.167,
       "step": 4,
       "tool": "project_save_as",
       "typed": true
@@ -42,8 +42,8 @@
       "admission": "executed",
       "committed_revision": 3,
       "outcome": "committed",
-      "receipt_sha256": "2cf829c3d8bdfbe42eef49989d427c6477ce879ae6dacdca0961246aed46caba",
-      "seconds": 0.333,
+      "receipt_sha256": "b34354e8655ed002f5c1b26f1c75e81d77465195a2202dcbe99bea597fc0fb79",
+      "seconds": 0.335,
       "step": 5,
       "tool": "sync_stack",
       "typed": true
@@ -51,8 +51,8 @@
     {
       "committed_revision": 3,
       "outcome": "returned",
-      "receipt_sha256": "6e9e33036b1a9673501bb7783bbd62b800ab33c496e0e672582e3fb5fb7b7626",
-      "seconds": 0.203,
+      "receipt_sha256": "c370ca93b23dbdab66ba150827b2e66e28069d2377df86bfb17968845497362b",
+      "seconds": 0.197,
       "step": 6,
       "tool": "project_save",
       "typed": true
@@ -83,9 +83,9 @@
     },
     {
       "map": "25-Faixa-Cintura_Normal",
-      "sha256": "9cb08e41770cef710809272d95a72ce4b250031c0ee35c5a00bac25779e1458b",
+      "sha256": "055926b42fc58064bf61d08703bcb7418d4b9d1e9d08926fc6e387ce096b58b9",
       "texture_set": "25-Faixa-Cintura",
-      "tier1_sha256": "9cb08e41770cef710809272d95a72ce4b250031c0ee35c5a00bac25779e1458b"
+      "tier1_sha256": "055926b42fc58064bf61d08703bcb7418d4b9d1e9d08926fc6e387ce096b58b9"
     },
     {
       "map": "25-Faixa-Cintura_Roughness",
@@ -102,7 +102,7 @@
   "run": {
     "backend": "vulkan",
     "date": "2026-11-03",
-    "exe_sha256": "35ab4c44696b9e497ce3de272599e1e88aefd3280864a22f9df3fad789cd8281",
+    "exe_sha256": "4900af0674a2d137b5c610bd4217ee3f0ec8952130455cddb89b5940b583152b",
     "tools_listed": 67
   },
   "schema": "uzpainter/pilot-mcp-round/1"
