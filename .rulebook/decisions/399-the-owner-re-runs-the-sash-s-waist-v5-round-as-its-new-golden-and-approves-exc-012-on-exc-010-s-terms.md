@@ -94,6 +94,13 @@ Counts are of differing values (components). There are 1,810,502 covered texels,
 - **The MCP-only round** (`parity/reports/phase2/sash-v5-mcp-round.json`). It ran with Python disabled and `run_python` not listed (67 tools), every call typed. The create, mesh maps, save, sync and save calls succeeded. The production `export` was refused as `capability_gap: NotYetSupported` (decisions 245, 259), so the outcome is `refused` and the maps are `not_measured`.
 - **Against the delivered project.** The offline comparator against the migration golden (`tools/parity/tier1/current_reference.py`) says `different`. Metallic is byte-identical. Height differs on 31 values by 1 code, Roughness on 1 value, and Normal on 1,537 values by at most 6 codes. BaseColor differs, from the new swatches. The re-run reproduces the delivered piece apart from its colour. This is not a parity claim against v5.
 
+## Result: the cause of the 196 values, and the round through the measure export (2026-11-03)
+
+- **The 196 values on 126 covered interior texels** are exactly the covered interior texels whose Normal mesh map has z ≤ 0 (16-bit code ≤ 32767). Every such edge texel differs too (115), and no other interior texel does.
+- Painter decodes the Normal mesh map as normalise(2c − 1) with z floored at 0.001 before the normalise. UzPainter floors it at 0 (`arith::DecodeNormal`, decision 079). With the 0.001 floor, the model in `tools/parity/fit/normal.py` (it reproduces UzPainter's export on every covered texel from UzPainter's float32 Height) matches Painter on all 126 texels and on 114 of the 115 edge ones, and changes no other interior texel.
+- So EXC-012 is not widened. The fix is native and is queued, not made here. 3.1 stays a fail until then. The Wand's mesh map has no covered texel with z ≤ 0.
+- **The MCP-only round** closes through the diagnostic measure export, as decision 398 §4 closed the Tunic's. The typed round sends no `export`, and its saved project is exported in its own `run --diagnostic-measure-export` process. A script job's round now creates its project under the manifest's `OCIO`: without `ocio_config_hash`, the typed tool made a Legacy project and its BaseColor differed. The round completed with every map byte-identical to the Tier 1 run's (`parity/reports/phase2/sash-v5-mcp-round.json`, `export_mode: diagnostic_measure`). It is not conformant, as those Tier 1 maps are not.
+
 ## Alternatives Considered
 
 - **Restore the round folder.** There is no source to restore it from (decisions 192, 260; the inventory).

@@ -6,7 +6,7 @@
 - [x] 2.2 Sash v5 Tier 1 goldens recorded twice through the recorder on the owner's machine; oracle stability classified; blobs in the private store, hashes in the manifest
 - [x] 2.3 Sash v5 rebuilt in UzPainter from the same stack JSON and resources, including the `base_tex` swatch fills
 - [x] 2.4 Tier 1 comparison and report `parity/reports/phase2/tier1-sash-v5.json`
-- [ ] 2.5 MCP-only round script driving typed tools against a supervisor started without `--allow-python`; call log and receipts in `parity/reports/phase2/sash-v5-mcp-round.json`
+- [x] 2.5 MCP-only round script driving typed tools against a supervisor started without `--allow-python`; call log and receipts in `parity/reports/phase2/sash-v5-mcp-round.json` — done through the measure export (decision 398 §4's route, §18 below)
 - [x] 2.6 Before input-dependent rebuild or recording work, complete one bounded inventory of the round folder, swatches and identified recovery sources: name the sources checked, inputs present or missing, known historical hashes or resource versions, and unresolved identity checks; publish numbers, hashes and missing-path metadata only. Reuse the documented searches of decisions 192 and 260; do not repeat a sweep without a newly identified source
 - [x] 2.7 Preserve every available or recovered input, the fixture request and its oracle envelope in the private content-addressed store, and verify the stored hashes before use; public manifests contain hashes and provenance metadata, not private input bytes
 - [x] 2.8 At the inventory checkpoint, verify restored originals against known reference hashes/resource versions and provenance. Original restoration needs no new scope decision. If originals remain unavailable, prepare one owner decision package for recovery versus a new reference, replacement or exclusion; link any existing pending question instead of duplicating it. A changed baseline requires an explicit recorded owner scope decision before recording or claiming Sash v5 parity; unresolved inputs keep this task open while independent work continues
@@ -14,7 +14,7 @@
 ## 3. Tests
 - [ ] 3.1 Tier 1: every exported Sash v5 map equals the private golden in native decoded values; save/reopen preserves equality
 - [x] 3.2 Repeatability: two UzPainter runs produce byte-identical exports
-- [ ] 3.3 MCP-only round: `run_python` absent from the tool list, every call typed, round completed, maps equal to the Tier 1 run
+- [x] 3.3 MCP-only round: `run_python` absent from the tool list, every call typed, round completed, maps equal to the Tier 1 run — done in the measure mode (§18 below): not conformant, like the Tier 1 maps it equals
 - [x] 3.4 Every divergence is listed with the owner-approved exception that covers it, or the test fails
 
 ## 4. Acceptance
@@ -156,4 +156,22 @@
   - `tests/parity/test_verdict.py`: 61 passed. `tests/parity/test_guard.py`: 130 passed.
   - ruff, `ruff format --check` and mypy clean on the touched files.
 - Still open: 2.5, 3.1, 3.3, 4.1, 5.3. Not archived.
+
+## 18. The round closed through the measure export, and the cause of the 196 (2026-11-03)
+- 2.5, 3.3 (done), as decision 398 §4 closed the Tunic's: `run_round(..., diagnostic=True)` (`tests/parity/tier1/mcp_round.py`).
+  - The typed round sends every call up to the save and no `export`. After the session, its saved project is exported by the diagnostic measure export in its own `UzPainter.exe run --diagnostic-measure-export` process (`tunic_recipe.measured_config_export`), with the configuration the export script builds. Its receipt is checked as the Tunic's: `non_conformant`, only decided refusals bypassed, every file listed with its hash.
+  - The report gains an optional `export_mode` (`diagnostic_measure`); such a round lists no `export` call and is never refused.
+  - That export is a `run` process, not an MCP call. The MCP supervisor still had no `--allow-python` and did not list `run_python`.
+  - The production round stays an expected failure on the islanded refusal (its reason this run: decision 259's padding).
+- **A bug the first run found.** The round completed but its BaseColor differed from the Tier 1 run's. A script job's `project_create` passed no `ocio_config_hash`, so the typed tool made a Legacy project: it reads no environment (decisions 207, 212). The facade makes the create script's project under the manifest's `OCIO`. The round now passes the substance configuration's hash exactly when the manifest names `OCIO`, and refuses any other configuration before its first call.
+- **Run** (ReleaseFast `35ab4c44…`, Tier 1 on DX12, round workers on Vulkan as every round's): the round completed, 67 tools, and all five maps are byte-identical to the Tier 1 run's. The backends differ, and the maps are equal across them; no backend claim is made beyond that.
+- 3.1 stays a **fail under EXC-012**; the refreshed `tier1-sash-v5.json` differs from the last one only in its build hash.
+- **The cause of the 196 values (offline; values in memory, aggregates only).** `tools/parity/fit/normal.py` on UzPainter's own float32 Height (decision 308's `UZP_DIAGNOSTIC_NORMAL_DUMP`) and the 16-bit Normal mesh map reproduces our export on every covered texel (0 differ).
+  - The 126 texels are **exactly** the covered interior texels whose Normal mesh map has z ≤ 0 (code ≤ 32767). All 115 such edge texels differ as well, and no other interior texel does.
+  - Ours is 32 to 39 codes low on z there, whatever the mesh z (−0.52 to −0.002), and within ±4 codes on x and y.
+  - Painter decodes the mesh map as normalise(2c − 1) with **z floored at 0.001** before the normalise; we floor it at 0 (`arith::DecodeNormal`, decision 079). With 0.001, all 126 match (max 0), no other interior texel changes, and 114 of the 115 edge texels match. Floors of 2^-10, 5e-4 and 2e-3, a clamp after the normalise, no clamp and |z| all miss.
+  - Not the Height stencil, the tangent frame, a seam or the mip footprint. The Wand's mesh map has no covered texel with z ≤ 0, hence its exact interior. The Tunic was never compared (its 4096 refusal), so it says nothing here.
+- **The fix is native**, so it is reported and not made here (no exception, EXC-012 not widened). Scope: a mesh-map decode with the 0.001 floor at the three mesh-map sites (`height_to_normal.cpp` `VirtualNormalTexel` and `MeshOnPaddedNormal`, the `V_FLAG_MESH_TILE` decode in `evaluator_blend.hlsl`), the same in `tools/parity/fit/normal.py`'s model for the mesh map, and a test. The shared `DecodeNormal` of the Normal channel and normal-map blends is not recorded at z ≤ 0 by this golden and stays unchanged.
+- Tests run once (2026-11-03): `tests/parity/tier1/sash_v5` (GPU, native lock): 2 passed, 2 failed (3.1; the round's BaseColor, then fixed), 1 xfailed. The failed round case alone, re-run after the fix: 1 passed. Host: the new round tests in `test_current_round_adapters.py` and `test_mcp_round.py`, `test_only_the_islanded_export_refusal_is_expected` (now ungated): passed. ruff, `ruff format --check` and mypy clean.
+- Still open: 3.1 (the native decode), 4.1, 5.3. Not archived.
 
