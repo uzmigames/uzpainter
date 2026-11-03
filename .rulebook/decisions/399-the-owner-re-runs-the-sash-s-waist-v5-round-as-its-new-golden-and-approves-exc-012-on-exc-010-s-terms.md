@@ -67,6 +67,33 @@ These are his own yes to a changed baseline (decision 300 item 8), to the image 
    - A Sash pass is reported as "pass under EXC-012, against the current round", never as exact and never as parity with the delivered v5. Its report lists EXC-012 version 1 in `exceptions_relied_on`.
    - EXC-012 is narrowed by new versions as `phase3.1_export-island-padding` makes parts exact, and withdrawn once the Sash passes with no exception.
 
+## Result: the Sash's Tier 1 run under EXC-012
+
+The run was a DX12 run of 2026-11-03: `tests/parity/tier1/sash_v5` on `zig build painter -Doptimize=ReleaseFast` (`UzPainter.exe` SHA-256 `20982dff60ea…`), under the manifest's `OCIO`. Every export was the diagnostic measure export, and every receipt was `non_conformant` with only decisions 245's and 259's refusals bypassed. It took 181 s, with the MCP round included.
+
+**Verdict: fail under EXC-012** (`parity/reports/phase2/tier1-sash-v5.json`). The oracle is `stable`, the two rebuilds are `repeatable`, there is no structural item, and the save/reopen export equals the first one byte for byte.
+
+Counts are of differing values (components). There are 1,810,502 covered texels, 43,634 of them on the island edge, and 2,383,802 uncovered ones.
+
+| Map | Covered interior | Covered island edge: values differing / max | Padding: values differing / max / mean | Within 1 / 2 / 4 / 8 texels of coverage |
+|---|---|---|---|---|
+| BaseColor | 0 | 0 | 130,644 / 15,658 / 8.311 | 439 / 968 / 2,464 / 7,090 |
+| Roughness | 0 | 0 | 2,170 / 19,789 / 0.381 | 28 / 55 / 113 / 258 |
+| Metallic | 0 | 0 | 0 | 0 |
+| Height | 0 | 0 | 63,237 / 110 / 0.130 | 357 / 757 / 1,767 / 4,561 |
+| Normal | **196** | 1,059 / 653 | 66,880 / 3,648 / 0.201 | 1,194 / 2,314 / 4,654 / 10,122 |
+
+- **The four material maps.** Every covered texel is equal: what EXC-012 holds them to.
+- **The Normal.** 1,059 values differ on island-edge texels, the class EXC-012 excepts. But **196 values, on 126 covered interior texels, differ too**, and bound 1 holds those exact. That is the fail, and EXC-012 is not widened for it (decision 259 §6: only the owner's yes changes terms).
+- **Where the 126 texels are.** One more diagnostic measure-mode rebuild located them; it printed aggregates only.
+  - They are 2 to 5 texels inside the islands: 62 at distance 2, 40 at 3, 17 at 4 and 7 at 5.
+  - None is next to another UV island within 3 texels. Of the 61 islands, no two overlap.
+  - None is within 1 texel of a differing Height texel, and only 3 are within 2.
+  - The largest difference is 39 codes.
+  - So the Height-to-normal stencil on the padded Height outside the islands, which explains the edge class (decisions 245, 308), does not explain them. Their cause is not yet diagnosed. The Wand's measure export had none (decision 395).
+- **The MCP-only round** (`parity/reports/phase2/sash-v5-mcp-round.json`). It ran with Python disabled and `run_python` not listed (67 tools), every call typed. The create, mesh maps, save, sync and save calls succeeded. The production `export` was refused as `capability_gap: NotYetSupported` (decisions 245, 259), so the outcome is `refused` and the maps are `not_measured`.
+- **Against the delivered project.** The offline comparator against the migration golden (`tools/parity/tier1/current_reference.py`) says `different`. Metallic is byte-identical. Height differs on 31 values by 1 code, Roughness on 1 value, and Normal on 1,537 values by at most 6 codes. BaseColor differs, from the new swatches. The re-run reproduces the delivered piece apart from its colour. This is not a parity claim against v5.
+
 ## Alternatives Considered
 
 - **Restore the round folder.** There is no source to restore it from (decisions 192, 260; the inventory).

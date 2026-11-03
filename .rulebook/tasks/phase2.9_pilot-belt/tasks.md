@@ -1,28 +1,28 @@
 ## 1. Prerequisites
-- [ ] 1.1 Prerequisites accepted: phase1.25_pilot-wand, phase2.8_mcp-server
+- [x] 1.1 Prerequisites accepted: phase1.25_pilot-wand, phase2.8_mcp-server
 
 ## 2. Implementation
-- [ ] 2.1 Sash v5 fixture manifest in `parity/manifests/`: stack JSON, resources and external mesh maps by SHA-256, instruction sequence, export configuration
-- [ ] 2.2 Sash v5 Tier 1 goldens recorded twice through the recorder on the owner's machine; oracle stability classified; blobs in the private store, hashes in the manifest
-- [ ] 2.3 Sash v5 rebuilt in UzPainter from the same stack JSON and resources, including the `base_tex` swatch fills
-- [ ] 2.4 Tier 1 comparison and report `parity/reports/phase2/tier1-sash-v5.json`
+- [x] 2.1 Sash v5 fixture manifest in `parity/manifests/`: stack JSON, resources and external mesh maps by SHA-256, instruction sequence, export configuration
+- [x] 2.2 Sash v5 Tier 1 goldens recorded twice through the recorder on the owner's machine; oracle stability classified; blobs in the private store, hashes in the manifest
+- [x] 2.3 Sash v5 rebuilt in UzPainter from the same stack JSON and resources, including the `base_tex` swatch fills
+- [x] 2.4 Tier 1 comparison and report `parity/reports/phase2/tier1-sash-v5.json`
 - [ ] 2.5 MCP-only round script driving typed tools against a supervisor started without `--allow-python`; call log and receipts in `parity/reports/phase2/sash-v5-mcp-round.json`
 - [x] 2.6 Before input-dependent rebuild or recording work, complete one bounded inventory of the round folder, swatches and identified recovery sources: name the sources checked, inputs present or missing, known historical hashes or resource versions, and unresolved identity checks; publish numbers, hashes and missing-path metadata only. Reuse the documented searches of decisions 192 and 260; do not repeat a sweep without a newly identified source
-- [ ] 2.7 Preserve every available or recovered input, the fixture request and its oracle envelope in the private content-addressed store, and verify the stored hashes before use; public manifests contain hashes and provenance metadata, not private input bytes
-- [ ] 2.8 At the inventory checkpoint, verify restored originals against known reference hashes/resource versions and provenance. Original restoration needs no new scope decision. If originals remain unavailable, prepare one owner decision package for recovery versus a new reference, replacement or exclusion; link any existing pending question instead of duplicating it. A changed baseline requires an explicit recorded owner scope decision before recording or claiming Sash v5 parity; unresolved inputs keep this task open while independent work continues
+- [x] 2.7 Preserve every available or recovered input, the fixture request and its oracle envelope in the private content-addressed store, and verify the stored hashes before use; public manifests contain hashes and provenance metadata, not private input bytes
+- [x] 2.8 At the inventory checkpoint, verify restored originals against known reference hashes/resource versions and provenance. Original restoration needs no new scope decision. If originals remain unavailable, prepare one owner decision package for recovery versus a new reference, replacement or exclusion; link any existing pending question instead of duplicating it. A changed baseline requires an explicit recorded owner scope decision before recording or claiming Sash v5 parity; unresolved inputs keep this task open while independent work continues
 
 ## 3. Tests
 - [ ] 3.1 Tier 1: every exported Sash v5 map equals the private golden in native decoded values; save/reopen preserves equality
-- [ ] 3.2 Repeatability: two UzPainter runs produce byte-identical exports
+- [x] 3.2 Repeatability: two UzPainter runs produce byte-identical exports
 - [ ] 3.3 MCP-only round: `run_python` absent from the tool list, every call typed, round completed, maps equal to the Tier 1 run
-- [ ] 3.4 Every divergence is listed with the owner-approved exception that covers it, or the test fails
+- [x] 3.4 Every divergence is listed with the owner-approved exception that covers it, or the test fails
 
 ## 4. Acceptance
 - [ ] 4.1 DAG gate met: equal maps and the Python-disabled MCP integration round completed; reports written to `parity/reports/phase2/`; the input inventory and preservation records are complete, and the reports identify the original reference or an explicitly owner-authorized changed baseline (items 2.6-2.8)
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
-- [ ] 5.1 Update or create documentation covering the implementation
-- [ ] 5.2 Write tests covering the new behavior
+- [x] 5.1 Update or create documentation covering the implementation
+- [x] 5.2 Write tests covering the new behavior
 - [ ] 5.3 Run tests and confirm they pass
 
 ## 6. Notes (decision 260; 2026-10-18, branch `wt/pilot-skeleton-mage`)
@@ -126,3 +126,34 @@
 - Front T (`07a53574`): 20 masks (19 stack inputs, `M_cloth` auxiliary), r1 produced and an independent repeat byte-identical (repeat record `83821efbe840cd59…`); no colour.
 - Front V (`acb59fa1`): `25-Faixa-Cintura_AO_v5.png` 16-bit grey 2048 (`cfcb22a6…f145`), r1 produced and an independent repeat byte-identical (repeat record `a1395597a9853a4f…`).
 - All are new current-round substitutes, not the lost round's files. Front R's generator (`08226682`) and the rebuild adapters (`12593445`) consume them; the request stays refused until T_sash has a colour producer and the two swatches exist (owner authorization for an image generator pending). No item checked.
+
+## 17. The re-run as the new golden (decision 399; 2026-11-03)
+- Owner (2026-11-03): re-run the waist-v5 round as a new golden, with the two swatches from the image generator, and EXC-012 on EXC-010's terms. His answers are quoted verbatim in decision 399. That decision is the changed baseline of decision 300 item 8: the basis is `phase2/tier1/sash-v5-current`. `phase2/tier1/sash-v5` stays unrecordable, and `sash-v5-migration` is retained.
+- Route: the input contract's (`sash_current.py`, then `record-script`). The original `script_run manifest --pilot sash` cannot run, because its arguments files are lost.
+- Swatches: one Astra `image_gen` session, with the committed `swatch-prompts.txt` blocks (only the save path changed) and the two stored crops attached.
+  - Cloth `ab5168c6…` and hem `2d69035f…`, both 1,254 px RGB, saved as `Textures/Swatches/*-BaseColor-v2.png`. The sandbox refused the save, so each was copied byte for byte.
+  - Each has a private provenance record as a generated current-round substitute. Assets3D collaboration note seq 2241.
+- `T_sash`: front W's producer, r1 then an independent repeat, `reproduced` and byte-identical (`c58e8578…`). The private inputs file has 34 roles. The request was written and every input stored (`376b0e88`).
+- Base assembly: not needed by the re-run, and not regenerable by its pinned builder, whose input pin fails (`896ee8c9…` against `25842ed8…` on disk). Details in decision 399 §3. No owner question.
+- 2.1, 2.2, 2.7 (done): request and admitted manifest under `painter-12.2.0_js-api.1.1.20-env-a981b586eae7/{requests,manifests}/phase2/tier1/sash-v5-current.json`.
+  - Recorded twice under OCIO, each in its own Painter process, under the Assets3D painter lock (acquired and released). `envelope check --request` gave `ocio_reference`.
+  - Each process gave r1, r1-repeat and r2 byte-identical on 5/5 maps, and both processes gave the same 15 blobs.
+  - Admitted: golden record `2cc1ba7e…`, 17 private records. The second record `668fbeee…` is stored, not admitted. `store verify` is ok.
+- 2.8 (done): the owner's scope decision is decision 399. The inventory's routes are answered by it.
+- 2.3, 2.4, 3.2 (done): `tests/parity/tier1/sash_v5` (`runner.py`: the Wand's `reopened_compared(..., diagnostic=True)` under the manifest's `OCIO`). Two rebuilds plus save/reopen, every receipt `non_conformant` with only decisions 245/259 bypassed. The rebuilds are `repeatable`, and the reopen export equals the first byte for byte. The report is `parity/reports/phase2/tier1-sash-v5.json`.
+- 3.1 (open, **fail under EXC-012**):
+  - The four material maps are exact on every covered texel.
+  - The Normal differs on 1,059 values on island-edge texels (excepted) and on **196 values on 126 covered interior texels** (max 39 codes), which bound 1 holds exact.
+  - A one-shot diagnostic rebuild put those texels 2 to 5 texels inside the islands, none next to another island. None is within 1 texel of a differing Height texel, and 3 are within 2. So they are not the Height stencil's edge class, and their cause is undiagnosed.
+  - EXC-012 is not widened (decision 259 §6). The next step is a root-cause investigation of the measure export's Normal at depth 2 to 5 on the Sash (decision 308's island rule).
+- 3.4 (done): the uncovered divergence fails the test, as it must. Covered by `tests/parity/test_verdict.py::test_exc012_*` (EXC-010's seven injected defects on the Sash).
+- 2.5, 3.3 (open): `parity/reports/phase2/sash-v5-mcp-round.json`. Python was disabled and `run_python` not listed (67 tools), every call typed. The create, mesh maps, save, sync and save calls succeeded. The production `export` was refused (`capability_gap: NotYetSupported`, decisions 245/259), so the outcome is `refused` and the maps are `not_measured`. The test is an expected failure only for that refusal: the export, `NotYetSupported`, and a reason naming the islands and decision 245's or 259's refusal. The round keeps the reason in memory (`Round.refusal_reason`), never in the public report. Any other refusal fails, as `test_only_the_islanded_export_refusal_is_expected` checks on the host.
+  - That narrowing came from Codex's review and landed after the GPU run. The real reply's reason has not been checked against it, because no run was repeated. The next round run checks it.
+  - To complete it: either the exact island export (`phase3.1_export-island-padding`), or a measure-export close of the typed round's saved project, as decision 398 §4 did for the Tunic. The second needs the round report schema to carry the measure export, and is not done here.
+- Against the delivered project (`current_reference`, offline): `different`. Metallic is byte-identical. Height differs on 31 values by 1 code, Roughness on 1 value, Normal on 1,537 values by at most 6, and BaseColor differs (the new swatches).
+- Tests run once (2026-11-03):
+  - `tests/parity/tier1/sash_v5` (GPU, under the native lock): 1 passed (save/reopen), 1 failed (3.1, above), 1 xfailed (round).
+  - `tests/parity/test_verdict.py`: 61 passed. `tests/parity/test_guard.py`: 130 passed.
+  - ruff, `ruff format --check` and mypy clean on the touched files.
+- Still open: 2.5, 3.1, 3.3, 4.1, 5.3. Not archived.
+
