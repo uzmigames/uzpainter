@@ -449,7 +449,9 @@ def drive_native(
         },
     )
     assert imported is not None
-    resource = imported["resource"]
+    resource = imported.get("returned", {}).get("resource")  # a mutation returns under `returned`
+    if not isinstance(resource, dict):
+        raise fail("resource_import returned no resource")
     if resource["sha256"] != pinned:
         raise fail(f"the imported Normal is {resource['sha256']}, not the pinned {pinned}")
     maps = {NORMAL_USAGE: {"resource": resource["url"]}}

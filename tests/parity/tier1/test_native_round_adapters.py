@@ -715,7 +715,8 @@ class Session:
         if tool == "resource_import":
             name = arguments["name"]
             url = f"resource://project/{name}?version={self.sha256}"
-            return {"result": {"resource": {"name": name, "sha256": self.sha256, "url": url}}}
+            resource = {"name": name, "sha256": self.sha256, "url": url, "usage": "TEXTURE"}
+            return {"result": {"status": "committed", "returned": {"resource": resource}}}
         if tool == "set_mesh_maps":
             self.maps = {"Normal": {"sha256": self.bound, "name": NORMAL, "invalid": False}}
         if tool == "sync_stack" and self.after_sync is not None:
