@@ -3,8 +3,10 @@
 
 ## 2. Joined items
 - [ ] 2.1 phase1.26_gate-g1 accepted (previous gate)
-- [ ] 2.2 phase2.4_supervisor-worker accepted: worker-kill, lost-acknowledgement and stalled-fence recovery evidence in `parity/reports/phase2/supervisor-settling.json`
-- [ ] 2.3 phase2.3_realtime-preview accepted: window-independent captures and non-pausing preview in `parity/reports/phase2/preview-settling.json`
+- [x] 2.2 phase2.4_supervisor-worker accepted: worker-kill, lost-acknowledgement and stalled-fence recovery evidence in `parity/reports/phase2/supervisor-settling.json`
+  - Reconciled 2026-11-02 against `.rulebook/archive/2026-10-20-phase2.4_supervisor-worker/tasks.md`, item 4.1 and the acceptance run of 2026-10-20: 14 DX12 cases and 13 GPU-free Vulkan cases passed. Decision 326 records the Wand prerequisite scope split; decision 221 assigns the real-Vulkan obligations to `phase3.1_vulkan-compute-parity`. This join records the existing acceptance, not a new run or acceptance of Wand or G1.
+- [x] 2.3 phase2.3_realtime-preview accepted: window-independent captures and non-pausing preview in `parity/reports/phase2/preview-settling.json`
+  - Reconciled 2026-11-02 against `.rulebook/archive/2026-10-20-phase2.3_realtime-preview/tasks.md`, section 12: acceptance includes six refreshed DX12/CPU preview tests and section 11's full-size Wand run. Decisions 326 and 221 retain the Wand parity and Vulkan obligations in their owning tasks. G2 prerequisites, pilot joins and acceptance remain open.
 - [ ] 2.4 phase2.10_pilot-tunic-recovery accepted: Tunic v10 Tier 1 maps and dump-and-rebuild under the exception policy
 - [ ] 2.5 Reached through P2-TUNIC and confirmed: phase2.8_mcp-server, phase2.2_recipe-and-diagnostics, phase2.9_pilot-belt (Belt v5 Tier 1 and the Python-disabled MCP-only round)
 
