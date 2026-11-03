@@ -71,10 +71,10 @@ send no export and each project is exported instead by `measured_export`, a sepa
 (the original after its session, the rebuilt one after its save and reopen) and exports the job's
 `config_export.config`, only its `exportPath` changed. Its report must name the measure mode, its
 receipt must be marked `non_conformant` with every bypassed refusal one of the Tier 1 runner's
-`DECIDED_REFUSALS`, and the receipt must list every written file with its SHA-256, or the run
-fails. A refusal is kept as the side's refusal, never counted as equal files. Its maps are NOT
-conformant: the report's `pass` then means the rebuild reproduces the same bytes (item 3.4), never
-a production delivery.
+`DECIDED_REFUSALS`, and the receipt must list exactly the files the export returned, each name
+once and with its SHA-256, or the run fails. A refusal is kept as the side's refusal, never
+counted as equal files. Its maps are NOT conformant: the report's `pass` then means the rebuild
+reproduces the same bytes (item 3.4), never a production delivery.
 
 Assumptions (accepted by the coordinator, 2026-11-02): the original is a fresh reopen of the
 state round's saved project, and the state round's own export is not reused; `display_get` and
@@ -527,10 +527,20 @@ def measured_export(
     undecided = [b for b in bypassed if not any(k in b["refusal"] for k in DECIDED_REFUSALS)]
     if undecided:
         raise RecipeFailed(f"the measure export bypassed refusals no decision names: {undecided}")
-    listed = {Path(str(f["path"])).name: str(f["sha256"]) for f in receipt["files"]}
-    unlisted = sorted(n for n, p in files.items() if listed.get(n) != sha256_of(p))
-    if not files or unlisted:
-        raise RecipeFailed(f"the measure export's receipt does not list {unlisted or 'any file'}")
+    names = [Path(str(f["path"])).name for f in receipt["files"]]
+    if len(set(names)) != len(names):
+        raise RecipeFailed(f"the measure export's receipt names a file twice: {sorted(names)}")
+    listed = {name: str(f["sha256"]) for name, f in zip(names, receipt["files"], strict=True)}
+    if not files or set(listed) != set(files):  # every map the export returned, and no other
+        raise RecipeFailed(
+            f"the measure export's receipt lists {sorted(listed)}, not the files it returned "
+            f"{sorted(files)}"
+        )
+    changed = sorted(n for n, p in files.items() if listed[n] != sha256_of(p))
+    if changed:
+        raise RecipeFailed(
+            f"the measure export's receipt does not list {changed} with their hashes"
+        )
     return Export(files, None)
 
 

@@ -294,13 +294,24 @@ def measure_process(world: World, args: list[str]) -> subprocess.CompletedProces
     path.write_bytes(content(world.entry(project_file)))
     fault = world.measure.get("receipt")
     bypassed = [{"refusal": "an undecided refusal" if fault == "undecided" else DECIDED}]
+    returned = [str(path)]
     listed = [] if fault == "unlisted" else [{"path": str(path), "sha256": sha256_file(path)}]
+    if fault == "extra":  # a file the export never wrote nor returned
+        listed.append({"path": str(out / "extra.png"), "sha256": "0" * 64})
+    elif fault == "missing":  # a map written and listed, which the export does not return
+        normal = out / f"{TUNIC_SET}_Normal.png"
+        normal.write_bytes(b"normal")
+        listed.append({"path": str(normal), "sha256": sha256_file(normal)})
+    elif fault == "duplicate":
+        listed.append(dict(listed[0]))
+    elif fault == "hash":
+        listed[0]["sha256"] = "0" * 64
     receipt: dict[str, Any] = {"files": listed}
     if fault != "conformant":
         receipt["non_conformant"] = {"bypassed": bypassed}
     (out / "receipt.json").write_text(json.dumps(receipt), encoding="utf-8")
     (out / "current.json").write_text(json.dumps({"receipt": "receipt.json"}), encoding="utf-8")
-    result = {"status": "ExportStatus.Success", "message": "", "files": {TUNIC_SET: [str(path)]}}
+    result = {"status": "ExportStatus.Success", "message": "", "files": {TUNIC_SET: returned}}
     report = {"status": "ok", "result": result, "diagnostic": mode}
     return subprocess.CompletedProcess(args, 0, f"UZP_JSON:{json.dumps(report)}\n", "")
 
@@ -623,15 +634,21 @@ def test_measure_exports_refused_alike_keep_their_message_and_never_pass(
     [
         ("receipt", "conformant", "not marked non_conformant"),
         ("receipt", "undecided", "bypassed refusals no decision names"),
-        ("receipt", "unlisted", "receipt does not list"),
+        ("receipt", "unlisted", "receipt lists"),
+        ("receipt", "extra", "receipt lists"),
+        ("receipt", "missing", "receipt lists"),
+        ("receipt", "duplicate", "names a file twice"),
+        ("receipt", "hash", "with their hashes"),
         ("mode", "", "without the measure mode"),
     ],
 )
 def test_a_measure_export_outside_its_contract_fails(
     world: World, tmp_path: Path, fault: str, value: str, message: str
 ) -> None:
-    """A receipt not marked `non_conformant`, one naming a refusal no decision names, one that
-    does not list the written file, or a process not in the measure mode, fails the run."""
+    """A receipt not marked `non_conformant`, one naming a refusal no decision names, one whose
+    files are not exactly those the export returned (none, an extra file, or a map the export
+    left out of its result on both sides), one naming a file twice or with another hash, or a
+    process not in the measure mode, fails the run."""
     world.measure[fault] = value
     with pytest.raises(tunic_recipe.RecipeFailed, match=message):
         run(world, tmp_path, diagnostic=True)
