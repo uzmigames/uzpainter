@@ -29,6 +29,15 @@ Counts are of values (components) unless they say texels. The model is `tools/pa
 3. **The owner** of the magnification is a new Phase 3 level-1 task, `phase3.1_height-magnification-fit`. It is not `phase3.1_export-island-padding`: that task owns padding and the island-edge Normal on UV islands, an export problem, while this one is the compositor's bilinear filter on a fully covered set. No pilot needs it (§4).
 4. **The Normal mesh map's decode** floors z at float32(0.001) before the normalise, in the combined virtual texel and on the padded normal (`MeshDecode` in `height_to_normal.cpp`, the `V_FLAG_MESH_TILE` decode in `shaders/evaluator_blend.hlsl`, `mesh_decode` in `tools/parity/fit/normal.py`). The Normal channel's decode and the normal-map blends keep `arith::DecodeNormal` (z floored at 0), which their own goldens fit; the geometry-only pass-through still copies the codes.
 
+## Results (2026-11-03)
+
+Native change 7d35eb99, under the native lock, one `zig build evaluator-tests` and one `zig build painter -Doptimize=ReleaseFast` (`UzPainter.exe` `4900af06…`), DX12.
+
+- **Evaluator** (`tests/evaluator/test_compositor_height_normal.py`, `tests/parity/fit/test_normal.py`): 63 passed. Every earlier height-normal golden stays exact on the CPU and DX12, the mesh-map goldens included; the published `height-to-normal.json` still reproduces. New: the 4096 golden's scale (§1), its refused magnification (§2), a 1:1 4096 px Height evaluated on the CPU and DX12 with normals equal to the model's, and the native `height-normal` checks (Sharp 4096 admitted; Sobel at 4096, 4096 x 2048 and 8192 refused; 16x, 32x and an anisotropic scale at 4096 refused; 1:1 and Nearest at 4096 and 16x on a 256 set admitted; mesh operands with z <= 0 in both conventions, on the CPU and, through `height-normal-gpu-vs-cpu`, on DX12).
+- **The Sash** (`tests/parity/tier1/sash_v5`): 4 passed, 1 xfailed (the production round's expected islanded refusal). Tier 1 is now **`pass` under EXC-012**: the Normal's covered interior differs in 0 values (was 196), its island edge in 880 (was 1,059), its padding in 66,753; every other map's covered texels are equal (f1c2b21a).
+- **The Wand** (`tests/parity/tier1/wand_v1/test_wand_v1.py`): 2 passed, its report unchanged but for the build hash. Its mesh map has no covered texel with z <= 0.
+- **The Tunic** (`test_mcp_round.py`, its three real-run tests): the height-to-normal refusal is gone, and no magnification refusal is met (§4). The exports now stop on the GPU request deadline instead: `timeout {backend: dx12, reason: the GPU did not complete the submitted work before the deadline (request deadline 60000 ms)}`, raised by `uzpainter.export.export_project_textures` in the rebuild's `run` process, before any file is written. Both Tier 1 rebuilds failed so in the module fixture (the two Tier 1 tests error at setup, no report written); the measure-mode recipe test failed with `RecipeFailed`, whose private diagnostic was not kept (pytest's `tmp_path` retention of 1 removed it before it was read), so its cause is not confirmed to be the same deadline. The `run` verb's export engine uses the default `EngineOptions::requestDeadline` of 60 s (`src/render/engine_thread.h`) and has no `--gpu-deadline-ms` option, unlike `--mcp` and `--worker`. No map was compared; items 2.5, 3.1, 3.4 and 3.5 stay open on this new blocker.
+
 ## Alternatives Considered
 
 - **Refuse magnification by factor (above 8) instead of set size.** Rejected: it would refuse P20-A's recorded-exact 16x Height and still admit an unrecorded 2x magnification at 4096.
@@ -38,6 +47,6 @@ Counts are of values (components) unless they say texels. The model is `tools/pa
 
 ## Consequences
 
-- The Tunic's 4096 px export is no longer refused by the height-to-normal scale (Results below).
+- The Tunic's 4096 px export is no longer refused by the height-to-normal scale; it now stops on the 60 s GPU request deadline of the `run` export (Results).
 - A Height bitmap magnified onto a 4096 px set (a tiling or low-resolution height map) is refused until `phase3.1_height-magnification-fit` fits it.
 - Normal mesh maps with texels of z <= 0 now combine as Painter does; the Sash's 196 interior values were their only recorded instance.
