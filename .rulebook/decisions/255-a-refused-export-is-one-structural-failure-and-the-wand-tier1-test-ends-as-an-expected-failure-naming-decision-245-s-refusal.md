@@ -3,6 +3,7 @@
 **Status**: accepted
 **Date**: 2026-10-13
 **Related Tasks**: phase1.25_pilot-wand
+**Superseded in part by**: decision 395 (2026-11-03). §3: the Wand's Tier 1 test runs the diagnostic measure export under EXC-010 and no longer ends as an expected failure; any refusal fails it.
 
 ## Context
 

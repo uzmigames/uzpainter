@@ -88,8 +88,9 @@ def register_problems(
 
     Each (exception_id, version) appears once, a version that withdraws its id (decision 259)
     has a lower version of that id to withdraw, every entry's decision_id names a decision
-    recorded under `.rulebook/decisions/`, and every golden an entry's domain lists (decision 307)
-    resolves through the current envelope with that domain.
+    recorded under `.rulebook/decisions/`, every golden an entry's domain lists (decision 307)
+    resolves through the current envelope with that domain, and an entry with a bound that
+    excepts outputs (decision 395) lists the goldens those outputs belong to.
     """
     from tools.parity.verdict import resolve_golden  # the verdict imports this module
 
@@ -112,6 +113,12 @@ def register_problems(
             problems.append(
                 f"entries/{index}: decision {entry['decision_id']} is not recorded in "
                 f"{decisions_dir.as_posix()}"
+            )
+        if "goldens" not in entry["domain"] and any(
+            "excepted_outputs" in bound for bound in entry["bounds"]
+        ):
+            problems.append(
+                f"entries/{index}: {key[0]} version {key[1]} excepts outputs but lists no goldens"
             )
         for golden_id in entry["domain"].get("goldens", []):
             golden = resolve_golden(golden_id)

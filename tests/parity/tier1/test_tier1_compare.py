@@ -20,6 +20,7 @@ import pytest
 
 from tests.adapters.assets3d.wand import Call
 from tests.parity.tier1.wand_v1.runner import refusal
+from tools.parity.coverage import coverage, distance_bands
 from tools.parity.envelope.registry import current_envelope
 from tools.parity.feasibility import png
 from tools.parity.fit.decode import Decoded, decode
@@ -380,6 +381,57 @@ def test_padding_texels_are_excepted_and_published_while_covered_texels_stay_exa
     report = compare(subject(), resolved, store, runs, IDENTITY, [entry])
     assert report["equality_to_painter"]["outcome"] == "fail"
     assert all("padding" not in m for m in report["equality_to_painter"]["maps"])
+
+
+# A UV triangle pair covering 3 x 3 texels of the 4 x 4 maps, on a tile border row: x wraps and y
+# does not, so two texels are interior and seven are island-edge texels.
+WIDE_ISLAND = np.array(
+    [[[0.05, 0.05], [0.7, 0.05], [0.7, 0.7]], [[0.05, 0.05], [0.7, 0.7], [0.05, 0.7]]]
+)
+
+
+def test_exc010_excepts_the_normal_edge_by_its_recorded_output_and_publishes_it(
+    tmp_path: Path,
+) -> None:
+    """Decision 395: the comparison names each map's golden and recorded output, so EXC-010 (scoped
+    here to the synthetic golden, its Normal's output excepted) passes padding differences on every
+    map and island-edge differences on the Normal only; the padding block publishes the edge
+    texels. One code on the Normal's interior, or on another map's edge, fails."""
+    resolved, store = stable_golden(tmp_path)
+    island = Subject(MANIFEST, "2" * 64, REGIONS, frozenset({NORMAL}), {SET: WIDE_ISLAND})
+    entries = load_json(REPO_ROOT / "parity" / "exceptions.json")["entries"]
+    (entry,) = [e for e in entries if e["exception_id"] == "EXC-010"]
+    domain = {**entry["domain"], "selector": MANIFEST["domain"], "goldens": [MANIFEST["golden_id"]]}
+    excepted = {**entry["bounds"][1], "excepted_outputs": [f"export/{NORMAL}"]}
+    entry = {**entry, "domain": domain, "bounds": [entry["bounds"][0], excepted]}
+    covered = coverage(WIDE_ISLAND, 4, 4)
+    edge = covered & (distance_bands(~covered, 1) == 1)
+    assert (int(covered.sum()), int(edge.sum())) == (9, 7)
+    interior = np.argwhere(covered & ~edge)[0]
+    rim = np.argwhere(edge)[0]
+    padded = maps()
+    padded[BASE][~covered] += 900
+    padded[NORMAL][rim[0], rim[1], 0] -= 537
+    runs = (candidate(tmp_path / "a", padded), candidate(tmp_path / "b", padded))
+    report = compare(island, resolved, store, runs, IDENTITY, [entry])
+    assert validation_errors(report, Schema.COMPARISON_REPORT) == []
+    equality = report["equality_to_painter"]
+    assert equality["outcome"] == "pass", equality
+    assert equality["exceptions_relied_on"] == [{"exception_id": "EXC-010", "version": 1}]
+    normal = by_id(equality["maps"])[f"{SET}/{NORMAL}"]["padding"]
+    assert (normal["covered_texels"], normal["edge_texels"]) == (9, 7)
+    assert normal["edge"]["abs_diff"]["max"] == 537
+    assert normal["edge"]["differing"]["count"] == 1
+    base = by_id(equality["maps"])[f"{SET}/{BASE}"]["padding"]
+    assert base["edge"]["differing"]["count"] == 0
+    assert base["uncovered"]["abs_diff"]["max"] == 900
+    for name, (row, col) in ((NORMAL, interior), (BASE, rim)):
+        wrong = maps()
+        wrong[name][row, col, 0] += 1
+        runs = (candidate(tmp_path / f"{name}-c", wrong), candidate(tmp_path / f"{name}-d", wrong))
+        report = compare(island, resolved, store, runs, IDENTITY, [entry])
+        assert report["equality_to_painter"]["outcome"] == "fail", name
+        assert report["equality_to_painter"]["exceptions_relied_on"] == [], name
 
 
 def test_an_unstable_golden_without_an_entry_is_blocked(tmp_path: Path) -> None:

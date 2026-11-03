@@ -3,6 +3,7 @@
 **Status**: accepted
 **Date**: 2026-10-18
 **Related Tasks**: phase1.25_pilot-wand, phase1.18_export-engine, phase1.16_export-processing-encoders
+**Superseded in part by**: decision 395 (2026-11-03), for the golden `phase1/tier1/wand-v1` only. The owner approved EXC-010 himself: the Wand v1 padding and its Normal's island-edge texels may differ, everything else stays exact. §2 no longer fails a Wand padding difference under EXC-010; §4's production refusal is unchanged, and only the Wand's Tier 1 evidence is written past it by the diagnostic measure export.
 
 ## Context
 

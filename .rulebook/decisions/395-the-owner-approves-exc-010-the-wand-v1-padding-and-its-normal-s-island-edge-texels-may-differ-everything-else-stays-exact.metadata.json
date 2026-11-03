@@ -1,0 +1,9 @@
+{
+  "id": 395,
+  "slug": "the-owner-approves-exc-010-the-wand-v1-padding-and-its-normal-s-island-edge-texels-may-differ-everything-else-stays-exact",
+  "title": "The owner approves EXC-010: the Wand v1 padding and its Normal's island-edge texels may differ, everything else stays exact",
+  "status": "accepted",
+  "date": "2026-11-03",
+  "relatedTasks": ["phase1.25_pilot-wand", "phase1.18_export-engine"],
+  "supersededBy": null
+}

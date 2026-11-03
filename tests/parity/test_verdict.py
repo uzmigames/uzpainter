@@ -791,6 +791,134 @@ def test_a_withdrawal_leaves_nothing_in_force_and_needs_a_version_to_withdraw() 
     assert register_problems(load_json(REGISTER_PATH)) == []
 
 
+# --- decision 395: EXC-010, the owner's Wand v1 scope ------------------------------------------
+
+WAND_GOLDEN = "phase1/tier1/wand-v1"
+WAND_NORMAL = "export/11-Varinha-Madeira_v1r2_Normal"
+WAND_BASE = "export/11-Varinha-Madeira_v1r2_BaseColor"
+
+
+def exc010() -> dict[str, Any]:
+    (entry,) = [e for e in load_json(REGISTER_PATH)["entries"] if e["exception_id"] == "EXC-010"]
+    return dict(entry)
+
+
+def island_classes(covered: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """The island-edge texels (covered, with an uncovered 8-neighbour) and the interior ones."""
+    edge = np.zeros_like(covered)
+    edge[2:6, 2:6] = True
+    edge[3:5, 3:5] = False
+    return edge, covered & ~edge
+
+
+def wand_comparison(
+    candidate: np.ndarray, mask: np.ndarray | None, output: str | None, golden: str = WAND_GOLDEN
+) -> Comparison:
+    oracle, _ = scope_split_case()
+    domain = "tier1/pilot/wand-v1"
+    return Comparison(
+        "1", domain, oracle, candidate, covered=mask, golden_id=golden, output_id=output
+    )
+
+
+def test_exc010_excepts_the_padding_and_the_normal_island_edge_only() -> None:
+    """EXC-010 version 1 (decision 395), with the published register: padding differences pass on
+    every map, island-edge differences pass on the Normal only, and each pass names EXC-010; an
+    exact map relies on nothing; another golden of the domain is not covered."""
+    register: list[dict[str, Any]] = load_json(REGISTER_PATH)["entries"]
+    entry = exc010()
+    identity = (entry["version"], entry["decision_id"], entry["approved_on"])
+    assert identity == (1, "395", "2026-11-03")
+    assert entry["domain"] == {
+        "kind": "asset_map",
+        "selector": "tier1/pilot/wand-v1",
+        "goldens": [WAND_GOLDEN],
+    }
+    assert entry["evidence"]["basis"] == "owner_scope_split"
+    assert [e["exception_id"] for e in in_force(register)].count("EXC-010") == 1
+    oracle, covered = scope_split_case()
+    edge, _ = island_classes(covered)
+    padded = oracle.copy()
+    padded[~covered] = 65535 - padded[~covered]  # every padding texel wrong
+    both = padded.copy()
+    both[edge] += 537  # and every island-edge texel
+    passing = [(padded, WAND_BASE), (padded, WAND_NORMAL), (both, WAND_NORMAL)]
+    for candidate, output in passing:
+        verdict = evaluate(wand_comparison(candidate, covered, output), register)
+        assert verdict.outcome is Outcome.PASS, output
+        assert verdict.exceptions_relied_on == (("EXC-010", 1),), output
+    exact = evaluate(wand_comparison(oracle.copy(), covered, WAND_NORMAL), register)
+    assert exact.outcome is Outcome.PASS and exact.exceptions_relied_on == ()
+    other = evaluate(
+        wand_comparison(padded, covered, WAND_NORMAL, "phase1/tier1/wand-v1-float"), register
+    )
+    assert other.outcome is Outcome.FAIL and other.exceptions_relied_on == ()
+    assert register_problems(load_json(REGISTER_PATH)) == []
+
+
+def test_exc010_catches_injected_defects() -> None:
+    """EXC-010's defect test: with the padding wrong on every case (excepted), one code on one
+    covered interior texel fails on any map, the Normal included; an island-edge difference fails
+    on any map but the Normal, and on the Normal when the comparison names no output; so do a
+    uniform offset and a missing or mis-sized coverage mask."""
+    register: list[dict[str, Any]] = load_json(REGISTER_PATH)["entries"]
+    entry = exc010()
+    oracle, covered = scope_split_case()
+    edge, interior = island_classes(covered)
+    padding = oracle.copy()
+    padding[~covered] += 7
+    defects: dict[str, tuple[np.ndarray, np.ndarray | None, str | None]] = {}
+    inside = padding.copy()
+    inside[3, 4] += 1
+    assert interior[3, 4]
+    defects["one_covered_interior_value_off_by_one_code"] = (inside, covered, WAND_BASE)
+    defects["one_normal_interior_value_off_by_one_code"] = (inside, covered, WAND_NORMAL)
+    rim = padding.copy()
+    rim[2, 3] += 1
+    assert edge[2, 3]
+    defects["one_edge_value_off_by_one_code_on_another_map"] = (rim, covered, WAND_BASE)
+    defects["normal_edge_difference_naming_no_output"] = (rim, covered, None)
+    defects["uniform_offset_one_code"] = (padding + 1, covered, WAND_NORMAL)
+    defects["no_coverage_mask"] = (padding, None, WAND_NORMAL)
+    defects["coverage_mask_of_another_size"] = (padding, np.ones((4, 4), bool), WAND_NORMAL)
+    assert set(defects) == set(entry["defect_detection_test"]["injected_defects"])
+    for name, (candidate, mask, output) in defects.items():
+        for entries in (register, [entry]):
+            verdict = evaluate(wand_comparison(candidate, mask, output), entries)
+            assert verdict.outcome is Outcome.FAIL, name
+            assert verdict.exceptions_relied_on == (), name
+    # The edge difference on the Normal is the one the entry excepts.
+    excepted = evaluate(wand_comparison(rim, covered, WAND_NORMAL), [entry])
+    assert excepted.outcome is Outcome.PASS
+    # An island with no interior texel: the interior bound has nothing to hold, so nothing passes.
+    thin = np.zeros((8, 8), dtype=bool)
+    thin[2:4, 2:6] = True
+    no_interior = evaluate(wand_comparison(padding, thin, WAND_NORMAL), [entry])
+    assert no_interior.outcome is Outcome.FAIL
+    assert entry["defect_detection_test"]["outcome"] == "every_injected_defect_fails"
+
+
+def test_excepted_outputs_need_an_owner_scope_split_and_listed_goldens() -> None:
+    """The schema admits `excepted_outputs` and `covered_interior` only in an owner scope split,
+    which keeps one unexcepted max |delta| 0 bound; the register needs the entry's goldens."""
+    entry = exc010()
+    schema = "uzpainter/parity/exceptions/1"
+    assert is_valid({"schema": schema, "entries": [entry]}, Schema.EXCEPTIONS)
+    every = [{**b, "excepted_outputs": [WAND_NORMAL]} for b in entry["bounds"]]
+    other = load_json(REGISTER_PATH)["entries"][0]
+    stray = {
+        **other,
+        "bounds": [{**other["bounds"][0], "excepted_outputs": ["s5/basecolor/step46"]}],
+    }
+    inner = {"metric": "max_abs_diff", "scope": "covered_interior", "max": 0}
+    interior = {**other, "bounds": [inner]}
+    for bad in ({**entry, "bounds": every}, stray, interior):
+        assert not is_valid({"schema": schema, "entries": [bad]}, Schema.EXCEPTIONS)
+    unscoped = {**entry, "domain": {"kind": "asset_map", "selector": "tier1/pilot/wand-v1"}}
+    problems = register_problems({"schema": schema, "entries": [unscoped]})
+    assert problems == ["entries/0: EXC-010 version 1 excepts outputs but lists no goldens"]
+
+
 # --- decisions 034 and 037: the envelope -------------------------------------------------------
 
 CURRENT = "painter-12.1.5+js-api.1.1.20"

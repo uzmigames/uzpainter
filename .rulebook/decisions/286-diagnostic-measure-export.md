@@ -3,6 +3,7 @@
 **Status**: accepted
 **Date**: 2026-10-19
 **Related Tasks**: phase1.25_pilot-wand, phase1.18_export-engine, phase1.23_pyapi-pipeline-adapter
+**Superseded in part by**: decision 395 (2026-11-03). §2's "its report is never written as the Tier 1 report" no longer holds for the Wand v1: under EXC-010 the Tier 1 test runs in this mode and its report is the Tier 1 report.
 
 ## Context
 

@@ -23,7 +23,14 @@
   UV coverage mask marks covered (bound scope `covered`, `max_abs_diff` 0): the texels outside it
   are the ones the entry excepts. Without a mask, or with no covered texel, it covers nothing.
 - Decision 259: a version that withdraws its id leaves nothing of it in force. The owner withdrew
-  EXC-007, the only owner scope split, so a padding difference on the Wand fails.
+  EXC-007, so its terms except nothing.
+- Decision 395: an owner scope split may also bound `covered_interior`, the covered texels whose
+  eight neighbours are all covered (x wrapping, `tools.parity.coverage.distance_bands`), and a bound
+  may name `excepted_outputs` it does not apply to. EXC-010 holds every map of the Wand v1 golden
+  exact on its interior and every map but the Normal exact on every covered texel, so only the
+  Normal's island-edge texels and the padding texels may differ. A comparison naming no output is
+  held to every bound; without a mask, or with no texel in a bound's scope, the entry covers
+  nothing.
 - Decision 307: an entry whose domain lists `goldens` covers only comparisons that name one of
   them (`Comparison.golden_id`), and with `outputs` only those outputs (`Comparison.output_id`);
   an entry without them covers its whole domain. Two goldens of one domain thus keep their own
@@ -56,6 +63,7 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
+from tools.parity.coverage import distance_bands
 from tools.parity.envelope.registry import (
     corpus_manifests,
     current_envelope,
@@ -118,9 +126,10 @@ class Comparison:
     `exact_target` marks, for an unstable oracle, the comparison against the same-session
     recording r1 (decision 032). `covered` is the UV coverage mask of a texture map, rows by
     columns of its first two axes (`tools/parity/coverage.py`), for entries bounding the covered
-    texels only (decision 223); None when the comparison has none. `golden_id` and `output_id`
-    name the golden (its public manifest's `golden_id`) and the recorded output compared, for
-    entries scoped to some goldens or outputs of their domain (decision 307); None when unnamed.
+    texels only (decisions 223, 395); None when the comparison has none. `golden_id` and
+    `output_id` name the golden (its public manifest's `golden_id`) and the recorded output
+    compared, for entries scoped to some goldens or outputs of their domain (decision 307) and
+    bounds that except some outputs (decision 395); None when unnamed.
 
     `envelope_id` is the envelope of the golden compared against (`ResolvedGolden.envelope_id`);
     None means the caller resolved the golden through the current envelope. `oracle_side` marks
@@ -212,12 +221,20 @@ def _bound_holds(
 ) -> bool:
     metric: str = bound["metric"]
     limit = float(bound["max"])
+    if comparison.output_id is not None and comparison.output_id in bound.get(
+        "excepted_outputs", ()
+    ):
+        return True  # decision 395: this output is not held to this bound
     if bound["scope"] == "whole":
         return metric in metrics and metrics[metric] <= limit
-    if bound["scope"] == "covered":
+    if bound["scope"] in ("covered", "covered_interior"):
         covered = comparison.covered
         oracle = np.asarray(comparison.oracle)
-        if covered is None or covered.shape != oracle.shape[:2] or not covered.any():
+        if covered is None or covered.shape != oracle.shape[:2]:
+            return False
+        if bound["scope"] == "covered_interior":
+            covered = covered & (distance_bands(~covered, 1) > 1)
+        if not covered.any():
             return False
         inside = diagnose(oracle[covered], np.asarray(comparison.candidate)[covered]).metrics()
         return metric in inside and inside[metric] <= limit

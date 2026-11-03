@@ -3,6 +3,7 @@
 **Status**: accepted
 **Date**: 2026-10-13
 **Related Tasks**: phase1.25_pilot-wand, phase1.18_export-engine, phase3.2_unreal-ue56-packed-preset, phase2.1_recipe-diagnostic-views
+**Superseded in part by**: decision 395 (2026-11-03), §1 for the Wand v1 Tier 1 evidence only. That evidence is written by the diagnostic measure export under EXC-010; the production refusal stays on every asset.
 
 ## Context
 

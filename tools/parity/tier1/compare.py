@@ -58,11 +58,13 @@ dropped), with the tool's identity in `flip_tool`. It is a diagnostic only: it n
 verdict. Without the pinned package (hosted runners), or for float maps, it is omitted.
 
 Padding (decision 223): for a texture set whose UV triangles the subject names, each map is split
-by the set's texel-centre coverage (`tools.parity.coverage`). The verdict receives the coverage
-for an entry that bounds the covered texels only (an owner scope split; the one there was, EXC-007,
-is withdrawn, decision 259, so every padding difference fails), and the map's `padding` block
-publishes the covered and uncovered statistics and the uncovered ones within 1, 2, 4 and 8 texels
-of coverage, whatever the verdict.
+by the set's texel-centre coverage (`tools.parity.coverage`). The verdict receives the coverage,
+the golden's id and the map's recorded output id, for an entry that bounds the covered texels only
+(an owner scope split: EXC-007 is withdrawn, decision 259; EXC-010 excepts the Wand v1 padding
+and its Normal's island-edge texels, decision 395), and the map's `padding` block publishes the
+covered statistics, those of the island-edge texels among them (covered, with an uncovered
+8-neighbour, x wrapping), the uncovered statistics and the uncovered ones within 1, 2, 4 and 8
+texels of coverage, whatever the verdict.
 
 Nothing here writes into the repository except `write_report`: decoded values stay in memory, and
 the report holds numbers and hashes only.
@@ -216,10 +218,12 @@ def region_diagnostics(
 def padding_block(
     oracle: npt.NDArray[Any], candidate: npt.NDArray[Any], covered: Mask
 ) -> dict[str, Any]:
-    """The map split by coverage (decision 223): the covered texels, the uncovered ones and the
-    uncovered ones within each band of `BANDS` texels of coverage."""
+    """The map split by coverage (decision 223): the covered texels, the island-edge texels among
+    them (an uncovered 8-neighbour, x wrapping; decision 395), the uncovered ones and the uncovered
+    ones within each band of `BANDS` texels of coverage."""
     distance = distance_bands(covered)
     uncovered = ~covered
+    edge = covered & (distance_bands(uncovered, 1) == 1)
     bands = []
     for band in BANDS:
         within = uncovered & (distance <= band)
@@ -230,6 +234,8 @@ def padding_block(
         "covered_texels": int(covered.sum()),
         "uncovered_texels": int(uncovered.sum()),
         "covered": stat_block(diagnose(oracle[covered], candidate[covered])),
+        "edge_texels": int(edge.sum()),
+        "edge": stat_block(diagnose(oracle[edge], candidate[edge])) if edge.any() else None,
         "uncovered": (
             stat_block(diagnose(oracle[uncovered], candidate[uncovered]))
             if uncovered.any()
@@ -605,6 +611,8 @@ def equality(
                 exact_target=not stable[key],
                 envelope_id=resolved.envelope_id,
                 covered=covered,
+                golden_id=str(subject.manifest["golden_id"]),
+                output_id=output_id,
             ),
             register_entries,
         )

@@ -44,13 +44,20 @@
       "properties": {
         "metric": { "$ref": "#/$defs/metric" },
         "scope": {
-          "description": "whole: the statistic over the compared data; each_region: the statistic of every material region; covered: the statistic over the texels the comparison's UV coverage mask marks covered (decision 223), and the entry covers no comparison without such a mask.",
-          "enum": ["whole", "each_region", "covered"]
+          "description": "whole: the statistic over the compared data; each_region: the statistic of every material region; covered: the statistic over the texels the comparison's UV coverage mask marks covered (decision 223); covered_interior: the statistic over the covered texels whose eight neighbours are all covered (x wrapping, tools/parity/coverage.py `distance_bands`), so without the island-edge texels (decision 395). The entry covers no comparison without such a mask, nor one whose mask has no texel in the scope.",
+          "enum": ["whole", "each_region", "covered", "covered_interior"]
         },
         "max": {
           "description": "Inclusive upper bound: the metric passes when its value is <= max.",
           "type": "number",
           "minimum": 0
+        },
+        "excepted_outputs": {
+          "description": "Decision 395: the recorded outputs of the entry's `goldens` (the private record's output ids, `Comparison.output_id`) this bound does not apply to. Every other comparison of the entry is held to it, a comparison that names no output included. Owner scope splits only.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
         }
       }
     },
@@ -125,7 +132,7 @@
           "required": ["basis", "summary", "private_evidence", "uncontrolled_settings"],
           "properties": {
             "basis": {
-              "description": "owner_scope_split (decision 223): Painter is stable and the difference is UzPainter's unfitted rule, excepted by an owner scope decision outside the covered texels only.",
+              "description": "owner_scope_split (decisions 223, 395): Painter is stable and the difference is UzPainter's unfitted rule, excepted by the owner's own scope decision outside the covered texels, and on the island-edge covered texels of the outputs a bound names in `excepted_outputs`.",
               "enum": ["oracle_instability", "irreducible_difference", "noise_floor", "owner_scope_split"]
             },
             "summary": { "type": "string", "minLength": 1 },
@@ -250,23 +257,29 @@
           }
         },
         {
-          "description": "An owner scope split (decision 223) bounds only the covered texels, and holds them exactly equal: the texels outside the coverage are the ones it excepts.",
+          "description": "An owner scope split (decisions 223, 395) bounds only the covered texels, and holds them exactly equal: the texels outside the coverage are the ones it excepts. One of its bounds is max |delta| 0 on every comparison (no `excepted_outputs`); a bound that excepts outputs names the entry's goldens' outputs.",
           "if": {
             "properties": { "evidence": { "properties": { "basis": { "const": "owner_scope_split" } } } }
           },
           "then": {
             "properties": {
               "bounds": {
-                "items": { "properties": { "scope": { "const": "covered" } } },
+                "items": { "properties": { "scope": { "enum": ["covered", "covered_interior"] } } },
                 "contains": {
-                  "properties": { "metric": { "const": "max_abs_diff" }, "max": { "const": 0 } }
+                  "properties": { "metric": { "const": "max_abs_diff" }, "max": { "const": 0 } },
+                  "not": { "required": ["excepted_outputs"] }
                 }
               }
             }
           },
           "else": {
             "properties": {
-              "bounds": { "items": { "properties": { "scope": { "enum": ["whole", "each_region"] } } } }
+              "bounds": {
+                "items": {
+                  "properties": { "scope": { "enum": ["whole", "each_region"] } },
+                  "not": { "required": ["excepted_outputs"] }
+                }
+              }
             }
           }
         },

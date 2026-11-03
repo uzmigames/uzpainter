@@ -405,7 +405,7 @@
         },
         "private_difference_map_sha256": { "$ref": "#/$defs/sha256" },
         "padding": {
-          "description": "Decision 223: the map split by its texture set's UV coverage (tools/parity/coverage.py). `covered` is compared exactly; `uncovered` and each band (the uncovered texels within `within_texels` texels of coverage, chessboard distance, x wrapping) are the padding texels, published whatever the verdict.",
+          "description": "Decision 223: the map split by its texture set's UV coverage (tools/parity/coverage.py). `covered` is compared exactly unless a register entry excepts its island-edge texels (decision 395); `edge` is those texels (covered, with an uncovered 8-neighbour, x wrapping), null when there is none; `uncovered` and each band (the uncovered texels within `within_texels` texels of coverage, chessboard distance, x wrapping) are the padding texels, published whatever the verdict.",
           "type": "object",
           "additionalProperties": false,
           "required": ["covered_texels", "uncovered_texels", "covered", "uncovered", "bands"],
@@ -413,6 +413,8 @@
             "covered_texels": { "type": "integer", "minimum": 1 },
             "uncovered_texels": { "type": "integer", "minimum": 0 },
             "covered": { "$ref": "#/$defs/stat_block" },
+            "edge_texels": { "type": "integer", "minimum": 0 },
+            "edge": { "anyOf": [{ "$ref": "#/$defs/stat_block" }, { "type": "null" }] },
             "uncovered": { "anyOf": [{ "$ref": "#/$defs/stat_block" }, { "type": "null" }] },
             "bands": {
               "type": "array",

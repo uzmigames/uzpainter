@@ -705,6 +705,61 @@
       "approved_by": "owner",
       "approved_on": "2026-10-11",
       "notes": "SUP-027, decision 307. UzPainter equals r1 exactly on every map of steps 78, 80 and 82 of the compared sets (phase1.15_compositor-colour-fits item 2.2, decision 174). Entered under decision 032's standing approval; flagged for the owner's review."
+    },
+    {
+      "exception_id": "EXC-010",
+      "version": 1,
+      "tier": "1",
+      "domain": {
+        "kind": "asset_map",
+        "selector": "tier1/pilot/wand-v1",
+        "goldens": [
+          "phase1/tier1/wand-v1"
+        ]
+      },
+      "bounds": [
+        {
+          "metric": "max_abs_diff",
+          "scope": "covered_interior",
+          "max": 0
+        },
+        {
+          "metric": "max_abs_diff",
+          "scope": "covered",
+          "max": 0,
+          "excepted_outputs": [
+            "export/11-Varinha-Madeira_v1r2_Normal"
+          ]
+        }
+      ],
+      "evidence": {
+        "basis": "owner_scope_split",
+        "summary": "The owner approved this scope himself on 2026-11-03 (decision 395), in two answers: \"Aprovar exceção (Recomendado)\" to a new exception covering the island-edge texels of the Wand v1 Normal, and, asked again after the question had wrongly said that EXC-007 still covered the padding (it is withdrawn, decision 259), \"Incluir o padding (Recomendado)\" to one exception for Wand v1 in which the padding outside the islands and the Normal's island edge may differ, published per band, and everything else stays exact. Painter is stable on all five maps (r1, r1-repeat and r2 byte-identical); the differences are UzPainter's unfitted rules: the `infinite` padding ring across UV seams, seam corners and poles (phase1.25_pilot-wand item 2.7), and the Normal's island-edge texels, whose stencil reads Painter's padded Height outside the islands (decisions 245, 263, 308). Terms, for the golden phase1/tier1/wand-v1 only: every covered texel whose eight neighbours are all covered (x wrapping) is exactly equal on every map, the Normal included (bound 1); every covered texel is exactly equal on every map but the Normal (bound 2, which excepts only the Normal's output); so the only covered texels that may differ are the Normal's island-edge texels (covered, with an uncovered 8-neighbour: decision 223's result, 1,071 texels on the whole-tile path). The uncovered (padding) texels of all five maps may differ. A comparison without a coverage mask, with a mask of another size, or naming no output, is held to both bounds. Every report still publishes, per map, the covered, island-edge and uncovered statistics and the uncovered ones within 1, 2, 4 and 8 texels of coverage. No numeric bound is put on the excepted texels (decision 223 §3, kept). The entry is narrowed by a new version as item 2.7 makes parts exact; a Wand pass under it is reported as \"pass under EXC-010\", never as exact.",
+        "private_evidence": [
+          {
+            "sha256": "54fbcc2c259b578acd116412554e70940b472a500627a90177093e6fd4b3809f",
+            "description": "private golden record of phase1/tier1/wand-v1 under the current envelope painter-12.2.0+js-api.1.1.20-env-a981b586eae7 (recording R9, refreshed by decision 037's transaction): r1, r1-repeat and r2, the five exported maps of each and their blob hashes"
+          }
+        ],
+        "uncontrolled_settings": []
+      },
+      "defect_detection_test": {
+        "test_id": "tests/parity/test_verdict.py::test_exc010_catches_injected_defects",
+        "injected_defects": [
+          "one_covered_interior_value_off_by_one_code",
+          "one_normal_interior_value_off_by_one_code",
+          "one_edge_value_off_by_one_code_on_another_map",
+          "normal_edge_difference_naming_no_output",
+          "uniform_offset_one_code",
+          "no_coverage_mask",
+          "coverage_mask_of_another_size"
+        ],
+        "outcome": "every_injected_defect_fails"
+      },
+      "decision_id": "395",
+      "approved_by": "owner",
+      "approved_on": "2026-11-03",
+      "notes": "The owner's own yes to these terms (decision 259 §6), recorded verbatim in decision 395, which supersedes in part decision 259 §2 and §4 and decision 245 §1 for this golden only. EXC-007 stays withdrawn and its id is not reused. The Wand's Tier 1 candidate is the diagnostic measure export (decision 286), whose receipt records the refusals it bypassed; production keeps refusing both cases on every asset."
     }
   ]
 }
