@@ -16,6 +16,7 @@ Clean-room note (decision 002, `docs/licensing-and-clean-room.md`): some of thes
 | `painter-recording-backlog/` | `01-inventory.md`, `02-batch-plan.json` (snapshot of `python -m tools.parity.recorder.batch plan`) | What the next Painter slot records, and the open rulebook items that wait on a recording with no request yet (decision 367 front C, 2026-11-02) |
 | `sash-v5-current-round/` | `01-input-contract.md` | What the Sash v5 current round (`phase2/tier1/sash-v5-current`) can take from the admitted migration golden and what is still missing; detail stays private (decision 300 section 7, 2026-11-02) |
 | `tunic-v10-current-round/` | `01-input-contract.md` | The Tunic v10 current round (`phase2/tier1/tunic-v10-current`): its route, its pins, the 8 preserved masks and the Normal against the 9 substitutes, and the refusal rules; detail stays private (decision 300 sections 7-8, 2026-11-02) |
+| `padding-world-offset-residuals/` | `01-residual-diagnosis.md` | Why no frozen far-distance model fits the world-offset padding probe, what partly explains its residuals, and the next general hypothesis; counts only, no production change (`phase1.25_pilot-wand` item 2.7, decision 367 front A4, 2026-11-02) |
 
 ## Clean-room record
 
