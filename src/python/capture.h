@@ -27,6 +27,7 @@
 //
 // Every capture writes `<stem>.receipt.json` (`kCaptureReceiptSchema`) and returns it.
 
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -72,8 +73,10 @@ struct CaptureArguments {
 
 /// The GPU of `painter_viewport` captures in this process: the worker's own engine, or, with
 /// `engine` null (`UzPainter.exe run`, the test runner), a device of `backend` created for each
-/// capture. Dx12 and no engine until set.
-void SetCaptureGpu(render::Backend backend, render::Engine* engine);
+/// capture, each request bounded by `deadline` (none: the engine's default). Dx12 and no engine
+/// until set.
+void SetCaptureGpu(render::Backend backend, render::Engine* engine,
+                   std::optional<std::chrono::milliseconds> deadline = std::nullopt);
 
 /// Raises `PathTracerUnavailable` for `painter_iray`; the first step of every capture call.
 void RefuseUnavailableMode(std::string_view mode);

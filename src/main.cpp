@@ -69,6 +69,7 @@ constexpr const char* kUsage =
     "                                   (--orm <png> | --ao <png> --roughness <png> --metallic <png>)\n"
     "                                   [--emissive <png>] [--height <png>] [--specularweight <png>]\n"
     "       UzPainter.exe run <script.py> [args...] [--gpu-backend dx12|vulkan] [-- args...]\n"
+    "                         [--gpu-deadline-ms <ms>]\n"
     "                         [--diagnostic-measure-export]   (non-conformant, decision 286)\n"
     "                         [--test-gpu-unavailable]       (Debug-only device failure fixture)\n"
     "                         [--assets3d-production-required] (Assets3D production guard, decision 360)\n"

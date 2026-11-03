@@ -11,6 +11,9 @@
 // `painter_viewport` captures create one per call. Both use the reported process backend.
 // Before returning, run joins active jobs and cancels still-paused queued jobs, while capturing
 // callback output; the project is closed only after those jobs and their GPU resources finish.
+// `--gpu-deadline-ms <ms>` before `--` bounds every GPU request of those exports and captures, as
+// the worker's option does (a whole number from 1 to 86400000, given once); without it the
+// engine's default of 60 s (`render::EngineOptions::requestDeadline`) applies.
 // `--test-gpu-unavailable` before `--` is a Debug-only fixture: captures use an engine whose
 // device factory fails with `gpu_backend_unavailable` before loading any GPU. CPU operations
 // still run and `gpu_backend` keeps the requested backend. Release builds reject the flag.

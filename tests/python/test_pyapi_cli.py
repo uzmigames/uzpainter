@@ -151,6 +151,12 @@ def test_run_reports_a_raising_script_as_a_structured_failure(
         ["x.py", "--gpu-backend", "dx12", "--gpu-backend", "dx12"],
         ["x.py", "--diagnostic-measure-export", "--diagnostic-measure-export"],
         ["x.py", "--test-gpu-unavailable", "--test-gpu-unavailable"],
+        ["x.py", "--gpu-deadline-ms"],
+        ["x.py", "--gpu-deadline-ms", "0"],
+        ["x.py", "--gpu-deadline-ms", "86400001"],
+        ["x.py", "--gpu-deadline-ms", "1.5"],
+        ["x.py", "--gpu-deadline-ms", "-1"],
+        ["x.py", "--gpu-deadline-ms", "10", "--gpu-deadline-ms", "10"],
     ],
 )
 def test_run_usage_errors(painter: Path, args: list[str]) -> None:
@@ -484,6 +490,21 @@ def test_run_passes_gpu_failure_flag_after_separator(painter: Path, tmp_path: Pa
     (report,) = documents
     assert report["status"] == "ok"
     assert report["result"] == ["--test-gpu-unavailable"]
+
+
+def test_run_takes_a_gpu_deadline_before_the_separator(painter: Path, tmp_path: Path) -> None:
+    """`--gpu-deadline-ms <ms>` before `--` is the host's (1 to 86400000, as the worker's); it never
+    reaches the script, and after `--` it is the script's argument."""
+    path = script(tmp_path, "import sys\nresult = sys.argv[1:]\n")
+    for args, argv in (
+        (["a", "--gpu-deadline-ms", "1"], ["a"]),
+        (["--gpu-deadline-ms", "86400000", "a"], ["a"]),
+        (["--", "--gpu-deadline-ms", "5"], ["--gpu-deadline-ms", "5"]),
+    ):
+        status, documents, stderr = cli(painter, "run", path, *args)
+        assert status == 0, stderr
+        (report,) = documents
+        assert report["status"] == "ok" and report["result"] == argv, (args, report)
 
 
 def test_capabilities_prints_the_shipped_manifest(painter: Path, tmp_path: Path) -> None:

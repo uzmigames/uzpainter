@@ -2,7 +2,9 @@
 
 #include "python/run.h"
 
+#include <charconv>
 #include <chrono>
+#include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <memory>
@@ -29,12 +31,24 @@ namespace {
 namespace json = core::json;
 
 constexpr const char* kUsage =
-    "usage: UzPainter.exe run <script.py> [args...] [--gpu-backend dx12|vulkan] [--diagnostic-measure-export] "
-    "[--assets3d-production-required] [--test-gpu-unavailable] "
+    "usage: UzPainter.exe run <script.py> [args...] [--gpu-backend dx12|vulkan] [--gpu-deadline-ms <ms>] "
+    "[--diagnostic-measure-export] [--assets3d-production-required] [--test-gpu-unavailable] "
     "[-- args...]\n";
 constexpr std::string_view kDiagnosticFlag = "--diagnostic-measure-export";
 /// Requires an Assets3D production policy before any import, restore or mutation (decision 360).
 constexpr std::string_view kProductionFlag = "--assets3d-production-required";
+constexpr std::string_view kDeadlineFlag = "--gpu-deadline-ms";
+
+/// The milliseconds of `--gpu-deadline-ms`: a whole number from 1 to 86400000, as the worker's.
+std::optional<std::chrono::milliseconds> DeadlineMs(std::string_view text) {
+    std::uint64_t value = 0;
+    const auto [end, ec] = std::from_chars(text.data(), text.data() + text.size(), value);
+    if (text.empty() || ec != std::errc() || end != text.data() + text.size() || value == 0 ||
+        value > 86'400'000) {
+        return std::nullopt;
+    }
+    return std::chrono::milliseconds(value);
+}
 
 /// Set once, before the script runs, by `--diagnostic-measure-export` (decision 286).
 bool g_diagnosticMeasureExport = false;
@@ -63,6 +77,7 @@ bool DiagnosticMeasureExport() { return g_diagnosticMeasureExport; }
 
 int RunRunCommand(const std::vector<std::string>& args, std::FILE* out, std::FILE* err) {
     std::optional<render::Backend> backend;
+    std::optional<std::chrono::milliseconds> deadline;
     bool diagnostic = false;
     bool production = false;
     bool test_gpu_unavailable = false;
@@ -98,6 +113,21 @@ int RunRunCommand(const std::vector<std::string>& args, std::FILE* out, std::FIL
             return kRunUsage;
 #endif
             test_gpu_unavailable = true;
+            continue;
+        }
+        if (args[i] == kDeadlineFlag) {
+            if (deadline || i + 1 >= args.size()) {
+                std::fprintf(err, "%s", kUsage);
+                return kRunUsage;
+            }
+            deadline = DeadlineMs(args[++i]);
+            if (!deadline) {
+                std::fprintf(err,
+                             "UzPainter.exe run: --gpu-deadline-ms must be a whole number of milliseconds between 1 "
+                             "and 86400000\n%s",
+                             kUsage);
+                return kRunUsage;
+            }
             continue;
         }
         if (args[i] != "--gpu-backend") {
@@ -141,13 +171,14 @@ int RunRunCommand(const std::vector<std::string>& args, std::FILE* out, std::FIL
     if (test_gpu_unavailable) {
         SetExportGpu(nullptr);  // Explicit Debug fixture preserves CPU-only operations.
     } else {
-        SetExportGpuFactory([chosen = backend.value_or(render::Backend::Dx12)] {
+        SetExportGpuFactory([chosen = backend.value_or(render::Backend::Dx12), deadline] {
             render::EngineOptions options;
             options.device.backend = chosen;
+            if (deadline) options.requestDeadline = *deadline;
             return std::make_shared<render::Engine>(options);
         });
     }
-    SetCaptureGpu(backend.value_or(render::Backend::Dx12), unavailable_engine.get());
+    SetCaptureGpu(backend.value_or(render::Backend::Dx12), unavailable_engine.get(), deadline);
     struct ResetCapture {
         render::Backend backend;
         ~ResetCapture() { SetExportGpu(nullptr); SetCaptureGpu(backend, nullptr); }

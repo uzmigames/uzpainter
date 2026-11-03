@@ -196,7 +196,7 @@ GPU and oracle checks run locally on a qualified machine; see [Parity Testing](#
 | `store-census --inputs <inputs.json> --assets-root <dir> --work <dir> --out <report.json> [--edits N]` | Project size census |
 | `export <file.uzp> --config <config.json> --app-version <version> --build <id>` | Export maps with a Painter-style JSON configuration |
 | `export --recover <exportPath> [--fixed-names <dir>]...` | Recover an interrupted export publication |
-| `run <script.py> [args...] [--gpu-backend dx12\|vulkan] [-- args...]` | Run a Python script with the embedded API and facade |
+| `run <script.py> [args...] [--gpu-backend dx12\|vulkan] [--gpu-deadline-ms <ms>] [-- args...]` | Run a Python script with the embedded API and facade |
 | `capabilities` | Print the capability manifest |
 | `assets list [--parity] [--library <dir>]` | List the procedural asset library |
 | `cache info \| clear` | Inspect or clear the render caches |

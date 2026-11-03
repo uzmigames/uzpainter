@@ -49,6 +49,7 @@ constexpr const char* kSymbol = "uzpainter.render.capture";
 std::mutex g_gpuMutex;
 render::Backend g_backend = render::Backend::Dx12;
 render::Engine* g_engine = nullptr;
+std::optional<std::chrono::milliseconds> g_deadline;
 
 enum class Mode : uint8_t { Viewport, BaseColor, Channel, Mask };
 
@@ -468,6 +469,7 @@ json::Object CaptureViewport(const CaptureArguments& a) {
     if (!engine) {
         render::EngineOptions options;
         options.device.backend = g_backend;
+        if (g_deadline) options.requestDeadline = *g_deadline;
         local = std::make_unique<render::Engine>(options);
         engine = local.get();
     }
@@ -599,10 +601,12 @@ json::Object CaptureViewport(const CaptureArguments& a) {
 
 }  // namespace
 
-void SetCaptureGpu(render::Backend backend, render::Engine* engine) {
+void SetCaptureGpu(render::Backend backend, render::Engine* engine,
+                   std::optional<std::chrono::milliseconds> deadline) {
     std::lock_guard lock(g_gpuMutex);
     g_backend = backend;
     g_engine = engine;
+    g_deadline = deadline;
 }
 
 void RefuseUnavailableMode(std::string_view mode) {
