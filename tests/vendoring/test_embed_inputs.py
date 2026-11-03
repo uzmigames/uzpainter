@@ -4,14 +4,19 @@
 Zig 0.15.2 hashes the files an object embeds only after the compile, so a shader saved while a
 build compiled its embedder was recorded beside an object built from the old bytes, and every later
 build reused that object. `build.zig` now puts a digest of each embedding source's targets in that
-source's compile flags. These tests build `uzp-render-tests.exe` in a copy of the package with an
-empty local cache (CPU only, no GPU run):
+source's compile flags. These tests build a tiny authored package in pytest's `tmp_path`, with an
+empty local cache (CPU only, no GPU run): a static library of `src/embeds.c`, which embeds
+`src/blob.txt`, and `src/plain.c`, which embeds nothing. Its `build.zig` is `FIXTURE_BUILD` followed
+by the `EmbedInputs` struct cut out of the live `build.zig`, so the production code is what runs:
 
-- every embedding source of the render layer is compiled with its digest define;
-- a comment appended to one embedded shader changes the executable, which then holds the new bytes;
-- reverting the shader gives back the byte-identical executable: the original key names the
-  original object and link again (without the digest, the revert recompiles and relinks);
-- a C++ file that embeds a file without going through `EmbedInputs.add` fails the build.
+- the embedding source is compiled with its digest define, the other source without it;
+- a line appended to the embedded file changes the library, which then holds the new bytes;
+- reverting the embedded file gives back the byte-identical library: the original key names the
+  original object and archive again (without the digest, the revert recompiles and relinks);
+- a C file that embeds a file without going through `EmbedInputs.add` fails the build.
+
+The C sources live only in this module: `EmbedInputs.check` scans `tests/` for `#embed`, so an
+authored `.c` fixture here would fail the repository's own build.
 """
 
 from __future__ import annotations
@@ -20,7 +25,6 @@ import hashlib
 import re
 import shutil
 import subprocess
-from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -28,10 +32,34 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ZIG = shutil.which("zig")
-SHADER = "src/render/shaders/mips.hlsl"
+STRUCT_BEGIN = "\nconst EmbedInputs = struct {\n"
+STRUCT_END = "\n};\n"
+STRUCT_FUNCTIONS = ("add", "check", "targets", "digestFlag", "readSource", "embedTarget")
+BLOB = b"embed-inputs fixture blob\n"
 PROBE = b"// embed-cache probe (decision 147)\n"
-EMBED_RE = re.compile(r'^[ \t]*#[ \t]*embed[ \t]+"([^"]+)"', re.MULTILINE)
 DIGEST_RE = re.compile(r"-DUZP_EMBED_DIGEST=([0-9a-f]{32})")
+REFUSAL = "src/untracked.c uses #embed but is not compiled through EmbedInputs.add"
+
+FIXTURE_BUILD = """\
+const std = @import("std");
+
+pub fn build(b: *std.Build) void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+    var embed_inputs: EmbedInputs = .{ .b = b };
+    defer embed_inputs.check();
+    const mod = b.createModule(.{ .target = target, .optimize = optimize });
+    embed_inputs.add(mod, "src", &.{ "embeds.c", "plain.c" }, &.{"-std=c23"});
+    const lib = b.addLibrary(.{ .linkage = .static, .name = "embed_probe", .root_module = mod });
+    b.installArtifact(lib);
+}
+"""
+
+SOURCES = {
+    "src/embeds.c": b'const unsigned char embed_probe_blob[] = {\n#embed "blob.txt"\n};\n',
+    "src/plain.c": b"int embed_probe_plain(void) { return 0; }\n",
+    "src/blob.txt": BLOB,
+}
 
 
 @dataclass(frozen=True)
@@ -42,22 +70,25 @@ class Rebuilds:
     reverted: bytes
 
 
-def _package_paths() -> list[str]:
-    """The `.paths` of `build.zig.zon`: the files and folders that make up the package."""
-    zon = (REPO_ROOT / "build.zig.zon").read_text(encoding="utf-8")
-    block = re.search(r"\.paths\s*=\s*\.\{(.*?)\}", zon, re.DOTALL)
-    assert block, "build.zig.zon has no .paths"
-    return re.findall(r'"([^"]+)"', block.group(1))
+def _embed_inputs_struct() -> str:
+    """The top-level `const EmbedInputs = struct { ... };` of the live `build.zig`, verbatim."""
+    text = (REPO_ROOT / "build.zig").read_text(encoding="utf-8")
+    assert text.count(STRUCT_BEGIN) == 1, "build.zig must declare `const EmbedInputs` exactly once"
+    start = text.index(STRUCT_BEGIN) + 1
+    end = text.find(STRUCT_END, start)
+    assert end != -1, "the EmbedInputs struct has no top-level `};`"
+    block = text[start : end + len(STRUCT_END)]
+    for name in STRUCT_FUNCTIONS:
+        assert len(re.findall(rf"^    fn {name}\(", block, re.MULTILINE)) == 1, name
+    return block
 
 
-def _copy(root: Path, rels: list[str]) -> None:
-    for rel in rels:
-        source = REPO_ROOT / rel
-        if source.is_dir():
-            shutil.copytree(source, root / rel, ignore=shutil.ignore_patterns("__pycache__"))
-        else:
-            (root / rel).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, root / rel)
+def _package(root: Path) -> None:
+    """The authored fixture package under `root`."""
+    (root / "src").mkdir(parents=True)
+    (root / "build.zig").write_bytes((FIXTURE_BUILD + "\n" + _embed_inputs_struct()).encode())
+    for rel, data in SOURCES.items():
+        (root / rel).write_bytes(data)
 
 
 def _zig_build(root: Path, cache: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -69,81 +100,69 @@ def _zig_build(root: Path, cache: Path, *args: str) -> subprocess.CompletedProce
         text=True,
         encoding="utf-8",
         errors="replace",
-        timeout=1800,
+        timeout=600,
         check=False,
     )
 
 
 @pytest.fixture(scope="module")
-def rebuilds(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Rebuilds]:
-    """`zig build render-tests` of a package copy: fresh, after a shader edit, after its revert."""
+def rebuilds(tmp_path_factory: pytest.TempPathFactory) -> Rebuilds:
+    """`zig build` of the fixture: fresh, after an edit of the embedded file, after its revert."""
     if ZIG is None:
         pytest.skip("zig is not on PATH")
     work = tmp_path_factory.mktemp("embed-inputs")
-    root = work / "uzpainter"
-    _copy(root, [*_package_paths(), "tests/render"])
-    exe = work / "out" / "bin" / "uzp-render-tests.exe"
-    shader = root / SHADER
-    text = shader.read_bytes()
+    root = work / "package"
+    _package(root)
+    blob = root / "src" / "blob.txt"
 
     def build(*extra: str) -> tuple[str, bytes]:
-        proc = _zig_build(
-            root, work / "cache", "render-tests", "--prefix", str(work / "out"), *extra
-        )
+        proc = _zig_build(root, work / "cache", "--prefix", str(work / "out"), *extra)
         assert proc.returncode == 0, (proc.stdout + proc.stderr)[-6000:]
-        return proc.stdout + proc.stderr, exe.read_bytes()
+        (lib,) = (work / "out" / "lib").glob("*embed_probe*")
+        return proc.stdout + proc.stderr, lib.read_bytes()
 
     log, original = build("--verbose-cc")
-    shader.write_bytes(text + PROBE)
+    blob.write_bytes(BLOB + PROBE)
     _, edited = build()
-    shader.write_bytes(text)
+    blob.write_bytes(BLOB)
     _, reverted = build()
-    yield Rebuilds(verbose_log=log, original=original, edited=edited, reverted=reverted)
-    shutil.rmtree(work, ignore_errors=True)
+    return Rebuilds(verbose_log=log, original=original, edited=edited, reverted=reverted)
 
 
 def _compile_lines(log: str, name: str) -> list[str]:
-    """The `--verbose-cc` compiler invocations of `src/render/<name>`."""
-    pattern = re.compile(rf"clang \S*[\\/]src[\\/]render[\\/]{re.escape(name)} ")
+    """The `--verbose-cc` compiler invocations of `src/<name>`."""
+    pattern = re.compile(rf"clang (?:\S*[\\/])?src[\\/]{re.escape(name)} ")
     return [line for line in log.splitlines() if pattern.search(line)]
 
 
-def test_every_render_embedder_is_compiled_with_its_digest(rebuilds: Rebuilds) -> None:
-    """Each source that embeds a file carries the digest define; the others do not."""
-    sources = sorted((REPO_ROOT / "src" / "render").glob("*.cpp"))
-    embedders = {p.name for p in sources if EMBED_RE.search(p.read_text(encoding="utf-8"))}
-    assert "mips.cpp" in embedders
-    for source in sources:
-        lines = _compile_lines(rebuilds.verbose_log, source.name)
-        assert lines, f"{source.name} was not compiled"
+def test_only_the_embedding_source_is_compiled_with_its_digest(rebuilds: Rebuilds) -> None:
+    for name, embeds in (("embeds.c", True), ("plain.c", False)):
+        lines = _compile_lines(rebuilds.verbose_log, name)
+        assert lines, f"{name} was not compiled"
         for line in lines:
-            assert bool(DIGEST_RE.search(line)) == (source.name in embedders), source.name
+            assert bool(DIGEST_RE.search(line)) == embeds, name
 
 
-def test_a_shader_edit_changes_the_executable(rebuilds: Rebuilds) -> None:
+def test_an_embedded_file_edit_changes_the_library(rebuilds: Rebuilds) -> None:
     assert PROBE not in rebuilds.original
     assert PROBE in rebuilds.edited
     assert hashlib.sha256(rebuilds.edited).digest() != hashlib.sha256(rebuilds.original).digest()
 
 
-def test_reverting_the_shader_gives_back_the_original_executable(rebuilds: Rebuilds) -> None:
+def test_reverting_the_embedded_file_gives_back_the_original_library(rebuilds: Rebuilds) -> None:
     assert hashlib.sha256(rebuilds.reverted).digest() == hashlib.sha256(rebuilds.original).digest()
 
 
 def test_an_embed_outside_the_tracked_sources_fails_the_build(tmp_path: Path) -> None:
     if ZIG is None:
         pytest.skip("zig is not on PATH")
-    root = tmp_path / "uzpainter"
-    _copy(root, _package_paths())
+    root = tmp_path / "package"
+    _package(root)
     listed = _zig_build(root, tmp_path / "cache", "-l")
     assert listed.returncode == 0, listed.stderr[-4000:]
-    (root / "src" / "untracked_embed.cpp").write_text(
-        'static const char kShader[] = {\n#embed "render/shaders/mips.hlsl"\n};\n',
-        encoding="utf-8",
+    (root / "src" / "untracked.c").write_bytes(
+        b'const unsigned char untracked_blob[] = {\n#embed "blob.txt"\n};\n'
     )
     refused = _zig_build(root, tmp_path / "cache", "-l")
     assert refused.returncode != 0
-    assert (
-        "src/untracked_embed.cpp uses #embed but is not compiled through EmbedInputs.add"
-        in refused.stderr
-    )
+    assert REFUSAL in refused.stderr

@@ -69,9 +69,14 @@
 //! Every include and library path is inside this repository. Windows system headers and import
 //! libraries come from the MinGW-w64 files bundled with the pinned Zig release; nothing refers
 //! to a UzEngine checkout, `runtime.lib` or a submodule.
+//!
+//! Every executable and library compiles one generated stamp source carrying a digest of the files
+//! under its source and include roots (`native_input_key.zig`, decision 394), so a header-only
+//! edit cannot leave a stale binary in the cache.
 
 const std = @import("std");
 const builtin = @import("builtin");
+const native_input_key = @import("native_input_key.zig");
 
 /// The pinned Zig release. `build.zig.zon` declares the same version as `minimum_zig_version`;
 /// this check refuses newer releases as well.
@@ -706,7 +711,20 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
     // Sources that `#embed` a file carry its bytes in their cache key (`EmbedInputs`).
     var embed_inputs: EmbedInputs = .{ .b = b };
-    defer embed_inputs.check();
+    const native_input_inventory = b.option([]const u8, "native-input-inventory", "Write each native artifact's input key, roots and inputs to this build-root relative file (decision 394)");
+    // When `build()` returns, in this order: the `#embed` guard, then the native input key
+    // (`native_input_key.zig`, decision 394), which stamps every executable and library with a
+    // digest of the files under its source and include roots and their `#embed` targets. It runs
+    // last because it needs the final module graphs and link objects.
+    defer {
+        embed_inputs.check();
+        const embed_targets = embed_inputs.targets();
+        native_input_key.stampAll(b, .{
+            .widen = &.{ "src", "tests", "thirdparty/*" },
+            .extra_inputs = &embed_targets,
+            .inventory = native_input_inventory,
+        });
+    }
 
     // ── uzrendercore: the vendored render core as a static library ──────────────────────────
 
@@ -2230,6 +2248,27 @@ const EmbedInputs = struct {
                 }
             }
         }
+    }
+
+    /// The `#embed` targets of each source passed to `add` that embeds a file, as written beside
+    /// the source (inputs of its artifact's native input key, decision 394).
+    fn targets(self: *EmbedInputs) std.StringHashMapUnmanaged([]const []const u8) {
+        const b = self.b;
+        var result: std.StringHashMapUnmanaged([]const []const u8) = .empty;
+        var it = self.scanned.iterator();
+        while (it.next()) |entry| {
+            if (entry.value_ptr.* == null) continue;
+            const rel = entry.key_ptr.*;
+            const dir = std.fs.path.dirname(rel) orelse ".";
+            var list: std.ArrayList([]const u8) = .empty;
+            var lines = std.mem.splitScalar(u8, readSource(b, rel), '\n');
+            while (lines.next()) |line| {
+                const target = embedTarget(rel, line) orelse continue;
+                list.append(b.allocator, b.fmt("{s}/{s}", .{ dir, target })) catch @panic("OOM");
+            }
+            result.put(b.allocator, rel, list.items) catch @panic("OOM");
+        }
+        return result;
     }
 
     /// `-DUZP_EMBED_DIGEST=<hex>` over the `#embed` targets of `rel`, or null when it has none.

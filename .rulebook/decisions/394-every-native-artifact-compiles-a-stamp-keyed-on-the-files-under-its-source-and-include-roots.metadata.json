@@ -1,0 +1,9 @@
+{
+  "id": 394,
+  "slug": "every-native-artifact-compiles-a-stamp-keyed-on-the-files-under-its-source-and-include-roots",
+  "title": "Every native artifact compiles a stamp keyed on the files under its source and include roots",
+  "status": "accepted",
+  "date": "2026-11-03",
+  "relatedTasks": ["phase2.10_pilot-tunic-recovery"],
+  "supersededBy": null
+}
