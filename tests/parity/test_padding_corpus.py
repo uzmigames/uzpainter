@@ -13,10 +13,15 @@ REF = load_module(REPO_ROOT / "tests/export/padding_reference.py", "test_padding
 
 def test_kernel_probes_are_the_padding_manifests_with_the_eight_kernel_maps() -> None:
     names = corpus.probes()
-    assert len(names) == 30
-    assert {"hinge-vary", "joint-bend", "kernel-sphere-256", "plane-control", "tau-prism"} <= set(
-        names
-    )
+    assert len(names) == 31
+    assert {
+        "hinge-vary",
+        "joint-bend",
+        "kernel-sphere-256",
+        "plane-control",
+        "tau-prism",
+        "world-offset",
+    } <= set(names)
     assert "" not in names and "bevelled-cube" not in names
 
 
