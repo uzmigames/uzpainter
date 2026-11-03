@@ -1,0 +1,12 @@
+{
+  "id": 397,
+  "slug": "gate-tasks-run-last-after-every-feature-task-of-their-phase-passed-its-own-tests",
+  "title": "Gate tasks run last, after every feature task of their phase passed its own tests",
+  "status": "accepted",
+  "date": "2026-11-03",
+  "relatedTasks": [
+    "phase1.26_gate-g1",
+    "phase2.11_gate-g2"
+  ],
+  "supersededBy": null
+}

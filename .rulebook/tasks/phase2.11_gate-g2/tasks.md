@@ -1,5 +1,6 @@
 ## 1. Prerequisites
 - [ ] 1.1 Prerequisites accepted: phase1.26_gate-g1, phase2.10_pilot-tunic-recovery, phase2.3_realtime-preview, phase2.4_supervisor-worker
+  - Runs last (decision 397, owner 2026-11-03): this gate's runs start only after every feature task of Phase 2 has passed its own tests
 
 ## 2. Joined items
 - [ ] 2.1 phase1.26_gate-g1 accepted (previous gate)

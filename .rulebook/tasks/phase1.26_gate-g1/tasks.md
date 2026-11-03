@@ -1,5 +1,6 @@
 ## 1. Prerequisites
 - [ ] 1.1 Prerequisites accepted: phase0.10_gate-g0, phase1.25_pilot-wand, phase1.8_project-store, phase1.7_mesh-loader
+  - Runs last (decision 397, owner 2026-11-03): this gate's runs start only after every feature task of Phase 1 has passed its own tests
 
 ## 2. Joined items
 - [x] 2.1 phase0.10_gate-g0 accepted: G0 Contract frozen
