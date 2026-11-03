@@ -22,6 +22,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -59,7 +60,7 @@ def island_refusal(log: Round) -> bool:
 
 
 GOLDEN = resolve_golden(GOLDEN_ID)
-pytestmark = [
+_NEEDS_THE_SASH = [
     pytest.mark.skipif(
         not (ASSETS3D / "AGENTS.md").is_file(),
         reason=f"the UzmiGames asset repository is not at {ASSETS3D} (local run, decision 028)",
@@ -67,6 +68,14 @@ pytestmark = [
     pytest.mark.skipif(locate() is None, reason="no private oracle store on this machine"),
     pytest.mark.skipif(GOLDEN is None, reason=f"{GOLDEN_ID} is not admitted"),
 ]
+
+
+def _needs_the_sash[T: Callable[..., None]](test: T) -> T:
+    """`test` skipped, with the reason, where the Sash's inputs or its golden are absent; the
+    host test of the round's expected refusal runs everywhere."""
+    for mark in _NEEDS_THE_SASH:
+        test = mark(test)
+    return test
 
 
 @pytest.fixture(scope="module")
@@ -97,6 +106,7 @@ def evidence(painter: Path, tmp_path_factory: pytest.TempPathFactory) -> Evidenc
     return run(painter, tmp_path_factory.mktemp("sash"))
 
 
+@_needs_the_sash
 def test_sash_v5_maps_equal_painter_and_are_byte_stable(evidence: Evidence) -> None:
     """3.1 every exported map equals its golden under EXC-012 (decision 399: covered interior
     texels exact on every map, covered texels exact on every map but the Normal, the padding and
@@ -117,6 +127,7 @@ def test_sash_v5_maps_equal_painter_and_are_byte_stable(evidence: Evidence) -> N
     assert isinstance(repeatability, dict) and repeatability["status"] == "repeatable"
 
 
+@_needs_the_sash
 def test_sash_v5_saved_and_reopened_project_exports_the_first_maps(evidence: Evidence) -> None:
     """3.1's save/reopen: the first rebuild's project keeps one file and UUID from its first
     export through the save to the reopen in a fresh process, and exports again every file of its
@@ -131,6 +142,7 @@ def test_sash_v5_saved_and_reopened_project_exports_the_first_maps(evidence: Evi
     assert reopen.equal
 
 
+@_needs_the_sash
 def test_sash_v5_round_through_typed_mcp_tools_with_python_disabled(
     painter: Path, evidence: Evidence, tmp_path: Path
 ) -> None:
