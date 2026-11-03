@@ -1,0 +1,29 @@
+# Tunic v10 current reference against the migration golden
+
+`python -m tools.parity.tier1.current_reference` (decision 300 item 7), run once on 2026-11-03 against the admitted `phase2/tier1/tunic-v10` migration golden and the admitted `phase2/tier1/tunic-v10-current` round. The comparator's full JSON report (SHA-256 `61b38a4fede40bba91863b0f9288615a101835f36f281d0226be176e9adab249`) is kept in the private oracle work area beside the run, because no public schema covers it; this summary carries its aggregate figures. It holds identifiers, hashes, shapes and counts only, never a pixel, coordinate or map hash.
+
+**Outcome: `different`.** One of the five maps is byte-identical.
+
+| Map | Bytes equal | Values equal | Differing values | Max abs diff (16-bit) |
+|---|---|---|---:|---:|
+| BaseColor_sRGB | no | no | 3,301,154 | 1,884 |
+| Normal_Raw | no | no | 3,423,291 | 128 |
+| Metallic_Raw | yes | yes | 0 | 0 |
+| Roughness_Raw | no | no | 4,479 | 257 |
+| Displacement_Raw | no | no | 284,649 | 3 |
+
+Each map is 4096 × 4096 × 3, PNG 16-bit, on both sides.
+
+- **Stability.** Both sides are stable: `r1`, `r1-repeat` and `r2` are byte-identical within each side, for all five maps.
+- **Structure.** There are no structural differences: the same maps, storage formats and shapes.
+- **Envelope.** The two environment records `match`.
+- **Problems.** None.
+
+**Sides.**
+- The current round: record `3165bacb…2d1e`, manifest `e3b69e54…129d`, request `7364fafe…93a7`, recorded after the recorder's named-import fix `52a182da`.
+- The migration golden: record `59ef801e…01bf`, manifest `ce702ddf…de31`.
+
+**What this does not establish.**
+- The current round runs on current-round substitutes: 9 masks, the AO behind them, and a low exported now. Only the 8 preserved masks and the Normal are originals. The historical inputs stay missing, so `historical_input_identity_established` is false. Equal outputs would not prove input identity either.
+- The record observes the create's slots and the Normal's identity. It does not yet observe the 21 bindings onto 17 resources (Data colour space, F03/C07) that the input contract asks for. A recorder state-readback extension is in progress.
+- No baseline is changed or promotable, no exception is recorded, and no gate or acceptance item is completed. Using the current round as phase2.10's changed baseline is the owner's decision (decision 300 item 8).
