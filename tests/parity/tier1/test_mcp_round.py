@@ -17,6 +17,7 @@ import hashlib
 import json
 import shutil
 import subprocess
+import traceback
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,7 @@ import pytest
 
 from tests.adapters.assets3d.wand import ASSETS3D, REPO_ROOT
 from tests.parity.tier1.mcp_round import round_report, run_round, run_tunic_current
+from tests.parity.tier1.tunic_recipe import RecipeMismatch, RecipeRound, run_tunic_recipe
 from tests.parity.tier1.wand_v1 import runner as wand_runner
 from tools.parity.store.store import locate
 from tools.parity.tier1.mcp_round import equality, report_problems
@@ -195,3 +197,151 @@ def test_tunic_current_round_checks_its_state_before_the_export(
         assert log.refusal is not None and log.refusal["tool"] == "export", log.refusal
     else:
         assert log.outcome == "completed", log.calls
+
+
+@pytest.mark.skipif(
+    not (ASSETS3D / "AGENTS.md").is_file(),
+    reason=f"the UzmiGames asset repository is not at {ASSETS3D} (local run, decision 028)",
+)
+@pytest.mark.skipif(locate() is None, reason="no private oracle store on this machine")
+@pytest.mark.skipif(
+    resolve_golden(TUNIC_CURRENT) is None, reason=f"{TUNIC_CURRENT} is not admitted"
+)
+def test_tunic_current_recipe_rebuilds_the_typed_round_from_its_dump(
+    painter: Path, tmp_path: Path, record_property: Callable[[str, object], None]
+) -> None:
+    """The real Tunic dump-and-rebuild (`tunic_recipe.run_tunic_recipe`, phase2.10 item 2.4) on the
+    admitted golden: the typed state round, its saved project reopened afresh, the bundle, the
+    rebuild in a separate `run` process and the rebuilt project's checks, on this module's one
+    build. It proves the flow, not recipe acceptance. The rebuild is the separate public-facade
+    `run` process, never an MCP tool.
+
+    Each of the three MCP sessions (the state round's, the original's and the rebuilt project's)
+    lists its tools before any project call and is refused if `run_python` is among them; the
+    test asserts all three lists left it out. Every state check passes or raises. The outcome
+    must be `pass` (equal digests, identical files) or `export_refused` (equal digests, both
+    exports refused alike before writing, with the same generic `capability_gap` refusal; which
+    gap fired, decision 245 or 259 or another, is not claimed). `export_refused` counts only as
+    success of the state and rebuild flow, never as parity acceptance; a refused step or a `fail`
+    fails the test. The aggregate is recorded as the `tunic_current_recipe` property, even when a
+    check raises: hashes, each session's `run_python_listed`, how far each side's state checks
+    got, the dump digests, each export's status or refusal and the outcomes. When a check raises,
+    no stage proof comes back, so each side's state is recorded as `unverified` (an earlier stage
+    may have succeeded), and only the exception's class name is recorded, never its message. The
+    raw error is kept privately in `tmp_path` and the test fails with the class name alone, with
+    no traceback or exception context (`private_recipe`), so no private dump or API value reaches
+    the pytest or JUnit output. An accepted outcome needs all three sessions' logs."""
+    manifest = resolve_golden(TUNIC_CURRENT)
+    assert manifest is not None
+    aggregate: dict[str, Any] = {
+        "manifest_sha256": hashlib.sha256(manifest.manifest_path.read_bytes()).hexdigest(),
+        "exe_sha256": hashlib.sha256(painter.read_bytes()).hexdigest(),
+    }
+    result = private_recipe(
+        lambda: run_tunic_recipe(painter, tmp_path / "recipe", manifest.manifest_path),
+        tmp_path,
+        aggregate,
+        lambda value: record_property("tunic_current_recipe", json.dumps(value, sort_keys=True)),
+    )
+    # Every message below is the aggregate: hashes and outcomes, no private value.
+    assert result.outcome in ("pass", "export_refused"), aggregate
+    assert set(result.logs) == {"state", "original", "rebuilt"}, aggregate
+    assert not any(log.run_python_listed for log in result.logs.values()), aggregate
+    assert result.report is not None, aggregate
+    equality = result.report["equality"]
+    assert equality["digests_equal"], aggregate
+    if result.outcome == "export_refused":  # the flow succeeded; never parity acceptance
+        exports = [result.report[name]["export"] for name in ("original", "rebuilt")]
+        assert equality["files"] == "not_exported", aggregate
+        assert [e["status"] for e in exports] == ["refused", "refused"], aggregate
+        assert exports[0]["refusal"] == exports[1]["refusal"], aggregate
+        assert str(exports[0]["refusal"]).startswith("capability_gap:"), aggregate
+    else:
+        assert equality["files"] == "identical", aggregate
+
+
+PRIVATE_DIAGNOSTICS = "private-recipe-diagnostics.txt"
+
+
+def private_recipe(
+    run: Callable[[], RecipeRound],
+    directory: Path,
+    aggregate: dict[str, Any],
+    record: Callable[[dict[str, Any]], None],
+) -> RecipeRound:
+    """`run()`'s result, its aggregate added to `aggregate` and recorded. A raised error is kept
+    privately in `directory` (the test's `tmp_path`) and fails the test with its class name only,
+    raised outside the except block with no traceback or exception context (the
+    `tests/python/conftest.py` `_private_report` pattern): no stage proof comes back, so each
+    side's state is `unverified`."""
+    result: RecipeRound | None = None
+    failure, diagnostic = "", ""
+    try:
+        result = run()
+    except Exception as error:
+        failure = type(error).__name__
+        diagnostic = "".join(traceback.format_exception(error))
+    if result is not None:
+        aggregate.update(recipe_aggregate(result))
+        record(aggregate)
+        return result
+    aggregate.update(
+        outcome="raised",
+        error=failure,
+        state={"original": "unverified", "rebuilt": "unverified"},
+    )
+    record(aggregate)
+    saved = True
+    try:
+        (directory / PRIVATE_DIAGNOSTICS).write_text(diagnostic, encoding="utf-8")
+    except OSError:
+        saved = False
+    suffix = "details kept privately" if saved else "private diagnostic write failed"
+    pytest.fail(f"the Tunic recipe raised {failure} ({suffix})", pytrace=False)
+
+
+def test_a_raised_recipe_error_fails_with_its_class_only(tmp_path: Path) -> None:
+    """A check that raises with a private value: the value is kept in the private file, and
+    neither the failure, which has no traceback or context, nor the record carries it."""
+    sentinel = "SENTINEL-private-dump-value-0123"
+
+    def leaking() -> RecipeRound:
+        raise RecipeMismatch(f"the dump holds {sentinel}")
+
+    recorded: list[str] = []
+    with pytest.raises(pytest.fail.Exception) as raised:
+        private_recipe(leaking, tmp_path, {}, lambda value: recorded.append(json.dumps(value)))
+    failure = raised.value
+    assert str(failure) == "the Tunic recipe raised RecipeMismatch (details kept privately)"
+    assert failure.pytrace is False
+    assert failure.__context__ is None and failure.__cause__ is None
+    assert sentinel not in str(failure) and sentinel not in "".join(recorded)
+    assert json.loads(recorded[0])["state"] == {"original": "unverified", "rebuilt": "unverified"}
+    assert sentinel in (tmp_path / PRIVATE_DIAGNOSTICS).read_text(encoding="utf-8")
+
+
+def recipe_aggregate(result: RecipeRound) -> dict[str, Any]:
+    """What the recipe test records of `result`: no dump content, file name or file hash."""
+    document = result.report or {}
+    sides = {name: document.get(name) or {} for name in ("original", "rebuilt")}
+    return {
+        "run_python_listed": {name: log.run_python_listed for name, log in result.logs.items()},
+        "tools_listed": {name: log.tools_listed for name, log in result.logs.items()},
+        # A returned result proves each stage it logged; a side without a log refused before it.
+        "state": {
+            "original": "checked" if "original" in result.logs else "not_reached",
+            "rebuilt": "checked" if "rebuilt" in result.logs else "not_reached",
+        },
+        "digests": {name: side.get("recipe_digest") for name, side in sides.items()},
+        "digests_equal": (document.get("equality") or {}).get("digests_equal"),
+        "exports": {
+            name: {
+                "status": (side.get("export") or {}).get("status"),
+                "refusal": (side.get("export") or {}).get("refusal"),
+            }
+            for name, side in sides.items()
+        },
+        "outcome": result.outcome,
+        "report_outcome": (document.get("equality") or {}).get("outcome"),
+        "refusal": (result.refusal or {}).get("type"),
+    }

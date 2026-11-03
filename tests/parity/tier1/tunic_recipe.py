@@ -5,9 +5,12 @@ round, not an MCP-only one. There is no typed `project_rebuild` tool.
     round = run_tunic_recipe(painter, work, manifest)    # the golden's manifest
 
 1. **The state round** (`state_round`): `mcp_round.drive` with `tunic_state.TUNIC_CURRENT`
-   unchanged, typed MCP with Python disabled, its replies recorded so the sync's reply, the saved
+   unchanged, typed MCP with Python disabled (its `tools/list` first, refused before any call if
+   it names `run_python`), its replies recorded so the sync's reply, the saved
    project's path and the reopened reads are known. Only an export refusal may end it.
-2. **The original** (`original_session`), in a fresh MCP session: `project_open` of the saved
+2. **The original** (`original_session`), in a fresh MCP session that first lists its tools
+   (`listed`) and refuses before any project call if `run_python` is among them: `project_open`
+   of the saved
    project at the round's revision; `set_list`, `layer_list`, `project_recipe` (the FULL dump),
    `shader_get` and `display_get`, checked through `tunic_state` with `fresh_uids=False` and equal
    to the round's reopened reads literally (the same project), the dump written to
@@ -26,10 +29,13 @@ round, not an MCP-only one. There is no typed `project_rebuild` tool.
    `uzpainter.project.rebuild_from_recipe(dump, resources)`, then `save_as` (full) to a new file;
    it returns the saved file, its revision and its `dump_recipe()`. A `NotYetSupported` refusal
    ends the run `refused`; any other error fails it.
-5. **The rebuilt project** (`rebuilt_session`), in a fresh MCP session: `project_open` at the
+5. **The rebuilt project** (`rebuilt_session`), in a fresh MCP session listed and refused as
+   the original's: `project_open` at the
    rebuild's revision, the same reads and checks, its dump equal to the rebuild's literally; then
    `project_save` (full), `project_close`, `project_open` and the reads again, equal to the first
-   literally; then the same export, and `project_close`. No `run_python` is sent in any session.
+   literally; then the same export, and `project_close`. No `run_python` is sent in any session,
+   and each of the three sessions' own `tools/list` must not list it. The rebuild itself is the
+   separate public-facade process of step 4, never an MCP tool.
 6. **The comparison** (`compare_projects`), original against rebuilt:
    - the two dumps literally, key presence included (a missing key is never a null one),
      `revision` alone excepted: `digest`, `recipe`, the whole `rebuild`
@@ -221,14 +227,11 @@ def state_round(painter: Path, work: Path, manifest: Path, backend: str = BACKEN
     expected = mcp_round.expected_of(scenario, job, staged, wand.native_ocio_sha256(job))
     session = session_of(painter, work, backend)
     try:
-        tools = {tool["name"] for tool in session.request("tools/list", {})["tools"]}
-        log = Round(len(tools), "run_python" in tools)
+        log = listed(session, "state")  # before the round's first call
         driver = Recorder(session, log)
         mcp_round.drive(driver, job, staged, work, scenario)
     finally:
         session.close()
-    if log.run_python_listed:
-        raise RecipeFailed("the state round's session lists run_python")
     if log.outcome != "completed" and (log.outcome, (log.refusal or {}).get("tool")) != (
         "refused",
         "export",
@@ -302,13 +305,24 @@ def export_once(driver: Driver, job: NativeJob, out: Path) -> Export:
     return Export(files, None)
 
 
+def listed(session: Mcp, where: str) -> Round:
+    """A session's log from its real `tools/list`; refused before any project call when
+    `run_python` is listed."""
+    tools = {tool["name"] for tool in session.request("tools/list", {})["tools"]}
+    log = Round(len(tools), "run_python" in tools)
+    if log.run_python_listed:
+        raise RecipeFailed(f"the {where} session lists run_python: refused before any project call")
+    return log
+
+
 def original_session(
     painter: Path, work: Path, st: StateRound, backend: str = BACKEND
 ) -> tuple[dict[str, Any], Export, Round]:
     """The saved project reopened in a fresh session: its reads, its export and the call log."""
+    where = "original"
     session = session_of(painter, work, backend)
-    log = Round(0, False)
     try:
+        log = listed(session, where)
         driver = Driver(session, log)
         at = opened_at(driver, st.project)
         if at != st.revision:
@@ -428,9 +442,10 @@ def rebuilt_session(
 ) -> tuple[dict[str, Any], Export, Round]:
     """The rebuilt project in a fresh session, checked, saved, closed, reopened and checked
     again literally, then exported: its reads, its export and the call log."""
+    where = "rebuilt"
     session = session_of(painter, work, backend)
-    log = Round(0, False)
     try:
+        log = listed(session, where)
         driver = Driver(session, log)
         at = opened_at(driver, target)
         if at != made["revision"]:

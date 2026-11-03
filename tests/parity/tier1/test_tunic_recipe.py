@@ -27,6 +27,7 @@ from tools.parity.recorder.job import canonical_json, sha256_file
 from tools.parity.store.store import STORE_ENV
 
 READS = list(tunic_recipe.READS)
+FRESH_TOOLS = ["project_open", "project_close", "project_save", "export", *READS]
 REVISION = 9  # the rebuilt project's revision
 SHIFT = 1000  # the rebuild's new uids: every one moved
 
@@ -60,6 +61,7 @@ class World:
         self.rebuilt_fault: Callable[[dict[str, Any]], None] | None = None
         self.reopen_fault: Callable[[dict[str, Any]], None] | None = None
         self.refuse: set[str] = set()  # the sides whose export refuses
+        self.python: set[str] = set()  # the sessions whose tools/list names run_python
 
     def entry(self, path: str) -> dict[str, Any]:
         """A saved project's replies; the state round's project as its session last saw it."""
@@ -120,6 +122,12 @@ class RecipeStateSession(StateSession):
             **dump,
         }
 
+    def request(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+        listed = super().request(method, params)
+        if "state" in self.world.python:
+            listed["tools"].append({"name": "run_python"})
+        return listed
+
     def call(self, tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
         if tool == "project_save_as":
             self.world.saved = arguments["path"]
@@ -138,9 +146,13 @@ class OpenSession:
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.project: dict[str, Any] | None = None
         self.opens = 0
+        self.requests: list[str] = []
 
     def request(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
-        raise AssertionError(f"{method} is not sent")
+        assert method == "tools/list" and not self.calls, (method, self.calls)
+        self.requests.append(method)
+        names = [*FRESH_TOOLS, *(["run_python"] if self.name in self.world.python else [])]
+        return {"tools": [{"name": name} for name in names]}
 
     def close(self) -> None:
         pass
@@ -311,6 +323,10 @@ def test_the_rebuilt_tunic_equals_the_original_across_reallocated_uids(
     reopened = ["project_save", "project_close", "project_open", *READS]
     assert tools(rebuilt) == ["project_open", *READS, *reopened, *EXPORT_THEN_CLOSE]
     assert "run_python" not in tools(world.sessions[0]) + tools(original) + tools(rebuilt)
+    assert original.requests == rebuilt.requests == ["tools/list"]  # before any project call
+    logs = outcome.logs
+    assert [logs[n].run_python_listed for n in ("state", "original", "rebuilt")] == [False] * 3
+    assert logs["original"].tools_listed == logs["rebuilt"].tools_listed == len(FRESH_TOOLS)
     work = tmp_path / "work"
     target = work / "rebuild" / "tunic-rebuilt.uzp"
     assert [args[1] for args in world.processes] == ["export-bundle", "run"]
@@ -335,6 +351,29 @@ def test_the_rebuilt_tunic_equals_the_original_across_reallocated_uids(
         for p in (world.saved, str(target))
     ]
     assert uids[0].isdisjoint(uids[1])
+
+
+def test_a_state_session_that_lists_run_python_is_refused_before_any_call(
+    world: World, tmp_path: Path
+) -> None:
+    world.python = {"state"}
+    with pytest.raises(tunic_recipe.RecipeFailed, match="the state session lists run_python"):
+        run(world, tmp_path)
+    assert world.state is not None and world.state.calls == []
+    assert len(world.sessions) == 1 and world.processes == []
+
+
+@pytest.mark.parametrize("name", ["original", "rebuilt"])
+def test_a_fresh_session_that_lists_run_python_is_refused_before_any_project_call(
+    world: World, tmp_path: Path, name: str
+) -> None:
+    world.python = {name}
+    with pytest.raises(tunic_recipe.RecipeFailed, match=f"the {name} session lists run_python"):
+        run(world, tmp_path)
+    session = world.sessions[-1]
+    assert session.name == name and session.requests == ["tools/list"] and session.calls == []
+    expected = ["export-bundle", "run"] if name == "rebuilt" else []
+    assert [args[1] for args in world.processes] == expected
 
 
 def test_a_missing_bundle_resource_fails_and_is_never_filled_from_the_inputs(
