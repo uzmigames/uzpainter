@@ -123,6 +123,17 @@ def decode(c: Vec) -> Vec:
     return normalise((x, y, np.fmax(z, F32(0))))
 
 
+MESH_FLOOR_Z = F32(0.001)  # the Normal mesh map's z floor before the normalise (decision 400)
+
+
+def mesh_decode(c: Vec) -> Vec:
+    """The Normal mesh map's decode: normalise(2c - 1) with z floored at float32(0.001), not 0
+    (height_to_normal.cpp MeshDecode, decision 400)."""
+    two, one = F32(2), F32(1)
+    x, y, z = ((np.asarray(k, F32) * two) - one for k in c)
+    return normalise((x, y, np.fmax(z, MESH_FLOOR_Z)))
+
+
 def reoriented(base: Vec, detail: Vec) -> Vec:
     """Reoriented normal mapping of `detail` on `base`, not normalised (arith.cpp Reoriented)."""
     tx, ty, tz = (
@@ -216,7 +227,7 @@ def normal_maps(
         channel = (np.full_like(h, F32(0.5)), np.full_like(h, F32(0.5)), np.ones_like(h))
     first = flat
     if mesh is not None:
-        first = decode(mesh)
+        first = mesh_decode(mesh)
         if mesh_directx:
             first = (first[0], -first[1], first[2])
     base = normalise(reoriented(first, normalise(height_vector(h, method, width))))

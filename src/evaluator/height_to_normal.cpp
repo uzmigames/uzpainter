@@ -52,8 +52,23 @@ Vec3 ChannelNormal(const Vec3& x, float a) {
     return TowardFlatAcos(arith::NormalDecode({Mul(x[0], inverse), Mul(x[1], inverse), Mul(x[2], inverse)}), a);
 }
 
-/// The set widths whose height-to-normal scaling is recorded (decision 079).
-bool RecordedResolution(uint32_t width) { return width == 256 || width == 512 || width == 1024 || width == 2048; }
+/// The set widths whose height-to-normal scaling is recorded: 256 to 2048 in both methods (decision
+/// 079), 4096 with Sharp only (`height-normal-resolution-4096`, decision 400).
+bool RecordedResolution(uint32_t width, HeightToNormalMethod method) {
+    if (width == 4096) return method == HeightToNormalMethod::Sharp;
+    return width == 256 || width == 512 || width == 1024 || width == 2048;
+}
+
+/// The Normal mesh map's decode: normalise(2c - 1) with z floored at float32(0.001) before the
+/// normalise (decision 400; the Sash v5's interior texels whose mesh map has z <= 0). The Normal
+/// channel and the normal-map blends keep arith::NormalDecode, z floored at 0.
+Vec3 MeshDecode(const Vec3& c) {
+    constexpr float kMeshFloorZ = 0.001f;
+    Vec3 n{};
+    for (size_t i = 0; i < 3; ++i) n[i] = Sub(Mul(c[i], 2.0f), 1.0f);
+    n[2] = arith::Fmax(n[2], kMeshFloorZ);
+    return arith::NormalNormalise(n);
+}
 
 const core::TextureSet* FindSet(const core::Project& project, core::Id set) {
     for (const core::TextureSet& candidate : project.texture_sets) {
@@ -219,7 +234,7 @@ std::array<float, 3> VirtualNormalTexel(const std::array<float, 3>& v, const Nor
     if (component == VirtualNormalComponent::Channel) return detail;
     Vec3 mesh{0.0f, 0.0f, 1.0f};
     if (inputs.hasMesh) {
-        mesh = arith::NormalDecode(inputs.mesh);
+        mesh = MeshDecode(inputs.mesh);
         if (inputs.meshDirectX) mesh[1] = -mesh[1];
     }
     const Vec3 base = arith::NormalNormalise(arith::NormalReoriented(mesh, heightNormal));
@@ -231,7 +246,7 @@ std::array<float, 3> VirtualNormalTexel(const std::array<float, 3>& v, const Nor
 std::array<float, 3> MeshOnPaddedNormal(const std::array<float, 3>& mesh, bool meshDirectX,
                                         const std::array<float, 3>& heightNormal,
                                         const std::array<float, 3>& channelNormal, core::NormalMapFormat convention) {
-    Vec3 f = arith::NormalDecode(mesh);
+    Vec3 f = MeshDecode(mesh);
     if (meshDirectX) f[1] = -f[1];
     const Vec3 base = arith::NormalNormalise(arith::NormalReoriented(f, heightNormal));
     const Vec3 n = arith::NormalNormalise(arith::NormalReoriented(base, channelNormal));
@@ -258,10 +273,11 @@ render::Result<VirtualNormalResult> EvaluateVirtualNormalOn(const core::Project&
 
     const uint32_t width = static_cast<uint32_t>(set->resolution.width);
     const uint32_t height = static_cast<uint32_t>(set->resolution.height);
-    if (width != height || !RecordedResolution(width)) {
+    if (width != height || !RecordedResolution(width, set->height_to_normal_method)) {
         return EvalFail(EvalErrorKind::UnsupportedSource,
                         "the height-to-normal scaling is recorded on square sets of 256, 512, 1024 and 2048 "
-                        "texels only (phase1.12_compositor-height-normal)");
+                        "texels, and of 4096 texels with the Sharp method (phase1.12_compositor-height-normal, "
+                        "decision 400)");
     }
     // The bound Normal mesh map: F of the combination, recorded as a 16-bit RGB image at the set
     // resolution.

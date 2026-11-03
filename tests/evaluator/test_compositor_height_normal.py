@@ -1,6 +1,6 @@
 """Tests of phase1.12_compositor-height-normal (P1-COMPOSITOR,
 `docs/architecture/04-layer-stack-and-compositing.md` §6; `src/evaluator/height_to_normal.h`,
-`parity/semantics/height-to-normal.json`, decisions 064, 065, 079 and 080).
+`parity/semantics/height-to-normal.json`, decisions 064, 065, 079, 080 and 400).
 
 The native cases run `uzp-evaluator-tests.exe` (`tests/evaluator/evaluator_test.cpp`):
 `height-normal` on the CPU anywhere; `height-normal-gpu-vs-cpu` needs the DX12 adapter and skips
@@ -13,6 +13,7 @@ exact target where its two recordings differ (decision 032): r2 is compared wher
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -167,6 +168,11 @@ def test_height_normal_on_the_cpu(evaluator_tests: Path) -> None:
         p.startswith("a DirectX project's Normal channel other than one bitmap") for p in passed
     )
     assert any(p.startswith("a 512 set evaluates") for p in passed)
+    # Decision 400: the 4096 scale, the Height magnification refusal and the mesh map's z floor.
+    assert "z at 4096 is 100 / 4096 (Sharp)" in passed
+    assert any(p.startswith("a 4096 set evaluates with Sharp") for p in passed)
+    assert any(p.startswith("Height magnification: 16x on a 256 set evaluates") for p in passed)
+    assert any(p.startswith("a Normal mesh map with z <= 0 decodes with z floored") for p in passed)
 
 
 def test_height_normal_gpu_equals_cpu(evaluator_tests: Path, tmp_path: Path) -> None:
@@ -300,6 +306,92 @@ def test_recorded_inputs_exact(
                 n = differing(values, theirs, None)
                 if n:
                     problems.append(f"{key} {recording}: {n} values differ")
+    assert not problems, problems
+
+
+# ── Decision 400: the scale at 4096 px, and the magnification it does not admit ─────────────
+
+RESOLUTION_4096 = "semantics/height-normal-resolution-4096"
+W4096 = 4096
+
+
+def test_height_normal_scale_at_4096_equals_painter() -> None:
+    """Decision 400 §1: z = 100 / W holds at 4096 px. Painter's own Height of s0 (opacity 1) and s3
+    (two copies in LinearDodge), whose exported half is the float32 read-out, through the model the
+    evaluator follows operation for operation (`normal_fit.normal_maps`, Sharp, z = 100 / 4096),
+    gives Normal_OpenGL and Normal_DirectX on every texel, r1 and r2."""
+    needs_store()
+    golden = envelope_golden(RESOLUTION_4096)
+    problems = []
+    for texture_set in ("s0", "s3"):
+        assert stable(golden, f"{texture_set}/height")
+        height = golden.map("r1", f"{texture_set}/height").values[..., 0].astype(np.float32)
+        ours = normal_fit.normal_maps(height, "Sharp", width=W4096)
+        for map_name in MAPS:
+            for recording in ("r1", "r2"):
+                theirs = golden.map(recording, f"{texture_set}/{map_name}").values
+                n = differing(ours[map_name], theirs, None)
+                if n:
+                    problems.append(f"{texture_set}/{map_name} {recording}: {n} values differ")
+    assert not problems, problems
+
+
+def test_height_magnification_at_4096_is_not_exact_and_refused(
+    evaluator_tests: Path, tmp_path: Path
+) -> None:
+    """Decision 400 §2: the 256 px ramps magnified 16 times onto the 4096 set. The magnification
+    exact at 512 to 2048 px (`magnified`, the evaluator's filter) misses Painter's s0 Height, so the
+    evaluator refuses that magnification with `unsupported_source`, naming the decision, before
+    it evaluates the Height channel or the virtual normal maps."""
+    needs_store()
+    from tools.parity.feasibility import png
+
+    manifest = envelope_manifest(RESOLUTION_4096)
+    golden = envelope_golden(RESOLUTION_4096)
+    path = next(i["path"] for i in manifest["inputs"] if i["input_id"] == "height-ramps")
+    codes = png.decode((REPO_ROOT / path).read_bytes()).astype(np.int64)
+    predicted = normal_fit.height_content(codes.reshape(256, 256, -1)[..., 0], W4096)
+    recorded = golden.map("r1", "s0/height").values[..., 0].astype(np.float32)
+    assert int(np.count_nonzero(predicted != recorded)) > 0
+    spec = virtual_spec(manifest, "s0", tmp_path, ["Height"])
+    with pytest.raises(AssertionError) as failure:
+        evaluate(evaluator_tests, spec, tmp_path, "cpu")
+    assert "unsupported_source" in str(failure.value)
+    assert "on the Height channel of a 4096x4096 set is not recorded exact" in str(failure.value)
+    assert "decision 400" in str(failure.value)
+
+
+@pytest.mark.parametrize("backend", backends())
+def test_height_normal_at_4096_evaluates_a_one_to_one_height(
+    evaluator_tests: Path, tmp_path: Path, backend: str
+) -> None:
+    """Decision 400 §3: a 4096 px set is admitted when its Height is not magnified. The 256 px ramps
+    tiled 16 x 16 times into a 4096 px 16-bit bitmap, at 1:1: the Height channel stores the signed
+    texels written half toward zero, and Normal_OpenGL and Normal_DirectX are the model's normals of
+    that Height with z = 100 / 4096 on every texel."""
+    from tools.parity.feasibility import png
+
+    manifest = envelope_manifest(RESOLUTION_4096)
+    path = next(i["path"] for i in manifest["inputs"] if i["input_id"] == "height-ramps")
+    ramps = png.decode((REPO_ROOT / path).read_bytes()).astype(np.int64).reshape(256, 256, -1)
+    tiled = np.tile(ramps[..., 0], (16, 16))
+    spec = virtual_spec(manifest, "s0", tmp_path, ["Height"])
+    data = png.encode(tiled.astype(np.uint16), 16)
+    (tmp_path / "ramps-4096.png").write_bytes(data)
+    sha = hashlib.sha256(data).hexdigest()
+    spec["resources"] = [{"sha256": sha, "png": "ramps-4096.png"}]
+    (layer,) = spec["layers"]
+    layer["sources"]["Height"]["bitmap"] = sha
+    result = evaluate(evaluator_tests, spec, tmp_path, backend)
+    height = raster(result, "Height")[..., 0].astype(np.float32)
+    expected = normal_fit.half_toward_zero(normal_fit.signed_texels(tiled))
+    assert differing(height, expected, None) == 0
+    ours = normal_fit.normal_maps(height, "Sharp", width=W4096)
+    problems = []
+    for map_name in MAPS:
+        n = differing(write16(raster(result, map_name)), ours[map_name], None)
+        if n:
+            problems.append(f"{map_name}: {n} values differ")
     assert not problems, problems
 
 

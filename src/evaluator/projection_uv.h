@@ -121,8 +121,10 @@ struct UvProjection {
 /// filter minifies outside the texture unit's measured domain: a rotation that is not a multiple
 /// of 90 degrees, a bitmap that is not square with a power-of-two side, a non-square set, or
 /// `signedRange` (the Height channel: Painter filters the signed heights, `ProjectTexel`, and its
-/// minification of them is not measured), and for a float32 bitmap source that a bilinear filter
-/// would minify (an sRGB bitmap is decoded to float32 after this check, sources.h).
+/// minification of them is not measured), for a float32 bitmap source that a bilinear filter
+/// would minify (an sRGB bitmap is decoded to float32 after this check, sources.h), and for a
+/// bilinear magnification with `signedRange` on a set above 2048 texels on either axis (decision
+/// 400: the 16x magnification at 4096 is not exact; 256 to 2048 are recorded exact).
 [[nodiscard]] render::Result<void> CheckSampling(const UvProjection& projection,
                                                  uint32_t setWidth, uint32_t setHeight,
                                                  const DecodedImage& image, bool signedRange,

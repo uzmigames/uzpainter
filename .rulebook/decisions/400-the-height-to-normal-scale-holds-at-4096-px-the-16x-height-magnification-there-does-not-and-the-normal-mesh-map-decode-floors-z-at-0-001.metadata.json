@@ -1,0 +1,9 @@
+{
+  "id": 400,
+  "slug": "the-height-to-normal-scale-holds-at-4096-px-the-16x-height-magnification-there-does-not-and-the-normal-mesh-map-decode-floors-z-at-0-001",
+  "title": "The height-to-normal scale holds at 4096 px, the 16x Height magnification there does not, and the Normal mesh map's decode floors z at 0.001",
+  "status": "accepted",
+  "date": "2026-11-03",
+  "relatedTasks": ["phase2.10_pilot-tunic-recovery", "phase2.9_pilot-belt", "phase1.12_compositor-height-normal", "phase3.1_height-magnification-fit"],
+  "supersededBy": null
+}

@@ -18,8 +18,10 @@
 //                     (this summation order is the implemented convention; the goldens do not
 //                     separate it from others).
 //   z is a UV-space gradient: 0.390625 = 100 / 256 and 3.125 = 800 / 256, recorded at 256, 512,
-//   1024 and 2048 texels (square sets; other sizes and shapes are refused).
-// - Combination (arith.h normal-map steps): H = normalise(v); F = decode(M), its y negated when
+//   1024 and 2048 texels, and at 4096 for Sharp only (decision 400; square sets; other sizes,
+//   shapes and Sobel at 4096 are refused).
+// - Combination (arith.h normal-map steps): H = normalise(v); F = decode(M) with z floored at
+//   float32(0.001) instead of 0 before the normalise (the mesh map only, decision 400), its y negated when
 //   the mesh map is in the DirectX convention, else the flat normal (0, 0, 1); A = normalise(
 //   reoriented(F, H)) (a mesh map in the project's convention; another one is refused); the
 //   channel normal C = the flat normal where a = 0, else u = decode(X
@@ -169,7 +171,8 @@ struct VirtualNormalResult {
 /// combined virtual map (the Height read-out, the Normal channel's root list and the Normal
 /// mesh map, one VirtualNormalOp per tile) or the geometry-only pass-through. Fails with the
 /// evaluation failures of the two channels and with `evaluator:unsupported_source` for what is
-/// not recorded: a set that is not square of 256, 512, 1024 or 2048 texels, a Normal mesh map in
+/// not recorded: a set that is not square of 256, 512, 1024 or 2048 texels (or of 4096 with the
+/// Sharp method, decision 400), a Normal mesh map in
 /// the combined map that is not a 16-bit RGB image at the set resolution in the project's
 /// convention, a profile whose root is not isolated; `missing_resource` for a Normal mesh map
 /// without a resource provider or bytes.

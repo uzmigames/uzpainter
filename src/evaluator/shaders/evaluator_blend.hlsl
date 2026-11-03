@@ -1019,7 +1019,12 @@ void main(uint3 id : SV_DispatchThreadID) {
     }
     float3 mesh = float3(0.0f, 0.0f, 1.0f);
     if ((flags & V_FLAG_MESH_TILE) != 0u) {
-        mesh = DecodeNormal(LoadTexel(BufferWord(g_paramsSrv, base + V_MESH_SRV), int2(x, y)).xyz);
+        // The mesh map's decode floors z at float32(0.001), not 0 (height_to_normal.cpp MeshDecode,
+        // decision 400).
+        const float3 m = LoadTexel(BufferWord(g_paramsSrv, base + V_MESH_SRV), int2(x, y)).xyz;
+        mesh = float3(m.x * 2.0f - 1.0f, m.y * 2.0f - 1.0f, m.z * 2.0f - 1.0f);
+        mesh.z = Fmax(mesh.z, 0.001f);
+        mesh = Normalise(mesh);
         if ((flags & V_FLAG_MESH_DIRECTX) != 0u) mesh.y = -mesh.y;
     }
     const float3 heightNormal = Normalise(v);

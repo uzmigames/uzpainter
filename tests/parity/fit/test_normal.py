@@ -6,15 +6,18 @@ import numpy as np
 
 from tools.parity.fit import hwmath
 from tools.parity.fit.normal import (
+    MESH_FLOOR_Z,
     SHARP_Z,
     SOBEL_Z,
     channel_normal,
+    decode,
     fills,
     half_toward_zero,
     height_layers,
     height_readout,
     height_vector,
     magnified,
+    mesh_decode,
     normal_maps,
     stack_readout,
     unorm,
@@ -120,6 +123,27 @@ def test_z_is_a_uv_space_gradient() -> None:
     h = np.zeros((4, 4), np.float32)
     assert height_vector(h, "Sharp", 512)[2][0, 0] == np.float32(SHARP_Z / 2)
     assert height_vector(h, "SmoothSobel", 1024)[2][0, 0] == np.float32(SOBEL_Z / 4)
+
+
+def test_the_mesh_map_decode_floors_z_at_a_thousandth() -> None:
+    """Decision 400: a Normal mesh map code with 2c - 1 <= 0 in z decodes with z = float32(0.001)
+    before the normalise; the Normal channel's decode keeps 0; above the floor both agree."""
+    c = (
+        np.array([0.25, 0.5], np.float32),
+        np.array([0.5, 0.5], np.float32),
+        np.array([0.5, 0.9], np.float32),
+    )
+    mesh = mesh_decode(c)
+    channel = decode(c)
+    assert channel[2][0] == 0 and mesh[2][0] > 0
+    expected = np.float32(MESH_FLOOR_Z) * (mesh[0][0] / np.float32(-0.5))
+    assert mesh[2][0] == expected
+    assert all(m[1] == k[1] for m, k in zip(mesh, channel, strict=True))
+    flat = np.full((4, 4), 0.5, np.float32)
+    low = (flat, flat, np.full((4, 4), 0.25, np.float32))
+    # A mesh map (0, 0, -1/2) decodes to the flat normal, not to the zero vector a floor of 0 gives.
+    maps = normal_maps(np.zeros((4, 4), np.float32), mesh=low)
+    assert (maps["Normal_OpenGL"][..., 2] == 65535).all()
 
 
 def test_channel_normal_follows_the_coverage() -> None:

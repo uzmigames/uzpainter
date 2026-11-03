@@ -100,6 +100,22 @@ double Footprint(const UvProjection& projection, uint32_t setWidth, uint32_t set
     return std::sqrt((trace + disc) / 2.0);
 }
 
+/// Bitmap texels per output texel along the most magnified direction: the smaller singular value
+/// of `Footprint`'s Jacobian.
+static double SmallestFootprint(const UvProjection& projection, uint32_t setWidth, uint32_t setHeight,
+                                uint32_t bitmapWidth, uint32_t bitmapHeight) {
+    const double su = projection.scale[0] / setWidth;
+    const double sv = projection.scale[1] / setHeight;
+    const double a = bitmapWidth * projection.cosR * su;
+    const double b = -(bitmapWidth * projection.sinR * sv);
+    const double c = bitmapHeight * projection.sinR * su;
+    const double d = bitmapHeight * projection.cosR * sv;
+    const double trace = a * a + b * b + c * c + d * d;
+    const double det = a * d - b * c;
+    const double disc = std::sqrt(std::fmax(trace * trace - 4.0 * det * det, 0.0));
+    return std::sqrt(std::fmax(trace - disc, 0.0) / 2.0);
+}
+
 render::Result<void> CheckSampling(const UvProjection& projection, uint32_t setWidth,
                                    uint32_t setHeight, const DecodedImage& image, bool signedRange,
                                    core::Id node) {
@@ -143,6 +159,22 @@ render::Result<void> CheckSampling(const UvProjection& projection, uint32_t setW
                                    "signed heights and their minification is not measured",
                             node);
         }
+    }
+    // Height magnification is recorded exact on sets of 256 to 2048 texels only. At 4096 Painter's
+    // 16x magnification of a 256-px height bitmap leaves 48 126 of the 16 777 216 Height texels off
+    // (0.29 %, up to 2^-10; tier0/semantics/height-normal-resolution-4096, decision 400).
+    if (signedRange && projection.filter != core::FilteringMode::Nearest && (setWidth > 2048 || setHeight > 2048) &&
+        SmallestFootprint(projection, setWidth, setHeight, image.width, image.height) < 1.0 - 1e-9) {
+        return EvalFail(EvalErrorKind::UnsupportedSource,
+                        std::string(core::ToString(projection.filter)) + " magnification (" +
+                            std::to_string(SmallestFootprint(projection, setWidth, setHeight, image.width,
+                                                             image.height)) +
+                            " bitmap texels per texel) on the Height channel of a " + std::to_string(setWidth) + "x" +
+                            std::to_string(setHeight) +
+                            " set is not recorded exact: Painter's 16x magnification of a 256-px height bitmap "
+                            "at 4096 leaves 0.29% of the Height texels off (height-normal-resolution-4096, "
+                            "decision 400; owner phase3.1_height-magnification-fit)",
+                        node);
     }
     return {};
 }

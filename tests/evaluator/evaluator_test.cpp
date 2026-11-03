@@ -6579,6 +6579,16 @@ std::shared_ptr<DecodedImage> NormalCodes(uint32_t size, uint32_t seed, uint32_t
     return image;
 }
 
+/// `image` with every fifth texel's z code at or below the flat half (2c - 1 <= 0), where the
+/// Normal mesh map's z floor of 0.001 applies (decision 400).
+std::shared_ptr<DecodedImage> WithLowZ(std::shared_ptr<DecodedImage> image) {
+    const uint32_t half = image->encoding == render::TexelEncoding::Unorm16 ? 32767u : 127u;
+    for (size_t i = 0; i < image->values.size() / 3; i += 5) {
+        image->values[i * 3 + 2] = static_cast<uint32_t>((i * 7919u) % (half + 1u));
+    }
+    return image;
+}
+
 std::array<uint32_t, 3> Codes16(const std::array<float, 3>& e) {
     return {arith::WriteUnorm(e[0], 16), arith::WriteUnorm(e[1], 16), arith::WriteUnorm(e[2], 16)};
 }
@@ -6936,6 +6946,121 @@ int RunHeightNormal(const fs::path& assets) {
               "a 512 set evaluates; a 128 set fails with unsupported_source (not recorded)", kindOf(r) + " " + s128);
     }
 
+    // Decision 400: 4096 is recorded with Sharp only; Height magnification on a 4096 set is refused,
+    // 1:1 and Nearest are not, and magnification on smaller sets is unchanged.
+    {
+        const auto normalOf = [&](uint32_t width, uint32_t height, HeightToNormalMethod method) {
+            Builder s(width, height, {{ChannelType::Height, ChannelFormat::L16F}, {ChannelType::Normal, ChannelFormat::RGB16F}});
+            s.Set().height_to_normal_method = method;
+            return cpu.EvaluateNormal(s.project, 1, request(s, NormalSourceKind::Combined, NormalMapFormat::OpenGL));
+        };
+        render::Result<VirtualNormalResult> sharp4096 = normalOf(4096, 4096, HeightToNormalMethod::Sharp);
+        const std::string sobel4096 = kindOf(normalOf(4096, 4096, HeightToNormalMethod::SmoothSobel));
+        const std::string oblong4096 = kindOf(normalOf(4096, 2048, HeightToNormalMethod::Sharp));
+        const std::string set8192 = kindOf(normalOf(8192, 8192, HeightToNormalMethod::Sharp));
+        Check(sharp4096 && sharp4096->width == 4096 && sobel4096 == "unsupported_source" &&
+                  oblong4096 == "unsupported_source" && set8192 != "ok",
+              "a 4096 set evaluates with Sharp (z = 100 / 4096); Sobel at 4096, a 4096 x 2048 set and an 8192 set fail",
+              kindOf(sharp4096) + " " + sobel4096 + " " + oblong4096 + " " + set8192);
+        Check(HeightZ(HeightToNormalMethod::Sharp, 4096) == 0.0244140625f, "z at 4096 is 100 / 4096 (Sharp)");
+
+        const std::string h16Sha(64, '1');
+        const std::string h128Sha(64, '2');
+        const std::string h4096Sha(64, '3');
+        resources->Add(h16Sha, HeightCodes(16, 21));
+        resources->Add(h128Sha, HeightCodes(128, 22));
+        resources->Add(h4096Sha, HeightCodes(4096, 23));
+        const auto heightOf = [&](uint32_t size, const std::string& sha, std::optional<core::FilteringMode> filter,
+                                  std::array<double, 2> scale) {
+            Builder s(size, size, {{ChannelType::Height, ChannelFormat::L16F}});
+            s.AddResource(sha, 1);
+            core::Layer fill = s.Fill("h", {{ChannelType::Height, Bitmap(sha)}}, {{ChannelType::Height, Blend(BlendingMode::Normal, 1.0)}});
+            if (filter) SetUv(fill, *filter, core::UVWrapMode::Repeat, scale, 0.0, {0.0, 0.0});
+            s.SetRoot({fill});
+            EvaluateRequest channel;
+            channel.textureSet = s.SetId();
+            channel.stack = s.StackId();
+            channel.channel = ChannelType::Height;
+            channel.resources = resources;
+            return cpu.Evaluate(s.project, channel);
+        };
+        const auto kind = [](const render::Result<ChannelResult>& r) -> std::string {
+            if (r) return "ok";
+            const std::optional<EvalErrorKind> k = EvalErrorKindOf(r.error());
+            return (k ? std::string(EvalErrorKindName(*k)) : std::string("other")) + ": " + r.error().Describe();
+        };
+        const std::string at256x16 = kind(heightOf(256, h16Sha, std::nullopt, {1.0, 1.0}));
+        const std::string at4096x16 = kind(heightOf(4096, heightSha, std::nullopt, {1.0, 1.0}));
+        const std::string at4096x32 = kind(heightOf(4096, h128Sha, std::nullopt, {1.0, 1.0}));
+        const std::string anisotropic =
+            kind(heightOf(4096, h4096Sha, core::FilteringMode::BilinearHQ, {1.0, 0.5}));
+        const std::string oneToOne = kind(heightOf(4096, h4096Sha, std::nullopt, {1.0, 1.0}));
+        const std::string nearest = kind(heightOf(4096, heightSha, core::FilteringMode::Nearest, {1.0, 1.0}));
+        const auto refused = [](const std::string& k) {
+            return k.starts_with("unsupported_source") && k.find("decision 400") != std::string::npos;
+        };
+        Check(at256x16 == "ok" && refused(at4096x16) && refused(at4096x32) && refused(anisotropic) && oneToOne == "ok" &&
+                  nearest == "ok",
+              "Height magnification: 16x on a 256 set evaluates; on a 4096 set 16x, 32x and an anisotropic (1, 1/2) "
+              "scale fail with unsupported_source (decision 400); 1:1 and Nearest at 4096 evaluate",
+              at256x16 + " | " + at4096x16 + " | " + at4096x32 + " | " + anisotropic + " | " + oneToOne + " | " + nearest);
+    }
+
+    // Decision 400: the Normal mesh map's decode floors z at float32(0.001) before the normalise,
+    // in the combined map and on the padded normal, in both conventions; the Normal channel keeps 0.
+    {
+        const std::array<std::array<float, 3>, 4> lowZ{{{0.25f, 0.5f, 0.5f}, {0.7f, 0.2f, 0.25f},
+                                                        {0.5f, 0.5f, 0.0f}, {0.9f, 0.6f, 0.4999f}}};
+        const auto decoded = [](const std::array<float, 3>& c, bool meshDirectX) {
+            std::array<float, 3> n{c[0] * 2.0f - 1.0f, c[1] * 2.0f - 1.0f, c[2] * 2.0f - 1.0f};
+            n[2] = std::fmax(n[2], 0.001f);
+            n = arith::NormalNormalise(n);
+            if (meshDirectX) n[1] = -n[1];
+            return n;
+        };
+        const auto encoded = [](const std::array<float, 3>& base, const std::array<float, 3>& h,
+                                const std::array<float, 3>& detail, NormalMapFormat convention) {
+            const std::array<float, 3> a = arith::NormalNormalise(arith::NormalReoriented(base, h));
+            const std::array<float, 3> n = arith::NormalNormalise(arith::NormalReoriented(a, detail));
+            const float y = convention == NormalMapFormat::DirectX ? -n[1] : n[1];
+            return std::array<float, 3>{arith::Fma(n[0], 0.5f, 0.5f), arith::Fma(y, 0.5f, 0.5f), arith::Fma(n[2], 0.5f, 0.5f)};
+        };
+        const std::array<float, 3> v{0.3f, -0.2f, kSharpZ};
+        const std::array<float, 3> h = arith::NormalNormalise(v);
+        const std::array<float, 3> flatDetail = arith::NormalDecode(kFlatNormalColour);
+        const std::array<float, 3> tilted = arith::NormalDecode({0.6f, 0.45f, 0.9f});
+        bool ok = true;
+        bool differs = false;
+        std::string detail;
+        for (const std::array<float, 3>& c : lowZ) {
+            for (const bool meshDirectX : {false, true}) {
+                for (const NormalMapFormat convention : {NormalMapFormat::OpenGL, NormalMapFormat::DirectX}) {
+                    NormalInputs inputs;
+                    inputs.hasMesh = true;
+                    inputs.mesh = c;
+                    inputs.meshDirectX = meshDirectX;
+                    const std::array<float, 3> texel = VirtualNormalTexel(v, inputs, convention);
+                    const std::array<float, 3> padded = MeshOnPaddedNormal(c, meshDirectX, h, tilted, convention);
+                    const std::array<float, 3> f = decoded(c, meshDirectX);
+                    const bool same = texel == encoded(f, h, flatDetail, convention) &&
+                                      padded == encoded(f, h, tilted, convention);
+                    if (!same && detail.empty()) detail = std::to_string(c[0]) + "," + std::to_string(c[1]) + "," + std::to_string(c[2]);
+                    ok = ok && same;
+                    std::array<float, 3> old = arith::NormalDecode(c);
+                    if (meshDirectX) old[1] = -old[1];
+                    const std::array<float, 3> before = encoded(old, h, flatDetail, convention);
+                    differs = differs || !(before == texel);
+                }
+            }
+        }
+        const std::array<float, 3> channelZero = arith::NormalDecode({0.25f, 0.5f, 0.5f});
+        Check(ok && differs && channelZero[2] == 0.0f,
+              "a Normal mesh map with z <= 0 decodes with z floored at 0.001 before the normalise, in the combined "
+              "texel and on the padded normal, mesh map and output in both conventions; the Normal channel's decode "
+              "keeps the floor at 0",
+              detail);
+    }
+
     // Explicit failures of what is not recorded.
     {
         Builder oblong(512, 256, {{ChannelType::Height, ChannelFormat::L16F}, {ChannelType::Normal, ChannelFormat::RGB16F}});
@@ -7240,7 +7365,7 @@ int RunHeightNormalGpuVsCpu(const fs::path& assets, const fs::path& dir) {
     std::shared_ptr<DecodedImage> normals = FloatNormals(kTiles * kSize, 6);
     std::shared_ptr<DecodedImage> coverage = HeightCodes(kTiles * kSize, 12);
     for (size_t i = 0; i < coverage->values.size(); i += 17) coverage->values[i] = i % 2 == 0 ? 0u : 65535u;
-    std::shared_ptr<DecodedImage> mesh = NormalCodes(kTiles * kSize, 13);
+    std::shared_ptr<DecodedImage> mesh = WithLowZ(NormalCodes(kTiles * kSize, 13));
     size_t compared = 0;
     std::vector<std::string> failures;
     for (const core::HeightToNormalMethod method : {core::HeightToNormalMethod::Sharp, core::HeightToNormalMethod::SmoothSobel}) {
@@ -7281,7 +7406,7 @@ int RunHeightNormalGpuVsCpu(const fs::path& assets, const fs::path& dir) {
     for (const std::string& failure : failures) Check(false, "virtual normal kernel", failure);
     Check(failures.empty(), "the virtual normal kernel equals the CPU reference bit for bit across tile edges (" +
                                 std::to_string(compared) + " values, both methods and conventions, partial Normal "
-                                "coverage, mesh maps in both conventions)");
+                                "coverage, mesh maps in both conventions with texels of z <= 0)");
 
     failures.clear();
     compared = 0;
@@ -7312,7 +7437,7 @@ int RunHeightNormalGpuVsCpu(const fs::path& assets, const fs::path& dir) {
     auto resources = std::make_shared<MapResourceProvider>();
     resources->Add(heightSha, HeightCodes(256, 9));
     resources->Add(normalSha, NormalCodes(256, 10));
-    resources->Add(meshSha, NormalCodes(256, 14));
+    resources->Add(meshSha, WithLowZ(NormalCodes(256, 14)));
     Builder b(256, 256, {{ChannelType::Height, ChannelFormat::L16F}, {ChannelType::Normal, ChannelFormat::RGB16F}});
     b.AddResource(heightSha, 1);
     b.AddResource(normalSha, 1);
