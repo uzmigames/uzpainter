@@ -19,6 +19,7 @@ import pytest
 
 from tests.adapters.assets3d.wand import Call, Wand
 from tests.parity.tier1.wand_v1.runner import (
+    DECIDED_REFUSALS,
     IDENTITY,
     SAVE,
     Project,
@@ -36,9 +37,10 @@ UUID = "6c1d7a52-2f4e-4c55-9a44-0d8f0e0a1b2c"
 class Stand:
     """`Wand`'s `work`, `argument` (`out`, and `dst`: the created project), `probe` and `export`;
     every identity read names `project` and `uuid`. Each export writes `maps` into `out` with
-    a conformant receipt naming `receipt_project`; `refuse` makes the next export refuse as
-    UzPainter does; the save sets the project's UUID to `uuid_after_save` and leaves it needing a
-    save when `stays_unsaved`."""
+    a receipt naming `receipt_project`: conformant, or under `diagnostic` the measure mode's,
+    marked `non_conformant` with `bypassed` unless `unmarked`; `modes` lists each export's
+    `diagnostic`; `refuse` makes the next export refuse as UzPainter does; the save sets the
+    project's UUID to `uuid_after_save` and leaves it needing a save when `stays_unsaved`."""
 
     def __init__(self, work: Path, maps: dict[str, bytes]) -> None:
         self.work = work
@@ -52,6 +54,9 @@ class Stand:
         self.stays_unsaved = False
         self.refuse = False
         self.calls: list[str] = []
+        self.modes: list[bool] = []
+        self.bypassed = [{"path": name, "refusal": DECIDED_REFUSALS[0]} for name in maps]
+        self.unmarked = False
         work.mkdir()
 
     def argument(self, step: str, key: str) -> Path:
@@ -70,8 +75,8 @@ class Stand:
         return {"before": before, "after": self.read(self.stays_unsaved)}
 
     def export(self, diagnostic: bool = False) -> Call:
-        assert not diagnostic
         self.calls.append("export")
+        self.modes.append(diagnostic)
         if self.refuse:
             error = {"type": "NotYetSupported", "message": "the padding is not exact"}
             return Call(1, "", json.dumps({"error": error}) + "\n")
@@ -80,7 +85,13 @@ class Stand:
         for name, data in self.maps.items():
             (self.out / name).write_bytes(data)
             files.append({"path": name, "sha256": hashlib.sha256(data).hexdigest()})
-        receipt = {"files": files, "manifest_files": {"project": {"path": self.receipt_project}}}
+        receipt: dict[str, Any] = {
+            "files": files,
+            "manifest_files": {"project": {"path": self.receipt_project}},
+        }
+        if diagnostic and not self.unmarked:
+            marking = {"mode": "diagnostic-measure", "decision": "286", "bypassed": self.bypassed}
+            receipt["non_conformant"] = marking
         (self.out / "receipt.json").write_text(json.dumps(receipt), encoding="utf-8")
         (self.out / "current.json").write_text('{"receipt": "receipt.json"}', encoding="utf-8")
         names = [str(self.out / name) for name in self.maps]
@@ -261,3 +272,35 @@ def test_a_save_that_leaves_the_project_unsaved_stops_the_run(stand: Stand) -> N
     with pytest.raises(RunError, match="still needs saving"):
         reopened(cast(Wand, stand), first, initial)
     assert stand.calls == ["built", "export", "save"]
+
+
+# --- decision 395: the Tier 1 run's exports are all the measure mode's --------------------------
+
+
+def start_measured(stand: Stand) -> tuple[CandidateRun, Project]:
+    """`start` with the first export in the diagnostic measure mode."""
+    initial = initial_project(cast(Wand, stand))
+    return exported(cast(Wand, stand), stand.export(diagnostic=True)), initial
+
+
+def test_a_measured_first_export_is_exported_again_in_the_measure_mode(stand: Stand) -> None:
+    """The export after the reopen runs in the first export's mode, its receipt marked and naming
+    only decided refusals, and the record holds 3.3."""
+    first, initial = start_measured(stand)
+    _, record = reopened(cast(Wand, stand), first, initial, diagnostic=True)
+    assert stand.modes == [True, True]
+    assert record.equal, record
+
+
+def test_a_measured_reopen_whose_receipt_is_unmarked_stops_the_run(stand: Stand) -> None:
+    first, initial = start_measured(stand)
+    stand.unmarked = True
+    with pytest.raises(RunError, match="is not marked non_conformant"):
+        reopened(cast(Wand, stand), first, initial, diagnostic=True)
+
+
+def test_a_measured_reopen_bypassing_an_undecided_refusal_stops_the_run(stand: Stand) -> None:
+    first, initial = start_measured(stand)
+    stand.bypassed = [{"path": "wand_Normal.png", "refusal": "a resize is not recorded"}]
+    with pytest.raises(RunError, match="no decision names"):
+        reopened(cast(Wand, stand), first, initial, diagnostic=True)

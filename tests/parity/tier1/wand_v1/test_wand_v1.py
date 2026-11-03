@@ -8,15 +8,16 @@ default `E:\\UzmiGames\\Assets3D`), `zig` for a fresh `zig build painter`, the p
 admitted golden `phase1/tier1/wand-v1` (recording R9); hosted CI has none of them and skips it
 with the reason. Synthetic host cases of the comparison are in `../test_tier1_compare.py`.
 
-While phase1.25 item 2.7 is open, UzPainter refuses the pinned five-map export before writing:
-the virtual Normal on the Wand's UV islands is not exact (decision 245), and neither is its
-`infinite` padding there (decision 259; the owner withdrew exception EXC-007). The test then checks
-that both rebuilds refused it with one of those refusals and that the report states it as the one
-structural failure `candidate_export_refused`, and ends as an expected failure naming the refusal
-(decision 255); the 3.3 test then has no evidence (a refused first export is never reopened) and
-ends as an expected failure too. Any other refusal fails the tests with its message; once the
-refusal is lifted, the equality, repeatability and save/reopen assertions run unchanged.
-Diagnostic measure exports (`test_wand_measure.py`) are never reopened and never count as 3.3.
+While phase1.25 item 2.7 is open, production UzPainter refuses the pinned five-map export before
+writing: the virtual Normal on the Wand's UV islands is not exact (decision 245), and neither is
+its `infinite` padding there (decision 259). The owner approved exception EXC-010 (decision 395):
+on the Wand v1 the padding texels of all five maps and the Normal's island-edge texels may differ,
+and every other texel stays exact. So every export here (both rebuilds and the export after the
+reopen) is the diagnostic measure export (decision 286), which writes past exactly those two
+refusals and records them in its receipt; `runner.checked_receipt` checks each receipt is marked
+`non_conformant` and names no other bypassed refusal. A pass is a pass under EXC-010, never an
+exact one, and any refusal fails the tests with its message. Production keeps both refusals on
+every asset. `test_wand_measure.py` is the opt-in per-class measurement of the same mode.
 """
 
 from __future__ import annotations
@@ -37,12 +38,8 @@ from tools.parity.tier1.compare import CandidateRun, write_report
 from tools.parity.verdict import resolve_golden
 
 REPORT_ENV = "UZP_TIER1_REPORT"  # repository-relative path of the report to write
-# The decided refusals of the five-map export (src/export/padding.cpp `IslandNormalRefusal` and
-# `CheckPadding`), whichever of its files is checked first.
-KNOWN_REFUSALS = (
-    "the Height outside the UV islands; decision 245",
-    "UV islands do not cover the whole tile is not exact",
-)
+# The only exception the Wand's equality may rely on (decision 395).
+EXC010 = {"exception_id": "EXC-010", "version": 1}
 
 pytestmark = [
     pytest.mark.skipif(
@@ -85,39 +82,31 @@ Evidence = tuple[dict[str, Any], tuple[CandidateRun, CandidateRun], Reopen | Non
 
 @pytest.fixture(scope="module")
 def evidence(painter: Path, tmp_path_factory: pytest.TempPathFactory) -> Evidence:
-    """The report, the two rebuilds and the save/reopen record (`runner.reopened_compared`),
-    from one run for both tests."""
-    return reopened_compared(painter, tmp_path_factory.mktemp("wand"))
+    """The report, the two rebuilds and the save/reopen record (`runner.reopened_compared`), every
+    export in the diagnostic measure mode (decision 395), from one run for both tests."""
+    return reopened_compared(painter, tmp_path_factory.mktemp("wand"), diagnostic=True)
 
 
-def refusals_of(runs: tuple[CandidateRun, CandidateRun]) -> list[str]:
-    """Each rebuild's refusal message, asserted to be a decided refusal; empty when none refused."""
-    if not any(r.refused for r in runs):
-        return []
-    refusals = [r.refusal for r in runs]
-    assert all(any(k in message for k in KNOWN_REFUSALS) for message in refusals), refusals
-    return refusals
+def unrefused(runs: tuple[CandidateRun, CandidateRun]) -> None:
+    """Neither rebuild was refused: the measure mode bypasses only the decided refusals."""
+    assert not any(r.refused for r in runs), [r.refusal for r in runs]
 
 
 def test_wand_v1_maps_equal_painter_and_are_byte_stable(evidence: Evidence) -> None:
-    """3.1 every exported map equals its golden; 3.2 the two independent rebuilds, each in its own
-    processes and work directory, are byte-identical."""
+    """3.1 every exported map equals its golden under EXC-010 (decision 395: covered interior
+    texels exact on every map, covered texels exact on every map but the Normal, the padding and
+    the Normal's island-edge texels published per band); 3.2 the two independent rebuilds, each in
+    its own processes and work directory, are byte-identical."""
     report, runs, _ = evidence
     assert validation_errors(report, Schema.COMPARISON_REPORT) == []
     if os.environ.get(REPORT_ENV):
         write_report(report, REPO_ROOT / os.environ[REPORT_ENV])
+    unrefused(runs)
     equality = report["equality_to_painter"]
-    if refusals := refusals_of(runs):
-        assert equality == {
-            "outcome": "fail",
-            "exceptions_relied_on": [],
-            "maps": [],
-            "structural": [{"output_id": "export", "reason": "candidate_export_refused"}],
-        }
-        assert report["uzpainter_repeatability"] == {"status": "not_measured", "maps": []}
-        pytest.xfail(f"UzPainter refuses the five-map export (decisions 245, 259): {refusals[0]}")
     assert equality["structural"] == []
+    assert len(equality["maps"]) == 5 and all("padding" in m for m in equality["maps"]), equality
     assert equality["outcome"] == "pass", equality
+    assert equality["exceptions_relied_on"] in ([], [EXC010]), equality["exceptions_relied_on"]
     assert report["uzpainter_repeatability"]["status"] == "repeatable"
 
 
@@ -126,9 +115,7 @@ def test_wand_v1_saved_and_reopened_project_exports_the_first_maps(evidence: Evi
     project) through the save to the reopen in a fresh process, and exports again every file of its
     first export, byte for byte (the first export's hashes were taken before the save)."""
     _, runs, reopen = evidence
-    if refusals := refusals_of(runs):
-        assert reopen is None  # a refused first export is never reopened: no 3.3 evidence
-        pytest.xfail(f"UzPainter refuses the five-map export (decisions 245, 259): {refusals[0]}")
+    unrefused(runs)
     assert reopen is not None
     assert reopen.first, "the first export wrote no file"
     assert reopen.same_project, reopen

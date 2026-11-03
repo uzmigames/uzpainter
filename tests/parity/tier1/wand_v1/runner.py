@@ -28,12 +28,14 @@ the normal map is the file the pinned `painter_export.py` exports from the virtu
 
 The texture sets' UV coverage (decision 223) comes from the job's staged OBJ mesh inputs: each set
 is the mesh material of its name, and the report publishes each map's covered texels and its
-padding texels apart. Both are compared exactly: the owner withdrew exception EXC-007, which had
-excepted the padding texels (decision 259).
+padding texels apart, and its Normal's island-edge texels among the covered ones. The owner withdrew
+exception EXC-007 (decision 259) and approved EXC-010 (decision 395): on the Wand v1 the padding
+texels of every map and the Normal's island-edge texels may differ, and every other texel is
+compared exactly.
 
 An export UzPainter refuses before writing (`NotYetSupported`, while phase1.25 item 2.7 is open:
 decision 245 refuses the five-map export's virtual Normal on the Wand's UV islands, and decision
-259 its `infinite` padding there) is reported as
+259 its `infinite` padding there; the measure mode below records both as bypassed) is reported as
 the one structural failure `candidate_export_refused`, with no map compared (decision 255); the
 rebuild keeps the refusal's message. Any other failed call stops the run. Nothing is written
 under the Assets3D root or into the repository except the report, when `UZP_TIER1_REPORT` names
@@ -60,13 +62,17 @@ file, and every file's bytes are equal. A refused first export
 gives no 3.3 evidence (no record). The second rebuild, in its own work directory, stays the 3.2
 evidence.
 
-`measured(painter, work)` is the diagnostic measure mode (decision 286), never the test's: both
+`measured(painter, work)` is the diagnostic measure mode (decision 286): both
 rebuilds export with `UzPainter.exe run --diagnostic-measure-export` (through the adapter client),
 which writes past those two refusals: `InexactPadding::measure` over the islands, and the Normal by
 Painter's recorded island rule (decision 308: the stencil on the padded Height, decision 287's ring
 copy, the flood under the mesh map; src/export/virtual_maps.h). Its maps are NOT conformant (each
-rebuild's receipt must say `non_conformant`, and a conformant rebuild's must not), so its report is
-no verdict and is never written as the Tier 1 report. It returns the report and, per map, the texels
+rebuild's receipt must say `non_conformant` and name only decided refusals as bypassed,
+`DECIDED_REFUSALS`, and a conformant rebuild's receipt must not be marked). Since decision 395 the
+Tier 1 test runs `reopened_compared(..., diagnostic=True)`: the owner's exception EXC-010 excepts
+exactly what this mode writes inexactly on the Wand v1 (its padding and its Normal's island-edge
+texels), so its report is the Tier 1 report, a pass under EXC-010 at best. `measured` returns the
+report and, per map, the texels
 of the first rebuild that differ from Painter's r1 (in any component), per class: `interior` (the
 covered texels), `edge` (the covered texels with an uncovered 8-neighbour, a part of `interior`),
 `ring` (the uncovered texels with a covered 8-neighbour, x wrapping as the ring does) and `gutter`
@@ -117,6 +123,12 @@ GOLDEN_ID = "phase1/tier1/wand-v1"
 BACKEND = "dx12"  # `UzPainter.exe run`'s default; the adapter passes no --gpu-backend
 REFUSAL = "NotYetSupported"
 NORMAL_SUFFIX = "_Normal"  # painter_export.py: f"{P}_Normal" from virtual map Normal_OpenGL
+# The decided refusals of an islanded export (src/export/padding.cpp `IslandNormalRefusal` and
+# `CheckPadding`): the only ones the diagnostic measure export may bypass on the Wand.
+DECIDED_REFUSALS = (
+    "the Height outside the UV islands; decision 245",
+    "UV islands do not cover the whole tile is not exact",
+)
 
 # Item 3.3: the open project's identity, read by an adapter call (IDENTITY), and by the call that
 # saves it both before and after its save (SAVE).
@@ -313,12 +325,24 @@ def rebuild(
 
 
 def checked_export(wand: Wand, diagnostic: bool = False) -> CandidateRun:
-    """The export of `rebuild` on a built `wand`, its receipt checked to be (not) the measure
-    mode's as `diagnostic` says."""
+    """The export of `rebuild` on a built `wand`, its receipt checked by `checked_receipt`."""
     run = exported(wand, wand.export(diagnostic=diagnostic))
-    if not run.refused and non_conformant(wand) != diagnostic:
-        raise RunError(f"the export's receipt is {'not ' * diagnostic}marked non_conformant")
+    if not run.refused:
+        checked_receipt(wand, diagnostic)
     return run
+
+
+def checked_receipt(wand: Wand, diagnostic: bool) -> None:
+    """The receipt of the export `wand` last published is (not) the measure mode's as `diagnostic`
+    says, and the measure mode bypassed only decided refusals (`DECIDED_REFUSALS`)."""
+    if non_conformant(wand) != diagnostic:
+        raise RunError(f"the export's receipt is {'not ' * diagnostic}marked non_conformant")
+    if not diagnostic:
+        return
+    bypassed = receipt_of(wand)["non_conformant"]["bypassed"]
+    undecided = [b for b in bypassed if not any(k in b["refusal"] for k in DECIDED_REFUSALS)]
+    if undecided:
+        raise RunError(f"the measure export bypassed refusals no decision names: {undecided}")
 
 
 def non_conformant(wand: Wand) -> bool:
@@ -427,11 +451,14 @@ def initial_project(wand: Wand) -> Project:
     return project
 
 
-def reopened(wand: Wand, first: CandidateRun, initial: Project) -> tuple[CandidateRun, Reopen]:
+def reopened(
+    wand: Wand, first: CandidateRun, initial: Project, diagnostic: bool = False
+) -> tuple[CandidateRun, Reopen]:
     """Item 3.3 on `wand` after its export `first` (not refused) of the project `initial`
     (`initial_project`): `first` as the copies taken before the save, and the save/reopen record.
-    A first export whose receipt lists other files, a save that leaves the project needing a save,
-    or a conformant export after the reopen marked `non_conformant`, stops the run."""
+    The export after the reopen runs in `first`'s mode (`diagnostic`). A first export whose
+    receipt lists other files, a save that leaves the project needing a save, or an export after
+    the reopen whose receipt fails `checked_receipt`, stops the run."""
     kept, hashes = preserved(first, wand.work / "first-export")
     project = exported_project(receipt_of(wand), kept.files, hashes)
     saving = wand.probe("save", SAVE)
@@ -441,15 +468,15 @@ def reopened(wand: Wand, first: CandidateRun, initial: Project) -> tuple[Candida
     # `exported` checks that it is empty.
     out = wand.argument("export", "out")
     before = contents(out)
-    call = wand.export()  # a fresh process, which reopens the saved project
+    call = wand.export(diagnostic=diagnostic)  # a fresh process: reopens the saved project
     if call.status == 1 and REFUSAL in call.stderr:
         if contents(out) != before:
             raise RunError(f"the refused export after the reopen changed {out}: {call.stderr}")
         again = CandidateRun(refused=True, refusal=refusal(call))
     else:
         again = exported(wand, call)
-    if not again.refused and non_conformant(wand):
-        raise RunError("the export after the reopen is marked non_conformant")
+    if not again.refused:
+        checked_receipt(wand, diagnostic)
     record = Reopen(
         initial,
         project,
@@ -481,12 +508,16 @@ def compared(
 
 
 def reopened_compared(
-    painter: Path, work: Path, golden_id: str = GOLDEN_ID, request: Path = REQUEST
+    painter: Path,
+    work: Path,
+    golden_id: str = GOLDEN_ID,
+    request: Path = REQUEST,
+    diagnostic: bool = False,
 ) -> tuple[dict[str, Any], tuple[CandidateRun, CandidateRun], Reopen | None]:
     """`compared` with item 3.3 on the first rebuild (above): the report, the two rebuilds (the
     first as the copies taken before its save) and the save/reopen record, None when the first
-    export was refused."""
-    report, runs, _, record = _evidence(painter, work, golden_id, request, False, True)
+    export was refused. `diagnostic`: every export in the measure mode (above, decision 395)."""
+    report, runs, _, record = _evidence(painter, work, golden_id, request, diagnostic, True)
     return report, runs, record
 
 
@@ -514,7 +545,7 @@ def _evidence(
         initial = initial_project(wand)
         first = checked_export(wand, diagnostic)
         if not first.refused:
-            first, record = reopened(wand, first, initial)
+            first, record = reopened(wand, first, initial, diagnostic)
     else:
         wand, first = rebuild(painter, work / "run-1", manifest, diagnostic)
     _, second = rebuild(painter, work / "run-2", manifest, diagnostic)
