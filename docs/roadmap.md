@@ -31,3 +31,34 @@ Total, Hypothesis: 30–39 weeks of elapsed time; it shortens only where the DAG
 
 8. Before input-dependent Belt or Tunic rebuild/recording work, complete one bounded inventory of identified sources using the searches already documented in the pilot tasks. Publish present/missing inputs and identity evidence, preserve available or recovered bytes and the request/envelope/reference by verified hash in the private store, and do not repeat a sweep without a newly identified source. Restoring verified originals does not require a new scope decision. A recreated, replaced or excluded reference requires an explicit recorded owner scope decision; reuse any pending question and retain the existing reference. The inventory checkpoint produces one decision package when needed, never a silently changed golden or a gate pass. Independent work continues while that choice is unresolved.
 9. Wand remains the next delivery checkpoint. Before each unresolved parity experiment batch, record its hypothesis, expected discriminating evidence and finite wall-clock budget in the owning task's evidence record. At budget expiry or the declared stopping condition, stop that batch and publish elapsed time, remaining residuals and the next decision: continue with a new discriminating hypothesis, propose an evidenced owner exception, or leave the capability blocked. No budget expiry grants a tolerance, exception or scope change. A new batch needs a recorded hypothesis and budget; rerunning the same investigation without new evidence does not reset the checkpoint. At a blocked Wand checkpoint, record an interim schedule update from measured effort and unresolved dependencies; on the pilot's pass/fail completion, perform the full remaining-phase re-forecast required by rule 6, distinguishing measured estimates from hypotheses.
+
+## Schedule checkpoint: Wand v1 (2026-11-03, decision 035)
+
+The Wand v1 pilot completed on 2026-11-03: its Tier 1 run passes under EXC-010, never exact (decision 395). The exact padding moved to `phase3.1_export-island-padding` (decision 396). Measured below means read from the task notes, decisions and archive dates. Extrapolated means not validated by this slice.
+
+**Measured from the slice.**
+- **Wall-clock.** The task was created on 2026-10-10 and its R9 goldens were admitted on 2026-10-12 (decision 180). The first full Tier 1 runs came on 2026-10-13 (decisions 223, 245), and the pass under EXC-010 on 2026-11-03: 24 calendar days. One Tier 1 run takes 232 s.
+- **Where the time went.** Mesh, stack, compositor, encoders, pipeline scripts and adapter were exact on every covered texel of four maps by 2026-10-13 (decision 223). The other 21 days went to one capability: `infinite` padding and the Normal's island-edge texels on UV islands. About 40 decisions (220 to 368) narrowed it, and it is still not exact.
+- **Failure causes, in order:**
+  1. the 16-bit export of the sRGB8 material channels (item 2.6; decisions 126 to 204, 2026-10-12/13), closed exact;
+  2. `infinite` padding on UV islands (decisions 127 to 368), not exact;
+  3. the virtual Normal's island-edge texels, which read Painter's padded Height (decisions 245, 263, 308), not exact;
+  4. the exception route. The panel's EXC-007 (2026-10-13) was withdrawn by the owner on 2026-10-18 (decision 259). The owner approved EXC-010 on 2026-11-03 (decision 395). That left 16 days with no exception route;
+  5. the oracle refresh to Painter 12.2.0 (2026-10-23): recorder repairs only, and no Wand golden changed.
+- **Exceptions.** One relied on: EXC-010 version 1, Wand v1 only. One withdrawn: EXC-007.
+- **Phase actuals.**
+  - Phase 0: closed at G0 on 2026-10-13, 4 days after its tasks were created, against a 3–4 week Hypothesis.
+  - Phase 1: 41 of 43 tasks were archived by 2026-10-21, and the Wand closed on 2026-11-03. Only gate G1's record remains.
+  - Phase 2: 14 of 18 tasks were archived by 2026-10-20 (supervisor, MCP, preview, recipe children). Open: recipe-and-diagnostics, Belt, Tunic and G2.
+
+**Re-forecast of the remaining phases** (from 2026-11-03).
+
+| Phase | Was | Now | Basis |
+|---|---|---|---|
+| 1 | 5–6 weeks | G1 record only: under 1 week | Measured: G0's record closed within days |
+| 2 | 5–6 weeks | 2–4 weeks once the Belt and Tunic inputs are available (rule 8). This assumes each pilot's islanded export is covered by its own owner exception through the diagnostic measure export, as the Wand's was. Without one, Phase 2 waits on `phase3.1_export-island-padding`, which has no estimate | Extrapolated. The engineering for the exception route is measured (decisions 286, 395); input recovery and owner decisions are not |
+| 3 | 9–12 weeks | 9–12 weeks, plus `phase3.1_export-island-padding` with no estimate | Extrapolated. Bakers, procedurals and the path tracer are not validated by a compositor slice. The padding's 21 measured days with ~40 decisions did not close it, so no duration is claimed for it |
+| 4 | 5–7 weeks | unchanged | Extrapolated |
+| 5 | 3–4 weeks | unchanged | Extrapolated |
+
+**What the slice measured.** Recorded, fitted semantics went fast: Phase 0 and most of Phase 1 took about 11 days. The calendar was set by exact-equality residuals that no recorded probe yet decides, and by the time it took to reach an exception decision. Those two factors, not implementation throughput, are the Hypotheses' main risk for Phases 2 to 5.
