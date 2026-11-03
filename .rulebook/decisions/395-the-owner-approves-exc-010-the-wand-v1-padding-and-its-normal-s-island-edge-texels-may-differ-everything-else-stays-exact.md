@@ -43,7 +43,7 @@ These are his own yes to the terms below (decision 259 §6).
    - **Bound 1.** `max_abs_diff` 0 over `covered_interior`, on every map, the Normal included: every covered texel whose eight neighbours are all covered (x wrapping) is exactly equal.
    - **Bound 2.** `max_abs_diff` 0 over `covered`, on every map but the Normal (`excepted_outputs: ["export/11-Varinha-Madeira_v1r2_Normal"]`, the golden record's output id).
    - So the only covered texels that may differ are the Normal's island-edge texels: covered, with an uncovered 8-neighbour (decision 223's Result; x wrapping, as the ring and `runner.texel_classes` do). The uncovered (padding) texels of all five maps may differ.
-   - **Fail-closed.** A comparison without a coverage mask, with a mask of another size, or naming no output is held to both bounds. An island with no interior texel is covered by nothing.
+   - **Fail-closed.** A comparison without a coverage mask, with a mask of another size, or naming no output is held to both bounds. A coverage mask with no interior texel at all is covered by nothing.
    - **No numeric bound on the excepted texels.** Decision 223 §3's reasoning holds: a bound measured on a guessed rule would not carry. The class is excepted, not a count; 1,071 is its whole-tile count.
    - **Basis** `owner_scope_split`, `approved_by: owner`, `approved_on: 2026-11-03`.
 2. **Everything that differs is still measured and published**, per map and per band (decision 223 §2).
