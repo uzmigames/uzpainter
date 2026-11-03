@@ -78,4 +78,11 @@
 - Runs and request (2026-11-03): U4's AO control, AO r1 and repeat (reproduced), masks r1 and repeat (reproduced, byte-identical). S3/S4 native naming and Blender preset layout (d88c2895). Writer `tunic_current.py` and request `7364fafe…` (f7c26a78). The first capture was refused by the recorder's own name check; the cause was the recorder requiring `.image` on a named import's name, fixed in 52a182da.
 - Capture (2026-11-03): `phase2/tier1/tunic-v10-current` admitted (record `3165bacb…`). All five maps byte-identical across r1, r1-repeat and r2. Comparator against the migration golden: `different`; only Metallic is byte-identical (`parity/reports/phase2/tunic-v10-current-reference.md`).
 - Inventory for the owner's decision 300 item 8: the 8 preserved masks and the Normal are originals; the 9 masks, the AO and the low are current-round substitutes; the historical inputs stay missing. The migration golden is unchanged.
-- Open: the record does not yet observe the contract's 21 bindings and 17 resources (Data colour space, F03/C07); a recorder state-readback extension is in progress. The changed baseline waits for the owner. No item checked.
+- State readback (bf2d57bb) and supplementary record (2026-11-03): the same request recorded again with the layer stack read back in r1 and r2 (record `7663d8ac…`, kept in the private store as content-addressed evidence, not admitted under the manifest). All five maps byte-identical to the admitted `3165bacb…`. Observed in r1 and r2:
+  - 21 bindings onto 17 resources, all Data;
+  - F03 and C07 distinct;
+  - the height blends;
+  - one hidden default layer;
+  - the staged mesh.
+  The environment differs only in the recorder version.
+- Open: the changed baseline waits for the owner (decision 300 item 8). No item checked.

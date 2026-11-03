@@ -25,5 +25,20 @@ Each map is 4096 × 4096 × 3, PNG 16-bit, on both sides.
 
 **What this does not establish.**
 - The current round runs on current-round substitutes: 9 masks, the AO behind them, and a low exported now. Only the 8 preserved masks and the Normal are originals. The historical inputs stay missing, so `historical_input_identity_established` is false. Equal outputs would not prove input identity either.
-- The record observes the create's slots and the Normal's identity. It does not yet observe the 21 bindings onto 17 resources (Data colour space, F03/C07) that the input contract asks for. A recorder state-readback extension is in progress.
+- The admitted record observes the create's slots and the Normal's identity, not the layer stack. The supplementary record below observes the stack.
 - No baseline is changed or promotable, no exception is recorded, and no gate or acceptance item is completed. Using the current round as phase2.10's changed baseline is the owner's decision (decision 300 item 8).
+
+## Supplementary state-qualified record (2026-11-03)
+
+This record is separate from the admission above. It is content-addressed evidence, not a second golden record: the admitted manifest, its private records and the comparison above are unchanged.
+
+- **Run.** The same request `7364fafe…93a7`, recorded again after the recorder's state readback (`bf2d57bb`). Record `7663d8ac374637d40a88c7b694a5b6055103f0a354f51a74b254ab5e01aca1df`. It is kept in the private store with its run manifest and every blob it names, each re-hashed after storing, because the write-once store refuses a second record under the admitted manifest's record id.
+- **Maps.** All five maps of `r1`, `r1-repeat` and `r2` are byte-identical to the admitted record `3165bacb…2d1e`, so the comparison above holds for this record unchanged.
+- **Observed layer stack**, read back from Painter in `r1` (after the save) and in `r2` (after the reopen), before each export, and checked against the pinned stack and the sync's reply:
+  - 21 mask bindings onto 17 distinct resources, every one in colour space Data, each URL equal to the sync's, version included;
+  - F03 and C07 on distinct resources;
+  - height blends: Forro Normal, Tecido externo LinearDodge, and the titled group LinearDodge;
+  - exactly one hidden default layer (`Layer 1`) beside the synced group;
+  - the staged mesh as the last imported mesh.
+  `r2` equals `r1` once project contexts are renumbered and the project file path is checked.
+- **Environment.** It differs from the admitted record's only in the recorder version.
