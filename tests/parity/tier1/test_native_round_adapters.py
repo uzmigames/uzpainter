@@ -155,6 +155,9 @@ def stand_ins(painter: Painter, monkeypatch: pytest.MonkeyPatch) -> None:
         painter.calls.append(("save_as", path, mode))
         painter.saved = path
 
+    def save(mode: str) -> None:
+        painter.calls.append(("save", painter.saved, mode))
+
     def import_project_resource(path: str, usage: str, name: str, group: str) -> Resource:
         painter.calls.append(("import", path, usage, name, group))
         return Resource(name)
@@ -176,6 +179,7 @@ def stand_ins(painter: Painter, monkeypatch: pytest.MonkeyPatch) -> None:
         ProjectSaveMode=members("ProjectSaveMode", "Full", "Incremental"),
         create=create,
         save_as=save_as,
+        save=save,
         file_path=lambda: painter.saved,
     )
     resource = types.ModuleType("substance_painter.resource")
@@ -515,13 +519,16 @@ def test_the_save_after_the_sync_and_the_export_check_the_imported_normal(
     if refusal is None:
         assert run_code(save)["normal"] == baseline
         assert run_code(export)["status"] == "ExportStatus.Success"
-        assert [call[0] for call in painter.calls] == ["save_as", "export"]
+        # The open project is the create's file: a Full `save`, never `save_as` onto it.
+        project = str(tmp_path / "work" / "project" / "native-create.spp")
+        assert [call[0] for call in painter.calls] == ["save", "export"]
+        assert painter.calls[0][1] == project
         return
     with pytest.raises(RuntimeError, match=refusal):
         run_code(save)
     with pytest.raises(RuntimeError, match=refusal):
         run_code(export)
-    assert [call[0] for call in painter.calls] == ["save_as"]
+    assert [call[0] for call in painter.calls] == ["save"]
 
 
 def test_a_native_wand_refuses_its_script_only_parts_by_name(

@@ -306,10 +306,12 @@ def sha256_of(path: Path) -> str:
 
 
 def built(painter: Path, work: Path, manifest: Path) -> Wand:
-    """create and sync through the adapter in `work`, a fresh directory."""
+    """create and sync through the adapter in `work`, a fresh directory; each step runs only
+    after the one before it succeeded, so a failed create is reported as itself."""
     work.mkdir(parents=True)
     wand = Wand(painter, work, manifest)
-    for step, call in (("create", wand.create()), ("sync", wand.sync())):
+    for step, run_step in (("create", wand.create), ("sync", wand.sync)):
+        call = run_step()
         if call.status != 0:
             raise RunError(f"{step} failed ({call.status}): {call.stdout}{call.stderr}")
     return wand

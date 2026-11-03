@@ -64,6 +64,18 @@ reference source's `anchor` or an instance's `instance_source` (none in the Tuni
 normalised, so it would refuse the round. The listing's `revision` is checked inside each project,
 not across them. Within one project, save and reopen stay literal: nothing is normalised.
 
+**The measure mode** (`run_tunic_recipe(..., diagnostic=True)`; decisions 286 and 398): production
+refuses the Tunic's islanded export (decisions 245 and 259), so with `diagnostic` the two sessions
+send no export and each project is exported instead by `measured_export`, a separate
+`UzPainter.exe run --diagnostic-measure-export` process of `MEASURE` that opens the saved project
+(the original after its session, the rebuilt one after its save and reopen) and exports the job's
+`config_export.config`, only its `exportPath` changed. Its report must name the measure mode, its
+receipt must be marked `non_conformant` with every bypassed refusal one of the Tier 1 runner's
+`DECIDED_REFUSALS`, and the receipt must list every written file with its SHA-256, or the run
+fails. A refusal is kept as the side's refusal, never counted as equal files. Its maps are NOT
+conformant: the report's `pass` then means the rebuild reproduces the same bytes (item 3.4), never
+a production delivery.
+
 Assumptions (accepted by the coordinator, 2026-11-02): the original is a fresh reopen of the
 state round's saved project, and the state round's own export is not reused; `display_get` and
 `set_list` hold no project-specific uid or path, and the dump no uid; the rebuilt project's
@@ -87,6 +99,7 @@ from tests.adapters.assets3d import wand
 from tests.parity.tier1 import mcp_round, tunic_state
 from tests.parity.tier1.mcp_round import BACKEND, NATIVE_REFUSABLE, Driver, Round, refusal_of
 from tests.parity.tier1.tunic_state import Expected, StateMismatch
+from tests.parity.tier1.wand_v1.runner import DECIDED_REFUSALS
 from tests.supervisor.conftest import JSON_PREFIX, Mcp
 from tools.parity.recipe_rebuild import Side, report, sha256_of
 from tools.parity.recorder.job import sha256_bytes
@@ -118,7 +131,26 @@ result = {
     "dump": project.dump_recipe(),
 }
 """
-TIMEOUT = 1800  # seconds, for `export-bundle` and the rebuild
+# The diagnostic measure export of one saved project (decision 286), in its own `run` process:
+# the project, then the configuration's file.
+MEASURE = """\
+import json
+import sys
+import substance_painter.export
+import substance_painter.project as project
+path, configuration = sys.argv[1:3]
+with open(configuration, encoding="utf-8") as stream:
+    config = json.load(stream)
+project.open(path)
+exported = substance_painter.export.export_project_textures(config)
+result = {
+    "status": str(exported.status),
+    "message": exported.message,
+    "files": {str(key): list(files) for key, files in exported.textures.items()},
+}
+"""
+MEASURE_MODE = "diagnostic-measure"  # the `run` report's `diagnostic` (src/python/run.cpp)
+TIMEOUT = 1800  # seconds, for `export-bundle`, the rebuild and a measure export
 
 
 class RecipeFailed(RuntimeError):
@@ -162,12 +194,14 @@ class Export:
 @dataclass(frozen=True)
 class RecipeRound:
     """The outcome (`pass`, `fail`, `export_refused` or `refused`), the report (None when a step
-    refused before it), the step's refusal and each session's call log."""
+    refused before it), the step's refusal, each session's call log and, in the measure mode, the
+    message of each refused measure export (kept for the caller; the report holds none)."""
 
     outcome: str
     report: dict[str, Any] | None
     refusal: dict[str, Any] | None
     logs: dict[str, Round]
+    export_refusals: tuple[str, ...] = ()
 
 
 class Recorder(Driver):
@@ -316,9 +350,10 @@ def listed(session: Mcp, where: str) -> Round:
 
 
 def original_session(
-    painter: Path, work: Path, st: StateRound, backend: str = BACKEND
-) -> tuple[dict[str, Any], Export, Round]:
-    """The saved project reopened in a fresh session: its reads, its export and the call log."""
+    painter: Path, work: Path, st: StateRound, backend: str = BACKEND, exporting: bool = True
+) -> tuple[dict[str, Any], Export | None, Round]:
+    """The saved project reopened in a fresh session: its reads, its export (None without
+    `exporting`) and the call log."""
     where = "original"
     session = session_of(painter, work, backend)
     try:
@@ -329,7 +364,7 @@ def original_session(
             raise RecipeMismatch(f"the saved project opens at revision {at}, not {st.revision}")
         reads = observe(driver, st, at)
         literal(st.reads, reads, "the saved project reopened afresh")
-        exported = export_once(driver, st.job, work / "out" / "export")
+        exported = export_once(driver, st.job, work / "out" / "export") if exporting else None
         result_of(driver, "project_close", {})
     finally:
         session.close()
@@ -409,10 +444,7 @@ def rebuild(
     done = run_process(
         [str(painter), "run", str(script), "--gpu-backend", backend, "--", *arguments]
     )
-    lines = [line for line in done.stdout.splitlines() if line.startswith(JSON_PREFIX)]
-    if not lines:
-        raise RecipeFailed(f"the rebuild printed no report ({done.returncode}): {done.stderr}")
-    printed = json.loads(lines[-1][len(JSON_PREFIX) :])
+    printed = printed_report(done, "the rebuild")
     error = printed.get("error") or {}
     if printed.get("status") != "ok":
         if error.get("type") == "NotYetSupported":
@@ -432,6 +464,76 @@ def rebuild(
     return made
 
 
+def printed_report(done: subprocess.CompletedProcess[str], what: str) -> dict[str, Any]:
+    """The last `UZP_JSON:` report a `run` process printed."""
+    lines = [line for line in done.stdout.splitlines() if line.startswith(JSON_PREFIX)]
+    if not lines:
+        raise RecipeFailed(f"{what} printed no report ({done.returncode}): {done.stderr}")
+    printed: dict[str, Any] = json.loads(lines[-1][len(JSON_PREFIX) :])
+    return printed
+
+
+def measured_export(
+    painter: Path, project: Path, job: NativeJob, folder: Path, backend: str = BACKEND
+) -> Export:
+    """The diagnostic measure export of the saved `project` (the module's docstring) into
+    `folder/export`, `folder` a new directory: its files by name, checked against its receipt,
+    or its explicit refusal."""
+    out = folder / "export"
+    out.mkdir(parents=True)
+    configuration = folder / "config.json"
+    configuration.write_text(
+        json.dumps({**job.config_export.config, "exportPath": out.as_posix()}), encoding="utf-8"
+    )
+    script = folder / "measure.py"
+    script.write_text(MEASURE, encoding="utf-8")
+    done = run_process(
+        [
+            str(painter),
+            "run",
+            str(script),
+            "--gpu-backend",
+            backend,
+            "--diagnostic-measure-export",
+            "--",
+            str(project),
+            str(configuration),
+        ]
+    )
+    printed = printed_report(done, "the measure export")
+    if printed.get("diagnostic") != MEASURE_MODE:
+        raise RecipeFailed(f"the export ran without the measure mode: {printed.get('diagnostic')}")
+    error = printed.get("error") or {}
+    if printed.get("status") != "ok":
+        if error.get("type") == "NotYetSupported" and not any(out.iterdir()):
+            refused = {"error_code": "capability_gap", "type": "NotYetSupported"}
+            return Export(None, {**refused, "message": str(error.get("message"))})
+        raise RecipeFailed(f"the measure export failed: {error}")
+    made = printed.get("result") or {}
+    if done.returncode != 0 or str(made.get("status", "")).rsplit(".", 1)[-1] != "Success":
+        raise RecipeFailed(f"the measure export did not succeed: {made.get('message')}")
+    files: dict[str, Path] = {}
+    for names in made["files"].values():
+        for name in names:
+            path = Path(name)
+            if path.name in files:
+                raise RecipeFailed(f"the measure export wrote {path.name} twice")
+            files[path.name] = path
+    current = json.loads((out / "current.json").read_text(encoding="utf-8"))
+    receipt = json.loads((out / current["receipt"]).read_text(encoding="utf-8"))
+    bypassed = (receipt.get("non_conformant") or {}).get("bypassed")
+    if not isinstance(bypassed, list):
+        raise RecipeFailed("the measure export's receipt is not marked non_conformant")
+    undecided = [b for b in bypassed if not any(k in b["refusal"] for k in DECIDED_REFUSALS)]
+    if undecided:
+        raise RecipeFailed(f"the measure export bypassed refusals no decision names: {undecided}")
+    listed = {Path(str(f["path"])).name: str(f["sha256"]) for f in receipt["files"]}
+    unlisted = sorted(n for n, p in files.items() if listed.get(n) != sha256_of(p))
+    if not files or unlisted:
+        raise RecipeFailed(f"the measure export's receipt does not list {unlisted or 'any file'}")
+    return Export(files, None)
+
+
 def rebuilt_session(
     painter: Path,
     work: Path,
@@ -439,9 +541,11 @@ def rebuilt_session(
     st: StateRound,
     made: dict[str, Any],
     backend: str = BACKEND,
-) -> tuple[dict[str, Any], Export, Round]:
+    exporting: bool = True,
+) -> tuple[dict[str, Any], Export | None, Round]:
     """The rebuilt project in a fresh session, checked, saved, closed, reopened and checked
-    again literally, then exported: its reads, its export and the call log."""
+    again literally, then exported: its reads, its export (None without `exporting`) and the
+    call log."""
     where = "rebuilt"
     session = session_of(painter, work, backend)
     try:
@@ -459,7 +563,7 @@ def rebuilt_session(
         if again != at:
             raise RecipeMismatch(f"the rebuilt project reopens at {again}, not {at}")
         literal(first, observe(driver, st, again), "the rebuilt project after its save and reopen")
-        exported = export_once(driver, st.job, work / "out" / "export")
+        exported = export_once(driver, st.job, work / "out" / "export") if exporting else None
         result_of(driver, "project_close", {})
     finally:
         session.close()
@@ -587,13 +691,17 @@ def side(dump: dict[str, Any], exported: Export) -> Side:
 
 
 def run_tunic_recipe(
-    painter: Path, work: Path, manifest: Path, backend: str = BACKEND
+    painter: Path, work: Path, manifest: Path, backend: str = BACKEND, diagnostic: bool = False
 ) -> RecipeRound:
     """The dump-and-rebuild of the Tunic current round (the module's docstring) in `work`, a
-    fresh directory; nothing is written elsewhere."""
+    fresh directory; nothing is written elsewhere. `diagnostic`: both projects exported by the
+    measure mode (`measured_export`), not by their sessions."""
     st = state_round(painter, work / "state", manifest, backend)
     logs = {"state": st.log}
-    original, first, logs["original"] = original_session(painter, work / "original", st, backend)
+    exporting = not diagnostic
+    original, first, logs["original"] = original_session(
+        painter, work / "original", st, backend, exporting
+    )
     dump = work / "original" / "recipe" / "dump.json"
     dump.parent.mkdir(parents=True)  # never left to a session or an export to create
     dump.write_text(json.dumps(original["project_recipe"]), encoding="utf-8")
@@ -604,9 +712,14 @@ def run_tunic_recipe(
     except RecipeRefused as refused:
         return RecipeRound("refused", None, refused.refusal, logs)
     rebuilt, second, logs["rebuilt"] = rebuilt_session(
-        painter, work / "rebuilt", target, st, made, backend
+        painter, work / "rebuilt", target, st, made, backend, exporting
     )
     compare_projects(original, rebuilt)
+    if diagnostic:
+        first = measured_export(painter, st.project, st.job, work / "original" / "measure", backend)
+        second = measured_export(painter, target, st.job, work / "rebuilt" / "measure", backend)
+    if first is None or second is None:
+        raise RecipeFailed("a session sent no export outside the measure mode")
     document = report(
         st.job.golden_id,
         sha256_of(manifest),
@@ -614,4 +727,7 @@ def run_tunic_recipe(
         side(original["project_recipe"], first),
         side(rebuilt["project_recipe"], second),
     )
-    return RecipeRound(document["equality"]["outcome"], document, None, logs)
+    messages = tuple(
+        str((e.refusal or {}).get("message")) for e in (first, second) if diagnostic and e.refusal
+    )
+    return RecipeRound(document["equality"]["outcome"], document, None, logs, messages)

@@ -35,9 +35,12 @@ UzPainter's `substance_painter` API:
    back the imported resource's identity (URL, context, name and version), else a refusal;
 5. `save_as` (Full) to `work/project/native-create.spp`.
 The create's reply gives that identity, the Wand's baseline. Its sync is the unchanged sync
-above, then, as the recorder does (no script saves), `save_as` (Full) to the same project and the
-slot check against the baseline. Its export runs the slot check again, then exports the closing
-configuration only into `work/export`. Both go through the layer-stack script's `run` (as
+above, then, as the recorder does (no script saves), a Full save to the same project and the slot
+check against the baseline. The recorder's save is `save_as` to that file, which Painter accepts;
+UzPainter's store refuses `save_as` onto the open project (`src/store/save.cpp`, "use save()"), so
+when the open project is that file the adapter calls `save` (Full) instead, and `save_as`
+otherwise. Its export runs the slot check again, then exports the closing configuration only into
+`work/export`. Both go through the layer-stack script's `run` (as
 `painter_export.py` does), each in its own `UzPainter.exe run` process. Each later check accepts
 only a renumbered `projectN` context (a reopen's), as the recorder does; any other change refuses.
 UzPainter itself refuses a setting it does not support yet (`NotYetSupported` in the client's
@@ -181,7 +184,18 @@ normal = identity(imported.identifier())  # the baseline of the later processes
 result = {"texture_sets": sets, "normal": normal, "project": project.file_path()}
 """
 NATIVE_SAVE_CODE = """
-project.save_as(spec["project"], project.ProjectSaveMode.Full)
+import os
+
+
+def same_file(first, second):
+    return os.path.normcase(os.path.abspath(first)) == os.path.normcase(os.path.abspath(second))
+
+
+opened = project.file_path()
+if opened is not None and same_file(opened, spec["project"]):
+    project.save(project.ProjectSaveMode.Full)
+else:
+    project.save_as(spec["project"], project.ProjectSaveMode.Full)
 result = {"normal": check_baseline(), "project": project.file_path()}
 """
 NATIVE_EXPORT_CODE = """

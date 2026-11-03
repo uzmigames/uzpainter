@@ -15,20 +15,25 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import traceback
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from tests.adapters.assets3d.wand import ASSETS3D, REPO_ROOT
+from python.uzpainter_facade.bitmap_defaults import PAINTER_OCIO_CONFIG_SHA256
+from tests.adapters.assets3d.wand import ASSETS3D, PAINTER_OCIO, REPO_ROOT
 from tests.parity.tier1.mcp_round import round_report, run_round, run_tunic_current
 from tests.parity.tier1.tunic_recipe import RecipeMismatch, RecipeRound, run_tunic_recipe
 from tests.parity.tier1.wand_v1 import runner as wand_runner
+from tools.parity.recorder.launcher import default_painter_exe
+from tools.parity.schemas import Schema, validation_errors
 from tools.parity.store.store import locate
+from tools.parity.tier1.compare import CandidateRun, write_report
 from tools.parity.tier1.mcp_round import equality, report_problems
 from tools.parity.verdict import resolve_golden
 
@@ -64,15 +69,14 @@ BEFORE_EXPORT = [
 COMMITTING = {"project_create", "set_mesh_maps", "sync_stack"}
 
 
-@pytest.fixture(scope="module")
-def painter(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """`UzPainter.exe` of a fresh `zig build painter` install."""
+def built_painter(tmp_path_factory: pytest.TempPathFactory, *options: str) -> Path:
+    """`UzPainter.exe` of a fresh `zig build painter` install with `options`."""
     zig = shutil.which("zig")
     if zig is None:
         pytest.skip("zig is not on PATH; UzPainter.exe cannot be built")
     prefix = tmp_path_factory.mktemp("painter")
     build = subprocess.run(
-        [zig, "build", "painter", "--prefix", str(prefix)],
+        [zig, "build", "painter", *options, "--prefix", str(prefix)],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -83,6 +87,20 @@ def painter(tmp_path_factory: pytest.TempPathFactory) -> Path:
     )
     assert build.returncode == 0, build.stdout + build.stderr
     return prefix / "bin" / "UzPainter.exe"
+
+
+@pytest.fixture(scope="module")
+def painter(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """`UzPainter.exe` of a fresh `zig build painter` install."""
+    return built_painter(tmp_path_factory)
+
+
+@pytest.fixture(scope="module")
+def fast_painter(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """`UzPainter.exe` of a fresh `zig build painter -Doptimize=ReleaseFast` install, for the
+    Tunic's 4096-px measure exports: a Debug export of the Wand's 2048-px maps already outlasts the
+    adapter's 600 s per call (decision 223), as `wand_v1/test_wand_v1.py` builds it."""
+    return built_painter(tmp_path_factory, "-Doptimize=ReleaseFast")
 
 
 A, B = "a" * 64, "b" * 64
@@ -258,6 +276,156 @@ def test_tunic_current_recipe_rebuilds_the_typed_round_from_its_dump(
         assert str(exports[0]["refusal"]).startswith("capability_gap:"), aggregate
     else:
         assert equality["files"] == "identical", aggregate
+
+
+_NEEDS_THE_TUNIC = [
+    pytest.mark.skipif(
+        not (ASSETS3D / "AGENTS.md").is_file(),
+        reason=f"the UzmiGames asset repository is not at {ASSETS3D} (local run, decision 028)",
+    ),
+    pytest.mark.skipif(locate() is None, reason="no private oracle store on this machine"),
+    pytest.mark.skipif(
+        resolve_golden(TUNIC_CURRENT) is None, reason=f"{TUNIC_CURRENT} is not admitted"
+    ),
+]
+
+
+def _needs_the_tunic[T: Callable[..., None]](test: T) -> T:
+    """`test` skipped, with the reason, where the Tunic's inputs or its golden are absent."""
+    for mark in _NEEDS_THE_TUNIC:
+        test = mark(test)
+    return test
+
+
+# --- decision 398: the Tunic's Tier 1 under EXC-011, through the diagnostic measure export ------
+
+REPORT_ENV = "UZP_TIER1_REPORT"  # repository-relative path of the report to write
+# The only exception the Tunic's equality may rely on (decision 398).
+EXC011 = {"exception_id": "EXC-011", "version": 1}
+# The capability gap the Tunic's 4096-px Normal meets in every export, the measure mode included
+# (src/evaluator/height_to_normal.cpp; decision 398, Result).
+HEIGHT_NORMAL_GAP = (
+    "the height-to-normal scaling is recorded on square sets of 256, 512, 1024 and 2048 texels only"
+)
+
+
+def xfail_on_the_height_normal_gap(refusals: Sequence[str]) -> None:
+    """An expected failure naming the gap when every export was refused by it alone (decision
+    398); any other refusal, or a mix of refused and written exports, is left to fail."""
+    if refusals and all(HEIGHT_NORMAL_GAP in refusal for refusal in refusals):
+        pytest.xfail(f"decision 398: the Tunic's 4096-px Normal is refused: {HEIGHT_NORMAL_GAP}")
+
+
+def painter_ocio() -> Path:
+    """Painter's substance configuration, which the manifest applies as `OCIO` and the native
+    create checks by hash (`tests/adapters/assets3d/wand.py`): skipped where it is absent."""
+    config = default_painter_exe().parent / PAINTER_OCIO
+    if not config.is_file():
+        pytest.skip(f"Painter's OCIO configuration is not at {config}")
+    if hashlib.sha256(config.read_bytes()).hexdigest() != PAINTER_OCIO_CONFIG_SHA256:
+        pytest.skip(f"{config} is not the pinned substance configuration")
+    return config
+
+
+TunicEvidence = tuple[
+    dict[str, Any],
+    tuple[CandidateRun, CandidateRun],
+    wand_runner.Reopen | None,
+]
+
+
+@pytest.fixture(scope="module")
+def tunic_tier1(fast_painter: Path, tmp_path_factory: pytest.TempPathFactory) -> TunicEvidence:
+    """The Tunic current round's Tier 1 evidence through the Wand's runner (its native route):
+    two rebuilds and the first one's save/reopen export, every export the diagnostic measure
+    export (decisions 286, 398), from one run for both Tier 1 tests, under the manifest's `OCIO`."""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("OCIO", str(painter_ocio()))
+        return wand_runner.reopened_compared(
+            fast_painter, tmp_path_factory.mktemp("tunic-tier1"), TUNIC_CURRENT, diagnostic=True
+        )
+
+
+@_needs_the_tunic
+def test_tunic_current_tier1_maps_equal_painter_under_exc011(tunic_tier1: TunicEvidence) -> None:
+    """Items 2.5 and 3.1: every exported map of the Tunic current round equals its golden under
+    EXC-011 (decision 398, EXC-010's terms: covered interior texels exact on every map, covered
+    texels exact on every map but the Normal, the padding and the Normal's island-edge texels
+    published per band); the two rebuilds, each in its own processes and work directory, are
+    byte-identical. The report is written to `UZP_TIER1_REPORT` when that is set. While the
+    4096-px Normal is refused (`HEIGHT_NORMAL_GAP`) the test is an expected failure naming it."""
+    report, runs, _ = tunic_tier1
+    assert validation_errors(report, Schema.COMPARISON_REPORT) == []
+    if os.environ.get(REPORT_ENV):
+        write_report(report, REPO_ROOT / os.environ[REPORT_ENV])
+    if all(r.refused for r in runs):
+        xfail_on_the_height_normal_gap([r.refusal for r in runs])
+    assert not any(r.refused for r in runs), [r.refusal for r in runs]
+    equality = report["equality_to_painter"]
+    assert equality["structural"] == []
+    assert len(equality["maps"]) == 5 and all("padding" in m for m in equality["maps"]), equality
+    assert equality["outcome"] == "pass", equality
+    assert equality["exceptions_relied_on"] in ([], [EXC011]), equality["exceptions_relied_on"]
+    assert report["uzpainter_repeatability"]["status"] == "repeatable"
+
+
+@_needs_the_tunic
+def test_tunic_current_saved_and_reopened_project_exports_the_first_maps(
+    tunic_tier1: TunicEvidence,
+) -> None:
+    """Item 3.1's save/reopen: the first rebuild's project keeps one file and UUID from its first
+    export through the save to the reopen in a fresh process, and exports again every file of its
+    first export, byte for byte, in the measure mode. An expected failure while the 4096-px Normal
+    is refused, as the maps test."""
+    _, runs, reopen = tunic_tier1
+    if all(r.refused for r in runs):
+        xfail_on_the_height_normal_gap([r.refusal for r in runs])
+    assert not any(r.refused for r in runs), [r.refusal for r in runs]
+    assert reopen is not None
+    assert reopen.first, "the first export wrote no file"
+    assert reopen.same_project, reopen
+    assert reopen.refusal == "", reopen.refusal
+    assert reopen.differing == [], reopen.differing
+    assert reopen.equal
+
+
+@_needs_the_tunic
+def test_tunic_current_recipe_rebuild_exports_identical_bytes_in_the_measure_mode(
+    fast_painter: Path, tmp_path: Path, record_property: Callable[[str, object], None]
+) -> None:
+    """Items 2.4 and 3.4 (decision 398): the real Tunic dump-and-rebuild of
+    `test_tunic_current_recipe_rebuilds_the_typed_round_from_its_dump`, its two projects exported
+    by the diagnostic measure export (`tunic_recipe.measured_export`) instead of their sessions.
+    Every state check of the three typed sessions passes (bindings, Height blends and
+    `double_sided` read through freshly resolved handles, after the reopen and after the rebuilt
+    project's save and reopen); the outcome must be `pass`: equal recipe digests and
+    byte-identical exports. The aggregate is recorded as `tunic_current_recipe_measure`, with no
+    private value, as the production test's. While the 4096-px Normal is refused
+    (`HEIGHT_NORMAL_GAP`) on both sides, with the digests equal, it is an expected failure."""
+    manifest = resolve_golden(TUNIC_CURRENT)
+    assert manifest is not None
+    aggregate: dict[str, Any] = {
+        "manifest_sha256": hashlib.sha256(manifest.manifest_path.read_bytes()).hexdigest(),
+        "exe_sha256": hashlib.sha256(fast_painter.read_bytes()).hexdigest(),
+    }
+    result = private_recipe(
+        lambda: run_tunic_recipe(
+            fast_painter, tmp_path / "recipe", manifest.manifest_path, diagnostic=True
+        ),
+        tmp_path,
+        aggregate,
+        lambda value: record_property(
+            "tunic_current_recipe_measure", json.dumps(value, sort_keys=True)
+        ),
+    )
+    assert set(result.logs) == {"state", "original", "rebuilt"}, aggregate
+    assert not any(log.run_python_listed for log in result.logs.values()), aggregate
+    assert result.report is not None, aggregate
+    assert result.report["equality"]["digests_equal"], aggregate
+    if result.outcome == "export_refused" and len(result.export_refusals) == 2:
+        xfail_on_the_height_normal_gap(result.export_refusals)
+    assert result.outcome == "pass", aggregate
+    assert result.report["equality"]["files"] == "identical", aggregate
 
 
 PRIVATE_DIAGNOSTICS = "private-recipe-diagnostics.txt"

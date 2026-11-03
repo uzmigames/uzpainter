@@ -61,6 +61,9 @@ class World:
         self.rebuilt_fault: Callable[[dict[str, Any]], None] | None = None
         self.reopen_fault: Callable[[dict[str, Any]], None] | None = None
         self.refuse: set[str] = set()  # the sides whose export refuses
+        # The measure export's faults: `refuse` (its refusal's message), `receipt` (`conformant`,
+        # `undecided` or `unlisted`) and `mode` (the `run` report's `diagnostic`).
+        self.measure: dict[str, str] = {}
         self.python: set[str] = set()  # the sessions whose tools/list names run_python
 
     def entry(self, path: str) -> dict[str, Any]:
@@ -241,6 +244,8 @@ def process(world: World, args: list[str]) -> subprocess.CompletedProcess[str]:
         }
         (bundle / "bundle.json").write_text(json.dumps(index), encoding="utf-8")
         return subprocess.CompletedProcess(args, 0, "", "")
+    if "--diagnostic-measure-export" in args:
+        return measure_process(world, args)
     assert args[1] == "run" and args[3:6] == ["--gpu-backend", "vulkan", "--"], args
     dump_file, folder, target = (Path(a) for a in args[6:])
     report: dict[str, Any]
@@ -261,6 +266,42 @@ def process(world: World, args: list[str]) -> subprocess.CompletedProcess[str]:
     world.projects[str(target)] = rebuilt
     result = {"file": str(target), "revision": REVISION, "dump": rebuilt["project_recipe"]}
     report = {"status": "ok", "result": result}
+    return subprocess.CompletedProcess(args, 0, f"UZP_JSON:{json.dumps(report)}\n", "")
+
+
+DECIDED = "the Height outside the UV islands; decision 245"
+
+
+def measure_process(world: World, args: list[str]) -> subprocess.CompletedProcess[str]:
+    """`run --diagnostic-measure-export` of the fake UzPainter: the saved project's export, its
+    receipt marked `non_conformant` with a decided refusal bypassed, unless a fault is authored."""
+    assert args[1] == "run" and args[3:7] == [
+        "--gpu-backend",
+        "vulkan",
+        "--diagnostic-measure-export",
+        "--",
+    ], args
+    project_file, configuration = args[7:]
+    config = json.loads(Path(configuration).read_text(encoding="utf-8"))
+    out = Path(config["exportPath"])
+    mode = world.measure.get("mode", tunic_recipe.MEASURE_MODE)
+    report: dict[str, Any]
+    if "refuse" in world.measure:
+        error = {"type": "NotYetSupported", "message": world.measure["refuse"], "traceback": ""}
+        report = {"status": "failed", "result": None, "error": error, "diagnostic": mode}
+        return subprocess.CompletedProcess(args, 1, f"UZP_JSON:{json.dumps(report)}\n", "")
+    path = out / f"{TUNIC_SET}_Height.exr"
+    path.write_bytes(content(world.entry(project_file)))
+    fault = world.measure.get("receipt")
+    bypassed = [{"refusal": "an undecided refusal" if fault == "undecided" else DECIDED}]
+    listed = [] if fault == "unlisted" else [{"path": str(path), "sha256": sha256_file(path)}]
+    receipt: dict[str, Any] = {"files": listed}
+    if fault != "conformant":
+        receipt["non_conformant"] = {"bypassed": bypassed}
+    (out / "receipt.json").write_text(json.dumps(receipt), encoding="utf-8")
+    (out / "current.json").write_text(json.dumps({"receipt": "receipt.json"}), encoding="utf-8")
+    result = {"status": "ExportStatus.Success", "message": "", "files": {TUNIC_SET: [str(path)]}}
+    report = {"status": "ok", "result": result, "diagnostic": mode}
     return subprocess.CompletedProcess(args, 0, f"UZP_JSON:{json.dumps(report)}\n", "")
 
 
@@ -294,12 +335,14 @@ def world(native: dict[str, Any], tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     return made
 
 
-def run(world: World, tmp_path: Path) -> tunic_recipe.RecipeRound:
+def run(world: World, tmp_path: Path, diagnostic: bool = False) -> tunic_recipe.RecipeRound:
     manifest = tmp_path / "manifest.json"
     manifest.write_text(json.dumps(world.job.manifest), encoding="utf-8")
     painter = tmp_path / "UzPainter.exe"
     painter.write_bytes(b"fake")
-    return tunic_recipe.run_tunic_recipe(painter, tmp_path / "work", manifest)
+    return tunic_recipe.run_tunic_recipe(
+        painter, tmp_path / "work", manifest, diagnostic=diagnostic
+    )
 
 
 def tools(session: Any) -> list[str]:
@@ -531,6 +574,67 @@ def test_exports_refused_on_both_sides_are_never_counted_as_equal(
         "status": "refused",
         "refusal": "capability_gap:NotYetSupported",
     }
+
+
+def test_the_measure_mode_exports_each_saved_project_in_its_own_process(
+    world: World, tmp_path: Path
+) -> None:
+    """Decision 398: with `diagnostic` the sessions send no export; the original's saved project
+    and the rebuilt one (after its save and reopen) are each exported by a separate
+    `run --diagnostic-measure-export` process, and equal bytes with equal digests pass."""
+    outcome = run(world, tmp_path, diagnostic=True)
+    assert outcome.outcome == "pass" and outcome.export_refusals == (), outcome.report
+    assert outcome.report is not None and outcome.report["equality"]["files"] == "identical"
+    original, rebuilt = world.sessions[1:]
+    assert "export" not in tools(original) + tools(rebuilt)
+    assert tools(original)[-1] == tools(rebuilt)[-1] == "project_close"
+    work = tmp_path / "work"
+    measures = [args for args in world.processes if "--diagnostic-measure-export" in args]
+    assert [args[7] for args in measures] == [
+        world.saved,
+        str(work / "rebuild" / "tunic-rebuilt.uzp"),
+    ]
+    for side, args in zip(("original", "rebuilt"), measures, strict=True):
+        folder = work / side / "measure"
+        assert args[2] == str(folder / "measure.py") and args[8] == str(folder / "config.json")
+        config = json.loads((folder / "config.json").read_text(encoding="utf-8"))
+        assert config == {
+            **world.job.config_export.config,
+            "exportPath": (folder / "export").as_posix(),
+        }
+
+
+def test_measure_exports_refused_alike_keep_their_message_and_never_pass(
+    world: World, tmp_path: Path
+) -> None:
+    """A refused measure export is the side's refusal, its message kept for the caller only."""
+    world.measure["refuse"] = "evaluator:unsupported_source: the height-to-normal scaling"
+    outcome = run(world, tmp_path, diagnostic=True)
+    assert outcome.outcome == "export_refused" and outcome.report is not None
+    assert outcome.export_refusals == (world.measure["refuse"],) * 2
+    assert outcome.report["rebuilt"]["export"] == {
+        "status": "refused",
+        "refusal": "capability_gap:NotYetSupported",
+    }
+
+
+@pytest.mark.parametrize(
+    ("fault", "value", "message"),
+    [
+        ("receipt", "conformant", "not marked non_conformant"),
+        ("receipt", "undecided", "bypassed refusals no decision names"),
+        ("receipt", "unlisted", "receipt does not list"),
+        ("mode", "", "without the measure mode"),
+    ],
+)
+def test_a_measure_export_outside_its_contract_fails(
+    world: World, tmp_path: Path, fault: str, value: str, message: str
+) -> None:
+    """A receipt not marked `non_conformant`, one naming a refusal no decision names, one that
+    does not list the written file, or a process not in the measure mode, fails the run."""
+    world.measure[fault] = value
+    with pytest.raises(tunic_recipe.RecipeFailed, match=message):
+        run(world, tmp_path, diagnostic=True)
 
 
 def test_an_export_refused_on_one_side_fails(world: World, tmp_path: Path) -> None:
