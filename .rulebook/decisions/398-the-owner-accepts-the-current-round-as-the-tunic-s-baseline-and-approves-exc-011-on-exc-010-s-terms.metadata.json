@@ -1,0 +1,9 @@
+{
+  "id": 398,
+  "slug": "the-owner-accepts-the-current-round-as-the-tunic-s-baseline-and-approves-exc-011-on-exc-010-s-terms",
+  "title": "The owner accepts the current round as the Tunic's baseline and approves EXC-011 on EXC-010's terms",
+  "status": "accepted",
+  "date": "2026-11-03",
+  "relatedTasks": ["phase2.10_pilot-tunic-recovery", "phase2.9_pilot-belt", "phase3.1_export-island-padding"],
+  "supersededBy": null
+}

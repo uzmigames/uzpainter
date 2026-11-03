@@ -760,6 +760,61 @@
       "approved_by": "owner",
       "approved_on": "2026-11-03",
       "notes": "The owner's own yes to these terms (decision 259 §6), recorded verbatim in decision 395, which supersedes in part decision 259 §2 and §4 and decision 245 §1 for this golden only. EXC-007 stays withdrawn and its id is not reused. The Wand's Tier 1 candidate is the diagnostic measure export (decision 286), whose receipt records the refusals it bypassed; production keeps refusing both cases on every asset."
+    },
+    {
+      "exception_id": "EXC-011",
+      "version": 1,
+      "tier": "1",
+      "domain": {
+        "kind": "asset_map",
+        "selector": "tier1/pilot/tunic-v10-current",
+        "goldens": [
+          "phase2/tier1/tunic-v10-current"
+        ]
+      },
+      "bounds": [
+        {
+          "metric": "max_abs_diff",
+          "scope": "covered_interior",
+          "max": 0
+        },
+        {
+          "metric": "max_abs_diff",
+          "scope": "covered",
+          "max": 0,
+          "excepted_outputs": [
+            "export/DefaultMaterial_Normal_Raw"
+          ]
+        }
+      ],
+      "evidence": {
+        "basis": "owner_scope_split",
+        "summary": "The owner approved this scope himself on 2026-11-03 (decision 398): asked whether Tunic and Sash, which have UV islands as the Wand does, should take EXC-010's rule (only the padding and the Normal's edge may differ, published per band; the rest exact), one exception per piece (EXC-011 Tunic, EXC-012 Sash), he chose \"Sim, mesma regra (Recomendado)\". In the same session he accepted the current round as the Tunic's comparison basis (decision 300 item 8, \"Aceito a base nova (Recomendado)\"), so the domain is the current-round golden, never the retained migration golden phase2/tier1/tunic-v10. Painter is stable on all five maps (r1, r1-repeat and r2 byte-identical). The differences are UzPainter's unfitted rules, the same as the Wand's: the `infinite` padding outside the UV islands (phase3.1_export-island-padding, decision 396) and the Normal's island-edge texels, whose stencil reads Painter's padded Height outside the islands (decisions 245, 263, 308). Terms, EXC-010's, for the golden phase2/tier1/tunic-v10-current only: every covered texel whose eight neighbours are all covered (x wrapping) is exactly equal on every map, the Normal included (bound 1); every covered texel is exactly equal on every map but the Normal (bound 2, which excepts only the Normal's output); so the only covered texels that may differ are the Normal's island-edge texels (covered, with an uncovered 8-neighbour). The uncovered (padding) texels of all five maps may differ. A comparison without a coverage mask, with a mask of another size, or naming no output, is held to both bounds. Every report still publishes, per map, the covered, island-edge and uncovered statistics and the uncovered ones within 1, 2, 4 and 8 texels of coverage. No numeric bound is put on the excepted texels (decision 223 §3, kept). The entry is narrowed by a new version as phase3.1_export-island-padding makes parts exact; a Tunic pass under it is reported as \"pass under EXC-011\", never as exact.",
+        "private_evidence": [
+          {
+            "sha256": "3165bacb90ddd61486736f95bcd370fb4ea6444e03a09ab6877f70a143392d1e",
+            "description": "private golden record of phase2/tier1/tunic-v10-current under the current envelope painter-12.2.0+js-api.1.1.20-env-a981b586eae7 (decision 300 item 7): r1, r1-repeat and r2, the five exported maps of each and their blob hashes"
+          }
+        ],
+        "uncontrolled_settings": []
+      },
+      "defect_detection_test": {
+        "test_id": "tests/parity/test_verdict.py::test_exc011_catches_injected_defects",
+        "injected_defects": [
+          "one_covered_interior_value_off_by_one_code",
+          "one_normal_interior_value_off_by_one_code",
+          "one_edge_value_off_by_one_code_on_another_map",
+          "normal_edge_difference_naming_no_output",
+          "uniform_offset_one_code",
+          "no_coverage_mask",
+          "coverage_mask_of_another_size"
+        ],
+        "outcome": "every_injected_defect_fails"
+      },
+      "decision_id": "398",
+      "approved_by": "owner",
+      "approved_on": "2026-11-03",
+      "notes": "The owner's own yes to these terms (decision 259 §6), recorded verbatim in decision 398, which applies decision 395's partial supersessions of decisions 245 §1, 259 §2 and §4 and 286 §2 to this golden only. EXC-012 is reserved for the Sash and not created here. The Tunic's Tier 1 candidate is the diagnostic measure export (decision 286), whose receipt records the refusals it bypassed; production keeps refusing both cases on every asset."
     }
   ]
 }

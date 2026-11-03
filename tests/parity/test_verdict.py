@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypedDict
 
@@ -861,8 +862,18 @@ def test_exc010_catches_injected_defects() -> None:
     covered interior texel fails on any map, the Normal included; an island-edge difference fails
     on any map but the Normal, and on the Normal when the comparison names no output; so do a
     uniform offset and a missing or mis-sized coverage mask."""
+    injected_defects_fail(exc010(), wand_comparison, WAND_BASE, WAND_NORMAL)
+
+
+Compared = Callable[[np.ndarray, np.ndarray | None, str | None], Comparison]
+
+
+def injected_defects_fail(
+    entry: dict[str, Any], comparison: Compared, base: str, normal: str
+) -> None:
+    """The defect test of an entry on EXC-010's terms (decisions 395, 398): `comparison` names
+    its golden, `base` a material map's output and `normal` the excepted Normal's."""
     register: list[dict[str, Any]] = load_json(REGISTER_PATH)["entries"]
-    entry = exc010()
     oracle, covered = scope_split_case()
     edge, interior = island_classes(covered)
     padding = oracle.copy()
@@ -871,29 +882,29 @@ def test_exc010_catches_injected_defects() -> None:
     inside = padding.copy()
     inside[3, 4] += 1
     assert interior[3, 4]
-    defects["one_covered_interior_value_off_by_one_code"] = (inside, covered, WAND_BASE)
-    defects["one_normal_interior_value_off_by_one_code"] = (inside, covered, WAND_NORMAL)
+    defects["one_covered_interior_value_off_by_one_code"] = (inside, covered, base)
+    defects["one_normal_interior_value_off_by_one_code"] = (inside, covered, normal)
     rim = padding.copy()
     rim[2, 3] += 1
     assert edge[2, 3]
-    defects["one_edge_value_off_by_one_code_on_another_map"] = (rim, covered, WAND_BASE)
+    defects["one_edge_value_off_by_one_code_on_another_map"] = (rim, covered, base)
     defects["normal_edge_difference_naming_no_output"] = (rim, covered, None)
-    defects["uniform_offset_one_code"] = (padding + 1, covered, WAND_NORMAL)
-    defects["no_coverage_mask"] = (padding, None, WAND_NORMAL)
-    defects["coverage_mask_of_another_size"] = (padding, np.ones((4, 4), bool), WAND_NORMAL)
+    defects["uniform_offset_one_code"] = (padding + 1, covered, normal)
+    defects["no_coverage_mask"] = (padding, None, normal)
+    defects["coverage_mask_of_another_size"] = (padding, np.ones((4, 4), bool), normal)
     assert set(defects) == set(entry["defect_detection_test"]["injected_defects"])
     for name, (candidate, mask, output) in defects.items():
         for entries in (register, [entry]):
-            verdict = evaluate(wand_comparison(candidate, mask, output), entries)
+            verdict = evaluate(comparison(candidate, mask, output), entries)
             assert verdict.outcome is Outcome.FAIL, name
             assert verdict.exceptions_relied_on == (), name
     # The edge difference on the Normal is the one the entry excepts.
-    excepted = evaluate(wand_comparison(rim, covered, WAND_NORMAL), [entry])
+    excepted = evaluate(comparison(rim, covered, normal), [entry])
     assert excepted.outcome is Outcome.PASS
     # An island with no interior texel: the interior bound has nothing to hold, so nothing passes.
     thin = np.zeros((8, 8), dtype=bool)
     thin[2:4, 2:6] = True
-    no_interior = evaluate(wand_comparison(padding, thin, WAND_NORMAL), [entry])
+    no_interior = evaluate(comparison(padding, thin, normal), [entry])
     assert no_interior.outcome is Outcome.FAIL
     assert entry["defect_detection_test"]["outcome"] == "every_injected_defect_fails"
 
@@ -917,6 +928,84 @@ def test_excepted_outputs_need_an_owner_scope_split_and_listed_goldens() -> None
     unscoped = {**entry, "domain": {"kind": "asset_map", "selector": "tier1/pilot/wand-v1"}}
     problems = register_problems({"schema": schema, "entries": [unscoped]})
     assert problems == ["entries/0: EXC-010 version 1 excepts outputs but lists no goldens"]
+
+
+# --- decision 398: EXC-011, the owner's Tunic current-round scope on EXC-010's terms ----------
+
+TUNIC_GOLDEN = "phase2/tier1/tunic-v10-current"
+TUNIC_NORMAL = "export/DefaultMaterial_Normal_Raw"
+TUNIC_BASE = "export/DefaultMaterial_BaseColor_sRGB"
+
+
+def exc011() -> dict[str, Any]:
+    (entry,) = [e for e in load_json(REGISTER_PATH)["entries"] if e["exception_id"] == "EXC-011"]
+    return dict(entry)
+
+
+def tunic_comparison(
+    candidate: np.ndarray, mask: np.ndarray | None, output: str | None, golden: str = TUNIC_GOLDEN
+) -> Comparison:
+    oracle, _ = scope_split_case()
+    domain = "tier1/pilot/tunic-v10-current"
+    return Comparison(
+        "1", domain, oracle, candidate, covered=mask, golden_id=golden, output_id=output
+    )
+
+
+def test_exc011_takes_exc010_s_terms_for_the_tunic_current_round_only() -> None:
+    """EXC-011 version 1 (decision 398), with the published register: EXC-010's bounds and
+    defect list on the Tunic's current-round golden and its Normal's output; padding differences
+    pass on every map and island-edge ones on the Normal only, each pass naming EXC-011. The
+    retained migration golden, and the Wand, are not covered by it, and no other entry names
+    the Tunic's golden (EXC-012 is reserved for the Sash)."""
+    register: list[dict[str, Any]] = load_json(REGISTER_PATH)["entries"]
+    entry, wand = exc011(), exc010()
+    identity = (entry["version"], entry["decision_id"], entry["approved_on"])
+    assert identity == (1, "398", "2026-11-03")
+    assert entry["domain"] == {
+        "kind": "asset_map",
+        "selector": "tier1/pilot/tunic-v10-current",
+        "goldens": [TUNIC_GOLDEN],
+    }
+    assert entry["evidence"]["basis"] == "owner_scope_split"
+    unexcepted = [{k: v for k, v in b.items() if k != "excepted_outputs"} for b in entry["bounds"]]
+    assert unexcepted == [
+        {k: v for k, v in b.items() if k != "excepted_outputs"} for b in wand["bounds"]
+    ]
+    assert [b.get("excepted_outputs") for b in entry["bounds"]] == [None, [TUNIC_NORMAL]]
+    injected = entry["defect_detection_test"]["injected_defects"]
+    assert injected == wand["defect_detection_test"]["injected_defects"]
+    assert [e["exception_id"] for e in in_force(register)].count("EXC-011") == 1
+    others = [e for e in register if TUNIC_GOLDEN in e["domain"].get("goldens", [])]
+    assert [e["exception_id"] for e in others] == ["EXC-011"]
+    oracle, covered = scope_split_case()
+    edge, _ = island_classes(covered)
+    padded = oracle.copy()
+    padded[~covered] = 65535 - padded[~covered]  # every padding texel wrong
+    both = padded.copy()
+    both[edge] += 537  # and every island-edge texel
+    passing = [(padded, TUNIC_BASE), (padded, TUNIC_NORMAL), (both, TUNIC_NORMAL)]
+    for candidate, output in passing:
+        verdict = evaluate(tunic_comparison(candidate, covered, output), register)
+        assert verdict.outcome is Outcome.PASS, output
+        assert verdict.exceptions_relied_on == (("EXC-011", 1),), output
+    exact = evaluate(tunic_comparison(oracle.copy(), covered, TUNIC_NORMAL), register)
+    assert exact.outcome is Outcome.PASS and exact.exceptions_relied_on == ()
+    migration = evaluate(
+        tunic_comparison(padded, covered, TUNIC_NORMAL, "phase2/tier1/tunic-v10"), register
+    )
+    assert migration.outcome is Outcome.FAIL and migration.exceptions_relied_on == ()
+    wand_case = evaluate(wand_comparison(padded, covered, WAND_NORMAL), [entry])
+    assert wand_case.outcome is Outcome.FAIL
+    assert register_problems(load_json(REGISTER_PATH)) == []
+
+
+def test_exc011_catches_injected_defects() -> None:
+    """EXC-011's defect test, EXC-010's on the Tunic: with the padding wrong on every case
+    (excepted), one code on one covered interior texel fails on any map, the Normal included; an
+    island-edge difference fails on any map but the Normal, and on the Normal when the comparison
+    names no output; so do a uniform offset and a missing or mis-sized coverage mask."""
+    injected_defects_fail(exc011(), tunic_comparison, TUNIC_BASE, TUNIC_NORMAL)
 
 
 # --- decisions 034 and 037: the envelope -------------------------------------------------------

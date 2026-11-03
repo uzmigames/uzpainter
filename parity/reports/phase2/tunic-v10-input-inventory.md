@@ -77,3 +77,7 @@ This updates the existing scope question in decision 300 item 8 and the Sash inv
 | Retain the current gate, replace or exclude the pilot | Retaining the gate leaves input recovery and parity open. Replacement or exclusion changes the required evidence. | Replacement or exclusion requires an explicit scope decision; no route is selected here. |
 
 The existing migration golden and all five map hashes remain unchanged. Double-sided scope is already settled by decision 196; this question does not reopen it. Item 2.8 remains open until restored identity or the required explicit scope decision is recorded. A concrete new-reference comparison has not yet been produced, so this package is preparation, not a request to approve unseen results.
+
+## Owner answer (2026-11-03, decision 398)
+
+The owner answered this package for the Tunic: "Aceito a base nova (Recomendado)". The Tunic's Tier 1 comparison basis is now the current round, `phase2/tier1/tunic-v10-current` (record `3165bacb…`), recorded in Painter and compared above with the retained migration golden (`different`; only Metallic is byte-identical, `tunic-v10-current-reference.md`). The migration golden and its five map hashes stay unchanged as the approved v10 reference, so no approved-v10 parity is claimed. The nine masks, the AO and the low of the current round remain named substitutes, and the missing originals above stay missing. The answer names the Tunic only; the Sash's package is unchanged by it.
