@@ -91,7 +91,7 @@ Model panel (cx/gpt-6-astra, kimi/kimi-k3, xai/grok-4.5, 2026-10-13, one round):
 - The decode is a measured table: an sRGB component outside the 449 recorded inputs is refused under OCIO.
 - The Wand pilot still needs an OCIO creation path and the UV padding fit.
 
-## Amendment, 2026-11-03: part 5, the Tunic stack's components (pending admission)
+## Amendment, 2026-11-03: part 5, the Tunic stack's components (admitted)
 
 The Tunic v10 current round (`phase2/tier1/tunic-v10-current`) sets 50 distinct float32 sRGB BaseColor components. The table above holds 1 of them; `sync_stack` refuses the other 49 under OCIO. Offline emulation of `python::SyncStack`, with the same parse and float32 cast, finds no other unsupported item in that stack. The nearest table key to any of the 49 is 261 float32 steps away, so this is missing data, not a precision or lookup bug.
 
@@ -102,3 +102,5 @@ The Tunic v10 current round (`phase2/tier1/tunic-v10-current`) sets 50 distinct 
    - the 449 entries above unchanged (frozen by digest).
    The Tunic round's state capture `7663d8ac…` is a Tier 1 supplement: kept private, never admitted, and never a source of the table. It is only an independent cross-check, and it must give the same working value for all 50 inputs.
 3. **The extension.** The table may grow from 449 to 498 entries only after the golden is admitted, its control matches, the cross-check passes and the 449 entries are kept exactly. It then holds numbers only, as in item 2 of the Decision: no layer-to-colour mapping, no RGB tuples, no names or order from the recipe, and no raw readbacks. Every other component is still refused. This sets no precedent for assets or presets, claims no production parity, and waives no baseline.
+4. **Admitted.** The golden is admitted (commit `dfd21b7b`): manifest `parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/manifests/tier0/api-probes/phase1-srgb-uniform-decode-ocio-part5.json` (SHA-256 `9d197ad77a2b727d693f6e8c88b2265fb7285e9209b7e87a50f0c7e09f0ceb45`), private record `a131bfddfc59bfce6ce7426c348934e7c28bdcdac157ff943dde16e6a4ce093d`. `qualify` passes on it: 50 inputs, 49 new, 1 control equal to the table, the supplement agreeing on all 50, new pairs SHA-256 `4104b941aabf8ef3adbb97ed14f7510c5f4d5c47a4e55abeca8003eec06e17f5`. The 49 pairs are appended to `RECORDED` in `python/uzpainter_facade/ocio_srgb.py`, after the 449 entries, which are unchanged, in input order. The table now has 498 entries.
+   - Limits: the 498 inputs only. Every other component is still refused under OCIO, and the Tunic round itself still needs its own run. `tests/python/test_ocio_srgb_part5_replay.py` replays the admitted readbacks through the facade and native routes on an OCIO project, where the private store is present. This claims no Tier 1 or production parity and accepts no baseline.

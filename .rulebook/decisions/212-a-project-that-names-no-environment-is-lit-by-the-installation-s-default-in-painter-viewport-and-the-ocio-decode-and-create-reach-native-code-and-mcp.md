@@ -83,4 +83,4 @@ The claims:
 
 ## Amendment, 2026-11-03
 
-The generated native table follows decision 202's part-5 amendment. Once that golden is admitted and qualified, `tools/parity/ocio_srgb_table.py` renders 498 entries: the 449 above unchanged, plus the 49 qualified pairs. No native table changes before that.
+The generated native table follows decision 202's part-5 amendment. That golden is now admitted and qualified: record `a131bfddfc59bfce6ce7426c348934e7c28bdcdac157ff943dde16e6a4ce093d`, manifest `9d197ad77a2b727d693f6e8c88b2265fb7285e9209b7e87a50f0c7e09f0ceb45`, new pairs SHA-256 `4104b941aabf8ef3adbb97ed14f7510c5f4d5c47a4e55abeca8003eec06e17f5`. `tools/parity/ocio_srgb_table.py` renders 498 entries into `src/evaluator/ocio_srgb_table.inc`: the 449 above unchanged, plus the 49 qualified pairs. `--check` passes. The native decode `evaluator::PainterOcioSrgbDecode` and `python::WorkingColour` therefore accept those 498 inputs only. Any other component is refused as before.

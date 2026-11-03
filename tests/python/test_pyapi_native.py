@@ -987,7 +987,10 @@ def test_sync_stack_under_ocio_reads_painters_measured_decode(run: Run, tmp_path
     """Decisions 202 and 212: on an OCIO project, `base` on the sRGB8 BaseColor is stored as the
     facade stores it, Painter's measured working value of each component (the native table
     generated from `ocio_srgb.py`); a component the table does not record raises
-    `NotYetSupported` and nothing is committed."""
+    `NotYetSupported` and nothing is committed. The unrecorded component is authored here and
+    proven outside the table's 498 entries."""
+    unrecorded_component = 0.123456789
+    assert ocio_srgb_table._bits(unrecorded_component) not in ocio_srgb_table.entries()
     (tmp_path / "masks").mkdir()
     recorded = {
         "title": "T",
@@ -995,7 +998,7 @@ def test_sync_stack_under_ocio_reads_painters_measured_decode(run: Run, tmp_path
         "layers": [{"id": "L1", "group": "g", "name": "base", "base": [204, 51, 26]}],
     }
     unrecorded = json.loads(json.dumps(recorded))
-    unrecorded["layers"][0]["base"] = [0.1, 0.2, 0.3]
+    unrecorded["layers"][0]["base"] = [unrecorded_component] * 3
     (tmp_path / "stack.json").write_text(
         json.dumps({"recorded": recorded, "unrecorded": unrecorded}), encoding="utf-8"
     )
@@ -1018,7 +1021,8 @@ def test_sync_stack_under_ocio_reads_painters_measured_decode(run: Run, tmp_path
     assert result["status"] == "committed"
     assert result["base"] == [[codes[204], codes[51], codes[26]], "Working"]
     assert result["refused"].startswith(
-        "NotYetSupported: sync_stack: under OCIO, Painter's working value of the sRGB component 0.1"
+        "NotYetSupported: sync_stack: under OCIO, Painter's working value of the sRGB component "
+        "0.123456789 is not recorded"
     )
     assert result["refused"].endswith("(the base colour of 'base')")
     assert result["unchanged"] is True
