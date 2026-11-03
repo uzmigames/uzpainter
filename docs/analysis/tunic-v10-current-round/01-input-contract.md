@@ -61,6 +61,9 @@ A *derived* value is read from the record or the report. An *authored* value is 
 | | `default_texture_resolution` | 4096 | derived |
 | | `normal_map_format` | OpenGL | authored. It matches the preserved Normal's encoding (the report's OpenGL tangent bake); the historical project setting is not read back and stays unknown |
 | | `import_cameras` | False | authored |
+| | `tangent_space_mode` | PerFragment | authored (rev435). It is not Painter's default (PerVertex, decision 031); the historical project setting is unknown |
+| | `project_workflow` | Default | authored |
+| | `mesh_unit_scale` | 1.0 | authored |
 | | every other `project.Settings` field | each one passed explicitly. The request lists each value, so no setting is left to preferences or host state | authored; unknown in the record |
 | | Normal mesh map | the preserved Normal, imported with usage TEXTURE under the name `Tunic_v6_HighNormal` (derived), in the group `tunica18_v10c_mesh_maps` (authored), and bound as Normal | derived and authored |
 | | other mesh maps | none bound, and no Painter bake | authored (see the risks) |

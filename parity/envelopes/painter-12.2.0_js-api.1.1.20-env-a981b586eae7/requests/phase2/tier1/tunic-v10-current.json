@@ -1,0 +1,447 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "phase2/tier1/tunic-v10-current",
+  "tier": "1",
+  "domain": "tier1/pilot/tunic-v10-current",
+  "description": "Tier 1 current round of the UzmiGames tunic 18-Tunica v10 of the Skeletal Mage (decision 300 items 7-8): a current-round technical preparation, not the historical round, not parity evidence and not an approved baseline. Using it as phase2.10's changed baseline waits for the owner's yes (decision 300 item 8); this request promotes and admits nothing. The recorder creates the project itself (substance_painter.project.create, no template, under OCIO with Painter's substance config): the low OBJ, texture set DefaultMaterial, 4096 px, OpenGL normals, PerFragment tangents, the Default workflow, unit scale 1, no cameras; the preserved Normal imported as Tunic_v6_HighNormal in tunica18_v10c_mesh_maps and bound alone. Then painter_layer_stack.py sync, byte-unchanged (the raw git blob of Assets3D 1c9a312a, with run.py and its two import-time helpers), on the stack working copy (the report's recipe with F03 alone binding M_piping_lining_v9, decision 194) and its 17 masks by folder (8 preserved, 9 current-round substitutes), resource prefix v10c_, group tunica18_v10c. Then the migration golden's export configuration, the only export: the five DefaultMaterial maps as 16-bit PNG, sizeLog2 12, infinite padding, no dithering. The low, the 9 masks and the AO behind them are made now, each pinned by hash under the receipts its note names; the historical inputs stay missing. Double-sided display is neither set nor checked in Painter (SUP-030). Recordings: r1 (create, sync, export), r1-repeat (export again) and r2 (after save, close and reopen, export again), which must be byte-identical.",
+  "inputs": [
+    {
+      "input_id": "painter-layer-stack-py",
+      "kind": "pipeline_script",
+      "assets3d_path": "Pipeline/painting/painter_layer_stack.py",
+      "sha256": "834c4bca3d32ebdeb9cd705e699782ee86fb86eb6dcff277345fae7bd63827aa",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Raw git blob of Assets3D 1c9a312a Pipeline/painting/painter_layer_stack.py (LF), read from Assets3D's object database into the private store: the committed file the current round runs. Which bytes the historical round ran is unestablished."
+      }
+    },
+    {
+      "input_id": "production-run-py",
+      "kind": "pipeline_script",
+      "assets3d_path": "Pipeline/production/run.py",
+      "sha256": "7d8017d256a2359d5062fcc6e9e06881fee5d2bbb113e8000f8fba819a85b0a2",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Raw git blob of Assets3D 1c9a312a Pipeline/production/run.py (LF), read from Assets3D's object database into the private store: the committed file the current round runs. Which bytes the historical round ran is unestablished."
+      }
+    },
+    {
+      "input_id": "decision-evidence-py",
+      "kind": "pipeline_script",
+      "assets3d_path": "Pipeline/production/decision_evidence.py",
+      "sha256": "a1f11c9a6938a8c77284e63c3e515b78a892424df480d8931a90f825a1967d60",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Raw git blob of Assets3D 1c9a312a Pipeline/production/decision_evidence.py (LF), read from Assets3D's object database into the private store: the committed file the current round runs. Which bytes the historical round ran is unestablished."
+      }
+    },
+    {
+      "input_id": "stage-review-evidence-py",
+      "kind": "pipeline_script",
+      "assets3d_path": "Pipeline/production/stage_review_evidence.py",
+      "sha256": "598c774ade15d7893bec154aead7065ddb515fd5799ab42fcf8f6e97735f502a",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Raw git blob of Assets3D 1c9a312a Pipeline/production/stage_review_evidence.py (LF), read from Assets3D's object database into the private store: the committed file the current round runs. Which bytes the historical round ran is unestablished."
+      }
+    },
+    {
+      "input_id": "tunic-report",
+      "kind": "recipe_json",
+      "assets3d_path": "Creatures/Undead/Skeletal Mage/Models3D/18-Tunica/report.json",
+      "sha256": "7829b2add3961e6916bfba32fdea470c3736c2f060636fd8a03b0272a982af5f",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Raw git blob of Assets3D 1c9a312a Creatures/Undead/Skeletal Mage/Models3D/18-Tunica/report.json (LF), read from Assets3D's object database into the private store: the committed recipe (painting_v10.painter_stack_recipe) the sync's F03 override applies to."
+      }
+    },
+    {
+      "input_id": "tunic-stack",
+      "kind": "recipe_json",
+      "assets3d_path": "_tmp/claude/tunica18-v10c/paint/stack-tunic-v10-working-copy.json",
+      "sha256": "a5bc5613f9507c184e1b6df29c0d5e59b9c87dd812bd04db5695847f963a3650",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Derived for the current round from the pinned report.json (tunic.working_copy): its recipe with the recorded override, F03 alone binding M_piping_lining_v9 (decision 194), written as tunic.stack_bytes; the input contract's stack working copy."
+      }
+    },
+    {
+      "input_id": "tunic-mesh",
+      "kind": "mesh",
+      "assets3d_path": "_tmp/claude/tunica18-v10c/lows/18-Tunica-v10-low.obj",
+      "sha256": "b691bc3d979323d24a43caf399075ecb9802681dd02ae98f2e67146c38f8ebfb",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the lost normalized_low.obj and not parity evidence: front U3's deterministic export (tunic_low_export) from the preserved .blend f6243a577f673c2b00e5803c256cebfbe933187810b7446f81d56827f0d92cb9, receipt uzpainter/parity/tunic-low-export-record/1 export record sha256 842685dc3899b845e45635b8e70bb8378c4906294381ab073cfcb94af9ea6ce5, reproduced by uzpainter/parity/tunic-low-export-record/1 export record sha256 beffc6103caa28c42052156eb3d1c1431da98de8ed48fa95d3084068007d82d8. Its material DefaultMaterial is an authored name remap of the copy, not a recovered material."
+      }
+    },
+    {
+      "input_id": "tunic-mesh-mtl",
+      "kind": "mesh",
+      "assets3d_path": "_tmp/claude/tunica18-v10c/lows/18-Tunica-v10-low.mtl",
+      "sha256": "13cbcd82a676ad6abcf8f66ef3600cf143721c96afcad8a1956c38552fa6e93f",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the lost normalized_low.obj and not parity evidence: front U3's deterministic export (tunic_low_export) from the preserved .blend f6243a577f673c2b00e5803c256cebfbe933187810b7446f81d56827f0d92cb9, receipt uzpainter/parity/tunic-low-export-record/1 export record sha256 842685dc3899b845e45635b8e70bb8378c4906294381ab073cfcb94af9ea6ce5, reproduced by uzpainter/parity/tunic-low-export-record/1 export record sha256 beffc6103caa28c42052156eb3d1c1431da98de8ed48fa95d3084068007d82d8. Its material DefaultMaterial is an authored name remap of the copy, not a recovered material."
+      }
+    },
+    {
+      "input_id": "tunic-normal",
+      "kind": "image",
+      "assets3d_path": "_tmp/claude/tunica18-v10c/mesh-maps/Source_v6_HighNormal.png",
+      "sha256": "5815e0782be67818d31b1f99d108ecc4a0462bdeb18ba9bc1d9eb508eb44f55a",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Preserved, never regenerated: the packed Source_v6_HighNormal recovered from Creatures/Undead/Skeletal Mage/Models3D/18-Tunica/18-Tunica-v10.blend (tunic.NORMAL), resolved from the private store by its pin; its SHA-1 is the Normal resource version the report records."
+      }
+    },
+    {
+      "input_id": "mask-m_band",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/tunica18-v10c/paint/masks/M_band.png",
+      "sha256": "f12fd122cde2c56937c16564aa5b33bfef1d6ab49bbbe5038f56cd74945775ea",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Preserved, never regenerated: the packed Source_v10_M_band recovered from Creatures/Undead/Skeletal Mage/Models3D/18-Tunica/18-Tunica-v10.blend (tunic.RECOVERED), resolved from the private store by its pin; its SHA-1 is the resource version the report records."
+      }
+    },
+    {
+      "input_id": "mask-m_cav",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/tunica18-v10c/paint/masks/M_cav.png",
+      "sha256": "fb779c19fea266095633ce5de7e3f18cc28b7753aa388d709a0c2070bf5d0df6",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical M_cav and not parity evidence: written by Pipeline/painting/garment_material_masks.py (raw blob of Assets3D f49fe67c, dfed970b93a387fe9321a66538c483ef48216efd7bdbdd0489901eb91e2976ca) run unchanged through tunic_masks, receipt uzpainter/parity/tunic-masks-record/1 masks record sha256 fc7609a6c192d73eb80e41d4848947c759da7886fd6d4cc29d9df7bdabfc6215 (an independent repeat of 37e0112a2f1d7bd9ce2ecadb730edc0cd52505a2426347b917e591392a7c1856, byte-identical), from front U3's low.npz 0b034ea1213efe8e08389b4d57fabb33aeba520c4ffdf3fecf9491ded5ab6ae4 and highnormal.npy 81620fb92606bc7a59122204073d7ebec7bbbda68d41f5291748eb1d4485441b (receipt uzpainter/parity/tunic-low-export-record/1 export record sha256 842685dc3899b845e45635b8e70bb8378c4906294381ab073cfcb94af9ea6ce5) and the NEW AO substitute ao.npy 6a36914f3092c0b9c4532dacb5c2e63257c4bd92b90d60b753d59372bc503fea (receipt uzpainter/parity/tunic-ao-record/1 ao record sha256 cd99d9728c0de1c05aa28850562809156e7503062dc4434c611555f2ca8d9b51, reproduced by uzpainter/parity/tunic-ao-record/1 ao record sha256 81778d96b20a5d550459550043186fc8e85e35b6209011446e75d1fa65af7877)."
+      }
+    },
+    {
+      "input_id": "mask-m_dyeinv",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/tunica18-v10c/paint/masks/M_dyeinv.png",
+      "sha256": "a931e4d5dc19d1147854076da8339095b7c279b7d5a9a27eba98f555bc9f7fd6",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical M_dyeinv and not parity evidence: written by Pipeline/painting/garment_material_masks.py (raw blob of Assets3D f49fe67c, dfed970b93a387fe9321a66538c483ef48216efd7bdbdd0489901eb91e2976ca) run unchanged through tunic_masks, receipt uzpainter/parity/tunic-masks-record/1 masks record sha256 fc7609a6c192d73eb80e41d4848947c759da7886fd6d4cc29d9df7bdabfc6215 (an independent repeat of 37e0112a2f1d7bd9ce2ecadb730edc0cd52505a2426347b917e591392a7c1856, byte-identical), from front U3's low.npz 0b034ea1213efe8e08389b4d57fabb33aeba520c4ffdf3fecf9491ded5ab6ae4 and highnormal.npy 81620fb92606bc7a59122204073d7ebec7bbbda68d41f5291748eb1d4485441b (receipt uzpainter/parity/tunic-low-export-record/1 export record sha256 842685dc3899b845e45635b8e70bb8378c4906294381ab073cfcb94af9ea6ce5) and the NEW AO substitute ao.npy 6a36914f3092c0b9c4532dacb5c2e63257c4bd92b90d60b753d59372bc503fea (receipt uzpainter/parity/tunic-ao-record/1 ao record sha256 cd99d9728c0de1c05aa28850562809156e7503062dc4434c611555f2ca8d9b51, reproduced by uzpainter/parity/tunic-ao-record/1 ao record sha256 81778d96b20a5d550459550043186fc8e85e35b6209011446e75d1fa65af7877)."
+      }
+    },
+    {
+      "input_id": "mask-m_embro",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/tunica18-v10c/paint/masks/M_embro.png",
+      "sha256": "750c2facd9aca492bd1ac21b8f8ac1610ebe75803594ee66c33be25d4d1d3fb6",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Preserved, never regenerated: the packed Source_v10_M_embro recovered from Creatures/Undead/Skeletal Mage/Models3D/18-Tunica/18-Tunica-v10.blend (tunic.RECOVERED), resolved from the private store by its pin; its SHA-1 is the resource version the report records."
+      }
+    },
+    {
+      "input_id": "mask-m_fiber",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/tunica18-v10c/paint/masks/M_fiber.png",
+      "sha256": "3e3e553ae76639e6dee17a411bbe9fa7bdbed3a34970109f012244a38595af88",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical M_fiber and not parity evidence: written by Pipeline/painting/garment_material_masks.py (raw blob of Assets3D f49fe67c, dfed970b93a387fe9321a66538c483ef48216efd7bdbdd0489901eb91e2976ca) run unchanged through tunic_masks, receipt uzpainter/parity/tunic-masks-record/1 masks record sha256 fc7609a6c192d73eb80e41d4848947c759da7886fd6d4cc29d9df7bdabfc6215 (an independent repeat of 37e0112a2f1d7bd9ce2ecadb730edc0cd52505a2426347b917e591392a7c1856, byte-identical), from front U3's low.npz 0b034ea1213efe8e08389b4d57fabb33aeba520c4ffdf3fecf9491ded5ab6ae4 and highnormal.npy 81620fb92606bc7a59122204073d7ebec7bbbda68d41f5291748eb1d4485441b (receipt uzpainter/parity/tunic-low-export-record/1 export record sha256 842685dc3899b845e45635b8e70bb8378c4906294381ab073cfcb94af9ea6ce5) and the NEW AO substitute ao.npy 6a36914f3092c0b9c4532dacb5c2e63257c4bd92b90d60b753d59372bc503fea (receipt uzpainter/parity/tunic-ao-record/1 ao record sha256 cd99d9728c0de1c05aa28850562809156e7503062dc4434c611555f2ca8d9b51, reproduced by uzpainter/parity/tunic-ao-record/1 ao record sha256 81778d96b20a5d550459550043186fc8e85e35b6209011446e75d1fa65af7877)."
+      }
+    },
+    {
+      "input_id": "mask-m_fray",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/tunica18-v10c/paint/masks/M_fray.png",
+      "sha256": "0772c83624e1a5b5b75141c1efc1774098be3d6b89462f9ce1b6634b1348a49e",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical M_fray and not parity evidence: written by Pipeline/painting/garment_material_masks.py (raw blob of Assets3D f49fe67c, dfed970b93a387fe9321a66538c483ef48216efd7bdbdd0489901eb91e2976ca) run unchanged through tunic_masks, receipt uzpainter/parity/tunic-masks-record/1 masks record sha256 fc7609a6c192d73eb80e41d4848947c759da7886fd6d4cc29d9df7bdabfc6215 (an independent repeat of 37e0112a2f1d7bd9ce2ecadb730edc0cd52505a2426347b917e591392a7c1856, byte-identical), from front U3's low.npz 0b034ea1213efe8e08389b4d57fabb33aeba520c4ffdf3fecf9491ded5ab6ae4 and highnormal.npy 81620fb92606bc7a59122204073d7ebec7bbbda68d41f5291748eb1d4485441b (receipt uzpainter/parity/tunic-low-export-record/1 export record sha256 842685dc3899b845e45635b8e70bb8378c4906294381ab073cfcb94af9ea6ce5) and the NEW AO substitute ao.npy 6a36914f3092c0b9c4532dacb5c2e63257c4bd92b90d60b753d59372bc503fea (receipt uzpainter/parity/tunic-ao-record/1 ao record sha256 cd99d9728c0de1c05aa28850562809156e7503062dc4434c611555f2ca8d9b51, reproduced by uzpainter/parity/tunic-ao-record/1 ao record sha256 81778d96b20a5d550459550043186fc8e85e35b6209011446e75d1fa65af7877)."
+      }
+    },
+    {
+      "input_id": "mask-m_hem",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/tunica18-v10c/paint/masks/M_hem.png",
+      "sha256": "3f92a49c4f77751c337ed375786a450d4267b1184f26bc0b4b18c2699047ff49",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical M_hem and not parity evidence: written by Pipeline/painting/garment_material_masks.py (raw blob of Assets3D f49fe67c, dfed970b93a387fe9321a66538c483ef48216efd7bdbdd0489901eb91e2976ca) run unchanged through tunic_masks, receipt uzpainter/parity/tunic-masks-record/1 masks record sha256 fc7609a6c192d73eb80e41d4848947c759da7886fd6d4cc29d9df7bdabfc6215 (an independent repeat of 37e0112a2f1d7bd9ce2ecadb730edc0cd52505a2426347b917e591392a7c1856, byte-identical), from front U3's low.npz 0b034ea1213efe8e08389b4d57fabb33aeba520c4ffdf3fecf9491ded5ab6ae4 and highnormal.npy 81620fb92606bc7a59122204073d7ebec7bbbda68d41f5291748eb1d4485441b (receipt uzpainter/parity/tunic-low-export-record/1 export record sha256 842685dc3899b845e45635b8e70bb8378c4906294381ab073cfcb94af9ea6ce5) and the NEW AO substitute ao.npy 6a36914f3092c0b9c4532dacb5c2e63257c4bd92b90d60b753d59372bc503fea (receipt uzpainter/parity/tunic-ao-record/1 ao record sha256 cd99d9728c0de1c05aa28850562809156e7503062dc4434c611555f2ca8d9b51, reproduced by uzpainter/parity/tunic-ao-record/1 ao record sha256 81778d96b20a5d550459550043186fc8e85e35b6209011446e75d1fa65af7877)."
+      }
+    },
+    {
+      "input_id": "mask-m_hemband",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/tunica18-v10c/paint/masks/M_hemband.png",
+      "sha256": "5b6559335b6f9bc49c50ba37097a618f00ed5c5069f1522cb7fededc20a2ab74",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Preserved, never regenerated: the packed Source_v10_M_hemband recovered from Creatures/Undead/Skeletal Mage/Models3D/18-Tunica/18-Tunica-v10.blend (tunic.RECOVERED), resolved from the private store by its pin; its SHA-1 is the resource version the report records."
+      }
+    },
+    {
+      "input_id": "mask-m_hemline",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/tunica18-v10c/paint/masks/M_hemline.png",
+      "sha256": "8591ee1ec691467cc291ff7bc4e7e7a2e676f09d43c96d88e48e77cbe72e0a9f",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Preserved, never regenerated: the packed Source_v10_M_hemline recovered from Creatures/Undead/Skeletal Mage/Models3D/18-Tunica/18-Tunica-v10.blend (tunic.RECOVERED), resolved from the private store by its pin; its SHA-1 is the resource version the report records."
+      }
+    },
+    {
+      "input_id": "mask-m_laceholes",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/tunica18-v10c/paint/masks/M_laceholes.png",
+      "sha256": "72a700679efa8b0ee214b5e01eecc140795f4e566d8e94712dba14a86afb30b5",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Preserved, never regenerated: the packed Source_v10_M_laceholes recovered from Creatures/Undead/Skeletal Mage/Models3D/18-Tunica/18-Tunica-v10.blend (tunic.RECOVERED), resolved from the private store by its pin; its SHA-1 is the resource version the report records."
+      }
+    },
+    {
+      "input_id": "mask-m_lacerings",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/tunica18-v10c/paint/masks/M_lacerings.png",
+      "sha256": "3e04c6282e385bf3e8d637e6f03f5b27130c2bcbd7800ae95d72938ccbf896a1",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Preserved, never regenerated: the packed Source_v10_M_lacerings recovered from Creatures/Undead/Skeletal Mage/Models3D/18-Tunica/18-Tunica-v10.blend (tunic.RECOVERED), resolved from the private store by its pin; its SHA-1 is the resource version the report records."
+      }
+    },
+    {
+      "input_id": "mask-m_lining",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/tunica18-v10c/paint/masks/M_lining.png",
+      "sha256": "61a1b281b87fd61c99825d3449dc6f8e5ee6fc006655673464d8a69440266f29",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical M_lining and not parity evidence: written by Pipeline/painting/garment_material_masks.py (raw blob of Assets3D f49fe67c, dfed970b93a387fe9321a66538c483ef48216efd7bdbdd0489901eb91e2976ca) run unchanged through tunic_masks, receipt uzpainter/parity/tunic-masks-record/1 masks record sha256 fc7609a6c192d73eb80e41d4848947c759da7886fd6d4cc29d9df7bdabfc6215 (an independent repeat of 37e0112a2f1d7bd9ce2ecadb730edc0cd52505a2426347b917e591392a7c1856, byte-identical), from front U3's low.npz 0b034ea1213efe8e08389b4d57fabb33aeba520c4ffdf3fecf9491ded5ab6ae4 and highnormal.npy 81620fb92606bc7a59122204073d7ebec7bbbda68d41f5291748eb1d4485441b (receipt uzpainter/parity/tunic-low-export-record/1 export record sha256 842685dc3899b845e45635b8e70bb8378c4906294381ab073cfcb94af9ea6ce5) and the NEW AO substitute ao.npy 6a36914f3092c0b9c4532dacb5c2e63257c4bd92b90d60b753d59372bc503fea (receipt uzpainter/parity/tunic-ao-record/1 ao record sha256 cd99d9728c0de1c05aa28850562809156e7503062dc4434c611555f2ca8d9b51, reproduced by uzpainter/parity/tunic-ao-record/1 ao record sha256 81778d96b20a5d550459550043186fc8e85e35b6209011446e75d1fa65af7877)."
+      }
+    },
+    {
+      "input_id": "mask-m_piping",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/tunica18-v10c/paint/masks/M_piping.png",
+      "sha256": "822f926d65403df422df81cd5c9227cb2a1a2ef6c727c42f76d21b836f98a09c",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Preserved, never regenerated: the packed Source_v10_M_piping recovered from Creatures/Undead/Skeletal Mage/Models3D/18-Tunica/18-Tunica-v10.blend (tunic.RECOVERED), resolved from the private store by its pin; its SHA-1 is the resource version the report records."
+      }
+    },
+    {
+      "input_id": "mask-m_piping_lining_v9",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/tunica18-v10c/paint/masks/M_piping_lining_v9.png",
+      "sha256": "9b2b306359a4ef6a1888c5eb33095a8f1fea1024130eae4d08d9c06a28aaf4d0",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Preserved, never regenerated: the packed Source_v9_M_piping recovered from Creatures/Undead/Skeletal Mage/Models3D/18-Tunica/18-Tunica-v10.blend (tunic.RECOVERED), resolved from the private store by its pin; its SHA-1 is the resource version the report records."
+      }
+    },
+    {
+      "input_id": "mask-m_pores",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/tunica18-v10c/paint/masks/M_pores.png",
+      "sha256": "b43250e20dbabd4fef8aad979132658564b71d69d8d9f330db69287d23fa7908",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical M_pores and not parity evidence: written by Pipeline/painting/garment_material_masks.py (raw blob of Assets3D f49fe67c, dfed970b93a387fe9321a66538c483ef48216efd7bdbdd0489901eb91e2976ca) run unchanged through tunic_masks, receipt uzpainter/parity/tunic-masks-record/1 masks record sha256 fc7609a6c192d73eb80e41d4848947c759da7886fd6d4cc29d9df7bdabfc6215 (an independent repeat of 37e0112a2f1d7bd9ce2ecadb730edc0cd52505a2426347b917e591392a7c1856, byte-identical), from front U3's low.npz 0b034ea1213efe8e08389b4d57fabb33aeba520c4ffdf3fecf9491ded5ab6ae4 and highnormal.npy 81620fb92606bc7a59122204073d7ebec7bbbda68d41f5291748eb1d4485441b (receipt uzpainter/parity/tunic-low-export-record/1 export record sha256 842685dc3899b845e45635b8e70bb8378c4906294381ab073cfcb94af9ea6ce5) and the NEW AO substitute ao.npy 6a36914f3092c0b9c4532dacb5c2e63257c4bd92b90d60b753d59372bc503fea (receipt uzpainter/parity/tunic-ao-record/1 ao record sha256 cd99d9728c0de1c05aa28850562809156e7503062dc4434c611555f2ca8d9b51, reproduced by uzpainter/parity/tunic-ao-record/1 ao record sha256 81778d96b20a5d550459550043186fc8e85e35b6209011446e75d1fa65af7877)."
+      }
+    },
+    {
+      "input_id": "mask-m_ridgewear",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/tunica18-v10c/paint/masks/M_ridgewear.png",
+      "sha256": "65131369a1d96b3d389c19280186b1ddc60bdfeedc05d4cb324b4b8d6a82b7d0",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical M_ridgewear and not parity evidence: written by Pipeline/painting/garment_material_masks.py (raw blob of Assets3D f49fe67c, dfed970b93a387fe9321a66538c483ef48216efd7bdbdd0489901eb91e2976ca) run unchanged through tunic_masks, receipt uzpainter/parity/tunic-masks-record/1 masks record sha256 fc7609a6c192d73eb80e41d4848947c759da7886fd6d4cc29d9df7bdabfc6215 (an independent repeat of 37e0112a2f1d7bd9ce2ecadb730edc0cd52505a2426347b917e591392a7c1856, byte-identical), from front U3's low.npz 0b034ea1213efe8e08389b4d57fabb33aeba520c4ffdf3fecf9491ded5ab6ae4 and highnormal.npy 81620fb92606bc7a59122204073d7ebec7bbbda68d41f5291748eb1d4485441b (receipt uzpainter/parity/tunic-low-export-record/1 export record sha256 842685dc3899b845e45635b8e70bb8378c4906294381ab073cfcb94af9ea6ce5) and the NEW AO substitute ao.npy 6a36914f3092c0b9c4532dacb5c2e63257c4bd92b90d60b753d59372bc503fea (receipt uzpainter/parity/tunic-ao-record/1 ao record sha256 cd99d9728c0de1c05aa28850562809156e7503062dc4434c611555f2ca8d9b51, reproduced by uzpainter/parity/tunic-ao-record/1 ao record sha256 81778d96b20a5d550459550043186fc8e85e35b6209011446e75d1fa65af7877)."
+      }
+    },
+    {
+      "input_id": "mask-m_stains",
+      "kind": "mask",
+      "assets3d_path": "_tmp/claude/tunica18-v10c/paint/masks/M_stains.png",
+      "sha256": "bd0882cf9a356f3b695ce254786849f650a7014b7ea54f023bc1827a96cafc79",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D",
+        "note": "Current-round substitute, not the historical M_stains and not parity evidence: written by Pipeline/painting/garment_material_masks.py (raw blob of Assets3D f49fe67c, dfed970b93a387fe9321a66538c483ef48216efd7bdbdd0489901eb91e2976ca) run unchanged through tunic_masks, receipt uzpainter/parity/tunic-masks-record/1 masks record sha256 fc7609a6c192d73eb80e41d4848947c759da7886fd6d4cc29d9df7bdabfc6215 (an independent repeat of 37e0112a2f1d7bd9ce2ecadb730edc0cd52505a2426347b917e591392a7c1856, byte-identical), from front U3's low.npz 0b034ea1213efe8e08389b4d57fabb33aeba520c4ffdf3fecf9491ded5ab6ae4 and highnormal.npy 81620fb92606bc7a59122204073d7ebec7bbbda68d41f5291748eb1d4485441b (receipt uzpainter/parity/tunic-low-export-record/1 export record sha256 842685dc3899b845e45635b8e70bb8378c4906294381ab073cfcb94af9ea6ce5) and the NEW AO substitute ao.npy 6a36914f3092c0b9c4532dacb5c2e63257c4bd92b90d60b753d59372bc503fea (receipt uzpainter/parity/tunic-ao-record/1 ao record sha256 cd99d9728c0de1c05aa28850562809156e7503062dc4434c611555f2ca8d9b51, reproduced by uzpainter/parity/tunic-ao-record/1 ao record sha256 81778d96b20a5d550459550043186fc8e85e35b6209011446e75d1fa65af7877)."
+      }
+    },
+    {
+      "input_id": "tunic-v10-export-config",
+      "kind": "recipe_json",
+      "path": "parity/fixtures/tier1/tunic-v10/export-config.json",
+      "sha256": "7167a93ec10baf82f6d394efff7ea91d3f525b747ed1a71b47dc5bc75b846de8",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0",
+        "note": "The export configuration of the Tunic v10 migration golden (decision 194), unchanged: the current round exports the same five map names."
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "uzmigames_pipeline_scripts",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "tunic-mesh",
+          "mesh_material_library": "tunic-mesh-mtl",
+          "normal": "tunic-normal",
+          "texture_set": "DefaultMaterial",
+          "normal_name": "Tunic_v6_HighNormal",
+          "normal_group": "tunica18_v10c_mesh_maps",
+          "normal_map_format": "OpenGL",
+          "tangent_space_mode": "PerFragment",
+          "project_workflow": "Default",
+          "default_texture_resolution": 4096,
+          "import_cameras": false,
+          "mesh_unit_scale": 1.0
+        }
+      },
+      {
+        "step": 2,
+        "call": "uzmigames.pipeline.run_script",
+        "args": {
+          "script": "painter-layer-stack-py",
+          "command": "sync",
+          "stack": "tunic-stack",
+          "mask_folder": "_tmp/claude/tunica18-v10c/paint/masks",
+          "imports": [
+            "production-run-py"
+          ],
+          "import_closure": [
+            "decision-evidence-py",
+            "stage-review-evidence-py"
+          ],
+          "resource_prefix": "v10c_",
+          "resource_group": "tunica18_v10c",
+          "texture_set": "DefaultMaterial",
+          "recipe": "tunic-report",
+          "recipe_keys": [
+            "painting_v10",
+            "painter_stack_recipe"
+          ],
+          "override_layer": "F03",
+          "override_mask": "M_piping_lining_v9"
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "config": "tunic-v10-export-config"
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "OCIO",
+      "value": "resources/ocio/substance/config.ocio",
+      "applied_by": "environment_variable"
+    },
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "project.tangent_space_mode",
+      "value": "PerFragment",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "project.project_workflow",
+      "value": "Default",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "project.default_texture_resolution",
+      "value": 4096,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "project.import_cameras",
+      "value": false,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "project.mesh_unit_scale",
+      "value": 1.0,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "project.save_mode",
+      "value": "Full",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.file_format",
+      "value": "png",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.png.bit_depth",
+      "value": 16,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.size_log2",
+      "value": 12,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "infinite",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.shader_params",
+      "value": false,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": []
+}
