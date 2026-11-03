@@ -772,7 +772,7 @@ def keys_at(record: Any, role: str, path: Sequence[str], keys: frozenset[str]) -
     """An object of exactly `keys`."""
     found = value_at(record, role, path)
     if not isinstance(found, dict) or set(found) != keys:
-        held = sorted(found) if isinstance(found, dict) else type(found).__name__
+        held = sorted(found) if isinstance(found, dict) else type(found)
         where = ".".join(path) or "record"
         raise RecorderError(f"`{role}` `{where}` holds {held}, not {sorted(keys)}")
     return found

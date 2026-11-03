@@ -24,6 +24,7 @@ from tests.parity.recorder.test_script_run import (  # noqa: F401  (`painter` is
     CLOSURE,
     CURRENT_LAYER_STACK,
     LAYER_STACK_PATH,
+    NATIVE_LAYER_STACK,
     painter,
     write,
 )
@@ -111,9 +112,12 @@ def stand_in_report() -> dict[str, Any]:
         "title": "stand-in tunic recipe",
         "groups": [{"key": "lining", "name": "Forro", "mask": "M_lining"}],
         "layers": [
-            *({"id": f"L{i:02d}", "group": "lining", "mask": n} for i, n in enumerate(others)),
-            {"id": "C07", "group": "lining", "mask": "M_piping"},
-            {"id": "F03", "group": "lining", "mask": "M_piping"},
+            *(
+                {"id": f"L{i:02d}", "group": "lining", "name": f"L{i:02d} {n}", "mask": n}
+                for i, n in enumerate(others)
+            ),
+            {"id": "C07", "group": "lining", "name": "C07 Piping", "mask": "M_piping"},
+            {"id": "F03", "group": "lining", "name": "F03 Lining piping", "mask": "M_piping"},
         ],
     }
     v9 = preserved_png("M_piping_lining_v9")
@@ -573,7 +577,7 @@ def test_the_request_records_through_the_fake_painter(
 ) -> None:
     """With a stand-in repository config the fake can export: r1, r1-repeat and r2, the native
     create binding the Normal alone and the sync with the round's options."""
-    r = build(tmp_path)
+    r = build(tmp_path, layer_stack=NATIVE_LAYER_STACK)  # a sync that builds the stack's tree
     repo = tmp_path / "repo"
     data = json.dumps(STAND_IN_CONFIG).encode("utf-8")
     write(repo / tunic.EXPORT_CONFIG, data)
@@ -585,6 +589,7 @@ def test_the_request_records_through_the_fake_painter(
     world, session = painter
     world.version, world.version_info = "12.2.0", (12, 2, 0)  # the request's Painter
     world.texture_set = world.imported_texture_set = "DefaultMaterial"
+    world.default_tree_layer = "Layer 1"  # a created project's default root layer
     monkeypatch.setattr(session_module, "envelope_builds", lambda: frozenset({BUILD}))
     run = record_script_golden(session, job, tmp_path / "work", tmp_path / "inbox")
     data = json.loads((run / "record.json").read_text(encoding="utf-8"))

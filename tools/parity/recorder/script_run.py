@@ -1435,6 +1435,315 @@ def mesh_map_output(
     return output, resource_identity(normal)
 
 
+# The native state readback (`painter_side.migration_readback`, recorded as `create/state`): each
+# readback's fields, the key sets of the synced group's nodes, and what a renumbering may change.
+STATE_ID = "create/state"
+STATE_FIELDS = frozenset({"file_path", "last_imported_mesh_path", "texture_sets"})
+LAYER_FIELDS = frozenset(
+    {"name", "type", "uid", "visible", "blending", "mask", "content_effects", "mask_effects"}
+)
+GROUP_FIELDS = LAYER_FIELDS | {"sub_layers"}
+FILL_FIELDS = LAYER_FIELDS | {"active_channels", "sources"}
+MASK_FILL_FIELDS = frozenset({"name", "type", "uid", "visible", "blending", "sources"})
+BITMAP_FIELDS = frozenset({"resource_url", "color_space", "available_color_spaces"})
+MASKED = {"has_mask": True, "enabled": True, "background": "Black"}  # the sync's add_mask
+UNMASKED = {"has_mask": False}
+SYNC_REPLY = frozenset({"root_uid", "layers", "hidden", "resources", "group_height_blend"})
+PROJECT_URL = re.compile(r"\Aresource://(project[0-9]+)/")
+
+
+def renumbered_url(url: str) -> str:
+    return PROJECT_URL.sub("resource://projectN/", url, count=1)
+
+
+def project_renumbered(value: Any) -> Any:
+    """`value` with only a project resource context renumbered: a `context` that is `projectN`,
+    and that prefix of a `url` or `resource_url`. Every other value, names, versions and shelf
+    contexts included, is kept literally."""
+    if isinstance(value, list):
+        return [project_renumbered(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    out: dict[str, Any] = {}
+    for key, item in value.items():
+        if key == "context" and isinstance(item, str) and PROJECT_CONTEXT.fullmatch(item):
+            out[key] = "projectN"
+        elif key in ("url", "resource_url") and isinstance(item, str):
+            out[key] = renumbered_url(item)
+        else:
+            out[key] = project_renumbered(item)
+    return out
+
+
+def project_contexts(value: Any) -> set[str]:
+    """Every project context a readback names (in a `context`, `url` or `resource_url`)."""
+    found: set[str] = set()
+    if isinstance(value, list):
+        for item in value:
+            found |= project_contexts(item)
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            if key == "context" and isinstance(item, str) and PROJECT_CONTEXT.fullmatch(item):
+                found.add(item)
+            elif key in ("url", "resource_url") and isinstance(item, str):
+                match = PROJECT_URL.match(item)
+                found |= {match.group(1)} if match else set()
+            else:
+                found |= project_contexts(item)
+    return found
+
+
+def count_bitmaps(value: Any) -> int:
+    if isinstance(value, list):
+        return sum(count_bitmaps(item) for item in value)
+    if isinstance(value, dict):
+        return int("bitmap" in value) + sum(count_bitmaps(item) for item in value.values())
+    return 0
+
+
+def first_difference(a: Any, b: Any, path: str = "") -> str:
+    """The path of the first value where `a` and `b` differ (`a != b`)."""
+    if isinstance(a, dict) and isinstance(b, dict) and set(a) == set(b):
+        for key in a:
+            if a[key] != b[key]:
+                return first_difference(a[key], b[key], f"{path}/{key}")
+    if isinstance(a, list) and isinstance(b, list) and len(a) == len(b):
+        for index, (x, y) in enumerate(zip(a, b, strict=True)):
+            if x != y:
+                return first_difference(x, y, f"{path}[{index}]")
+    return path or "/"
+
+
+def sync_built(stack: dict[str, Any], synced: Any) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """The stack's layers in the order the sync builds them (group by group), and the uid the
+    sync's own reply gives each; refused unless that reply names exactly those layers, one
+    resource per bitmap, no resource for two bitmaps, and every group and layer path once."""
+    if not isinstance(synced, dict) or not set(synced) >= SYNC_REPLY:
+        found = sorted(synced) if isinstance(synced, dict) else synced
+        raise RecorderError(f"the sync replied {found}, not its {sorted(SYNC_REPLY)}")
+    groups = [g["name"] for g in stack["groups"]]
+    built = [x for g in stack["groups"] for x in stack["layers"] if x["group"] == g["key"]]
+    paths = [
+        (next(g["name"] for g in stack["groups"] if g["key"] == x["group"]), x["name"])
+        for x in built
+    ]
+    if len(built) != len(stack["layers"]) or len(set(groups)) != len(groups):
+        raise RecorderError("the stack has a layer in no group, or two groups of one name")
+    if len(set(paths)) != len(paths):
+        raise RecorderError("the stack names one group/layer path twice")
+    report = synced["layers"]
+    if not isinstance(report, list) or [
+        (r.get("id"), r.get("name")) if isinstance(r, dict) else r for r in report
+    ] != [(x["id"], x["name"]) for x in built]:
+        raise RecorderError("the sync's reply does not list the stack's layers as it builds them")
+    if any(type(r["uid"]) is not int for r in report) or type(synced["root_uid"]) is not int:
+        raise RecorderError("the sync's reply gives a layer or its group no uid")
+    resources = synced["resources"]
+    if (
+        not isinstance(resources, dict)
+        or set(resources) != stack_bitmaps(stack)
+        or not all(isinstance(url, str) for url in resources.values())
+    ):
+        named = sorted(resources) if isinstance(resources, dict) else resources
+        raise RecorderError(
+            f"the sync's resources name {named}, not the stack's bitmaps "
+            f"{sorted(stack_bitmaps(stack))}"
+        )
+    shared = sorted(n for n in resources if list(resources.values()).count(resources[n]) > 1)
+    if shared:
+        raise RecorderError(f"the sync bound the bitmaps {shared} to one resource")
+    return built, {r["id"]: r["uid"] for r in report}
+
+
+def check_native_state(
+    texture_set: str,
+    stack: dict[str, Any],
+    synced: dict[str, Any],
+    urls: dict[str, str],
+    value: Any,
+    project: Path,
+    mesh: Path,
+    recording: str,
+) -> None:
+    """The state readback holds the synced stack as the pinned stack and the sync's reply give
+    it, refused otherwise (decision 300 item 7; contract "Resources" and "Root"):
+
+    - the project file, the staged mesh as the last imported, one texture set with one stack;
+    - the root layers: the stack's titled group first, visible, the sync's group; after it
+      exactly one layer, Painter's default, the one the sync reports hiding, hidden;
+    - in the group, the stack's groups and in each its layers, top first (Painter lists the
+      stack the sync built bottom first from the top), each visible, by name, a layer by the uid
+      the sync reported; nothing else and no content effect. A field this check needs (a
+      structure, a name, a uid, a visibility, a mask, a binding or a Height blend) that is
+      missing or raised is refused; any other getter's value, raised included, is only kept
+      for the r1/r2 comparison;
+    - each mask the stack gives (a layer's or a group's): a Black mask, enabled, holding exactly
+      one visible fill effect named for its bitmap and bound to that bitmap's resource `urls`
+      in the Data colour space; no mask elsewhere; a `base_tex` bound in BaseColor as sRGB;
+    - Height blending Normal on a group with `replace_height`, LinearDodge on the others and on
+      the titled group, as the sync reported;
+    - as many bitmap sources in the whole stack as the stack binds, so none is added anywhere."""
+
+    def refused(where: str, problem: str) -> RecorderError:
+        return RecorderError(f"{recording}: the state readback at {where} {problem}")
+
+    if not isinstance(value, dict) or set(value) != STATE_FIELDS:
+        raise refused("/", f"holds {sorted(value) if isinstance(value, dict) else value!r}")
+    file_path = value["file_path"]
+    if not isinstance(file_path, str) or Path(file_path).resolve() != project.resolve():
+        raise refused("/file_path", f"is {file_path!r}, not {project}")
+    imported = value["last_imported_mesh_path"]
+    if not isinstance(imported, str) or Path(imported).resolve() != mesh.resolve():
+        raise refused("/last_imported_mesh_path", f"is {imported!r}, not the staged mesh {mesh}")
+    sets = value["texture_sets"]
+    if not isinstance(sets, dict) or list(sets) != [texture_set]:
+        raise refused("/texture_sets", f"is not exactly {texture_set}")
+    stacks = sets[texture_set].get("stacks")
+    if not isinstance(stacks, dict) or len(stacks) != 1:
+        raise refused(f"/{texture_set}", "holds no single stack")
+    roots = next(iter(stacks.values())).get("layers")
+    if not isinstance(roots, list) or not roots:
+        raise refused(f"/{texture_set}", "holds no root layer")
+    built, uids = sync_built(stack, synced)
+
+    def node(item: Any, fields: frozenset[str], kind: str, name: str, where: str) -> Any:
+        if not isinstance(item, dict) or set(item) != fields:
+            raise refused(where, f"is no {kind} readback")
+        if item["type"] != kind or item["name"] != name:
+            raise refused(where, f"is the {item['type']} {item['name']!r}, not the {kind} {name!r}")
+        if item["visible"] is not True or type(item["uid"]) is not int:
+            raise refused(where, "is hidden, or has no uid")
+        if "content_effects" in fields and item["content_effects"] != []:
+            raise refused(where, "holds a content effect")
+        return item
+
+    def bitmap(sources: Any, channel: str, bitmap_name: str, space: str, where: str) -> None:
+        source = sources.get(channel) if isinstance(sources, dict) else None
+        inner = source.get("source") if isinstance(source, dict) else None
+        found = inner.get("bitmap") if isinstance(inner, dict) else None
+        if not isinstance(found, dict) or set(found) != BITMAP_FIELDS:
+            raise refused(where, f"binds no bitmap in {channel}")
+        if found["resource_url"] != urls[bitmap_name]:
+            raise refused(
+                where,
+                f"binds {found['resource_url']!r}, not the sync's {bitmap_name} "
+                f"{urls[bitmap_name]!r}",
+            )
+        available = found["available_color_spaces"]
+        if (
+            found["color_space"] != space
+            or not isinstance(available, list)
+            or space not in available
+        ):
+            raise refused(where, f"reads {bitmap_name} in {found['color_space']!r}, not {space}")
+
+    def mask(item: dict[str, Any], bitmap_name: str | None, where: str) -> None:
+        if bitmap_name is None:
+            if item["mask"] != UNMASKED or item["mask_effects"] != []:
+                raise refused(where, "has a mask the stack does not give it")
+            return
+        effects = item["mask_effects"]
+        if item["mask"] != MASKED or not isinstance(effects, list) or len(effects) != 1:
+            raise refused(where, f"has no Black mask holding exactly one fill for {bitmap_name}")
+        effect = node(effects[0], MASK_FILL_FIELDS, "FillEffect", bitmap_name, f"{where}/mask")
+        if set(effect["sources"]) != {"mask"}:
+            raise refused(f"{where}/mask", "holds a source other than its mask")
+        bitmap(effect["sources"], "mask", bitmap_name, "Data", f"{where}/mask")
+
+    def height(item: dict[str, Any], expected: str, where: str) -> str:
+        found = item["blending"].get("Height") if isinstance(item["blending"], dict) else None
+        mode = found.get("blending_mode") if isinstance(found, dict) else None
+        if mode != expected:
+            raise refused(where, f"blends Height as {mode!r}, not {expected}")
+        return expected
+
+    title = stack["title"]
+    root = node(roots[0], GROUP_FIELDS, "GroupLayer", title, f"/{title}")
+    if root["uid"] != synced["root_uid"]:
+        raise refused(
+            f"/{title}", f"has the uid {root['uid']}, not the sync's {synced['root_uid']}"
+        )
+    mask(root, None, f"/{title}")
+    height(root, "LinearDodge", f"/{title}")
+    others, hidden = roots[1:], synced["hidden"]
+    if (
+        not isinstance(hidden, list)
+        or len(hidden) != 1
+        or len(others) != 1
+        or not isinstance(others[0], dict)
+        or others[0].get("name") != hidden[0]
+        or others[0].get("visible") is not False
+    ):
+        raise refused(
+            "/", f"holds not exactly one other root layer, the default the sync hid ({hidden})"
+        )
+    groups = root["sub_layers"]
+    if not isinstance(groups, list) or len(groups) != len(stack["groups"]):
+        raise refused(f"/{title}", f"does not hold the stack's {len(stack['groups'])} groups")
+    blends: dict[str, str] = {}
+    for item, group in zip(groups, reversed(stack["groups"]), strict=True):
+        where = f"/{title}/{group['name']}"
+        found = node(item, GROUP_FIELDS, "GroupLayer", group["name"], where)
+        mask(found, group.get("mask"), where)
+        expected = "Normal" if group.get("replace_height") else "LinearDodge"
+        blends[group["name"]] = height(found, expected, where)
+        layers = [x for x in built if x["group"] == group["key"]]
+        children = found["sub_layers"]
+        if not isinstance(children, list) or len(children) != len(layers):
+            raise refused(where, f"does not hold the stack's {len(layers)} layers")
+        for child, layer in zip(children, reversed(layers), strict=True):
+            path = f"{where}/{layer['name']}"
+            fill = node(child, FILL_FIELDS, "FillLayer", layer["name"], path)
+            if fill["uid"] != uids[layer["id"]]:
+                raise refused(path, f"has the uid {fill['uid']}, not the sync's {layer['id']}")
+            if layer.get("base_tex"):
+                bitmap(fill["sources"], "BaseColor", layer["base_tex"], "sRGB", path)
+            mask(fill, layer.get("mask"), path)
+    if blends != synced["group_height_blend"]:
+        raise refused(f"/{title}", f"blends Height {blends}, not as the sync reported")
+    bindings = sum(bool(x.get("mask")) + bool(x.get("base_tex")) for x in stack["layers"])
+    bindings += sum(bool(g.get("mask")) for g in stack["groups"])
+    if count_bitmaps(roots) != bindings:
+        raise refused("/", f"binds {count_bitmaps(roots)} bitmaps, not the stack's {bindings}")
+
+
+def native_state(
+    session: PainterSession,
+    job: NativeJob,
+    staged: dict[str, Path],
+    synced: Any,
+    project: Path,
+    recording: str,
+) -> tuple[dict[str, Any], Any]:
+    """The project's state read back (`migration.state_readback`, as `create/state`) and checked
+    against the pinned stack and the sync's reply (`check_native_state`): literally in r1, after
+    renumbering only a project context in r2. Returns the output and what r1 and r2 must hold
+    alike: the readback with that renumbering and without its project path (checked here)."""
+    from tools.parity.recorder.migration import state_readback  # migration imports this module
+
+    output = {**state_readback(session), "output_id": STATE_ID}
+    value = output["value"]
+    stack = json.loads(staged[job.sync.args["stack"]].read_bytes().decode("utf-8"))
+    resources = synced.get("resources") if isinstance(synced, dict) else None
+    urls = dict(resources) if isinstance(resources, dict) else {}
+    contexts = project_contexts(value)  # before any renumbering, which would merge them
+    if len(contexts) > 1:
+        raise RecorderError(
+            f"{recording}: the state readback names several project contexts {sorted(contexts)}"
+        )
+    observed = value
+    if recording != R1:
+        observed = project_renumbered(value)
+        urls = {
+            name: renumbered_url(url) if isinstance(url, str) else url for name, url in urls.items()
+        }
+    texture_set = job.create.args["texture_set"]
+    mesh = staged[job.create.mesh.input_id]
+    check_native_state(texture_set, stack, synced, urls, observed, project, mesh, recording)
+    renumbered = project_renumbered(value)
+    return output, {key: item for key, item in renumbered.items() if key != "file_path"}
+
+
 def save_project(session: PainterSession, project: Path) -> str:
     """`save_as` Full to `project`, refused unless Painter reports that file."""
     session.call("save_as", path=str(project))
@@ -1483,6 +1792,7 @@ def record_script_golden(
 
     try:
         baseline: dict[str, Any] | None = None  # the imported Normal, as the create bound it
+        compared_r1: Any = None  # the native state r2 must hold alike
         if isinstance(job, NativeJob):
             native, project = run_native_create(session, job, staged, directory)
             created = native_readback(job.create, native)
@@ -1501,6 +1811,8 @@ def record_script_golden(
                     f"after the sync the Normal is {identity_r1}, not the imported {baseline}"
                 )
             first.append(slots_r1)
+            state_r1, compared_r1 = native_state(session, job, staged, synced, project, R1)
+            first.append(state_r1)
         first.append(template_output(session))
         exported, first_blobs = exports(R1)
         repeat, repeat_blobs = exports(R1_REPEAT)
@@ -1516,6 +1828,13 @@ def record_script_golden(
                     f"after the reopen the Normal is {identity_r2}, not the imported {baseline}"
                 )
             second.append(slots_r2)
+            state_r2, compared_r2 = native_state(session, job, staged, synced, project, R2)
+            if compared_r2 != compared_r1:
+                raise RecorderError(
+                    "after the reopen the state differs from r1's at "
+                    f"{first_difference(compared_r1, compared_r2)}"
+                )
+            second.append(state_r2)
         reopened, second_blobs = exports(R2)
     finally:
         close_quietly(session)

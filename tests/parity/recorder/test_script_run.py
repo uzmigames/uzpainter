@@ -976,6 +976,72 @@ def collect():
     return 'stage-review-pinned'
 """
 
+# The native stand-in's Painter-side sync: the pinned sync's construction for masks, groups and
+# `base_tex` (a stand-in: no projection or other channels), and its reply's fields.
+CURRENT_SYNC_RESULT = """result = {'project': project.file_path(), 'imported': sorted(D['masks']),
+          'options': D['options'], 'argv': D['argv'], 'run_mark': D['run_mark'],
+          'resources': {k: 'resource://fake/' + k for k in D['masks']}}
+"""
+NATIVE_SYNC_RESULT = """import substance_painter.colormanagement as cm
+import substance_painter.layerstack as ls
+import substance_painter.resource as rs
+import substance_painter.textureset as ts
+S, OPT, CT = D['stack'], D['options'], ts.ChannelType.__members__
+stack = ts.TextureSet.from_name(OPT['texture_set']).get_stack()
+res = {}
+def mask_res(name):
+    if name not in res:
+        path = D['dir'] + '/' + name + '.png'
+        label = OPT['prefix'] + name + '_' + D['masks'][name][:6]
+        imported = rs.import_project_resource(path, rs.Usage.TEXTURE, label, OPT['group'])
+        res[name] = imported.identifier()
+    return res[name]
+def add_mask(node, name):
+    node.add_mask(ls.MaskBackground.Black)
+    e = ls.insert_fill(ls.InsertPosition.inside_node(node, ls.NodeStack.Mask))
+    e.set_source(None, mask_res(name))
+    e.set_name(name)
+root = ls.insert_group(ls.InsertPosition.from_textureset_stack(stack))
+root.set_name(S['title'])
+report = []
+for G in S['groups']:
+    g = ls.insert_group(ls.InsertPosition.inside_node(root, ls.NodeStack.Substack))
+    g.set_name(G['name'])
+    if G.get('mask'):
+        add_mask(g, G['mask'])
+    if G.get('replace_height'):
+        g.set_blending_mode(ls.BlendingMode.Normal, CT['Height'])
+    for L in [x for x in S['layers'] if x['group'] == G['key']]:
+        n = ls.insert_fill(ls.InsertPosition.inside_node(g, ls.NodeStack.Substack))
+        n.set_name(L['name'])
+        n.active_channels = {CT['BaseColor']}
+        if L.get('base_tex'):
+            source = n.set_source(CT['BaseColor'], mask_res(L['base_tex']))
+            source.set_color_space(cm.GenericColorSpace.sRGB)
+        else:
+            n.set_source(CT['BaseColor'], cm.Color(*L.get('base', [0.5, 0.5, 0.5])))
+        if L.get('mask'):
+            add_mask(n, L['mask'])
+        report.append({'id': L['id'], 'uid': n.uid(), 'name': n.get_name()})
+hidden = []
+for n in ls.get_root_layer_nodes(stack):
+    if n.uid() != root.uid() and n.is_visible():
+        n.set_visible(False)
+        hidden.append(n.get_name())
+blends = {n.get_name(): n.get_blending_mode(CT['Height']).name for n in root.sub_layers()}
+result = {'project': project.file_path(), 'imported': sorted(D['masks']),
+          'options': D['options'], 'argv': D['argv'], 'run_mark': D['run_mark'],
+          'root_uid': root.uid(), 'layers': report, 'hidden': hidden,
+          'group_height_blend': blends, 'resources': {k: v.url() for k, v in res.items()}}
+"""
+CURRENT_SYNC_DATA = "data = {'masks': masks, "
+NATIVE_SYNC_DATA = "data = {'masks': masks, 'stack': stack, 'dir': masks_dir.as_posix(), "
+assert CURRENT_LAYER_STACK.count(CURRENT_SYNC_RESULT) == 1
+assert CURRENT_LAYER_STACK.count(CURRENT_SYNC_DATA) == 1
+NATIVE_LAYER_STACK = CURRENT_LAYER_STACK.replace(CURRENT_SYNC_RESULT, NATIVE_SYNC_RESULT).replace(
+    CURRENT_SYNC_DATA, NATIVE_SYNC_DATA
+)
+
 PRODUCTION = "Pipeline/production"
 CLOSURE = (
     ("production-run-py", f"{PRODUCTION}/run.py", RUN_PY),
@@ -1365,6 +1431,23 @@ NATIVE_ARGS: dict[str, Any] = {
 REPORT_PATH = "Creatures/stand-in/18-Tunica/report.json"
 RECIPE_KEYS = ["painting_v10", "painter_stack_recipe"]
 OVERRIDE = {"override_layer": "C02", "override_mask": "M_iron"}  # the stand-in's F03
+# The native stand-in's stack, in the Tunic's shape: an unmasked outer group, a masked lining
+# group with `replace_height`, one bitmap bound twice (M_wood), a `base_tex`, and C02 (the F03)
+# overriding the M_iron_v9 that C04 (the C07) keeps: 6 bindings onto 5 resources.
+NATIVE_STACK: dict[str, Any] = {
+    "title": "Stand-in v10",
+    "groups": [
+        {"key": "outer", "name": "Outer", "mask": None},
+        {"key": "lining", "name": "Lining", "mask": "M_lining", "replace_height": True},
+    ],
+    "layers": [
+        {"id": "C01", "group": "outer", "name": "C01 Wood", "mask": None, "base_tex": "T_base"},
+        {"id": "C04", "group": "outer", "name": "C04 Iron", "mask": "M_iron_v9", "base": [0.4] * 3},
+        {"id": "C05", "group": "outer", "name": "C05 Grain", "mask": "M_wood", "base": [0.3] * 3},
+        {"id": "F01", "group": "lining", "name": "F01 Grain", "mask": "M_wood", "base": [0.2] * 3},
+        {"id": "C02", "group": "lining", "name": "C02 Iron", "mask": "M_iron", "base": [0.6] * 3},
+    ],
+}
 
 
 def recipe_of(stack: dict[str, Any]) -> dict[str, Any]:
@@ -1376,11 +1459,17 @@ def recipe_of(stack: dict[str, Any]) -> dict[str, Any]:
 
 def native_manifest(assets: Path, repo: Path) -> dict[str, Any]:
     """A Tunic-shaped native job over the stand-in Wand: the native create, the current-round
-    sync with the C02 override of the recipe, and the closing config export only."""
+    sync (building the stack's tree) with the C02 override of the recipe over `NATIVE_STACK`,
+    and the closing config export only."""
+    write(assets / WAND / "paint/stack-wand.json", json.dumps(NATIVE_STACK))
+    for name in ("M_iron_v9", "M_lining"):
+        write(assets / WAND / "paint/masks" / f"{name}.png", name.encode("ascii"))
     current = current_manifest(assets)
+    write(assets / LAYER_STACK_PATH, NATIVE_LAYER_STACK)
+    current = wand_manifest_unchecked(current, assets)
     write(
         assets / REPORT_PATH,
-        json.dumps({"painting_v10": {"painter_stack_recipe": recipe_of(STACK)}}),
+        json.dumps({"painting_v10": {"painter_stack_recipe": recipe_of(NATIVE_STACK)}}),
     )
     dropped = {
         "painter-create-py",
@@ -1448,6 +1537,7 @@ def test_a_native_job_creates_binds_only_the_normal_syncs_and_exports_its_config
     export only the configuration."""
     world, session = painter
     world.texture_set = world.imported_texture_set = TUNIC_SET
+    world.default_tree_layer = "Layer 1"
     job = native_job(native, native_assets, tmp_path)
     assert job.create.settings == {k: NATIVE_ARGS[k] for k in script_run.NATIVE_SETTINGS}
     run = record_script_golden(session, job, tmp_path / "work", tmp_path / "inbox")
@@ -1472,9 +1562,9 @@ def test_a_native_job_creates_binds_only_the_normal_syncs_and_exports_its_config
     bound = {k: v for k, v in value["mesh_maps"].items() if v is not None}
     assert list(bound) == ["Normal"] and bound["Normal"] == value["resource"]
     assert value["resource"]["name"] == "Tunic_v6_HighNormal"
-    assert [(n, g) for _, n, g in world.named_resources] == [
-        ("Tunic_v6_HighNormal", "tunica18_v10c_mesh_maps")
-    ]
+    named = [(n, g) for _, n, g in world.named_resources]
+    assert named[0] == ("Tunic_v6_HighNormal", "tunica18_v10c_mesh_maps")
+    assert {g for _, g in named[1:]} == {"tunica18_v10c"}  # the sync's masks
     assert Path(value["saved"]).name == "native-create.spp"
     synced = next(o for o in recordings["r1"]["outputs"] if o["output_id"] == "script/s2")
     assert synced["value"]["options"] == {
@@ -1493,6 +1583,30 @@ def test_a_native_job_creates_binds_only_the_normal_syncs_and_exports_its_config
         assert slots["value"]["mesh_maps"]["Normal"] == value["resource"]
         sha1 = hashlib.sha1(normal_bytes).hexdigest()
         assert slots["value"]["normal_pinned_bytes_sha1"] == sha1
+    # the state read back after the slots, before the export, alike in r1 and r2
+    states = []
+    for rid in ("r1", "r2"):
+        ids = [o["output_id"] for o in recordings[rid]["outputs"]]
+        assert ids.index("create/state") == ids.index(f"create/mesh-maps-{rid}") + 1
+        (state,) = [o for o in recordings[rid]["outputs"] if o["output_id"] == "create/state"]
+        assert state["call"] == "substance_painter.layerstack.get_root_layer_nodes"
+        states.append(state["value"])
+        # the separator may differ (Painter's reported path); the file is the saved project
+        assert Path(state["value"]["file_path"]).resolve() == Path(value["saved"]).resolve()
+        assert Path(state["value"]["file_path"]).name == "native-create.spp"
+    assert {**states[0], "file_path": None} == {**states[1], "file_path": None}
+    roots = states[0]["texture_sets"][TUNIC_SET]["stacks"][""]["layers"]
+    assert [(r["name"], r["visible"]) for r in roots] == [(STATE_TITLE, True), ("Layer 1", False)]
+    assert [g["name"] for g in roots[0]["sub_layers"]] == ["Lining", "Outer"]
+    assert script_run.count_bitmaps(roots) == 6
+    resources = synced["value"]["resources"]
+    assert len(resources) == len(set(resources.values())) == 5
+    assert mask_bitmap(states[0], "Lining", "C02 Iron") == {
+        "resource_url": resources["M_iron"],
+        "color_space": "Data",
+        "available_color_spaces": ["sRGB", "Raw", "Linear", "Data", "OpenGL", "ACEScg"],
+    }
+    assert mask_bitmap(states[0], "Outer", "C04 Iron")["resource_url"] == resources["M_iron_v9"]
 
 
 def hooked(
@@ -1612,12 +1726,226 @@ def test_a_native_job_refuses_slot_readbacks_that_omit_add_or_change(
     its project context aside."""
     world, session = painter
     world.texture_set = world.imported_texture_set = TUNIC_SET
+    world.default_tree_layer = "Layer 1"
     job = native_job(native, native_assets, tmp_path)
     hooked(session, monkeypatch, operation, change)
     if refusal is None:
         assert record_script_golden(session, job, tmp_path / "work", tmp_path / "inbox")
         return
     with pytest.raises(RecorderError, match=refusal):
+        record_script_golden(session, job, tmp_path / "work", tmp_path / "inbox")
+
+
+STATE_TITLE = NATIVE_STACK["title"]
+
+
+def state_node(value: dict[str, Any], *names: str) -> dict[str, Any]:
+    """A node of a state readback by its names below the synced group ("Layer 1": the root)."""
+    roots = value["texture_sets"][TUNIC_SET]["stacks"][""]["layers"]
+    if names == ("Layer 1",):
+        return next(n for n in roots if n["name"] == "Layer 1")
+    node: dict[str, Any] = next(n for n in roots if n["name"] == STATE_TITLE)
+    for name in names:
+        node = next(n for n in node["sub_layers"] if n["name"] == name)
+    return node
+
+
+def mask_bitmap(value: dict[str, Any], *names: str) -> dict[str, Any]:
+    bitmap: dict[str, Any] = state_node(value, *names)["mask_effects"][0]["sources"]["mask"][
+        "source"
+    ]["bitmap"]
+    return bitmap
+
+
+def in_state(recording: int | None, edit: Any) -> Any:
+    """A `hooked` change editing the state readback of r1 (1), of r2 (2) or of both (None)."""
+
+    def change(reply: dict[str, Any], nth: int) -> dict[str, Any]:
+        if recording in (None, nth):
+            edit(reply)
+        return reply
+
+    return change
+
+
+def other_binding(value: dict[str, Any]) -> None:
+    """C02 (the F03) bound to C04's (the C07's) resource, in r1 and r2 alike."""
+    mask_bitmap(value, "Lining", "C02 Iron")["resource_url"] = mask_bitmap(
+        value, "Outer", "C04 Iron"
+    )["resource_url"]
+
+
+def no_binding(value: dict[str, Any]) -> None:
+    state_node(value, "Outer", "C05 Grain")["mask_effects"] = []
+
+
+def second_binding(value: dict[str, Any]) -> None:
+    effects = state_node(value, "Lining", "C02 Iron")["mask_effects"]
+    effects.append(copy.deepcopy(effects[0]))
+
+
+def hidden_binding(value: dict[str, Any]) -> None:
+    """A mask fill in the hidden default layer, bound to a synced resource."""
+    effect = copy.deepcopy(state_node(value, "Lining", "C02 Iron")["mask_effects"][0])
+    state_node(value, "Layer 1")["mask_effects"] = [effect]
+
+
+def srgb(value: dict[str, Any]) -> None:
+    mask_bitmap(value, "Lining", "C02 Iron")["color_space"] = "sRGB"
+
+
+def raised_binding(value: dict[str, Any]) -> None:
+    effect = state_node(value, "Lining", "C02 Iron")["mask_effects"][0]
+    effect["sources"]["mask"] = {"raised": {"type": "RuntimeError", "message": "x"}}
+
+
+def raised_height(value: dict[str, Any]) -> None:
+    lining = state_node(value, "Lining")
+    lining["blending"]["Height"] = {"raised": {"type": "RuntimeError", "message": "x"}}
+
+
+def raised_elsewhere(value: dict[str, Any]) -> None:
+    """A getter the check does not need (the BaseColor blending of a fill) raised in r1 and r2
+    alike: kept, compared, accepted."""
+    fill = state_node(value, "Outer", "C05 Grain")
+    fill["blending"]["BaseColor"] = {"raised": {"type": "RuntimeError", "message": "x"}}
+
+
+def visible_default(value: dict[str, Any]) -> None:
+    state_node(value, "Layer 1")["visible"] = True
+
+
+def swapped_names(value: dict[str, Any]) -> None:
+    c04, c05 = state_node(value, "Outer", "C04 Iron"), state_node(value, "Outer", "C05 Grain")
+    c04["name"], c05["name"] = c05["name"], c04["name"]
+
+
+def other_project_file(value: dict[str, Any]) -> None:
+    value["file_path"] = str(Path(value["file_path"]).with_name("other.spp"))
+
+
+def new_mask_version(value: dict[str, Any]) -> None:
+    mask_bitmap(value, "Lining", "C02 Iron")["resource_url"] += "?version=other"
+
+
+def shelf_mask(value: dict[str, Any]) -> None:
+    bitmap = mask_bitmap(value, "Lining", "C02 Iron")
+    bitmap["resource_url"] = bitmap["resource_url"].replace("project0", "starter_assets")
+
+
+def one_mask_context(value: dict[str, Any]) -> None:
+    """One mask moved to another project context while every other keeps project0."""
+    bitmap = mask_bitmap(value, "Lining", "C02 Iron")
+    bitmap["resource_url"] = bitmap["resource_url"].replace("project0", "project7")
+
+
+def every_context(value: dict[str, Any]) -> None:
+    """The whole project renumbered by a reopen: allowed."""
+    renumbered = json.loads(
+        json.dumps(value).replace("resource://project0/", "resource://project1/")
+    )
+    renumbered = json.loads(json.dumps(renumbered).replace('"project0"', '"project1"'))
+    value.clear()
+    value.update(renumbered)
+
+
+def new_colour(value: dict[str, Any]) -> None:
+    source = state_node(value, "Outer", "C05 Grain")["sources"]["BaseColor"]["source"]
+    source["uniform_color_working"] = [0.9, 0.9, 0.9]
+
+
+def new_uid(value: dict[str, Any]) -> None:
+    state_node(value, "Outer", "C01 Wood")["uid"] += 1
+
+
+def other_mesh(value: dict[str, Any]) -> None:
+    """Another mesh reported as the last imported, in r1 and r2 alike."""
+    value["last_imported_mesh_path"] = str(
+        Path(value["last_imported_mesh_path"]).with_name("other.obj")
+    )
+
+
+@pytest.mark.parametrize(
+    ("change", "refusal"),
+    [
+        (in_state(None, other_binding), r"r1: .*C02 Iron/mask binds .*, not the sync's M_iron "),
+        (in_state(None, no_binding), "has no Black mask holding exactly one fill for M_wood"),
+        (in_state(None, second_binding), "has no Black mask holding exactly one fill for M_iron"),
+        (in_state(None, hidden_binding), "binds 7 bitmaps, not the stack's 6"),
+        (in_state(1, srgb), r"reads M_iron in 'sRGB', not Data"),
+        (in_state(1, raised_binding), "C02 Iron/mask binds no bitmap in mask"),
+        (in_state(1, raised_height), "Lining blends Height as None, not Normal"),
+        (in_state(None, raised_elsewhere), None),
+        (in_state(1, visible_default), "holds not exactly one other root layer"),
+        (in_state(None, swapped_names), "is the FillLayer 'C04 Iron', not the FillLayer 'C05"),
+        (in_state(1, other_project_file), "/file_path is"),
+        (in_state(2, new_mask_version), r"r2: .*C02 Iron/mask binds .*, not the sync's M_iron "),
+        (in_state(2, shelf_mask), r"r2: .*C02 Iron/mask binds 'resource://starter_assets/"),
+        (
+            in_state(2, one_mask_context),
+            r"r2: the state readback names several project contexts \['project0', 'project7'\]",
+        ),
+        (in_state(2, every_context), None),
+        (in_state(2, new_colour), "after the reopen the state differs from r1's at .*/BaseColor/"),
+        (in_state(2, new_uid), r"r2: .*C01 Wood has the uid \d+, not the sync's C01"),
+        (in_state(None, other_mesh), r"r1: .*/last_imported_mesh_path is .*, not the staged mesh"),
+    ],
+)
+def test_a_native_state_readback_must_hold_the_synced_stack(
+    painter: tuple[Any, ScriptSession],
+    native: dict[str, Any],
+    native_assets: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    change: Any,
+    refusal: str | None,
+) -> None:
+    """The state read in r1 (after the save) and in r2 (after the reopen) must hold the pinned
+    stack as the sync built it: each binding the sync's resource in Data, the structure, the
+    visibility and the Height blends, nothing added; then r2 must equal r1 but for a project
+    renumbered whole. A getter the check does not need may raise, alike in both."""
+    world, session = painter
+    world.texture_set = world.imported_texture_set = TUNIC_SET
+    world.default_tree_layer = "Layer 1"
+    job = native_job(native, native_assets, tmp_path)
+    hooked(session, monkeypatch, "migration_readback", change)
+    if refusal is None:
+        assert record_script_golden(session, job, tmp_path / "work", tmp_path / "inbox")
+        return
+    with pytest.raises(RecorderError, match=refusal):
+        record_script_golden(session, job, tmp_path / "work", tmp_path / "inbox")
+    assert not list((tmp_path / "inbox").rglob("READY"))
+
+
+def test_a_created_project_without_its_default_layer_is_refused(
+    painter: tuple[Any, ScriptSession], native: dict[str, Any], native_assets: Path, tmp_path: Path
+) -> None:
+    """Without Painter's default root layer the sync hides nothing: the synced group alone at
+    the root, alike in r1 and r2, is refused all the same."""
+    world, session = painter
+    world.texture_set = world.imported_texture_set = TUNIC_SET
+    job = native_job(native, native_assets, tmp_path)
+    with pytest.raises(RecorderError, match=r"r1: .*not exactly one other root layer.*\(\[\]\)"):
+        record_script_golden(session, job, tmp_path / "work", tmp_path / "inbox")
+
+
+def test_a_sync_binding_two_bitmaps_to_one_resource_is_refused(
+    painter: tuple[Any, ScriptSession], native: dict[str, Any], native_assets: Path, tmp_path: Path
+) -> None:
+    """The F03 (C02, M_iron) bound to the C07's (C04, M_iron_v9) resource by the sync itself:
+    the readback agrees with the sync's reply, and is refused all the same."""
+    world, session = painter
+    world.texture_set = world.imported_texture_set = TUNIC_SET
+    world.default_tree_layer = "Layer 1"
+    old = "    return res[name]\n"
+    assert NATIVE_LAYER_STACK.count(old) == 1
+    new = "    if name == 'M_iron':\n        res[name] = mask_res('M_iron_v9')\n" + old
+    write(native_assets / LAYER_STACK_PATH, NATIVE_LAYER_STACK.replace(old, new))
+    changed = copy.deepcopy(native)
+    script = next(i for i in changed["inputs"] if i["input_id"] == "painter-layer-stack-py")
+    script["sha256"] = hashlib.sha256((native_assets / LAYER_STACK_PATH).read_bytes()).hexdigest()
+    job = native_job(changed, native_assets, tmp_path)
+    with pytest.raises(RecorderError, match=r"bound the bitmaps \['M_iron', 'M_iron_v9'\] to one"):
         record_script_golden(session, job, tmp_path / "work", tmp_path / "inbox")
 
 
@@ -1681,8 +2009,8 @@ def test_a_native_job_refuses_a_wrong_create_or_override(
 def test_a_stack_that_differs_from_the_overridden_recipe_elsewhere_is_refused(
     native: dict[str, Any], native_assets: Path, tmp_path: Path
 ) -> None:
-    recipe = recipe_of(STACK)
-    recipe["layers"][1]["base"] = [0.1, 0.1, 0.1]  # C02's colour differs too
+    recipe = recipe_of(NATIVE_STACK)
+    next(x for x in recipe["layers"] if x["id"] == "C02")["base"] = [0.1] * 3  # its colour too
     write(
         native_assets / REPORT_PATH, json.dumps({"painting_v10": {"painter_stack_recipe": recipe}})
     )
@@ -1745,6 +2073,7 @@ def test_a_native_create_refuses_other_texture_sets(
     otherwise, and no sync runs."""
     world, session = painter
     world.texture_set = world.imported_texture_set = TUNIC_SET
+    world.default_tree_layer = "Layer 1"
     world.other_resolutions = {"Extra": (4096, 4096)}
     prepare(world)
     job = native_job(native, native_assets, tmp_path)
@@ -1765,6 +2094,7 @@ def test_a_native_create_refuses_a_second_bound_mesh_map(
     refused, before the sync."""
     world, session = painter
     world.texture_set = world.imported_texture_set = TUNIC_SET
+    world.default_tree_layer = "Layer 1"
     job = native_job(native, native_assets, tmp_path)
     call = session.call
 
@@ -1815,6 +2145,7 @@ def test_record_script_command_records_script_and_native_manifests(
     assert cli.main(["record-script", str(script), "--assets-root", str(assets)]) == 0
     monkeypatch.setattr(cli, "load_pipeline_job", loader)
     world.texture_set = world.imported_texture_set = TUNIC_SET
+    world.default_tree_layer = "Layer 1"
     path = tmp_path / "tunic-current.json"
     path.write_text(json.dumps(native), encoding="utf-8")
     assert cli.main(["record-script", str(path), "--assets-root", str(native_assets)]) == 0

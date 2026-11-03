@@ -89,6 +89,7 @@ def session_of(fake: types.ModuleType) -> tuple[Any, PainterSession]:
     world = fake.FakeWorld()
     world.version, world.version_info = "12.1.5", (12, 1, 5)
     world.texture_set = world.imported_texture_set = script_fixtures.TUNIC_SET
+    world.default_tree_layer = "Layer 1"  # a created project's default root layer
     return world, PainterSession(
         fake.LocalTransport(world),
         sleep=lambda seconds: None,

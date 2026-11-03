@@ -196,6 +196,18 @@ class BlendingMode(enum.Enum):
 
 class NodeType(enum.Enum):
     FillLayer = 1
+    GroupLayer = 2
+    FillEffect = 3
+
+
+class NodeStack(enum.Enum):
+    Substack = 0
+    Mask = 2
+
+
+class MaskBackground(enum.Enum):
+    Black = 0
+    White = 1
 
 
 class SourceMode(enum.Enum):
@@ -226,6 +238,9 @@ class DataColorSpace(enum.Enum):
 
 class NormalColorSpace(enum.Enum):
     OpenGL = 1
+
+
+TREE_SPACES: dict[str, Any] = {**SPACE_CLASSES, "DataColorSpace": DataColorSpace}
 
 
 class NormalMapFormat(enum.Enum):
@@ -513,6 +528,81 @@ class Layer:
     opacity: dict[ChannelType, float] = field(default_factory=dict)
 
 
+@dataclass
+class TreeNode:
+    """A node of the fake's layer tree (a group, a fill inside a group, or a mask fill effect),
+    kept beside the flat root fills and listed above them. Authored rules of the fake: a node
+    keeps its uid across a save and reopen (as Painter's saved projects do), a mask fill's
+    bitmap reads Data and a layer channel's sRGB, and Height blends LinearDodge by default.
+    In a mask stack the channel key is `None`."""
+
+    uid_value: int
+    kind: NodeType
+    name: str
+    in_mask: bool = False
+    visible: bool = True
+    mask: MaskBackground | None = None
+    channels: set[ChannelType] = field(default_factory=set)
+    sources: dict[ChannelType | None, Color] = field(default_factory=dict)
+    urls: dict[ChannelType | None, str] = field(default_factory=dict)  # bitmap resource URLs
+    bitmaps: dict[ChannelType | None, Any] = field(default_factory=dict)  # their colour spaces
+    blending: dict[ChannelType | None, BlendingMode] = field(default_factory=dict)
+    opacity: dict[ChannelType | None, float] = field(default_factory=dict)
+    sub_layers: list[TreeNode] = field(default_factory=list)  # top first
+    mask_effects: list[TreeNode] = field(default_factory=list)
+
+
+def tree_key(channel: ChannelType | None) -> str:
+    return "" if channel is None else channel.name
+
+
+def tree_channel(key: str) -> ChannelType | None:
+    return None if key == "" else ChannelType[key]
+
+
+def tree_dump(node: TreeNode) -> dict[str, Any]:
+    return {
+        "uid": node.uid_value,
+        "kind": node.kind.name,
+        "name": node.name,
+        "in_mask": node.in_mask,
+        "visible": node.visible,
+        "mask": None if node.mask is None else node.mask.name,
+        "channels": sorted(c.name for c in node.channels),
+        "sources": {tree_key(c): list(v.working) for c, v in node.sources.items()},
+        "urls": {tree_key(c): url for c, url in node.urls.items()},
+        "bitmaps": {tree_key(c): [type(s).__name__, s.name] for c, s in node.bitmaps.items()},
+        "blending": {tree_key(c): m.name for c, m in node.blending.items()},
+        "opacity": {tree_key(c): o for c, o in node.opacity.items()},
+        "sub_layers": [tree_dump(n) for n in node.sub_layers],
+        "mask_effects": [tree_dump(n) for n in node.mask_effects],
+    }
+
+
+def tree_load(data: dict[str, Any]) -> TreeNode:
+    return TreeNode(
+        uid_value=data["uid"],
+        kind=NodeType[data["kind"]],
+        name=data["name"],
+        in_mask=data["in_mask"],
+        visible=data["visible"],
+        mask=None if data["mask"] is None else MaskBackground[data["mask"]],
+        channels={ChannelType[c] for c in data["channels"]},
+        sources={
+            tree_channel(c): Color(v[0], v[1], v[2], GenericColorSpace.Working)
+            for c, v in data["sources"].items()
+        },
+        urls={tree_channel(c): url for c, url in data["urls"].items()},
+        bitmaps={
+            tree_channel(c): TREE_SPACES[kind][name] for c, (kind, name) in data["bitmaps"].items()
+        },
+        blending={tree_channel(c): BlendingMode[m] for c, m in data["blending"].items()},
+        opacity={tree_channel(c): o for c, o in data["opacity"].items()},
+        sub_layers=[tree_load(n) for n in data["sub_layers"]],
+        mask_effects=[tree_load(n) for n in data["mask_effects"]],
+    )
+
+
 class FakeWorld:
     """State of one fake Painter process."""
 
@@ -534,6 +624,11 @@ class FakeWorld:
         ]
         self.resource_presets = ["resource://starter_assets/Fake Engine Preset"]
         self.layers: list[Layer] = []  # bottom to top
+        self.native_tree: list[TreeNode] = []  # top first, listed above the flat layers
+        # The default root layer `project.create` gives a new project, by name (as Painter's
+        # projects have one; its kind here, a fill, is the fake's own). None keeps the tree
+        # empty, as every test of the flat layers expects.
+        self.default_tree_layer: str | None = None
         self.next_uid = 100
         self.ui_mode = UIMode.Edition
         self.environment: str | None = None
@@ -612,7 +707,9 @@ class FakeWorld:
         return False
 
     def snapshot(self) -> dict[str, Any]:
+        tree = {"native_tree": [tree_dump(n) for n in self.native_tree]} if self.native_tree else {}
         return {
+            **tree,
             "resolution": list(self.resolution),
             "mesh_path": self.mesh_path,
             "other_resolutions": {k: list(v) for k, v in self.other_resolutions.items()},
@@ -635,6 +732,7 @@ class FakeWorld:
         }
 
     def restore(self, data: dict[str, Any]) -> None:
+        self.native_tree = [tree_load(n) for n in data.get("native_tree", [])]
         self.resolution = (data["resolution"][0], data["resolution"][1])
         self.mesh_path = data.get("mesh_path")
         self.other_resolutions = {k: (v[0], v[1]) for k, v in data["other_resolutions"].items()}
@@ -726,6 +824,17 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
         world.resolution = (size, size)
         world.other_resolutions = {name: (size, size) for name in world.other_texture_sets}
         world.layers = []
+        world.native_tree = []
+        if world.default_tree_layer is not None:
+            world.next_uid += 1
+            world.native_tree = [
+                TreeNode(
+                    world.next_uid,
+                    NodeType.FillLayer,
+                    world.default_tree_layer,
+                    channels=set(CHANNEL_FORMATS),
+                )
+            ]
         world.baked_maps = {}
 
     def save_as(path: str, mode: ProjectSaveMode) -> None:
@@ -736,6 +845,7 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
     def close() -> None:
         world.require_open()
         world.project_open, world.layers, world.file_path = False, [], None
+        world.native_tree = []
 
     def open_(path: str) -> None:
         if world.project_open:
@@ -941,13 +1051,109 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
         def mask_effects(self) -> list[Any]:
             return []
 
+    class TreeLayerNode:
+        """A node of `world.native_tree`, by the documented calls a layer-stack sync and the
+        state readback make."""
+
+        def __init__(self, node: TreeNode) -> None:
+            self.node = node
+
+        @property
+        def active_channels(self) -> set[ChannelType]:
+            return set(self.node.channels)
+
+        @active_channels.setter
+        def active_channels(self, channels: set[ChannelType]) -> None:
+            self.node.channels = set(channels)
+
+        def set_source(self, channel: ChannelType | None, source: Any) -> Any:
+            node = self.node
+            if isinstance(source, ResourceID):
+                node.urls[channel] = source.url()
+                space = DataColorSpace.Data if node.in_mask else GenericColorSpace.sRGB
+                node.bitmaps[channel] = space
+                node.sources.pop(channel, None)
+                return SourceBitmap(node, channel, source)  # type: ignore[arg-type]
+            node.sources[channel] = source
+            node.urls.pop(channel, None)
+            node.bitmaps.pop(channel, None)
+            return SourceUniformColor(source)
+
+        def get_source(self, channel: ChannelType | None = None) -> Any:
+            node = self.node
+            if channel in node.urls:
+                rid = ResourceID.from_url(node.urls[channel])
+                return SourceBitmap(node, channel, rid)  # type: ignore[arg-type]
+            return SourceUniformColor(node.sources.get(channel, Color(1.0, 1.0, 1.0)))
+
+        def get_blending_mode(self, channel: ChannelType | None = None) -> BlendingMode:
+            default = BlendingMode.LinearDodge if channel == ChannelType.Height else None
+            return self.node.blending.get(channel, default or BlendingMode.Normal)
+
+        def set_blending_mode(self, mode: BlendingMode, channel: ChannelType | None = None) -> None:
+            self.node.blending[channel] = mode
+
+        def get_opacity(self, channel: ChannelType | None = None) -> float:
+            return self.node.opacity.get(channel, 1.0)
+
+        def set_opacity(self, opacity: float, channel: ChannelType | None = None) -> None:
+            self.node.opacity[channel] = opacity
+
+        def get_name(self) -> str:
+            return self.node.name
+
+        def set_name(self, name: str) -> None:
+            self.node.name = name
+
+        def uid(self) -> int:
+            return self.node.uid_value
+
+        def get_type(self) -> NodeType:
+            return self.node.kind
+
+        def is_visible(self) -> bool:
+            return self.node.visible
+
+        def set_visible(self, visible: bool) -> None:
+            self.node.visible = visible
+
+        def is_in_mask_stack(self) -> bool:
+            return self.node.in_mask
+
+        def has_mask(self) -> bool:
+            return self.node.mask is not None
+
+        def add_mask(self, background: MaskBackground) -> None:
+            self.node.mask = background
+
+        def is_mask_enabled(self) -> bool:
+            return True
+
+        def get_mask_background(self) -> MaskBackground | None:
+            return self.node.mask
+
+        def sub_layers(self) -> list[TreeLayerNode]:
+            return [TreeLayerNode(n) for n in self.node.sub_layers]
+
+        def mask_effects(self) -> list[TreeLayerNode]:
+            return [TreeLayerNode(n) for n in self.node.mask_effects]
+
+        def content_effects(self) -> list[Any]:
+            return []
+
     @dataclass
     class InsertPosition:
         index: int
+        parent: TreeNode | None = None  # inside this tree node, in `stack`
+        stack: NodeStack | None = None
 
         @staticmethod
         def from_textureset_stack(stack: Stack) -> InsertPosition:
             return InsertPosition(len(world.layers))
+
+        @staticmethod
+        def inside_node(node: TreeLayerNode, stack: NodeStack) -> InsertPosition:
+            return InsertPosition(0, node.node, stack)
 
         @staticmethod
         def above_node(node: FillLayerNode) -> InsertPosition:
@@ -957,22 +1163,51 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
         def below_node(node: FillLayerNode) -> InsertPosition:
             return InsertPosition(world.layers.index(node.layer))
 
-    def insert_fill(position: InsertPosition) -> FillLayerNode:
+    def insert_tree(position: InsertPosition, kind: NodeType) -> TreeLayerNode:
+        """At the top of the tree's roots (no parent), of a group's sub-layers, or of a masked
+        layer's mask stack (a fill there is a mask fill effect)."""
+        world.require_open()
+        world.next_uid += 1
+        node = TreeNode(world.next_uid, kind, f"{kind.name} {world.next_uid}")
+        parent = position.parent
+        if parent is None:
+            world.native_tree.insert(0, node)
+        elif position.stack == NodeStack.Mask and parent.mask is not None:
+            node.kind, node.in_mask = NodeType.FillEffect, True
+            parent.mask_effects.insert(0, node)
+        elif position.stack == NodeStack.Substack and parent.kind == NodeType.GroupLayer:
+            parent.sub_layers.insert(0, node)
+        else:
+            raise ValueError("insertion failed due to an invalid position")
+        if node.kind == NodeType.FillLayer:
+            node.channels = set(CHANNEL_FORMATS)
+        return TreeLayerNode(node)
+
+    def insert_group(position: InsertPosition) -> TreeLayerNode:
+        return insert_tree(position, NodeType.GroupLayer)
+
+    def insert_fill(position: InsertPosition) -> Any:
+        if position.parent is not None:
+            return insert_tree(position, NodeType.FillLayer)
         world.require_open()
         world.next_uid += 1
         layer = Layer(world.next_uid, set(CHANNEL_FORMATS))
         world.layers.insert(position.index, layer)
         return FillLayerNode(layer)
 
-    def get_root_layer_nodes(stack: Stack) -> list[FillLayerNode]:
-        return [FillLayerNode(layer) for layer in reversed(world.layers)]  # top first
+    def get_root_layer_nodes(stack: Stack) -> list[Any]:
+        tree = [TreeLayerNode(node) for node in world.native_tree]
+        return [*tree, *(FillLayerNode(layer) for layer in reversed(world.layers))]  # top first
 
     layerstack = module(
         "substance_painter.layerstack",
         BlendingMode=BlendingMode,
         NodeType=NodeType,
+        NodeStack=NodeStack,
+        MaskBackground=MaskBackground,
         InsertPosition=InsertPosition,
         insert_fill=insert_fill,
+        insert_group=insert_group,
         get_root_layer_nodes=get_root_layer_nodes,
     )
 
