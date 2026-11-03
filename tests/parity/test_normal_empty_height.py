@@ -144,7 +144,10 @@ def recording(manifest: dict[str, Any], condition: str = "same_session") -> dict
         elif call == RESOURCE_RETRIEVE:
             value = [queries[args["resource_step"]]]
         elif call == ps.GET_SOURCE:
-            value = {"bitmap": {"resource": dict(IMPORTED[m.FILL_INPUT])}, "color_space": "sRGB"}
+            value = {
+                "bitmap": {"resource": dict(IMPORTED[m.FILL_INPUT])},
+                "color_space": "NormalXYZLeft",
+            }
         else:
             assert call == ps.GET_MESH_MAP
             value = {"resource": dict(IMPORTED[m.MESH_MAP_INPUT])}
@@ -170,7 +173,7 @@ def test_clean_recordings_pass_and_agree() -> None:
     manifest = m.request()
     pair = [recording(manifest, c) for c in m.CONDITIONS]
     measured = m.validate_pair(pair, manifest, IMPORTED, UUID, CLEANUP)
-    assert measured == {"channels": CHANNELS, "source_color_space": "sRGB"}
+    assert measured == {"channels": CHANNELS, "source_color_space": "NormalXYZLeft"}
 
 
 def initial_paint_left(record: dict[str, Any]) -> None:

@@ -127,3 +127,63 @@ classifying texels by their exported values.
 Capture, the pixel checker and the native prediction run each need their own review and GO.
 Nothing here claims that the Wand is unblocked, and no tolerance, fit or admission follows from
 this note.
+
+## Native prediction inputs (frozen before any run)
+
+`tools/parity/tier0_semantics/normal_empty_height_prediction.py` writes the closed `ParseSpec`
+document and the three run configurations; it never runs the executable.
+
+- Spec: `uzp_sphere`, 256 x 256, template `default`, evaluator profile
+  `painter-12.1-isolated-coverage-weights`, colour management `legacy`, OpenGL, height-to-normal
+  `Sharp` (a native stand-in: with a flat Height of 0 the method does not change H0, and it is
+  not Painter's measured method). Channels exactly the default template's five, with formats and
+  bases checked against `assets/templates/default.json`: BaseColor sRGB8 (0.8), BaseMetalness L8
+  (0), Height L16F (0), Normal RGB16F (127/255, 127/255, 1), SpecularRoughness L8 (76/255). The
+  pinned sphere, normal-a and normal-b by absolute path and SHA-256; normal-b bound as the Normal
+  mesh map; one visible fill, its only source and active channel Normal: normal-a with colour
+  space `NormalXYZLeft` (decisions 214 and 226; read as linear by `src/evaluator/sources.cpp`),
+  Normal blend at opacity 1, identity Nearest Repeat UV. No Height layer and no Height source.
+- Source colour domain: exactly `NormalXYZLeft`. A recording whose fill source measures any
+  other value is out of the prediction's domain: it goes to review, no alias is mapped onto it,
+  and it is not by itself an invalid stack.
+- Runs of `uzp-export-tests export-diagnostic`:
+  - `exr32-infinite`: `uzp_sphere_n.exr` (Normal_OpenGL), `uzp_sphere_h.exr` (documentMap
+    height, L), `uzp_sphere_normal.exr` (documentMap normal), `uzp_sphere_normal_base.exr`
+    (meshMap normal_base);
+  - `png16-infinite`: `uzp_sphere_n.png`;
+  - `exr32-passthrough-refused`: Normal_OpenGL under `passthrough`, which must be refused.
+- Result check (`validate_result`), on the printed JSON, never the exit code (the runner exits 0
+  on an error):
+  - a positive run prints `written` only, every planned file exactly once at
+    `exportPath/relativePath`, with exactly its causes in `bypassed`, checked by text and
+    decision: Normal_OpenGL the island-normal refusal (decision 245) then the `infinite` padding
+    refusal (decision 259); each control the `infinite` refusal only. `undecided` is an integer
+    of at least 0, kept as reported;
+  - the refused run prints only `error` `NotYetSupported` with the passthrough cause of a
+    virtualMap source (decision 245); `error` and `written` together are refused;
+  - the checker's own report is marked nonconformant.
+- Native checks, once run: the Height control is +0.0 in every word (signed zero counts); the
+  PNG 16 Normal is the UNORM write of the OpenEXR 32f Normal on covered texels; `normal_base` is
+  float32(code / 65535) of normal-b on covered texels (decision 079 F1). `partial_pins` records
+  raw pins after a run only: the executable, every template file, the canonical spec and
+  configurations and each output. It is not the full receipt: the decoded digests and the native
+  input closure are still to come, in the run wrapper of the next slice.
+- Decoding: `exr_words` and `png16_rgb` read each file in place, check its header first, keep
+  float32 words or uint16 codes exactly, and refuse a non-finite native output. That finite rule
+  is the native prediction's; Painter's Height observations are read by the gate's own decoder,
+  which reports non-finite words instead of refusing them.
+
+## Texel classes (frozen before any capture)
+
+`tools/parity/tier0_semantics/normal_empty_height_mask.py`, from the authored geometry only:
+`covered` is `tools.parity.coverage` of the sphere's UV triangles (decision 281's raster, equal
+to `padding_reference.Ring.owner >= 0`); `interior` the covered texels whose eight neighbours are
+all covered, both axes wrapping (the stencil's addressing, not the ring's); `edge` covered minus
+interior. Digests are SHA-256 of `np.packbits` of the C-order flattened mask, big bit order.
+
+| Class | Texels | Membership SHA-256 |
+| --- | --- | --- |
+| covered | 61,440 | `01f1a76c8f3f29715f9d430c9c9c2bacfcc79d0c25d5015461038bfbb3a2b462` |
+| interior | 59,264 | `0134bab17af35667eb58d0c2a30fd14b11eae22bcef7d3ff7b79653a1c611dae` |
+| edge | 2,176 | `78d4e25a991de7152cf253383e7294634d3c43f43396b24deda66ed98513eb6e` |
+| uncovered | 4,096 | `fb9daeb128aa7ed99ab85b58da6a871f2b1a7f77b3247d0b9864e48a4ef41ad1` |
