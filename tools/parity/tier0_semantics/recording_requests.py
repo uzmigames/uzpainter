@@ -18,8 +18,10 @@ and P-tie (decision 157), the other 21 inferred template bases (decision 168), d
 sRGB bitmap minification and decision 169's L8 material channels, decision 210's ring-sign probes
 and a position-encoded seam probe (decision 216), decision 225's sRGB minification on random
 content, decision 266's kernel-code padding probes, decision 272's tie-order sweeps and decision
-293's Normal mesh-map combination probe, decision 314's glTF preset recording R-314, and
-decision 317's subnormal float32 probe.
+293's Normal mesh-map combination probe, decision 314's glTF preset recording R-314,
+decision 317's subnormal float32 probe, and `height-normal-resolution-4096`: decision 077's
+resolution sweep (`current.height_normal_resolution`) at 4096 px, the size the Tunic exports
+(phase2.10_pilot-tunic-recovery), which decision 079 refuses until recorded.
 
 Colour management: every golden runs under Legacy (Painter started without `OCIO`) except the
 three that name `OCIO` in `applied_settings` (`export-ocio-encode`, `export-presets-ocio`,
@@ -56,7 +58,7 @@ from tools.parity.tier0_semantics.corpus import (
     start,
     template_slug,
 )
-from tools.parity.tier0_semantics.current import resample_minifying
+from tools.parity.tier0_semantics.current import height_normal_resolution, resample_minifying
 from tools.parity.tier0_semantics.fixtures import Config, grid
 
 REQUESTS = "requests"
@@ -2327,6 +2329,7 @@ def later_goldens() -> list[Golden]:
         ao_mixed_precomposed_scalar_probe(),
         ao_control.request(),
         *specularweight_base_probes(),
+        height_normal_resolution(4096, "sharp"),
     ]
 
 
