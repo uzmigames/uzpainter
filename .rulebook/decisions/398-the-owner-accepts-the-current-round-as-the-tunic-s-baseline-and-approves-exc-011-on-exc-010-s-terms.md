@@ -54,7 +54,27 @@ These are his own yes to a changed baseline (decision 300 item 8) and to the ter
 6. **Reporting and what stays open.**
    - A Tunic pass is reported as "pass under EXC-011, against the current reference", never as exact and never as approved-v10 parity. Its report lists EXC-011 version 1 in `exceptions_relied_on`.
    - EXC-011 is narrowed by new versions as `phase3.1_export-island-padding` makes parts exact, and withdrawn once the Tunic passes with no exception.
-   - Acceptance 4.1 and the archive still wait on item 1.1: `phase2.9_pilot-belt` and `phase2.2_recipe-and-diagnostics` are not accepted.
+   - Acceptance 4.1 and the archive still wait on item 1.1: `phase2.9_pilot-belt` is not accepted (`phase2.8_mcp-server` and `phase2.2_recipe-and-diagnostics` are archived).
+
+## Result: the Tunic's runs of 2026-11-03
+
+The tests of dff5f1b0 (register and defect test: e46e6641), on `zig build painter -Doptimize=ReleaseFast` (`UzPainter.exe` SHA-256 `20982dff60ea…`, the Wand's build), DX12 for the Tier 1 runner and Vulkan for the typed round, as each route runs.
+
+**No map was compared.** Every Tunic export is refused before writing, the diagnostic measure export included:
+
+> `evaluator:unsupported_source: the height-to-normal scaling is recorded on square sets of 256, 512, 1024 and 2048 texels only (phase1.12_compositor-height-normal)`
+
+The Tunic's set is 4096 px. The measure mode bypasses only decisions 245's and 259's refusals; this one is the height-to-normal stencil's own (`src/evaluator/height_to_normal.cpp`, `docs/architecture/04-layer-stack-and-compositing.md`: "Refused until recorded: other set sizes and shapes"). The z = 100 / W and 800 / W scalings were fitted on recordings at 256 to 2048 px (decisions 079, 080), and extending them to 4096 without a recording would be a guess. So EXC-011 has nothing to judge yet, and no task owns a 4096 recording: the coordinator has to assign one.
+
+- **Tier 1** (`test_tunic_current_tier1_maps_equal_painter_under_exc011` and its save/reopen test): both rebuilds refused, so there is no save/reopen record. `parity/reports/phase2/tier1-tunic-v10.json` holds the refusal as its one structural item (`candidate_export_refused`, outcome `fail`, nothing relied on). The oracle is `stable`: all five maps are byte-identical in r1, r1-repeat and r2.
+- **Dump-and-rebuild** (`test_tunic_current_recipe_rebuild_exports_identical_bytes_in_the_measure_mode`): every state check passed in all three typed sessions, `run_python` was listed in none, and the two recipe digests are equal. Both measure exports were refused by the same message.
+- These three tests are expected failures naming that refusal (`HEIGHT_NORMAL_GAP` in `tests/parity/tier1/test_mcp_round.py`). Any other refusal, or a mix of refused and written exports, fails them. Once the scaling is recorded they must pass under EXC-011, or fail.
+- **Two defects of the direct route, found and fixed on the way.** It had never run on real UzPainter.
+  - The Tier 1 runner ran the sync even after a failed create, so the create's error was hidden (`runner.built`).
+  - The native save after the sync called `save_as` onto the open project, which UzPainter's store refuses ("use save()"). It now saves that file with `save` (Full) (`NATIVE_SAVE_CODE`, `tests/adapters/assets3d/wand.py`).
+  - The fixture also sets `OCIO` to Painter's substance configuration, which the manifest applies by environment variable and the native create checks by hash.
+
+What this run establishes for phase2.10: items 2.1, 2.3, 2.4, 2.8, 3.2 and 3.3 hold. Items 2.5, 3.1, 3.4 and 3.5 wait on the 4096-px scaling. Item 1.1 waits on `phase2.9_pilot-belt` alone.
 
 ## Alternatives Considered
 
@@ -65,5 +85,5 @@ These are his own yes to a changed baseline (decision 300 item 8) and to the ter
 ## Consequences
 
 - The Tunic's Tier 1 test passes only when every covered interior texel is equal on all five maps, every covered texel is equal on the four material maps and the two rebuilds are byte-identical. It is then a pass under EXC-011.
-- `parity/reports/phase2/tunic-v10-tier1.json` is written by that run.
+- `parity/reports/phase2/tier1-tunic-v10.json` is written by that run.
 - Production export of the Tunic is still refused, so it has no conformant UzPainter delivery until `phase3.1_export-island-padding` is exact.

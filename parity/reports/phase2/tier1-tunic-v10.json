@@ -1,0 +1,415 @@
+{
+  "schema": "uzpainter/parity/comparison-report/1",
+  "record_class": "comparison_report",
+  "golden_id": "phase2/tier1/tunic-v10-current",
+  "tier": "1",
+  "domain": "tier1/pilot/tunic-v10-current",
+  "manifest_sha256": "e3b69e5451af87b32eff12d2a7bc99fa529b7769215ff9f28a94072046fa129d",
+  "envelope_id": "painter-12.2.0+js-api.1.1.20-env-a981b586eae7",
+  "run": {
+    "hardware": "AMD Radeon(TM) Graphics | NVIDIA GeForce RTX 4090",
+    "driver": "32.0.11024.2 | 32.0.16.1714",
+    "backend": "dx12",
+    "uzpainter_build_hash": "20982dff60eafe05207f66c38b334631b360b630f47557169a38a420b3321209",
+    "painter_build_id": "12.2.0+js-api.1.1.20",
+    "resource_hashes": [
+      "0772c83624e1a5b5b75141c1efc1774098be3d6b89462f9ce1b6634b1348a49e",
+      "13cbcd82a676ad6abcf8f66ef3600cf143721c96afcad8a1956c38552fa6e93f",
+      "3e04c6282e385bf3e8d637e6f03f5b27130c2bcbd7800ae95d72938ccbf896a1",
+      "3e3e553ae76639e6dee17a411bbe9fa7bdbed3a34970109f012244a38595af88",
+      "3f92a49c4f77751c337ed375786a450d4267b1184f26bc0b4b18c2699047ff49",
+      "5815e0782be67818d31b1f99d108ecc4a0462bdeb18ba9bc1d9eb508eb44f55a",
+      "598c774ade15d7893bec154aead7065ddb515fd5799ab42fcf8f6e97735f502a",
+      "5b6559335b6f9bc49c50ba37097a618f00ed5c5069f1522cb7fededc20a2ab74",
+      "61a1b281b87fd61c99825d3449dc6f8e5ee6fc006655673464d8a69440266f29",
+      "65131369a1d96b3d389c19280186b1ddc60bdfeedc05d4cb324b4b8d6a82b7d0",
+      "7167a93ec10baf82f6d394efff7ea91d3f525b747ed1a71b47dc5bc75b846de8",
+      "72a700679efa8b0ee214b5e01eecc140795f4e566d8e94712dba14a86afb30b5",
+      "750c2facd9aca492bd1ac21b8f8ac1610ebe75803594ee66c33be25d4d1d3fb6",
+      "7829b2add3961e6916bfba32fdea470c3736c2f060636fd8a03b0272a982af5f",
+      "7d8017d256a2359d5062fcc6e9e06881fee5d2bbb113e8000f8fba819a85b0a2",
+      "822f926d65403df422df81cd5c9227cb2a1a2ef6c727c42f76d21b836f98a09c",
+      "834c4bca3d32ebdeb9cd705e699782ee86fb86eb6dcff277345fae7bd63827aa",
+      "8591ee1ec691467cc291ff7bc4e7e7a2e676f09d43c96d88e48e77cbe72e0a9f",
+      "9b2b306359a4ef6a1888c5eb33095a8f1fea1024130eae4d08d9c06a28aaf4d0",
+      "a1f11c9a6938a8c77284e63c3e515b78a892424df480d8931a90f825a1967d60",
+      "a5bc5613f9507c184e1b6df29c0d5e59b9c87dd812bd04db5695847f963a3650",
+      "a931e4d5dc19d1147854076da8339095b7c279b7d5a9a27eba98f555bc9f7fd6",
+      "b43250e20dbabd4fef8aad979132658564b71d69d8d9f330db69287d23fa7908",
+      "b691bc3d979323d24a43caf399075ecb9802681dd02ae98f2e67146c38f8ebfb",
+      "bd0882cf9a356f3b695ce254786849f650a7014b7ea54f023bc1827a96cafc79",
+      "f12fd122cde2c56937c16564aa5b33bfef1d6ab49bbbe5038f56cd74945775ea",
+      "fb779c19fea266095633ce5de7e3f18cc28b7753aa388d709a0c2070bf5d0df6"
+    ]
+  },
+  "uzpainter_repeatability": {
+    "status": "not_measured",
+    "maps": []
+  },
+  "oracle_stability": {
+    "status": "stable",
+    "maps": [
+      {
+        "output_id": "DefaultMaterial/DefaultMaterial_BaseColor_sRGB@r1-repeat",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 50331648
+        },
+        "regions": [
+          {
+            "region": "M_lining",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 22502049
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "DefaultMaterial/DefaultMaterial_BaseColor_sRGB@r2",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 50331648
+        },
+        "regions": [
+          {
+            "region": "M_lining",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 22502049
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "DefaultMaterial/DefaultMaterial_Displacement_Raw@r1-repeat",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 50331648
+        },
+        "regions": [
+          {
+            "region": "M_lining",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 22502049
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "DefaultMaterial/DefaultMaterial_Displacement_Raw@r2",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 50331648
+        },
+        "regions": [
+          {
+            "region": "M_lining",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 22502049
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "DefaultMaterial/DefaultMaterial_Metallic_Raw@r1-repeat",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 50331648
+        },
+        "regions": [
+          {
+            "region": "M_lining",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 22502049
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "DefaultMaterial/DefaultMaterial_Metallic_Raw@r2",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 50331648
+        },
+        "regions": [
+          {
+            "region": "M_lining",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 22502049
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "DefaultMaterial/DefaultMaterial_Normal_Raw@r1-repeat",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 50331648
+        },
+        "regions": [
+          {
+            "region": "M_lining",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 22502049
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "DefaultMaterial/DefaultMaterial_Normal_Raw@r2",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 50331648
+        },
+        "regions": [
+          {
+            "region": "M_lining",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 22502049
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "DefaultMaterial/DefaultMaterial_Roughness_Raw@r1-repeat",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 50331648
+        },
+        "regions": [
+          {
+            "region": "M_lining",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 22502049
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "DefaultMaterial/DefaultMaterial_Roughness_Raw@r2",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 50331648
+        },
+        "regions": [
+          {
+            "region": "M_lining",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 22502049
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "equality_to_painter": {
+    "outcome": "fail",
+    "exceptions_relied_on": [],
+    "maps": [],
+    "structural": [
+      {
+        "output_id": "export",
+        "reason": "candidate_export_refused"
+      }
+    ]
+  }
+}
