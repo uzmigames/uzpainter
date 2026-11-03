@@ -4,14 +4,14 @@
   "golden_id": "phase1/tier1/wand-v1",
   "tier": "1",
   "domain": "tier1/pilot/wand-v1",
-  "manifest_sha256": "6d65e8b7dc8215808cc964e9203046600cecf4af52bf5b76c279c0ac045ca237",
-  "envelope_id": "painter-12.1.5+js-api.1.1.20",
+  "manifest_sha256": "432f9b14fb28489527ccdea6cdf19324c995939526866541c51596bcf4581c1a",
+  "envelope_id": "painter-12.2.0+js-api.1.1.20-env-a981b586eae7",
   "run": {
     "hardware": "AMD Radeon(TM) Graphics | NVIDIA GeForce RTX 4090",
     "driver": "32.0.11024.2 | 32.0.16.1714",
     "backend": "dx12",
-    "uzpainter_build_hash": "7e89c77034463afaa1362cbc4849a4b594702f856369cf27f256fadd7a44038b",
-    "painter_build_id": "12.1.5+js-api.1.1.20",
+    "uzpainter_build_hash": "20982dff60eafe05207f66c38b334631b360b630f47557169a38a420b3321209",
+    "painter_build_id": "12.2.0+js-api.1.1.20",
     "resource_hashes": [
       "071a7123e3f87c2d9a63a6dd403a223cc42904ec233cf199c581da612e3dea3f",
       "1581237aadc1d6f8f49e0b4454531797ee275ca91f319bd2b14a9ed95c5bb180",
@@ -1161,10 +1161,10 @@
     ]
   },
   "equality_to_painter": {
-    "outcome": "fail",
+    "outcome": "pass",
     "exceptions_relied_on": [
       {
-        "exception_id": "EXC-007",
+        "exception_id": "EXC-010",
         "version": 1
       }
     ],
@@ -1179,74 +1179,74 @@
           "sample_type": "uint"
         },
         "abs_diff": {
-          "max": 29580,
-          "mean": 1878.648154258728,
-          "p99": 17457
+          "max": 2806,
+          "mean": 0.7968973318735758,
+          "p99": 0
         },
         "differing": {
-          "count": 9523887,
-          "percent": 75.68905353546143,
+          "count": 34374,
+          "percent": 0.2731800079345703,
           "total": 12582912
         },
         "regions": [
           {
             "region": "M_gem",
             "abs_diff": {
-              "max": 5918,
-              "mean": 946.7763170318449,
-              "p99": 2858
+              "max": 306,
+              "mean": 0.33890883443576986,
+              "p99": 0
             },
             "differing": {
-              "count": 3983563,
-              "percent": 98.72148590152591,
+              "count": 5790,
+              "percent": 0.1434889829456281,
               "total": 4035153
             }
           },
           {
             "region": "M_iron",
             "abs_diff": {
-              "max": 29580,
-              "mean": 3556.831341584354,
-              "p99": 18223
+              "max": 801,
+              "mean": 1.5806464262048723,
+              "p99": 0
             },
             "differing": {
-              "count": 2390294,
-              "percent": 63.330437448219165,
+              "count": 18631,
+              "percent": 0.49362521099821666,
               "total": 3774321
             }
           },
           {
             "region": "M_leather",
             "abs_diff": {
-              "max": 14418,
-              "mean": 1261.035164974171,
-              "p99": 11066
+              "max": 2806,
+              "mean": 0.18709243136993986,
+              "p99": 0
             },
             "differing": {
-              "count": 1681224,
-              "percent": 69.0479065377725,
+              "count": 1783,
+              "percent": 0.07322784908902584,
               "total": 2434866
             }
           },
           {
             "region": "M_wood",
             "abs_diff": {
-              "max": 29580,
-              "mean": 1421.1246153635636,
-              "p99": 6936
+              "max": 1068,
+              "mean": 0.9571345248296824,
+              "p99": 0
             },
             "differing": {
-              "count": 1468806,
-              "percent": 62.80781605184703,
+              "count": 8170,
+              "percent": 0.3493584974078198,
               "total": 2338572
             }
           }
         ],
-        "private_difference_map_sha256": "ccc88fae6c0e68cb6361004154f49515aec6a61f01e2dcb7d58f197e20f7a76d",
-        "flip_mean": 0.12675419449806213,
+        "private_difference_map_sha256": "afdfb2f606765327f371db7f8f2afb57acb0f59a060c3a8dcee343bde5f2195e",
+        "flip_mean": 0.00022853666450828314,
         "padding": {
-          "covered_texels": 508305,
-          "uncovered_texels": 3685999,
+          "covered_texels": 508307,
+          "uncovered_texels": 3685997,
           "covered": {
             "abs_diff": {
               "max": 0,
@@ -1256,19 +1256,32 @@
             "differing": {
               "count": 0,
               "percent": 0.0,
-              "total": 1524915
+              "total": 1524921
+            }
+          },
+          "edge_texels": 6301,
+          "edge": {
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 18903
             }
           },
           "uncovered": {
             "abs_diff": {
-              "max": 29580,
-              "mean": 2137.716659174351,
-              "p99": 17457
+              "max": 2806,
+              "mean": 0.9067912064677933,
+              "p99": 0
             },
             "differing": {
-              "count": 9523887,
-              "percent": 86.12669184120777,
-              "total": 11057997
+              "count": 34374,
+              "percent": 0.3108521249474701,
+              "total": 11057991
             }
           },
           "bands": [
@@ -1276,13 +1289,13 @@
               "within_texels": 1,
               "texels": 6334,
               "abs_diff": {
-                "max": 29580,
-                "mean": 1748.6988211767182,
-                "p99": 10344
+                "max": 2806,
+                "mean": 2.7402904957372907,
+                "p99": 0
               },
               "differing": {
-                "count": 18453,
-                "percent": 97.11083043890117,
+                "count": 147,
+                "percent": 0.7736027786548785,
                 "total": 19002
               }
             },
@@ -1290,13 +1303,13 @@
               "within_texels": 2,
               "texels": 12698,
               "abs_diff": {
-                "max": 29580,
-                "mean": 1832.4845644983461,
-                "p99": 11066
+                "max": 2806,
+                "mean": 2.6977739276526487,
+                "p99": 0
               },
               "differing": {
-                "count": 36535,
-                "percent": 95.90749199348978,
+                "count": 291,
+                "percent": 0.7638998267443692,
                 "total": 38094
               }
             },
@@ -1304,28 +1317,28 @@
               "within_texels": 4,
               "texels": 25518,
               "abs_diff": {
-                "max": 29580,
-                "mean": 1923.1390521723229,
-                "p99": 11662
+                "max": 2806,
+                "mean": 2.5677169057136138,
+                "p99": 0
               },
               "differing": {
-                "count": 72110,
-                "percent": 94.1949473574209,
+                "count": 589,
+                "percent": 0.7693915406118557,
                 "total": 76554
               }
             },
             {
               "within_texels": 8,
-              "texels": 51528,
+              "texels": 51527,
               "abs_diff": {
-                "max": 29580,
-                "mean": 2013.3072116131036,
-                "p99": 12369
+                "max": 2806,
+                "mean": 2.467301932320272,
+                "p99": 0
               },
               "differing": {
-                "count": 143041,
-                "percent": 92.53286239196812,
-                "total": 154584
+                "count": 1215,
+                "percent": 0.785995691579172,
+                "total": 154581
               }
             }
           ]
@@ -1341,74 +1354,74 @@
           "sample_type": "uint"
         },
         "abs_diff": {
-          "max": 73,
-          "mean": 0.9125142097473145,
-          "p99": 15
+          "max": 8,
+          "mean": 0.0066986083984375,
+          "p99": 0
         },
         "differing": {
-          "count": 709980,
-          "percent": 16.927242279052734,
+          "count": 12295,
+          "percent": 0.2931356430053711,
           "total": 4194304
         },
         "regions": [
           {
             "region": "M_gem",
             "abs_diff": {
-              "max": 17,
-              "mean": 0.0014356332956891598,
+              "max": 0,
+              "mean": 0,
               "p99": 0
             },
             "differing": {
-              "count": 245,
-              "percent": 0.0182149227055331,
+              "count": 0,
+              "percent": 0.0,
               "total": 1345051
             }
           },
           {
             "region": "M_iron",
             "abs_diff": {
-              "max": 73,
-              "mean": 3.031517986943877,
-              "p99": 20
+              "max": 3,
+              "mean": 0.022265991684332097,
+              "p99": 0
             },
             "differing": {
-              "count": 707987,
-              "percent": 56.273989414254906,
+              "count": 12271,
+              "percent": 0.975354242524682,
               "total": 1258107
             }
           },
           {
             "region": "M_leather",
             "abs_diff": {
-              "max": 18,
-              "mean": 0.0036963019730859932,
+              "max": 8,
+              "mean": 2.9570415784687946e-05,
               "p99": 0
             },
             "differing": {
-              "count": 908,
-              "percent": 0.11187473971873606,
+              "count": 3,
+              "percent": 0.00036963019730859933,
               "total": 811622
             }
           },
           {
             "region": "M_wood",
             "abs_diff": {
-              "max": 24,
-              "mean": 0.010848928320359604,
+              "max": 3,
+              "mean": 7.568721424869536e-05,
               "p99": 0
             },
             "differing": {
-              "count": 840,
-              "percent": 0.10775806774390526,
+              "count": 21,
+              "percent": 0.0026939516935976316,
               "total": 779524
             }
           }
         ],
-        "private_difference_map_sha256": "841f040182629c3b519d999abe1528382c4141f743ca8d32277781244efa1570",
-        "flip_mean": 0.0003202940570190549,
+        "private_difference_map_sha256": "b917a50d94d5556538fdefe6e2d83ff25a8ace554f7ea24cc09383c107d6b228",
+        "flip_mean": 3.389423227417865e-06,
         "padding": {
-          "covered_texels": 508305,
-          "uncovered_texels": 3685999,
+          "covered_texels": 508307,
+          "uncovered_texels": 3685997,
           "covered": {
             "abs_diff": {
               "max": 0,
@@ -1418,19 +1431,32 @@
             "differing": {
               "count": 0,
               "percent": 0.0,
-              "total": 508305
+              "total": 508307
+            }
+          },
+          "edge_texels": 6301,
+          "edge": {
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 6301
             }
           },
           "uncovered": {
             "abs_diff": {
-              "max": 73,
-              "mean": 1.0383513397589093,
-              "p99": 17
+              "max": 8,
+              "mean": 0.007622361059979159,
+              "p99": 0
             },
             "differing": {
-              "count": 709980,
-              "percent": 19.26153533953753,
-              "total": 3685999
+              "count": 12295,
+              "percent": 0.33355968547993936,
+              "total": 3685997
             }
           },
           "bands": [
@@ -1438,13 +1464,13 @@
               "within_texels": 1,
               "texels": 6334,
               "abs_diff": {
-                "max": 30,
-                "mean": 1.2903378591727186,
-                "p99": 18
+                "max": 8,
+                "mean": 0.004578465424692138,
+                "p99": 0
               },
               "differing": {
-                "count": 1331,
-                "percent": 21.013577518155984,
+                "count": 17,
+                "percent": 0.26839280075781496,
                 "total": 6334
               }
             },
@@ -1452,13 +1478,13 @@
               "within_texels": 2,
               "texels": 12698,
               "abs_diff": {
-                "max": 30,
-                "mean": 1.391636478185541,
-                "p99": 19
+                "max": 8,
+                "mean": 0.005355174043156403,
+                "p99": 0
               },
               "differing": {
-                "count": 2655,
-                "percent": 20.908804536147425,
+                "count": 38,
+                "percent": 0.29925972594109307,
                 "total": 12698
               }
             },
@@ -1466,28 +1492,28 @@
               "within_texels": 4,
               "texels": 25518,
               "abs_diff": {
-                "max": 30,
-                "mean": 1.4858139352613842,
-                "p99": 20
+                "max": 8,
+                "mean": 0.006661964103769888,
+                "p99": 0
               },
               "differing": {
-                "count": 5313,
-                "percent": 20.82059722548789,
+                "count": 91,
+                "percent": 0.3566110196723881,
                 "total": 25518
               }
             },
             {
               "within_texels": 8,
-              "texels": 51528,
+              "texels": 51527,
               "abs_diff": {
-                "max": 59,
-                "mean": 1.5772589659990686,
-                "p99": 20
+                "max": 8,
+                "mean": 0.008694470859937508,
+                "p99": 0
               },
               "differing": {
-                "count": 10734,
-                "percent": 20.831392640894272,
-                "total": 51528
+                "count": 240,
+                "percent": 0.4657752246395094,
+                "total": 51527
               }
             }
           ]
@@ -1503,74 +1529,74 @@
           "sample_type": "uint"
         },
         "abs_diff": {
-          "max": 42148,
-          "mean": 347.9956965446472,
-          "p99": 19532
+          "max": 8481,
+          "mean": 1.5268149375915527,
+          "p99": 0
         },
         "differing": {
-          "count": 329614,
-          "percent": 7.858610153198242,
+          "count": 14103,
+          "percent": 0.3362417221069336,
           "total": 4194304
         },
         "regions": [
           {
             "region": "M_gem",
             "abs_diff": {
-              "max": 12528,
-              "mean": 0.5653696402589939,
+              "max": 0,
+              "mean": 0,
               "p99": 0
             },
             "differing": {
-              "count": 276,
-              "percent": 0.020519668027457694,
+              "count": 0,
+              "percent": 0.0,
               "total": 1345051
             }
           },
           {
             "region": "M_iron",
             "abs_diff": {
-              "max": 42148,
-              "mean": 1154.178823422809,
-              "p99": 23130
+              "max": 2570,
+              "mean": 5.0656152457620856,
+              "p99": 257
             },
             "differing": {
-              "count": 328629,
-              "percent": 26.12091022464703,
+              "count": 14079,
+              "percent": 1.119062210129981,
               "total": 1258107
             }
           },
           {
             "region": "M_leather",
             "abs_diff": {
-              "max": 19160,
-              "mean": 1.2883349638132038,
+              "max": 8481,
+              "mean": 0.03134833703374231,
               "p99": 0
             },
             "differing": {
-              "count": 88,
-              "percent": 0.010842485787718913,
+              "count": 3,
+              "percent": 0.00036963019730859933,
               "total": 811622
             }
           },
           {
             "region": "M_wood",
             "abs_diff": {
-              "max": 42148,
-              "mean": 7.329079027714349,
+              "max": 257,
+              "mean": 0.006923455852545913,
               "p99": 0
             },
             "differing": {
-              "count": 621,
-              "percent": 0.07966400008210138,
+              "count": 21,
+              "percent": 0.0026939516935976316,
               "total": 779524
             }
           }
         ],
-        "private_difference_map_sha256": "526daef795ff51dfcca889643af956f422f584edf1315990f29726a7709767ac",
-        "flip_mean": 0.0147642120718956,
+        "private_difference_map_sha256": "9392931769c834b1bcbb5086abecd2c0e9311b76f0f65f9bae9091dc5cc19638",
+        "flip_mean": 0.00015219979104585946,
         "padding": {
-          "covered_texels": 508305,
-          "uncovered_texels": 3685999,
+          "covered_texels": 508307,
+          "uncovered_texels": 3685997,
           "covered": {
             "abs_diff": {
               "max": 0,
@@ -1580,19 +1606,32 @@
             "differing": {
               "count": 0,
               "percent": 0.0,
-              "total": 508305
+              "total": 508307
+            }
+          },
+          "edge_texels": 6301,
+          "edge": {
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 6301
             }
           },
           "uncovered": {
             "abs_diff": {
-              "max": 42148,
-              "mean": 395.9848448141196,
-              "p99": 23130
+              "max": 8481,
+              "mean": 1.7373660369229817,
+              "p99": 0
             },
             "differing": {
-              "count": 329614,
-              "percent": 8.942324726620924,
-              "total": 3685999
+              "count": 14103,
+              "percent": 0.3826101866062289,
+              "total": 3685997
             }
           },
           "bands": [
@@ -1600,13 +1639,13 @@
               "within_texels": 1,
               "texels": 6334,
               "abs_diff": {
-                "max": 42148,
-                "mean": 238.84812125039468,
-                "p99": 4112
+                "max": 8481,
+                "mean": 2.677928639090622,
+                "p99": 0
               },
               "differing": {
-                "count": 1680,
-                "percent": 26.523523839595832,
+                "count": 15,
+                "percent": 0.2368171771392485,
                 "total": 6334
               }
             },
@@ -1614,13 +1653,13 @@
               "within_texels": 2,
               "texels": 12698,
               "abs_diff": {
-                "max": 42148,
-                "mean": 257.53787998109937,
-                "p99": 4452
+                "max": 8481,
+                "mean": 2.8335170893054022,
+                "p99": 0
               },
               "differing": {
-                "count": 3259,
-                "percent": 25.66545912742164,
+                "count": 31,
+                "percent": 0.24413293432036542,
                 "total": 12698
               }
             },
@@ -1628,28 +1667,28 @@
               "within_texels": 4,
               "texels": 25518,
               "abs_diff": {
-                "max": 42148,
-                "mean": 289.50764166470725,
-                "p99": 5426
+                "max": 8481,
+                "mean": 2.7897562504898503,
+                "p99": 0
               },
               "differing": {
-                "count": 6314,
-                "percent": 24.74331844188416,
+                "count": 82,
+                "percent": 0.32134179794654755,
                 "total": 25518
               }
             },
             {
               "within_texels": 8,
-              "texels": 51528,
+              "texels": 51527,
               "abs_diff": {
-                "max": 42148,
-                "mean": 331.8905449464369,
-                "p99": 8889
+                "max": 8481,
+                "mean": 3.1771498437712267,
+                "p99": 0
               },
               "differing": {
-                "count": 12443,
-                "percent": 24.14803601925167,
-                "total": 51528
+                "count": 253,
+                "percent": 0.49100471597414946,
+                "total": 51527
               }
             }
           ]
@@ -1665,102 +1704,116 @@
           "sample_type": "uint"
         },
         "abs_diff": {
-          "max": 32238,
-          "mean": 3780.5831339359283,
-          "p99": 26449
+          "max": 169,
+          "mean": 0.004468123118082683,
+          "p99": 0
         },
         "differing": {
-          "count": 11042581,
-          "percent": 87.7585490544637,
+          "count": 4715,
+          "percent": 0.03747145334879557,
           "total": 12582912
         },
         "regions": [
           {
             "region": "M_gem",
             "abs_diff": {
-              "max": 27745,
-              "mean": 4310.534083589891,
-              "p99": 16624
+              "max": 0,
+              "mean": 0,
+              "p99": 0
             },
             "differing": {
-              "count": 4005891,
-              "percent": 99.27482303644992,
+              "count": 0,
+              "percent": 0.0,
               "total": 4035153
             }
           },
           {
             "region": "M_iron",
             "abs_diff": {
-              "max": 31199,
-              "mean": 5717.966683278926,
-              "p99": 26803
+              "max": 51,
+              "mean": 0.014706486279253937,
+              "p99": 0
             },
             "differing": {
-              "count": 3476531,
-              "percent": 92.11010404255494,
+              "count": 4702,
+              "percent": 0.12457869905606862,
               "total": 3774321
             }
           },
           {
             "region": "M_leather",
             "abs_diff": {
-              "max": 28279,
-              "mean": 1221.1864813094437,
-              "p99": 15986
+              "max": 169,
+              "mean": 0.00029200785587379344,
+              "p99": 0
             },
             "differing": {
-              "count": 1957612,
-              "percent": 80.39916775707574,
+              "count": 9,
+              "percent": 0.00036963019730859933,
               "total": 2434866
             }
           },
           {
             "region": "M_wood",
             "abs_diff": {
-              "max": 32238,
-              "mean": 2404.1223323464064,
-              "p99": 16771
+              "max": 1,
+              "mean": 1.7104455197445278e-06,
+              "p99": 0
             },
             "differing": {
-              "count": 1602547,
-              "percent": 68.52673340825085,
+              "count": 4,
+              "percent": 0.0001710445519744528,
               "total": 2338572
             }
           }
         ],
         "normal": {
-          "angular_max_deg": 72.32285859599851,
-          "angular_mean_deg": 14.315284192076513,
+          "angular_max_deg": 0.29568880925855257,
+          "angular_mean_deg": 2.328531991584842e-05,
           "non_finite_count": 0,
-          "unnormalised_count": 193729
+          "unnormalised_count": 0,
+          "negative_z_count": 0
         },
-        "private_difference_map_sha256": "4a65b560e812ac23a99e893985775ab774ec131c466ab89c6572c00c7da1357c",
-        "flip_mean": 0.29401758313179016,
+        "private_difference_map_sha256": "bc48772de0e34f816a267acba16823591284ddfc7cfc7561b44b1a1251c7e5f8",
+        "flip_mean": 2.803966026476701e-06,
         "padding": {
-          "covered_texels": 508305,
-          "uncovered_texels": 3685999,
+          "covered_texels": 508307,
+          "uncovered_texels": 3685997,
           "covered": {
             "abs_diff": {
-              "max": 537,
-              "mean": 0.08710387136332189,
+              "max": 168,
+              "mean": 0.00023411048834660943,
               "p99": 0
             },
             "differing": {
-              "count": 2499,
-              "percent": 0.1638779866418784,
-              "total": 1524915
+              "count": 42,
+              "percent": 0.0027542410393718757,
+              "total": 1524921
+            }
+          },
+          "edge_texels": 6301,
+          "edge": {
+            "abs_diff": {
+              "max": 168,
+              "mean": 0.01888589112839232,
+              "p99": 0
+            },
+            "differing": {
+              "count": 42,
+              "percent": 0.22218695445167433,
+              "total": 18903
             }
           },
           "uncovered": {
             "abs_diff": {
-              "max": 32238,
-              "mean": 4301.919421482932,
-              "p99": 26660
+              "max": 169,
+              "mean": 0.00505200266486019,
+              "p99": 0
             },
             "differing": {
-              "count": 11040082,
-              "percent": 99.83799055109166,
-              "total": 11057997
+              "count": 4673,
+              "percent": 0.04225903240471077,
+              "total": 11057991
             }
           },
           "bands": [
@@ -1768,13 +1821,13 @@
               "within_texels": 1,
               "texels": 6334,
               "abs_diff": {
-                "max": 13978,
-                "mean": 137.2598673823808,
-                "p99": 2416
+                "max": 168,
+                "mean": 0.024892116619303233,
+                "p99": 0
               },
               "differing": {
-                "count": 17273,
-                "percent": 90.90095779391643,
+                "count": 51,
+                "percent": 0.26839280075781496,
                 "total": 19002
               }
             },
@@ -1782,13 +1835,13 @@
               "within_texels": 2,
               "texels": 12698,
               "abs_diff": {
-                "max": 20567,
-                "mean": 234.54751404420642,
-                "p99": 3663
+                "max": 169,
+                "mean": 0.02598834462120019,
+                "p99": 0
               },
               "differing": {
-                "count": 35792,
-                "percent": 93.95705360424213,
+                "count": 103,
+                "percent": 0.2703837874730929,
                 "total": 38094
               }
             },
@@ -1796,28 +1849,28 @@
               "within_texels": 4,
               "texels": 25518,
               "abs_diff": {
-                "max": 25718,
-                "mean": 372.8188468270763,
-                "p99": 5425
+                "max": 169,
+                "mean": 0.02579878255871672,
+                "p99": 0
               },
               "differing": {
-                "count": 73631,
-                "percent": 96.18178018130992,
+                "count": 208,
+                "percent": 0.27170363403610526,
                 "total": 76554
               }
             },
             {
               "within_texels": 8,
-              "texels": 51528,
+              "texels": 51527,
               "abs_diff": {
-                "max": 27648,
-                "mean": 580.2497412410081,
-                "p99": 7954
+                "max": 169,
+                "mean": 0.02613516538255025,
+                "p99": 0
               },
               "differing": {
-                "count": 151068,
-                "percent": 97.72550846141904,
-                "total": 154584
+                "count": 447,
+                "percent": 0.2891687852970287,
+                "total": 154581
               }
             }
           ]
@@ -1833,74 +1886,74 @@
           "sample_type": "uint"
         },
         "abs_diff": {
-          "max": 21074,
-          "mean": 438.63218450546265,
-          "p99": 14649
+          "max": 1542,
+          "mean": 0.8351588249206543,
+          "p99": 0
         },
         "differing": {
-          "count": 621903,
-          "percent": 14.827322959899902,
+          "count": 7667,
+          "percent": 0.18279552459716797,
           "total": 4194304
         },
         "regions": [
           {
             "region": "M_gem",
             "abs_diff": {
-              "max": 5353,
-              "mean": 0.2837899826846714,
+              "max": 0,
+              "mean": 0,
               "p99": 0
             },
             "differing": {
-              "count": 276,
-              "percent": 0.020519668027457694,
+              "count": 0,
+              "percent": 0.0,
               "total": 1345051
             }
           },
           {
             "region": "M_iron",
             "abs_diff": {
-              "max": 21074,
-              "mean": 798.0258634599442,
-              "p99": 17219
+              "max": 1542,
+              "mean": 2.5601804933920564,
+              "p99": 0
             },
             "differing": {
-              "count": 300417,
-              "percent": 23.878493641637792,
+              "count": 6579,
+              "percent": 0.522928494953132,
               "total": 1258107
             }
           },
           {
             "region": "M_leather",
             "abs_diff": {
-              "max": 2329,
-              "mean": 0.07656766327181866,
+              "max": 1028,
+              "mean": 0.003799798428332401,
               "p99": 0
             },
             "differing": {
-              "count": 88,
-              "percent": 0.010842485787718913,
+              "count": 3,
+              "percent": 0.00036963019730859933,
               "total": 811622
             }
           },
           {
             "region": "M_wood",
             "abs_diff": {
-              "max": 19018,
-              "mean": 1071.5653976016133,
-              "p99": 9509
+              "max": 257,
+              "mean": 0.35771188571487217,
+              "p99": 0
             },
             "differing": {
-              "count": 321122,
-              "percent": 41.19462646435517,
+              "count": 1085,
+              "percent": 0.13918750416921097,
               "total": 779524
             }
           }
         ],
-        "private_difference_map_sha256": "d6337693d9d8b79668a0a603ed5b11c15da47918e63aa63d443a6e219ff508de",
-        "flip_mean": 0.023798910900950432,
+        "private_difference_map_sha256": "4785108f245d69758435c5e5e85cb726eaff15cb8ae5bdadc6471bfdf23d6039",
+        "flip_mean": 9.327453881269321e-05,
         "padding": {
-          "covered_texels": 508305,
-          "uncovered_texels": 3685999,
+          "covered_texels": 508307,
+          "uncovered_texels": 3685997,
           "covered": {
             "abs_diff": {
               "max": 0,
@@ -1910,19 +1963,32 @@
             "differing": {
               "count": 0,
               "percent": 0.0,
-              "total": 508305
+              "total": 508307
+            }
+          },
+          "edge_texels": 6301,
+          "edge": {
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 6301
             }
           },
           "uncovered": {
             "abs_diff": {
-              "max": 21074,
-              "mean": 499.12024555622503,
-              "p99": 17219
+              "max": 1542,
+              "mean": 0.9503290425901052,
+              "p99": 0
             },
             "differing": {
-              "count": 621903,
-              "percent": 16.87203387738304,
-              "total": 3685999
+              "count": 7667,
+              "percent": 0.2080034248535742,
+              "total": 3685997
             }
           },
           "bands": [
@@ -1930,13 +1996,13 @@
               "within_texels": 1,
               "texels": 6334,
               "abs_diff": {
-                "max": 21074,
-                "mean": 669.9204294284812,
-                "p99": 7967
+                "max": 1542,
+                "mean": 1.338964319545311,
+                "p99": 0
               },
               "differing": {
-                "count": 3530,
-                "percent": 55.73097568676982,
+                "count": 20,
+                "percent": 0.3157562361856647,
                 "total": 6334
               }
             },
@@ -1944,13 +2010,13 @@
               "within_texels": 2,
               "texels": 12698,
               "abs_diff": {
-                "max": 21074,
-                "mean": 695.0485115766262,
-                "p99": 8224
+                "max": 1542,
+                "mean": 1.4977161757757127,
+                "p99": 0
               },
               "differing": {
-                "count": 6930,
-                "percent": 54.5755237045204,
+                "count": 44,
+                "percent": 0.34651126161600254,
                 "total": 12698
               }
             },
@@ -1958,28 +2024,28 @@
               "within_texels": 4,
               "texels": 25518,
               "abs_diff": {
-                "max": 21074,
-                "mean": 722.0070930323693,
-                "p99": 8310
+                "max": 1542,
+                "mean": 1.6416255192413198,
+                "p99": 0
               },
               "differing": {
-                "count": 13549,
-                "percent": 53.095853907046006,
+                "count": 100,
+                "percent": 0.3918802413982287,
                 "total": 25518
               }
             },
             {
               "within_texels": 8,
-              "texels": 51528,
+              "texels": 51527,
               "abs_diff": {
-                "max": 21074,
-                "mean": 754.2497088961342,
-                "p99": 8481
+                "max": 1542,
+                "mean": 2.0349719564500166,
+                "p99": 0
               },
               "differing": {
-                "count": 26616,
-                "percent": 51.65346995808105,
-                "total": 51528
+                "count": 240,
+                "percent": 0.4657752246395094,
+                "total": 51527
               }
             }
           ]

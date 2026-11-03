@@ -72,6 +72,26 @@ These are his own yes to the terms below (decision 259 §6).
    - Item 2.7 stays open for the exact rule. EXC-010 is narrowed by a new version as parts become exact: the padding first, then the Normal's edge, which follows the Height's ring (decision 308).
    - Items 3.1 to 3.3 can be checked on the run's evidence; 4.1 and the archive wait on the coordinator's full gate.
 
+## Result: the Wand's Tier 1 run under EXC-010
+
+The run: DX12 run of 2026-11-03, `test_wand_v1.py` on the tree of `e50844ee`, `zig build painter -Doptimize=ReleaseFast` (`UzPainter.exe` SHA-256 `20982dff60ea…`), every export the diagnostic measure export (decision 286), both rebuilds' receipts and the reopen export's marked `non_conformant` with only decisions 245's and 259's refusals bypassed. It took 232 s.
+
+**Verdict: pass under EXC-010** (`parity/reports/phase1/tier1-wand-v1.json`). The oracle is `stable`, the two rebuilds are `repeatable`, there is no structural item, and the save/reopen export equals the first one byte for byte.
+
+Counts are of differing values (components), as the report gives them. There are 508,307 covered texels, 6,301 of them on the island edge, and 3,685,997 uncovered ones.
+
+| Map | Covered interior | Covered island edge: values differing / max | Padding: values differing / max / mean | Within 1 / 2 / 4 / 8 texels of coverage |
+|---|---|---|---|---|
+| BaseColor | 0 | 0 | 34,374 / 2,806 / 0.907 | 147 / 291 / 589 / 1,215 |
+| Roughness | 0 | 0 | 7,667 / 1,542 / 0.950 | 20 / 44 / 100 / 240 |
+| Metallic | 0 | 0 | 14,103 / 8,481 / 1.737 | 15 / 31 / 82 / 253 |
+| Height | 0 | 0 | 12,295 / 8 / 0.008 | 17 / 38 / 91 / 240 |
+| Normal | 0 | **42 / 168** | 4,673 / 169 / 0.005 | 51 / 103 / 208 / 447 |
+
+- Every covered interior texel is equal on all five maps. Every covered texel is equal on the four material maps.
+- The Normal's only covered differences are 42 values on island-edge texels: the class EXC-010 excepts. On the whole-tile path there were 1,071 such texels (decision 223); decision 308's island rule leaves these.
+- `phase1.25_pilot-wand` items 3.1 to 3.3 are checked on this run. Item 2.7 and acceptance 4.1 stay open.
+
 ## Alternatives Considered
 
 - **Reuse EXC-007 (a version 3).** Rejected. A withdrawn id is never reused (decision 259 §1), and EXC-007 never covered covered texels.
