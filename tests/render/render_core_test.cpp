@@ -9,6 +9,8 @@
 //   kernel-cache    HLSL to DXIL and SPIR-V (IEEE-strict); cache hits and misses per key part
 //   dispatch        a cached DXIL kernel dispatched by the engine thread, read back exactly
 //   deadline        a stalled GPU queue: the wait returns `timeout` within the deadline
+//   deferred-release a timed-out request's resources released after the queue drains
+//   deferred-release-stalled resources retained with a device that cannot drain
 //   device-removed  `ID3D12Device5::RemoveDevice`, then `device_removed {backend: dx12, ...}`
 //   unavailable     injected Vulkan failure and a missing DX12 adapter; no work run
 //   capabilities    the DX12 capability report and the derived admission budget
@@ -623,6 +625,118 @@ int RunDeadline(const fs::path& dir) {
     engine.Stop();
     Info("engine stopped after " +
          std::to_string(std::chrono::duration_cast<Ms>(Clock::now() - stopStart).count()) + " ms");
+    return Finish();
+}
+
+uint64_t LiveAllocations(IDevice& device);
+
+struct DeferredReleaseObservation {
+    std::atomic<unsigned> destroyed{0};
+    std::atomic<bool> onEngineThread{false};
+    std::atomic<bool> allocationRestored{false};
+    std::thread::id engineThread;
+    uint64_t baseline = 0;
+};
+
+struct DeferredTestBuffer {
+    IDevice& device;
+    uz::RHIBufferHandle buffer;
+    std::shared_ptr<DeferredReleaseObservation> observation;
+
+    DeferredTestBuffer(IDevice& owner, uz::RHIBufferHandle handle,
+                       std::shared_ptr<DeferredReleaseObservation> observed)
+        : device(owner), buffer(handle), observation(std::move(observed)) {}
+
+    ~DeferredTestBuffer() {
+        observation->onEngineThread = std::this_thread::get_id() == observation->engineThread;
+        device.DestroyBuffer(buffer);
+        observation->allocationRestored = LiveAllocations(device) == observation->baseline;
+        ++observation->destroyed;
+    }
+};
+
+int RunDeferredRelease(const fs::path& dir, bool keepStalled) {
+    auto observation = std::make_shared<DeferredReleaseObservation>();
+    ComPtr<ID3D12Fence> blocker;
+    {
+        EngineOptions options = TestOptions(dir);
+        options.requestDeadline = Ms{300};
+        Engine engine(options);
+        if (NoAdapter(engine)) return kExitSkip;
+        observation->engineThread = engine.ThreadId();
+        auto snapshot = std::make_shared<const TestSnapshot>();
+        auto stalled = engine.Submit(snapshot, [&](EngineContext& context, const TestSnapshot&)
+                                                  -> Result<void> {
+            auto& device = static_cast<Dx12Device&>(context.Device());
+            if (FAILED(device.D3D12()->CreateFence(
+                    0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&blocker)))) {
+                return Fail(ErrorCode::ResourceCreationFailed, Backend::Dx12, "blocker fence");
+            }
+            observation->baseline = LiveAllocations(device);
+            uz::RHIBufferDesc desc;
+            desc.sizeBytes = 65536;
+            desc.usage = uz::RHIBufferUsage::CopyDst;
+            desc.memory = uz::RHIMemoryType::Default;
+            desc.debugName = "deferred_release_test";
+            Result<uz::RHIBufferHandle> buffer = device.CreateBuffer(desc);
+            if (!buffer) return Unexpected(buffer.error());
+            auto held = std::make_shared<DeferredTestBuffer>(device, *buffer, observation);
+            Check(LiveAllocations(device) == observation->baseline + 1,
+                  "the deferred resource owns one real GPU allocation");
+            context.DeferRelease(std::move(held));
+            if (FAILED(device.Native().GetDirectQueue()->Wait(blocker.Get(), 1))) {
+                return Fail(ErrorCode::RequestFailed, Backend::Dx12, "queue blocker wait");
+            }
+            const uz::RHIBufferHandle handle = *buffer;
+            return context.SubmitAndWait([handle](uz::IRHICommandList& cmd) {
+                const uz::RHIBarrierDesc before{
+                    uz::RHITextureHandle::Invalid(), handle,
+                    uz::RHIResourceState::Common, uz::RHIResourceState::CopyDst};
+                cmd.ResourceBarrier(&before, 1);
+                const uz::RHIBarrierDesc after{
+                    uz::RHITextureHandle::Invalid(), handle,
+                    uz::RHIResourceState::CopyDst, uz::RHIResourceState::Common};
+                cmd.ResourceBarrier(&after, 1);
+            });
+        });
+        Result<void> result = Get(stalled);
+        Check(!result && result.error().code == ErrorCode::Timeout,
+              "the deferred-resource request reports timeout", Describe(result));
+        Check(observation->destroyed.load() == 0,
+              "the timed-out request retains its GPU resource");
+
+        bool ran = false;
+        auto after = engine.Submit(snapshot, [&](EngineContext&, const TestSnapshot&) -> Result<void> {
+            ran = true;
+            return {};
+        });
+        Result<void> later = Get(after);
+        Check(!later && later.error().code == ErrorCode::Timeout && !ran,
+              "deferred release preserves the sticky timeout", Describe(later));
+
+        if (!keepStalled) {
+            Check(blocker && SUCCEEDED(blocker->Signal(1)),
+                  "the deferred-resource queue is released before teardown");
+        }
+        engine.Stop();
+        if (keepStalled) {
+            Check(observation->destroyed.load() == 0,
+                  "a stalled teardown leaves the GPU resource alive");
+            // The abandoned holder owns its observation; it never captures this stack.
+            // Release the hardware queue only after teardown chose to retain the device.
+            Check(blocker && SUCCEEDED(blocker->Signal(1)),
+                  "the abandoned queue is released after teardown");
+        } else {
+            Check(observation->destroyed.load() == 1,
+                  "a drained teardown releases the GPU resource exactly once");
+            Check(observation->onEngineThread.load(),
+                  "deferred destruction runs on the engine thread");
+            Check(observation->allocationRestored.load(),
+                  "deferred destruction restores allocations before device destruction");
+        }
+    }
+    Check(observation->destroyed.load() == (keepStalled ? 0u : 1u),
+          "engine destruction preserves the teardown ownership decision");
     return Finish();
 }
 
@@ -1751,7 +1865,8 @@ int main(int argc, char** argv) {
     if (argc < 3) {
         std::fprintf(stderr,
                      "usage: uzp-render-tests xxhash | admission | readback-layout | kernel-cache | "
-                     "dispatch | deadline | device-removed | unavailable | capabilities | "
+                     "dispatch | deadline | deferred-release | deferred-release-stalled | "
+                     "device-removed | unavailable | capabilities | "
                      "readback-pitch | readback-exact | readback-drain | readback-failure | "
                      "readback-kernel | uv-raster-* | vulkan-qualify | vulkan-device | vulkan-faults | vulkan-readback | "
                      "vulkan-uv-raster | vulkan-image-passes | ray-query-reference | ray-query-mesh | vulkan-ray-query | dx12-ray-query | ray-cast-fixtures | "
@@ -1768,6 +1883,8 @@ int main(int argc, char** argv) {
     if (mode == "kernel-cache") code = RunKernelCache(dir);
     else if (mode == "dispatch") code = RunDispatch(dir);
     else if (mode == "deadline") code = RunDeadline(dir);
+    else if (mode == "deferred-release") code = RunDeferredRelease(dir, false);
+    else if (mode == "deferred-release-stalled") code = RunDeferredRelease(dir, true);
     else if (mode == "device-removed") code = RunDeviceRemoved(dir);
     else if (mode == "unavailable") code = RunUnavailable(dir);
     else if (mode == "vulkan-product-factory") code = RunVulkanProductFactory(dir);

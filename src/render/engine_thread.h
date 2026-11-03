@@ -31,6 +31,7 @@
 #include <type_traits>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 namespace uzp::render {
 
@@ -65,6 +66,12 @@ public:
     /// otherwise.
     Result<void> Wait(uint64_t value);
     Result<void> SubmitAndWait(const RecordFn& record);
+
+    /// Transfer final ownership on the engine thread after a failed wait. Release after
+    /// teardown proves the queue drained or the device lost, before destroying the device.
+    /// A still-stalled device retains these resources until process exit. Does not clear
+    /// the request's fatal error; callers must retain no ownership beyond teardown.
+    void DeferRelease(std::shared_ptr<void> resource);
 
     /// The kernel compiled through the cache for this device's bytecode format and created on
     /// the device; created once per cache key and kept until the engine stops.
@@ -140,6 +147,7 @@ private:
     std::optional<Error> m_compilerError;
     std::unique_ptr<KernelCache> m_kernelCache;
     std::unordered_map<uint64_t, ComputeKernel> m_kernels;
+    std::unique_ptr<std::vector<std::shared_ptr<void>>> m_deferredResources;
 
     // Shared with submitting threads.
     std::mutex m_mutex;

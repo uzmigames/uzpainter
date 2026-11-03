@@ -21,6 +21,14 @@ Result<void> EngineContext::SubmitAndWait(const RecordFn& record) {
     return Wait(*value);
 }
 
+void EngineContext::DeferRelease(std::shared_ptr<void> resource) {
+    if (!m_engine.m_deferredResources) {
+        m_engine.m_deferredResources =
+            std::make_unique<std::vector<std::shared_ptr<void>>>();
+    }
+    m_engine.m_deferredResources->push_back(std::move(resource));
+}
+
 Result<ComputeKernel> EngineContext::Kernel(const KernelSource& source) {
     return m_engine.KernelFor(source);
 }
@@ -196,8 +204,10 @@ void Engine::Teardown() {
                      "left undestroyed\n",
                      std::string(BackendName(m_device->GetBackend())).c_str());
         m_kernels.clear();
+        static_cast<void>(m_deferredResources.release());
         static_cast<void>(m_device.release());
     } else {
+        m_deferredResources.reset();
         for (const auto& [key, kernel] : m_kernels) m_device->DestroyComputeKernel(kernel);
         m_kernels.clear();
         m_device.reset();

@@ -69,13 +69,15 @@ ExportGpu ExportGpuOf() {
     return g_exportGpu;
 }
 
-/// A failed wait can leave tiles in flight. As with Evaluator::Shutdown, keep their store
-/// until process exit when the engine cannot prove its last submission completed.
+/// A failed wait can leave tiles in flight. Transfer their store to engine teardown,
+/// which releases it before the device once the queue drains or the device is lost.
 struct ExportGpuTiles {
     render::EngineContext& context;
     std::unique_ptr<evaluator::GpuTileStore> store;
     ~ExportGpuTiles() {
-        if (!context.Wait(context.Device().Queue().LastSubmitted())) (void)store.release();
+        if (!context.Wait(context.Device().Queue().LastSubmitted())) {
+            context.DeferRelease(std::move(store));
+        }
     }
 };
 

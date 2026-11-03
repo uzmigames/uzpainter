@@ -24,6 +24,8 @@ GPU_CASES = frozenset(
     {
         "dispatch",
         "deadline",
+        "deferred-release",
+        "deferred-release-stalled",
         "device-removed",
         "unavailable",
         "capabilities",
@@ -131,6 +133,34 @@ def test_stalled_fence_times_out(render_tests: Path, tmp_path: Path) -> None:
         "the wait ends at the deadline, not later",
         "later requests fail with the timeout without running",
     } <= passed
+
+
+@pytest.mark.parametrize("stalled", [False, True], ids=["drained", "still-stalled"])
+def test_gpu_resources_follow_teardown_drain(
+    render_tests: Path, tmp_path: Path, stalled: bool
+) -> None:
+    """A timed-out request retains resources until drain, or with the abandoned device."""
+    case = "deferred-release-stalled" if stalled else "deferred-release"
+    passed, _ = run_case(render_tests, case, tmp_path)
+    assert {
+        "the deferred resource owns one real GPU allocation",
+        "the deferred-resource request reports timeout",
+        "the timed-out request retains its GPU resource",
+        "deferred release preserves the sticky timeout",
+        "engine destruction preserves the teardown ownership decision",
+    } <= passed
+    if stalled:
+        assert {
+            "a stalled teardown leaves the GPU resource alive",
+            "the abandoned queue is released after teardown",
+        } <= passed
+    else:
+        assert {
+            "the deferred-resource queue is released before teardown",
+            "a drained teardown releases the GPU resource exactly once",
+            "deferred destruction runs on the engine thread",
+            "deferred destruction restores allocations before device destruction",
+        } <= passed
 
 
 def test_device_removal_reported(render_tests: Path, tmp_path: Path) -> None:
