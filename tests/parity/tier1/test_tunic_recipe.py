@@ -123,7 +123,10 @@ class RecipeStateSession(StateSession):
     def call(self, tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
         if tool == "project_save_as":
             self.world.saved = arguments["path"]
-        return super().call(tool, arguments)
+        reply = super().call(tool, arguments)
+        if tool == "set_list":  # UzPainter's set_list names its committed revision
+            reply["result"] = {"revision": self.revision, **reply["result"]}
+        return reply
 
 
 class OpenSession:
@@ -239,7 +242,7 @@ def process(world: World, args: list[str]) -> subprocess.CompletedProcess[str]:
         assert sha256_file(found) == sha256
     original = next(p for p in world.projects.values() if p["project_recipe"] == dump)
     rebuilt = renumbered(original)
-    rebuilt["layer_list"]["revision"] = REVISION
+    rebuilt["layer_list"]["revision"] = rebuilt["set_list"]["revision"] = REVISION
     rebuilt["project_recipe"] = {**dump, "revision": REVISION}
     if world.rebuilt_fault is not None:
         world.rebuilt_fault(rebuilt)
@@ -325,6 +328,8 @@ def test_the_rebuilt_tunic_equals_the_original_across_reallocated_uids(
     dump = json.loads((work / "original" / "recipe" / "dump.json").read_text(encoding="utf-8"))
     assert dump == world.entry(world.saved)["project_recipe"]
     assert dump["rebuild"]["/display"]["shader"]["parameters"]["double_sided"] is True
+    revisions = [world.projects[p]["set_list"]["revision"] for p in (world.saved, str(target))]
+    assert revisions[0] != revisions[1] == REVISION  # compared across projects without it
     uids = [
         {n["uid"] for n in world.projects[p]["layer_list"]["nodes"]}
         for p in (world.saved, str(target))
@@ -522,6 +527,39 @@ def test_a_rebuild_error_fails(world: World, tmp_path: Path) -> None:
     world.rebuild_error = "ProjectError"
     with pytest.raises(tunic_recipe.RecipeFailed, match="the rebuild failed"):
         run(world, tmp_path)
+
+
+@pytest.mark.parametrize("tool", ["set_list", "layer_list"])
+def test_a_stale_revision_in_a_rebuilt_snapshot_is_a_mismatch(
+    world: World, tmp_path: Path, tool: str
+) -> None:
+    """Each read names its own snapshot's revision: one left at the original's is refused."""
+
+    def stale(project: dict[str, Any]) -> None:
+        project[tool]["revision"] = world.projects[world.saved][tool]["revision"]
+
+    world.rebuilt_fault = stale
+    with pytest.raises(tunic_recipe.RecipeMismatch, match=f"'{tool}': 5"):
+        run(world, tmp_path)
+
+
+def test_set_list_is_compared_across_projects_without_its_revision_only(
+    world: World, tmp_path: Path
+) -> None:
+    run(world, tmp_path)
+    first = world.projects[world.saved]
+    second = renumbered(first)
+    second["set_list"]["revision"] = REVISION
+    tunic_recipe.compare_projects(first, second)  # the revision alone may differ
+    second["set_list"]["texture_sets"][0]["original_name"] = "renamed"
+    with pytest.raises(
+        tunic_recipe.RecipeMismatch, match=r"set_list differs at \['texture_sets'\]"
+    ):
+        tunic_recipe.compare_projects(first, second)
+    third = renumbered(first)
+    third["shader_get"] = {**third["shader_get"], "revision": REVISION}  # never omitted there
+    with pytest.raises(tunic_recipe.RecipeMismatch, match=r"shader_get differs at \['revision'\]"):
+        tunic_recipe.compare_projects(first, third)
 
 
 def test_a_rebuilt_project_that_changes_on_reopen_is_a_mismatch(

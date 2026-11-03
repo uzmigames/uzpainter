@@ -37,7 +37,9 @@ round, not an MCP-only one. There is no typed `project_rebuild` tool.
      `resource_hashes` and every version field. The rebuild block lies outside the digest, so an
      equal digest alone proves nothing about it;
    - `double_sided` true in both dumps' `/display` block (decision 196), named on its own;
-   - `set_list` (the mesh bindings), `shader_get` and `display_get` (OCIO and display) literally;
+   - `set_list` (the mesh bindings) literally but for its `revision`, which each snapshot checks
+     against its own opened revision; `shader_get` and `display_get` (OCIO and display), which
+     carry no revision, literally (`REVISIONED`);
    - `layer_list` after `canonical_listing`, the only normalisation;
    then the report of `tools.parity.recipe_rebuild` (digests and exported files by name):
    `pass` only for equal digests and identical files; both exports refused alike is
@@ -86,6 +88,11 @@ from tools.parity.recorder.script_run import NativeJob, load_pipeline_job, stage
 
 # The reads of each snapshot, in order; `layer_list` takes the texture set.
 READS = ("set_list", "layer_list", "project_recipe", "shader_get", "display_get")
+# The reads that carry the committed revision, each checked against its own snapshot's and left
+# out of the comparison across projects alone: `set_list`, `layer_list` (`typed_tools.cpp`) and
+# `project_recipe` (`DumpRecipe`). `shader_get` and `display_get` carry none (`display.cpp`,
+# `Shader` and `State`), so they are compared whole.
+REVISIONED = ("set_list", "layer_list", "project_recipe")
 # The `layer_list` params that hold uids, and the slot their nodes sit in (`layer_tree.cpp`).
 UID_LISTS = (
     (("children",), "Substack"),
@@ -247,11 +254,9 @@ def observe(driver: Driver, st: StateRound, at: Any) -> dict[str, Any]:
         for tool in READS
     }
     listing, dump = reads["layer_list"], reads["project_recipe"]
-    if type(at) is not int or listing.get("revision") != at or dump.get("revision") != at:
-        raise RecipeMismatch(
-            f"the reads are at revisions {listing.get('revision')} and {dump.get('revision')}, "
-            f"not the opened {at}"
-        )
+    found = {tool: reads[tool].get("revision") for tool in REVISIONED}
+    if type(at) is not int or any(revision != at for revision in found.values()):
+        raise RecipeMismatch(f"the reads are at revisions {found}, not the opened {at}")
     sets = reads["set_list"].get("texture_sets")
     wanted = st.reads["set_list"]["texture_sets"][0]["mesh_maps"]
     if (
@@ -526,8 +531,14 @@ def compare_projects(original: dict[str, Any], rebuilt: dict[str, Any]) -> None:
     names every point that differs."""
     problems: list[str] = []
     for tool in ("set_list", "shader_get", "display_get"):
-        if original[tool] != rebuilt[tool]:
-            problems.append(f"{tool} differs")
+        first, second = (
+            {key: value for key, value in reads[tool].items() if key != "revision"}
+            if tool in REVISIONED
+            else reads[tool]
+            for reads in (original, rebuilt)
+        )
+        if differing(first, second):
+            problems.append(f"{tool} differs at {differing(first, second)}")
     first, second = (
         {key: value for key, value in reads["project_recipe"].items() if key != "revision"}
         for reads in (original, rebuilt)
