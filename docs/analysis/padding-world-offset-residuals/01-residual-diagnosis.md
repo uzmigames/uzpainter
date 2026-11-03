@@ -272,3 +272,147 @@ refusals 245/259 stay.
     Root verified their hashes and their absence from the repository.
   - The committed tool and its tests write no such file.
   - The model-panel prompts held aggregate maths only.
+
+## 9. Preflight result
+
+Date: 2026-11-02. Front A5. Design and preflight only, on authored geometry, the committed kernel
+bitmaps and the frozen reference. There is no capture, no recording request, no production change
+and no arithmetic-order grid. Tool: `tools/parity/fit/padding_turn_exact_preflight.py`, tests
+`tests/parity/test_padding_turn_exact_preflight.py`. Counts only.
+
+**Result.** At exact 90° the turn is not isolated: every candidate pair is `mixed` in both
+declared universes. A capture would discriminate the controlled recipes but would identify no
+cause. This is no full-ring and no production acceptance.
+
+**Geometry.**
+- The three flat world-offset shapes with their 41 copies each, in two meshes with the same layout
+  and the same box anchors. Mesh SHA-256: exact `3cb37024…752e`, oblique `f568f771…eeb`.
+- Oblique twins: the world-offset shapes themselves.
+- Exact twins: J folded at (0, c, c), so the UVs, band depths and 3D edge lengths are the oblique
+  shape's.
+- The bent shapes have no exact twin: K would need a direction off the dyadic grid.
+
+**Recipes.** Every candidate keeps decision 358's `compare_distance` for the own taps of tau's
+triangle in every chain.
+
+| Stage | `pos32n+own32` | `rod32n+own32` | `inv32n+own32` |
+| --- | --- | --- | --- |
+| Normal, axis, origin | Float32 raw-corner normals; unit, axis and Cramer origin in double | The same in float32 (GPU sqrt) | As `rod32n`, roles swapped |
+| Turned point | P, J → tau, double Rodrigues | P, J → tau, float32 | q, tau → J, float32 |
+| Difference | q − P' in double | q − P' in float32 | q' − P in float32 |
+| Norm | Double sqrt | `distance32` | `distance32` of the turned components |
+| Fractions | Decision 268 | Decision 268 | Decision 268 |
+
+All candidates take q and P from `position32`. Control: production `double`.
+
+**Selection and the declared universes.**
+- Each recipe's complete pipeline (`farhook` + `fm<model>`, then `own32mix` for the fractions)
+  was run on both meshes.
+- It keeps the same support, order, count and decided status everywhere: 0 texels differ from the
+  control.
+- The fixed-support recipes equal the complete pipeline's fractions and bits on every included
+  chain (0 inconsistent).
+
+Two universes are declared before any certification:
+
+| Universe | Texels | Turned far taps | Explicitly excluded |
+| --- | ---: | ---: | --- |
+| `matched` | 3,380 | 8,564 | 64 of 3,444 far texels per mesh (undecided, or different taps or entries between twins) |
+| `tau_same` | 1,722 | 4,141 | also 1,658 chains with tau in island B (q and the own taps move between twins) |
+
+In both universes, every far tap is a `turn` tap: the same gates in both twins, one winner, no
+tie, and the same winner in both twins.
+
+**(a) Stage agreement**, per candidate pair: agree / differ on the turned entries (chains for the
+fractions), or agree / unproved where marked. The entry stages compare values exactly (−0 = +0).
+The fractions and output compare uint32 bits.
+
+| Stage | `matched` exact: pos/rod | pos/inv | rod/inv | `tau_same` exact: pos/rod | pos/inv | rod/inv |
+| --- | --- | --- | --- | --- | --- | --- |
+| Inputs | all agree | all agree | all agree | all agree | all agree | all agree |
+| Frame | all agree | all agree | all agree | all agree | all agree | all agree |
+| Turned point | 4,706 / 3,858 | 4,480 / unproved 4,084 | 622 / unproved 7,942 | 606 / 3,535 | 3,838 / unproved 303 | 303 / unproved 3,838 |
+| Difference | 4,368 / 4,196 | 4,369 / 4,195 | 622 / 7,942 | 450 / 3,691 | 3,736 / 405 | 303 / 3,838 |
+| Norm | 0 / 8,564 | 0 / 8,564 | 634 / 7,930 | 0 / 4,141 | 0 / 4,141 | 308 / 3,833 |
+| Fractions and output | 3,369 / 11 | 3,331 / 49 | 3,320 / 60 | 1,715 / 7 | 1,719 / 3 | 1,712 / 10 |
+
+**Inverse turns.** A forward and an inverse turned point are compared only through a proved
+inverse:
+- the frames are equal, the axes opposite and each map an exact rotation;
+- then both turns must be exact to agree. A rounded turn on either side is `unproved`, not a
+  difference: the two rounding errors are not compared in a common frame and can line up.
+
+**On the oblique twins:**
+- pos and rod (both forward) differ on every turned point;
+- every turned point involving inv is `unproved`;
+- after the inputs, every other entry stage differs from pos for both float32 recipes.
+
+How often each stage is exact (no rounding), exact set, `matched` (`tau_same`):
+
+| Stage | pos32n | rod32n | inv32n |
+| --- | ---: | ---: | ---: |
+| Turned point | 8,564 (4,141) | 4,706 (606) | 4,480 (3,838) |
+| Difference | 8,564 (4,141) | 8,160 (3,919) | 8,409 (4,039) |
+| Norm | 0 (0) | 0 (0) | 2 (0) |
+
+The float32 turn rounds where the Cramer origin is off the normalised centre
+(fl(o + fl(P − o))). The double and `distance32` norms never agree.
+
+**(b) Discrimination** on the clean texels (output bits). AD means the pair agrees on the exact
+set and differs on the oblique twins.
+
+| Pair | `matched`: exact / oblique | AD / DA / DD | `tau_same`: exact / oblique | AD / DA / DD |
+| --- | --- | --- | --- | --- |
+| pos/rod | 11 / 70 | 65 / 6 / 5 | 7 / 26 | 22 / 3 / 4 |
+| pos/inv | 49 / 87 | 72 / 34 / 15 | 3 / 22 | 22 / 3 / 0 |
+| rod/inv | 60 / 112 | 86 / 34 / 26 | 10 / 36 | 31 / 5 / 5 |
+
+Bits that differ between twins: double 0 (0), pos 102 (18), rod 103 (21), inv 121 (35).
+
+**(c) Exact-arithmetic invariants** (rationals), `matched` (`tau_same`).
+- **Exact set, every candidate, on every entry, 8,564 (4,141):**
+  - the normals are signed unit vectors;
+  - cos = 0 and sin = 1;
+  - the map is an exact rotation;
+  - the Cramer origin lies on both planes, with axial component 0;
+  - the turned point keeps its axial component.
+- **Oblique set:** none of the normals, cos and sin, or rotations is exact.
+- **The Cramer anchor and the seam vertex differ** on 7,739 (3,316) entries.
+- **Where inv's difference is a signed permutation of rod's**, on 622 (303) entries, their norms
+  agree on all of them.
+- **Origin at the normalised centre** (the copies at x = 54), 212 (101) entries:
+  - there rod and inv agree at every entry stage, as the root's control predicts;
+  - pos agrees with neither, through its norm;
+  - the tests reproduce the root's sentinel: distance 5/8 through the GPU sqrt, every stage exact.
+- **Across twins:**
+  - the exact developed distance is equal on all 8,564 (4,141) entries;
+  - the own taps are equal on 1,722 of 1,722 chains with tau in island A;
+  - with tau in island B, they are equal on only 16 of 1,658, so `matched` fails the own
+    precondition.
+
+| Precondition | `matched` | `tau_same` |
+| --- | --- | --- |
+| Box and scale | pass | pass |
+| Support (complete selection, consistency) | pass | pass |
+| Gates and branch | pass | pass |
+| Developed distances | pass | pass |
+| Own taps | fail | pass |
+
+**Verdict.** It is conditional and makes no causal claim about Painter.
+- **Every pair is `mixed` in both universes.**
+  - On the exact-90° set, the inputs and the frame agree.
+  - The difference, the norm and the fractions provably differ for every pair.
+  - The turned point provably differs for pos/rod. For pos/inv and rod/inv it is `unproved`
+    wherever a turn rounds.
+  - The downstream arithmetic differs for every pair.
+  - `tau_same` meets every precondition and is still `mixed`, so the failed own condition is not
+    what decides the verdict.
+- **What a capture would show.** The output bits differ on both sets, so a capture would
+  discriminate these controlled recipes:
+  - on `tau_same`, 3 to 10 texels on the exact set and 22 to 36 on the oblique twins, with 22 to
+    31 AD;
+  - an axis-exact hit with an oblique miss would not separate the turn from the turned point's
+    rounding, the difference or the norm.
+- **Where a stage proof holds.** Only the normalised-centre lane proves the turn stages equivalent,
+  and only for rod/inv.
+- **Capture stays on hold.** Root judges whether these named strata are worth a controlled capture.
