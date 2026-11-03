@@ -91,7 +91,7 @@ from __future__ import annotations
 import copy
 import json
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
@@ -103,7 +103,12 @@ from tests.parity.tier1.wand_v1.runner import DECIDED_REFUSALS
 from tests.supervisor.conftest import JSON_PREFIX, Mcp
 from tools.parity.recipe_rebuild import Side, report, sha256_of
 from tools.parity.recorder.job import sha256_bytes
-from tools.parity.recorder.script_run import NativeJob, load_pipeline_job, stage_inputs
+from tools.parity.recorder.script_run import (
+    NativeJob,
+    load_pipeline_job,
+    stage_inputs,
+    texture_set_of,
+)
 
 # The reads of each snapshot, in order; `layer_list` takes the texture set.
 READS = ("set_list", "layer_list", "project_recipe", "shader_get", "display_get")
@@ -185,10 +190,12 @@ class StateRound:
 
 @dataclass(frozen=True)
 class Export:
-    """An export's files by name, or its refusal."""
+    """An export's files by name, or its refusal; for a measure export, each file's texture set
+    by name (`measured_config_export`)."""
 
     files: dict[str, Path] | None
     refusal: dict[str, str] | None
+    sets: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -479,12 +486,18 @@ def measured_export(
     """The diagnostic measure export of the saved `project` (the module's docstring) into
     `folder/export`, `folder` a new directory: its files by name, checked against its receipt,
     or its explicit refusal."""
+    return measured_config_export(painter, project, job.config_export.config, folder, backend)
+
+
+def measured_config_export(
+    painter: Path, project: Path, config: dict[str, Any], folder: Path, backend: str = BACKEND
+) -> Export:
+    """`measured_export` of the export configuration `config`, only its `exportPath` changed:
+    also the MCP round's measure mode (`mcp_round.measured_round`)."""
     out = folder / "export"
     out.mkdir(parents=True)
     configuration = folder / "config.json"
-    configuration.write_text(
-        json.dumps({**job.config_export.config, "exportPath": out.as_posix()}), encoding="utf-8"
-    )
+    configuration.write_text(json.dumps({**config, "exportPath": out.as_posix()}), encoding="utf-8")
     script = folder / "measure.py"
     script.write_text(MEASURE, encoding="utf-8")
     done = run_process(
@@ -513,12 +526,14 @@ def measured_export(
     if done.returncode != 0 or str(made.get("status", "")).rsplit(".", 1)[-1] != "Success":
         raise RecipeFailed(f"the measure export did not succeed: {made.get('message')}")
     files: dict[str, Path] = {}
-    for names in made["files"].values():
+    sets: dict[str, str] = {}
+    for key, names in made["files"].items():
         for name in names:
             path = Path(name)
             if path.name in files:
                 raise RecipeFailed(f"the measure export wrote {path.name} twice")
             files[path.name] = path
+            sets[path.name] = texture_set_of(str(key))
     current = json.loads((out / "current.json").read_text(encoding="utf-8"))
     receipt = json.loads((out / current["receipt"]).read_text(encoding="utf-8"))
     bypassed = (receipt.get("non_conformant") or {}).get("bypassed")
@@ -541,7 +556,7 @@ def measured_export(
         raise RecipeFailed(
             f"the measure export's receipt does not list {changed} with their hashes"
         )
-    return Export(files, None)
+    return Export(files, None, sets)
 
 
 def rebuilt_session(

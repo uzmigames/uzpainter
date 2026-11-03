@@ -9,7 +9,11 @@ sync`, `painter_export.py`), sent as typed tool calls to `UzPainter.exe --mcp` s
 `--allow-python`, so `run_python` is not even listed:
 
 1. `project_create` from the staged mesh with the manifest's applied project settings (OpenGL
-   normals, the default resolution, no cameras), then `set_list`;
+   normals, the default resolution, no cameras) and, when the manifest runs the create script
+   under `OCIO` (`script_ocio_sha256`), the `ocio_config_hash` of Painter's substance
+   configuration: the facade creates the script's project under that variable, while the typed
+   tool reads no environment and creates a Legacy project without the hash (decisions 207, 212);
+   then `set_list`;
 2. `set_mesh_maps`: the staged Normal and AO on the first texture set, as the create script binds
    them to `all_texture_sets()[0]`; a sync `texture_set` must name exactly that set, or the round
    fails before this first edit of a set (`mesh_maps_set`);
@@ -46,6 +50,16 @@ script. Its round sends the recorder's own steps as typed calls instead:
 A settings value (`project_create`) or a configuration (`export`) that UzPainter refuses as a
 release gap ends the round as `refused`, naming it; any other failed call fails the round.
 
+**The measure mode** (`run_round(..., diagnostic=True)`, a script job only; decisions 286, 398 §4
+and 399): production refuses an islanded set's export (decisions 245, 259), so the round sends no
+`export`. After the session closes, its saved project is exported by the diagnostic measure export
+in a separate `UzPainter.exe run --diagnostic-measure-export` process
+(`tunic_recipe.measured_config_export`, the Tunic recipe's), with the configuration the export
+script builds, and its receipt is checked the same way: marked `non_conformant`, every bypassed
+refusal one the Tier 1 runner decided, every returned file listed with its hash. Those files are
+the round's maps, compared with the Tier 1 run's (also the measure export), and the report names
+the mode (`export_mode: diagnostic_measure`). A refused or failed measure export fails the round.
+
 With a state scenario (`state`, the Tunic current round's `tunic_state.TUNIC_CURRENT`), the native
 round also checks the state before its export (`tunic_state`), every step a typed call. The
 scenario is checked against the job before any call. After the sync it sets
@@ -71,7 +85,8 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from tests.adapters.assets3d.wand import ASSETS3D, native_ocio_sha256
+from python.uzpainter_facade.bitmap_defaults import PAINTER_OCIO_CONFIG_SHA256
+from tests.adapters.assets3d.wand import ASSETS3D, PAINTER_OCIO, native_ocio_sha256
 from tests.parity.tier1 import tunic_state
 from tests.parity.tier1.tunic_state import StateMismatch, StateScenario
 from tests.supervisor.conftest import Mcp
@@ -177,6 +192,10 @@ class Round:
     # check only, never written to the public report, whose fields are identifiers only.
     refusal_reason: str = ""
     files: dict[tuple[str, str], Path] = field(default_factory=dict)
+    # `production` (the round's own `export` call) or `diagnostic_measure` (the measure mode).
+    export_mode: str = "production"
+    # The measure mode's saved project and export configuration, set by `drive`.
+    measure: tuple[Path, dict[str, Any]] | None = None
 
 
 class RoundFailed(RuntimeError):
@@ -252,10 +271,14 @@ def run_round(
     manifest: Path,
     backend: str = BACKEND,
     state: StateScenario | None = None,
+    diagnostic: bool = False,
 ) -> Round:
     """The round over the manifest's inputs staged in `work` (a fresh directory); a native job's
-    with the `state` scenario's checks, if one is given."""
+    with the `state` scenario's checks, if one is given; with `diagnostic`, a script job's saved
+    project exported by the measure mode after the session (the module's docstring)."""
     job = load_pipeline_job(manifest, ASSETS3D)
+    if diagnostic and isinstance(job, NativeJob):  # refused before UzPainter starts
+        raise RoundFailed(f"the round's measure mode applies to a script job, not {job.golden_id}")
     staged = stage_inputs(job, work / "assets")
     if state is not None:  # refused before UzPainter starts
         if not isinstance(job, NativeJob):
@@ -266,10 +289,32 @@ def run_round(
         tools = {tool["name"] for tool in session.request("tools/list", {})["tools"]}
         log = Round(len(tools), "run_python" in tools)
         driver = Driver(session, log)
-        drive(driver, job, staged, work, state)
-        return log
+        drive(driver, job, staged, work, state, diagnostic)
     finally:
         session.close()
+    if log.measure is not None and log.outcome == "completed":
+        measured_round(painter, log, work / "measure", backend)
+    return log
+
+
+def measured_round(painter: Path, log: Round, folder: Path, backend: str = BACKEND) -> None:
+    """The measure mode's export of the round's saved project (the module's docstring): its files
+    become the round's maps, keyed by texture set and map name; a refusal or failure fails the
+    round."""
+    from tests.parity.tier1.tunic_recipe import RecipeFailed, measured_config_export
+
+    assert log.measure is not None
+    project, config = log.measure
+    try:
+        made = measured_config_export(painter, project, config, folder, backend)
+    except RecipeFailed as error:
+        log.outcome = "failed"
+        raise RoundFailed(f"the measure export failed: {error}") from error
+    if made.files is None:
+        log.outcome = "failed"
+        raise RoundFailed(f"the measure export refused: {made.refusal}")
+    for name, path in made.files.items():
+        log.files[(made.sets[name], PurePosixPath(path.as_posix()).stem)] = path
 
 
 def run_tunic_current(painter: Path, work: Path, manifest: Path, backend: str = BACKEND) -> Round:
@@ -305,6 +350,25 @@ def sync_stack_arguments(job: ScriptJob | NativeJob, staged: dict[str, Path]) ->
     return arguments
 
 
+def script_ocio_sha256(job: ScriptJob) -> str | None:
+    """The `ocio_config_hash` a script job's project is created with: None (Legacy) when the
+    manifest sets no `OCIO`, else the hash of Painter's substance configuration, the only one the
+    facade creates under (`python/uzpainter_facade/colour.py`); `RoundFailed` for another."""
+    named = [
+        setting["value"]
+        for setting in job.manifest["applied_settings"]
+        if setting["applied_by"] == "environment_variable" and setting["name"] == "OCIO"
+    ]
+    if not named:
+        return None
+    if named != [PAINTER_OCIO]:
+        raise RoundFailed(
+            f"{job.golden_id}: the create script runs under OCIO {named}, not {PAINTER_OCIO} "
+            "only: refused before project_create"
+        )
+    return PAINTER_OCIO_CONFIG_SHA256
+
+
 def mesh_maps_set(job: ScriptJob, sets: list[str]) -> str:
     """The texture set `set_mesh_maps` binds: the first, as the create script binds the maps to
     `all_texture_sets()[0]`. A sync `texture_set` must name that set, once: the create script's
@@ -327,8 +391,11 @@ def drive(
     staged: dict[str, Path],
     work: Path,
     state: StateScenario | None = None,
+    diagnostic: bool = False,
 ) -> None:
     if isinstance(job, NativeJob):
+        if diagnostic:
+            raise RoundFailed(f"the measure mode applies to a script job, not {job.golden_id}")
         drive_native(driver, job, staged, work, state)
         return
     if state is not None:
@@ -337,19 +404,27 @@ def drive(
     assert job.create.arguments is not None and job.export.arguments is not None
     applied = {s["name"]: s["value"] for s in job.manifest["applied_settings"]}
     settings = {key: applied[name] for name, key in PROJECT_SETTINGS.items() if name in applied}
+    created: dict[str, Any] = {"mesh": str(staged[job.create.args["mesh"]]), "settings": settings}
+    try:
+        ocio = script_ocio_sha256(job)
+    except RoundFailed:
+        log.outcome = "failed"
+        raise
+    if ocio is not None:
+        created["ocio_config_hash"] = ocio
     out = work / "out" / "export"
+    project = work / "project" / f"{job.create.arguments['name']}.uzp"
     steps: list[tuple[str, Any]] = [
-        ("project_create", {"mesh": str(staged[job.create.args["mesh"]]), "settings": settings}),
+        ("project_create", created),
         ("set_list", {}),
         ("set_mesh_maps", None),  # on the first texture set set_list returns
-        (
-            "project_save_as",
-            {"path": str(work / "project" / f"{job.create.arguments['name']}.uzp"), "mode": "full"},
-        ),
+        ("project_save_as", {"path": str(project), "mode": "full"}),
         ("sync_stack", sync_stack_arguments(job, staged)),
         ("project_save", {"mode": "full"}),
         ("export", None),  # with the texture sets set_list returns
     ]
+    if diagnostic:  # no export call: the saved project is exported by the measure mode
+        steps.pop()
     sets: list[str] = []
     for tool, arguments in steps:
         if tool == "set_mesh_maps":
@@ -381,6 +456,10 @@ def drive(
                 path = Path(written["path"])
                 root = str(written["root_path"])
                 log.files[(root, PurePosixPath(path.as_posix()).stem)] = path
+    if diagnostic:
+        prefix = str(job.export.arguments["prefix"])
+        log.export_mode = "diagnostic_measure"
+        log.measure = (project, pipeline_export_config(prefix, out, sets))
 
 
 def drive_native(
@@ -565,6 +644,7 @@ def round_report(
         "python": {"allow_python": False, "run_python_listed": log.run_python_listed},
         "calls": log.calls,
         "outcome": log.outcome,
+        "export_mode": log.export_mode,
         "maps": maps,
         "equal_to_tier1": equality(log.outcome, maps),
     }

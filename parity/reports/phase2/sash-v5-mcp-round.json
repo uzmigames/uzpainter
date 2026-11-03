@@ -4,8 +4,8 @@
       "admission": "executed",
       "committed_revision": 1,
       "outcome": "committed",
-      "receipt_sha256": "fa3bd2a3c09f78311fe3dcd3566d972bc15e86a449defd4011e84acc3151bd53",
-      "seconds": 0.059,
+      "receipt_sha256": "c0dd78d07524b492c99cce40e069d5a811d96e207f9d363e351ebaf405e15f51",
+      "seconds": 0.06,
       "step": 1,
       "tool": "project_create",
       "typed": true
@@ -13,8 +13,8 @@
     {
       "committed_revision": 1,
       "outcome": "returned",
-      "receipt_sha256": "257f1fca068b947d14143ba6ae2f27b8bfdd5ed02f53a93e9d90bb40ddba0101",
-      "seconds": 0.007,
+      "receipt_sha256": "727e52a76ff1482487a535d1a5079f198988a375c623caa85fef3d12edaee9e8",
+      "seconds": 0.006,
       "step": 2,
       "tool": "set_list",
       "typed": true
@@ -23,8 +23,8 @@
       "admission": "executed",
       "committed_revision": 2,
       "outcome": "committed",
-      "receipt_sha256": "0b31868edfec7a93a0d70b1f61166685af84a812414a5dc3e2e871c9145728b6",
-      "seconds": 0.241,
+      "receipt_sha256": "a24d455093b4a76c48d342ee7b73e6b6eaead8ea1de38dcebd98eabe9b1275e5",
+      "seconds": 0.243,
       "step": 3,
       "tool": "set_mesh_maps",
       "typed": true
@@ -32,8 +32,8 @@
     {
       "committed_revision": 2,
       "outcome": "returned",
-      "receipt_sha256": "34230452bd824517e6257942ec0e7430673db39cfdae3b0e2ddaf5542c6bf858",
-      "seconds": 0.2,
+      "receipt_sha256": "554e1390ca60f13e8ddb71f05a245fc3b9e059bceceb200e5c9da7fe34a0d177",
+      "seconds": 0.19,
       "step": 4,
       "tool": "project_save_as",
       "typed": true
@@ -42,8 +42,8 @@
       "admission": "executed",
       "committed_revision": 3,
       "outcome": "committed",
-      "receipt_sha256": "9dfe76ba32bb8bee5042b2ff7054ddd840664ac22b03487abd49c426888ab81e",
-      "seconds": 0.274,
+      "receipt_sha256": "2cf829c3d8bdfbe42eef49989d427c6477ce879ae6dacdca0961246aed46caba",
+      "seconds": 0.333,
       "step": 5,
       "tool": "sync_stack",
       "typed": true
@@ -51,72 +51,58 @@
     {
       "committed_revision": 3,
       "outcome": "returned",
-      "receipt_sha256": "184c497b9ae5d4482a0b5dd30e2bdc6b99d05e30f47a8acb853dd6a7517625b1",
-      "seconds": 0.218,
+      "receipt_sha256": "6e9e33036b1a9673501bb7783bbd62b800ab33c496e0e672582e3fb5fb7b7626",
+      "seconds": 0.203,
       "step": 6,
       "tool": "project_save",
       "typed": true
-    },
-    {
-      "committed_revision": 3,
-      "error_code": "capability_gap",
-      "outcome": "error",
-      "receipt_sha256": "7a162daa156051746f78d1c4a9895da78dddf78e04fbe8224ac165cb23e26011",
-      "seconds": 0.056,
-      "step": 7,
-      "tool": "export",
-      "typed": true
     }
   ],
-  "equal_to_tier1": "not_measured",
+  "equal_to_tier1": "equal",
+  "export_mode": "diagnostic_measure",
   "golden_id": "phase2/tier1/sash-v5-current",
   "manifest_sha256": "b3028e5a2a729a3340eeedbd8b76907802f10ced88f13a8159164f532ee1b44c",
   "maps": [
     {
       "map": "25-Faixa-Cintura_BaseColor",
-      "sha256": null,
+      "sha256": "66e04f7f68461dbe5a64accf6dc9629b45797ed18bdaddb81e92eb46d08e9e2b",
       "texture_set": "25-Faixa-Cintura",
       "tier1_sha256": "66e04f7f68461dbe5a64accf6dc9629b45797ed18bdaddb81e92eb46d08e9e2b"
     },
     {
       "map": "25-Faixa-Cintura_Height",
-      "sha256": null,
+      "sha256": "0ca1a19a3192cc25e9bf8a25814a30ef276ff451914ea64c3e602f14985c7d2f",
       "texture_set": "25-Faixa-Cintura",
       "tier1_sha256": "0ca1a19a3192cc25e9bf8a25814a30ef276ff451914ea64c3e602f14985c7d2f"
     },
     {
       "map": "25-Faixa-Cintura_Metallic",
-      "sha256": null,
+      "sha256": "537c59bf6206c8a29d89a0f0433ae285254a2b7deac15ba730f547b6d678ca33",
       "texture_set": "25-Faixa-Cintura",
       "tier1_sha256": "537c59bf6206c8a29d89a0f0433ae285254a2b7deac15ba730f547b6d678ca33"
     },
     {
       "map": "25-Faixa-Cintura_Normal",
-      "sha256": null,
+      "sha256": "9cb08e41770cef710809272d95a72ce4b250031c0ee35c5a00bac25779e1458b",
       "texture_set": "25-Faixa-Cintura",
       "tier1_sha256": "9cb08e41770cef710809272d95a72ce4b250031c0ee35c5a00bac25779e1458b"
     },
     {
       "map": "25-Faixa-Cintura_Roughness",
-      "sha256": null,
+      "sha256": "356b148fff1d0b14dacd6fd9392733ba6909847150ae8f8cb3ce3f12dc23ed56",
       "texture_set": "25-Faixa-Cintura",
       "tier1_sha256": "356b148fff1d0b14dacd6fd9392733ba6909847150ae8f8cb3ce3f12dc23ed56"
     }
   ],
-  "outcome": "refused",
+  "outcome": "completed",
   "python": {
     "allow_python": false,
     "run_python_listed": false
   },
-  "refusal": {
-    "error_code": "capability_gap",
-    "tool": "export",
-    "type": "NotYetSupported"
-  },
   "run": {
     "backend": "vulkan",
     "date": "2026-11-03",
-    "exe_sha256": "20982dff60eafe05207f66c38b334631b360b630f47557169a38a420b3321209",
+    "exe_sha256": "35ab4c44696b9e497ce3de272599e1e88aefd3280864a22f9df3fad789cd8281",
     "tools_listed": 67
   },
   "schema": "uzpainter/pilot-mcp-round/1"

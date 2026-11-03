@@ -145,6 +145,33 @@ def test_a_run_that_wrote_nothing_is_not_measured(outcome: str, maps: list[dict[
     assert equality(outcome, maps) == "not_measured"
 
 
+def _measure_mode_report() -> dict[str, Any]:
+    """The published Sash round's report as a completed measure-mode round would be: its calls
+    up to the save, no export call, and both runs' maps the same bytes."""
+    path = REPO_ROOT / "parity/reports/phase2/sash-v5-mcp-round.json"
+    report: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+    report["calls"] = [call for call in report["calls"] if call["tool"] != "export"]
+    report.pop("refusal")
+    report["maps"] = [{**m, "sha256": m["tier1_sha256"]} for m in report["maps"]]
+    measured = {"outcome": "completed", "export_mode": "diagnostic_measure"}
+    return {**report, **measured, "equal_to_tier1": "equal"}
+
+
+def test_a_measure_mode_round_sends_no_export_and_is_never_refused() -> None:
+    """`export_mode: diagnostic_measure` (decisions 398 §4, 399): the round's maps come from the
+    measure export of its saved project, so its call log holds no `export` call and it is never
+    refused by one; a report without the mode is a production round, as historical ones are."""
+    report = _measure_mode_report()
+    assert report_problems(report) == []
+    assert equality(report["outcome"], report["maps"]) == "equal"
+    historical = {k: v for k, v in report.items() if k != "export_mode"}
+    assert report_problems(historical) == []
+    export = {**report["calls"][-1], "step": len(report["calls"]) + 1, "tool": "export"}
+    with_export = {**report, "calls": [*report["calls"], export]}
+    assert "export_mode: a measure-mode round sends no export call" in report_problems(with_export)
+    assert report_problems({**report, "export_mode": "measure"})
+
+
 @_needs_the_wand
 def test_wand_round_runs_through_typed_tools_with_python_disabled(
     painter: Path, tmp_path: Path

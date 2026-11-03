@@ -10,7 +10,7 @@
     "hardware": "AMD Radeon(TM) Graphics | NVIDIA GeForce RTX 4090",
     "driver": "32.0.11024.2 | 32.0.16.1714",
     "backend": "dx12",
-    "uzpainter_build_hash": "20982dff60eafe05207f66c38b334631b360b630f47557169a38a420b3321209",
+    "uzpainter_build_hash": "35ab4c44696b9e497ce3de272599e1e88aefd3280864a22f9df3fad789cd8281",
     "painter_build_id": "12.2.0+js-api.1.1.20",
     "resource_hashes": [
       "0536fb8fe4c97780658dbb2f0405bb4d0bcb0f2122410ad22626a11c85d44eea",

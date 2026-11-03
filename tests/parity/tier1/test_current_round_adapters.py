@@ -20,8 +20,9 @@ from typing import Any, cast
 import pytest
 
 from adapters.assets3d import layer_stack
+from python.uzpainter_facade.bitmap_defaults import PAINTER_OCIO_CONFIG_SHA256
 from tests.adapters.assets3d import wand as wand_module
-from tests.adapters.assets3d.wand import Wand
+from tests.adapters.assets3d.wand import PAINTER_OCIO, Wand
 from tests.parity.recorder.test_script_run import (
     DECISION_EVIDENCE,
     RUN_PY,
@@ -406,7 +407,11 @@ class FakeSession:
 
 
 def round_of(
-    manifest: dict[str, Any], assets: Path, tmp_path: Path, sets: list[str]
+    manifest: dict[str, Any],
+    assets: Path,
+    tmp_path: Path,
+    sets: list[str],
+    diagnostic: bool = False,
 ) -> tuple[FakeSession, mcp_round.Round, Any, dict[str, Path]]:
     job = load_script_job(manifest_file(tmp_path, manifest, "round"), assets)
     staged = stage_inputs(job, tmp_path / "round" / "assets")
@@ -414,7 +419,7 @@ def round_of(
     log = mcp_round.Round(0, False)
     driver = mcp_round.Driver(cast(Any, session), log)
     with contextlib.suppress(mcp_round.RoundFailed):  # `log.outcome` says `failed`
-        mcp_round.drive(driver, job, staged, tmp_path / "round")
+        mcp_round.drive(driver, job, staged, tmp_path / "round", diagnostic=diagnostic)
     return session, log, job, staged
 
 
@@ -469,6 +474,57 @@ def test_a_named_set_that_is_not_the_create_scripts_fails_before_the_first_set_e
     session, log, _, _ = round_of(current_manifest(assets), assets, tmp_path, sets)
     assert log.outcome == "failed"
     assert [tool for tool, _ in session.calls] == ["project_create", "set_list"]
+
+
+def test_a_measure_mode_round_sends_no_export_and_keeps_its_saved_project(
+    assets: Path, tmp_path: Path
+) -> None:
+    """The measure mode (decisions 398 §4, 399): the same calls up to the save, no `export`, and
+    the saved project with the export script's configuration kept for the measure export."""
+    sets = ["25-Faixa-Cintura"]
+    session, log, job, _ = round_of(current_manifest(assets), assets, tmp_path, sets, True)
+    assert log.outcome == "completed"
+    assert [tool for tool, _ in session.calls] == [
+        "project_create",
+        "set_list",
+        "set_mesh_maps",
+        "project_save_as",
+        "sync_stack",
+        "project_save",
+    ]
+    assert log.export_mode == "diagnostic_measure" and log.measure is not None
+    project, config = log.measure
+    assert str(project) == arguments_of(session, "project_save_as")["path"]
+    prefix = str(job.export.arguments["prefix"])
+    out = tmp_path / "round" / "out" / "export"
+    assert config == mcp_round.pipeline_export_config(prefix, out, sets)
+
+
+def test_a_round_creates_its_project_in_the_create_scripts_colour_profile(
+    assets: Path, tmp_path: Path
+) -> None:
+    """The create script runs in the facade, which creates the project under the manifest's
+    `OCIO`; the typed `project_create` reads no environment, so the round passes the substance
+    configuration's hash exactly when the manifest names it (a Legacy manifest passes none), and
+    refuses any other configuration before its first call."""
+    sets = ["25-Faixa-Cintura"]
+    for name in ("legacy", "ocio", "other"):
+        (tmp_path / name).mkdir()
+    manifest = current_manifest(assets)
+    ocio = {"name": "OCIO", "value": PAINTER_OCIO, "applied_by": "environment_variable"}
+    rest = [s for s in manifest["applied_settings"] if s["name"] != "OCIO"]
+    manifest["applied_settings"] = rest
+    legacy, _, _, _ = round_of(manifest, assets, tmp_path / "legacy", sets)
+    assert "ocio_config_hash" not in arguments_of(legacy, "project_create")
+    manifest["applied_settings"] = [ocio, *rest]
+    session, log, _, _ = round_of(manifest, assets, tmp_path / "ocio", sets)
+    assert log.outcome == "completed"
+    created = arguments_of(session, "project_create")
+    assert created["ocio_config_hash"] == PAINTER_OCIO_CONFIG_SHA256
+    other = {**ocio, "value": "resources/ocio/other/config.ocio"}
+    manifest["applied_settings"] = [other, *rest]
+    session, log, _, _ = round_of(manifest, assets, tmp_path / "other", sets)
+    assert log.outcome == "failed" and session.calls == []
 
 
 def test_a_legacy_mcp_round_refuses_a_project_without_a_set(assets: Path, tmp_path: Path) -> None:

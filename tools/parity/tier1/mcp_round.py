@@ -13,6 +13,11 @@ to the Tier 1 run's (the same pilot rebuilt through the pipeline adapter):
   code), the receipt's admission and committed revision, and the SHA-256 of the canonical receipt;
 - `outcome`: `completed` when every call succeeded, `refused` when the export refused before
   writing (a feature UzPainter does not support yet, named in `refusal`), `failed` otherwise;
+- `export_mode` (optional; historical reports have none and are `production`): `production` when
+  the round's own `export` call wrote the maps, `diagnostic_measure` when the round sent no
+  `export` and its saved project was exported by the diagnostic measure export in a separate
+  `UzPainter.exe run --diagnostic-measure-export` process (decisions 286, 398 §4, 399), whose maps
+  are not conformant; such a round lists no `export` call and is never `refused`;
 - `maps` and `equal_to_tier1`: `equal` only when both runs wrote the same maps byte for byte,
   `different` when both wrote maps and the map sets or any map's bytes differ, `not_measured` when
   either run wrote nothing or the round did not complete (nothing was compared).
@@ -34,6 +39,7 @@ SCHEMA_ID = "uzpainter/pilot-mcp-round/1"
 OUTCOMES = ("completed", "refused", "failed")
 CALL_OUTCOMES = ("committed", "no_op", "returned", "error")
 EQUALITY = ("equal", "different", "not_measured")
+EXPORT_MODES = ("production", "diagnostic_measure")
 
 _SHA256 = {"type": "string", "pattern": "^[0-9a-f]{64}$"}
 _ID = {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._/:-]*$"}
@@ -98,6 +104,7 @@ SCHEMA: dict[str, Any] = {
             },
         },
         "outcome": {"enum": list(OUTCOMES)},
+        "export_mode": {"enum": list(EXPORT_MODES)},
         "refusal": {
             "type": "object",
             "additionalProperties": False,
@@ -151,6 +158,11 @@ def report_problems(document: Any) -> list[str]:
         problems.append("outcome: a refused round names its refusal, its one failed call")
     if outcome != "refused" and "refusal" in document:
         problems.append("refusal: only a refused round names one")
+    if document.get("export_mode") == "diagnostic_measure":
+        if any(call["tool"] == "export" for call in calls):
+            problems.append("export_mode: a measure-mode round sends no export call")
+        if outcome == "refused":
+            problems.append("export_mode: a measure-mode round is never refused by its export")
     maps = document["maps"]
     keys = [(m["texture_set"], m["map"]) for m in maps]
     problems += [f"maps: {key} is listed twice" for key in {k for k in keys if keys.count(k) > 1}]

@@ -9,10 +9,13 @@ diagnostic measure export (decision 286): production refuses the Sash's islanded
 excepts exactly what that mode writes inexactly. A pass is a pass under EXC-012, never exact.
 
 The MCP-only round runs the same request through typed MCP tools with Python disabled
-(`../mcp_round.py`). Its export is the production `export` tool, which refuses the islanded set
-before writing; while it does, the round test is an expected failure naming that refusal (the
-export, `NotYetSupported`, and a reason naming the islands and decision 245's or 259's refusal;
-any other refusal fails), with its report written. They need the UzmiGames asset repository
+(`../mcp_round.py`), twice. With the production `export` tool, which refuses the islanded set
+before writing, the round test is an expected failure naming that refusal (the export,
+`NotYetSupported`, and a reason naming the islands and decision 245's or 259's refusal; any other
+refusal fails). In the measure mode, as decision 398 §4 closed the Tunic's, the round sends no
+export and its saved project is exported by the diagnostic measure export in its own `run`
+process; that round must complete with every map byte-identical to the Tier 1 run's (also the
+measure export), and it writes the round's report. They need the UzmiGames asset repository
 (`UZP_TEST_ASSETS3D`), `zig` for a fresh `zig build painter -Doptimize=ReleaseFast`, the private
 store and the admitted golden; hosted CI has none of them and skips with the reason.
 """
@@ -33,6 +36,7 @@ from tests.parity.tier1.sash_v5.runner import GOLDEN_ID, Evidence, painter_ocio,
 from tools.parity.schemas import Schema, validation_errors
 from tools.parity.store.store import locate
 from tools.parity.tier1.compare import write_report
+from tools.parity.tier1.mcp_round import report_problems
 from tools.parity.tier1.mcp_round import write_report as write_round_report
 from tools.parity.verdict import resolve_golden
 
@@ -146,23 +150,48 @@ def test_sash_v5_saved_and_reopened_project_exports_the_first_maps(evidence: Evi
 def test_sash_v5_round_through_typed_mcp_tools_with_python_disabled(
     painter: Path, evidence: Evidence, tmp_path: Path
 ) -> None:
-    """2.5, 3.3: the round through typed tools against a supervisor without `--allow-python`;
+    """The production round through typed tools against a supervisor without `--allow-python`;
     `run_python` is not listed, every call is typed, the round completes and its maps equal the
     Tier 1 run's byte for byte. The production `export` tool refuses the islanded set before
-    writing (decisions 245, 259); while it does, this is an expected failure naming the refusal."""
+    writing (decisions 245, 259); while it does, this is an expected failure naming the refusal.
+    The round's report is the measure mode's (below)."""
     assert GOLDEN is not None
     _, (tier1, _), _ = evidence
     with pytest.MonkeyPatch.context() as patch:
         patch.setenv("OCIO", str(painter_ocio()))
         log = run_round(painter, tmp_path / "round", GOLDEN.manifest_path)
     report = round_report(log, tier1, GOLDEN.manifest_path, painter)
-    if os.environ.get(ROUND_ENV):
-        write_round_report(report, REPO_ROOT / os.environ[ROUND_ENV])
     assert report["python"] == {"allow_python": False, "run_python_listed": False}
     assert all(call["typed"] for call in report["calls"])
     if island_refusal(log):
         pytest.xfail(f"the production export refuses the Sash's UV islands: {log.refusal_reason}")
     assert report["outcome"] == "completed", report.get("refusal", report["calls"][-1])
+    assert report["equal_to_tier1"] == "equal", report["maps"]
+
+
+@_needs_the_sash
+def test_sash_v5_round_through_typed_mcp_tools_closes_on_the_measure_export(
+    painter: Path, evidence: Evidence, tmp_path: Path
+) -> None:
+    """2.5, 3.3 (decisions 398 §4, 399): the round through typed tools against a supervisor
+    without `--allow-python`, `run_python` not listed and every call typed, sends no export; its
+    saved project is exported by the diagnostic measure export in its own `run` process, its
+    receipt checked (`mcp_round.measured_round`). The round completes and its maps equal the Tier
+    1 run's, also the measure export, byte for byte. Not conformant: a measure-mode round."""
+    assert GOLDEN is not None
+    _, (tier1, _), _ = evidence
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("OCIO", str(painter_ocio()))
+        log = run_round(painter, tmp_path / "round", GOLDEN.manifest_path, diagnostic=True)
+    report = round_report(log, tier1, GOLDEN.manifest_path, painter)
+    if os.environ.get(ROUND_ENV):
+        write_round_report(report, REPO_ROOT / os.environ[ROUND_ENV])
+    assert report_problems(report) == []
+    assert report["python"] == {"allow_python": False, "run_python_listed": False}
+    assert all(call["typed"] for call in report["calls"])
+    assert "export" not in [call["tool"] for call in report["calls"]]
+    assert report["export_mode"] == "diagnostic_measure"
+    assert report["outcome"] == "completed", report["calls"][-1]
     assert report["equal_to_tier1"] == "equal", report["maps"]
 
 
