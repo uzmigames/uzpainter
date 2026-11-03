@@ -1008,6 +1008,82 @@ def test_exc011_catches_injected_defects() -> None:
     injected_defects_fail(exc011(), tunic_comparison, TUNIC_BASE, TUNIC_NORMAL)
 
 
+# --- decision 399: EXC-012, the owner's Sash current-round scope on EXC-010's terms ------------
+
+SASH_GOLDEN = "phase2/tier1/sash-v5-current"
+SASH_NORMAL = "export/25-Faixa-Cintura_Normal"
+SASH_BASE = "export/25-Faixa-Cintura_BaseColor"
+
+
+def exc012() -> dict[str, Any]:
+    (entry,) = [e for e in load_json(REGISTER_PATH)["entries"] if e["exception_id"] == "EXC-012"]
+    return dict(entry)
+
+
+def sash_comparison(
+    candidate: np.ndarray, mask: np.ndarray | None, output: str | None, golden: str = SASH_GOLDEN
+) -> Comparison:
+    oracle, _ = scope_split_case()
+    domain = "tier1/pilot/sash-v5-current"
+    return Comparison(
+        "1", domain, oracle, candidate, covered=mask, golden_id=golden, output_id=output
+    )
+
+
+def test_exc012_takes_exc010_s_terms_for_the_sash_current_round_only() -> None:
+    """EXC-012 version 1 (decision 399), with the published register: EXC-010's bounds and
+    defect list on the Sash's re-run golden and its Normal's output; padding differences pass on
+    every map and island-edge ones on the Normal only, each pass naming EXC-012. The retained
+    migration golden, the unrecordable original golden, the Tunic and the Wand are not covered."""
+    register: list[dict[str, Any]] = load_json(REGISTER_PATH)["entries"]
+    entry, wand = exc012(), exc010()
+    identity = (entry["version"], entry["decision_id"], entry["approved_on"])
+    assert identity == (1, "399", "2026-11-03")
+    assert entry["domain"] == {
+        "kind": "asset_map",
+        "selector": "tier1/pilot/sash-v5-current",
+        "goldens": [SASH_GOLDEN],
+    }
+    assert entry["evidence"]["basis"] == "owner_scope_split"
+    unexcepted = [{k: v for k, v in b.items() if k != "excepted_outputs"} for b in entry["bounds"]]
+    assert unexcepted == [
+        {k: v for k, v in b.items() if k != "excepted_outputs"} for b in wand["bounds"]
+    ]
+    assert [b.get("excepted_outputs") for b in entry["bounds"]] == [None, [SASH_NORMAL]]
+    injected = entry["defect_detection_test"]["injected_defects"]
+    assert injected == wand["defect_detection_test"]["injected_defects"]
+    assert [e["exception_id"] for e in in_force(register)].count("EXC-012") == 1
+    oracle, covered = scope_split_case()
+    edge, _ = island_classes(covered)
+    padded = oracle.copy()
+    padded[~covered] = 65535 - padded[~covered]  # every padding texel wrong
+    both = padded.copy()
+    both[edge] += 537  # and every island-edge texel
+    passing = [(padded, SASH_BASE), (padded, SASH_NORMAL), (both, SASH_NORMAL)]
+    for candidate, output in passing:
+        verdict = evaluate(sash_comparison(candidate, covered, output), register)
+        assert verdict.outcome is Outcome.PASS, output
+        assert verdict.exceptions_relied_on == (("EXC-012", 1),), output
+    exact = evaluate(sash_comparison(oracle.copy(), covered, SASH_NORMAL), register)
+    assert exact.outcome is Outcome.PASS and exact.exceptions_relied_on == ()
+    for other in ("phase2/tier1/sash-v5-migration", "phase2/tier1/sash-v5"):
+        verdict = evaluate(sash_comparison(padded, covered, SASH_NORMAL, other), register)
+        assert verdict.outcome is Outcome.FAIL and verdict.exceptions_relied_on == (), other
+    tunic_case = evaluate(tunic_comparison(padded, covered, TUNIC_NORMAL), [entry])
+    assert tunic_case.outcome is Outcome.FAIL
+    wand_case = evaluate(wand_comparison(padded, covered, WAND_NORMAL), [entry])
+    assert wand_case.outcome is Outcome.FAIL
+    assert register_problems(load_json(REGISTER_PATH)) == []
+
+
+def test_exc012_catches_injected_defects() -> None:
+    """EXC-012's defect test, EXC-010's on the Sash: with the padding wrong on every case
+    (excepted), one code on one covered interior texel fails on any map, the Normal included; an
+    island-edge difference fails on any map but the Normal, and on the Normal when the comparison
+    names no output; so do a uniform offset and a missing or mis-sized coverage mask."""
+    injected_defects_fail(exc012(), sash_comparison, SASH_BASE, SASH_NORMAL)
+
+
 # --- decisions 034 and 037: the envelope -------------------------------------------------------
 
 CURRENT = "painter-12.1.5+js-api.1.1.20"
