@@ -28,7 +28,9 @@ sequence and settings. Two different contents under one golden id are a conflict
 the current envelope's Painter build and version, the file name equal to the golden name, every
 repository input by path and SHA-256, every Assets3D input by `assets3d_path` and SHA-256 under
 `--assets-root` (or, with `--store`, a store blob of that hash), the recorder's own offline job
-check for the request's kind, and, for texture goldens, an `applied_settings` entry for every
+check for the request's kind (for a pipeline script, `record-script`'s loader: a script job, or a
+native job whose first step is `project.create`, each refused on its own rules), and, for texture
+goldens, an `applied_settings` entry for every
 export parameter the steps use (the generator's rule, `recording_requests.export_settings`).
 
 **Order.** Wand / G1 probes first (the golden name holds `wand`, or the description cites
@@ -80,7 +82,7 @@ from tools.parity.recorder.migration import INTERFACE as MIGRATION_INTERFACE
 from tools.parity.recorder.migration import migration_job_from_manifest
 from tools.parity.recorder.probes import probe_job_from_manifest
 from tools.parity.recorder.script_run import INTERFACE as SCRIPT_INTERFACE
-from tools.parity.recorder.script_run import script_job_from_manifest
+from tools.parity.recorder.script_run import pipeline_job_from_manifest
 from tools.parity.recorder.session import RecorderError
 from tools.parity.schemas import REPO_ROOT, Schema, validation_errors
 from tools.parity.store.store import OracleStore, StoreError, locate
@@ -391,7 +393,7 @@ def job_problems(
         PROBE: lambda: probe_job_from_manifest(manifest, root),
         DEFAULTS: lambda: check_baking_job(job_from_manifest(manifest, root)),
         TEMPLATES: lambda: template_check(job_from_manifest(manifest, root)),
-        SCRIPT: lambda: script_job_from_manifest(manifest, assets_root or root, store, root),
+        SCRIPT: lambda: pipeline_job_from_manifest(manifest, assets_root or root, store, root),
         MIGRATION: lambda: migration_job_from_manifest(manifest, assets_root or root, store, root),
         IRAY: lambda: settings_sheet(job_from_manifest(manifest, root)),
     }

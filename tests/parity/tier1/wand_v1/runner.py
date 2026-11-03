@@ -39,6 +39,12 @@ rebuild keeps the refusal's message. Any other failed call stops the run. Nothin
 under the Assets3D root or into the repository except the report, when `UZP_TIER1_REPORT` names
 it.
 
+A native job (decision 300 item 7; the Wand's native create, sync and config export) rebuilds the
+same way. Its normal maps come from its closing configuration (`normal_maps_of`), read before any
+rebuild runs: an inline preset, else the authored catalogue preset its Painter alias names (only
+the Blender preset, the Tunic's), named under OCIO. Any other preset or file-name token is
+refused then (`NativeSubjectRefused`), with nothing rebuilt.
+
 Item 3.3, save/reopen (`reopened_compared` only): between the first rebuild's sync and its export,
 an adapter call reads the project's file and UUID, and the file must be the create step's `dst`.
 After the export, its files are copied with their SHA-256 into `run-1/first-export` before
@@ -81,13 +87,20 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
-from tests.adapters.assets3d.wand import REQUEST, Call, Wand
+from tests.adapters.assets3d import wand as wand_module
+from tests.adapters.assets3d.wand import REQUEST, Call, Wand, native_ocio_sha256
 from tools.parity.coverage import coverage, distance_bands, obj_materials, obj_triangles
 from tools.parity.fit.decode import decode
 from tools.parity.fit.oracle import load
 from tools.parity.recorder.environment import video_controllers
-from tools.parity.recorder.script_run import texture_set_of
-from tools.parity.schemas import REGISTER_PATH, load_json
+from tools.parity.recorder.script_run import (
+    NativeJob,
+    is_native,
+    load_manifest,
+    pipeline_job_from_manifest,
+    texture_set_of,
+)
+from tools.parity.schemas import REGISTER_PATH, REPO_ROOT, load_json
 from tools.parity.store.store import locate
 from tools.parity.tier1.compare import (
     FIRST,
@@ -120,6 +133,100 @@ SAVE = (
 
 class RunError(RuntimeError):
     """A rebuild step failed other than by the export's explicit refusal."""
+
+
+class NativeSubjectRefused(RuntimeError):
+    """A native job whose comparison subject its configuration does not give: refused before
+    any rebuild runs."""
+
+
+NORMAL_VIRTUAL_MAPS = frozenset({"Normal_OpenGL", "Normal_DirectX"})
+STARTER_ASSETS = "resource://starter_assets/"
+# The one Painter preset a native subject resolves, as `src/export/preset_aliases.cpp` aliases it:
+# its Painter name -> the authored catalogue preset and the recorded versions of its URL.
+PRESET_ALIASES = {
+    "Blender (Principled BSDF)": ("blender-principled-bsdf", frozenset({"13120355637414252359"}))
+}
+CATALOGUE = REPO_ROOT / "assets" / "export-presets"
+# `$colorSpace` of a normal map under OCIO with Painter's substance configuration, a native job's
+# only profile: Painter names it Raw (the Blender preset's provenance, `<set>_Normal_Raw`).
+NORMAL_COLOUR_SPACE = "Raw"
+OPTIONAL = re.compile(r"\(([^()]*)\)")
+TOKEN = re.compile(r"\$([A-Za-z]+)")
+
+
+def preset_maps(config: Mapping[str, Any]) -> list[Any]:
+    """The maps of the configuration's default preset: an inline preset of that name first, else
+    the authored catalogue's preset its Painter alias names (its URL with no query or a recorded
+    version), checked against the catalogue's provenance; anything else is refused."""
+    reference = str(config.get("defaultExportPreset"))
+    inline = {p.get("name"): p for p in config.get("exportPresets", [])}
+    if reference in inline:
+        return list(inline[reference].get("maps", []))
+    painter, _, query = reference.removeprefix(STARTER_ASSETS).partition("?")
+    if painter not in PRESET_ALIASES:
+        raise NativeSubjectRefused(
+            f"the preset {reference!r} is neither inline nor a preset the runner resolves "
+            f"({sorted(PRESET_ALIASES)}): its normal maps are not known, refused before any rebuild"
+        )
+    preset_id, versions = PRESET_ALIASES[painter]
+    version = query.removeprefix("version=")
+    if query and (version == query or version not in versions):
+        raise NativeSubjectRefused(f"the preset {reference!r}: the query {query!r} is not recorded")
+    preset = json.loads((CATALOGUE / f"{preset_id}.json").read_text(encoding="utf-8"))
+    provenance = json.loads(
+        (CATALOGUE / f"{preset_id}.provenance.json").read_text(encoding="utf-8")
+    )
+    if preset.get("name") != preset_id or provenance.get("preset") != preset_id:
+        raise NativeSubjectRefused(f"the catalogue preset {preset_id} is not the one it names")
+    if painter not in provenance.get("answersTo", []):
+        raise NativeSubjectRefused(f"the catalogue preset {preset_id} does not answer to {painter}")
+    return list(preset["maps"])
+
+
+def map_name(file_name: str, root: str) -> str:
+    """A normal map's file name for the export root `root`: `$textureSet` the root, `$colorSpace`
+    Raw, and each `( ... )` group kept without its parentheses (none of these tokens is empty);
+    any other token is refused."""
+
+    def expand(text: str) -> str:
+        def value(match: re.Match[str]) -> str:
+            token = match.group(1)
+            if token == "textureSet":
+                return root
+            if token == "colorSpace":
+                return NORMAL_COLOUR_SPACE
+            raise NativeSubjectRefused(f"the map name {file_name!r} has another token ${token}")
+
+        return TOKEN.sub(value, text)
+
+    name = expand(OPTIONAL.sub(lambda group: group.group(1), file_name))
+    if any(c in name for c in "$()"):
+        raise NativeSubjectRefused(f"the map name {file_name!r} is not one the runner expands")
+    return name
+
+
+def normal_maps_of(config: Mapping[str, Any]) -> frozenset[str]:
+    """The tangent-space normal maps a native job's closing configuration exports, under OCIO (a
+    native job's only profile): each map of its default preset (`preset_maps`) whose every
+    channel is a `Normal_OpenGL` or `Normal_DirectX` virtual map, named for each `exportList`
+    root (`map_name`)."""
+    maps = preset_maps(config)
+    roots = []
+    for entry in config.get("exportList", []):
+        if set(entry) != {"rootPath"}:
+            raise NativeSubjectRefused(f"the export entry {entry} names more than its rootPath")
+        roots.append(str(entry["rootPath"]))
+    names = set()
+    for item in maps:
+        channels = item.get("channels", [])
+        if not channels or any(
+            c.get("srcMapType") != "virtualMap" or c.get("srcMapName") not in NORMAL_VIRTUAL_MAPS
+            for c in channels
+        ):
+            continue
+        names |= {map_name(str(item["fileName"]), root) for root in roots}
+    return frozenset(names)
 
 
 @dataclass(frozen=True)
@@ -386,6 +493,12 @@ def _evidence(
 ) -> tuple[dict[str, Any], tuple[CandidateRun, CandidateRun], Subject, Reopen | None]:
     resolved = resolve_golden(golden_id)
     manifest = resolved.manifest_path if resolved is not None else request
+    native_normals = None
+    if is_native(load_json(manifest)):  # its subject comes from its configuration, before any run
+        job = pipeline_job_from_manifest(load_manifest(manifest), wand_module.ASSETS3D)
+        assert isinstance(job, NativeJob)
+        native_ocio_sha256(job)  # OCIO only, the profile `normal_maps_of` names maps under
+        native_normals = normal_maps_of(job.config_export.config)
     record = None
     if reopen:
         wand = built(painter, work / "run-1", manifest)
@@ -398,17 +511,21 @@ def _evidence(
     _, second = rebuild(painter, work / "run-2", manifest, diagnostic)
     stack = load_json(wand.stack)
     masks = wand.masks
-    assert wand.job.export.arguments is not None
+    if native_normals is None:
+        assert wand.job.export.arguments is not None
+        normals = frozenset({f"{wand.job.export.arguments['prefix']}{NORMAL_SUFFIX}"})
+    else:
+        normals = native_normals
     meshes = [
         wand.staged[item.input_id]
-        for item in wand.job.inputs.values()
+        for item in wand.pipeline.inputs.values()
         if item.kind == "mesh" and wand.staged[item.input_id].suffix.lower() == ".obj"
     ]
     subject = Subject(
-        wand.job.manifest,
+        wand.pipeline.manifest,
         sha256_of(manifest),
         material_regions(stack, masks),
-        frozenset({f"{wand.job.export.arguments['prefix']}{NORMAL_SUFFIX}"}),
+        normals,
         {m: obj_triangles(mesh, m) for mesh in meshes for m in obj_materials(mesh)},
     )
     hardware, driver = video_controllers()
@@ -417,7 +534,7 @@ def _evidence(
         driver,
         BACKEND,
         sha256_of(painter),
-        tuple(sorted({str(item["sha256"]) for item in wand.job.manifest["inputs"]})),
+        tuple(sorted({str(item["sha256"]) for item in wand.pipeline.manifest["inputs"]})),
     )
     entries = load_json(REGISTER_PATH)["entries"]
     report = compare(subject, resolved, locate(), (first, second), identity, entries)

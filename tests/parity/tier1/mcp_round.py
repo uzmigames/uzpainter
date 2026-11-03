@@ -27,6 +27,24 @@ The inputs are the manifest's pinned files, staged by hash like the Tier 1 runne
 byte with the Tier 1 run's (the same pilot rebuilt through the pipeline adapter). An export
 UzPainter refuses before writing (a configuration it does not support yet) ends the round as
 `refused`, naming the refusal; it is never a pass.
+
+A native job (decision 300 item 7, the Tunic current round: `NativeJob`) has no create or export
+script. Its round sends the recorder's own steps as typed calls instead:
+
+1. `project_create` from the staged mesh with exactly the create step's six settings, no
+   template and the `ocio_config_hash` of Painter's substance configuration, which the manifest
+   must name (`NativeColourRefused` otherwise, before any call: never Legacy), then `set_list`:
+   the project must hold exactly the step's texture set, or the round fails before the import;
+2. `resource_import` of the staged Normal as a TEXTURE resource under the step's name and group:
+   the imported entry must be the pinned bytes (its SHA-256);
+3. `set_mesh_maps`: that entry's URL as the set's Normal, then `set_list` again: the set's bound
+   mesh maps must be exactly the Normal, that entry (its SHA-256 and name, valid);
+4. `project_save_as` (`full`), `sync_stack` as above and `project_save` (`full`), as the recorder
+   saves after the sync, then the same `set_list` check again;
+5. `export` with the closing configuration, its `exportPath` the round's: the only export.
+
+A settings value (`project_create`) or a configuration (`export`) that UzPainter refuses as a
+release gap ends the round as `refused`, naming it; any other failed call fails the round.
 """
 
 from __future__ import annotations
@@ -38,13 +56,15 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from tests.adapters.assets3d.wand import ASSETS3D
+from tests.adapters.assets3d.wand import ASSETS3D, native_ocio_sha256
 from tests.supervisor.conftest import Mcp
 from tools.parity.recorder.job import canonical_json, sha256_bytes, sha256_file
 from tools.parity.recorder.script_run import (
+    NORMAL_USAGE,
     SYNC_OPTIONS,
+    NativeJob,
     ScriptJob,
-    load_script_job,
+    load_pipeline_job,
     stage_inputs,
 )
 from tools.parity.schemas import load_json
@@ -63,6 +83,9 @@ BACKEND = "vulkan"
 LONG = frozenset({"project_create", "project_save_as", "export"})  # waited for (`wait`)
 # An export setting UzPainter refuses before writing (`NotYetSupported`) is `capability_gap`.
 REFUSAL = "capability_gap"
+# The calls whose release-gap refusal is the round's refusal: the export, and a native job's create.
+REFUSABLE = frozenset({"export"})
+NATIVE_REFUSABLE = frozenset({"project_create", "export"})
 
 
 def pipeline_export_config(prefix: str, out: Path, texture_sets: list[str]) -> dict[str, Any]:
@@ -181,11 +204,14 @@ class Driver:
         return reply
 
 
-def refusal_of(tool: str, reply: dict[str, Any]) -> dict[str, str] | None:
-    """The export's refusal before writing, or None for any other failure."""
+def refusal_of(
+    tool: str, reply: dict[str, Any], refusable: frozenset[str] = REFUSABLE
+) -> dict[str, str] | None:
+    """The refusal before writing of a `refusable` call (the export), or None for any other
+    failure."""
     error = reply["error"]
     kind = (error.get("details") or {}).get("type")
-    if tool != "export" or error.get("code") != REFUSAL:
+    if tool not in refusable or error.get("code") != REFUSAL:
         return None
     refusal = {"tool": tool, "error_code": REFUSAL}
     if isinstance(kind, str):
@@ -195,7 +221,7 @@ def refusal_of(tool: str, reply: dict[str, Any]) -> dict[str, str] | None:
 
 def run_round(painter: Path, work: Path, manifest: Path, backend: str = BACKEND) -> Round:
     """The round over the manifest's inputs staged in `work` (a fresh directory)."""
-    job: ScriptJob = load_script_job(manifest, ASSETS3D)
+    job = load_pipeline_job(manifest, ASSETS3D)
     staged = stage_inputs(job, work / "assets")
     session = Mcp(painter, work, "--gpu-backend", backend)
     try:
@@ -208,7 +234,7 @@ def run_round(painter: Path, work: Path, manifest: Path, backend: str = BACKEND)
         session.close()
 
 
-def sync_stack_arguments(job: ScriptJob, staged: dict[str, Path]) -> dict[str, Any]:
+def sync_stack_arguments(job: ScriptJob | NativeJob, staged: dict[str, Path]) -> dict[str, Any]:
     """`sync_stack`'s arguments: the staged stack JSON, its bitmaps' folder (the job's validated
     masks, from the `masks` list or the `mask_folder`) and each typed option the sync gives."""
     arguments: dict[str, Any] = {
@@ -238,7 +264,10 @@ def mesh_maps_set(job: ScriptJob, sets: list[str]) -> str:
     return sets[0]
 
 
-def drive(driver: Driver, job: ScriptJob, staged: dict[str, Path], work: Path) -> None:
+def drive(driver: Driver, job: ScriptJob | NativeJob, staged: dict[str, Path], work: Path) -> None:
+    if isinstance(job, NativeJob):
+        drive_native(driver, job, staged, work)
+        return
     log = driver.log
     assert job.create.arguments is not None and job.export.arguments is not None
     applied = {s["name"]: s["value"] for s in job.manifest["applied_settings"]}
@@ -286,6 +315,90 @@ def drive(driver: Driver, job: ScriptJob, staged: dict[str, Path], work: Path) -
                 path = Path(written["path"])
                 root = str(written["root_path"])
                 log.files[(root, PurePosixPath(path.as_posix()).stem)] = path
+
+
+def drive_native(driver: Driver, job: NativeJob, staged: dict[str, Path], work: Path) -> None:
+    """A native job's round (the module's docstring): its create's settings and Normal binding
+    through the typed tools, each checked, then the sync and the closing config export."""
+    ocio = native_ocio_sha256(job)  # refused before any call
+    log = driver.log
+    create = job.create
+    texture_set = str(create.args["texture_set"])
+    pinned = create.normal.sha256
+
+    def fail(message: str) -> RoundFailed:
+        log.outcome = "failed"
+        return RoundFailed(message)
+
+    def send(tool: str, arguments: dict[str, Any]) -> dict[str, Any] | None:
+        """The call's result; None when it refused (the round's refusal is logged)."""
+        reply = driver.call(tool, arguments)
+        if "error" not in reply:
+            result: dict[str, Any] = reply["result"]
+            return result
+        log.refusal = refusal_of(tool, reply, NATIVE_REFUSABLE)
+        if log.refusal is None:
+            raise fail(f"{tool} failed: {reply['error']}")
+        log.outcome = "refused"
+        return None
+
+    def mesh_maps() -> dict[str, Any]:
+        """The created project's one texture set's mesh maps; refused unless it is exactly the
+        create step's set."""
+        listed = send("set_list", {})
+        assert listed is not None
+        sets = [entry["name"] for entry in listed["texture_sets"]]
+        if sets != [texture_set]:
+            raise fail(
+                f"contract mismatch: the created project's texture sets are {sets}, not exactly "
+                f"the native create's {texture_set!r}"
+            )
+        maps: dict[str, Any] = listed["texture_sets"][0]["mesh_maps"]
+        return maps
+
+    def check_normal(baseline: dict[str, Any]) -> None:
+        """Refused unless the one set binds exactly the Normal, as `baseline` (the import)."""
+        bound = mesh_maps()
+        if bound != {NORMAL_USAGE: baseline}:
+            raise fail(f"the mesh maps bound are {bound}, not only the imported Normal {baseline}")
+
+    created = {
+        "mesh": str(staged[create.mesh.input_id]),
+        "settings": create.settings,
+        "ocio_config_hash": ocio,  # never Legacy
+    }
+    if send("project_create", created) is None:
+        return
+    mesh_maps()  # the one texture set, before the import
+    imported = send(
+        "resource_import",
+        {
+            "path": str(staged[create.normal.input_id]),
+            "usage": "TEXTURE",
+            "name": create.args["normal_name"],
+            "group": create.args["normal_group"],
+        },
+    )
+    assert imported is not None
+    resource = imported["resource"]
+    if resource["sha256"] != pinned:
+        raise fail(f"the imported Normal is {resource['sha256']}, not the pinned {pinned}")
+    maps = {NORMAL_USAGE: {"resource": resource["url"]}}
+    send("set_mesh_maps", {"texture_set": texture_set, "maps": maps})
+    baseline = {"sha256": pinned, "name": resource["name"], "invalid": False}
+    check_normal(baseline)
+    project = work / "project" / "native-create.uzp"
+    send("project_save_as", {"path": str(project), "mode": "full"})
+    send("sync_stack", sync_stack_arguments(job, staged))
+    send("project_save", {"mode": "full"})
+    check_normal(baseline)  # after the sync and its save, before the export
+    config = {**job.config_export.config, "exportPath": str(work / "out" / "export")}
+    exported = send("export", {"config": config})
+    if exported is None:
+        return
+    for written in exported["files"]:
+        path = Path(written["path"])
+        log.files[(str(written["root_path"]), PurePosixPath(path.as_posix()).stem)] = path
 
 
 def round_report(

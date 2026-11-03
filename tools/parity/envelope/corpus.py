@@ -5,8 +5,9 @@ The corpus holds six kinds of jobs; each is recorded exactly as its own command 
 
 - API probes (`tier0/api-probes`): `tools.parity.recorder.probes`;
 - baking defaults (`record-defaults`) and shipped templates (`record-templates`);
-- Tier 1 pipeline scripts (`record-script`) and project migrations (`record-migration`),
-  resolved from pinned Assets3D files or the private store before connecting to Painter;
+- Tier 1 pipeline scripts (`record-script`: a script job, or a native job whose first step is
+  `project.create`) and project migrations (`record-migration`), resolved from pinned Assets3D
+  files or the private store before connecting to Painter;
 - every other texture golden (`record`); one whose settings sheet names values only Painter's
   UI can set (`texture_sheet.py`) is recorded with the UI operator (`painter_ui.py`, decision
   029), so a refresh or a study never records a default in place of the sheet's value.
@@ -44,8 +45,8 @@ from tools.parity.recorder.script_run import (
 )
 from tools.parity.recorder.script_run import (
     ScriptSession,
+    pipeline_job_from_manifest,
     record_script_golden,
-    script_job_from_manifest,
 )
 from tools.parity.recorder.session import PainterIdentity, PainterSession, RecorderError
 from tools.parity.recorder.texture import record_texture_golden
@@ -128,7 +129,7 @@ def record_golden(
             session, migration, work, inbox, now, record_prefix=record_prefix
         )
     if kind == SCRIPT:
-        script = script_job_from_manifest(
+        script = pipeline_job_from_manifest(
             dict(manifest), assets_root or repo_root.parent / "Assets3D", store, repo_root
         )
         # Preserve the caller's guards and timing while loading the script transport operation.
