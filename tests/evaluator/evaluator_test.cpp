@@ -8,6 +8,7 @@
 // tests/evaluator/test_compositor_sources_projection.py.
 //
 // Usage: uzp-evaluator-tests <case> <assets-dir> [args]
+//   evaluator-lifetime-* <assets> <work> GPU state ownership through normal/fatal teardown
 //   arith <assets>                       the scalar rules of arith.h (write rules, half toward
 //                                        zero, sRGB tables, fused multiply-add, compositing)
 //   templates <assets>                   the template library: every file loads, "default" and
@@ -109,6 +110,7 @@
 #include "evaluator/templates.h"
 #include "evaluator/texture_unit.h"
 #include "render/capabilities.h"
+#include "render/device.h"
 #include "render/disk_cache.h"
 #include "render/engine_thread.h"
 #include "render/image_pass.h"
@@ -128,6 +130,8 @@
 
 #include "log.h"
 #include "zlib.h"
+#include "D3D12MemAlloc.h"
+#include "dx12_device.h"
 
 #include <algorithm>
 #include <atomic>
@@ -150,6 +154,7 @@
 #include <string_view>
 #include <thread>
 #include <vector>
+#include <wrl/client.h>
 
 #include <xmmintrin.h>
 #include "../no_error_dialogs.h"
@@ -2471,6 +2476,153 @@ bool NoAdapter(const render::Engine& engine) {
     std::printf("SKIP no %s device: %s\n", g_vulkan ? "qualified Vulkan" : "DX12",
                 engine.DeviceError()->Describe().c_str());
     return true;
+}
+
+uint64_t EvaluatorLiveAllocations(D3D12MA::Allocator& allocator) {
+    D3D12MA::TotalStatistics stats{};
+    allocator.CalculateStatistics(&stats);
+    return stats.Total.Stats.AllocationCount;
+}
+
+int RunEvaluatorLifetime(const fs::path& assets, const fs::path& dir,
+                         std::string_view mode) {
+    const bool fatal = mode == "fatal-drained" || mode == "fatal-stalled";
+    const bool stalled = mode == "fatal-stalled";
+    const bool stopFirst = mode == "stop-first";
+    Microsoft::WRL::ComPtr<D3D12MA::Allocator> allocator;
+    Microsoft::WRL::ComPtr<ID3D12Fence> blocker;
+    uint64_t retained = 0;
+
+    {
+        render::EngineOptions options = TestOptions(dir);
+        options.requestDeadline = std::chrono::milliseconds(5000);
+        render::Engine engine(options);
+        if (NoAdapter(engine)) return kExitSkip;
+        auto token = std::make_shared<const int>(0);
+        auto inspect = engine.Submit(
+            token, [&](render::EngineContext& context, const int&) -> render::Result<void> {
+                auto& device = static_cast<render::Dx12Device&>(context.Device());
+                allocator = device.Native().GetAllocator();
+                return {};
+            });
+        auto inspected = Get(inspect);
+        Check(bool(inspected) && allocator,
+              "the lifetime test retains the real DX12 allocation observer");
+        if (!inspected || !allocator) return Finish();
+        const uint64_t baseline = EvaluatorLiveAllocations(*allocator.Get());
+
+        auto evaluator = std::make_unique<Evaluator>(engine, LoadTemplates(assets));
+        Builder builder(256, 256, {{ChannelType::User0, ChannelFormat::RGB32F}});
+        const std::vector<ChannelType> channels{ChannelType::User0};
+        const auto fill = [&](double value) {
+            builder.SetRoot({
+                builder.Fill("lifetime", SameSource(channels, Uniform(value, 0.3, 0.7)),
+                             Same(channels, BlendingMode::Normal, 1.0))
+            });
+        };
+        fill(0.2);
+        EvaluateRequest request;
+        request.textureSet = builder.SetId();
+        request.stack = builder.StackId();
+        request.channel = ChannelType::User0;
+        auto warm = evaluator->Evaluate(
+            core::Snapshot{1, std::make_shared<const core::Project>(builder.project)}, request);
+        auto warmed = Get(warm);
+        Check(bool(warmed), "the lifetime test evaluates real GPU tiles", Describe(warmed));
+        if (!warmed) return Finish();
+        Check(EvaluatorLiveAllocations(*allocator.Get()) > baseline,
+              "the evaluator owns real GPU allocations");
+
+        if (fatal) {
+            auto block = engine.Submit(
+                token, [&](render::EngineContext& context, const int&) -> render::Result<void> {
+                    auto& device = static_cast<render::Dx12Device&>(context.Device());
+                    if (FAILED(device.D3D12()->CreateFence(
+                            0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&blocker)))) {
+                        return render::Fail(render::ErrorCode::ResourceCreationFailed,
+                                            render::Backend::Dx12, "lifetime blocker fence");
+                    }
+                    if (FAILED(device.Native().GetDirectQueue()->Wait(blocker.Get(), 1))) {
+                        return render::Fail(render::ErrorCode::RequestFailed,
+                                            render::Backend::Dx12, "lifetime queue blocker");
+                    }
+                    return {};
+                });
+            auto blocked = Get(block);
+            Check(bool(blocked), "the lifetime test blocks the GPU queue", Describe(blocked));
+            if (!blocked) {
+                if (blocker) (void)blocker->Signal(1);
+                return Finish();
+            }
+
+            // A new source forces GPU work instead of a cached readout.
+            fill(0.8);
+            auto pending = evaluator->Evaluate(
+                core::Snapshot{2, std::make_shared<const core::Project>(builder.project)}, request);
+            auto timedOut = Get(pending);
+            Check(!timedOut && timedOut.error().code == render::ErrorCode::Timeout,
+                  "the blocked evaluator request reports timeout", Describe(timedOut));
+            if (timedOut || timedOut.error().code != render::ErrorCode::Timeout) {
+                (void)blocker->Signal(1);
+                return Finish();
+            }
+            retained = EvaluatorLiveAllocations(*allocator.Get());
+            Check(retained > baseline, "the timed-out evaluator retains GPU allocations");
+            auto stats = evaluator->Stats();
+            auto rejected = Get(stats);
+            Check(!rejected && rejected.error().code == render::ErrorCode::Timeout,
+                  "the evaluator preserves the engine's sticky timeout", Describe(rejected));
+        }
+
+        if (stopFirst) {
+            engine.Stop();
+            Check(EvaluatorLiveAllocations(*allocator.Get()) == 0,
+                  "engine stop releases evaluator allocations before evaluator shutdown");
+        }
+        evaluator->Shutdown();
+        evaluator->Shutdown();
+        evaluator.reset();
+
+        if (fatal) {
+            Check(EvaluatorLiveAllocations(*allocator.Get()) == retained,
+                  "fatal shutdown and evaluator destruction retain pending GPU allocations");
+            if (!stalled) {
+                Check(SUCCEEDED(blocker->Signal(1)),
+                      "the evaluator queue is released before engine teardown");
+            }
+        } else if (!stopFirst) {
+            auto after = engine.Submit(
+                token, [&](render::EngineContext&, const int&) -> render::Result<void> {
+                    Check(EvaluatorLiveAllocations(*allocator.Get()) == baseline,
+                          "normal evaluator shutdown restores GPU allocations");
+                    return {};
+                });
+            auto checked = Get(after);
+            Check(bool(checked), "the engine remains usable after evaluator shutdown",
+                  Describe(checked));
+        }
+
+        engine.Stop();
+        if (stalled) {
+            Check(EvaluatorLiveAllocations(*allocator.Get()) == retained,
+                  "stalled engine teardown retains evaluator GPU allocations");
+        } else {
+            Check(EvaluatorLiveAllocations(*allocator.Get()) == 0,
+                  "drained engine teardown releases every GPU allocation");
+        }
+    }
+
+    if (stalled) {
+        Check(EvaluatorLiveAllocations(*allocator.Get()) == retained,
+              "engine destruction preserves stalled evaluator resources");
+        // Release hardware only after teardown has chosen permanent ownership retention.
+        Check(blocker && SUCCEEDED(blocker->Signal(1)),
+              "the abandoned evaluator queue is released after engine destruction");
+    } else {
+        Check(EvaluatorLiveAllocations(*allocator.Get()) == 0,
+              "engine destruction leaves no evaluator GPU allocation");
+    }
+    return Finish();
 }
 
 template <class T>
@@ -9044,7 +9196,9 @@ int main(int argc, char** argv) {
                      "vulkan-projection-gpu-vs-cpu|vulkan-masks-gpu-vs-cpu|vulkan-height-normal-gpu-vs-cpu|vulkan-gpu-vs-cpu|"
                      "vulkan-diagnostics-gpu-vs-cpu|"
                      "projection-gpu-vs-cpu|srgb8-hardware|fp-hardware|pow-hardware|trig-hardware|bilinear-hardware|texture-unit|masks-gpu-vs-cpu|"
-                     "height-normal-gpu-vs-cpu|diagnostics|diagnostics-gpu-vs-cpu|persistent|tables <assets-dir> <work-dir> | "
+                     "height-normal-gpu-vs-cpu|diagnostics|diagnostics-gpu-vs-cpu|persistent|tables|"
+                     "evaluator-lifetime-normal|evaluator-lifetime-fatal-drained|"
+                     "evaluator-lifetime-fatal-stalled|evaluator-lifetime-stop-first <assets-dir> <work-dir> | "
                      "uv-coverage <assets-dir> <work-dir> <mesh> <size>\n");
         return 2;
     }
@@ -9085,7 +9239,13 @@ int main(int argc, char** argv) {
         fs::create_directories(dir, ec);
         uz::LogInit((dir / ("evaluator-tests-" + std::string(mode) + ".log")).string().c_str());
         uz::LogSuppressConsole();
-        if (mode == "gpu-vs-cpu") code = RunGpuVsCpu(assets, dir);
+        if (mode == "evaluator-lifetime-normal" ||
+            mode == "evaluator-lifetime-fatal-drained" ||
+            mode == "evaluator-lifetime-fatal-stalled" ||
+            mode == "evaluator-lifetime-stop-first") {
+            code = RunEvaluatorLifetime(assets, dir, mode.substr(19));
+        }
+        else if (mode == "gpu-vs-cpu") code = RunGpuVsCpu(assets, dir);
         else if (mode == "kernel-sweep") code = RunKernelSweep(assets, dir);
         else if (mode == "vulkan-kernel-spirv") code = RunVulkanKernelSpirv(dir);
         else if (mode == "projection-gpu-vs-cpu") code = RunProjectionGpuVsCpu(assets, dir);

@@ -83,18 +83,20 @@ public:
     /// The cache statistics as of the requests run so far.
     [[nodiscard]] std::future<render::Result<CacheStats>> Stats();
 
-    /// Releases the GPU tiles on the engine thread; later requests fail with `engine_stopped`
-    /// or an evaluator error. Idempotent.
+    /// Releases GPU state on the engine thread. If cleanup is refused, engine teardown owns
+    /// its safe release or retention. Later requests fail; idempotent. The Engine object
+    /// must outlive this Evaluator, but may already have been stopped.
     void Shutdown();
 
 private:
     struct State;
+    struct StateSlot;
     render::Result<State*> StateFor(render::EngineContext& context);
 
     render::Engine& m_engine;
     std::shared_ptr<const TemplateLibrary> m_templates;
     EvaluatorOptions m_options;
-    std::unique_ptr<State> m_state;  ///< Created and used on the engine thread.
+    std::weak_ptr<StateSlot> m_state;  ///< Engine-owned slot, accessed on the engine thread.
     bool m_shutdown = false;
 };
 

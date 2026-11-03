@@ -189,6 +189,24 @@ def test_admission(evaluator_tests: Path) -> None:
 # ── Native GPU cases (owner's machine) ───────────────────────────────────────
 
 
+@pytest.mark.parametrize("mode", ["normal", "fatal-drained", "fatal-stalled", "stop-first"])
+def test_evaluator_gpu_resources_follow_engine_lifetime(
+    evaluator_tests: Path, tmp_path: Path, mode: str
+) -> None:
+    """GPU state is released or retained with its engine even after fatal or stopped cleanup."""
+    passed, output = run_case(
+        evaluator_tests,
+        f"evaluator-lifetime-{mode}",
+        str(tmp_path),
+        needs_gpu=True,
+    )
+    assert "the evaluator owns real GPU allocations" in passed, output
+    if mode == "fatal-stalled":
+        assert "engine destruction preserves stalled evaluator resources" in passed, output
+    else:
+        assert "engine destruction leaves no evaluator GPU allocation" in passed, output
+
+
 def test_gpu_equals_cpu_on_random_stacks(evaluator_tests: Path, tmp_path: Path) -> None:
     """2.5: the generated kernels, dispatched through the engine thread, give the same bytes as
     the CPU reference on random stacks over every channel format."""

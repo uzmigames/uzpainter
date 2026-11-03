@@ -66,6 +66,10 @@ struct Evaluator::State {
     TileCache cache;
 };
 
+struct Evaluator::StateSlot {
+    std::unique_ptr<State> state;
+};
+
 Evaluator::Evaluator(render::Engine& engine, std::shared_ptr<const TemplateLibrary> templates,
                      EvaluatorOptions options)
     : m_engine(engine), m_templates(std::move(templates)), m_options(std::move(options)) {}
@@ -87,12 +91,18 @@ render::Result<void> Evaluator::AdmitTextureSet(const core::Project& project, co
 
 render::Result<Evaluator::State*> Evaluator::StateFor(render::EngineContext& context) {
     if (m_shutdown) return EvalFail(EvalErrorKind::Internal, "the evaluator is shut down");
-    if (!m_state) {
+    std::shared_ptr<StateSlot> slot = m_state.lock();
+    if (!slot) {
         render::Result<AdmissionLimits> limits = Limits();
         if (!limits) return render::Unexpected(limits.error());
-        m_state = std::make_unique<State>(context.Device(), *limits);
+        slot = std::make_shared<StateSlot>();
+        slot->state = std::make_unique<State>(context.Device(), *limits);
+        // Register ownership while a valid context exists: a later fatal engine may refuse
+        // Shutdown's cleanup request, and must still release the state before its device.
+        context.DeferRelease(slot);
+        m_state = slot;
     }
-    return m_state.get();
+    return slot->state.get();
 }
 
 std::future<render::Result<ChannelResult>> Evaluator::Evaluate(core::Snapshot snapshot,
@@ -196,14 +206,15 @@ void Evaluator::Shutdown() {
     auto token = std::make_shared<const int>(0);
     std::future<render::Result<void>> done =
         m_engine.Submit(token, [this](render::EngineContext&, const int&) -> render::Result<void> {
-            if (m_state) {
-                m_state->cache.UnpinAll();
-                m_state->cache.Clear(m_state->store);
-                m_state.reset();
+            if (const std::shared_ptr<StateSlot> slot = m_state.lock(); slot && slot->state) {
+                slot->state->cache.UnpinAll();
+                slot->state->cache.Clear(slot->state->store);
+                slot->state.reset();
             }
             return {};
         });
-    // `engine_stopped` when the engine is gone: its device released the tiles with it.
+    // A fatal or stopped engine may refuse cleanup. Its registered slot then owns the
+    // state until safe teardown, or retains it with a device whose queue cannot drain.
     (void)done.get();
 }
 

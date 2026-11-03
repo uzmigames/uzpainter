@@ -67,8 +67,9 @@ public:
     Result<void> Wait(uint64_t value);
     Result<void> SubmitAndWait(const RecordFn& record);
 
-    /// Transfer final ownership on the engine thread after a failed wait. Release after
-    /// teardown proves the queue drained or the device lost, before destroying the device.
+    /// Transfer ownership on the engine thread for resources after a failed wait, or for
+    /// persistent state whose later cleanup request may be refused. Release after teardown
+    /// proves the queue drained or the device lost, before destroying the device.
     /// A still-stalled device retains these resources until process exit. Does not clear
     /// the request's fatal error; callers must retain no ownership beyond teardown.
     void DeferRelease(std::shared_ptr<void> resource);
