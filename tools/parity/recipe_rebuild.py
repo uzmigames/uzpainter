@@ -8,8 +8,10 @@ UzPainter is compared with itself: the report holds recipe digests, file names, 
 never a pixel or an oracle record.
 
 The outcome is `pass` when the digests are equal and both exports wrote the same file names with
-the same bytes, `export_refused` when the digests are equal and both exports were refused before
-writing (the gate is not met), and `fail` otherwise.
+the same bytes in the same mode, `export_refused` when the digests are equal and both exports were
+refused before writing (the gate is not met), and `fail` otherwise. Each written export names its
+mode: a diagnostic measure pass proves rebuild equality, not a conformant production delivery.
+The caller validates each export receipt before constructing its `Side`.
 """
 
 from __future__ import annotations
@@ -33,6 +35,7 @@ class Side:
     dump: Mapping[str, Any]
     files: Mapping[str, Path] | None
     refusal: str | None = None
+    diagnostic: bool = False
 
 
 def sha256_of(path: Path) -> str:
@@ -50,6 +53,7 @@ def _side(side: Side) -> dict[str, Any]:
     else:
         export = {
             "status": "written",
+            "mode": "diagnostic_measure" if side.diagnostic else "production",
             "files": [
                 {"name": name, "sha256": sha256_of(path), "bytes": path.stat().st_size}
                 for name, path in sorted(side.files.items())
@@ -78,7 +82,8 @@ def _equality(original: dict[str, Any], rebuilt: dict[str, Any]) -> dict[str, An
     else:
         files = "not_exported"
     both_refused = a["status"] == b["status"] == "refused" and a["refusal"] == b["refusal"]
-    if digests_equal and files == "identical":
+    same_mode = a.get("mode") == b.get("mode")
+    if digests_equal and files == "identical" and same_mode:
         outcome = "pass"
     elif digests_equal and both_refused:
         outcome = "export_refused"

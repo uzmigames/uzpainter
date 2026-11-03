@@ -78,11 +78,13 @@ class Scenario:
     refusals: tuple[str, ...]
 
 
-def side(dump: dict[str, Any], candidate: CandidateRun) -> Side:
-    """The dump and the export's files by name, or its refusal's class."""
+def side(dump: dict[str, Any], candidate: CandidateRun, diagnostic: bool) -> Side:
+    """The dump and the export's files by name, or its refusal's class; `diagnostic`: the export's
+    receipt-checked mode (`run`), which the report names."""
     if candidate.refused:
-        return Side(dump, None, REFUSAL)
-    return Side(dump, {path.name: path for path in candidate.files.values()})
+        return Side(dump, None, REFUSAL, diagnostic=diagnostic)
+    files = {path.name: path for path in candidate.files.values()}
+    return Side(dump, files, diagnostic=diagnostic)
 
 
 def resources(painter: Path, project_file: Path, work: Path) -> Path:
@@ -150,8 +152,8 @@ def run(painter: Path, work: Path, diagnostic: bool = False) -> Scenario:
         GOLDEN_ID,
         sha256_of(manifest),
         sha256_of(painter),
-        side(original, first),
-        side(rebuilt, second),
+        side(original, first, diagnostic),
+        side(rebuilt, second, diagnostic),
     )
     refusals = tuple(candidate.refusal for candidate in (first, second) if candidate.refused)
     return Scenario(document, original, rebuilt, refusals)

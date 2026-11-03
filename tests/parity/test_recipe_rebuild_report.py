@@ -57,6 +57,7 @@ def test_equal_digests_and_identical_files_pass(tmp_path: Path) -> None:
     assert document["schema"] == SCHEMA_ID
     assert document["resources"] == ["e" * 64, "f" * 64]
     assert document["original"]["export"]["files"][0]["name"] == "w_BaseColor.png"
+    assert document["original"]["export"]["mode"] == "production"
     assert document["original"]["export"] == document["rebuilt"]["export"]
     assert document["equality"] == {
         "digests_equal": True,
@@ -82,6 +83,41 @@ def test_another_digest_fails_even_with_identical_files(tmp_path: Path) -> None:
     b = files(tmp_path / "b", MAPS)
     equality = built(Side(dump(), a), Side(dump(OTHER), b))["equality"]
     assert equality["digests_equal"] is False and equality["outcome"] == "fail"
+
+
+def test_diagnostic_equality_preserves_non_production_mode(tmp_path: Path) -> None:
+    a = files(tmp_path / "a", MAPS)
+    b = files(tmp_path / "b", MAPS)
+    document = built(Side(dump(), a, diagnostic=True), Side(dump(), b, diagnostic=True))
+    assert document["equality"]["outcome"] == "pass"
+    for name in ("original", "rebuilt"):
+        assert document[name]["export"]["mode"] == "diagnostic_measure"
+    path = tmp_path / "report.json"
+    write_report(document, path)
+    assert json.loads(path.read_text(encoding="utf-8")) == document
+
+
+@pytest.mark.parametrize("diagnostic", [False, True])
+def test_different_export_modes_fail_even_with_identical_files(
+    tmp_path: Path, diagnostic: bool
+) -> None:
+    a = files(tmp_path / "a", MAPS)
+    b = files(tmp_path / "b", MAPS)
+    document = built(
+        Side(dump(), a, diagnostic=diagnostic), Side(dump(), b, diagnostic=not diagnostic)
+    )
+    assert document["equality"]["files"] == "identical"
+    assert document["equality"]["outcome"] == "fail"
+
+
+def test_schema_preserves_historical_reports_but_rejects_unknown_mode(tmp_path: Path) -> None:
+    side = Side(dump(), files(tmp_path / "a", MAPS))
+    document = built(side, side)
+    for name in ("original", "rebuilt"):
+        del document[name]["export"]["mode"]
+    assert validation_errors(document, Schema.RECIPE_REBUILD_REPORT) == []
+    document["original"]["export"]["mode"] = "unknown"
+    assert validation_errors(document, Schema.RECIPE_REBUILD_REPORT)
 
 
 def test_both_exports_refused_alike_is_not_a_pass(tmp_path: Path) -> None:

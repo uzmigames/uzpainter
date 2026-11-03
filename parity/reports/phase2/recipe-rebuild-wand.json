@@ -31,6 +31,7 @@
     "revision": 169,
     "export": {
       "status": "written",
+      "mode": "diagnostic_measure",
       "files": [
         {
           "name": "11-Varinha-Madeira_v1r2_BaseColor.png",
@@ -65,6 +66,7 @@
     "revision": 1,
     "export": {
       "status": "written",
+      "mode": "diagnostic_measure",
       "files": [
         {
           "name": "11-Varinha-Madeira_v1r2_BaseColor.png",

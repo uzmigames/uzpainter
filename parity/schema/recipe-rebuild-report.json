@@ -46,7 +46,7 @@
         "missing": { "description": "Written by the original only.", "$ref": "#/$defs/names" },
         "extra": { "description": "Written by the rebuilt project only.", "$ref": "#/$defs/names" },
         "outcome": {
-          "description": "pass: equal digests and identical files; export_refused: equal digests and both exports refused before writing; fail: anything else.",
+          "description": "pass: equal digests and identical files in the same export mode; a diagnostic_measure pass proves rebuild equality only, not a conformant production delivery. export_refused: equal digests and both exports refused before writing; fail: anything else.",
           "enum": ["pass", "export_refused", "fail"]
         }
       }
@@ -72,6 +72,10 @@
               "required": ["status", "files"],
               "properties": {
                 "status": { "const": "written" },
+                "mode": {
+                  "description": "The receipt-checked export mode. diagnostic_measure bypasses decided production refusals and remains non-conformant. Older reports may omit this field; absence is not proof of production conformance.",
+                  "enum": ["production", "diagnostic_measure"]
+                },
                 "files": {
                   "type": "array",
                   "minItems": 1,

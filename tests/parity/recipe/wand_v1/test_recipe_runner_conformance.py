@@ -147,6 +147,7 @@ def test_conformant_pair_is_reported(
     assert rebuilt.files == {
         "T_Wand_BaseColor.png": wand.work / "rebuilt" / "out" / "T_Wand_BaseColor.png"
     }
+    assert original.diagnostic is False and rebuilt.diagnostic is False
 
 
 def test_refused_export_keeps_its_refusal(
@@ -171,6 +172,7 @@ def test_diagnostic_pair_is_reported(
     assert wand.probes == ["dump-original", "rebuild", "dump-rebuilt"]
     ((original, rebuilt),) = sides
     assert original.files is not None and rebuilt.files is not None
+    assert original.diagnostic is True and rebuilt.diagnostic is True
 
 
 def test_diagnostic_run_stops_on_a_conformant_receipt(
