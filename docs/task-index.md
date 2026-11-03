@@ -115,12 +115,13 @@ Every rulebook task with a sub-phase id, open under `.rulebook/tasks/` or archiv
 
 ## Phase 3
 
-42 tasks, levels 1–8.
+43 tasks, levels 1–8.
 
 | Id | DAG node | Parent | Depends on (same phase) | Goal |
 |---|---|---|---|---|
 | `phase3.1_assets3d-cutover` | P3-CUTOVER | — | — | G-01 (`docs/prd.md`) requires the Assets3D governance text "painting is always in Substance Painter" to be amended to the replacement decision once Tunic v10 passes its parity gate; OWN-03 and PRD §18 item 9 tie the … |
 | `phase3.1_baker-request-model` | (P3-BAKER) | `phase3.5_embree-bakers` | — | BAK-03 (native high-poly bake with Painter's settings: highs per set, cage/distance, match by name, subsampling, dilation, backface, units), BAK-05 and NFR-02 (`docs/prd.md`) need one request model and one deterministic … |
+| `phase3.1_export-island-padding` | (P1-EXPORT) | — | — | Decision 396 moves `phase1.25_pilot-wand` item 2.7 here, so that the Wand closes on its Tier 1 pass under EXC-010 (decision 395): exact `infinite` padding and the island-edge virtual Normal on UV-islanded sets, the lift of decisions 245's and 259's refusals and the withdrawal of EXC-010 … |
 | `phase3.1_proc-backend-seam` | (P3-PROC) | `phase3.3_procedural-families` | — | ARC-05 requires a procedural backend seam with per-asset parity status and no silent substitution of a similar asset; RES-04 requires procedural asset versions pinned inside the project; CLR-06 keeps Painter asset names … |
 | `phase3.1_unreal-gltf-pbr-preset` | (P3-UNREAL) | `phase3.3_unreal-gltf-presets` | — | EXP-08 (`docs/prd.md`) lists a Painter-equivalent glTF metallic-roughness preset (SHOULD) validated by a glTF consumer fixture; OWN-06 asks for PBR export like Substance; PRD §18 item 5 requires export presets validated … |
 | `phase3.1_uze-uztexture-writer` | (P3-UZE) | `phase3.4_uzengine-preset` | — | OWN-06 and EXP-08 (`docs/prd.md`) require compressed UzEngine textures (`.uztexture` with BC7/BC5/BC4); EXP-10 requires explicit engine format metadata per map and signed normals kept at authoring precision. |

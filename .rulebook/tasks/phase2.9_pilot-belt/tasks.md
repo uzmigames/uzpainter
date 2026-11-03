@@ -32,7 +32,7 @@
 - Blockers, each with its owner, tracked apart:
   - Lost inputs (owner): restore `_tmp/claude/cintura-v5/` or name a backup. Then run `python -m tools.parity.recorder.script_run manifest --pilot sash --assets-root E:\UzmiGames\Assets3D --out <request> --store` and commit the request. This blocks 2.1, and through it 2.2-2.4, 3.1-3.4 and 4.1.
   - Recording (owner's Painter session): blocks 2.2, 3.1 and 4.1.
-  - `infinite` padding (phase1.25 item 2.7): independent of the inputs. Every pilot export is refused before writing until it lands.
+  - `infinite` padding (phase1.25 item 2.7; owner `phase3.1_export-island-padding` since decision 396): independent of the inputs. Every pilot export is refused before writing until it lands.
   - 1.1: phase1.25 and phase2.8 are not accepted.
   - Owner options that are not chosen here: a re-run of the waist-v5 round as a new golden, which also needs the lost base assembly; or a migration golden from the stored `.spp` (decision 194's route), a separate acceptance route that is not the script-created golden.
 - 2.1 (open): `sash_manifest`, sharing the Belt's builder (`waist_manifest`), is tested on a synthetic mirror (`tests/parity/recorder/test_script_run.py`). Arguments files that name another piece are refused, since the round folder holds one pair for both pieces.
@@ -47,7 +47,7 @@
 - Blockers, each with its owner:
   - Lost inputs (owner). Assets3D `_tmp/claude/cintura-v5/` (the round folder) and `_tmp/astra/paint-swatches/23/` were removed on 2026-10-12. The documented searches reported no copy in the private store, recycle bin, drives checked or Assets3D git; this is not a claim that every possible recovery source was exhausted. Restored original inputs are verified and preserved (2.6-2.8), then the owner runs `python -m tools.parity.recorder.script_run manifest --pilot belt --assets-root E:\UzmiGames\Assets3D --out <request> --store` and commits the request. This blocks input-dependent manifest, recording, rebuild and parity work; items 2.6-2.8 proceed to the inventory checkpoint with the missing inputs recorded.
   - Recording (owner's Painter session): blocks 2.2, 3.1 and 4.1.
-  - `infinite` padding (phase1.25 item 2.7): independent of the inputs. Pilot exports are currently refused before writing; phase1.25 must clear that capability under the existing equality/owner-exception contract before 2.3-2.5, 3.1-3.3 and 4.1 can pass. An exception route remains pending until measured evidence and an owner-approved, versioned register entry cover the affected domain; no tolerance is assumed.
+  - `infinite` padding (phase1.25 item 2.7; owner `phase3.1_export-island-padding` since decision 396): independent of the inputs. Pilot exports are currently refused before writing; phase1.25 must clear that capability under the existing equality/owner-exception contract before 2.3-2.5, 3.1-3.3 and 4.1 can pass. An exception route remains pending until measured evidence and an owner-approved, versioned register entry cover the affected domain; no tolerance is assumed.
   - 1.1: phase1.25 and phase2.8 are not accepted.
 - 2.1 (open): the generator `belt_manifest` is written and tested on a synthetic mirror (`tests/parity/recorder/test_script_run.py`). On the real Assets3D it refuses, listing 21 missing paths: the two arguments files, the 18 masks and `T_belt`.
 - 2.3, 2.4 (open; moved to `tests/parity/tier1/sash_v5` by decision 260): `tests/parity/tier1/belt_v5/runner.py` (the Wand's runner over `phase2/tier1/belt-v5`) and `test_belt_v5.py`. Both skip with the reason until the request exists. The report goes to `parity/reports/phase2/tier1-belt-v5.json`, the guard's `tier<tier>-*.json` name.
@@ -80,7 +80,7 @@
   - Still open: the fixture request and its oracle envelope cannot be preserved until the request exists, and no lost input has been recovered.
 - 2.8 (open): the owner decision package is the last section of the inventory. It links the pending question of decision 300 item 8 instead of asking it again, and it adds what the inventory found to each route. No route is chosen.
 - 2.1 (open, blocked): the generator refuses with 22 missing paths (log `tmp/scratch/belt-pilot/manifest-sash.log`, exit 2). Writing a manifest without them would mean substitutes, so none is written.
-- 2.3 (open, blocked): there is no rebuild without the masks, `T_sash`, mesh, Normal and AO. The runner `tests/parity/tier1/sash_v5/runner.py` is unchanged and still skips with the reason. Pilot exports also stay refused until `infinite` padding lands (phase1.25 item 2.7). No GPU job was run.
+- 2.3 (open, blocked): there is no rebuild without the masks, `T_sash`, mesh, Normal and AO. The runner `tests/parity/tier1/sash_v5/runner.py` is unchanged and still skips with the reason. Pilot exports also stay refused until `infinite` padding lands (phase1.25 item 2.7; owner `phase3.1_export-island-padding` since decision 396). No GPU job was run.
 - 2.5 (open, blocked): `tests/parity/tier1/mcp_round.py` is unchanged. A round report needs the request's inputs, and `parity/reports/phase2/sash-v5-mcp-round.json` is not written.
 - 2.4 (open): the store has no `phase2/tier1/sash-v5*` record. Its only phase2 golden is `tunic-v10`. Nothing was compared.
 - Painter work needed (Codex), in order:

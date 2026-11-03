@@ -1,0 +1,13 @@
+{
+  "id": 396,
+  "slug": "the-wand-closes-under-exc-010-and-moves-exact-island-padding-and-the-island-edge-normal-to-a-phase-3-task",
+  "title": "The Wand closes under EXC-010 and moves exact island padding and the island-edge Normal to a Phase 3 task",
+  "status": "accepted",
+  "date": "2026-11-03",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase3.1_export-island-padding",
+    "phase1.26_gate-g1"
+  ],
+  "supersededBy": null
+}
