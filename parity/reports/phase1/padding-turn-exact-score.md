@@ -7,7 +7,7 @@ The frozen scorer `python -m tools.parity.fit.padding_turn_exact_score` (commit 
 | x90 | `c9a659f8…e3fa` | `fc745152…976b` |
 | oblique | `17905604…e7d4` | `81b54967…e342` |
 
-Both were recorded in one Legacy session, where the envelope check passed. Each is admitted under its own golden id, with 66 private records and store verification passing. The scorer checked the compact predictions (`e1e2617e…82f1`) and the full predictions (`2b6e2f25…88e0`) before reading the store, and validated each capture on the snapshot its probe loaded. Each ring holds 11,070 texels. The full output is kept outside the repository: `tmp/scratch/turn-exact-score.log`, SHA-256 `bb0ee4a1707af95a5c12a9c6492991821f9d7f190995143aec8f5ddb6a2c912e`, counts only. This report gives its aggregates.
+Both were recorded in one Legacy session, where the envelope check passed. Each is admitted under its own golden id, with 66 private records and store verification passing. The scorer checked the compact predictions (`e1e2617e…82f1`) and the full predictions (`2b6e2f25…88e0`) before reading the store, and validated each capture on the snapshot its probe loaded. Each ring holds 11,070 texels. The full output (counts only) is kept in the private oracle work area as `%LOCALAPPDATA%\UzPainter\oracle-work\padding-turn-exact-score.log`, SHA-256 `bb0ee4a1707af95a5c12a9c6492991821f9d7f190995143aec8f5ddb6a2c912e`. This report gives its aggregates.
 
 **Outcome: `none_fits`.** No frozen recipe matches both twins on every primary texel. **Configuration: `dependent`.** Painter's own output bits differ between the two twins on 31 of the 1,722 primary texels, and on 75 of the 1,658 `tau_other` texels.
 
