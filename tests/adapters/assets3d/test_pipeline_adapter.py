@@ -340,6 +340,8 @@ def test_the_shim_writes_the_viewport_under_uzpainter_run(
     monkeypatch.setenv("UZPAINTER_EXE", str(painter))
     monkeypatch.setenv("UZP_ASSETS3D_SESSION", str(tmp_path / "session.json"))
     monkeypatch.setenv("UZP_ASSETS3D_ROOT", str(tmp_path / "assets"))
+    monkeypatch.setenv(client.IMPORT_DIAGNOSTIC_ENV, "1")
+    monkeypatch.delenv(client.PRODUCTION_ENV, raising=False)
     monkeypatch.delenv("UZP_ASSETS3D_OPEN_REDIRECTS", raising=False)
     out = tmp_path / "shots" / "capture.png"
     out.parent.mkdir()
