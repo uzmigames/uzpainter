@@ -80,3 +80,7 @@ The claims:
 ### Negative
 - A project that names no environment renders lit by the CC0 studio, not by Painter's own default, which is unrecorded and unshippable. The receipt and `state()` say so.
 - A `painter_viewport` render now depends on the installed default file when the project names no environment.
+
+## Amendment, 2026-11-03
+
+The generated native table follows decision 202's part-5 amendment. Once that golden is admitted and qualified, `tools/parity/ocio_srgb_table.py` renders 498 entries: the 449 above unchanged, plus the 49 qualified pairs. No native table changes before that.

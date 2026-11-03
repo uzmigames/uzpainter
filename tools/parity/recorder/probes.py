@@ -30,7 +30,9 @@ polled until the step's asynchronous calls answered (`reload_mesh`, `execute_whe
 `reload_modified_resources_async`), then a few more polls; a step with `wait: false` leaves its
 events to the next step's record. Further step arguments the host resolves: `work_file` (a file
 name in the recording's private work directory, the files of which are listed after every save
-step), and on `reload_modified_resources_async`, `rewrite_input` / `with_input` (the staged copy
+step); on `set_source`, `color_from` (a grey whose component is read from a hash-pinned stack
+input, so the manifest holds no colour value; decision 202 part 5); and on
+`reload_modified_resources_async`, `rewrite_input` / `with_input` (the staged copy
 of one input is overwritten with another input's bytes just before the call).
 `with_input_after_reopen` selects a different pinned input for that rewrite in r2, so repeated
 reloads can observe new content rather than a version already imported in r1. An
@@ -45,6 +47,8 @@ from __future__ import annotations
 import argparse
 import ast
 import base64
+import json
+import math
 import shutil
 import sys
 from collections.abc import Callable, Sequence
@@ -55,11 +59,13 @@ from typing import Any
 
 from tools.parity.recorder import vocabulary as ps
 from tools.parity.recorder.job import (
+    ASSETS3D_LICENCE,
     EXPORT,
     ExportStep,
     Step,
     canonical_json,
     export_step,
+    pinned_assets3d_file,
     sha256_bytes,
     sha256_file,
     staged_input_name,
@@ -92,6 +98,7 @@ from tools.parity.recorder.texture import (
     utc_now,
 )
 from tools.parity.schemas import REPO_ROOT, Schema, load_json, validation_errors
+from tools.parity.store.store import locate
 
 PAINTER_PROBES = Path(__file__).with_name("painter_probes.py")
 PROBE_FLAG = "probe"
@@ -173,6 +180,14 @@ PLUGIN_HOOKS = ("start_plugin", "close_plugin", "reload_plugin")
 # Step arguments naming an input by input_id; the recorder passes the staged file's path.
 INPUT_ARGS = {ps.CREATE: "mesh", IMPORT_RESOURCE: "image", RELOAD_MESH: "mesh"}
 
+# `set_source` of a grey sRGB colour whose component the host reads from a `recipe_json` input
+# (a UzmiGames layer stack, `{"layers": [{"base": [r, g, b]}, ...]}`): `[input, layer index,
+# component]`. The component is read as `painter_layer_stack.py` and `python::SyncStack` read
+# it: parsed as a double, the whole `base` divided by 255 when a component exceeds 1 (decision
+# 202 part 5). Painter receives `color: [x, x, x]`; the manifest and the record keep the reference.
+COLOR_FROM = "color_from"
+RECIPE_JSON = "recipe_json"
+
 # A file name in the recording's private work directory (saves, a missing mesh to reload).
 WORK_FILE = "work_file"
 SAVE_CALLS = frozenset({PROJECT_SAVE_AS, PROJECT_SAVE_AS_COPY, PROJECT_SAVE})
@@ -226,6 +241,8 @@ class ProbeStep:
     args: dict[str, Any]
     probe: bool
     wait: bool = True
+    # The component a `color_from` step sets, read from its pinned input when the job loads.
+    color_from_value: float | None = None
 
     @property
     def output_id(self) -> str:
@@ -272,10 +289,18 @@ class ProbeJob:
         return {k: v for k, v in self.create.args.items() if k != "mesh"}
 
 
-def checked_inputs(manifest: dict[str, Any], repo_root: Path) -> dict[str, Path]:
+def checked_inputs(
+    manifest: dict[str, Any], repo_root: Path, assets_root: Path | None = None
+) -> dict[str, Path]:
+    """Repository inputs, hash-checked; with `assets_root`, Assets3D inputs too
+    (`pinned_assets3d_file`: the file under the root, else the private store's blob)."""
     inputs: dict[str, Path] = {}
     for item in manifest["inputs"]:
         if "path" not in item:
+            if assets_root is not None and "assets3d_path" in item:
+                if item["provenance"]["licence"] != ASSETS3D_LICENCE:
+                    raise RecorderError(f"input {item['input_id']}: not an Assets3D input")
+                inputs[item["input_id"]] = pinned_assets3d_file(item, assets_root, locate())
             continue
         file = repo_root / item["path"]
         if not file.is_file():
@@ -414,6 +439,84 @@ def check_input_arg(step: Step, inputs: dict[str, Path]) -> None:
         raise RecorderError(f"step {step.step}: `{key}` must name an input with a path")
 
 
+def pinned_document(path: Path, sha256: str) -> Any:
+    """The JSON of a file read once, refused unless those bytes hash to `sha256`."""
+    data = path.read_bytes()
+    if sha256_bytes(data) != sha256:
+        raise RecorderError(f"{path.name}: sha256 {sha256_bytes(data)} differs from the pin")
+    return json.loads(data)
+
+
+def color_from_component(reference: Any, kinds: dict[str, str], documents: dict[str, Any]) -> float:
+    """The component a `color_from` reference names (`COLOR_FROM`), read from the parsed
+    document of its input (`pinned_document`)."""
+    if (
+        not isinstance(reference, list)
+        or len(reference) != 3
+        or not isinstance(reference[0], str)
+        or kinds.get(reference[0]) != RECIPE_JSON
+        or type(reference[1]) is not int
+        or reference[1] < 0
+        or type(reference[2]) is not int
+        or reference[2] not in (0, 1, 2)
+    ):
+        raise RecorderError(
+            f"`{COLOR_FROM}` is [input, layer, component]: a {RECIPE_JSON} input, a layer "
+            "index and a component 0-2"
+        )
+    input_id, index, component = reference
+    if input_id not in documents:
+        raise RecorderError(
+            f"`{COLOR_FROM}`: the input {input_id} is not resolved (an Assets3D input needs "
+            "--assets-root)"
+        )
+    document = documents[input_id]
+    layers = document.get("layers") if isinstance(document, dict) else None
+    if not isinstance(layers, list) or index >= len(layers):
+        raise RecorderError(f"`{COLOR_FROM}`: the stack has no layer {index}")
+    layer = layers[index]
+    base = layer.get("base") if isinstance(layer, dict) else None
+    if (
+        not isinstance(layer, dict)
+        or "base_tex" in layer
+        or not isinstance(base, list)
+        or len(base) != 3
+        or not all(type(c) in (int, float) for c in base)
+    ):
+        raise RecorderError(f"`{COLOR_FROM}`: layer {index} has no uniform base [r, g, b]")
+    rgb = [float(c) for c in base]
+    if not all(math.isfinite(c) for c in rgb):
+        raise RecorderError(f"`{COLOR_FROM}`: layer {index} has a non-finite base")
+    if max(rgb) > 1.0:  # "base" given as 0-255 (painter_layer_stack.py, python::SyncStack)
+        rgb = [c / 255.0 for c in rgb]
+    if not all(0.0 <= c <= 1.0 for c in rgb):
+        raise RecorderError(f"`{COLOR_FROM}`: layer {index} has a base outside [0, 1] or 0-255")
+    return rgb[component]
+
+
+def check_color_from(step: Step, manifest: dict[str, Any], inputs: dict[str, Path]) -> float | None:
+    """The component a `color_from` step sets (None without one): a `set_source` of a grey in
+    sRGB on BaseColor only, read from its input's bytes checked against the pin."""
+    if COLOR_FROM not in step.args:
+        return None
+    expected = {"node_step", "channel", COLOR_FROM, "color_space"}
+    if step.call != ps.SET_SOURCE or set(step.args) != expected:
+        raise RecorderError(
+            f"step {step.step}: `{COLOR_FROM}` is a set_source of node_step, channel, "
+            f"{COLOR_FROM} and color_space only"
+        )
+    if step.args["color_space"] != "sRGB" or step.args["channel"] != "BaseColor":
+        raise RecorderError(f"step {step.step}: `{COLOR_FROM}` sets an sRGB BaseColor")
+    kinds = {i["input_id"]: i["kind"] for i in manifest["inputs"]}
+    pins = {i["input_id"]: i["sha256"] for i in manifest["inputs"]}
+    reference = step.args[COLOR_FROM]
+    documents: dict[str, Any] = {}
+    named = reference[0] if isinstance(reference, list) and reference else None
+    if isinstance(named, str) and named in inputs and kinds.get(named) == RECIPE_JSON:
+        documents[named] = pinned_document(inputs[named], pins[named])
+    return color_from_component(reference, kinds, documents)
+
+
 def check_plugin_args(step: Step) -> None:
     """A plugin root is a plain folder name; a plugin call names a probe module (decision 297)."""
     folder = step.args.get(PLUGIN_FOLDER)
@@ -460,8 +563,10 @@ def check_connect(step: Step, probe: bool) -> None:
         raise RecorderError(f"step {step.step}: `events` must list the event class names")
 
 
-def probe_job_from_manifest(manifest: dict[str, Any], repo_root: Path = REPO_ROOT) -> ProbeJob:
-    inputs = checked_inputs(manifest, repo_root)
+def probe_job_from_manifest(
+    manifest: dict[str, Any], repo_root: Path = REPO_ROOT, assets_root: Path | None = None
+) -> ProbeJob:
+    inputs = checked_inputs(manifest, repo_root, assets_root)
     steps = [
         Step(s["step"], s["call"], dict(s.get("args", {})))
         for s in manifest["instruction_sequence"]["steps"]
@@ -554,12 +659,15 @@ def probe_job_from_manifest(manifest: dict[str, Any], repo_root: Path = REPO_ROO
         if step.call == EVENT_CONNECT:
             check_connect(step, flag)
         check_input_arg(step, inputs)
+        color = check_color_from(step, manifest, inputs)
         probe = flag or is_read(step.call, step.args)
         if probe and step.call == IMPORT_RESOURCE:
             raise RecorderError(f"step {step.step}: an import cannot be a probe step")
         if not probe and probes:
             raise RecorderError(f"step {step.step}: state steps must precede the probe steps")
-        (probes if probe else state).append(ProbeStep(step.step, step.call, step.args, probe, wait))
+        (probes if probe else state).append(
+            ProbeStep(step.step, step.call, step.args, probe, wait, color)
+        )
     if not probes:
         raise RecorderError("a probe golden needs at least one probe step")
     return ProbeJob(
@@ -574,12 +682,14 @@ def probe_job_from_manifest(manifest: dict[str, Any], repo_root: Path = REPO_ROO
     )
 
 
-def load_probe_job(path: Path, repo_root: Path = REPO_ROOT) -> ProbeJob:
+def load_probe_job(
+    path: Path, repo_root: Path = REPO_ROOT, assets_root: Path | None = None
+) -> ProbeJob:
     manifest = load_json(path)
     problems = validation_errors(manifest, Schema.GOLDEN_PUBLIC)
     if problems:
         raise RecorderError(f"{path}: not a valid public manifest: {problems}")
-    return probe_job_from_manifest(manifest, repo_root)
+    return probe_job_from_manifest(manifest, repo_root, assets_root)
 
 
 def manifest_symbol_problems(manifest: dict[str, Any]) -> list[str]:
@@ -699,8 +809,12 @@ def run_step(
     if step.call == RELOAD_RESOURCES and REWRITE_ARGS[0] in step.args:
         target, source = (step.args[name] for name in REWRITE_ARGS)
         shutil.copyfile(staged[source], staged[target])
+    args = step.args
+    if step.color_from_value is not None:  # Painter receives the grey; the record, the reference
+        x = step.color_from_value
+        args = {k: v for k, v in args.items() if k != COLOR_FROM} | {"color": [x, x, x]}
     outcome: dict[str, Any] = session.call(
-        "probe_step", step=step.step, call=step.call, args=step.args, resolved=resolved
+        "probe_step", step=step.step, call=step.call, args=args, resolved=resolved
     )
     return outcome
 
@@ -1298,9 +1412,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     record.add_argument("manifest", type=Path)
     record.add_argument("--host", default=REMOTE_HOST)
     record.add_argument("--port", type=int, default=REMOTE_PORT)
+    record.add_argument("--assets-root", type=Path, help="the Assets3D root (Assets3D inputs)")
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
     try:
-        job = load_probe_job(args.manifest)
+        job = load_probe_job(args.manifest, assets_root=args.assets_root)
         session = ProbeSession(HttpTransport(args.host, args.port))
         run = record_probe_golden(session, job, work_root(), inbox_root())
     except UnseenBuild as error:

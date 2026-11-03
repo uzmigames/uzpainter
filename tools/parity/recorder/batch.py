@@ -319,7 +319,7 @@ def command(item: Item, path: str, admit_root: str) -> list[str]:
     assets = ["--assets-root", ASSETS] if has_assets3d_inputs(item.request.manifest) else []
     commands: dict[str, list[str]] = {
         TEXTURE: [*recorder, "record", path, *assets],
-        PROBE: ["python", "-m", "tools.parity.recorder.probes", "record", path],
+        PROBE: ["python", "-m", "tools.parity.recorder.probes", "record", path, *assets],
         DEFAULTS: [*recorder, "record-defaults", path],
         TEMPLATES: [*recorder, "record-templates", path],
         SCRIPT: [*recorder, "record-script", path, "--assets-root", ASSETS],
@@ -390,7 +390,7 @@ def job_problems(
     checks: dict[str, Callable[[], object]] = {
         # Without a root, an Assets3D pin found only in the store resolves through the store.
         TEXTURE: lambda: job_from_manifest(manifest, root, assets_root or root),
-        PROBE: lambda: probe_job_from_manifest(manifest, root),
+        PROBE: lambda: probe_job_from_manifest(manifest, root, assets_root or root),
         DEFAULTS: lambda: check_baking_job(job_from_manifest(manifest, root)),
         TEMPLATES: lambda: template_check(job_from_manifest(manifest, root)),
         SCRIPT: lambda: pipeline_job_from_manifest(manifest, assets_root or root, store, root),
