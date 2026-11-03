@@ -39,8 +39,18 @@ stays the owner's yes (decision 300 item 8). It binds what the input contract
      arrays they output, and the 19 stack masks plus the auxiliary `M_cloth` (never an input);
    - the AO mesh map's record (`AO_MAP_SCHEMA`, front V's producer): P's `ao.npy` in, the PNG
      out;
-   - `T_sash` needs a separate colour record and both swatches; its producer has no contract
-     yet, so it stays refused.
+   - front W's colour record (`sash_colour.py`, `COLOUR_SCHEMA`), the independent repeat's
+     (`reproduced`, byte-identical): the helper, the same three source blobs, runtime,
+     orientation and padding as T's masks record, the 8-bit RGB form at the pinned resolution
+     and the `cloth`, then `hem` reads; P's three receipts and T's masks record, the very
+     records the masks role cites, with the same arrays, masks and texels; `T_sash` as the one
+     output; and both swatches, each with its provenance record (`SWATCH_SCHEMA`), each file it
+     verified and staged, by hash;
+   - each swatch's provenance record: its image (hash, size and PNG form) and its source, an
+     `original` (its path, the pinned `v5.json` by that file's own SHA-256, and the image that
+     manifest lists) or a `generated` substitute (generator, model, route, declaration, the
+     prompt's hash and every visual reference by plain name, hash and size; never an original's
+     bytes). The two swatches differ.
    Every bitmap is a complete, decodable PNG (`png_layout`: chunk CRCs, IHDR, one IDAT run,
    IEND, inflated size and row filters) at its native depth: the masks and the AO 16-bit grey,
    `T_sash` 8-bit RGB, each at the pinned resolution; a swatch 8-bit RGB or RGBA. Every
@@ -56,6 +66,7 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import math
 import re
 import struct
 import subprocess
@@ -63,7 +74,7 @@ import sys
 import zlib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 from tools.parity.recorder.job import sha256_bytes, sha256_file
@@ -192,6 +203,20 @@ BITMAPS = (
 )
 COLOUR = "T_sash"
 SWATCHES = ("sash-cloth-BaseColor-v1.png", "hem-leather-BaseColor-v1.png")
+SWATCH_NAMES = ("cloth", "hem")  # the donor's reads, in its order; SWATCHES holds their files
+PIECE_FOLDER = "Creatures/Undead/Skeletal Mage/Models3D/25-Faixa-Cintura"
+SWATCH_PATHS = {  # sash_colour.SWATCH_PATHS: the donor's SW entries
+    name: f"{PIECE_FOLDER}/Textures/Swatches/{file}"
+    for name, file in zip(SWATCH_NAMES, SWATCHES, strict=True)
+}
+# The pinned v5.json (raw blob at `SNAPSHOT`, sash_colour.MANIFEST) by its own SHA-256, and the
+# lost originals' SHA-256 as it lists them, in `SWATCH_NAMES` order (sash_colour.ORIGINALS).
+V5_JSON = f"{PIECE_FOLDER}/manifests/v5.json"
+V5_JSON_SHA256 = "c5566c38a6a1ff64318d375d1819717d4bd96a6f7e00b1b5fc13d905f6800c88"
+ORIGINALS = (
+    "5ab8cdf3edefbac2f35613bae9b2fbe49fea2754da2c1e8ca8bf5fa32bd518a9",
+    "546bba43d7291d29a70ac2bf26f234f62802feeb8be47d8f1c99a6719a80c5b7",
+)
 
 # The preserved `.blend` front N's low and front P's intermediates are both made from.
 LOW_SOURCE_SHA256 = "4c770d1dcf1fd4296386155e1ae12d60126a3d9de1fcfeaadf82636353624a3b"
@@ -221,7 +246,7 @@ AUXILIARY_MASKS = ("M_cloth",)  # written by the masks producer, not a stack inp
 
 # The private inputs file: role -> {"sha256", "file"?}. The substitutes' receipts are fixed by
 # role: the low's is N's export record, each stack mask's the masks producer's repeat record,
-# T_sash's the colour record, the AO's the AO map's.
+# T_sash's the colour record and each swatch's its provenance record, the AO's the AO map's.
 INPUTS_SCHEMA = "uzpainter/parity/sash-v5-current-inputs/1"
 ENTRY_KEYS = frozenset({"sha256", "file"})
 LOW_RECORD = "low-record"  # front N: sash_low_export's export-record.json
@@ -230,7 +255,8 @@ AO_RECORD = "ao-record"  # front P: sash_intermediates ao (ao.npy)
 CENTRE_RECORD = "centre-record"  # front P: sash_intermediates centre
 MASKS_RECORD = "masks-record"  # front T: sash_masks, the independent repeat's record
 AO_MAP_RECORD = "ao-map-record"  # the AO mesh map PNG made from ao.npy
-COLOUR_RECORD = "colour-record"  # T_sash's producer, which has no contract yet
+COLOUR_RECORD = "colour-record"  # front W: sash_colour, the independent repeat's record
+SWATCH_RECORDS = {name: f"swatch-{name}-record" for name in SWATCH_NAMES}  # one provenance each
 RECEIPTS = (LOW_RECORD, EXTRACT_RECORD, AO_RECORD, CENTRE_RECORD, MASKS_RECORD, AO_MAP_RECORD)
 LOW_SCHEMA = "uzpainter/parity/sash-low-export-record/1"  # sash_low_export.RECORD_SCHEMA
 LOW_EXPORTER = "uzpainter/parity/sash-low-export/1"
@@ -243,7 +269,67 @@ AO_MAP_SCHEMA = "uzpainter/parity/sash-ao-map-record/1"  # front V: sash_ao_map.
 # The donor whose one line converts ao.npy into the AO mesh map (raw blob at `SNAPSHOT`).
 AO_DONOR = f"{WAIST}/sashchain.sh"
 AO_DONOR_SHA256 = "70ee17308d9754e5df3c1728f26549d9e6ec64a6df9f14981ef1acef2dade65e"
+# Front W's colour producer (`tools/parity/tier1/sash_colour.py`): its record and swatch schemas,
+# its helper and the modules it checks with, as its record names them.
+COLOUR_SCHEMA = "uzpainter/parity/sash-colour-record/1"  # sash_colour.RECORD_SCHEMA
+SWATCH_SCHEMA = "uzpainter/parity/sash-swatch-provenance/1"  # sash_colour.SWATCH_SCHEMA
+SWATCH_RECORD_NAME = "swatch-provenance.json"  # sash_colour.SWATCH_RECORD_NAME
+COLOUR_HELPER = "tools/parity/tier1/sash_colour.py"
+COLOUR_CHECKS_WITH = (
+    "tools/parity/tier1/sash_masks.py",
+    "tools/parity/tier1/sash_intermediates.py",
+    "tools/parity/tier1/sash_intermediates_blender.py",
+    "tools/parity/feasibility/png.py",
+)
+COLOUR_KEYS = frozenset(
+    {"resolution", "orientation", "padding", "quantisation", "png", "swatch_reads"}
+)  # the colour record's `parameters`
+COLOUR_RECEIPTS = ("extraction", "ao", "centre")  # P's, as T's masks record cites them
+SWATCH_KEYS = frozenset({"schema", "kind", "swatch", "file", "image", "source", "classification"})
+IMAGE_KEYS = frozenset({"sha256", "size_bytes", "width", "height", "bit_depth", "colour_type"})
+SOURCE_KEYS = {
+    "original": frozenset({"type", "assets3d_path", "v5_json_sha256"}),
+    "generated": frozenset(
+        {
+            "type",
+            "generator",
+            "model",
+            "route",
+            "prompt_file",
+            "prompt_sha256",
+            "references",
+            "authorization_declaration",
+        }
+    ),
+}
+REFERENCE_KEYS = frozenset({"role", "file", "sha256", "size_bytes"})
+CLASSIFICATIONS = {"original": "original", "generated": "current-round substitute"}
+# sash_colour.QUANTISATION: how the donor's `save_rgb` writes T_sash.
+QUANTISATION = "uint8(clip(rgb, 0, 1) * 255 + 0.5), Pillow RGB PNG (the donor's save_rgb)"
+# The colour record's `masks` result once every mask equalled front T's (sash_colour.produce).
+MASKS_COMPARED = "identical to front T's masks record (bytes, size and mean); none written"
+PLACEHOLDER_TEXT = frozenset(  # sash_colour.PLACEHOLDER_TEXT
+    {
+        "",
+        "-",
+        "?",
+        "todo",
+        "tbd",
+        "placeholder",
+        "unknown",
+        "none",
+        "null",
+        "n/a",
+        "na",
+        "fake",
+        "dummy",
+        "test",
+        "stand-in",
+        "pending",
+    }
+)
 SHA256 = re.compile(r"[0-9a-f]{64}")
+EMPTY_SHA256 = sha256_bytes(b"")
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 CHANNELS = {0: 1, 2: 3, 4: 2, 6: 4}  # PNG colour type -> channels
 GREY, RGB, RGBA = 0, 2, 6
@@ -265,6 +351,8 @@ class Pins:
     ao_donor: str = AO_DONOR_SHA256
     auxiliary: tuple[str, ...] = AUXILIARY_MASKS
     resolution: int = 2048
+    v5_json: str = V5_JSON_SHA256
+    originals: tuple[str, ...] = ORIGINALS  # in `SWATCH_NAMES` order
 
 
 PINS = Pins()
@@ -292,8 +380,9 @@ def substitute_roles(pins: Pins) -> tuple[str, ...]:
 
 
 def receipt_roles(pins: Pins) -> tuple[str, ...]:
-    """The receipts; `T_sash` brings its colour record."""
-    return (*RECEIPTS, *((COLOUR_RECORD,) if COLOUR in pins.bitmaps else ()))
+    """The receipts; `T_sash` brings its colour record and a provenance record per swatch."""
+    colour = (COLOUR_RECORD, *SWATCH_RECORDS.values()) if COLOUR in pins.bitmaps else ()
+    return (*RECEIPTS, *colour)
 
 
 def load_inputs(path: Path) -> dict[str, dict[str, Any]]:
@@ -648,16 +737,303 @@ def check_ao_map(record: Any, ao_sha256: str, found: Found, pins: Pins) -> None:
     expect(record, role, ("outputs", name, "colour_type"), GREY)
 
 
+class NonFinite(ValueError):
+    """A record holds NaN or an infinity, which no producer writes (`allow_nan=False`)."""
+
+
+def no_constant(name: str) -> Any:
+    raise NonFinite(f"it holds {name}")
+
+
+def finite_float(text: str) -> float:
+    value = float(text)
+    if not math.isfinite(value):
+        raise NonFinite(f"it holds {text}, which is not finite")
+    return value
+
+
+def text_at(record: Any, role: str, path: Sequence[str]) -> str:
+    """Text that says something: no placeholder (`PLACEHOLDER_TEXT`) and not blank."""
+    found = value_at(record, role, path)
+    if not isinstance(found, str) or found.strip().lower() in PLACEHOLDER_TEXT:
+        raise RecorderError(f"`{role}` `{'.'.join(path)}` is {found!r}: a placeholder or no text")
+    return found
+
+
+def digest_at(record: Any, role: str, path: Sequence[str]) -> str:
+    """The SHA-256 of some bytes, never of none."""
+    found = sha_at(record, role, path)
+    if found == EMPTY_SHA256:
+        raise RecorderError(f"`{role}` `{'.'.join(path)}` is the SHA-256 of no bytes")
+    return found
+
+
+def keys_at(record: Any, role: str, path: Sequence[str], keys: frozenset[str]) -> dict[str, Any]:
+    """An object of exactly `keys`."""
+    found = value_at(record, role, path)
+    if not isinstance(found, dict) or set(found) != keys:
+        held = sorted(found) if isinstance(found, dict) else type(found).__name__
+        where = ".".join(path) or "record"
+        raise RecorderError(f"`{role}` `{where}` holds {held}, not {sorted(keys)}")
+    return found
+
+
+def name_at(record: Any, role: str, path: Sequence[str]) -> str:
+    """A file named by its plain name, next to the record that names it."""
+    found = text_at(record, role, path)
+    if found in (".", "..") or PureWindowsPath(found).name != found:
+        raise RecorderError(f"`{role}` `{'.'.join(path)}` is {found!r}, not a plain file name")
+    return found
+
+
+def swatch_image(role: str, item: Found) -> dict[str, Any]:
+    """A swatch image as its records describe it: its bytes, size and PNG form."""
+    data = item.read()
+    layout = png_layout(role, data)
+    return {
+        "sha256": item.sha256,
+        "size_bytes": len(data),
+        "width": layout.width,
+        "height": layout.height,
+        "bit_depth": layout.depth,
+        "colour_type": layout.colour,
+    }
+
+
+def check_swatch(record: Any, name: str, image: Found, pins: Pins) -> None:
+    """A swatch provenance record (`SWATCH_SCHEMA`, as front W's `load_swatch` accepts it): the
+    swatch's file and its image, by hash, size and PNG form; its source, either the `original`
+    the pinned `v5.json` (named by its own SHA-256) lists, or a `generated` substitute with its
+    generator, model, route and declaration as text, its prompt's hash and every visual
+    reference by plain name, hash and size (an empty list only when it used none)."""
+    role = SWATCH_RECORDS[name]
+    file = SWATCHES[SWATCH_NAMES.index(name)]
+    keys_at(record, role, (), SWATCH_KEYS)
+    for key, value in (("schema", SWATCH_SCHEMA), ("kind", "swatch"), ("swatch", name)):
+        expect(record, role, (key,), value)
+    expect(record, role, ("file",), file)
+    keys_at(record, role, ("image",), IMAGE_KEYS)
+    expect(record, role, ("image",), swatch_image(file, image))
+    source = value_at(record, role, ("source",))
+    kind = source.get("type") if isinstance(source, dict) else None
+    if not isinstance(kind, str) or kind not in SOURCE_KEYS:
+        raise RecorderError(f"`{role}` `source.type` is {kind!r}, not one of {sorted(SOURCE_KEYS)}")
+    keys_at(record, role, ("source",), SOURCE_KEYS[kind])
+    expect(record, role, ("classification",), CLASSIFICATIONS[kind])
+    originals = dict(zip(SWATCH_NAMES, pins.originals, strict=True))
+    if kind == "original":
+        expect(record, role, ("source", "assets3d_path"), SWATCH_PATHS[name])
+        expect(record, role, ("source", "v5_json_sha256"), pins.v5_json)
+        expect(record, role, ("image", "sha256"), originals[name])
+        return
+    for key in ("generator", "model", "route", "authorization_declaration"):
+        text_at(record, role, ("source", key))
+    prompt = name_at(record, role, ("source", "prompt_file"))
+    taken = {SWATCH_RECORD_NAME, file, prompt}
+    if len(taken) != 3:
+        raise RecorderError(f"`{role}` `source.prompt_file` {prompt!r} names the record or image")
+    digest_at(record, role, ("source", "prompt_sha256"))
+    references = value_at(record, role, ("source", "references"))
+    if not isinstance(references, list):
+        raise RecorderError(f"`{role}` `source.references` is no list (empty only if none used)")
+    for k, reference in enumerate(references):
+        where = f"{role} reference {k}"
+        keys_at(reference, where, (), REFERENCE_KEYS)
+        text_at(reference, where, ("role",))
+        named = name_at(reference, where, ("file",))
+        if named in taken:
+            raise RecorderError(f"`{where}` `file` {named!r} is already named by the record")
+        taken.add(named)
+        digest_at(reference, where, ("sha256",))
+        size = reference["size_bytes"]
+        if not isinstance(size, int) or isinstance(size, bool) or size <= 0:
+            raise RecorderError(f"`{where}` `size_bytes` is {size!r}, not a size")
+    if image.sha256 in originals.values():
+        raise RecorderError(f"`{role}` is generated, but its image has an original's bytes")
+
+
+def check_colour(
+    record: Any,
+    files: Mapping[str, Mapping[str, str]],
+    records: Mapping[str, Any],
+    found: Mapping[str, Found],
+    pins: Pins,
+) -> None:
+    """Front W's colour record (`sash_colour.py`), the independent repeat's: it reproduced its
+    first run byte for byte; its helper; the donor T's masks record ran (the same source blobs,
+    runtime, orientation and padding), past the colour boundary, at the pinned resolution, 8-bit
+    RGB, reading `cloth`, then `hem`; P's three receipts and T's masks record, the very records
+    the masks role cites, with their arrays, masks and texels; each swatch's provenance record
+    and image; every file it verified and staged, unchanged by the run; and `T_sash` as its one
+    output, exactly the inputs file's bytes. (Its `host` and `split` are its own repeat's.)"""
+    role = COLOUR_RECORD
+    masks = records[MASKS_RECORD]
+    swatches = {name: records[SWATCH_RECORDS[name]] for name in SWATCH_NAMES}
+    for key, value in (("schema", COLOUR_SCHEMA), ("kind", "colour"), ("piece", "sash")):
+        expect(record, role, (key,), value)
+    expect(record, role, ("status",), "reproduced")
+    expect(record, role, ("repeat", "result"), "byte-identical")
+    expect(record, role, ("repeat", "problems"), [])
+    sha_at(record, role, ("repeat", "of_record_sha256"))
+
+    expect(record, role, ("helper", "path"), COLOUR_HELPER)
+    sha_at(record, role, ("helper", "sha256"))
+    checks = value_at(record, role, ("helper", "checks_with"))
+    if not isinstance(checks, list) or len(checks) != len(COLOUR_CHECKS_WITH):
+        raise RecorderError(f"`{role}` `helper.checks_with` must be {list(COLOUR_CHECKS_WITH)}")
+    for check, path in zip(checks, COLOUR_CHECKS_WITH, strict=True):
+        keys_at(check, f"{role} checks_with", (), frozenset({"path", "sha256"}))
+        expect(check, f"{role} checks_with", ("path",), path)
+        sha_at(check, f"{role} checks_with", ("sha256",))
+    expect(record, role, ("sources",), masks["sources"])  # checked against the pins already
+    expect(record, role, ("manifest", "assets3d_path"), V5_JSON)
+    expect(record, role, ("manifest", "commit"), pins.snapshot)
+    expect(record, role, ("manifest", "sha256"), pins.v5_json)
+    lists = dict(zip(SWATCH_NAMES, pins.originals, strict=True))
+    expect(record, role, ("manifest", "lists"), lists)
+    expect(record, role, ("runtime",), value_at(masks, MASKS_RECORD, ("runtime",)))
+    keys_at(record, role, ("parameters",), COLOUR_KEYS)
+    expect(record, role, ("parameters", "resolution"), pins.resolution)
+    for key in ("orientation", "padding"):
+        expect(
+            record, role, ("parameters", key), value_at(masks, MASKS_RECORD, ("parameters", key))
+        )
+    expect(record, role, ("parameters", "quantisation"), QUANTISATION)
+    expect(record, role, ("parameters", "png"), {"bit_depth": 8, "colour_type": RGB})
+    expect(record, role, ("parameters", "swatch_reads"), list(SWATCH_NAMES))
+
+    cited: dict[str, dict[str, Any]] = {
+        name: {k: v for k, v in masks["receipts"][name].items() if k != "path"}
+        for name in COLOUR_RECEIPTS
+    }
+    cited["masks"] = {
+        "sha256": files[MASKS_RECORD]["sha256"],
+        "schema": MASKS_SCHEMA,
+        "kind": "masks",
+        "status": "reproduced",
+        "of_record_sha256": masks["repeat"]["of_record_sha256"],
+    }
+    for name, swatch in swatches.items():
+        cited[f"swatch-{name}"] = {
+            "sha256": files[SWATCH_RECORDS[name]]["sha256"],
+            "schema": SWATCH_SCHEMA,
+            "kind": "swatch",
+            "swatch": name,
+            "classification": swatch["classification"],
+            "image_sha256": swatch["image"]["sha256"],
+        }
+    keys_at(record, role, ("receipts",), frozenset(cited))
+    for name, receipt in cited.items():
+        keys_at(record, role, ("receipts", name), frozenset({*receipt, "path"}))
+        for key, value in receipt.items():
+            expect(record, role, ("receipts", name, key), value)
+    link = {"extraction_record_sha256": files[EXTRACT_RECORD]["sha256"]}
+    expect(record, role, ("extraction_link",), link | {"cited_by": ["ao", "centre", "masks"]})
+    expect(record, role, ("arrays",), masks["arrays"])
+    entries = {
+        name: {
+            "file": swatch["file"],
+            "assets3d_path": SWATCH_PATHS[name],
+            "classification": swatch["classification"],
+            "source": swatch["source"],
+            **swatch["image"],
+        }
+        for name, swatch in swatches.items()
+    }
+    expect(record, role, ("swatches",), entries)
+
+    verified = {
+        name: files[receipt]["sha256"]
+        for name, receipt in (
+            ("extraction", EXTRACT_RECORD),
+            ("ao", AO_RECORD),
+            ("centre", CENTRE_RECORD),
+            ("masks", MASKS_RECORD),
+        )
+    }
+    staged = {name: masks["arrays"][name]["sha256"] for name in MASK_ARRAYS}
+    for name, swatch in swatches.items():
+        verified[f"swatch-{name}"] = files[SWATCH_RECORDS[name]]["sha256"]
+        verified[f"image-{name}"] = swatch["image"]["sha256"]
+        staged[swatch["file"]] = swatch["image"]["sha256"]
+        source = swatch["source"]
+        if source["type"] == "generated":
+            verified[f"prompt-{name}"] = source["prompt_sha256"]
+            for reference in source["references"]:
+                verified[f"reference-{name}-{reference['file']}"] = reference["sha256"]
+    both = {"verified": verified, "staged": staged}
+    expect(record, role, ("inputs",), {"before": both, "after": both})
+    compared = [output["name"] for output in masks["outputs"]]
+    keys_at(record, role, ("masks",), frozenset({"compared", "result", "record_sha256"}))
+    expect(record, role, ("masks", "compared"), compared)
+    expect(record, role, ("masks", "result"), MASKS_COMPARED)
+    expect(record, role, ("masks", "record_sha256"), files[MASKS_RECORD]["sha256"])
+    expect(record, role, ("texels",), value_at(masks, MASKS_RECORD, ("texels",)))
+
+    outputs = value_at(record, role, ("outputs",))
+    if not isinstance(outputs, list) or len(outputs) != 1:
+        raise RecorderError(f"`{role}` `outputs` must be {COLOUR} only")
+    where = f"{role} {COLOUR}"
+    output = keys_at(
+        outputs[0],
+        where,
+        (),
+        frozenset(
+            {
+                "name",
+                "file",
+                "role",
+                "sha256",
+                "size_bytes",
+                "shape",
+                "depth",
+                "colour_type",
+                "median_srgb",
+            }
+        ),
+    )
+    wanted: tuple[tuple[str, Any], ...] = (
+        ("name", COLOUR),
+        ("file", f"{COLOUR}.png"),
+        ("role", "base-colour"),
+        ("sha256", found[COLOUR].sha256),
+        ("size_bytes", len(found[COLOUR].read())),
+        ("shape", [pins.resolution, pins.resolution]),
+        ("depth", 8),
+        ("colour_type", RGB),
+    )
+    for key, value in wanted:
+        expect(output, where, (key,), value)
+    median = output["median_srgb"]
+    if (
+        not isinstance(median, list)
+        or len(median) != 3
+        or not all(
+            isinstance(x, int | float) and not isinstance(x, bool) and 0 <= x <= 1 for x in median
+        )
+    ):
+        raise RecorderError(
+            f"`{where}` `median_srgb` is {median!r}, not three sRGB values in [0, 1]"
+        )
+    expect(record, role, ("substitute", "classification"), "current-round substitute")
+    classified = {name: swatch["classification"] for name, swatch in swatches.items()}
+    expect(record, role, ("substitute", "swatches"), classified)
+
+
 def check_receipts(
     files: Mapping[str, Mapping[str, str]], found: Mapping[str, Found], pins: Pins
 ) -> dict[str, Any]:
-    """Every receipt read and its typed links checked; returns the records by role. `T_sash`'s
-    colour record is refused: its producer has no contract yet (it needs authorized swatches)."""
+    """Every receipt read and its typed links checked; returns the records by role. With `T_sash`,
+    each swatch's provenance record, then the colour record, which must cite them."""
     records: dict[str, Any] = {}
     for role in receipt_roles(pins):
         try:
-            records[role] = json.loads(found[role].read().decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            records[role] = json.loads(
+                found[role].read().decode("utf-8"),
+                parse_constant=no_constant,
+                parse_float=finite_float,
+            )
+        except (UnicodeDecodeError, json.JSONDecodeError, NonFinite) as error:
             raise RecorderError(f"`{role}` is not a JSON record ({error})") from error
     extract_sha256 = files[EXTRACT_RECORD]["sha256"]
     check_low(records[LOW_RECORD], pins)
@@ -666,11 +1042,12 @@ def check_receipts(
     check_centre(records[CENTRE_RECORD], extract_sha256)
     check_masks(records[MASKS_RECORD], files, records, found, pins)
     check_ao_map(records[AO_MAP_RECORD], produced_arrays(records)["ao.npy"], found["ao"], pins)
-    if COLOUR_RECORD in records:
-        raise RecorderError(
-            f"`{COLOUR_RECORD}`: {COLOUR} has no colour producer contract yet (it needs "
-            "authorized substitute swatches), so no colour record can vouch for it"
-        )
+    if COLOUR in pins.bitmaps:
+        for name, file in zip(SWATCH_NAMES, SWATCHES, strict=True):
+            check_swatch(records[SWATCH_RECORDS[name]], name, found[file], pins)
+        if found[SWATCHES[0]].sha256 == found[SWATCHES[1]].sha256:
+            raise RecorderError("the cloth and hem swatches are the same image")
+        check_colour(records[COLOUR_RECORD], files, records, found, pins)
     return records
 
 
@@ -936,11 +1313,20 @@ def request_manifest(
     )
     for role in sorted(pins.bitmaps):
         if role == COLOUR:
+            colour = records[COLOUR_RECORD]
+            swatches = "; ".join(
+                f"{file} {files[file]['sha256']} "
+                f"({records[SWATCH_RECORDS[name]]['classification']}, receipt "
+                f"{note_of(SWATCH_RECORDS[name], records, files)})"
+                for name, file in zip(SWATCH_NAMES, SWATCHES, strict=True)
+            )
             note = (
-                f"Current-round substitute, not the historical {role}: receipt "
-                f"{note_of(COLOUR_RECORD, records, files)}; from the swatches "
-                + ", ".join(f"{s} {files[s]['sha256']}" for s in SWATCHES)
-                + "."
+                f"Current-round substitute, not the historical {role}: written by "
+                f"{WAIST_MASKS} sash ({sources['waist_masks']}, colour only) through front W's "
+                f"sash_colour, receipt {note_of(COLOUR_RECORD, records, files)} (an independent "
+                f"repeat of {colour['repeat']['of_record_sha256']}, byte-identical), its masks "
+                f"identical to receipt {note_of(MASKS_RECORD, records, files)}, from the "
+                f"swatches {swatches}."
             )
         else:
             note = (
