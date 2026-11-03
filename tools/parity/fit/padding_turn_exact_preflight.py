@@ -4,17 +4,17 @@ Design and preflight only: no capture, no recording request, no production chang
 geometry, the committed kernel bitmaps and the frozen reference only; no Painter data, so stdout
 and the return values hold no private value.
 
-**Geometry.** The world-offset probe's flat seam pairs (`padding_world_offset.SHAPES` without a
-bend) and, per shape, an exact twin (`twin`): the same shape with its far island folded at exactly
-90 degrees, J's direction (a, b, c) -> (0, c, c). The UV island, the band depth (from c) and every
-3D length (|(a, b)| = c) are the oblique shape's, so the intrinsic developed geometry is the same:
-in exact arithmetic the developed distance of every ring texel's far tap is the same in both twins
-(invariant `developed_equal`). Both sets are built as the world-offset copies (offsets, turns,
-scales, duplicates, z lanes; `copies`) in two meshes with identical layouts and the same two box
-anchors (`mesh`), so that every exact copy sits in its oblique twin's UV slot (the same kernel
-values) under the same mesh box and normalisation. The bent shapes have no twin: a 90-degree J with
-the oblique J-K bend needs a K direction off the dyadic grid (for b37-23v, (16, 63, 65)), whose
-band depth and positions are not exact.
+**Geometry** (`tier0_semantics/padding_turn_exact.py`). The world-offset probe's flat seam pairs
+(`padding_world_offset.SHAPES` without a bend) and, per shape, an exact twin (`twin`): the same
+shape with its far island folded at exactly 90 degrees, J's direction (a, b, c) -> (0, c, c). The UV
+island, the band depth (from c) and every 3D length (|(a, b)| = c) are the oblique shape's, so the
+intrinsic developed geometry is the same: in exact arithmetic the developed distance of every ring
+texel's far tap is the same in both twins (invariant `developed_equal`). Both sets are built as the
+world-offset copies (offsets, turns, scales, duplicates, z lanes; `copies`) in two meshes with
+identical layouts and the same two box anchors (`mesh`), so that every exact copy sits in its
+oblique twin's UV slot (the same kernel values) under the same mesh box and normalisation. The bent
+shapes have no twin: a 90-degree J with the oblique J-K bend needs a K direction off the dyadic grid
+(for b37-23v, (16, 63, 65)), whose band depth and positions are not exact.
 
 **Held matched.** Each mesh runs the frozen reference (`padding_world_offset.FROZEN_REFERENCE`,
 traced as `padding_world_offset_residual.traced_module`). A ring texel is compared only when it
@@ -82,14 +82,16 @@ from tools.parity.fit import padding_world_offset as fit
 from tools.parity.fit import padding_world_offset_residual as res
 from tools.parity.fit.padding_corpus import reference_text
 from tools.parity.schemas import REPO_ROOT
+from tools.parity.tier0_semantics import padding_turn_exact as te
 from tools.parity.tier0_semantics import padding_world_offset as wo
-from tools.parity.tier0_semantics import request_fixtures as rf
-from tools.parity.tier0_semantics.fixtures import obj
+from tools.parity.tier0_semantics.padding_turn_exact import FLAT as FLAT
+from tools.parity.tier0_semantics.padding_turn_exact import copies as copies
+from tools.parity.tier0_semantics.padding_turn_exact import layout as layout
+from tools.parity.tier0_semantics.padding_turn_exact import twin as twin
 
 F32 = np.float32
 Q = tuple[Fraction, ...]
 Tap = tuple[int, int]
-FLAT = tuple(s for s in wo.SHAPES if s.bend is None)
 # Recipe -> (far model of `padding_far32`, own32).
 RECIPES: dict[str, tuple[str, bool]] = {
     "pos32n+own32": ("pos32n", True),
@@ -112,81 +114,10 @@ OBJ_NAMES = {True: "turn-exact-preflight-exact.obj", False: "turn-exact-prefligh
 # --- Geometry --------------------------------------------------------------------------------
 
 
-def twin(shape: wo.Shape) -> wo.Shape:
-    """`shape` with J folded at exactly 90 degrees: (a, b, c) -> (0, c, c), c and the rest kept."""
-    c = shape.fold[2]
-    return shape._replace(name=f"{shape.name}-x90", fold=(0, c, c))
-
-
-def copies(exact: bool, shapes: Sequence[wo.Shape] = FLAT) -> list[wo.OffsetCopy]:
-    """`padding_world_offset.copies` restricted to `shapes` (each at its index in SHAPES, so its
-    z lanes are the world-offset copies'), each shape replaced by its `twin` when `exact`."""
-    out = []
-    for i, base in enumerate(wo.SHAPES):
-        if base not in shapes:
-            continue
-        shape = twin(base) if exact else base
-        sep = wo._separated
-        out += [
-            wo.OffsetCopy(shape, sep(i, (x, 0.0, 0.0)), role="base" if x == 0 else "offset")
-            for x in wo.OFFSETS_X
-        ]
-        out += [wo.OffsetCopy(shape, sep(i, o), role="yz") for o in wo.OFFSETS_YZ]
-        out += [
-            wo.OffsetCopy(shape, sep(i, (x, 0.0, 0.0), turn), turn, role="turn")
-            for turn in ("y90", "z90")
-            for x in wo.CONTROL_X
-        ]
-        out += [
-            wo.OffsetCopy(shape, sep(i, (x, 0.0, 0.0), f"s{s}"), scale=s, role="scale")
-            for s in wo.SCALES[1:]
-            for x in wo.CONTROL_X
-        ]
-        out += [
-            wo.OffsetCopy(shape, sep(i, (x, 0.0, 0.0), "dup"), tag="-dup", role="dup")
-            for x in wo.CONTROL_X[1:]
-        ]
-    return out
-
-
-def layout(
-    found: Sequence[wo.OffsetCopy],
-) -> tuple[list[tuple[wo.OffsetCopy, tuple[float, float]]], tuple[float, float]]:
-    """`padding_world_offset.layout`'s shelves over `found`, and the anchors' slot."""
-    limit = wo.RESOLUTION - rf.SWEEP_MARGIN
-    column, row, shelf = rf.SWEEP_MARGIN, rf.SWEEP_MARGIN, 0
-    placed = []
-    for copy in found:
-        width, height = copy.size
-        if column + width > limit:
-            column, row, shelf = rf.SWEEP_MARGIN, row + shelf + wo.UV_GAP, 0
-        placed.append((copy, (float(column), float(row))))
-        column += width + wo.UV_GAP
-        shelf = max(shelf, height)
-    anchors = (float(rf.SWEEP_MARGIN), float(row + shelf + wo.UV_GAP))
-    if anchors[1] + 1 > limit:
-        raise ValueError("the copies do not fit their tile")
-    return placed, anchors
-
-
 def mesh(found: Sequence[wo.OffsetCopy]) -> bytes:
-    """The OBJ of `found` at its `layout`, with the world-offset probe's box anchors (box
-    x in [-96, 204], y in [-64, 64], z in [-150, 150] cm); refused unless every position and UV is
-    exact and no two copies share 3D space."""
-    placed, anchors = layout(found)
-    tris: list[rf.Tri] = []
-    for copy, (oc, orow) in placed:
-        tris += [(ps, [(c + oc, r + orow) for c, r in uvs]) for ps, uvs in copy.tris]
-    if not wo.exact(tris):
-        raise ValueError("a position or UV is not exact")
-    if wo.overlaps(list(found)):
-        raise ValueError("two copies share 3D space")
-    data, faces = rf._sweep_obj_lines(tris, anchors, wo.HALF, wo.SHIFT)
-    return obj(
-        wo.MATERIAL,
-        f"Turn-exact padding preflight: {len(found)} copies of flat seam pairs.",
-        [(wo.MATERIAL, faces)],
-        "".join(data),
+    """`padding_turn_exact.obj_bytes` of `found` under the preflight's own OBJ comment."""
+    return te.obj_bytes(
+        found, f"Turn-exact padding preflight: {len(found)} copies of flat seam pairs."
     )
 
 
@@ -989,7 +920,7 @@ def invariants(
                             stage_agree(s, ka, kb) == "agree" for s in STAGES[:5]
                         )
         out[name] = dict(sorted(c.items()))
-    twin: collections.Counter[str] = collections.Counter()
+    across: collections.Counter[str] = collections.Counter()
     for texel in texels:
         a, b = exact["texels"][texel], oblique["texels"][texel]
         for tap, info in a["far"].items():
@@ -997,16 +928,16 @@ def invariants(
                 continue
             da, db = info["developed"], b["far"][tap]["developed"]
             if da is None or db is None:
-                twin["developed_irrational"] += 1
+                across["developed_irrational"] += 1
             else:
-                twin["developed_compared"] += 1
-                twin["developed_equal"] += da == db
+                across["developed_compared"] += 1
+                across["developed_equal"] += da == db
         if texel not in clean:
             continue
         key = "own_same_tau" if a["tau_corners"] == b["tau_corners"] else "own_other_tau"
-        twin[f"{key}:chains"] += 1
-        twin[f"{key}:equal"] += a["own"] == b["own"]
-    out["twins"] = dict(sorted(twin.items()))
+        across[f"{key}:chains"] += 1
+        across[f"{key}:equal"] += a["own"] == b["own"]
+    out["twins"] = dict(sorted(across.items()))
     return out
 
 

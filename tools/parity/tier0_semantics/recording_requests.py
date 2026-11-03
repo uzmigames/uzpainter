@@ -41,6 +41,7 @@ from tools.parity.schemas import Schema, validation_errors
 from tools.parity.tier0_semantics import ao_operand_control as ao_control
 from tools.parity.tier0_semantics import padding_joint_bend as joint_bend
 from tools.parity.tier0_semantics import padding_plane_control as plane_control
+from tools.parity.tier0_semantics import padding_turn_exact as turn_exact
 from tools.parity.tier0_semantics import padding_world_offset as world_offset
 from tools.parity.tier0_semantics import request_fixtures as rf
 from tools.parity.tier0_semantics import unreal_preset_control as unreal_control
@@ -343,6 +344,13 @@ REQUEST_FIXTURES[world_offset.MESH] = (
     f"{FIXTURE_DIR}/meshes/{world_offset.MESH}.obj",
     world_offset.mesh,
 )
+# Item 2.7's turn-exact probe: exact-90-degree and oblique twins of the world-offset flat pairs.
+for _twin in turn_exact.TWINS:
+    REQUEST_FIXTURES[turn_exact.MESHES[_twin]] = (
+        "mesh",
+        f"{FIXTURE_DIR}/meshes/{turn_exact.MESHES[_twin]}.obj",
+        turn_exact.generator(_twin),
+    )
 
 REQUEST_FIXTURES["tau-prism"] = (
     "mesh",
@@ -436,6 +444,7 @@ MESH_SETS = {
     plane_control.MESH: [plane_control.MATERIAL],
     joint_bend.MESH: [joint_bend.MATERIAL],
     world_offset.MESH: [world_offset.MATERIAL],
+    **{turn_exact.MESHES[t]: [turn_exact.MATERIAL] for t in turn_exact.TWINS},
     "window-side": ["uzp_window_side"],
     "corner-reach": ["uzp_corner"],
     "normal-combine": list(rf.COMBINE_SETS),
@@ -2299,6 +2308,7 @@ def later_goldens() -> list[Golden]:
         plane_control.request(),
         joint_bend.request(),
         world_offset.request(),
+        *(turn_exact.request(t) for t in turn_exact.TWINS),
         padding_window_side_probe(),
         padding_normal_combine_probe(),
         padding_corner_reach_probe(),

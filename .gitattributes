@@ -42,4 +42,6 @@
 /parity/exceptions.json text eol=lf
 /parity/semantics/*.json text eol=lf
 /parity/reports/**/*.json text eol=lf
+# Frozen compact predictions whose exact-byte SHA-256 the padding scorers check before scoring.
+/tools/parity/fit/*_predictions.json text eol=lf
 /thirdparty/stb/** -text

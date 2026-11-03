@@ -19,7 +19,7 @@ import re
 import subprocess
 import sys
 import types
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Any
@@ -546,7 +546,14 @@ def inverse_bins(
 class Probe:
     """A kernel probe: the reference, its ring under a policy, the source and the recorded ring."""
 
-    def __init__(self, probe: str) -> None:
+    def __init__(
+        self,
+        probe: str,
+        check: Callable[[dict[str, Any], dict[str, Any]], list[str]] | None = None,
+    ) -> None:
+        """`check(manifest, record)`, when given, runs on the exact manifest and record this
+        probe loads, after `validate_record` and before any export is read; a problem refuses
+        the probe (ValueError)."""
         store = locate()
         if store is None:
             raise ValueError("store unavailable")
@@ -559,6 +566,8 @@ class Probe:
             raise ValueError("private record unavailable")
         record = json.loads(raw)
         validate_record(record, manifest)
+        if check is not None and (problems := check(manifest, record)):
+            raise ValueError("; ".join(problems))
         inputs = {row["input_id"]: row for row in manifest["inputs"]}
         size = int(next(k for k in inputs if k.startswith("kernel-onehot-a-")).rsplit("-n", 1)[1])
         self.size = size
