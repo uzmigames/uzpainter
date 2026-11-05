@@ -168,10 +168,16 @@ def test_height_normal_on_the_cpu(evaluator_tests: Path) -> None:
         p.startswith("a DirectX project's Normal channel other than one bitmap") for p in passed
     )
     assert any(p.startswith("a 512 set evaluates") for p in passed)
-    # Decision 400: the 4096 scale, the Height magnification refusal and the mesh map's z floor.
+    # Decisions 400 and 402: the 4096 scale, the recorded 16x Height magnification at 4096, the
+    # refusal of the others and the mesh map's z floor.
     assert "z at 4096 is 100 / 4096 (Sharp)" in passed
     assert any(p.startswith("a 4096 set evaluates with Sharp") for p in passed)
-    assert any(p.startswith("Height magnification: 16x on a 256 set evaluates") for p in passed)
+    assert any(
+        p.startswith(
+            "Height magnification: 16x on a 256 set and the recorded 16x on a 4096 set evaluate"
+        )
+        for p in passed
+    )
     assert any(p.startswith("a Normal mesh map with z <= 0 decodes with z floored") for p in passed)
 
 
@@ -274,10 +280,11 @@ def test_recorded_inputs_exact(
 ) -> None:
     """3.1, 3.3, 4.1 (decisions 077, 079): the Normal mesh map in OpenGL and DirectX projects,
     SignedAddition on Height, Normal-channel coverage, 8- and 16-bit Normal imports in both
-    conventions and the sweep at 512, 1024 and 2048 px: Normal_OpenGL, Normal_DirectX, the Height
-    channel and the Normal channel (where it holds layers; its export in the project's convention)
-    equal r1 on every texel, and r2 wherever r2 equals r1 (decision 032: EXC-004 and EXC-005
-    bound the two r2 divergences)."""
+    conventions, the sweep at 512, 1024 and 2048 px and the 16x magnification at 4096 px (decision
+    402): Normal_OpenGL, Normal_DirectX, the Height channel and the Normal channel (where it holds
+    layers; its export in the project's convention) equal r1 on every texel, and r2 wherever r2
+    equals r1 (decision 032: EXC-004 and EXC-005 bound the two r2 divergences; r2 of the 4096
+    virtual maps of s1 and s2 differs from r1, decision 400, and is not compared)."""
     needs_store()
     manifest = envelope_manifest(golden_name)
     golden = envelope_golden(golden_name)
@@ -336,13 +343,12 @@ def test_height_normal_scale_at_4096_equals_painter() -> None:
     assert not problems, problems
 
 
-def test_height_magnification_at_4096_is_not_exact_and_refused(
-    evaluator_tests: Path, tmp_path: Path
-) -> None:
-    """Decision 400 §2: the 256 px ramps magnified 16 times onto the 4096 set. The magnification
-    exact at 512 to 2048 px (`magnified`, the evaluator's filter) misses Painter's s0 Height, so the
-    evaluator refuses that magnification with `unsupported_source`, naming the decision, before
-    it evaluates the Height channel or the virtual normal maps."""
+def test_height_magnification_at_4096_equals_painter() -> None:
+    """Decision 402: the 256 px ramps magnified 16 times onto the 4096 set. The model the evaluator
+    follows operation for operation (`magnified`: 8-bit fixed-point coordinates, the GPU's integer
+    weights with w11 = (fx fy + 127) >> 8, BilinearFilter on the signed values, then the half
+    write) gives Painter's s0 Height on every texel, r1 and r2; the exact dyadic weights did not
+    (48 126 texels off, decision 400 §2)."""
     needs_store()
     from tools.parity.feasibility import png
 
@@ -351,14 +357,38 @@ def test_height_magnification_at_4096_is_not_exact_and_refused(
     path = next(i["path"] for i in manifest["inputs"] if i["input_id"] == "height-ramps")
     codes = png.decode((REPO_ROOT / path).read_bytes()).astype(np.int64)
     predicted = normal_fit.height_content(codes.reshape(256, 256, -1)[..., 0], W4096)
-    recorded = golden.map("r1", "s0/height").values[..., 0].astype(np.float32)
-    assert int(np.count_nonzero(predicted != recorded)) > 0
+    for recording in ("r1", "r2"):
+        recorded = golden.map(recording, "s0/height").values[..., 0].astype(np.float32)
+        assert int(np.count_nonzero(predicted != recorded)) == 0, recording
+
+
+def test_unrecorded_height_magnification_at_4096_is_refused(
+    evaluator_tests: Path, tmp_path: Path
+) -> None:
+    """Decision 402: on a set above 2048 px only the recorded 16x magnification (a square bitmap,
+    the identity projection, BilinearHQ, Repeat, a square 4096 px set) is admitted. The same ramps
+    tiled twice (UV scale 2, an 8x magnification at 4096) are not recorded there: the evaluator
+    refuses them with `unsupported_source`, naming decision 400 and this task, before it evaluates
+    the Height channel or the virtual normal maps."""
+    manifest = envelope_manifest(RESOLUTION_4096)
     spec = virtual_spec(manifest, "s0", tmp_path, ["Height"])
+    (layer,) = spec["layers"]
+    layer["projection"] = {
+        "mode": "UV",
+        "filtering_mode": "BilinearHQ",
+        "uv_wrapping_mode": "Repeat",
+        "scale_mode": "Factors",
+        "scale": [2.0, 2.0],
+        "rotation": 0.0,
+        "offset": [0.0, 0.0],
+    }
     with pytest.raises(AssertionError) as failure:
         evaluate(evaluator_tests, spec, tmp_path, "cpu")
-    assert "unsupported_source" in str(failure.value)
-    assert "on the Height channel of a 4096x4096 set is not recorded exact" in str(failure.value)
-    assert "decision 400" in str(failure.value)
+    message = str(failure.value)
+    assert "unsupported_source" in message
+    assert "on the Height channel of a 4096x4096 set is not recorded exact" in message
+    assert "decision 400" in message
+    assert "phase3.1_height-magnification-fit" in message
 
 
 @pytest.mark.parametrize("backend", backends())

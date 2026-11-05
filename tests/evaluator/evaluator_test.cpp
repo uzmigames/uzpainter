@@ -6946,8 +6946,9 @@ int RunHeightNormal(const fs::path& assets) {
               "a 512 set evaluates; a 128 set fails with unsupported_source (not recorded)", kindOf(r) + " " + s128);
     }
 
-    // Decision 400: 4096 is recorded with Sharp only; Height magnification on a 4096 set is refused,
-    // 1:1 and Nearest are not, and magnification on smaller sets is unchanged.
+    // Decision 400: 4096 is recorded with Sharp only; Height magnification on a 4096 set is refused but
+    // for the recorded 16x of a 256 px bitmap under the identity BilinearHQ Repeat projection (decision
+    // 402); 1:1 and Nearest are not, and magnification on smaller sets is unchanged.
     {
         const auto normalOf = [&](uint32_t width, uint32_t height, HeightToNormalMethod method) {
             Builder s(width, height, {{ChannelType::Height, ChannelFormat::L16F}, {ChannelType::Normal, ChannelFormat::RGB16F}});
@@ -6994,16 +6995,20 @@ int RunHeightNormal(const fs::path& assets) {
         const std::string at4096x32 = kind(heightOf(4096, h128Sha, std::nullopt, {1.0, 1.0}));
         const std::string anisotropic =
             kind(heightOf(4096, h4096Sha, core::FilteringMode::BilinearHQ, {1.0, 0.5}));
+        const std::string tiled = kind(heightOf(4096, heightSha, core::FilteringMode::BilinearHQ, {2.0, 2.0}));
+        const std::string sharp16 = kind(heightOf(4096, heightSha, core::FilteringMode::BilinearSharp, {1.0, 1.0}));
         const std::string oneToOne = kind(heightOf(4096, h4096Sha, std::nullopt, {1.0, 1.0}));
         const std::string nearest = kind(heightOf(4096, heightSha, core::FilteringMode::Nearest, {1.0, 1.0}));
         const auto refused = [](const std::string& k) {
             return k.starts_with("unsupported_source") && k.find("decision 400") != std::string::npos;
         };
-        Check(at256x16 == "ok" && refused(at4096x16) && refused(at4096x32) && refused(anisotropic) && oneToOne == "ok" &&
-                  nearest == "ok",
-              "Height magnification: 16x on a 256 set evaluates; on a 4096 set 16x, 32x and an anisotropic (1, 1/2) "
-              "scale fail with unsupported_source (decision 400); 1:1 and Nearest at 4096 evaluate",
-              at256x16 + " | " + at4096x16 + " | " + at4096x32 + " | " + anisotropic + " | " + oneToOne + " | " + nearest);
+        Check(at256x16 == "ok" && at4096x16 == "ok" && refused(at4096x32) && refused(anisotropic) && refused(tiled) &&
+                  refused(sharp16) && oneToOne == "ok" && nearest == "ok",
+              "Height magnification: 16x on a 256 set and the recorded 16x on a 4096 set evaluate (decision 402); on a "
+              "4096 set 32x, an anisotropic (1, 1/2) scale, the 256 px bitmap tiled twice (8x) and BilinearSharp 16x "
+              "fail with unsupported_source (decision 400); 1:1 and Nearest at 4096 evaluate",
+              at256x16 + " | " + at4096x16 + " | " + at4096x32 + " | " + anisotropic + " | " + tiled + " | " + sharp16 +
+                  " | " + oneToOne + " | " + nearest);
     }
 
     // Decision 400: the Normal mesh map's decode floors z at float32(0.001) before the normalise,

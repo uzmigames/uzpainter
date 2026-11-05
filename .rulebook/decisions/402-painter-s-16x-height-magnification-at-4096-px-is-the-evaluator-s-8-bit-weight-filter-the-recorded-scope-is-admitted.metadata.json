@@ -1,0 +1,9 @@
+{
+  "id": 402,
+  "slug": "painter-s-16x-height-magnification-at-4096-px-is-the-evaluator-s-8-bit-weight-filter-the-recorded-scope-is-admitted",
+  "title": "Painter's 16x Height magnification at 4096 px is the evaluator's 8-bit-weight filter; the recorded scope is admitted",
+  "status": "accepted",
+  "date": "2026-11-05",
+  "relatedTasks": ["phase3.1_height-magnification-fit", "phase1.12_compositor-height-normal"],
+  "supersededBy": null
+}

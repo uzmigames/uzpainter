@@ -160,20 +160,28 @@ render::Result<void> CheckSampling(const UvProjection& projection, uint32_t setW
                             node);
         }
     }
-    // Height magnification is recorded exact on sets of 256 to 2048 texels only. At 4096 Painter's
-    // 16x magnification of a 256-px height bitmap leaves 48 126 of the 16 777 216 Height texels off
-    // (0.29 %, up to 2^-10; tier0/semantics/height-normal-resolution-4096, decision 400).
+    // Height magnification is recorded exact on sets of 256 to 2048 texels and, above 2048, only as
+    // the 16x magnification of a square 256-px bitmap under the identity BilinearHQ Repeat projection
+    // on a 4096 x 4096 set (tier0/semantics/height-normal-resolution-4096: this filter, w11 rounded
+    // to 8 bits, equals every texel; decision 402). Other magnifications there are not recorded
+    // (decision 400).
+    const bool recorded4096 = setWidth == 4096 && setHeight == 4096 && image.width == 256 && image.height == 256 &&
+                              projection.filter == core::FilteringMode::BilinearHQ &&
+                              projection.wrap == core::UVWrapMode::Repeat && projection.rotation == 0.0 &&
+                              projection.scale == std::array<double, 2>{1.0, 1.0} &&
+                              projection.offset == std::array<double, 2>{0.0, 0.0};
     if (signedRange && projection.filter != core::FilteringMode::Nearest && (setWidth > 2048 || setHeight > 2048) &&
-        SmallestFootprint(projection, setWidth, setHeight, image.width, image.height) < 1.0 - 1e-9) {
+        !recorded4096 && SmallestFootprint(projection, setWidth, setHeight, image.width, image.height) < 1.0 - 1e-9) {
         return EvalFail(EvalErrorKind::UnsupportedSource,
                         std::string(core::ToString(projection.filter)) + " magnification (" +
                             std::to_string(SmallestFootprint(projection, setWidth, setHeight, image.width,
                                                              image.height)) +
                             " bitmap texels per texel) on the Height channel of a " + std::to_string(setWidth) + "x" +
                             std::to_string(setHeight) +
-                            " set is not recorded exact: Painter's 16x magnification of a 256-px height bitmap "
-                            "at 4096 leaves 0.29% of the Height texels off (height-normal-resolution-4096, "
-                            "decision 400; owner phase3.1_height-magnification-fit)",
+                            " set is not recorded exact: above 2048 px only the 16x magnification of a square "
+                            "256-px bitmap under the identity BilinearHQ Repeat projection on a 4096x4096 set is "
+                            "(height-normal-resolution-4096; decision 400, decision 402; owner "
+                            "phase3.1_height-magnification-fit)",
                         node);
     }
     return {};

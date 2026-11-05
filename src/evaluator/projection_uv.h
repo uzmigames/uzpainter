@@ -123,8 +123,9 @@ struct UvProjection {
 /// `signedRange` (the Height channel: Painter filters the signed heights, `ProjectTexel`, and its
 /// minification of them is not measured), for a float32 bitmap source that a bilinear filter
 /// would minify (an sRGB bitmap is decoded to float32 after this check, sources.h), and for a
-/// bilinear magnification with `signedRange` on a set above 2048 texels on either axis (decision
-/// 400: the 16x magnification at 4096 is not exact; 256 to 2048 are recorded exact).
+/// bilinear magnification with `signedRange` on a set above 2048 texels on either axis, except the
+/// recorded one: 16x of a square 256 px bitmap under the identity BilinearHQ Repeat projection on a
+/// 4096 x 4096 set (decisions 400 and 402; 256 to 2048 are recorded exact).
 [[nodiscard]] render::Result<void> CheckSampling(const UvProjection& projection,
                                                  uint32_t setWidth, uint32_t setHeight,
                                                  const DecodedImage& image, bool signedRange,
@@ -144,8 +145,9 @@ inline constexpr int kFilterOperandBits = 28;
 /// texel t enters as the integer t 2^(28 - E) truncated toward zero (floor for t >= 0, the
 /// measured range); the weighted sum of these integers, times 2^(E - 36), is rounded to the
 /// nearest float32, ties away from zero (up for t >= 0). A texel weighed 256 comes back unchanged.
-/// Signed texels are the Height channel's (height-to-normal.json `height-normal-resolution`:
-/// exact on its magnified sets).
+/// Signed texels are the Height channel's (height-to-normal.json `height-normal-resolution` and
+/// `height-magnification-4096`: exact on its magnified sets, 2x to 16x; at 16x the rounded w11
+/// is what Painter does, decision 402).
 [[nodiscard]] float BilinearFilter(const std::array<uint32_t, 4>& weights,
                                    const std::array<float, 4>& texels);
 
