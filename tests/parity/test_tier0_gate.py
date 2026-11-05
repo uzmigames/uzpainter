@@ -2,12 +2,12 @@
 
 The whole Tier 0 corpus of the current envelope (every manifest under `tier0/` of its manifest
 root in `parity/envelopes/registry.json`, decision 037: all four children plus the recorder
-sample): each golden names its private record, the record holds at least two recordings (same
-session; after save/reopen), every listed hash verifies in the store, and the stability report
-classifies every golden. Checks that need the owner's private store skip,
-saying so, on a machine without one (hosted CI, decision 028); the local oracle run is their
-evidence (`parity/reports/phase0/tier0-goldens.md`). The published fits are checked by
-`tests/parity/fit/test_stability_and_publication.py`.
+sample, and the `semantics` goldens kept under `assets3d`): each golden names its private
+record, the record holds at least two recordings (same session; after save/reopen), every
+listed hash verifies in the store, and the stability report classifies every golden. Checks
+that need the owner's private store skip, saying so, on a machine without one (hosted CI,
+decision 028); the local oracle run is their evidence (`parity/reports/phase0/tier0-goldens.md`).
+The published fits are checked by `tests/parity/fit/test_stability_and_publication.py`.
 """
 
 from __future__ import annotations
@@ -28,6 +28,10 @@ from tools.parity.store.store import OracleStore, Status, locate
 
 TIER0 = manifest_root(current_envelope()) / "tier0"
 CONDITIONS = {"same_session", "after_save_reopen"}
+# `assets3d` holds `semantics` goldens whose mesh lives in the UzmiGames asset repository
+# (`tools/parity/tier0_semantics/wand_kernel_probe.py`): the recorder needs `--assets-root` for
+# them, and their golden ids stay `tier0/semantics/<name>`.
+FOLDER_FAMILY = {"assets3d": "semantics"}
 
 
 def manifest_paths() -> list[Path]:
@@ -35,7 +39,8 @@ def manifest_paths() -> list[Path]:
 
 
 def golden_id(path: Path) -> str:
-    return "tier0/" + path.relative_to(TIER0).with_suffix("").as_posix()
+    family, *rest = path.relative_to(TIER0).with_suffix("").parts
+    return "/".join(["tier0", FOLDER_FAMILY.get(family, family), *rest])
 
 
 def needs_store() -> OracleStore:
@@ -68,11 +73,14 @@ def test_corpus_covers_every_child() -> None:
     # semantics-ui: phase0.7_tier0-semantics-ui-cases (not a prerequisite of the gate).
     assert families == {
         "api-probes",
+        "assets3d",
         "defaults-templates",
         "recorder-sample",
         "semantics",
         "semantics-ui",
     }
+    ids = [golden_id(path) for path in manifest_paths()]
+    assert len(ids) == len(set(ids))
 
 
 @pytest.mark.parametrize("path", manifest_paths(), ids=golden_id)

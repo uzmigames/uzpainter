@@ -30,7 +30,7 @@ def test_the_committed_mesh_and_request_are_the_generators(twin: str) -> None:
     assert hashlib.sha256(data).hexdigest() == scorer.FROZEN_MESH_SHA256[twin]
     assert rr.MESH_SETS[te.MESHES[twin]] == [wo.MATERIAL]
     golden = te.request(twin)
-    assert golden.name in [g.name for g in rr.requested_goldens()]
+    assert golden.name in [g.name for g in rr.all_goldens()]
     assert golden.inputs == [te.MESHES[twin], *rr.kernel_bitmaps(te.RESOLUTION)]
     hashes = {
         name: hashlib.sha256((REPO_ROOT / rr.fixture(name)[1]).read_bytes()).hexdigest()
