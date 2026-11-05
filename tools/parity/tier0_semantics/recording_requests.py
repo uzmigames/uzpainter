@@ -41,6 +41,7 @@ from tools.parity.recorder import vocabulary as ps
 from tools.parity.recorder.job import EXPORT
 from tools.parity.schemas import Schema, validation_errors
 from tools.parity.tier0_semantics import ao_operand_control as ao_control
+from tools.parity.tier0_semantics import padding_fold_tie as fold_tie
 from tools.parity.tier0_semantics import padding_joint_bend as joint_bend
 from tools.parity.tier0_semantics import padding_plane_control as plane_control
 from tools.parity.tier0_semantics import padding_turn_exact as turn_exact
@@ -280,11 +281,12 @@ for _size in rf.KERNEL_RESOLUTIONS:
             f"{FIXTURE_DIR}/bitmaps/kernel-code-{_name}-n{_size}.exr",
             kernel_code_generator(_size, _name),
         )
-REQUEST_FIXTURES[renamed_ramp(256)] = (
-    "image",
-    f"{FIXTURE_DIR}/bitmaps/{renamed_ramp(256)}.exr",
-    uv_ramp_generator(256),
-)
+for _size in (256, 4096):
+    REQUEST_FIXTURES[renamed_ramp(_size)] = (
+        "image",
+        f"{FIXTURE_DIR}/bitmaps/{renamed_ramp(_size)}.exr",
+        uv_ramp_generator(_size),
+    )
 for _size, _moved in [*((n, False) for n in rf.ATLAS_RESOLUTIONS), (1024, True)]:
     REQUEST_FIXTURES[kernel_atlas_mesh(_size, _moved)] = (
         "mesh",
@@ -353,6 +355,12 @@ for _twin in turn_exact.TWINS:
         f"{FIXTURE_DIR}/meshes/{turn_exact.MESHES[_twin]}.obj",
         turn_exact.generator(_twin),
     )
+# Item 2.1's folded-seam tie probe: far points on a far window boundary along a folded seam.
+REQUEST_FIXTURES[fold_tie.MESH] = (
+    "mesh",
+    f"{FIXTURE_DIR}/meshes/{fold_tie.MESH}.obj",
+    fold_tie.mesh,
+)
 
 REQUEST_FIXTURES["tau-prism"] = (
     "mesh",
@@ -447,6 +455,7 @@ MESH_SETS = {
     joint_bend.MESH: [joint_bend.MATERIAL],
     world_offset.MESH: [world_offset.MATERIAL],
     **{turn_exact.MESHES[t]: [turn_exact.MATERIAL] for t in turn_exact.TWINS},
+    fold_tie.MESH: [fold_tie.MATERIAL],
     "window-side": ["uzp_window_side"],
     "corner-reach": ["uzp_corner"],
     "normal-combine": list(rf.COMBINE_SETS),
@@ -1838,6 +1847,27 @@ def padding_corner_reach_probe() -> Golden:
     )
 
 
+# --- phase3.1_export-island-padding item 2.1: the islands kernel probe --------------------------
+
+
+def padding_islands_kernel_probe() -> Golden:
+    """Decision 266's kernel-code probe on export-padding's islands mesh, to decode Painter's taps
+    and bins on the straight-edge own chains that export-padding's User1 misses."""
+    resolution = 256
+    return Golden(
+        "export-padding-kernel-islands-256",
+        EXPORT_DOMAIN,
+        "Decision 266's kernel-code probe (phase3.1_export-island-padding item 2.1: the infinite "
+        "ring tap by tap on the straight-edge 2- to 4-tap own chains of export-padding's L32F "
+        "User1 misses), exploratory: the islands mesh of export-padding (four islands in one "
+        "texture set: one on the tile's left border, gaps of 1 and 3 texels, one turned 30 "
+        f"degrees about 20 texels away); document resolution {resolution}. " + KERNEL_TAIL,
+        "islands",
+        ["islands", *kernel_bitmaps(resolution)],
+        kernel_probe("islands", resolution),
+    )
+
+
 # --- Decision 293: the Normal mesh-map combination probe --------------------------------------
 
 COMBINE_EXR_MAPS = [
@@ -2330,6 +2360,8 @@ def later_goldens() -> list[Golden]:
         ao_control.request(),
         *specularweight_base_probes(),
         height_normal_resolution(4096, "sharp"),
+        padding_islands_kernel_probe(),
+        fold_tie.request(),
     ]
 
 

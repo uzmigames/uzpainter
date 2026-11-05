@@ -428,7 +428,7 @@ def uv_ramp(size: int) -> bytes:
 # Four code bitmaps hold periodic pseudo-random values: d and e (codes k/256, k in 1..255, one
 # 17 x 13 texel tile each), f = (d + e)/2 (the superposition control) and g = 1 - d (the affine
 # control). Every value is exact in float32.
-KERNEL_RESOLUTIONS = (256, 512, 1024, 2048)
+KERNEL_RESOLUTIONS = (256, 512, 1024, 2048, 4096)  # 4096: the Tunic probe (phase3.1)
 KERNEL_ONEHOT = ("a", "b", "c")
 KERNEL_CODES = ("d", "e", "f", "g")
 KERNEL_PERIOD = (17, 13)  # columns, rows

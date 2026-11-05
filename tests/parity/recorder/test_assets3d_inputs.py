@@ -83,3 +83,26 @@ def test_the_wand_kernel_request_loads_with_the_asset_repository() -> None:
     (mesh,) = [r for r in probe.request()["inputs"] if r["input_id"] == probe.MESH]
     assert hashlib.sha256(job.inputs[probe.MESH].read_bytes()).hexdigest() == mesh["sha256"]
     assert len(job.inputs) == 9 and len(job.exports) == 4
+
+
+def test_the_tunic_kernel_request_is_current() -> None:
+    from tools.parity.tier0_semantics import tunic_kernel_probe as tunic
+
+    stored = json.loads(tunic.request_path().read_text(encoding="utf-8"))
+    assert stored == tunic.request()
+    (mesh,) = [r for r in stored["inputs"] if r["input_id"] == tunic.MESH]
+    assert mesh["provenance"]["licence"] == ASSETS3D_LICENCE and "path" not in mesh
+    create = stored["instruction_sequence"]["steps"][0]["args"]
+    assert create["mesh"] == tunic.MESH and create["default_texture_resolution"] == 4096
+
+
+@pytest.mark.skipif(
+    not (ASSETS3D / "AGENTS.md").is_file(), reason=f"the asset repository is not at {ASSETS3D}"
+)
+def test_the_tunic_kernel_request_loads_with_the_asset_repository() -> None:
+    from tools.parity.tier0_semantics import tunic_kernel_probe as tunic
+
+    job = load_job(tunic.request_path(), assets_root=ASSETS3D)
+    (mesh,) = [r for r in tunic.request()["inputs"] if r["input_id"] == tunic.MESH]
+    assert hashlib.sha256(job.inputs[tunic.MESH].read_bytes()).hexdigest() == mesh["sha256"]
+    assert len(job.inputs) == 9 and len(job.exports) == 4
