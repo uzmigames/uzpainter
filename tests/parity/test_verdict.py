@@ -869,11 +869,17 @@ Compared = Callable[[np.ndarray, np.ndarray | None, str | None], Comparison]
 
 
 def injected_defects_fail(
-    entry: dict[str, Any], comparison: Compared, base: str, normal: str
+    entry: dict[str, Any],
+    comparison: Compared,
+    base: str,
+    normal: str,
+    register: list[dict[str, Any]] | None = None,
 ) -> None:
     """The defect test of an entry on EXC-010's terms (decisions 395, 398): `comparison` names
-    its golden, `base` a material map's output and `normal` the excepted Normal's."""
-    register: list[dict[str, Any]] = load_json(REGISTER_PATH)["entries"]
+    its golden, `base` a material map's output and `normal` the excepted Normal's; `register`
+    is the register the entry was in force in (default: the published one)."""
+    if register is None:
+        register = load_json(REGISTER_PATH)["entries"]
     oracle, covered = scope_split_case()
     edge, interior = island_classes(covered)
     padding = oracle.copy()
@@ -937,9 +943,19 @@ TUNIC_NORMAL = "export/DefaultMaterial_Normal_Raw"
 TUNIC_BASE = "export/DefaultMaterial_BaseColor_sRGB"
 
 
-def exc011() -> dict[str, Any]:
-    (entry,) = [e for e in load_json(REGISTER_PATH)["entries"] if e["exception_id"] == "EXC-011"]
+def exc011(version: int) -> dict[str, Any]:
+    (entry,) = [
+        e
+        for e in load_json(REGISTER_PATH)["entries"]
+        if e["exception_id"] == "EXC-011" and e["version"] == version
+    ]
     return dict(entry)
+
+
+def before_exc011_v2() -> list[dict[str, Any]]:
+    """The published register as it stood while EXC-011 version 1 was in force."""
+    entries: list[dict[str, Any]] = load_json(REGISTER_PATH)["entries"]
+    return [e for e in entries if (e["exception_id"], e["version"]) != ("EXC-011", 2)]
 
 
 def tunic_comparison(
@@ -953,13 +969,13 @@ def tunic_comparison(
 
 
 def test_exc011_takes_exc010_s_terms_for_the_tunic_current_round_only() -> None:
-    """EXC-011 version 1 (decision 398), with the published register: EXC-010's bounds and
-    defect list on the Tunic's current-round golden and its Normal's output; padding differences
-    pass on every map and island-edge ones on the Normal only, each pass naming EXC-011. The
-    retained migration golden, and the Wand, are not covered by it, and no other entry names
-    the Tunic's golden (EXC-012 is reserved for the Sash)."""
-    register: list[dict[str, Any]] = load_json(REGISTER_PATH)["entries"]
-    entry, wand = exc011(), exc010()
+    """EXC-011 version 1 (decision 398), kept as history, in the register it was in force in:
+    EXC-010's bounds and defect list on the Tunic's current-round golden and its Normal's output;
+    padding differences pass on every map and island-edge ones on the Normal only, each pass
+    naming EXC-011. The retained migration golden, and the Wand, are not covered by it, and no
+    other id names the Tunic's golden (EXC-012 is reserved for the Sash)."""
+    register = before_exc011_v2()
+    entry, wand = exc011(1), exc010()
     identity = (entry["version"], entry["decision_id"], entry["approved_on"])
     assert identity == (1, "398", "2026-11-03")
     assert entry["domain"] == {
@@ -1001,11 +1017,121 @@ def test_exc011_takes_exc010_s_terms_for_the_tunic_current_round_only() -> None:
 
 
 def test_exc011_catches_injected_defects() -> None:
-    """EXC-011's defect test, EXC-010's on the Tunic: with the padding wrong on every case
-    (excepted), one code on one covered interior texel fails on any map, the Normal included; an
-    island-edge difference fails on any map but the Normal, and on the Normal when the comparison
-    names no output; so do a uniform offset and a missing or mis-sized coverage mask."""
-    injected_defects_fail(exc011(), tunic_comparison, TUNIC_BASE, TUNIC_NORMAL)
+    """EXC-011 version 1's defect test, EXC-010's on the Tunic, in the register it was in force
+    in: with the padding wrong on every case (excepted), one code on one covered interior texel
+    fails on any map, the Normal included; an island-edge difference fails on any map but the
+    Normal, and on the Normal when the comparison names no output; so do a uniform offset and a
+    missing or mis-sized coverage mask."""
+    injected_defects_fail(exc011(1), tunic_comparison, TUNIC_BASE, TUNIC_NORMAL, before_exc011_v2())
+
+
+# --- decision 401: EXC-011 version 2, the island edge of every Tunic map --------------------
+
+TUNIC_OUTPUTS = [
+    "export/DefaultMaterial_BaseColor_sRGB",
+    "export/DefaultMaterial_Displacement_Raw",
+    "export/DefaultMaterial_Metallic_Raw",
+    TUNIC_NORMAL,
+    "export/DefaultMaterial_Roughness_Raw",
+]
+
+
+def test_exc011_v2_excepts_the_island_edge_of_every_tunic_map() -> None:
+    """EXC-011 version 2 (decision 401), with the published register: it supersedes version 1
+    (kept as history) on the same golden; the covered-interior bound stays unexcepted and the
+    covered bound excepts every map's recorded output. An island-edge difference on BaseColor
+    now passes for the Tunic's golden, naming EXC-011 version 2; it still fails for the migration
+    golden and the Wand."""
+    register: list[dict[str, Any]] = load_json(REGISTER_PATH)["entries"]
+    entry, first = exc011(2), exc011(1)
+    identity = (entry["version"], entry["decision_id"], entry["approved_on"])
+    assert identity == (2, "401", "2026-11-05")
+    assert entry["domain"] == first["domain"]
+    assert entry["evidence"]["basis"] == "owner_scope_split"
+    assert entry["bounds"][0] == first["bounds"][0]
+    assert "excepted_outputs" not in entry["bounds"][0]
+    assert entry["bounds"][1] == {**first["bounds"][1], "excepted_outputs": TUNIC_OUTPUTS}
+    (current,) = [e for e in in_force(register) if e["exception_id"] == "EXC-011"]
+    assert current["version"] == 2
+    oracle, covered = scope_split_case()
+    edge, _ = island_classes(covered)
+    padded = oracle.copy()
+    padded[~covered] = 65535 - padded[~covered]  # every padding texel wrong
+    both = padded.copy()
+    both[edge] += 537  # and every island-edge texel
+    for output in TUNIC_OUTPUTS:
+        for candidate in (padded, both):
+            verdict = evaluate(tunic_comparison(candidate, covered, output), register)
+            assert verdict.outcome is Outcome.PASS, output
+            assert verdict.exceptions_relied_on == (("EXC-011", 2),), output
+    rim = padded.copy()
+    rim[2, 3] += 1  # one island-edge value on BaseColor: version 1 failed it
+    assert edge[2, 3]
+    widened = evaluate(tunic_comparison(rim, covered, TUNIC_BASE), register)
+    assert widened.outcome is Outcome.PASS
+    assert widened.exceptions_relied_on == (("EXC-011", 2),)
+    narrower = evaluate(tunic_comparison(rim, covered, TUNIC_BASE), before_exc011_v2())
+    assert narrower.outcome is Outcome.FAIL
+    exact = evaluate(tunic_comparison(oracle.copy(), covered, TUNIC_BASE), register)
+    assert exact.outcome is Outcome.PASS and exact.exceptions_relied_on == ()
+    migration = evaluate(
+        tunic_comparison(rim, covered, TUNIC_BASE, "phase2/tier1/tunic-v10"), register
+    )
+    assert migration.outcome is Outcome.FAIL and migration.exceptions_relied_on == ()
+    wand_case = evaluate(wand_comparison(rim, covered, WAND_BASE), [entry])
+    assert wand_case.outcome is Outcome.FAIL
+    assert register_problems(load_json(REGISTER_PATH)) == []
+
+
+def test_exc011_v2_catches_injected_defects() -> None:
+    """EXC-011 version 2's defect test: with the padding and the island edge wrong where it
+    excepts them, one code on one covered interior texel fails on any map, the Normal included;
+    an island-edge difference fails when the comparison names no output, an output it does not
+    list or another golden; so do a uniform offset and a missing or mis-sized coverage mask."""
+    entry = exc011(2)
+    register: list[dict[str, Any]] = load_json(REGISTER_PATH)["entries"]
+    oracle, covered = scope_split_case()
+    edge, interior = island_classes(covered)
+    padding = oracle.copy()
+    padding[~covered] += 7
+    rim = padding.copy()
+    rim[2, 3] += 1
+    assert edge[2, 3]
+    inside = rim.copy()
+    inside[3, 4] += 1
+    assert interior[3, 4]
+    unlisted = "export/DefaultMaterial_Emissive"
+    defects: dict[str, Comparison] = {
+        "one_covered_interior_value_off_by_one_code": tunic_comparison(inside, covered, TUNIC_BASE),
+        "one_normal_interior_value_off_by_one_code": tunic_comparison(
+            inside, covered, TUNIC_NORMAL
+        ),
+        "edge_difference_on_an_output_not_listed": tunic_comparison(rim, covered, unlisted),
+        "edge_difference_naming_no_output": tunic_comparison(rim, covered, None),
+        "edge_difference_on_another_golden": tunic_comparison(
+            rim, covered, TUNIC_BASE, "phase2/tier1/tunic-v10"
+        ),
+        "uniform_offset_one_code": tunic_comparison(padding + 1, covered, TUNIC_BASE),
+        "no_coverage_mask": tunic_comparison(padding, None, TUNIC_BASE),
+        "coverage_mask_of_another_size": tunic_comparison(
+            padding, np.ones((4, 4), bool), TUNIC_BASE
+        ),
+    }
+    assert list(defects) == entry["defect_detection_test"]["injected_defects"]
+    for name, comparison in defects.items():
+        for entries in (register, [entry]):
+            verdict = evaluate(comparison, entries)
+            assert verdict.outcome is Outcome.FAIL, name
+            assert verdict.exceptions_relied_on == (), name
+    # The edge differences on every listed map are the ones the entry excepts.
+    for output in TUNIC_OUTPUTS:
+        assert evaluate(tunic_comparison(rim, covered, output), [entry]).outcome is Outcome.PASS
+    # An island with no interior texel: the interior bound has nothing to hold, so nothing passes.
+    thin = np.zeros((8, 8), dtype=bool)
+    thin[2:4, 2:6] = True
+    no_interior = evaluate(tunic_comparison(padding, thin, TUNIC_BASE), [entry])
+    assert no_interior.outcome is Outcome.FAIL
+    assert entry["defect_detection_test"]["outcome"] == "every_injected_defect_fails"
 
 
 # --- decision 399: EXC-012, the owner's Sash current-round scope on EXC-010's terms ------------
