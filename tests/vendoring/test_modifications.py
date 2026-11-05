@@ -255,7 +255,20 @@ def test_standalone_static_library_build(build: Build) -> None:
             and not any(path.iterdir())
         )
 
-    commands = build.compile_commands(roots)
+    # Each artifact also compiles one generated native input stamp, `<artifact>-native-inputs.c`
+    # (`native_input_key.zig`, decision 394), from the build's own cache as `clang -x c <stamp>`.
+    commands: list[list[str]] = []
+    stamps: set[Path] = set()
+    for tokens in build.compile_commands(roots):
+        if tokens[2] == "-x" and tokens[4].endswith("-native-inputs.c"):
+            stamp = Path(tokens[4]).resolve()
+            assert tokens[3] == "c" and _inside(stamp, [build.cache.resolve()]), tokens[:5]
+            stamps.add(stamp)
+        else:
+            commands.append(tokens)
+    assert {"uzrendercore-native-inputs.c", "uzp-vendor-tests-native-inputs.c"} <= {
+        s.name for s in stamps
+    }
     compiled: set[Path] = set()
     for tokens in commands:
         source = Path(tokens[2]).resolve()
