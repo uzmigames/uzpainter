@@ -13,6 +13,13 @@
         "tests/native",
         "tests/no_error_dialogs.h",
         "assets/defaults/baking.json",
+        // `#embed` targets (and an embedding test source) that build.zig's EmbedInputs reads
+        // at configure time, so a copy of the package configures.
+        "parity/envelopes/registry.json",
+        "parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/requests/tier0/api-probes/filter-context-settings-a.json",
+        "parity/snapshot-producer-policy-v1.json",
+        "tests/export/snapshot_capture_validate.cpp",
+        "tests/export/snapshot_capture_validate.h",
     },
     .dependencies = .{},
 }
