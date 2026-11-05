@@ -220,12 +220,16 @@ def test_a_session_without_a_console_shows_no_window(
                 **without_headless(),
                 "UZPAINTER_EXE": str(painter),
                 "UZP_ASSETS3D_SESSION": str(tmp_path / "adapter" / "session.json"),
+                # Generic code, not a production round: the adapter runs only in one explicit
+                # context (7ae906da, `adapters/assets3d/client.py` `execution_policy`).
+                "UZP_ASSETS3D_DIAGNOSTIC_IMPORT": "1",
             },
             creationflags=subprocess.DETACHED_PROCESS,
         )
         tree.add(adapter.pid)
         out, err = adapter.communicate(timeout=300)
-        assert adapter.returncode == 0, err
+        # A host error's reply is on stdout, with nothing on stderr.
+        assert adapter.returncode == 0, out + err
         reply = json.loads(out)
         assert reply["success"] is True, reply
         reports.append(reply["data"])
