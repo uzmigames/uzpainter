@@ -1,5 +1,5 @@
 ## 1. Prerequisites
-- [ ] 1.1 Prerequisites accepted: phase2.10_pilot-tunic-recovery
+- [x] 1.1 Prerequisites accepted: phase2.10_pilot-tunic-recovery — done 2026-11-05: accepted and archived in fa25190d (`.rulebook/archive/2026-11-05-phase2.10_pilot-tunic-recovery/`).
 
 ## 2. Implementation
 - [x] 2.1 Vendor Embree 4.x from its upstream release under `thirdparty/` with `LICENSE`, `NOTICE` and `ORIGIN.md`; pin version and build configuration (ISA set, tasking, no fast-math) in `build.zig`
@@ -24,7 +24,7 @@
 - [x] 3.5 Linked-set transaction test: a failing `set` on one linked set leaves every set unchanged; capability error test on an unqualified ISA configuration
 
 ## 4. Acceptance
-- [ ] 4.1 Acceptance: defaults and property metadata exact against Tier 0 goldens; repeatable across thread counts; linked-set changes atomic
+- [ ] 4.1 Acceptance: defaults and property metadata exact against Tier 0 goldens; repeatable across thread counts; linked-set changes atomic — open (2026-11-05, §13): thread counts and linked sets pass; the Tier 0 replay compares every value and named metadata field exactly, then fails its capability-trace check on `project.get_uuid` (2daad902).
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [x] 5.1 Update or create documentation covering the implementation
@@ -154,3 +154,12 @@
 - `tests/python/test_pyapi_baking.py` compares the recorder's own code against every field of all nine admitted captures, with only the existing descriptive `properties()` refusal. Each successful replay has its own actual capability trace; evidence lists and the generated manifest match those traces. No trace or acceptance is manufactured from the authored table.
 - Fresh official fixture build: 19 passed in 99.21 s, covering all baking Python cases, native catalog/persistence/rollback, and the native parameter and request-mapping cases (`scripts/tmp/baking-current-first.xml`). Replay without trace updates plus full capability conformance, capability tests and private defaults checks: 79 passed in 158.08 s, zero skips (`scripts/tmp/baking-current-final.xml`). Recorder controlled-resolution tests: 40 passed. Ruff and mypy pass for all seven touched Python files. Clean-room guard: 12 files against 4449 private-store hashes, zero findings.
 - This establishes the current item 3.1 values and named metadata. Prerequisite 1.1 and parent acceptance 4.1 remain open; no AO parity or later baker acceptance is claimed.
+
+## 13. Acceptance attempt (2026-11-05)
+- 1.1 checked: `phase2.10_pilot-tunic-recovery` is archived (fa25190d).
+- 4.1 stays open, and the task is not archived. Evidence is the G1 full suite on 072756c0 (`tmp/scratch/g1-fullsuite.xml`, started 09:18). No later commit touches baking.
+  - Repeatable across thread counts: `tests/bake/test_bake_feasibility.py` passed 110 of 110, including `test_bytes_equal_across_thread_counts[*]` (10 fixtures at 1, 4 and every hardware thread) and `test_native_case[threads_in_process]`, `[bevel_threads_in_process]` and `[cage_file_threads_in_process]`.
+  - Linked-set changes atomic: `test_native_case[linked_groups]` and `[bake_settings]` passed, as did `tests/bake/test_baking_project.py` (4 of 4, including `test_baking_project[transactions]`).
+  - Defaults: `tests/bake/test_bake_defaults.py` passed 17 of 17, with `test_the_private_capture_equals_the_table` run, not skipped. It was run again on its own with Ruff and mypy clean on the five baking test and tool files.
+  - Property metadata and values against the Tier 0 goldens: `tests/python/test_pyapi_baking.py::test_baking_defaults_equal_painter[*]` failed 9 of 9. In each case `differences == []` and the refused-set assertion pass first, so every compared value and named metadata field is exact on all nine captures. The test then fails in `check_trace`: the replay exercises `substance_painter.project.get_uuid` and `uzpainter.project.get_uuid`, which `tools/capabilities/tier0-trace.json` does not record for `facade/baking-defaults*`. The cause is 2daad902 (2026-10-25), which made `painter_side.create_project` call `project.get_uuid()` for the own-project guard after the traces were last written (ae45b4bc). The same drift fails 71 Tier 0 replay tests across `tests/python/`, so this is not specific to baking.
+  - To close 4.1, the coordinator or Codex root decides whether the guard's `get_uuid` belongs in replay traces, which would mean regenerating them with `UZP_UPDATE_TIER0_TRACE=1`, or should be excluded from them. Then `test_baking_defaults_equal_painter` must pass. Adding the symbol here would claim `get_uuid` evidence from goldens that never compared its value, so this attempt does not do it.
