@@ -60,8 +60,8 @@ No tolerance, exception or refusal lift. The `island` rule stays out: the Wand's
 ## Consequences
 
 Across the 31 recorded padding probes (joint-bend and the Wand kernel probe included), ring
-texels differing go from 1,751 to 1,689. All 62 fixed texels are on joint-bend, and no probe has
-a new one.
+texels differing go from 1,751 to 1,689. All 62 fixed texels are on joint-bend, and no probe
+gains a differing texel it did not have before.
 
 - The joint-bend ring keeps 213 other residuals. Agreement on its 470 targets is not
   whole-probe parity.
