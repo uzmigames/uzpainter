@@ -56,7 +56,7 @@ RELEASE_BLOCKER = (
 class RuntimeFile:
     name: str
     sha256: str
-    thumbprint: str  # signer certificate thumbprint (SHA-1), as Windows reports it
+    thumbprint: str  # embedded signer certificate's thumbprint (SHA-1)
 
 
 FILES: tuple[RuntimeFile, ...] = (
@@ -81,7 +81,15 @@ METADATA_FILES = frozenset({"MANIFEST.json", "ORIGIN.md"})
 
 
 def signature(path: Path) -> tuple[str, str, str]:
-    """(status, signer subject, signer thumbprint) from Windows' Authenticode check.
+    """(status, signer subject, signer thumbprint): Windows' Authenticode verdict and the signer
+    of the signature embedded in the file.
+
+    The signer is read from the file, not from the verdict: when a file's hash is also listed in
+    an OS catalog, `Get-AuthenticodeSignature` reports the catalog's signer instead, and catalogs
+    change with OS updates. Windows 11 build 26200 (2026-11-05) lists these three DLLs in a
+    catalog signed by "CN=Microsoft Windows" (chain: Microsoft Windows Production PCA 2026
+    RSA2048-SHA256, Microsoft Root Certificate Authority 2010), while their embedded signer is
+    still the pinned one, with the pinned thumbprints, on bytes equal to the pinned SHA-256.
 
     Windows PowerShell runs without the parent's `PSModulePath`: a PowerShell 7 parent (the default
     shell of hosted CI steps) exports module paths that Windows PowerShell cannot load and that
@@ -93,7 +101,12 @@ def signature(path: Path) -> tuple[str, str, str]:
         "$ErrorActionPreference = 'Stop'; "
         f"$s = Get-AuthenticodeSignature -LiteralPath '{path}'; "
         "if ($null -eq $s) { throw 'Get-AuthenticodeSignature returned nothing' }; "
-        '"$($s.Status)|$($s.SignerCertificate.Subject)|$($s.SignerCertificate.Thumbprint)"'
+        "$subject = ''; $thumbprint = ''; "
+        "try { $c = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new("
+        "[System.Security.Cryptography.X509Certificates.X509Certificate]::CreateFromSignedFile("
+        f"'{path}')); $subject = $c.Subject; $thumbprint = $c.Thumbprint }} "
+        "catch [System.Security.Cryptography.CryptographicException] { }; "
+        '"$($s.Status)|$subject|$thumbprint"'
     )
     env = {k: v for k, v in os.environ.items() if k.upper() != "PSMODULEPATH"}
     proc = subprocess.run(
