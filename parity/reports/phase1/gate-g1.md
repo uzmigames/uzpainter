@@ -8,7 +8,9 @@ Pre-gate re-run, 2026-10-21, on a clean checkout of `main` `8709033adf6f644337df
 
 Gate run, 2026-11-05, after every Phase 1 feature task was archived (decision 397): the guard and `store verify` (§4.2), the capability manifest (§6.2) and the full local gate of decision 200 (§8), run once on the shared checkout at `072756c0ce7d2efc73e836f869d3bb087e12b1dd`. Logs under `tmp/scratch/g1-*` (untracked).
 
-**Result: G1 open.** Every clause of the roadmap is evidenced (§2), the Wand's under EXC-010 and not exactly, and every other Phase 1 task is archived (§5). The full local gate is red: 96 failed, 3 errors, 7328 passed, 32 skipped, 2 xfailed (§8). Two root causes were fixed and their 21 node ids pass on re-run (§8.2); the others are listed per node with their cause and owner (§8.3). G1 closes on a gate commit where the full gate is green, and the guard, `store verify` and the capability manifest are re-run on that commit.
+Second gate run, 2026-11-05 evening, on `58f7260ba745f2051808dbb56f67c59b2187f74e` after the repairs of §8.4, on a quiet checkout with the native lock held for the whole run (§4.3, §6.3, §9).
+
+**Result: G1 open.** Every clause of the roadmap is evidenced (§2), the Wand's under EXC-010 and not exactly, and every other Phase 1 task is archived (§5). The first full gate was red, 96 failed and 3 errors (§8). The second (§9) has 10 failures: 3 were fixed at their root after the run and pass on re-run, and 7 are known failures owned elsewhere (two need new Painter recordings, one a root decision on the R-322 TGA gap, one the owner's OK to remove a leftover folder). G1 closes on a gate commit where the full gate is green, with the guard, `store verify` and the capability manifest re-run on that commit.
 
 ## 1. Oracle envelope used by this gate (decision 037)
 
@@ -181,6 +183,16 @@ Store: `%LOCALAPPDATA%\UzPainter\parity-store`, read only. Each command ran once
 
 **The blocked `plane.obj` was a false positive, fixed in the guard (`072756c0`).** `parity/fixtures/meshes/plane.obj` (371 bytes, SHA-256 `7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe`) is an authored fixture: its header says it is authored by UzmiGames (Apache-2.0), it was committed in `6a2f26cc` on 2026-10-10, and current-envelope Tier 0 manifests declare it as an input by path and hash. On 2026-10-26 the private store kept a copy of it as an authored input (`inputs/7d3c5f61….json`, schema `uzpainter/parity/store-input/1`, `path` `parity/fixtures/meshes/plane.obj`; decision 144), and the blob joined the store index. The guard's `store-hash` rule read every index hash as a recorded Painter output. It now leaves out, when it reads the owner's store, the blobs kept only as authored inputs; a blob that a corpus record also names stays blocked. On the owner's store: 152 input entries, 2 of them also named by a corpus record, so 150 hashes leave the rule (4950 to 4800). `plane.obj` is the only stored input that is also a repository file. Test: `tests/parity/test_guard.py::test_cli_passes_an_authored_input_the_store_keeps_and_blocks_a_recorded_one`; `parity/GUARD.md` §1.
 
+### 4.3 Second gate run, 2026-11-05 evening (`58f7260b`)
+
+| Check | Exit | Result |
+|---|---|---|
+| `python -m tools.parity.guard` | 0 | store-hash rule against the store (4800 hashes); 5344 files checked, 0 blocked |
+| `python -m tools.parity.store verify` on the current envelope's manifests | 0 | 426 manifests, 24144 blobs, all `available` |
+| the same on `parity/envelopes/painter-12.1.5_js-api.1.1.20/manifests` | 0 | 333 manifests, 22578 blobs, all `available` |
+| the same on `parity/manifests` | 0 | 82 manifests, 2686 blobs, all `available` |
+| `python -m tools.parity.store verify` | 0 | whole store: `parity-store: ok` |
+
 ## 5. Phase 1 tasks (roadmap rule 3)
 
 Checked 2026-11-05 on `072756c0`: `docs/task-index.md` names 43 Phase 1 tasks. 42 are archived under `.rulebook/archive/`, the last being `2026-11-03-phase1.25_pilot-wand`. The only `phase1.*` task under `.rulebook/tasks/` is this gate, `phase1.26_gate-g1`.
@@ -259,6 +271,30 @@ Every `supported` entry has `since` and a non-empty `tier_evidence`, and the gen
 
 This is not yet the gate's manifest: `b0265f97` changes the inventory (`resource.Usage.FILTER` becomes a release gap, §8.2; inventory SHA-256 `924534c9…5f21`), and the trace fixes of §8.3 will change the evidence. The hash recorded at closure comes from the build of the gate commit. The untracked `capabilities.json` at the repository root (2026-10-23, SHA-256 `f982572f…8967`) is not this gate's: the build writes only `zig-out/bin/capabilities.json`, and the generator writes elsewhere only when called by hand with `--output`.
 
+### 6.3 Regeneration at the second gate run (`58f7260b`)
+
+`zig build painter -Doptimize=ReleaseFast -j4` exit 0 on `58f7260b`: product `zig-out/bin/UzPainter.exe` SHA-256 `4c5788b0f5885198be92222a75460a01206e96d16a7f2792c733b2e27d9eb62c` (18 036 224 bytes); `zig-out/bin/capabilities.json` SHA-256 **`ecbbfa8d94e5fe0f9ae5de2eb4efb2e536d6c6d93f60ce1353363eacef7f6b64`** (1 562 797 bytes).
+
+| Status | Entries |
+|---|---|
+| `supported` | 985 (921 `any`, 52 `compositor`, 2 each `backend:vulkan`, `compositor:height`, `compositor:minification`, `mesh-map`, 1 each `compositor:ocio`, `compositor:mask-stack`, `compositor:content-stack`, `compositor:normal-directx`) |
+| `pending-evidence` | 327 |
+| `release-gap` | 328 |
+| `desktop-only-omitted` | 15 |
+
+Every `supported` entry has `since` and a non-empty `tier_evidence`; they cite 111 distinct goldens of the current envelope's 333 Tier 0 manifests, and all 8660 of their listed blobs are `available` in that run's `store verify` (§4.3): 0 problems (`tmp/scratch/g1r2-cap-evidence.log`). The commits after `58f7260b` in this record (§9.2) change tests only, so the manifest inputs below are those of the commit that holds this record.
+
+| Input | SHA-256 (at `58f7260b`) |
+|---|---|
+| `tools/capabilities/generate_capabilities.py` | `0bf8f2e8a307947d7d27c845bab6502b7ac7c646a1137dd85a9fb6a517db5791` |
+| `tools/capabilities/painter-api-inventory.json` | `64ded30f5612e6cade1291370563e2bd0af01bcc8d74d360d235eef720427409` |
+| `tools/capabilities/uzpainter-additions.json` | `ad9296e575586992e026ab9d0ebe7379ccdc0c4d8b93afc66cbc97dea73c879a` |
+| `tools/capabilities/compositor-capabilities.json` | `f25e670c28c15f9aa173984d98623e9c9d8558465a3fcbee5e36675ef98aea56` |
+| `tools/capabilities/tier0-trace.json` | `9a11291a8e043afe2f3d082dfca8ef9c591a79852c3736e575a55f006930b92e` |
+| `tools/capabilities/mcp-tools.json` | `0867ed6eff10d20a5118bff9bb6ad85225f6801fe79b2572d8e5e9d50fa77b51` |
+| `tools/capabilities/operation-matrix.json` | `70c87ac6f7aa89da6a45f00d10f297da372ebb7b8a8fef694f97e0c6d451971c` |
+| `parity/envelopes/registry.json` | `721a547d493a38224c5ed5aaf2206b5b100956d07e5bbe51fc911d15e6f71377` |
+
 ## 7. Phase 2 duration Hypothesis (owner Q14, roadmap rule 6)
 
 Revised at this gate run, 2026-11-05, from the Wand checkpoint of `docs/roadmap.md` (decision 035) and the Phase 2 archive dates.
@@ -307,7 +343,7 @@ The run was not isolated. Other sessions committed five commits during it (`6aa7
 | `tests/sources/test_doc_overlap.py::test_checked_files_cover_the_analyses_review_and_decisions` | *Moved tree*: the untracked decision 402 appeared mid-run; passes on re-run | none |
 | `tests/sources/test_revision_check.py::test_repository_revisions_are_valid` | `docs/approved-sources.md` neither clears nor quarantines new analyses (`docs/analysis/padding-world-offset-residuals/01-…`, `02-…`, `docs/analysis/painter-recording-backlog/01-inventory.md`, …) | clean-room provenance audit |
 | `tests/supervisor/test_headless.py::test_a_session_without_a_console_shows_no_window[vulkan-True]`, `[dx12-False]` | The detached adapter (`execute_python`) exits 3 with empty stderr; not diagnosed (GPU runs of another session overlapped) | supervisor |
-| `tests/vendoring/test_modifications.py::test_standalone_static_library_build` | *Moved tree*: a stray file `-x` at the repository root during the run (gone afterwards); not re-run | none |
+| `tests/vendoring/test_modifications.py::test_standalone_static_library_build` | First read here as a stray file `-x` (*moved tree*); that was wrong. Since `022a909d` (decision 394) each artifact compiles a generated stamp as `zig clang -x c <stamp>`, and the test took `-x` as the source path. Fixed in `9035bae1` (§9.2) | this gate |
 | `tests/vendoring/test_render_core_integration.py`, 3 errors (`test_relocated_build_*`) | The relocated build cannot read `src/procedural/filter_gate_pins.cpp`'s `#embed` of `parity/envelopes/…/requests/tier0/api-probes/filter-context-settings-a.json` (`3f536fb3`) | `phase3.1_proc-backend-seam` |
 | `tests/vendoring/test_render_core_integration.py::test_build_script_paths_stay_in_the_repository` | `build.zig` names `export/cook_uzengine.cpp` (`0b838186`), which the test reads as a UzEngine path | `phase3.3_uze-png-cook-cli` |
 | `tests/vendoring/test_render_core_integration.py::test_no_submodule_runtime_lib_or_patch_queue` | An ignored leftover `scripts/tmp/r322-integration.patch` (2026-10-24) counts as a patch queue; `scripts/tmp/` is a temporary folder that only the owner may remove (`AGENTS.override.md`) | owner |
@@ -315,3 +351,56 @@ The run was not isolated. Other sessions committed five commits during it (`6aa7
 | `tests/vendoring/test_vendor_check.py::test_full_check_with_build_passes` | *Moved tree*: the fresh build log records `072756c0`, HEAD was `1d16098b` when the check ran; not re-run | none |
 
 G1 stays open until these are fixed at their root and the full gate passes once on the gate commit.
+
+### 8.4 Repairs after the first run (other sessions, 2026-11-05)
+
+| Commit | Repairs (§8.3 row) |
+|---|---|
+| `147f07b6` | decision 368's probe count reworded in our own words (doc overlap) |
+| `dbc31df0` | `docs/approved-sources.md` quarantines the six uncited analyses (revision check) |
+| `59b9e392` | `build.zig` may name its own UzEngine-format sources (`cook_uzengine.cpp`) |
+| `8a3dd16a` | the vc-runtime DLLs are pinned on their embedded signer, not Windows' verdict signer |
+| `3b21a5ce` | a procedural source without a snapshot provider is `unsupported_source`, not `missing_resource` (compositor `NotYetSupported` case) |
+| `db7ececd` | `build.zig.zon` paths include the `#embed` targets under `parity/` (the three relocated-build errors) |
+| `70404be9` | the headless adapter call selects the diagnostic-import context (headless supervisor, both ids) |
+| `17529d7c` | `parity/semantics/export-processing.json` republished over the goldens admitted since 2026-10-25 |
+| `e02d9e8d` | the Tier 0 gate counts the `assets3d` folder's semantics goldens; the turn-exact generator check (tier0 gate ×3, `padding_turn_exact` ×2) |
+| `58f7260b` | the 51 stale Tier 0 traces regenerated after an evidence audit (decision 403; field tracing started in `7604e4e1`, not only `ae45b4bc`) |
+
+Also in the tree of the second run: `ee0e4723` (`phase3.1_height-magnification-fit` archived; decision 402, native `CheckSampling` change `3325b5df`) and `6b08d37a` (new unrecorded padding requests).
+
+## 9. Second full local gate (decision 200)
+
+Run once, 2026-11-05 from 16:05, on `58f7260ba745f2051808dbb56f67c59b2187f74e`. The checkout was quiet: no other build or test process, and HEAD was the same at the start and end of the run. The native lock was held as `g1-gate` for the whole run, its timestamp refreshed every 5 minutes so that no session's 5400 s stale rule could take it. The only uncommitted files were other sessions' parked ones; the three parked decision-245 test files were left out by path as in §8.
+
+| Step | Command | Result |
+|---|---|---|
+| Product build | `zig build painter -Doptimize=ReleaseFast -j4` | exit 0 (§6.3) |
+| Selftest | `zig-out/bin/UzPainter.exe selftest` (ReleaseFast) | exit 0: 18 checks PASS, 0 FAIL; DX12 and Vulkan hardware slices passed |
+| Type-check | `python -m mypy <the 708 committed .py files of the configured roots>` | exit 0, no issues |
+| Lint | `python -m ruff check . --extend-exclude <the parked files>` | exit 0 |
+| Vendoring check | `python -m tools.vendoring.vendor_check --no-build` | exit 0, 97 vendored files; the build-path rule is `test_full_check_with_build_passes` in the suite: passed |
+| Guard | `python -m tools.parity.guard` | exit 0, 5344 files, 0 blocked (§4.3) |
+| Full suite | `python -m pytest -p no:cacheprovider -q -rfEsxX --junitxml=… --ignore=<the three parked files>` | **exit 1**: **10 failed**, 7441 passed, 31 skipped, 2 xfailed, 0 errors, in 16 165.56 s (4 h 29 min) |
+
+The 31 skips name their reason (for example the OCIO16 export cases that need an approved `UZP_OCIO16_EXPORT_TESTS_EXE`); the 2 xfails are the bitmap-defaults OCIO release gap (decision 190) and the Sash's production round, which is expected to refuse the islanded export.
+
+### 9.1 The 10 failures
+
+| Node ids | Cause | Status, owner |
+|---|---|---|
+| `tests/parity/test_initial_paint_cleanup.py::test_only_successful_owned_creation_can_arm_cleanup[True]`, `[False]` | Introduced by this gate's `1f830aca`: the test extracts `create_project` alone from `painter_side.py` by AST, and the identity check now lives in `own_project_identity()` (NameError) | **fixed** in `78eb9e3b`; 2 passed on re-run |
+| `tests/vendoring/test_modifications.py::test_standalone_static_library_build` | The compile-list parser took the `-x` of the native input stamps' `zig clang -x c <stamp>` (`022a909d`, decision 394) as a source path | **fixed** in `9035bae1`; 1 passed on re-run under the native lock |
+| `tests/python/test_pyapi_lifecycle_tier0.py::test_observed_probe_events_equal_painter[phase1-reload-mesh]` | Painter 12.2.0 records `LayerStacksModelDataChanged` at s9 and s11; the facade emits none. Needs repeated Painter recordings to decide | known; recording batch |
+| `tests/python/test_pyapi_reload_order_tier0.py::test_reload_results_equal_every_painter_recording[zam]`, `[mza]`, `::test_independent_alias_origin_equals_every_painter_recording[zam]`, `[mza]` | The current envelope's `p22b-reload-order-*-all-origins` goldens hold 2 recordings; decision 338's tests need 6 from 3 sessions | known; recording batch |
+| `tests/export/test_tga_capture_replay.py::test_r322_tga_capture_diagnostic` | The R-322 TGA diagnostic stops in setup or execution: the OCIO16 gap | known; `phase3.2_unreal-ue56-packed-preset`, awaiting a root decision |
+| `tests/vendoring/test_render_core_integration.py::test_no_submodule_runtime_lib_or_patch_queue` | Leftover ignored files in `scripts/tmp/` (`r322-integration.patch` and one more) count as a patch queue; `scripts/tmp/` is a temporary folder that only the owner may remove (`AGENTS.override.md`) | known; awaiting the owner's OK |
+
+### 9.2 Fixes after the second run
+
+| Commit | Change | Re-run |
+|---|---|---|
+| `78eb9e3b` | `tests/parity/test_initial_paint_cleanup.py` extracts `own_project_identity` and `create_project` into one namespace; its assertions are unchanged | the two node ids: 2 passed |
+| `9035bae1` | `tests/vendoring/test_modifications.py` sets the native input stamp commands apart: language `c`, inside the build's own cache, one each for `uzrendercore` and `uzp-vendor-tests`; every other command is checked as before | the node id under the native lock: 1 passed (90.6 s) |
+
+After these, the full gate's only failures are the 7 known ones of §9.1. G1 is not archived while any test is red.
