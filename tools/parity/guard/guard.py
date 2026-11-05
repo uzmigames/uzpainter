@@ -192,6 +192,26 @@ def load_index(path: Path) -> frozenset[str]:
     return frozenset(hashes)
 
 
+def store_index(root: Path) -> frozenset[str]:
+    """The recorded-output hashes of the store at `root`: its index, less the blobs kept only as
+    authored inputs (`inputs/<sha256>.json`, decision 144). An authored input is a repository
+    fixture a manifest pins by hash, not a Painter output; a blob that a corpus record also
+    names stays blocked."""
+    index = load_index(root / "index.json")
+    try:
+        inputs = {
+            json.loads(path.read_text(encoding="utf-8")).get("sha256")
+            for path in (root / "inputs").glob("*.json")
+        }
+        recorded = {
+            json.loads(path.read_text(encoding="utf-8")).get("sha256")
+            for path in (root / "corpora").rglob("*.json")
+        }
+    except (OSError, ValueError) as error:
+        raise GuardError(f"cannot read the store entries under {root} ({error})") from error
+    return index - (inputs - recorded)
+
+
 def content_hashes(data: bytes) -> set[str]:
     """SHA-256 of the bytes and, for text (no NUL byte), of their LF and CRLF forms, so a copy
     whose line endings git or an editor converted still matches the index."""

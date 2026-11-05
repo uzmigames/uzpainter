@@ -21,6 +21,7 @@ from tools.parity.guard.guard import (
     repository_root,
     run_guard,
     staged_snapshot,
+    store_index,
     worktree_snapshot,
 )
 from tools.parity.store.store import StoreError, locate
@@ -55,7 +56,7 @@ def _index(args: argparse.Namespace) -> tuple[frozenset[str] | None, str]:
     store = locate()
     if store is None:
         return None, "no private store on this machine"
-    return load_index(store.root / "index.json"), f"store {store.root}"
+    return store_index(store.root), f"store {store.root}"
 
 
 def _relative(repo: Path, paths: Sequence[Path]) -> list[str]:

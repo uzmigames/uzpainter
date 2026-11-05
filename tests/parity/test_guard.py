@@ -195,6 +195,29 @@ def test_pre_commit_cli_rejects_recorded_png_from_the_local_store(
     assert "BLOCKED parity/fixtures/images/basecolor.png: [store-hash]" in output
 
 
+def test_cli_passes_an_authored_input_the_store_keeps_and_blocks_a_recorded_one(
+    repo: Path,
+    outside: Path,
+    store: OracleStore,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A blob stored only as an authored input (decision 144) is a repository fixture, not a
+    recorded output; one that a corpus record also names stays blocked."""
+    monkeypatch.setenv(STORE_ENV, str(store.root))
+    store.add_input(AUTHORED_IMAGE, sha256_file(AUTHORED_IMAGE)[0], IMAGE_PATH)
+    recorded = outside / "basecolor.png"
+    digest = sha256_file(recorded)[0]
+    store.add_record("synthetic-build", "samples/guard", "r1", "texture", recorded, digest, "b.png")
+    store.add_input(recorded, digest, "parity/fixtures/images/basecolor.png")
+    add_authored(repo)
+    put(repo, "parity/fixtures/images/basecolor.png", recorded.read_bytes())
+    assert main(["--repo", str(repo), "--staged"]) == 1
+    output = capsys.readouterr().out
+    assert IMAGE_PATH not in output
+    assert "BLOCKED parity/fixtures/images/basecolor.png: [store-hash]" in output
+
+
 def test_pre_commit_hook_rejects_the_commit(
     repo: Path, outside: Path, store: OracleStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:
