@@ -18,3 +18,7 @@
 - [ ] 5.1 Update or create documentation covering the implementation
 - [ ] 5.2 Write tests covering the new behavior
 - [ ] 5.3 Run tests and confirm they pass
+
+## 6. Notes
+
+- **Decision 401 (2026-11-05): this task owns the island-edge coverage near-tie and EXC-011 version 2's narrowing.** The Tunic's Tier 1 (`phase2/tier1/tunic-v10-current`, 4096 px) differs on 17 values of 3 covered island-edge texels (BaseColor 5, Height 9, Roughness 3): Painter counts each texel outside its island, UzPainter inside. Under decision 281's 1/256-texel vertex snap the three texel centres lie inside their triangles by 0.00004, 0.0016 and 0.0007 texel, each with an endpoint of the deciding edge within 1/64 texel of a rounding tie of that snap. A float32 clip-space edge test was tried and does not reproduce Painter's choice; no rule that does is identified. The owner widened EXC-011 to the island edge of every Tunic map (version 2) and sent the exact tie rule here. When 2.1 makes this coverage exact, narrow EXC-011 by a new version (back to the Normal's edge, as EXC-010's terms), and withdraw it once the Tunic passes with no exception (decision 398 §6).
