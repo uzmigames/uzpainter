@@ -161,16 +161,15 @@ def test_only_successful_owned_creation_can_arm_cleanup(uuid_available: bool) ->
             side_effect=None if uuid_available else RuntimeError("unavailable"),
         ),
     )
-    run = function(
-        "tools/parity/recorder/painter_side.py",
-        "create_project",
-        {
-            "OWN_PROJECT_CREATION": marker,
-            "substance_painter": SimpleNamespace(project=project),
-            "SETTINGS_FOLDERS": (),
-            "colour_management": lambda: {"mode": "ocio"},
-        },
-    )
+    namespace = {
+        "OWN_PROJECT_CREATION": marker,
+        "substance_painter": SimpleNamespace(project=project),
+        "SETTINGS_FOLDERS": (),
+        "colour_management": lambda: {"mode": "ocio"},
+    }
+    # The identity check after `project.create` is its own function (the trace's bookkeeping).
+    function("tools/parity/recorder/painter_side.py", "own_project_identity", namespace)
+    run = function("tools/parity/recorder/painter_side.py", "create_project", namespace)
     assert run({}, {"mesh": "public.obj"}) == {"colour_management": {"mode": "ocio"}}
     project.create.assert_called_once()
     assert marker == ({"uuid": "public-created", "pending": True} if uuid_available else {})
