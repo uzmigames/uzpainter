@@ -76,6 +76,8 @@ SIGNED_ADDITION = "semantics/height-signed-addition"
 COVERAGE = f"{DEFAULT}-channel-coverage"
 IMPORTS = ("semantics/normal-channel-import", "semantics/normal-channel-import-directx")
 RESOLUTIONS = tuple(f"{DEFAULT}-resolution-{w}" for w in ("512", "1024", "1024-sobel", "2048"))
+# Decision 400's 4096 px golden: the 256 px ramps magnified 16 times (decision 402).
+RESOLUTION_4096 = f"{DEFAULT}-resolution-4096"
 RECORDED_SETS: dict[str, tuple[str, ...]] = {
     MESH_MAP[0]: PLANE_SETS,
     MESH_MAP[1]: PLANE_SETS[:4],
@@ -84,6 +86,7 @@ RECORDED_SETS: dict[str, tuple[str, ...]] = {
     IMPORTS[0]: PLANE_SETS[:4],
     IMPORTS[1]: PLANE_SETS[:4],
     **{name: PLANE_SETS[:4] for name in RESOLUTIONS},
+    RESOLUTION_4096: PLANE_SETS[:4],
 }
 FLAT = np.asarray([0.5, 0.5, 1.0], np.float32)  # the Normal channel's read-out base
 SOURCES = [
@@ -385,24 +388,55 @@ def height_readout(content: Array, layers: list[tuple[str, float]]) -> Array:
     return stack_readout([content] * len(layers), layers)
 
 
+FILTER_OPERAND_BITS = 28  # projection_uv.h kFilterOperandBits
+
+
+def bilinear_filter(weights: tuple[Array, ...], texels: tuple[Array, ...]) -> Array:
+    """projection_uv.h `BilinearFilter`, the GPU's linear filter of float32 texels with 8-bit
+    integer weights (summing to 256): with E the binary exponent of the largest texel magnitude of
+    non-zero weight, each texel enters as the integer t 2^(28 - E) truncated toward zero; the
+    weighted sum, times 2^(E - 36), is rounded to 24 significant bits, ties away from zero."""
+    t = [np.asarray(v, F32) for v in texels]
+    w = [np.asarray(v, np.int64) for v in weights]
+    largest = np.zeros(np.broadcast_shapes(*(v.shape for v in t), *(v.shape for v in w)), F32)
+    for wk, tk in zip(w, t, strict=True):
+        largest = np.where(wk != 0, np.maximum(largest, np.abs(tk)), largest)
+    _, exponent = np.frexp(largest)
+    total = np.zeros(largest.shape, np.int64)
+    for wk, tk in zip(w, t, strict=True):
+        operand = np.trunc(np.ldexp(tk.astype(F64), FILTER_OPERAND_BITS - exponent))
+        total += wk * operand.astype(np.int64)
+    magnitude = np.abs(total)
+    _, length = np.frexp(magnitude.astype(F64))  # bit length; the magnitude is below 2^37
+    shift = np.maximum(length - 24, 0)
+    significand = magnitude >> shift
+    significand += np.where(shift > 0, (magnitude >> np.maximum(shift - 1, 0)) & 1, 0)
+    value = np.ldexp(significand.astype(F64), shift + exponent - FILTER_OPERAND_BITS - 8)
+    out: Array = np.where(total < 0, -value, value).astype(F32)
+    return out
+
+
 def magnified(signed: Array, width: int) -> Array:
-    """The signed texels of a 256 px bitmap sampled onto a `width` px set by the default UV
-    projection (bilinear, repeat): texel centres x = (i + 1/2) 256 / width - 1/2, the dyadic
-    weights applied to the signed values 2t - 1 exactly and rounded once to float32 (the
-    evaluator's integer filter, projection_uv.h BilinearFilter, gives the same values here)."""
-    s = np.asarray(signed, np.float64)
+    """The signed texels of a square n px bitmap sampled onto a `width` px set by the default UV
+    projection (bilinear, repeat), as the evaluator does it (projection_uv.h `ProjectTexel`):
+    texel centres x = (i + 1/2) n / width - 1/2 in 8-bit fixed point X = floor(256 x + 1/2), x0 =
+    X >> 8, fx = X & 255 (rows the same); the integer weights of `resample.bilinear_weights`
+    (w11 = (fx fy + 127) >> 8); `bilinear_filter` of the signed values 2t - 1. The rounded w11 is
+    what Painter does: exact dyadic weights leave 48 126 Height texels of the 16x magnification
+    at 4096 px off (phase3.1_height-magnification-fit); at 2x to 8x fx fy is a multiple of 256."""
+    from tools.parity.fit.resample import ONE, SUBTEXEL_BITS, bilinear_weights
+
+    s = np.asarray(signed, F32)
     n = s.shape[0]
     if width == n:
-        return np.asarray(signed, F32)
+        return s
     i = np.arange(width)
-    x = (i + 0.5) * (n / width) - 0.5
-    x0 = np.floor(x).astype(np.int64)
-    f = x - x0
-    rows = s[x0 % n, :] * (1 - f)[:, None] + s[(x0 + 1) % n, :] * f[:, None]
-    out: Array = (rows[:, x0 % n] * (1 - f)[None, :] + rows[:, (x0 + 1) % n] * f[None, :]).astype(
-        F32
-    )
-    return out
+    fixed = np.floor(((i + 0.5) / width * n - 0.5) * ONE + 0.5).astype(np.int64)
+    x0, f = fixed >> SUBTEXEL_BITS, fixed & (ONE - 1)
+    a, b = x0 % n, (x0 + 1) % n
+    weights = bilinear_weights(f[None, :], f[:, None])
+    texels = (s[np.ix_(a, a)], s[np.ix_(a, b)], s[np.ix_(b, a)], s[np.ix_(b, b)])
+    return bilinear_filter(weights, texels)
 
 
 # --- Comparison domain ------------------------------------------------------------------------
@@ -1006,6 +1040,35 @@ def _resolution_entry(ctx: Context) -> dict[str, Any]:
     )
 
 
+def _magnification_entry(ctx: Context) -> dict[str, Any]:
+    return entry(
+        "height-magnification-4096",
+        "The Height magnified 16 times at 4096 px and its virtual normal maps",
+        "The 256 px Height bitmap on a 4096 px set (default projection, BilinearHQ, Repeat): "
+        "texel centres x = (i + 1/2) / 16 - 1/2 in 8-bit fixed point (fx, fy = k/32 of a texel); "
+        "integer weights w11 = (fx fy + 127) >> 8, w10 = fx - w11, w01 = fy - w11, w00 = 256 - fx "
+        "- fy + w11 (the GPU's 8-bit weights, projection_uv.h); the signed texels 2t - 1 filtered "
+        "by BilinearFilter (each operand truncated to 28 bits below the largest texel's exponent, "
+        "the sum rounded to float32, ties away from zero), then written half toward zero; z = 100 "
+        "/ 4096 (Sharp).",
+        [
+            source(
+                "X-D3D12", "Texture sampling: texel coordinate fixed-point precision, filtering"
+            ),
+            source("A-HELP-GUIDE", "Texture Set Settings: size"),
+        ],
+        [parameter("w11", "(fx fy + 127) >> 8", "fitted", "8-bit corner weight, ties down")],
+        _recorded_residuals(ctx, (RESOLUTION_4096,)),
+        notes=RECORDED_NOTES + " Search (phase3.1_height-magnification-fit): the exact dyadic "
+        "weights (fx fy / 65536 kept exactly) leave 48 126 of the 16 777 216 Height texels of s0 "
+        "off (38 847 by one binary16 step, decision 400 §2); w11 floored or ceiled to 1/256 with "
+        "the rest derived leave 62 118 and 62 060, all four weights floored or ceiled about 16.7 "
+        "M. At 16x fx fy / 256 is an odd number of quarters, so no tie decides; at 2x to 8x fx fy "
+        "is a multiple of 256 and the weights are exact. r2 of the virtual maps of s1 and s2 "
+        "differs from r1 (decision 400) and is not compared (decision 032).",
+    )
+
+
 def _signed_addition_entry(ctx: Context) -> dict[str, Any]:
     return entry(
         "height-signed-addition",
@@ -1061,11 +1124,13 @@ def _gaps() -> list[dict[str, Any]]:
             "Normal channel other than one bitmap fill in Normal mode at opacity 1 without mask or "
             "effects (other modes, coverage, stacks, uniform colours); a Normal mesh map in the "
             "combination that is 8-bit, of another size or in the other convention; sets other "
-            "than square 256, 512, 1024 or 2048 px. Modelled by the recorded rules but not "
-            "recorded: Normal root lists of several layers at partial coverage (one rule for "
-            "any root list), "
-            "and the signed bilinear filter of the Height with non-dyadic weights (rotated or "
-            "scaled projections; the recorded magnifications have dyadic weights).",
+            "than square 256, 512, 1024 or 2048 px and, with Sharp, 4096 px; on a set above 2048 "
+            "px, a bilinear Height magnification other than 16x of a square bitmap under the "
+            "identity projection (BilinearHQ, Repeat) on a square 4096 px set (decision 402). "
+            "Modelled by the recorded rules but not recorded: Normal root lists of several layers "
+            "at partial coverage (one rule for any root list), and the signed bilinear filter of "
+            "the Height with non-dyadic sub-texel fractions (rotated or scaled projections; the "
+            "recorded magnifications have fractions k/2^m, m <= 5).",
             [source("A-HELP-GUIDE", "Project configuration: normal map format")],
             [],
             [],
@@ -1086,6 +1151,7 @@ def fit(ctx: Context) -> dict[str, Any]:
         _coverage_entry(ctx),
         _import_entry(ctx),
         _resolution_entry(ctx),
+        _magnification_entry(ctx),
         _signed_addition_entry(ctx),
         *_recorded_divergences(ctx),
         *_gaps(),
@@ -1096,7 +1162,8 @@ def fit(ctx: Context) -> dict[str, Any]:
         "Height to normal for both methods of Painter 12.1.5 (Sharp, Smooth (Sobel)) and the "
         "virtual normal maps Normal_OpenGL / Normal_DirectX: the stencils on the Height read-out, "
         "the reoriented combination with the Normal mesh map and the Normal channel (at any "
-        "coverage, both conventions), the scale at 256 to 2048 px, the encoding to 16 bits, "
+        "coverage, both conventions), the scale at 256 to 4096 px, the Height magnified 16 times "
+        "at 4096 px, the encoding to 16 bits, "
         "fitted on the Tier 0 height-normal goldens, blend-normal-channel and the recordings of "
         "decision 077.",
         corpus,

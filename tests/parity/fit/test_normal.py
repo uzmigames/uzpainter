@@ -166,6 +166,19 @@ def test_signed_texels_are_magnified_before_the_write() -> None:
     assert wide[0].tolist() == [-0.5, -0.5, 0.5, 0.5]
 
 
+def test_magnification_rounds_the_corner_weight_to_eight_bits() -> None:
+    """phase3.1_height-magnification-fit: at 16x the fractions are k/32 and fx fy is not a multiple
+    of 256; w11 = (fx fy + 127) >> 8 as the evaluator and Painter do, not the exact weight."""
+    signed = np.array([[-1.0, 1.0], [1.0, -1.0]], np.float32)
+    out = magnified(signed, 32)
+    # Texel (8, 8) samples at x = y = 1/32: fx = fy = 8, w11 = 0, w10 = w01 = 8, w00 = 240, so
+    # (-240 + 16) / 256; the exact weights give -900 / 1024.
+    assert out[8, 8] == np.float32(-0.875)
+    # The weights of 2x to 8x are exact: fx fy is a multiple of 256 there.
+    exact = magnified(signed, 16)  # x = 1/16 at texel 4: fx = fy = 16
+    assert exact[4, 4] == np.float32(-(15 * 15) / 256 + 2 * 15 / 256 - 1 / 256)
+
+
 def test_signed_addition_on_height() -> None:
     a = np.array([0.25, -0.5], np.float32)
     b = np.array([0.75, 0.25], np.float32)

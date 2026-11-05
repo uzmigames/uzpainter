@@ -2,7 +2,7 @@
   "schema": "uzpainter/parity/semantics/1",
   "record_class": "public_semantics",
   "semantics_id": "height-to-normal",
-  "description": "Height to normal for both methods of Painter 12.1.5 (Sharp, Smooth (Sobel)) and the virtual normal maps Normal_OpenGL / Normal_DirectX: the stencils on the Height read-out, the reoriented combination with the Normal mesh map and the Normal channel (at any coverage, both conventions), the scale at 256 to 2048 px, the encoding to 16 bits, fitted on the Tier 0 height-normal goldens, blend-normal-channel and the recordings of decision 077.",
+  "description": "Height to normal for both methods of Painter 12.1.5 (Sharp, Smooth (Sobel)) and the virtual normal maps Normal_OpenGL / Normal_DirectX: the stencils on the Height read-out, the reoriented combination with the Normal mesh map and the Normal channel (at any coverage, both conventions), the scale at 256 to 4096 px, the Height magnified 16 times at 4096 px, the encoding to 16 bits, fitted on the Tier 0 height-normal goldens, blend-normal-channel and the recordings of decision 077.",
   "painter_build_id": "12.2.0+js-api.1.1.20",
   "corpus": [
     "tier0/semantics-ui/height-normal-sharp-bevelled-cube",
@@ -20,6 +20,7 @@
     "tier0/semantics/height-normal-resolution-1024",
     "tier0/semantics/height-normal-resolution-1024-sobel",
     "tier0/semantics/height-normal-resolution-2048",
+    "tier0/semantics/height-normal-resolution-4096",
     "tier0/semantics/height-normal-resolution-512",
     "tier0/semantics/height-normal-sphere",
     "tier0/semantics/height-signed-addition",
@@ -9368,6 +9369,453 @@
       "notes": "Every r1 map and every r2 map that equals its r1, whole image (the sets of a 4x2 or 2x2 plane grid). Exported Normal channel and mesh map included where the golden exports them. Search (decision 079): z fixed at 0.390625 leaves about 428 000 (512) to 6.7 M (2048) values off; filtering t then taking 2v - 1 leaves 16 (512) to 462 (2048) Height values one half step off near 0. Recorded sizes only: 256, 512, 1024, 2048. r2 of 2048 s2 differs from r1 (height-normal-resolution-save-reopen-divergence)."
     },
     {
+      "entry_id": "height-magnification-4096",
+      "subject": "The Height magnified 16 times at 4096 px and its virtual normal maps",
+      "status": "exact",
+      "formula": "The 256 px Height bitmap on a 4096 px set (default projection, BilinearHQ, Repeat): texel centres x = (i + 1/2) / 16 - 1/2 in 8-bit fixed point (fx, fy = k/32 of a texel); integer weights w11 = (fx fy + 127) >> 8, w10 = fx - w11, w01 = fy - w11, w00 = 256 - fx - fy + w11 (the GPU's 8-bit weights, projection_uv.h); the signed texels 2t - 1 filtered by BilinearFilter (each operand truncated to 28 bits below the largest texel's exponent, the sum rounded to float32, ties away from zero), then written half toward zero; z = 100 / 4096 (Sharp).",
+      "public_sources": [
+        {
+          "source_id": "X-D3D12",
+          "locator": "Texture sampling: texel coordinate fixed-point precision, filtering"
+        },
+        {
+          "source_id": "A-HELP-GUIDE",
+          "locator": "Texture Set Settings: size"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "w11",
+          "value": "(fx fy + 127) >> 8",
+          "origin": "fitted",
+          "unit": "8-bit corner weight, ties down"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "s0/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 50331648,
+            "affected_texels": 0,
+            "texels": 16777216
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "s0/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 50331648,
+            "affected_texels": 0,
+            "texels": 16777216
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "s0/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 50331648,
+            "affected_texels": 0,
+            "texels": 16777216
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "s0/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 50331648,
+            "affected_texels": 0,
+            "texels": 16777216
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "s0/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16777216,
+            "affected_texels": 0,
+            "texels": 16777216
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "s0/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16777216,
+            "affected_texels": 0,
+            "texels": 16777216
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "s0/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 50331648,
+            "affected_texels": 0,
+            "texels": 16777216
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "s0/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 50331648,
+            "affected_texels": 0,
+            "texels": 16777216
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "s1/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 50331648,
+            "affected_texels": 0,
+            "texels": 16777216
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "s1/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 50331648,
+            "affected_texels": 0,
+            "texels": 16777216
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "s1/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16777216,
+            "affected_texels": 0,
+            "texels": 16777216
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "s1/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16777216,
+            "affected_texels": 0,
+            "texels": 16777216
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "s1/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 50331648,
+            "affected_texels": 0,
+            "texels": 16777216
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "s1/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 50331648,
+            "affected_texels": 0,
+            "texels": 16777216
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "s2/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 50331648,
+            "affected_texels": 0,
+            "texels": 16777216
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "s2/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 50331648,
+            "affected_texels": 0,
+            "texels": 16777216
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "s2/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16777216,
+            "affected_texels": 0,
+            "texels": 16777216
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "s2/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16777216,
+            "affected_texels": 0,
+            "texels": 16777216
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "s2/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 50331648,
+            "affected_texels": 0,
+            "texels": 16777216
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "s2/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 50331648,
+            "affected_texels": 0,
+            "texels": 16777216
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "s3/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 50331648,
+            "affected_texels": 0,
+            "texels": 16777216
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "s3/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 50331648,
+            "affected_texels": 0,
+            "texels": 16777216
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "s3/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 50331648,
+            "affected_texels": 0,
+            "texels": 16777216
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "s3/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 50331648,
+            "affected_texels": 0,
+            "texels": 16777216
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "s3/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16777216,
+            "affected_texels": 0,
+            "texels": 16777216
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "s3/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16777216,
+            "affected_texels": 0,
+            "texels": 16777216
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "s3/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 50331648,
+            "affected_texels": 0,
+            "texels": 16777216
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "s3/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 50331648,
+            "affected_texels": 0,
+            "texels": 16777216
+          }
+        }
+      ],
+      "notes": "Every r1 map and every r2 map that equals its r1, whole image (the sets of a 4x2 or 2x2 plane grid). Exported Normal channel and mesh map included where the golden exports them. Search (phase3.1_height-magnification-fit): the exact dyadic weights (fx fy / 65536 kept exactly) leave 48 126 of the 16 777 216 Height texels of s0 off (38 847 by one binary16 step, decision 400 \u00a72); w11 floored or ceiled to 1/256 with the rest derived leave 62 118 and 62 060, all four weights floored or ceiled about 16.7 M. At 16x fx fy / 256 is an odd number of quarters, so no tie decides; at 2x to 8x fx fy is a multiple of 256 and the weights are exact. r2 of the virtual maps of s1 and s2 differs from r1 (decision 400) and is not compared (decision 032)."
+    },
+    {
       "entry_id": "height-signed-addition",
       "subject": "SignedAddition on the Height channel",
       "status": "exact",
@@ -10299,7 +10747,7 @@
       "entry_id": "height-normal-unrecorded-inputs",
       "subject": "Normal inputs and set sizes the recordings do not cover",
       "status": "gap",
-      "formula": "Not recorded, refused with unsupported_source (decision 079): a DirectX project's Normal channel other than one bitmap fill in Normal mode at opacity 1 without mask or effects (other modes, coverage, stacks, uniform colours); a Normal mesh map in the combination that is 8-bit, of another size or in the other convention; sets other than square 256, 512, 1024 or 2048 px. Modelled by the recorded rules but not recorded: Normal root lists of several layers at partial coverage (one rule for any root list), and the signed bilinear filter of the Height with non-dyadic weights (rotated or scaled projections; the recorded magnifications have dyadic weights).",
+      "formula": "Not recorded, refused with unsupported_source (decision 079): a DirectX project's Normal channel other than one bitmap fill in Normal mode at opacity 1 without mask or effects (other modes, coverage, stacks, uniform colours); a Normal mesh map in the combination that is 8-bit, of another size or in the other convention; sets other than square 256, 512, 1024 or 2048 px and, with Sharp, 4096 px; on a set above 2048 px, a bilinear Height magnification other than 16x of a square bitmap under the identity projection (BilinearHQ, Repeat) on a square 4096 px set (decision 402). Modelled by the recorded rules but not recorded: Normal root lists of several layers at partial coverage (one rule for any root list), and the signed bilinear filter of the Height with non-dyadic sub-texel fractions (rotated or scaled projections; the recorded magnifications have fractions k/2^m, m <= 5).",
       "public_sources": [
         {
           "source_id": "A-HELP-GUIDE",
