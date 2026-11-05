@@ -578,11 +578,11 @@
     ]
   },
   "equality_to_painter": {
-    "outcome": "fail",
+    "outcome": "pass",
     "exceptions_relied_on": [
       {
         "exception_id": "EXC-011",
-        "version": 1
+        "version": 2
       }
     ],
     "maps": [
