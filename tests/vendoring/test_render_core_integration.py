@@ -232,4 +232,15 @@ def test_build_script_paths_stay_in_the_repository() -> None:
         assert banned not in code, banned
     # An object file or import library (`python313.lib`) only through `b.path`.
     assert code.count("addObjectFile(") == code.count("addObjectFile(b.path(")
+    # UzEngine is named only by the vendored folder and by UzPainter's own sources named after
+    # the delivery format they write (`export/cook_uzengine.cpp`): an existing file under `src/`
+    # whose folders do not name UzEngine. A checkout folder, variable or library is refused.
+    own_sources = {
+        s
+        for s in literals
+        if (REPO_ROOT / "src" / s).is_file()
+        and not any("uzengine" in part.lower() for part in s.split("/")[:-1])
+    }
+    for source in own_sources:
+        code = code.replace(f'"{source}"', '""')
     assert "uzengine" not in code.replace("uzengine-render-core", "").lower()
