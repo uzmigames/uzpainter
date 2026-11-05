@@ -197,7 +197,14 @@ render::Result<DagSource> ResolveSource(const Context& ctx, const core::FillCont
             break;
         }
         case core::SourceKind::procedural: {
-            if (!ctx.procedurals) return EvalFail(EvalErrorKind::MissingResource, "no procedural snapshot provider", uid);
+            // Without a provider no procedural source is admitted: the release gap the support
+            // check names (support.cpp SourceGap), not a missing resource.
+            if (!ctx.procedurals) {
+                return EvalFail(EvalErrorKind::UnsupportedSource,
+                                "a procedural source without a snapshot provider is outside this profile "
+                                "(phase3.3_procedural-families)",
+                                uid);
+            }
             const auto& ref = std::get<core::ProceduralSource>(source.value).ref;
             auto image = ctx.procedurals->Resolve(ctx.project, ctx.set, ctx.channel, ctx.format, fill, ref, uid, mask);
             if (!image) return render::Unexpected(image.error());
