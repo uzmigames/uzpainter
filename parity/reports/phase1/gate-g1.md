@@ -6,7 +6,9 @@ Task-status reconciliation, 2026-10-20: sections 3.6 and 5 reflect completed che
 
 Pre-gate re-run, 2026-10-21, on a clean checkout of `main` `8709033adf6f644337df3842dd361a91595dd923` (same machine, Zig 0.15.2, Python 3.13.9; CPU only, no GPU run): §3.6, §4.1, §5 and §6.1. `8709033a` is not the gate commit. Logs: `tmp/scratch/g1-offline/` (untracked).
 
-**Result: G1 open.** The independent checks completed for this draft are evidenced below. Pending: the Wand clauses (§2, `phase1.25_pilot-wand`, item 2.2 of the gate), the other open Phase 1 tasks (§5), the gate-commit re-run of the checks (§4) and the Phase 2 duration Hypothesis (§7). The record is final only when it is re-run on the gate commit.
+Gate run, 2026-11-05, after every Phase 1 feature task was archived (decision 397): the guard and `store verify` (§4.2), the capability manifest (§6.2) and the full local gate of decision 200 (§8), run once on the shared checkout at `072756c0ce7d2efc73e836f869d3bb087e12b1dd`. Logs under `tmp/scratch/g1-*` (untracked).
+
+**Result: G1 open.** Every clause of the roadmap is evidenced (§2), the Wand's under EXC-010 and not exactly, and every other Phase 1 task is archived (§5). The full local gate is red: 96 failed, 3 errors, 7328 passed, 32 skipped, 2 xfailed (§8). Two root causes were fixed and their 21 node ids pass on re-run (§8.2); the others are listed per node with their cause and owner (§8.3). G1 closes on a gate commit where the full gate is green, and the guard, `store verify` and the capability manifest are re-run on that commit.
 
 ## 1. Oracle envelope used by this gate (decision 037)
 
@@ -24,8 +26,8 @@ The one manifest of `parity/manifests` without blobs is still `tier3/render-proc
 | Clause | Task | Evidence | Verdict |
 |---|---|---|---|
 | Requires G0 | `phase0.10_gate-g0` | §3.1 | met |
-| Wand v1 maps equal to the private Painter goldens (Tier 1) | `phase1.25_pilot-wand` | §3.5 | **pending** (item 2.7, then 3.1) |
-| Wand v1 maps byte-stable across two runs | `phase1.25_pilot-wand` | §3.5 | **pending** (item 3.2) |
+| Wand v1 maps equal to the private Painter goldens (Tier 1) | `phase1.25_pilot-wand` | §3.5 | met **under EXC-010, not exact** (decision 395) |
+| Wand v1 maps byte-stable across two runs | `phase1.25_pilot-wand` | §3.5 | met (rebuilds `repeatable`, save/reopen export byte-identical) |
 | The three pipeline scripts run unchanged through the adapter | `phase1.24_python-api-facade` | §3.6 | met (task archived 2026-10-21 on the coordinated full suite at `1103f00c`) |
 | Project save/reopen/revert verified with fault injection, including commit-then-die retry | `phase1.8_project-store` | §3.2 | met (re-run at this draft) |
 | Certificate and reload fixtures pass | `phase1.7_mesh-loader` | §3.3 | met (re-run at this draft) |
@@ -83,14 +85,23 @@ Re-run at this draft: `python -m pytest -p no:cacheprovider -rA tests/mesh` exit
 
 All their children are archived (§5). Checked 2026-10-21 on `8709033a`: the `tasks.md` of each of the five archives has no unchecked item.
 
-### 3.5 P1-WAND — `phase1.25_pilot-wand` (pending)
+### 3.5 P1-WAND — `phase1.25_pilot-wand` (accepted under EXC-010, not exact)
 
-Open. Done: items 2.1-2.6, 3.4 and 3.5. Open: 1.1 (needs `phase1.24_python-api-facade` accepted), 2.7 (`infinite` padding on UV-islanded sets, in progress), 3.1 (Tier 1 equality on DX12), 3.2 (byte-stable across two processes), 3.3 (save/reopen), 4.1, 4.2 (decision 035 re-forecast) and 5.1-5.3. The current comparison report predates 2.7's close and is not gate evidence yet.
+Archived `.rulebook/archive/2026-11-03-phase1.25_pilot-wand/` (`9e83774d`, decisions 395 and 396). Item 2.7 (the exact `infinite` padding) moved to `phase3.1_export-island-padding`; every other item is checked. The gate clause reads "maps equal to the private Painter goldens and byte-stable across two runs"; what is evidenced is a **pass under EXC-010 version 1, not equality**:
 
-| Evidence (current, not final) | SHA-256 |
+- Tier 1 report `parity/reports/phase1/tier1-wand-v1.json`: outcome `pass`, `exceptions_relied_on` EXC-010 version 1, no structural item, oracle `stable` (r1-repeat and r2 equal to r1 on all five maps), envelope `painter-12.2.0+js-api.1.1.20-env-a981b586eae7`.
+- Covered interior texels differing: 0 on all five maps. Covered texels differing: 0 on BaseColor, Roughness, Metallic and Height; 42 values on the Normal, all on its island-edge texels. Padding values differ on every map (per band in the report). These are the counts of the DX12 run of 2026-11-03 on `e50844ee` (archive item 3.1).
+- Byte stability: the two rebuilds of the run are `repeatable` (0 differing values on all five maps), and the export after save and reopen is byte-identical to the first (archive items 3.2 and 3.3). Dump-and-rebuild: `parity/reports/phase2/recipe-rebuild-wand.json`, recipe digests equal and the five exports byte-identical (`phase2.2_recipe-and-diagnostics`, `434c1f32`).
+- The maps are written by the diagnostic measure export (decision 286). Production still refuses both islanded cases (decisions 245, 259), owned by `phase3.1_export-island-padding`.
+- The report's run block was refreshed by `f1c2b21a` (the Sash run of 2026-11-03 on `7d35eb99`): only the build hash changed, the verdict and counts did not.
+
+| Evidence | SHA-256 (at `b0265f97`) |
 |---|---|
-| `parity/envelopes/painter-12.1.5_js-api.1.1.20/manifests/phase1/tier1/wand-v1.json` | `6e54e7f6c05071d26e631ed29163b94e1f3433d6958f12566d61a1a1b7b96478` |
-| `parity/reports/phase1/tier1-wand-v1.json` | `d2f89e107cd9479c866ca2740fa609fdef295350e013572d88d25ff0c9500722` |
+| `.rulebook/archive/2026-11-03-phase1.25_pilot-wand/tasks.md` | `0364ac26dc7f267d7eb368e787c8a5900769529d8cee81d72a3345956284f6b6` |
+| `parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/manifests/phase1/tier1/wand-v1.json` | `432f9b14fb28489527ccdea6cdf19324c995939526866541c51596bcf4581c1a` |
+| `parity/reports/phase1/tier1-wand-v1.json` | `5711b4a6e7185da6066d41c6601f136d10eae83b509726e6b7e35bc52782a942` |
+| `parity/reports/phase2/recipe-rebuild-wand.json` | `14e5db08ad23d3af012dd43b50b18bdb318d9f9298740e06f632e51aab4e4989` |
+| `.rulebook/decisions/395-the-owner-approves-exc-010-…` | `3558a12d178c766fc4c577546d661f9f81dd4ef0bb48c234f698935ef1556af7` |
 
 ### 3.6 P1-PYAPI — `phase1.24_python-api-facade` (accepted)
 
@@ -109,6 +120,19 @@ The pipeline-script clause is the task's item 3.2 and acceptance 4.1: `painter_c
 `parity/exceptions.json` (SHA-256 `f4ef87337725330216ffd0c676eca96987592984ab45f3abb54a1f3b874c6633`) holds EXC-001 to EXC-006 (Tier 0, basis `oracle_instability`) and EXC-007 (Tier 1, `tier1/pilot/wand-v1`), which is withdrawn in version 2 (decision 259). The Wand's own list of exceptions relied on is pending (§3.5, item 4.1).
 
 At `8709033a` the file's SHA-256 is `cbb999ae888dbdd7a9bb2843f6adc7fb0b92c53796966001c1d0d818869ea722`: EXC-001 to EXC-006 each have a version 2 (decision 307) that narrows version 1 to the outputs whose r2 differs from r1, EXC-007 stays withdrawn (decision 259), and EXC-008 and EXC-009 are new Tier 0 entries under decision 032 (decision 307).
+
+**At the gate run (2026-11-05)** the register's SHA-256 is `1678b0f2635c69110cba47ae0c6d7520d53fc36bdb7ea351fb5b0693052d4815` (unchanged from `072756c0` to `b0265f97`). Exceptions G1 relies on:
+
+| Exception | Version | Tier | Domain | Decision, approval | Relied on by |
+|---|---|---|---|---|---|
+| EXC-010 | 1 | 1 | `tier1/pilot/wand-v1`, golden `phase1/tier1/wand-v1`: covered interior exact; the covered bound excepts only the Normal's island edge; padding free | 395, owner 2026-11-03 | the Wand clauses (§3.5) |
+| EXC-001 | 2 | 0 | `tier0/semantics/quantisation-thirds`, 16 outputs | 032, owner 2026-10-11 | Tier 0 evidence of `supported` capabilities (§6.2) |
+| EXC-002 | 2 | 0 | `tier0/semantics/blend-inputs`, 3 outputs | 032, owner 2026-10-11 | same |
+| EXC-006 | 2 | 0 | `tier0/semantics/export-ocio-encode-legacy`, 5 outputs | 032, owner 2026-10-11 | same |
+| EXC-008 | 1 | 0 | `tier0/semantics/export-ocio-encode`, 5 outputs | 032, owner 2026-10-11 | same |
+| EXC-009 | 1 | 0 | `tier0/semantics/srgb-bitmap-variants-v2`, 6 outputs | 032, owner 2026-10-11 | same |
+
+The five Tier 0 entries are oracle-instability exceptions (r2 differs from r1 in Painter itself, decision 032) on goldens that the `supported` entries of the capability manifest cite as evidence; no G1 clause compares UzPainter output under them. Not relied on: EXC-003 to EXC-005 (their goldens are not cited by a `supported` entry), EXC-007 (withdrawn, decision 259), EXC-011 and EXC-012 (the Tunic and the Sash, Phase 2 pilots for G2).
 
 ## 4. Checks on the draft tree (`39d8d7b`)
 
@@ -142,14 +166,24 @@ Each command ran once from the root of a clean checkout of `8709033adf6f644337df
 
 Every hash the golden manifests name resolves in the store. The directory-wide `verify parity/manifests` of §4 is refused on this tree, so on the gate commit either the consumer fixture lives outside the golden manifest root or the check is run per golden subdirectory as above. That is an open point of item 3.1, independent of the Wand. Fixed the same day: a directory `verify` now leaves out the glTF consumer fixture, which names no store blob and which the guard validates under its own schema. Any other non-golden JSON is still refused (`tests/parity/test_store.py::test_verify_of_a_directory_leaves_out_the_gltf_consumer_fixture_only`). After the fix, `verify parity/manifests` exits 0 (`tmp/scratch/g1-offline/verify-manifests-after.log`).
 
-## 5. Phase 1 tasks not archived (roadmap rule 3)
+### 4.2 Gate run, 2026-11-05
 
-43 Phase 1 tasks are in `docs/task-index.md`. As of 2026-10-21 (`8709033a`), 41 of them are archived under `.rulebook/archive/`; `phase1.24_python-api-facade` is archived at `.rulebook/archive/2026-10-21-phase1.24_python-api-facade/`. `.rulebook/tasks/` holds no other `phase1.*` task. Open:
+Store: `%LOCALAPPDATA%\UzPainter\parity-store`, read only. Each command ran once on `072756c0` and once more on `b0265f97` (after the two fixes of §8.2); the results are the same apart from the file count.
 
-| Task | Open items | Waits on |
+| Check | Exit | Result |
 |---|---|---|
-| `phase1.25_pilot-wand` | 1.1, 2.7, 3.1-3.3, 4.1, 4.2, 5.1-5.3 | itself: 2.7 (`infinite` padding, decisions 339, 340, 342), then the DX12 runs 3.1-3.3. Its 1.1 names only `phase1.24_python-api-facade`, now archived, so 1.1 no longer waits on anything |
-| `phase1.26_gate-g1` | 1.1, 2.2, 3.1-3.4, 4.1, 5.1-5.3 | `phase1.25_pilot-wand` (1.1, 2.2, 3.3, 3.4, 4.1, and §7 through its item 4.2); the gate-commit re-runs of 3.1 and 3.2, which follow it; 3.1 also needs the `parity/manifests` point of §4.1 |
+| `python -m tools.parity.guard` (before the fix below, on `fa25190d`) | **1** | `BLOCKED parity/fixtures/meshes/plane.obj: [store-hash]`; 5321 files checked, 1 blocked |
+| `python -m tools.parity.guard` (`072756c0`, `b0265f97`) | 0 | store-hash rule against the store (4800 hashes); 5321 and 5329 files checked, 0 blocked |
+| `python -m tools.parity.store verify parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/manifests` | 0 | current envelope: 426 manifests, 24144 blobs, all `available` |
+| `python -m tools.parity.store verify parity/envelopes/painter-12.1.5_js-api.1.1.20/manifests` | 0 | 333 manifests, 22578 blobs, all `available` |
+| `python -m tools.parity.store verify parity/manifests` | 0 | 82 manifests, 2686 blobs, all `available` (the glTF consumer fixture left out, §4.1) |
+| `python -m tools.parity.store verify` | 0 | whole store: `parity-store: ok` |
+
+**The blocked `plane.obj` was a false positive, fixed in the guard (`072756c0`).** `parity/fixtures/meshes/plane.obj` (371 bytes, SHA-256 `7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe`) is an authored fixture: its header says it is authored by UzmiGames (Apache-2.0), it was committed in `6a2f26cc` on 2026-10-10, and current-envelope Tier 0 manifests declare it as an input by path and hash. On 2026-10-26 the private store kept a copy of it as an authored input (`inputs/7d3c5f61….json`, schema `uzpainter/parity/store-input/1`, `path` `parity/fixtures/meshes/plane.obj`; decision 144), and the blob joined the store index. The guard's `store-hash` rule read every index hash as a recorded Painter output. It now leaves out, when it reads the owner's store, the blobs kept only as authored inputs; a blob that a corpus record also names stays blocked. On the owner's store: 152 input entries, 2 of them also named by a corpus record, so 150 hashes leave the rule (4950 to 4800). `plane.obj` is the only stored input that is also a repository file. Test: `tests/parity/test_guard.py::test_cli_passes_an_authored_input_the_store_keeps_and_blocks_a_recorded_one`; `parity/GUARD.md` §1.
+
+## 5. Phase 1 tasks (roadmap rule 3)
+
+Checked 2026-11-05 on `072756c0`: `docs/task-index.md` names 43 Phase 1 tasks. 42 are archived under `.rulebook/archive/`, the last being `2026-11-03-phase1.25_pilot-wand`. The only `phase1.*` task under `.rulebook/tasks/` is this gate, `phase1.26_gate-g1`.
 
 ## 6. Capability manifest (roadmap rule 3)
 
@@ -199,6 +233,85 @@ Every `supported` entry has `since` and a non-empty `tier_evidence`. Every golde
 
 The Wand's padding work (item 2.7) can still change this manifest, so the gate records the hash from the gate commit's build.
 
+### 6.2 Regeneration at the gate run (2026-11-05, `072756c0`)
+
+`zig build painter -j4` exit 0 on the shared checkout at `072756c0`, no warning: `zig-out/bin/capabilities.json`, SHA-256 `005c916800adf812a15c0cac8069cde5a8558acc5991e5ae8d88b43aeeea5b8b` (1 558 752 bytes); `UzPainter.exe` SHA-256 `acdaf661e28d43487da71a1cd9d3da1628bcd471003bfc8db15181ad029f3118`. Current envelope `painter-12.2.0+js-api.1.1.20-env-a981b586eae7`.
+
+| Status | Entries |
+|---|---|
+| `supported` | 974 (910 `any`, 52 `compositor`, 2 `backend:vulkan`, 2 `compositor:height`, 2 `compositor:minification`, 2 `mesh-map`, 1 each `compositor:ocio`, `compositor:mask-stack`, `compositor:content-stack`, `compositor:normal-directx`) |
+| `pending-evidence` | 328 |
+| `release-gap` | 338 |
+| `desktop-only-omitted` | 15 |
+
+Every `supported` entry has `since` and a non-empty `tier_evidence`, and the generator refuses one that names anything but a Tier 0 public manifest of the current envelope. The entries cite 111 distinct goldens of the envelope's 333 Tier 0 manifests; every one of their 8660 listed blobs is `available` in the `store verify` of §4.2 (0 problems). The check ran inline over the build's manifest, the registry and the verify log (`tmp/scratch/g1-cap-evidence.log`).
+
+| Input | SHA-256 (at `072756c0`) |
+|---|---|
+| `tools/capabilities/generate_capabilities.py` | `0bf8f2e8a307947d7d27c845bab6502b7ac7c646a1137dd85a9fb6a517db5791` |
+| `tools/capabilities/painter-api-inventory.json` | `85bffd3fe35f08dd166bb6fe009afae963b6cb1e865ed6474de741b15b59d129` |
+| `tools/capabilities/uzpainter-additions.json` | `a349c4afa0d88b1ab8e71ba66aab6089932e492732761149584ca208185b832d` |
+| `tools/capabilities/compositor-capabilities.json` | `f25e670c28c15f9aa173984d98623e9c9d8558465a3fcbee5e36675ef98aea56` |
+| `tools/capabilities/tier0-trace.json` | `d0bddebd23c337a38d79666903a623f91c436a277aece54c4e0a50e7e8a99026` |
+| `tools/capabilities/mcp-tools.json` | `0867ed6eff10d20a5118bff9bb6ad85225f6801fe79b2572d8e5e9d50fa77b51` |
+| `tools/capabilities/operation-matrix.json` | `70c87ac6f7aa89da6a45f00d10f297da372ebb7b8a8fef694f97e0c6d451971c` |
+| `parity/envelopes/registry.json` | `721a547d493a38224c5ed5aaf2206b5b100956d07e5bbe51fc911d15e6f71377` |
+
+This is not yet the gate's manifest: `b0265f97` changes the inventory (`resource.Usage.FILTER` becomes a release gap, §8.2; inventory SHA-256 `924534c9…5f21`), and the trace fixes of §8.3 will change the evidence. The hash recorded at closure comes from the build of the gate commit. The untracked `capabilities.json` at the repository root (2026-10-23, SHA-256 `f982572f…8967`) is not this gate's: the build writes only `zig-out/bin/capabilities.json`, and the generator writes elsewhere only when called by hand with `--output`.
+
 ## 7. Phase 2 duration Hypothesis (owner Q14, roadmap rule 6)
 
-Pending. Decision 035 makes it the measured re-forecast of `phase1.25_pilot-wand` item 4.2, made when the pilot completes.
+Revised at this gate run, 2026-11-05, from the Wand checkpoint of `docs/roadmap.md` (decision 035) and the Phase 2 archive dates.
+
+- **Measured.** Every Phase 2 feature task is archived: 14 of 18 by 2026-10-20 (supervisor, MCP, preview, recipe children), `phase2.2_recipe-and-diagnostics` and `phase2.9_pilot-belt` on 2026-11-03, `phase2.10_pilot-tunic-recovery` on 2026-11-05. Only `phase2.11_gate-g2` is open. Each islanded pilot passes under its own owner exception, not exactly: the Sash (Belt v5) under EXC-012 (decision 399), the Tunic under EXC-011 version 2 (decisions 398, 401). Phase 2 feature work took 26 calendar days from the task's creation on 2026-10-10 to the Tunic's archive.
+- **Revised Hypothesis for the rest of Phase 2:** G2's record only, under 1 week once G1 is accepted, plus the repair of the full gate. This gate run shows what that repair costs: the features archived on their affected tests (CLAUDE.md, 2026-10-12) left a full-suite backlog of about 20 root causes in 5 h of suite time (§8). G2's own gate run is expected to start from that backlog, so its duration is extrapolated, not measured.
+- **Unchanged:** the exact `infinite` padding and island edges of all three pilots stay with `phase3.1_export-island-padding`, which has no estimate (`docs/roadmap.md`).
+
+## 8. Full local gate (decision 200)
+
+Run once, 2026-11-05, on the shared checkout at `072756c0ce7d2efc73e836f869d3bb087e12b1dd` (Windows 11 Pro 10.0.26200, NVIDIA GeForce RTX 4090, Zig 0.15.2, Python 3.13.9), under `python -m tools.native_lock` as owner `g1-gate`. The checkout is shared (`AGENTS.override.md`: no worktrees), so the tested tree is that commit plus other sessions' uncommitted files, of which the three parked decision-245 test files were left out of every check below by path (`tests/parity/test_normal_empty_height_gate.py`, `tests/parity/test_normal_empty_height_native.py`, and `tests/export/test_normal_empty_height_prediction.py`, whose working copy is another session's edit; its committed version passes mypy and ruff).
+
+| Step | Command | Result |
+|---|---|---|
+| Type-check | `python -m mypy <the 701 committed .py files of the configured roots>` | exit 0, no issues. The configured `python -m mypy` over the working tree finds 9 errors, all in two untracked parked files (`tests/parity/test_normal_empty_height_gate.py`, `tools/parity/tier0_semantics/normal_empty_height_gate.py`) |
+| Lint | `python -m ruff check . --extend-exclude <the parked files>` | exit 0. Over the whole working tree: 1 error (RUF043), in the untracked `tests/parity/test_normal_empty_height_gate.py` |
+| Selftest | `zig build painter -j4`, then `zig-out/bin/UzPainter.exe selftest` | exit 0: 18 checks PASS, DX12 hardware slice passed, Vulkan slice passed |
+| Vendoring check | `python -m tools.vendoring.vendor_check --no-build` | exit 0: 97 vendored files; the build-path rule runs in the suite (`test_full_check_with_build_passes`, row 8.3) |
+| Guard | `python -m tools.parity.guard` | exit 0 (§4.2) |
+| Full suite | `python -m pytest -p no:cacheprovider -q -rfEsxX --junitxml=… --ignore=<the three parked files>` | **exit 1**: 7461 collected; **96 failed, 3 errors**, 7328 passed, 32 skipped, 2 xfailed, in 17 000.65 s (4 h 43 min) |
+
+### 8.1 What moved under the suite
+
+The run was not isolated. Other sessions committed five commits during it (`6aa7f141` to `1d16098b`, phase3.1 work), added an untracked decision 402, and edited `docs/`, `parity/semantics/height-to-normal.json`, `tools/parity/fit/normal.py` and evaluator tests. The native lock's 5400 s stale rule let another owner (`height-magnification`) take it over after 90 min, so native builds and GPU runs of that session overlapped the suite. Failures that this movement explains are marked *moved tree* below; they are still failures of this run.
+
+### 8.2 Fixed and re-run
+
+| Failed node ids | Root cause | Fix | Re-run |
+|---|---|---|---|
+| 20 Tier 0 replays whose only trace difference was `project.get_uuid` (of the 71 below) | `2daad902` made `painter_side.py` read `project.get_uuid()` after `project.create` (the ownership check for guarded cleanup); the compared-replay trace credited it to `setup`, although no recorded output holds that value | `1f830aca`: the check moves to `own_project_identity()`, whose calls the trace attributes to `bookkeeping` (left out of `exercised`); test `tests/python/test_capability_trace.py::test_the_project_identity_check_is_bookkeeping_not_compared`. `tier0-trace.json` unchanged | the 71 node ids once, under the native lock: `get_uuid` gone from all; 20 pass |
+| `tests/python/test_capability_conformance.py::test_every_public_symbol_has_an_entry` | `6a8923c3` inventoried `substance_painter.resource.Usage.FILTER` as `pending-evidence` (implemented); the facade has no such member (reading it raises `NotYetSupported`) | `b0265f97`: the entry is a `release-gap` owned by `phase3.2_proc-filter-families`; `tests/capabilities/test_capabilities.py` 28 passed | passes |
+
+### 8.3 Still failing (75 failed, 3 errors after §8.2)
+
+| Node ids | Cause found | Owner |
+|---|---|---|
+| 51 Tier 0 replays in `tests/python/test_pyapi_*_tier0.py`, `test_pyapi_baking.py`, `test_pyapi_backend_tier0.py` (`check_trace`) | Their committed traces predate `ae45b4bc` (2026-10-25, the trace records successful native property reads), which regenerated only some replays. They now also exercise event fields (`BusyStatusChanged.busy` 41, `ProjectAboutToSave.file_path` 7, export, engine, texture-state and shelf event fields), `UVProjectionParams.uv_transformation` (37) and `Stack.get_channel`/`has_channel`, and no longer credit `FillLayerNode.set_source` (7) or `FillEffectNode.set_source` (4). The recorder's serialisers compare these fields; the fix is a decision-112 regeneration of these traces and the matching `tier_evidence`, not done here | coordinator (capability evidence) |
+| `tests/python/test_pyapi_lifecycle_tier0.py::test_observed_probe_events_equal_painter[phase1-reload-mesh]` | Output difference: Painter 12.2.0 records `LayerStacksModelDataChanged` at s9 and s11; the facade emits none | facade events (`phase1.24` area) |
+| `tests/python/test_pyapi_reload_order_tier0.py`, 4 ids (`zam`, `mza` × two tests) | The current envelope's `p22b-reload-order-*-all-origins` goldens hold 2 recordings; the tests (decision 338) need 6 from 3 sessions, as the 12.1.5 envelope had | recording batch (Painter session) |
+| `tests/evaluator/test_compositor_core.py::test_excluded_features_raise_not_yet_supported_before_any_mutation` | A procedural source now fails with `evaluator:missing_resource … no procedural snapshot provider` instead of a `NotYetSupported` kind | `phase3.1_proc-backend-seam` |
+| `tests/export/test_export_encoders.py::test_published_export_processing_reproduces` | `parity/semantics/export-processing.json` no longer equals what the comparisons derive (its `corpus` and `entries` differ) | `phase3.1_export-island-padding` (padding goldens) |
+| `tests/parity/test_padding_turn_exact.py::test_the_committed_mesh_and_request_are_the_generators[x90]`, `[oblique]` | The turn-exact goldens are no longer among the requested goldens (they were admitted) | `phase3.1_export-island-padding` |
+| `tests/parity/test_tier0_gate.py::test_corpus_covers_every_child`, `test_manifest_names_its_private_record_by_hash_only[tier0/assets3d/export-padding-kernel-wand-2048]`, `test_stability_report_classifies_every_golden` | A new Tier 0 family `tier0/assets3d` whose manifest names its golden `tier0/semantics/…`; the stability report does not classify the goldens admitted since (29 missing, e.g. `export-padding-turn-exact-x90`, `ocio16-*`, `srgb-bitmap-minification-random`) | `phase3.1_export-island-padding`; Tier 0 stability report |
+| `tests/export/test_tga_capture_replay.py::test_r322_tga_capture_diagnostic` | `TGA diagnostic setup or execution failed`, again on re-run; the stage was not read | R-322 TGA work |
+| `tests/sources/test_doc_overlap.py::test_inventory_prose_shares_no_span_with_the_documentation` | `.rulebook/decisions/368-…md:64`: a table cell occurs verbatim in the Adobe documentation | decision 368's author |
+| `tests/sources/test_doc_overlap.py::test_checked_files_cover_the_analyses_review_and_decisions` | *Moved tree*: the untracked decision 402 appeared mid-run; passes on re-run | none |
+| `tests/sources/test_revision_check.py::test_repository_revisions_are_valid` | `docs/approved-sources.md` neither clears nor quarantines new analyses (`docs/analysis/padding-world-offset-residuals/01-…`, `02-…`, `docs/analysis/painter-recording-backlog/01-inventory.md`, …) | clean-room provenance audit |
+| `tests/supervisor/test_headless.py::test_a_session_without_a_console_shows_no_window[vulkan-True]`, `[dx12-False]` | The detached adapter (`execute_python`) exits 3 with empty stderr; not diagnosed (GPU runs of another session overlapped) | supervisor |
+| `tests/vendoring/test_modifications.py::test_standalone_static_library_build` | *Moved tree*: a stray file `-x` at the repository root during the run (gone afterwards); not re-run | none |
+| `tests/vendoring/test_render_core_integration.py`, 3 errors (`test_relocated_build_*`) | The relocated build cannot read `src/procedural/filter_gate_pins.cpp`'s `#embed` of `parity/envelopes/…/requests/tier0/api-probes/filter-context-settings-a.json` (`3f536fb3`) | `phase3.1_proc-backend-seam` |
+| `tests/vendoring/test_render_core_integration.py::test_build_script_paths_stay_in_the_repository` | `build.zig` names `export/cook_uzengine.cpp` (`0b838186`), which the test reads as a UzEngine path | `phase3.3_uze-png-cook-cli` |
+| `tests/vendoring/test_render_core_integration.py::test_no_submodule_runtime_lib_or_patch_queue` | An ignored leftover `scripts/tmp/r322-integration.patch` (2026-10-24) counts as a patch queue; `scripts/tmp/` is a temporary folder that only the owner may remove (`AGENTS.override.md`) | owner |
+| `tests/vendoring/test_vcruntime.py::test_folder_matches_the_pinned_files`, `test_signature_ignores_the_parent_module_path` | The Authenticode signer Windows reports for the vendored `thirdparty/vc-runtime` DLLs changed from "Microsoft Windows Software Compatibility Publisher" to "Microsoft Windows" (catalog signature of this OS build) | vendoring (re-pin or OS question) |
+| `tests/vendoring/test_vendor_check.py::test_full_check_with_build_passes` | *Moved tree*: the fresh build log records `072756c0`, HEAD was `1d16098b` when the check ran; not re-run | none |
+
+G1 stays open until these are fixed at their root and the full gate passes once on the gate commit.
