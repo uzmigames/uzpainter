@@ -30,12 +30,22 @@
     "phase1/mesh-import/polygon-triangulation",
     "phase1/tier1/wand-v1-float",
     "phase1/tier1/wand-v1-normal-float",
+    "phase2/tier1/sash-v5-migration",
     "phase2/tier1/tunic-v10",
+    "phase2/tier1/tunic-v10-current",
     "tier0/api-probes/active-channel-order-control",
     "tier0/api-probes/active-channel-reset",
     "tier0/api-probes/active-channel-reset-superset",
     "tier0/api-probes/fill-layer-readback",
     "tier0/api-probes/mask-stack",
+    "tier0/api-probes/ocio16-bitmap-srgb-basecolor",
+    "tier0/api-probes/ocio16-bitmap-srgb-basecolor-field-a-brg",
+    "tier0/api-probes/ocio16-bitmap-srgb-basecolor-field-a-gbr",
+    "tier0/api-probes/ocio16-bitmap-srgb-basecolor-srgb8-ramp",
+    "tier0/api-probes/ocio16-bitmap-srgb-basecolor-uniform",
+    "tier0/api-probes/ocio16-raw-readout-calibration-float-export-v3",
+    "tier0/api-probes/ocio16-raw-readout-normalization-float-export-v3",
+    "tier0/api-probes/ocio16-raw-readout-normalization-png16-export-v3",
     "tier0/api-probes/phase1-create-settings",
     "tier0/api-probes/phase1-delete-node",
     "tier0/api-probes/phase1-engine-computations",
@@ -52,6 +62,7 @@
     "tier0/api-probes/phase1-srgb-uniform-decode-ocio-part2",
     "tier0/api-probes/phase1-srgb-uniform-decode-ocio-part3",
     "tier0/api-probes/phase1-srgb-uniform-decode-ocio-part4",
+    "tier0/api-probes/phase1-srgb-uniform-decode-ocio-part5",
     "tier0/api-probes/phase1-srgb-uniform-decode-part1",
     "tier0/api-probes/phase1-srgb-uniform-decode-part2",
     "tier0/api-probes/phase1-srgb-uniform-decode-part3",
@@ -71,9 +82,11 @@
     "tier0/semantics/ao-mixed-isolation",
     "tier0/semantics/ao-mixed-isolation-8bit",
     "tier0/semantics/ao-mixed-isolation-float",
+    "tier0/semantics/ao-mixed-mesh-float-product",
     "tier0/semantics/ao-mixed-opacity",
     "tier0/semantics/ao-mixed-opacity-float",
     "tier0/semantics/ao-mixed-precomposed-half-l32f",
+    "tier0/semantics/ao-mixed-precomposed-half-y-l32f",
     "tier0/semantics/base-values-asm-pbr-metallic-roughness",
     "tier0/semantics/base-values-asm-pbr-metallic-roughness-anisotropy-angle",
     "tier0/semantics/base-values-asm-pbr-metallic-roughness-coated",
@@ -131,6 +144,7 @@
     "tier0/semantics/export-padding-hinge-far",
     "tier0/semantics/export-padding-hinge-single",
     "tier0/semantics/export-padding-hinge-vary",
+    "tier0/semantics/export-padding-joint-bend",
     "tier0/semantics/export-padding-kernel-atlas-1024",
     "tier0/semantics/export-padding-kernel-atlas-1024-moved",
     "tier0/semantics/export-padding-kernel-atlas-2048",
@@ -144,7 +158,9 @@
     "tier0/semantics/export-padding-kernel-sphere-256",
     "tier0/semantics/export-padding-kernel-tie-2048",
     "tier0/semantics/export-padding-kernel-tie-512",
+    "tier0/semantics/export-padding-kernel-wand-2048",
     "tier0/semantics/export-padding-normal-combine",
+    "tier0/semantics/export-padding-plane-control",
     "tier0/semantics/export-padding-ramp-r1-p0",
     "tier0/semantics/export-padding-ramp-r1-p0-box17",
     "tier0/semantics/export-padding-ramp-r1-p0-v2",
@@ -181,7 +197,10 @@
     "tier0/semantics/export-padding-tie-sweep-strips-box320",
     "tier0/semantics/export-padding-tie-sweep-strips-centred",
     "tier0/semantics/export-padding-tie-sweep-strips-offcentre",
+    "tier0/semantics/export-padding-turn-exact-oblique",
+    "tier0/semantics/export-padding-turn-exact-x90",
     "tier0/semantics/export-padding-window-side",
+    "tier0/semantics/export-padding-world-offset",
     "tier0/semantics/export-resize",
     "tier0/semantics/export-template-base-asm-pbr-metallic-roughness",
     "tier0/semantics/export-template-base-asm-pbr-metallic-roughness-anisotropy-angle",
@@ -217,6 +236,7 @@
     "tier0/semantics/height-normal-resolution-1024",
     "tier0/semantics/height-normal-resolution-1024-sobel",
     "tier0/semantics/height-normal-resolution-2048",
+    "tier0/semantics/height-normal-resolution-4096",
     "tier0/semantics/height-normal-resolution-512",
     "tier0/semantics/height-normal-sphere",
     "tier0/semantics/height-signed-addition",
@@ -242,6 +262,7 @@
     "tier0/semantics/specularweight-empty-base-default-l32f",
     "tier0/semantics/specularweight-empty-base-default-l8",
     "tier0/semantics/srgb-bitmap-minification",
+    "tier0/semantics/srgb-bitmap-minification-random",
     "tier0/semantics/srgb-bitmap-variants-v2",
     "tier0/semantics/view-2d-state-camera",
     "tier0/semantics/view-2d-state-default",
@@ -258,7 +279,70 @@
     "tier0/semantics/virtual-maps-template-pbr-metallic-roughness-alpha-blend",
     "tier0/semantics/virtual-maps-template-pbr-metallic-roughness-alpha-blend-float",
     "tier0/semantics/virtual-maps-template-pbr-specular-glossiness",
-    "tier0/semantics/virtual-maps-template-pbr-specular-glossiness-float"
+    "tier0/semantics/virtual-maps-template-pbr-specular-glossiness-float",
+    "tier2b/bakes/ao-bevelled-cube-ground-plane",
+    "tier2b/bakes/ao-bevelled-cube-no-ground-plane",
+    "tier2b/bakes/ao-plane-ground-plane",
+    "tier2b/bakes/ao-plane-no-ground-plane",
+    "tier2b/bakes/ao-sphere-ground-plane",
+    "tier2b/bakes/ao-sphere-no-ground-plane",
+    "tier2b/bakes/curvature-bevelled-cube-from-mesh",
+    "tier2b/bakes/curvature-bevelled-cube-from-normal-map",
+    "tier2b/bakes/curvature-plane-from-mesh",
+    "tier2b/bakes/curvature-plane-from-normal-map",
+    "tier2b/bakes/curvature-sphere-from-mesh",
+    "tier2b/bakes/curvature-sphere-from-normal-map",
+    "tier2b/bakes/id-bevelled-cube-mesh-id-grayscale",
+    "tier2b/bakes/id-bevelled-cube-mesh-id-hue-shift",
+    "tier2b/bakes/id-bevelled-cube-mesh-id-random",
+    "tier2b/bakes/id-plane-mesh-id-grayscale",
+    "tier2b/bakes/id-plane-mesh-id-hue-shift",
+    "tier2b/bakes/id-plane-mesh-id-random",
+    "tier2b/bakes/id-sphere-mesh-id-grayscale",
+    "tier2b/bakes/id-sphere-mesh-id-hue-shift",
+    "tier2b/bakes/id-sphere-mesh-id-random",
+    "tier2b/bakes/normal-bevelled-cube",
+    "tier2b/bakes/normal-plane",
+    "tier2b/bakes/normal-sphere",
+    "tier2b/bakes/position-bevelled-cube-all-axis-bbox-full-scene",
+    "tier2b/bakes/position-bevelled-cube-all-axis-bbox-per-material",
+    "tier2b/bakes/position-bevelled-cube-all-axis-bsphere-full-scene",
+    "tier2b/bakes/position-bevelled-cube-all-axis-bsphere-per-material",
+    "tier2b/bakes/position-bevelled-cube-all-axis-none-full-scene",
+    "tier2b/bakes/position-bevelled-cube-all-axis-none-per-material",
+    "tier2b/bakes/position-bevelled-cube-one-axis-x",
+    "tier2b/bakes/position-bevelled-cube-one-axis-y",
+    "tier2b/bakes/position-bevelled-cube-one-axis-z",
+    "tier2b/bakes/position-plane-all-axis-bbox-full-scene",
+    "tier2b/bakes/position-plane-all-axis-bbox-per-material",
+    "tier2b/bakes/position-plane-all-axis-bsphere-full-scene",
+    "tier2b/bakes/position-plane-all-axis-bsphere-per-material",
+    "tier2b/bakes/position-plane-all-axis-none-full-scene",
+    "tier2b/bakes/position-plane-all-axis-none-per-material",
+    "tier2b/bakes/position-plane-one-axis-x",
+    "tier2b/bakes/position-plane-one-axis-y",
+    "tier2b/bakes/position-plane-one-axis-z",
+    "tier2b/bakes/position-sphere-all-axis-bbox-full-scene",
+    "tier2b/bakes/position-sphere-all-axis-bbox-per-material",
+    "tier2b/bakes/position-sphere-all-axis-bsphere-full-scene",
+    "tier2b/bakes/position-sphere-all-axis-bsphere-per-material",
+    "tier2b/bakes/position-sphere-all-axis-none-full-scene",
+    "tier2b/bakes/position-sphere-all-axis-none-per-material",
+    "tier2b/bakes/position-sphere-one-axis-x",
+    "tier2b/bakes/position-sphere-one-axis-y",
+    "tier2b/bakes/position-sphere-one-axis-z",
+    "tier2b/bakes/thickness-bevelled-cube-none",
+    "tier2b/bakes/thickness-bevelled-cube-relative-to-min-max-per-uv-tile",
+    "tier2b/bakes/thickness-bevelled-cube-relative-to-ray-distances",
+    "tier2b/bakes/thickness-slab-none",
+    "tier2b/bakes/thickness-slab-relative-to-min-max-per-uv-tile",
+    "tier2b/bakes/thickness-slab-relative-to-ray-distances",
+    "tier2b/bakes/thickness-sphere-none",
+    "tier2b/bakes/thickness-sphere-relative-to-min-max-per-uv-tile",
+    "tier2b/bakes/thickness-sphere-relative-to-ray-distances",
+    "tier2b/bakes/world-space-normal-bevelled-cube",
+    "tier2b/bakes/world-space-normal-plane",
+    "tier2b/bakes/world-space-normal-sphere"
   ],
   "entries": [
     {
@@ -306,7 +390,7 @@
         },
         {
           "name": "files",
-          "value": 1957,
+          "value": 2055,
           "origin": "fitted"
         }
       ],
@@ -1092,6 +1176,51 @@
           }
         },
         {
+          "golden_id": "phase2/tier1/sash-v5-migration",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 5,
+            "affected_texels": 0,
+            "texels": 5
+          }
+        },
+        {
+          "golden_id": "phase2/tier1/sash-v5-migration",
+          "map": "png files re-encoded",
+          "compared_against": "r1-repeat",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 5,
+            "affected_texels": 0,
+            "texels": 5
+          }
+        },
+        {
+          "golden_id": "phase2/tier1/sash-v5-migration",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 5,
+            "affected_texels": 0,
+            "texels": 5
+          }
+        },
+        {
           "golden_id": "phase2/tier1/tunic-v10",
           "map": "png files re-encoded",
           "compared_against": "r1",
@@ -1137,6 +1266,51 @@
           }
         },
         {
+          "golden_id": "phase2/tier1/tunic-v10-current",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 5,
+            "affected_texels": 0,
+            "texels": 5
+          }
+        },
+        {
+          "golden_id": "phase2/tier1/tunic-v10-current",
+          "map": "png files re-encoded",
+          "compared_against": "r1-repeat",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 5,
+            "affected_texels": 0,
+            "texels": 5
+          }
+        },
+        {
+          "golden_id": "phase2/tier1/tunic-v10-current",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 5,
+            "affected_texels": 0,
+            "texels": 5
+          }
+        },
+        {
           "golden_id": "tier0/api-probes/active-channel-order-control",
           "map": "png files re-encoded",
           "compared_against": "r1",
@@ -1284,6 +1458,156 @@
             "total": 1,
             "affected_texels": 0,
             "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/ocio16-bitmap-srgb-basecolor",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/ocio16-bitmap-srgb-basecolor",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/ocio16-bitmap-srgb-basecolor-field-a-brg",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/ocio16-bitmap-srgb-basecolor-field-a-brg",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/ocio16-bitmap-srgb-basecolor-field-a-gbr",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/ocio16-bitmap-srgb-basecolor-field-a-gbr",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/ocio16-bitmap-srgb-basecolor-srgb8-ramp",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/ocio16-bitmap-srgb-basecolor-srgb8-ramp",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/ocio16-bitmap-srgb-basecolor-uniform",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/ocio16-bitmap-srgb-basecolor-uniform",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
           }
         },
         {
@@ -1753,6 +2077,36 @@
         },
         {
           "golden_id": "tier0/api-probes/phase1-srgb-uniform-decode-ocio-part4",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-srgb-uniform-decode-ocio-part5",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-srgb-uniform-decode-ocio-part5",
           "map": "png files re-encoded",
           "compared_against": "r2",
           "unit": "file (bytes identical)",
@@ -2337,6 +2691,36 @@
           }
         },
         {
+          "golden_id": "tier0/semantics/ao-mixed-mesh-float-product",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 6,
+            "affected_texels": 0,
+            "texels": 6
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed-mesh-float-product",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 6,
+            "affected_texels": 0,
+            "texels": 6
+          }
+        },
+        {
           "golden_id": "tier0/semantics/ao-mixed-opacity",
           "map": "png files re-encoded",
           "compared_against": "r1",
@@ -2383,6 +2767,36 @@
         },
         {
           "golden_id": "tier0/semantics/ao-mixed-precomposed-half-l32f",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 3,
+            "affected_texels": 0,
+            "texels": 3
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed-precomposed-half-y-l32f",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 3,
+            "affected_texels": 0,
+            "texels": 3
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed-precomposed-half-y-l32f",
           "map": "png files re-encoded",
           "compared_against": "r2",
           "unit": "file (bytes identical)",
@@ -5067,6 +5481,36 @@
           }
         },
         {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
           "golden_id": "tier0/semantics/height-normal-resolution-512",
           "map": "png files re-encoded",
           "compared_against": "r1",
@@ -5803,6 +6247,36 @@
         },
         {
           "golden_id": "tier0/semantics/srgb-bitmap-minification",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/srgb-bitmap-minification-random",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/srgb-bitmap-minification-random",
           "map": "png files re-encoded",
           "compared_against": "r2",
           "unit": "file (bytes identical)",
@@ -6055,6 +6529,1896 @@
             "affected_texels": 0,
             "texels": 23
           }
+        },
+        {
+          "golden_id": "tier2b/bakes/ao-bevelled-cube-ground-plane",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/ao-bevelled-cube-ground-plane",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/ao-bevelled-cube-no-ground-plane",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/ao-bevelled-cube-no-ground-plane",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/ao-plane-ground-plane",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/ao-plane-ground-plane",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/ao-plane-no-ground-plane",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/ao-plane-no-ground-plane",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/ao-sphere-ground-plane",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/ao-sphere-ground-plane",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/ao-sphere-no-ground-plane",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/ao-sphere-no-ground-plane",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/curvature-bevelled-cube-from-mesh",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/curvature-bevelled-cube-from-mesh",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/curvature-bevelled-cube-from-normal-map",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/curvature-bevelled-cube-from-normal-map",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/curvature-plane-from-mesh",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/curvature-plane-from-mesh",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/curvature-plane-from-normal-map",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/curvature-plane-from-normal-map",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/curvature-sphere-from-mesh",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/curvature-sphere-from-mesh",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/curvature-sphere-from-normal-map",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/curvature-sphere-from-normal-map",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-bevelled-cube-mesh-id-grayscale",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-bevelled-cube-mesh-id-grayscale",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-bevelled-cube-mesh-id-hue-shift",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-bevelled-cube-mesh-id-hue-shift",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-bevelled-cube-mesh-id-random",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-bevelled-cube-mesh-id-random",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-plane-mesh-id-grayscale",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-plane-mesh-id-grayscale",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-plane-mesh-id-hue-shift",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-plane-mesh-id-hue-shift",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-plane-mesh-id-random",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-plane-mesh-id-random",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-sphere-mesh-id-grayscale",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-sphere-mesh-id-grayscale",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-sphere-mesh-id-hue-shift",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-sphere-mesh-id-hue-shift",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-sphere-mesh-id-random",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-sphere-mesh-id-random",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/normal-bevelled-cube",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/normal-bevelled-cube",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/normal-plane",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/normal-plane",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/normal-sphere",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/normal-sphere",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-all-axis-bbox-full-scene",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-all-axis-bbox-full-scene",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-all-axis-bbox-per-material",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-all-axis-bbox-per-material",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-all-axis-bsphere-full-scene",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-all-axis-bsphere-full-scene",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-all-axis-bsphere-per-material",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-all-axis-bsphere-per-material",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-all-axis-none-full-scene",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-all-axis-none-full-scene",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-all-axis-none-per-material",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-all-axis-none-per-material",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-one-axis-x",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-one-axis-x",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-one-axis-y",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-one-axis-y",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-one-axis-z",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-one-axis-z",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-all-axis-bbox-full-scene",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-all-axis-bbox-full-scene",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-all-axis-bbox-per-material",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-all-axis-bbox-per-material",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-all-axis-bsphere-full-scene",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-all-axis-bsphere-full-scene",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-all-axis-bsphere-per-material",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-all-axis-bsphere-per-material",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-all-axis-none-full-scene",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-all-axis-none-full-scene",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-all-axis-none-per-material",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-all-axis-none-per-material",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-one-axis-x",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-one-axis-x",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-one-axis-y",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-one-axis-y",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-one-axis-z",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-one-axis-z",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-all-axis-bbox-full-scene",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-all-axis-bbox-full-scene",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-all-axis-bbox-per-material",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-all-axis-bbox-per-material",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-all-axis-bsphere-full-scene",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-all-axis-bsphere-full-scene",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-all-axis-bsphere-per-material",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-all-axis-bsphere-per-material",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-all-axis-none-full-scene",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-all-axis-none-full-scene",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-all-axis-none-per-material",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-all-axis-none-per-material",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-one-axis-x",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-one-axis-x",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-one-axis-y",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-one-axis-y",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-one-axis-z",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-one-axis-z",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-bevelled-cube-none",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-bevelled-cube-none",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-bevelled-cube-relative-to-min-max-per-uv-tile",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-bevelled-cube-relative-to-min-max-per-uv-tile",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-bevelled-cube-relative-to-ray-distances",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-bevelled-cube-relative-to-ray-distances",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-slab-none",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-slab-none",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-slab-relative-to-min-max-per-uv-tile",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-slab-relative-to-min-max-per-uv-tile",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-slab-relative-to-ray-distances",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-slab-relative-to-ray-distances",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-sphere-none",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-sphere-none",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-sphere-relative-to-min-max-per-uv-tile",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-sphere-relative-to-min-max-per-uv-tile",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-sphere-relative-to-ray-distances",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-sphere-relative-to-ray-distances",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/world-space-normal-bevelled-cube",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/world-space-normal-bevelled-cube",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/world-space-normal-plane",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/world-space-normal-plane",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/world-space-normal-sphere",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/world-space-normal-sphere",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
         }
       ]
     },
@@ -6086,7 +8450,7 @@
         },
         {
           "name": "files",
-          "value": 1192,
+          "value": 1311,
           "origin": "fitted"
         }
       ],
@@ -6209,6 +8573,246 @@
             "total": 3,
             "affected_texels": 0,
             "texels": 3
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/ocio16-bitmap-srgb-basecolor",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/ocio16-bitmap-srgb-basecolor",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/ocio16-bitmap-srgb-basecolor-field-a-brg",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/ocio16-bitmap-srgb-basecolor-field-a-brg",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/ocio16-bitmap-srgb-basecolor-field-a-gbr",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/ocio16-bitmap-srgb-basecolor-field-a-gbr",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/ocio16-bitmap-srgb-basecolor-srgb8-ramp",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/ocio16-bitmap-srgb-basecolor-srgb8-ramp",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/ocio16-bitmap-srgb-basecolor-uniform",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/ocio16-bitmap-srgb-basecolor-uniform",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/ocio16-raw-readout-calibration-float-export-v3",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/ocio16-raw-readout-calibration-float-export-v3",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/ocio16-raw-readout-normalization-float-export-v3",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/ocio16-raw-readout-normalization-float-export-v3",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/ocio16-raw-readout-normalization-png16-export-v3",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/ocio16-raw-readout-normalization-png16-export-v3",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
           }
         },
         {
@@ -6572,6 +9176,36 @@
           }
         },
         {
+          "golden_id": "tier0/semantics/ao-mixed-mesh-float-product",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 6,
+            "affected_texels": 0,
+            "texels": 6
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed-mesh-float-product",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 6,
+            "affected_texels": 0,
+            "texels": 6
+          }
+        },
+        {
           "golden_id": "tier0/semantics/ao-mixed-opacity-float",
           "map": "exr files re-encoded",
           "compared_against": "r1",
@@ -6629,6 +9263,36 @@
             "total": 4,
             "affected_texels": 0,
             "texels": 4
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed-precomposed-half-y-l32f",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 3,
+            "affected_texels": 0,
+            "texels": 3
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed-precomposed-half-y-l32f",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 3,
+            "affected_texels": 0,
+            "texels": 3
           }
         },
         {
@@ -7382,6 +10046,36 @@
           }
         },
         {
+          "golden_id": "tier0/semantics/export-padding-joint-bend",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-joint-bend",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
           "golden_id": "tier0/semantics/export-padding-kernel-atlas-1024",
           "map": "exr files re-encoded",
           "compared_against": "r1",
@@ -7772,6 +10466,36 @@
           }
         },
         {
+          "golden_id": "tier0/semantics/export-padding-kernel-wand-2048",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-kernel-wand-2048",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
           "golden_id": "tier0/semantics/export-padding-normal-combine",
           "map": "exr files re-encoded",
           "compared_against": "r1",
@@ -7799,6 +10523,36 @@
             "total": 5,
             "affected_texels": 0,
             "texels": 5
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-plane-control",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-plane-control",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
           }
         },
         {
@@ -8882,6 +11636,66 @@
           }
         },
         {
+          "golden_id": "tier0/semantics/export-padding-turn-exact-oblique",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-turn-exact-oblique",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-turn-exact-x90",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-turn-exact-x90",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
           "golden_id": "tier0/semantics/export-padding-window-side",
           "map": "exr files re-encoded",
           "compared_against": "r1",
@@ -8898,6 +11712,36 @@
         },
         {
           "golden_id": "tier0/semantics/export-padding-window-side",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-world-offset",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-world-offset",
           "map": "exr files re-encoded",
           "compared_against": "r2",
           "unit": "file (bytes identical)",
@@ -9962,6 +12806,36 @@
           }
         },
         {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 5,
+            "affected_texels": 0,
+            "texels": 5
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-resolution-4096",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 5,
+            "affected_texels": 0,
+            "texels": 5
+          }
+        },
+        {
           "golden_id": "tier0/semantics/height-normal-resolution-512",
           "map": "exr files re-encoded",
           "compared_against": "r1",
@@ -10398,6 +13272,36 @@
         },
         {
           "golden_id": "tier0/semantics/srgb-bitmap-minification",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/srgb-bitmap-minification-random",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/srgb-bitmap-minification-random",
           "map": "exr files re-encoded",
           "compared_against": "r2",
           "unit": "file (bytes identical)",
@@ -10769,6 +13673,1896 @@
             "total": 23,
             "affected_texels": 0,
             "texels": 23
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/ao-bevelled-cube-ground-plane",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/ao-bevelled-cube-ground-plane",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/ao-bevelled-cube-no-ground-plane",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/ao-bevelled-cube-no-ground-plane",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/ao-plane-ground-plane",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/ao-plane-ground-plane",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/ao-plane-no-ground-plane",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/ao-plane-no-ground-plane",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/ao-sphere-ground-plane",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/ao-sphere-ground-plane",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/ao-sphere-no-ground-plane",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/ao-sphere-no-ground-plane",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/curvature-bevelled-cube-from-mesh",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/curvature-bevelled-cube-from-mesh",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/curvature-bevelled-cube-from-normal-map",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/curvature-bevelled-cube-from-normal-map",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/curvature-plane-from-mesh",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/curvature-plane-from-mesh",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/curvature-plane-from-normal-map",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/curvature-plane-from-normal-map",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/curvature-sphere-from-mesh",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/curvature-sphere-from-mesh",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/curvature-sphere-from-normal-map",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/curvature-sphere-from-normal-map",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-bevelled-cube-mesh-id-grayscale",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-bevelled-cube-mesh-id-grayscale",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-bevelled-cube-mesh-id-hue-shift",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-bevelled-cube-mesh-id-hue-shift",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-bevelled-cube-mesh-id-random",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-bevelled-cube-mesh-id-random",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-plane-mesh-id-grayscale",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-plane-mesh-id-grayscale",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-plane-mesh-id-hue-shift",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-plane-mesh-id-hue-shift",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-plane-mesh-id-random",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-plane-mesh-id-random",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-sphere-mesh-id-grayscale",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-sphere-mesh-id-grayscale",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-sphere-mesh-id-hue-shift",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-sphere-mesh-id-hue-shift",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-sphere-mesh-id-random",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/id-sphere-mesh-id-random",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/normal-bevelled-cube",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/normal-bevelled-cube",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/normal-plane",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/normal-plane",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/normal-sphere",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/normal-sphere",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-all-axis-bbox-full-scene",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-all-axis-bbox-full-scene",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-all-axis-bbox-per-material",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-all-axis-bbox-per-material",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-all-axis-bsphere-full-scene",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-all-axis-bsphere-full-scene",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-all-axis-bsphere-per-material",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-all-axis-bsphere-per-material",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-all-axis-none-full-scene",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-all-axis-none-full-scene",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-all-axis-none-per-material",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-all-axis-none-per-material",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-one-axis-x",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-one-axis-x",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-one-axis-y",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-one-axis-y",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-one-axis-z",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-bevelled-cube-one-axis-z",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-all-axis-bbox-full-scene",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-all-axis-bbox-full-scene",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-all-axis-bbox-per-material",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-all-axis-bbox-per-material",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-all-axis-bsphere-full-scene",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-all-axis-bsphere-full-scene",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-all-axis-bsphere-per-material",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-all-axis-bsphere-per-material",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-all-axis-none-full-scene",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-all-axis-none-full-scene",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-all-axis-none-per-material",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-all-axis-none-per-material",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-one-axis-x",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-one-axis-x",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-one-axis-y",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-one-axis-y",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-one-axis-z",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-plane-one-axis-z",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-all-axis-bbox-full-scene",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-all-axis-bbox-full-scene",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-all-axis-bbox-per-material",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-all-axis-bbox-per-material",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-all-axis-bsphere-full-scene",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-all-axis-bsphere-full-scene",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-all-axis-bsphere-per-material",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-all-axis-bsphere-per-material",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-all-axis-none-full-scene",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-all-axis-none-full-scene",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-all-axis-none-per-material",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-all-axis-none-per-material",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-one-axis-x",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-one-axis-x",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-one-axis-y",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-one-axis-y",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-one-axis-z",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/position-sphere-one-axis-z",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-bevelled-cube-none",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-bevelled-cube-none",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-bevelled-cube-relative-to-min-max-per-uv-tile",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-bevelled-cube-relative-to-min-max-per-uv-tile",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-bevelled-cube-relative-to-ray-distances",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-bevelled-cube-relative-to-ray-distances",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-slab-none",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-slab-none",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-slab-relative-to-min-max-per-uv-tile",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-slab-relative-to-min-max-per-uv-tile",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-slab-relative-to-ray-distances",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-slab-relative-to-ray-distances",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-sphere-none",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-sphere-none",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-sphere-relative-to-min-max-per-uv-tile",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-sphere-relative-to-min-max-per-uv-tile",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-sphere-relative-to-ray-distances",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/thickness-sphere-relative-to-ray-distances",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/world-space-normal-bevelled-cube",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/world-space-normal-bevelled-cube",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/world-space-normal-plane",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/world-space-normal-plane",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/world-space-normal-sphere",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier2b/bakes/world-space-normal-sphere",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
           }
         }
       ]
