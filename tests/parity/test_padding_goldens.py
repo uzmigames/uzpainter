@@ -21,6 +21,8 @@ def test_the_half_store_rounds_toward_zero() -> None:
     assert pg.half_toward_zero(-above) == F32(-1.0)
     assert pg.half_toward_zero(F32(0.25)) == F32(0.25)
     assert TABLE["half"].value(above) == F32(1.0)
+    # The half store reads the raw chain (decisions 263, 288 (a)); the others the rounded one.
+    assert [f.name for f in pg.formats() if not f.rounded] == ["half"]
 
 
 def test_unorm_stores_keep_their_operands_and_requantise_the_rest() -> None:

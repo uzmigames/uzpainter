@@ -11,6 +11,10 @@ Painter's own covered texels of that file, then compared with the file bit for b
   (`src/evaluator/cpu_store.cpp` `StoreValue`, `OperandOf`). Each component's document format is
   the coarsest of sRGB8, UNORM8, UNORM16, half and float32 whose operands hold every covered
   value of that component (`detect`), printed with the counts.
+- **The half store reads the raw chain.** A half (L16F) channel stores the half toward zero of the
+  chain without decision 206's 1 - (1 - m) step, as the Height the virtual normal reads (decisions
+  263 and 288 (a)); every other format stores the rounded chain. On the eight goldens this fixes
+  one Height ring texel each on `export-padding`, the cube and the sphere, and changes no other.
 - **Virtual normals** (`Normal_OpenGL`, `Normal_DirectX`) are padded by decision 287's rule
   (`island_normal`), the measure export's; their covered island-edge texels are item 2.2's.
 - **Classes.** Covered (kept), ring (an uncovered texel with a covered 8-neighbour, x wrapping)
@@ -76,16 +80,18 @@ def half_toward_zero(v: np.float32) -> np.float32:
 
 
 class Format:
-    """A document channel format: whether a value is one of its operands (`holds`), and a value
-    stored in it and read back (`value`)."""
+    """A document channel format: whether a value is one of its operands (`holds`), a value
+    stored in it and read back (`value`), and whether it stores the chain after decision 206's
+    1 - (1 - m) step (`rounded`)."""
 
     def __init__(
         self,
         name: str,
         holds: Callable[[np.float32], bool],
         value: Callable[[np.float32], np.float32],
+        rounded: bool = True,
     ) -> None:
-        self.name, self.holds, self.value = name, holds, value
+        self.name, self.holds, self.value, self.rounded = name, holds, value, rounded
 
 
 def _unorm(bits: int) -> Format:
@@ -120,7 +126,7 @@ def formats() -> list[Format]:
         Format("sRGB8", lambda v: int(np.array([v], F32).view(np.uint32)[0]) in srgb, srgb_value),
         _unorm(8),
         _unorm(16),
-        Format("half", lambda v: bool(F32(np.float16(v)) == v), half_toward_zero),
+        Format("half", lambda v: bool(F32(np.float16(v)) == v), half_toward_zero, rounded=False),
         Format("float32", lambda v: True, F32),
     ]
 
@@ -275,7 +281,7 @@ def score(name: str, policy: str) -> dict[str, Any]:
             out = painter.copy()
             for x, y, taps, t in chains:
                 for c, fmt in enumerate(stores):
-                    m = ref.chain([painter[ty, tx, c] for tx, ty in taps], t, True)
+                    m = ref.chain([painter[ty, tx, c] for tx, ty in taps], t, fmt.rounded)
                     out[y, x, c] = fmt.value(m)
             predicted = ref.flood(out, seed)
         bad = differs(predicted, painter)
