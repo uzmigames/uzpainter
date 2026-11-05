@@ -24,7 +24,13 @@ A thread it starts inherits that output, and so do the tasks it posts to the dis
 (`uzpainter.event.post`): the deliveries a worker queues belong to the output that started it.
 A thread still running at `stop()` is a service thread (the texture-state notifier), which works
 for whichever call waits on it: its calls keep the output marked when they are made, as calls on
-the main and dispatcher threads do.
+the main and dispatcher threads do. The calls a thread makes while it runs harness code no compared
+output reads (`BOOKKEEPING_CODE`, or a function run through `bookkeeping()`) go to `BOOKKEEPING`,
+on that thread only.
+
+A native method called on its instance with unpacked arguments (`node.set_source(*args)`) is
+invisible: CPython 3.13 reports no C_RETURN for a bound method called through CALL_FUNCTION_EX.
+Code whose calls are evidence spells such calls out.
 
 A capability manifest entry `supported` in context `any` cites the api-probe goldens whose
 compared outputs exercised it (`tier_evidence`); the Tier 0 tests check that claim against this
@@ -70,15 +76,16 @@ _native_enums: set[type] = set()
 # Code of the script and the recorder's Painter-side code: the values the API hands to it
 # (callback and handler arguments) are scanned too.
 USER_FILES = {"painter_side.py", "painter_probes.py"}
-# Harness functions of that code whose calls no compared output reads: while one runs, its calls go
-# to `BOOKKEEPING` (the project-identity check after `project.create`, for guarded cleanup).
+# Harness functions of that code whose calls no compared output reads: while one runs, the calls of
+# its thread go to `BOOKKEEPING` (the project-identity check after `project.create`, for guarded
+# cleanup).
 BOOKKEEPING_CODE = {("painter_side.py", "own_project_identity")}
 _keep: list[Any] = []
 _names: set[str] = set()  # every public name indexed
 _trace: dict[str, set[str]] = {}
 _current = ["setup"]
-_resume: list[str] = []  # the outputs a running `BOOKKEEPING_CODE` function interrupted
-_stack = threading.local()  # per thread: the open frames, and the worker tokens it runs under
+# Per thread: the open frames, the worker tokens it runs under, and its bookkeeping depth.
+_stack = threading.local()
 _lock = threading.Lock()
 # Threads started under the trace, by token: the output they were started for, and the thread.
 _workers: list[tuple[str, threading.Thread]] = []
@@ -229,7 +236,9 @@ def _token() -> int | None:
 def _note(names: set[str]) -> None:
     token = _token()
     with _lock:
-        if token is None:
+        if getattr(_stack, "bookkeeping", 0):
+            _trace.setdefault(BOOKKEEPING, set()).update(names)
+        elif token is None:
             _trace.setdefault(_current[0], set()).update(names)
         else:
             _deferred.setdefault((token, _current[0]), set()).update(names)
@@ -350,15 +359,22 @@ def _frames() -> list[tuple[types.CodeType, list[Any]]]:
 
 
 def _enter_bookkeeping() -> None:
-    with _lock:
-        _resume.append(_current[0])
-        _current[0] = BOOKKEEPING
+    _stack.bookkeeping = getattr(_stack, "bookkeeping", 0) + 1
 
 
 def _leave_bookkeeping() -> None:
-    with _lock:
-        if _resume:
-            _current[0] = _resume.pop()
+    _stack.bookkeeping = max(getattr(_stack, "bookkeeping", 0) - 1, 0)
+
+
+def bookkeeping(function: Any, *args: Any) -> Any:
+    """`function(*args)`, its thread's calls attributed to `BOOKKEEPING`: harness code that
+    serialises an output the replay does not compare (a recorder event callback whose log the
+    replay leaves out)."""
+    _enter_bookkeeping()
+    try:
+        return function(*args)
+    finally:
+        _leave_bookkeeping()
 
 
 def _on_start(code: types.CodeType, offset: int) -> Any:

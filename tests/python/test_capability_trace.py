@@ -482,6 +482,31 @@ def test_an_excluded_starting_output_gives_its_worker_no_credit(
     assert trace.exercised(found, ["s23/reload"]) == ["api.other"]
 
 
+def test_bookkeeping_takes_only_its_own_threads_calls(
+    trace: Any, api: tuple[Any, _Dispatcher]
+) -> None:
+    """An uncompared event callback (`bookkeeping`) leaves the calls another thread makes
+    meanwhile with the marked output."""
+    module, _ = api
+    entered, resumed = threading.Event(), threading.Event()
+
+    def callback() -> None:
+        module.work()
+        entered.set()
+        assert resumed.wait(10.0)
+
+    trace.start()
+    trace.mark("s5/set_source")
+    thread = threading.Thread(target=lambda: trace.bookkeeping(callback), daemon=True)
+    thread.start()  # alive at stop(): a dispatcher thread, not a worker
+    assert entered.wait(10.0)
+    module.other()
+    found = trace.stop()
+    resumed.set()
+    thread.join()
+    assert found == {"bookkeeping": ["api.work"], "s5/set_source": ["api.other"]}
+
+
 def test_main_dispatcher_and_service_threads_keep_the_marked_output(
     trace: Any, api: tuple[Any, _Dispatcher]
 ) -> None:

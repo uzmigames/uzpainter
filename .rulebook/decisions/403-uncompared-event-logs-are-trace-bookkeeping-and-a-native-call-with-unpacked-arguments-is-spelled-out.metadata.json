@@ -1,0 +1,9 @@
+{
+  "id": 403,
+  "slug": "uncompared-event-logs-are-trace-bookkeeping-and-a-native-call-with-unpacked-arguments-is-spelled-out",
+  "title": "Uncompared event logs are trace bookkeeping, and a native call with unpacked arguments is spelled out",
+  "status": "accepted",
+  "date": "2026-11-05",
+  "relatedTasks": ["phase1.22_pyapi-cli-capabilities", "phase1.24_python-api-facade"],
+  "supersededBy": null
+}

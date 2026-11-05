@@ -187,6 +187,14 @@ probes = dict(recorder)
 with open(PAYLOAD["painter_probes"], encoding="utf-8") as source:
     exec(compile(source.read(), "painter_probes.py", "exec"), probes)
 OPERATIONS = probes["OPERATIONS"]
+if PAYLOAD["uncompared_events"]:
+    _event_callback = probes["event_callback"]
+
+    def _uncompared_event_callback(name):
+        recorded = _event_callback(name)
+        return lambda event: TRACE["bookkeeping"](recorded, event)
+
+    probes["event_callback"] = _uncompared_event_callback
 
 
 def call(operation, **kwargs):
@@ -345,6 +353,7 @@ def replay(facade: Run, probe: str, work: Path) -> tuple[dict[str, Any], dict[st
         "save_to": (work / "project" / "probe.spp").as_posix(),
         "trace": SOURCE,
         "ocio_config": OCIO_DECLARATION if session_o(manifest) else None,
+        "uncompared_events": probe in UNCOMPARED_EVENTS,
     }
     encoded = base64.b64encode(json.dumps(payload).encode("utf-8")).decode("ascii")
     report = facade(REPLAY.replace("__PAYLOAD__", encoded))
@@ -461,8 +470,7 @@ def compare(probe: str, facade: Run, work: Path) -> list[str]:
         theirs = {
             k: v
             for k, v in expected[condition].items()
-            if probe not in (*R10_PROBES, *DECODE_PROBES, DEFAULTS_PROBE)
-            or not k.endswith(("/events", "/states"))
+            if probe not in UNCOMPARED_EVENTS or not k.endswith(("/events", "/states"))
         }
         for output_id, value in ours.items():
             if output_id in excluded:
@@ -525,6 +533,9 @@ DECODE_PROBES = (*OCIO_DECODE_PROBES, *LEGACY_DECODE_PROBES)
 # channels, and the default and available colour spaces of a colour and a grey bitmap on each and
 # in a mask, with every channel exported; events aside.
 DEFAULTS_PROBE = "phase1-fill-channel-defaults"
+# The probes whose events and readiness states these replays leave out: what the recorder's event
+# callbacks read for that log is bookkeeping (`capability_trace.bookkeeping`).
+UNCOMPARED_EVENTS = (*R10_PROBES, *DECODE_PROBES, DEFAULTS_PROBE)
 
 
 @pytest.mark.parametrize("probe", QUIRK_PROBES)

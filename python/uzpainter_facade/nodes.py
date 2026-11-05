@@ -672,22 +672,20 @@ class _Fill(Node):
         native = self._context(channeltype)
         uid = self.uid()
         context: str | None = None
+        tag: str | None = None
         # Every facade refusal and the native payload come before anything changes, including the
         # implicit activation below, which an enclosing transaction would otherwise commit after a
         # caught refusal (an observed ResourceID, decision 361; an unrecorded default space).
         if isinstance(source, colour.Color):
-            args: tuple[Any, ...] = (
-                channeltype,
-                colour.stored_color(source, decodes_colour(native, channeltype)),
-            )
+            value: Any = colour.stored_color(source, decodes_colour(native, channeltype))
         elif isinstance(source, (resource.ResourceID, resource.Resource)):
             identifier = source.identifier() if isinstance(source, resource.Resource) else source
-            target = resource.to_native(identifier)
-            space = bitmap_default(native, channeltype, target.version)
+            value = resource.to_native(identifier)
+            space = bitmap_default(native, channeltype, value.version)
             # Bound in its default space in one native call, by its native tag (a LegacyColorSpace
             # member keeps its class): under OCIO a bitmap without a space on BaseColor is
             # unrecorded, and the support check runs per call.
-            args = (channeltype, target, colour.bitmap_space_tag(space))
+            tag = colour.bitmap_space_tag(space)
             context = identifier.context
         elif isinstance(source, AnchorPointEffectNode):
             raise uzpainter.NotYetSupported(
@@ -700,7 +698,9 @@ class _Fill(Node):
                 # Implicit activation, without the reset of an assignment (set-source-none-
                 # multichannel s17-s19).
                 native.active_channels = set(native.active_channels) | {channeltype}
-            native.set_source(*args)
+            # Spelled out, not `set_source(*args)`: CPython 3.13 reports no C_RETURN for a bound
+            # native method called with `*args`, so the decision-112 trace would miss this call.
+            native.set_source(channeltype, value, tag)
         if context is not None:
             # Once committed: the transaction's commit checks the bitmap's image (decision 240).
             key = ("source", uid, None if channeltype is None else channeltype.name)
