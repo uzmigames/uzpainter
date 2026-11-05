@@ -654,15 +654,24 @@ def create_project(args: dict[str, Any], resolved: dict[str, Any]) -> dict[str, 
     project.create(
         mesh_file_path=resolved["mesh"], template_file_path=template, settings=settings, **others
     )
+    own_project_identity()
+    return {"colour_management": colour_management()}
+
+
+def own_project_identity() -> None:
+    """Remember the UUID of the project this script just created, for guarded cleanup.
+
+    Harness bookkeeping: no recorded output holds this value, so the compared-replay capability
+    trace attributes this function's calls to its `bookkeeping` output (decision 112).
+    """
     try:
-        identity = str(project.get_uuid())
+        identity = str(substance_painter.project.get_uuid())
         if identity:
             OWN_PROJECT_CREATION["uuid"] = identity
             OWN_PROJECT_CREATION["pending"] = True
     except Exception:
         # Ordinary creation remains supported; guarded cleanup requires this identity.
         OWN_PROJECT_CREATION.clear()
-    return {"colour_management": colour_management()}
 
 
 def application_shelf_root() -> str:

@@ -70,10 +70,14 @@ _native_enums: set[type] = set()
 # Code of the script and the recorder's Painter-side code: the values the API hands to it
 # (callback and handler arguments) are scanned too.
 USER_FILES = {"painter_side.py", "painter_probes.py"}
+# Harness functions of that code whose calls no compared output reads: while one runs, its calls go
+# to `BOOKKEEPING` (the project-identity check after `project.create`, for guarded cleanup).
+BOOKKEEPING_CODE = {("painter_side.py", "own_project_identity")}
 _keep: list[Any] = []
 _names: set[str] = set()  # every public name indexed
 _trace: dict[str, set[str]] = {}
 _current = ["setup"]
+_resume: list[str] = []  # the outputs a running `BOOKKEEPING_CODE` function interrupted
 _stack = threading.local()  # per thread: the open frames, and the worker tokens it runs under
 _lock = threading.Lock()
 # Threads started under the trace, by token: the output they were started for, and the thread.
@@ -345,7 +349,21 @@ def _frames() -> list[tuple[types.CodeType, list[Any]]]:
     return stack
 
 
+def _enter_bookkeeping() -> None:
+    with _lock:
+        _resume.append(_current[0])
+        _current[0] = BOOKKEEPING
+
+
+def _leave_bookkeeping() -> None:
+    with _lock:
+        if _resume:
+            _current[0] = _resume.pop()
+
+
 def _on_start(code: types.CodeType, offset: int) -> Any:
+    if (code.co_filename, code.co_name) in BOOKKEEPING_CODE:
+        _enter_bookkeeping()
     if code not in _code:
         if code.co_filename not in USER_FILES:
             return sys.monitoring.DISABLE
@@ -391,6 +409,9 @@ def _finish(code: types.CodeType, raised: BaseException | None, value: Any = Non
 
 
 def _on_return(code: types.CodeType, offset: int, value: Any) -> Any:
+    if (code.co_filename, code.co_name) in BOOKKEEPING_CODE:
+        _leave_bookkeeping()
+        return None
     if code not in _code:
         return sys.monitoring.DISABLE
     _finish(code, None, value)
@@ -398,6 +419,8 @@ def _on_return(code: types.CodeType, offset: int, value: Any) -> Any:
 
 
 def _on_unwind(code: types.CodeType, offset: int, exception: BaseException) -> None:
+    if (code.co_filename, code.co_name) in BOOKKEEPING_CODE:
+        _leave_bookkeeping()
     if code in _code:
         _finish(code, exception)
 

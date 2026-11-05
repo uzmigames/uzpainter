@@ -303,6 +303,45 @@ def test_module_function_and_refusal_contract_stay_intact(trace: Any) -> None:
     assert "api.Right.invalid" not in found["invalid"]
 
 
+def test_the_project_identity_check_is_bookkeeping_not_compared(trace: Any) -> None:
+    """The recorder's ownership check after `project.create` (`own_project_identity`) reads
+    `project.get_uuid`; no compared output holds that value, so it never enters `exercised`."""
+
+    def get_uuid() -> str:
+        return "uuid"
+
+    def create() -> None:
+        return None
+
+    module = types.ModuleType("api")
+    module.get_uuid = get_uuid  # type: ignore[attr-defined]  # Synthetic public module under test.
+    module.create = create  # type: ignore[attr-defined]  # Synthetic public module under test.
+    trace._index_module("api", module)
+    side: dict[str, Any] = {"api": module}
+    source = (
+        "def own_project_identity():\n"
+        "    api.get_uuid()\n"
+        "def create_project():\n"
+        "    api.create()\n"
+        "    own_project_identity()\n"
+        "    return api.get_uuid()\n"
+    )
+    exec(compile(source, "painter_side.py", "exec"), side)
+    trace.start()
+    side["create_project"]()
+    trace.mark("compared")
+    side["own_project_identity"]()
+    module.create()
+    found = trace.stop()
+    # The check's own call is bookkeeping; the marked output resumes after it.
+    assert found == {
+        "bookkeeping": ["api.get_uuid"],
+        "compared": ["api.create"],
+        "setup": ["api.create", "api.get_uuid"],
+    }
+    assert trace.exercised(found, excluded={"setup"}) == ["api.create"]
+
+
 def test_public_base_method_keeps_credit_and_ambiguous_factories_do_not(trace: Any) -> None:
     class Base:
         def value(self) -> int:
