@@ -24,6 +24,8 @@ The adapter is implemented in `adapters/assets3d/` (task phase1.23, decision 113
 - Because `run` is one process per call, a session file carries the project a call left open to the next call.
 - `smart` is refused before any call while smart presets are missing (the gate reads `capabilities.json`).
 - Each export's fixed-name copy is verified against its receipt in the run, with the receipt's manifest files rebased under the Assets3D root.
+- A production round (M11, M12) runs only code that names `supported` capabilities: anything else is refused before it runs, naming Painter as the tool for it (M13; task phase3.1_assets3d-cutover).
+- Each conformant export's manifest also cites its recipe file: the INT-20 recipe dump of the exported revision, beside the Assets3D export block of INT-21 (M14).
 
 `run` (decision 111): `UzPainter.exe run <script.py> [args...] [--gpu-backend dx12|vulkan] [--gpu-deadline-ms <ms>] [-- args...]` prints one line `UZP_JSON:{status, result, stdout, stderr, error?, last_committed_revision, committed, gpu_backend}`. The script's output stays captured until the event dispatcher has drained, so deliveries of operations it started belong to the report. Exit status 0 when the script ran to its end, 1 for a structured failure (Ctrl+C or Ctrl+Break interrupts the script with `KeyboardInterrupt`), 2 for a usage error, 3 for a host failure outside the script. The backend is checked and reported; no Phase 1 Python call uses the GPU, so the first GPU call creates the device. `--gpu-deadline-ms` bounds each GPU request of the process's exports and captures as the worker's option does (1 to 86400000 ms; default 60 s). The implementation is `src/python/run.{h,cpp}` (`src/python/PYAPI.md` §7).
 

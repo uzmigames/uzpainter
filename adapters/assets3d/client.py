@@ -8,7 +8,13 @@ running interpreter (`python client.py execute_python args.json`).
 It prints one JSON reply, a superset of the bridge's `{"success", "data"}` envelope:
 
     {"success", "data", "stdout", "stderr", "error": {type, message, traceback} | null,
-     "code_sha256", "last_committed_revision", "session", "exports", "redirects"[, "diagnostic"]}
+     "code_sha256", "last_committed_revision", "session", "exports", "redirects"[, "diagnostic"]
+     [, "production_guard", "scope"]}
+
+Each export's `manifest` carries its `painter_recipe` block (`manifest_blocks.py`, M14). A
+production call whose code names anything outside the amended scope is refused before anything
+runs (`scope.py`, M13): `{"success": false, "error": {"type": "OutOfAmendedScope", "tool": ...}}`,
+exit 1.
 
 and exits 0 on success, 1 on a structured failure (as the MCP client on an error result), 2 on a
 usage error and 3 when UzPainter could not run the code (`host_error`). The reply is also written
@@ -54,7 +60,7 @@ from typing import Any
 if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from adapters.assets3d import gate_contract
+from adapters.assets3d import gate_contract, manifest_blocks, scope
 
 RUNNER = Path(__file__).resolve().with_name("runner.py")
 JSON_PREFIX = "UZP_JSON:"
@@ -262,12 +268,29 @@ def report_line(stdout: str) -> dict[str, Any] | None:
     return json.loads(lines[-1][len(JSON_PREFIX) :]) if lines else None
 
 
+def inspect_recipe(painter: Path, project: str, revision: int) -> Any:
+    """The recipe dump of `revision` of the project file (`UzPainter.exe inspect --recipe`: no GPU,
+    no project lock)."""
+    process = run_painter(
+        [str(painter), "inspect", project, "--revision", str(revision), "--recipe"]
+    )
+    if process.returncode != OK:
+        raise manifest_blocks.BlockError(
+            f"UzPainter.exe inspect exited {process.returncode}: "
+            f"{process.stderr.strip() or process.stdout.strip()}"
+        )
+    return json.loads(process.stdout)
+
+
 def execute_python(code: str) -> tuple[dict[str, Any], int]:
-    """Run `code` in UzPainter as the bridge runs it; the reply and the exit status."""
+    """Run `code` in UzPainter as the bridge runs it; the reply and the exit status. A production
+    call names only the amended scope (`scope.check_code`, M13), or nothing runs."""
     policy = execution_policy()
     painter, session, diagnostic = painter_exe(), session_file(), diagnostic_flags()
+    scope_sha256 = None
     if policy is not None:
         require_production_runtime(painter)
+        scope_sha256 = scope.check_code(code, painter)
     with session_lock(session), request_files() as files:
         code_file, report_file, policy_file = files
         code_file.write_bytes(code.encode("utf-8"))
@@ -313,6 +336,13 @@ def execute_python(code: str) -> tuple[dict[str, Any], int]:
                 or guard.get("source_sha256") != policy["source_sha256"]
             ):
                 raise HostError("host did not acknowledge the required production policy")
+        # The recipe of each export's revision, read while this call still holds the session.
+        exports: list[dict[str, Any]] = extra.get("exports", [])
+        manifest_blocks.add_recipes(
+            exports,
+            lambda project, revision: inspect_recipe(painter, project, revision),
+            os.environ.get("UZP_ASSETS3D_ROOT"),
+        )
     success = host["status"] == "ok"
     reply = {
         "success": success,
@@ -323,9 +353,11 @@ def execute_python(code: str) -> tuple[dict[str, Any], int]:
         "code_sha256": extra.get("code_sha256"),
         "last_committed_revision": host.get("last_committed_revision"),
         "session": extra.get("session"),
-        "exports": extra.get("exports", []),
+        "exports": exports,
         "redirects": extra.get("redirects", {}),
     }
+    if scope_sha256 is not None:
+        reply["scope"] = {"capabilities_sha256": scope_sha256, "tool_outside": scope.PAINTER}
     if "diagnostic" in host:  # `UzPainter.exe run --diagnostic-measure-export`: not conformant
         reply["diagnostic"] = host["diagnostic"]
     elif policy is None:
@@ -348,6 +380,9 @@ def main(argv: list[str]) -> int:
         return USAGE
     try:
         reply, status = execute_python(arguments["code"])
+    except scope.OutOfAmendedScope as refused:
+        reply = {"success": False, "data": None, "error": refused.error}
+        status = FAILED
     except HostError as error:
         reply = {
             "success": False,

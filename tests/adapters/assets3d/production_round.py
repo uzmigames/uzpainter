@@ -285,19 +285,22 @@ result = {{"before": before, "after": project.revision(), "reload_status": reloa
     revision = reply["data"]["after"]
     wrong = tmp_path / "wrong.obj"
     wrong.write_bytes(mesh.read_bytes() + b"\n# different admitted-source bytes\n")
+    # The guard's exception class is `pending-evidence`, outside the amended scope (M13): the
+    # production code catches by name instead of naming the class.
     reply, status = client.execute_python(f"""
-import uzpainter
 from uzpainter import project
 before = project.revision()
 try:
     project.reload_mesh({str(wrong)!r})
     refusal = None
-except uzpainter.Assets3DProductionError as error:
-    refusal = str(error)
+except Exception as error:
+    refusal = type(error).__name__ + ": " + str(error)
 result = {{"refusal": refusal, "before": before, "after": project.revision()}}
 """)
     assert status == client.OK, reply
+    assert reply["data"]["refusal"].startswith("Assets3DProductionError: ")
     assert "not the admitted source" in reply["data"]["refusal"]
+    assert reply["scope"]["tool_outside"] == "Adobe Substance 3D Painter"
     assert reply["data"]["before"] == reply["data"]["after"] == revision
     assert store.read_bytes() == before
     assert (

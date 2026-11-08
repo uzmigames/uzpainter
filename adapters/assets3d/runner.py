@@ -342,6 +342,7 @@ def exports_of_run(uzpainter: Any) -> list[dict[str, Any]]:
                 "receipt_sha256": publication["receipt_sha256"],
                 "plan_hash": publication["plan_hash"],
                 "revision": publication["revision"],
+                "project_path": publication["project_path"],
                 "fixed_names": copies,
                 "manifest": manifest,
                 "manifest_unavailable": reason,

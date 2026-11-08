@@ -26,7 +26,9 @@ included, is the script's.
   shipped capability manifest: the gate opens by itself once the manifest marks the capability
   `supported`). Code a script sends through `run FILE` is not gated: a missing call raises where
   it is reached, after the script's earlier calls committed, as Painter's contract has it.
-  `capture` is not gated: its code changes nothing before the shim refuses.
+  `capture` is not gated: its code changes nothing before the shim refuses. In a production round
+  a gated subcommand is refused as outside the amended scope instead, naming Painter as the tool
+  for it, and the client refuses any code that names a capability outside it (`scope.py`, M13).
 - `UZP_ASSETS3D_ROOT` defaults to the script's own root (`ROOT`, the folder holding `AGENTS.md`).
 """
 
@@ -49,7 +51,7 @@ from typing import Any
 if not __package__:  # run as a file: `python <UzPainter>/adapters/assets3d/layer_stack.py ...`
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from adapters.assets3d import client, gate_contract
+from adapters.assets3d import client, gate_contract, scope
 
 ROOT_ENV = "UZP_ASSETS3D_ROOT"
 MODULE_NAME = "uzp_assets3d_painter_layer_stack"
@@ -244,11 +246,18 @@ def capability_statuses() -> dict[tuple[str, str], str]:
     return {(e["symbol"], e["context"]): e["status"] for e in manifest["entries"]}
 
 
-def check_gate(arguments: list[str]) -> None:
+def check_gate(arguments: list[str], production: bool = False) -> None:
+    """Refuse a gated subcommand before any call: `NotYetSupported` naming its owner, or, in a
+    production round, `OutOfAmendedScope` naming Painter as the tool for it (M13)."""
     command = next((a for a in arguments if not a.startswith("-")), None)
     if command not in GATES:
         return
     capability, owner, needs = GATES[command]
+    if production:
+        operation = f"`{command}` ({capability})"
+        statuses_any, sha = scope.scope_of(client.painter_exe(), operation)
+        scope.check_needs(operation, [s for s, _ in needs], statuses_any, sha)
+        return
     statuses = capability_statuses()
     missing = [
         {"symbol": s, "context": c, "status": statuses.get((s, c), "absent")}
@@ -271,7 +280,7 @@ def run_script(argv: list[str]) -> int:
     data = script.read_bytes()
     check_pins(pins, script, data)
     modules = pinned_imports(imports)
-    check_gate(arguments)
+    check_gate(arguments, production=bool(os.environ.get(client.PRODUCTION_ENV)))
     with closed_imports(modules) as guard:
         namespace: dict[str, Any] = {"__name__": MODULE_NAME, "__file__": str(script)}
         exec(compile(data, str(script), "exec", dont_inherit=True), namespace)
@@ -343,6 +352,9 @@ def main(argv: list[str] | None = None) -> int:
         return run(arguments)
     except Refused as refused:
         print(json.dumps(refused.reply))
+        return client.FAILED
+    except scope.OutOfAmendedScope as refused:
+        print(json.dumps({"success": False, "data": None, "error": refused.error}))
         return client.FAILED
     except client.HostError as error:
         print(

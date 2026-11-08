@@ -1,0 +1,1757 @@
+{
+ "schema": "uzpainter/assets3d-amended-scope/1",
+ "rule": "in scope: the symbol's `any` entry is `supported`; every other status, and a symbol the manifest does not list, stays with Adobe Substance 3D Painter",
+ "manifest": {
+  "path": "zig-out/bin/capabilities.json",
+  "sha256": "9f4d2abc558a43bbdf32bb751b78bb0570e257d4851693ff342cb2b4655a16e5",
+  "compat_profile": "painter-12.1-api-0.3.7",
+  "entries_by_status": {
+   "desktop-only-omitted": 15,
+   "pending-evidence": 327,
+   "release-gap": 328,
+   "supported": 985
+  },
+  "any_symbols_by_status": {
+   "desktop-only-omitted": 15,
+   "pending-evidence": 327,
+   "release-gap": 265,
+   "supported": 921
+  }
+ },
+ "modules": {
+  "substance_painter": {
+   "in_scope_count": 1,
+   "outside_by_status": {},
+   "in_scope": [
+    "substance_painter"
+   ]
+  },
+  "substance_painter.application": {
+   "in_scope_count": 4,
+   "outside_by_status": {
+    "pending-evidence": 2,
+    "release-gap": 1
+   },
+   "in_scope": [
+    "substance_painter.application",
+    "substance_painter.application.disable_engine_computations",
+    "substance_painter.application.enable_engine_computations",
+    "substance_painter.application.engine_computations_status"
+   ]
+  },
+  "substance_painter.async_utils": {
+   "in_scope_count": 0,
+   "outside_by_status": {
+    "pending-evidence": 4
+   },
+   "in_scope": []
+  },
+  "substance_painter.baking": {
+   "in_scope_count": 10,
+   "outside_by_status": {
+    "pending-evidence": 10,
+    "release-gap": 17
+   },
+   "in_scope": [
+    "substance_painter.baking",
+    "substance_painter.baking.BakingParameters",
+    "substance_painter.baking.BakingParameters.baker",
+    "substance_painter.baking.BakingParameters.common",
+    "substance_painter.baking.BakingParameters.from_texture_set",
+    "substance_painter.baking.BakingParameters.get_curvature_method",
+    "substance_painter.baking.BakingParameters.get_enabled_bakers",
+    "substance_painter.baking.BakingParameters.is_textureset_enabled",
+    "substance_painter.baking.CurvatureMethod",
+    "substance_painter.baking.CurvatureMethod.FromMesh"
+   ]
+  },
+  "substance_painter.colormanagement": {
+   "in_scope_count": 21,
+   "outside_by_status": {},
+   "in_scope": [
+    "substance_painter.colormanagement",
+    "substance_painter.colormanagement.Color",
+    "substance_painter.colormanagement.Color.color_space",
+    "substance_painter.colormanagement.Color.convert",
+    "substance_painter.colormanagement.Color.sRGB",
+    "substance_painter.colormanagement.Color.value",
+    "substance_painter.colormanagement.Color.value_raw",
+    "substance_painter.colormanagement.Color.working",
+    "substance_painter.colormanagement.DataColorSpace",
+    "substance_painter.colormanagement.DataColorSpace.Data",
+    "substance_painter.colormanagement.DataColorSpace.DataSigned",
+    "substance_painter.colormanagement.GenericColorSpace",
+    "substance_painter.colormanagement.GenericColorSpace.Raw",
+    "substance_painter.colormanagement.GenericColorSpace.Working",
+    "substance_painter.colormanagement.GenericColorSpace.sRGB",
+    "substance_painter.colormanagement.LegacyColorSpace",
+    "substance_painter.colormanagement.LegacyColorSpace.Linear",
+    "substance_painter.colormanagement.LegacyColorSpace.sRGB",
+    "substance_painter.colormanagement.NormalColorSpace",
+    "substance_painter.colormanagement.NormalColorSpace.NormalXYZLeft",
+    "substance_painter.colormanagement.NormalColorSpace.NormalXYZRight"
+   ]
+  },
+  "substance_painter.display": {
+   "in_scope_count": 2,
+   "outside_by_status": {
+    "pending-evidence": 21
+   },
+   "in_scope": [
+    "substance_painter.display",
+    "substance_painter.display.set_environment_resource"
+   ]
+  },
+  "substance_painter.event": {
+   "in_scope_count": 54,
+   "outside_by_status": {
+    "desktop-only-omitted": 1,
+    "pending-evidence": 8,
+    "release-gap": 4
+   },
+   "in_scope": [
+    "substance_painter.event",
+    "substance_painter.event.BusyStatusChanged",
+    "substance_painter.event.BusyStatusChanged.busy",
+    "substance_painter.event.DISPATCHER",
+    "substance_painter.event.DISPATCHER.connect",
+    "substance_painter.event.DISPATCHER.connect_strong",
+    "substance_painter.event.DISPATCHER.disconnect",
+    "substance_painter.event.Dispatcher",
+    "substance_painter.event.Dispatcher.connect",
+    "substance_painter.event.Dispatcher.connect_strong",
+    "substance_painter.event.Dispatcher.disconnect",
+    "substance_painter.event.EngineComputationsStatusChanged",
+    "substance_painter.event.EngineComputationsStatusChanged.engine_computations_enabled",
+    "substance_painter.event.ExportTexturesAboutToStart",
+    "substance_painter.event.ExportTexturesAboutToStart.textures",
+    "substance_painter.event.ExportTexturesEnded",
+    "substance_painter.event.ExportTexturesEnded.message",
+    "substance_painter.event.ExportTexturesEnded.status",
+    "substance_painter.event.ExportTexturesEnded.textures",
+    "substance_painter.event.LayerStacksModelDataChanged",
+    "substance_painter.event.ProjectAboutToClose",
+    "substance_painter.event.ProjectAboutToSave",
+    "substance_painter.event.ProjectAboutToSave.file_path",
+    "substance_painter.event.ProjectClosed",
+    "substance_painter.event.ProjectCreated",
+    "substance_painter.event.ProjectEditionEntered",
+    "substance_painter.event.ProjectEditionLeft",
+    "substance_painter.event.ProjectOpened",
+    "substance_painter.event.ProjectSaved",
+    "substance_painter.event.ReloadResourcesEnded",
+    "substance_painter.event.ReloadResourcesEnded.filter",
+    "substance_painter.event.ReloadResourcesEnded.reloaded_resources",
+    "substance_painter.event.ReloadResourcesEnded.resource_errors",
+    "substance_painter.event.ReloadResourcesStarted",
+    "substance_painter.event.ReloadResourcesStarted.filter",
+    "substance_painter.event.ReloadedResourceResult",
+    "substance_painter.event.ReloadedResourceResult.new_resource_id",
+    "substance_painter.event.ReloadedResourceResult.old_resource_id",
+    "substance_painter.event.ShelfCrawlingEnded",
+    "substance_painter.event.ShelfCrawlingEnded.shelf_name",
+    "substance_painter.event.ShelfCrawlingStarted",
+    "substance_painter.event.ShelfCrawlingStarted.shelf_name",
+    "substance_painter.event.TextureStateEvent",
+    "substance_painter.event.TextureStateEvent.action",
+    "substance_painter.event.TextureStateEvent.cache_key",
+    "substance_painter.event.TextureStateEvent.cache_key_invalidation_throttling_period",
+    "substance_painter.event.TextureStateEvent.channel_type",
+    "substance_painter.event.TextureStateEvent.set_cache_key_invalidation_throttling_period",
+    "substance_painter.event.TextureStateEvent.stack_id",
+    "substance_painter.event.TextureStateEvent.tile_indices",
+    "substance_painter.event.TextureStateEventAction",
+    "substance_painter.event.TextureStateEventAction.ADD",
+    "substance_painter.event.TextureStateEventAction.REMOVE",
+    "substance_painter.event.TextureStateEventAction.UPDATE"
+   ]
+  },
+  "substance_painter.exception": {
+   "in_scope_count": 3,
+   "outside_by_status": {
+    "pending-evidence": 1
+   },
+   "in_scope": [
+    "substance_painter.exception",
+    "substance_painter.exception.ProjectError",
+    "substance_painter.exception.ResourceNotFoundError"
+   ]
+  },
+  "substance_painter.export": {
+   "in_scope_count": 11,
+   "outside_by_status": {
+    "pending-evidence": 2,
+    "release-gap": 17
+   },
+   "in_scope": [
+    "substance_painter.export",
+    "substance_painter.export.ExportStatus",
+    "substance_painter.export.ExportStatus.Error",
+    "substance_painter.export.ExportStatus.Success",
+    "substance_painter.export.TextureExportResult",
+    "substance_painter.export.TextureExportResult.message",
+    "substance_painter.export.TextureExportResult.status",
+    "substance_painter.export.TextureExportResult.textures",
+    "substance_painter.export.export_project_textures",
+    "substance_painter.export.get_default_export_path",
+    "substance_painter.export.list_project_textures"
+   ]
+  },
+  "substance_painter.js": {
+   "in_scope_count": 2,
+   "outside_by_status": {},
+   "in_scope": [
+    "substance_painter.js",
+    "substance_painter.js.evaluate"
+   ]
+  },
+  "substance_painter.layerstack": {
+   "in_scope_count": 153,
+   "outside_by_status": {
+    "pending-evidence": 13,
+    "release-gap": 83
+   },
+   "in_scope": [
+    "substance_painter.layerstack",
+    "substance_painter.layerstack.BlendingMode",
+    "substance_painter.layerstack.BlendingMode.Color",
+    "substance_painter.layerstack.BlendingMode.ColorBurn",
+    "substance_painter.layerstack.BlendingMode.ColorDodge",
+    "substance_painter.layerstack.BlendingMode.Darken",
+    "substance_painter.layerstack.BlendingMode.Difference",
+    "substance_painter.layerstack.BlendingMode.Disable",
+    "substance_painter.layerstack.BlendingMode.Divide",
+    "substance_painter.layerstack.BlendingMode.Exclusion",
+    "substance_painter.layerstack.BlendingMode.HardLight",
+    "substance_painter.layerstack.BlendingMode.InverseDivide",
+    "substance_painter.layerstack.BlendingMode.InverseSubtract",
+    "substance_painter.layerstack.BlendingMode.Lighten",
+    "substance_painter.layerstack.BlendingMode.LinearBurn",
+    "substance_painter.layerstack.BlendingMode.LinearDodge",
+    "substance_painter.layerstack.BlendingMode.LinearLight",
+    "substance_painter.layerstack.BlendingMode.Multiply",
+    "substance_painter.layerstack.BlendingMode.Normal",
+    "substance_painter.layerstack.BlendingMode.NormalMapCombine",
+    "substance_painter.layerstack.BlendingMode.NormalMapDetail",
+    "substance_painter.layerstack.BlendingMode.NormalMapInverseDetail",
+    "substance_painter.layerstack.BlendingMode.Overlay",
+    "substance_painter.layerstack.BlendingMode.PinLight",
+    "substance_painter.layerstack.BlendingMode.Replace",
+    "substance_painter.layerstack.BlendingMode.Saturation",
+    "substance_painter.layerstack.BlendingMode.Screen",
+    "substance_painter.layerstack.BlendingMode.SignedAddition",
+    "substance_painter.layerstack.BlendingMode.SoftLight",
+    "substance_painter.layerstack.BlendingMode.Subtract",
+    "substance_painter.layerstack.BlendingMode.Tint",
+    "substance_painter.layerstack.BlendingMode.Value",
+    "substance_painter.layerstack.BlendingMode.VividLight",
+    "substance_painter.layerstack.FillEffectNode",
+    "substance_painter.layerstack.FillEffectNode.active_channels",
+    "substance_painter.layerstack.FillEffectNode.get_material_source",
+    "substance_painter.layerstack.FillEffectNode.get_projection_mode",
+    "substance_painter.layerstack.FillEffectNode.get_projection_parameters",
+    "substance_painter.layerstack.FillEffectNode.get_source",
+    "substance_painter.layerstack.FillEffectNode.is_symmetry_enabled",
+    "substance_painter.layerstack.FillEffectNode.reset_source",
+    "substance_painter.layerstack.FillEffectNode.set_projection_mode",
+    "substance_painter.layerstack.FillEffectNode.set_source",
+    "substance_painter.layerstack.FillEffectNode.set_symmetry_enabled",
+    "substance_painter.layerstack.FillEffectNode.source_mode",
+    "substance_painter.layerstack.FillLayerNode",
+    "substance_painter.layerstack.FillLayerNode.active_channels",
+    "substance_painter.layerstack.FillLayerNode.get_material_source",
+    "substance_painter.layerstack.FillLayerNode.get_projection_mode",
+    "substance_painter.layerstack.FillLayerNode.get_projection_parameters",
+    "substance_painter.layerstack.FillLayerNode.get_source",
+    "substance_painter.layerstack.FillLayerNode.reset_source",
+    "substance_painter.layerstack.FillLayerNode.set_projection_mode",
+    "substance_painter.layerstack.FillLayerNode.set_projection_parameters",
+    "substance_painter.layerstack.FillLayerNode.set_source",
+    "substance_painter.layerstack.FillLayerNode.set_symmetry_enabled",
+    "substance_painter.layerstack.FillLayerNode.source_mode",
+    "substance_painter.layerstack.FilteringMode",
+    "substance_painter.layerstack.FilteringMode.BilinearHQ",
+    "substance_painter.layerstack.FilteringMode.BilinearSharp",
+    "substance_painter.layerstack.FilteringMode.Nearest",
+    "substance_painter.layerstack.GroupLayerNode",
+    "substance_painter.layerstack.GroupLayerNode.is_collapsed",
+    "substance_painter.layerstack.GroupLayerNode.set_collapsed",
+    "substance_painter.layerstack.GroupLayerNode.sub_layers",
+    "substance_painter.layerstack.InsertPosition",
+    "substance_painter.layerstack.InsertPosition.above_node",
+    "substance_painter.layerstack.InsertPosition.below_node",
+    "substance_painter.layerstack.InsertPosition.from_textureset_stack",
+    "substance_painter.layerstack.InsertPosition.inside_node",
+    "substance_painter.layerstack.LayerNode",
+    "substance_painter.layerstack.LayerNode.add_mask",
+    "substance_painter.layerstack.LayerNode.content_effects",
+    "substance_painter.layerstack.LayerNode.enable_mask",
+    "substance_painter.layerstack.LayerNode.get_mask_background",
+    "substance_painter.layerstack.LayerNode.has_mask",
+    "substance_painter.layerstack.LayerNode.instances",
+    "substance_painter.layerstack.LayerNode.is_mask_enabled",
+    "substance_painter.layerstack.LayerNode.mask_effects",
+    "substance_painter.layerstack.LayerNode.remove_mask",
+    "substance_painter.layerstack.LayerNode.set_mask_background",
+    "substance_painter.layerstack.LevelsEffectNode",
+    "substance_painter.layerstack.LevelsEffectNode.affected_channel",
+    "substance_painter.layerstack.LevelsEffectNode.get_parameters",
+    "substance_painter.layerstack.LevelsEffectNode.set_parameters",
+    "substance_painter.layerstack.MaskBackground",
+    "substance_painter.layerstack.MaskBackground.Black",
+    "substance_painter.layerstack.MaskBackground.White",
+    "substance_painter.layerstack.Node",
+    "substance_painter.layerstack.Node.get_blending_mode",
+    "substance_painter.layerstack.Node.get_name",
+    "substance_painter.layerstack.Node.get_next_sibling",
+    "substance_painter.layerstack.Node.get_opacity",
+    "substance_painter.layerstack.Node.get_parent",
+    "substance_painter.layerstack.Node.get_previous_sibling",
+    "substance_painter.layerstack.Node.get_stack",
+    "substance_painter.layerstack.Node.get_texture_set",
+    "substance_painter.layerstack.Node.get_type",
+    "substance_painter.layerstack.Node.has_blending",
+    "substance_painter.layerstack.Node.is_in_mask_stack",
+    "substance_painter.layerstack.Node.is_visible",
+    "substance_painter.layerstack.Node.set_blending_mode",
+    "substance_painter.layerstack.Node.set_name",
+    "substance_painter.layerstack.Node.set_opacity",
+    "substance_painter.layerstack.Node.set_visible",
+    "substance_painter.layerstack.Node.uid",
+    "substance_painter.layerstack.NodeStack",
+    "substance_painter.layerstack.NodeStack.Content",
+    "substance_painter.layerstack.NodeStack.Mask",
+    "substance_painter.layerstack.NodeStack.Substack",
+    "substance_painter.layerstack.NodeType",
+    "substance_painter.layerstack.NodeType.FillEffect",
+    "substance_painter.layerstack.NodeType.FillLayer",
+    "substance_painter.layerstack.NodeType.GroupLayer",
+    "substance_painter.layerstack.NodeType.LevelsEffect",
+    "substance_painter.layerstack.NodeType.PaintLayer",
+    "substance_painter.layerstack.PaintLayerNode",
+    "substance_painter.layerstack.ProjectionMode",
+    "substance_painter.layerstack.ProjectionMode.Fill",
+    "substance_painter.layerstack.ProjectionMode.UV",
+    "substance_painter.layerstack.ScaleMode",
+    "substance_painter.layerstack.ScaleMode.Factors",
+    "substance_painter.layerstack.ScopedModification",
+    "substance_painter.layerstack.SelectionType",
+    "substance_painter.layerstack.SelectionType.Content",
+    "substance_painter.layerstack.SelectionType.GeometryMask",
+    "substance_painter.layerstack.SelectionType.Mask",
+    "substance_painter.layerstack.SelectionType.Properties",
+    "substance_painter.layerstack.UVProjectionParams",
+    "substance_painter.layerstack.UVProjectionParams.filtering_mode",
+    "substance_painter.layerstack.UVProjectionParams.uv_transformation",
+    "substance_painter.layerstack.UVProjectionParams.uv_wrapping_mode",
+    "substance_painter.layerstack.UVTransformationParams",
+    "substance_painter.layerstack.UVTransformationParams.offset",
+    "substance_painter.layerstack.UVTransformationParams.rotation",
+    "substance_painter.layerstack.UVTransformationParams.scale",
+    "substance_painter.layerstack.UVTransformationParams.scale_mode",
+    "substance_painter.layerstack.UVWrapMode",
+    "substance_painter.layerstack.UVWrapMode.Repeat",
+    "substance_painter.layerstack.UVWrapMode.RepeatNone",
+    "substance_painter.layerstack.delete_node",
+    "substance_painter.layerstack.get_node_by_uid",
+    "substance_painter.layerstack.get_root_layer_nodes",
+    "substance_painter.layerstack.get_selected_nodes",
+    "substance_painter.layerstack.get_selection_type",
+    "substance_painter.layerstack.insert_color_selection_effect",
+    "substance_painter.layerstack.insert_compare_mask_effect",
+    "substance_painter.layerstack.insert_fill",
+    "substance_painter.layerstack.insert_group",
+    "substance_painter.layerstack.insert_levels_effect",
+    "substance_painter.layerstack.insert_paint",
+    "substance_painter.layerstack.set_selected_nodes",
+    "substance_painter.layerstack.set_selection_type"
+   ]
+  },
+  "substance_painter.levels": {
+   "in_scope_count": 15,
+   "outside_by_status": {
+    "release-gap": 1
+   },
+   "in_scope": [
+    "substance_painter.levels",
+    "substance_painter.levels.LevelsParamsMono",
+    "substance_painter.levels.LevelsParamsMono.clamp",
+    "substance_painter.levels.LevelsParamsMono.gamma",
+    "substance_painter.levels.LevelsParamsMono.input_max",
+    "substance_painter.levels.LevelsParamsMono.input_min",
+    "substance_painter.levels.LevelsParamsMono.output_max",
+    "substance_painter.levels.LevelsParamsMono.output_min",
+    "substance_painter.levels.LevelsParamsRGB",
+    "substance_painter.levels.LevelsParamsRGB.clamp",
+    "substance_painter.levels.LevelsParamsRGB.gamma",
+    "substance_painter.levels.LevelsParamsRGB.input_max",
+    "substance_painter.levels.LevelsParamsRGB.input_min",
+    "substance_painter.levels.LevelsParamsRGB.output_max",
+    "substance_painter.levels.LevelsParamsRGB.output_min"
+   ]
+  },
+  "substance_painter.logging": {
+   "in_scope_count": 11,
+   "outside_by_status": {},
+   "in_scope": [
+    "substance_painter.logging",
+    "substance_painter.logging.DBG_ERROR",
+    "substance_painter.logging.DBG_INFO",
+    "substance_painter.logging.DBG_WARNING",
+    "substance_painter.logging.ERROR",
+    "substance_painter.logging.INFO",
+    "substance_painter.logging.WARNING",
+    "substance_painter.logging.error",
+    "substance_painter.logging.info",
+    "substance_painter.logging.log",
+    "substance_painter.logging.warning"
+   ]
+  },
+  "substance_painter.project": {
+   "in_scope_count": 51,
+   "outside_by_status": {
+    "release-gap": 14
+   },
+   "in_scope": [
+    "substance_painter.project",
+    "substance_painter.project.BoundingBox",
+    "substance_painter.project.BoundingBox.center",
+    "substance_painter.project.BoundingBox.dimensions",
+    "substance_painter.project.BoundingBox.radius",
+    "substance_painter.project.MeshReloadingSettings",
+    "substance_painter.project.MeshReloadingSettings.import_cameras",
+    "substance_painter.project.Metadata",
+    "substance_painter.project.Metadata.get",
+    "substance_painter.project.Metadata.list",
+    "substance_painter.project.Metadata.set",
+    "substance_painter.project.NormalMapFormat",
+    "substance_painter.project.NormalMapFormat.DirectX",
+    "substance_painter.project.NormalMapFormat.OpenGL",
+    "substance_painter.project.ProjectSaveMode",
+    "substance_painter.project.ProjectSaveMode.Full",
+    "substance_painter.project.ProjectSaveMode.Incremental",
+    "substance_painter.project.ProjectWorkflow",
+    "substance_painter.project.ProjectWorkflow.Default",
+    "substance_painter.project.ReloadMeshStatus",
+    "substance_painter.project.ReloadMeshStatus.ERROR",
+    "substance_painter.project.ReloadMeshStatus.SUCCESS",
+    "substance_painter.project.Settings",
+    "substance_painter.project.Settings.default_save_path",
+    "substance_painter.project.Settings.default_texture_resolution",
+    "substance_painter.project.Settings.export_path",
+    "substance_painter.project.Settings.import_cameras",
+    "substance_painter.project.Settings.mesh_unit_scale",
+    "substance_painter.project.Settings.normal_map_format",
+    "substance_painter.project.Settings.project_workflow",
+    "substance_painter.project.Settings.tangent_space_mode",
+    "substance_painter.project.TangentSpace",
+    "substance_painter.project.TangentSpace.PerFragment",
+    "substance_painter.project.TangentSpace.PerVertex",
+    "substance_painter.project.close",
+    "substance_painter.project.create",
+    "substance_painter.project.execute_when_not_busy",
+    "substance_painter.project.file_path",
+    "substance_painter.project.get_scene_bounding_box",
+    "substance_painter.project.get_uuid",
+    "substance_painter.project.is_busy",
+    "substance_painter.project.is_in_edition_state",
+    "substance_painter.project.is_open",
+    "substance_painter.project.last_imported_mesh_path",
+    "substance_painter.project.name",
+    "substance_painter.project.needs_saving",
+    "substance_painter.project.open",
+    "substance_painter.project.reload_mesh",
+    "substance_painter.project.save",
+    "substance_painter.project.save_as",
+    "substance_painter.project.save_as_copy"
+   ]
+  },
+  "substance_painter.properties": {
+   "in_scope_count": 10,
+   "outside_by_status": {},
+   "in_scope": [
+    "substance_painter.properties",
+    "substance_painter.properties.Property",
+    "substance_painter.properties.Property.enum_value",
+    "substance_painter.properties.Property.enum_values",
+    "substance_painter.properties.Property.label",
+    "substance_painter.properties.Property.name",
+    "substance_painter.properties.Property.properties",
+    "substance_painter.properties.Property.short_name",
+    "substance_painter.properties.Property.value",
+    "substance_painter.properties.Property.widget_type"
+   ]
+  },
+  "substance_painter.resource": {
+   "in_scope_count": 34,
+   "outside_by_status": {
+    "desktop-only-omitted": 2,
+    "pending-evidence": 6,
+    "release-gap": 30
+   },
+   "in_scope": [
+    "substance_painter.resource",
+    "substance_painter.resource.ProjectFilter",
+    "substance_painter.resource.Resource",
+    "substance_painter.resource.Resource.identifier",
+    "substance_painter.resource.ResourceID",
+    "substance_painter.resource.ResourceID.context",
+    "substance_painter.resource.ResourceID.from_project",
+    "substance_painter.resource.ResourceID.from_url",
+    "substance_painter.resource.ResourceID.name",
+    "substance_painter.resource.ResourceID.url",
+    "substance_painter.resource.ResourceID.version",
+    "substance_painter.resource.ResourcesListFilter",
+    "substance_painter.resource.ResourcesUsedByProjectFilter",
+    "substance_painter.resource.SessionFilter",
+    "substance_painter.resource.Shelf",
+    "substance_painter.resource.Shelf.is_crawling",
+    "substance_painter.resource.Shelf.name",
+    "substance_painter.resource.Shelf.path",
+    "substance_painter.resource.Shelf.refresh",
+    "substance_painter.resource.Shelves",
+    "substance_painter.resource.Shelves.add",
+    "substance_painter.resource.Shelves.all",
+    "substance_painter.resource.Shelves.exists",
+    "substance_painter.resource.Shelves.refresh_all",
+    "substance_painter.resource.Shelves.remove",
+    "substance_painter.resource.Usage",
+    "substance_painter.resource.Usage.GENERATOR",
+    "substance_painter.resource.Usage.SMART_MATERIAL",
+    "substance_painter.resource.Usage.TEXTURE",
+    "substance_painter.resource.import_project_resource",
+    "substance_painter.resource.is_reload_modified_resources_running",
+    "substance_painter.resource.list_project_resources",
+    "substance_painter.resource.reload_modified_resources_async",
+    "substance_painter.resource.update_layer_stack_resource"
+   ]
+  },
+  "substance_painter.source": {
+   "in_scope_count": 34,
+   "outside_by_status": {
+    "pending-evidence": 1,
+    "release-gap": 36
+   },
+   "in_scope": [
+    "substance_painter.source",
+    "substance_painter.source.ResolutionMode",
+    "substance_painter.source.ResolutionMode.Asset",
+    "substance_painter.source.ResolutionMode.Auto",
+    "substance_painter.source.ResolutionMode.Custom",
+    "substance_painter.source.ResolutionMode.Document",
+    "substance_painter.source.ResolutionMode.Manual",
+    "substance_painter.source.ResolutionMode.TextureSet",
+    "substance_painter.source.ResolutionMode.UVTile",
+    "substance_painter.source.ResolutionOverride",
+    "substance_painter.source.ResolutionOverride.log2_offset",
+    "substance_painter.source.ResolutionOverride.mode",
+    "substance_painter.source.ResolutionOverride.value",
+    "substance_painter.source.SourceBitmap",
+    "substance_painter.source.SourceBitmap.get_color_space",
+    "substance_painter.source.SourceBitmap.list_available_color_spaces",
+    "substance_painter.source.SourceBitmap.reset_color_space",
+    "substance_painter.source.SourceBitmap.resource_id",
+    "substance_painter.source.SourceBitmap.set_color_space",
+    "substance_painter.source.SourceMode",
+    "substance_painter.source.SourceMode.Split",
+    "substance_painter.source.SourceSubstance",
+    "substance_painter.source.SourceSubstance.active_output",
+    "substance_painter.source.SourceSubstance.get_parameters",
+    "substance_painter.source.SourceSubstance.get_preset_list",
+    "substance_painter.source.SourceSubstance.get_properties",
+    "substance_painter.source.SourceSubstance.image_inputs",
+    "substance_painter.source.SourceSubstance.image_outputs",
+    "substance_painter.source.SourceSubstance.resolution",
+    "substance_painter.source.SourceSubstance.resource_id",
+    "substance_painter.source.SourceSubstance.set_parameters",
+    "substance_painter.source.SourceUniformColor",
+    "substance_painter.source.SourceUniformColor.get_color",
+    "substance_painter.source.SourceUniformColor.set_color"
+   ]
+  },
+  "substance_painter.textureset": {
+   "in_scope_count": 143,
+   "outside_by_status": {
+    "pending-evidence": 2,
+    "release-gap": 14
+   },
+   "in_scope": [
+    "substance_painter.textureset",
+    "substance_painter.textureset.Channel",
+    "substance_painter.textureset.Channel.bit_depth",
+    "substance_painter.textureset.Channel.edit",
+    "substance_painter.textureset.Channel.format",
+    "substance_painter.textureset.Channel.is_color",
+    "substance_painter.textureset.Channel.is_floating",
+    "substance_painter.textureset.Channel.label",
+    "substance_painter.textureset.Channel.type",
+    "substance_painter.textureset.ChannelFormat",
+    "substance_painter.textureset.ChannelFormat.L16",
+    "substance_painter.textureset.ChannelFormat.L16F",
+    "substance_painter.textureset.ChannelFormat.L32F",
+    "substance_painter.textureset.ChannelFormat.L8",
+    "substance_painter.textureset.ChannelFormat.RGB16",
+    "substance_painter.textureset.ChannelFormat.RGB16F",
+    "substance_painter.textureset.ChannelFormat.RGB32F",
+    "substance_painter.textureset.ChannelFormat.RGB8",
+    "substance_painter.textureset.ChannelFormat.sRGB8",
+    "substance_painter.textureset.ChannelType",
+    "substance_painter.textureset.ChannelType.AO",
+    "substance_painter.textureset.ChannelType.AbsorptionColor",
+    "substance_painter.textureset.ChannelType.Anisotropyangle",
+    "substance_painter.textureset.ChannelType.Anisotropylevel",
+    "substance_painter.textureset.ChannelType.BaseColor",
+    "substance_painter.textureset.ChannelType.BaseDiffuseRoughness",
+    "substance_painter.textureset.ChannelType.BaseMetalness",
+    "substance_painter.textureset.ChannelType.BaseWeight",
+    "substance_painter.textureset.ChannelType.BlendingMask",
+    "substance_painter.textureset.ChannelType.CoatColor",
+    "substance_painter.textureset.ChannelType.CoatNormal",
+    "substance_painter.textureset.ChannelType.CoatOpacity",
+    "substance_painter.textureset.ChannelType.CoatRoughness",
+    "substance_painter.textureset.ChannelType.CoatRoughnessAnisotropy",
+    "substance_painter.textureset.ChannelType.CoatSpecularLevel",
+    "substance_painter.textureset.ChannelType.CoatTangent",
+    "substance_painter.textureset.ChannelType.CoatWeight",
+    "substance_painter.textureset.ChannelType.Diffuse",
+    "substance_painter.textureset.ChannelType.Displacement",
+    "substance_painter.textureset.ChannelType.EmissionColor",
+    "substance_painter.textureset.ChannelType.Emissive",
+    "substance_painter.textureset.ChannelType.FuzzColor",
+    "substance_painter.textureset.ChannelType.FuzzRoughness",
+    "substance_painter.textureset.ChannelType.FuzzWeight",
+    "substance_painter.textureset.ChannelType.Glossiness",
+    "substance_painter.textureset.ChannelType.Height",
+    "substance_painter.textureset.ChannelType.Ior",
+    "substance_painter.textureset.ChannelType.Metallic",
+    "substance_painter.textureset.ChannelType.Normal",
+    "substance_painter.textureset.ChannelType.Opacity",
+    "substance_painter.textureset.ChannelType.Reflection",
+    "substance_painter.textureset.ChannelType.Roughness",
+    "substance_painter.textureset.ChannelType.Scattering",
+    "substance_painter.textureset.ChannelType.ScatteringColor",
+    "substance_painter.textureset.ChannelType.SheenColor",
+    "substance_painter.textureset.ChannelType.SheenOpacity",
+    "substance_painter.textureset.ChannelType.SheenRoughness",
+    "substance_painter.textureset.ChannelType.Specular",
+    "substance_painter.textureset.ChannelType.SpecularColor",
+    "substance_painter.textureset.ChannelType.SpecularEdgeColor",
+    "substance_painter.textureset.ChannelType.SpecularRoughness",
+    "substance_painter.textureset.ChannelType.SpecularRoughnessAnisotropy",
+    "substance_painter.textureset.ChannelType.SpecularWeight",
+    "substance_painter.textureset.ChannelType.Specularlevel",
+    "substance_painter.textureset.ChannelType.SubsurfaceColor",
+    "substance_painter.textureset.ChannelType.SubsurfaceRadiusScale",
+    "substance_painter.textureset.ChannelType.SubsurfaceWeight",
+    "substance_painter.textureset.ChannelType.Tangent",
+    "substance_painter.textureset.ChannelType.ThinFilmWeight",
+    "substance_painter.textureset.ChannelType.Translucency",
+    "substance_painter.textureset.ChannelType.TransmissionColor",
+    "substance_painter.textureset.ChannelType.TransmissionWeight",
+    "substance_painter.textureset.ChannelType.Transmissive",
+    "substance_painter.textureset.ChannelType.User0",
+    "substance_painter.textureset.ChannelType.User1",
+    "substance_painter.textureset.ChannelType.User10",
+    "substance_painter.textureset.ChannelType.User11",
+    "substance_painter.textureset.ChannelType.User12",
+    "substance_painter.textureset.ChannelType.User13",
+    "substance_painter.textureset.ChannelType.User14",
+    "substance_painter.textureset.ChannelType.User15",
+    "substance_painter.textureset.ChannelType.User16",
+    "substance_painter.textureset.ChannelType.User17",
+    "substance_painter.textureset.ChannelType.User18",
+    "substance_painter.textureset.ChannelType.User19",
+    "substance_painter.textureset.ChannelType.User2",
+    "substance_painter.textureset.ChannelType.User20",
+    "substance_painter.textureset.ChannelType.User21",
+    "substance_painter.textureset.ChannelType.User22",
+    "substance_painter.textureset.ChannelType.User23",
+    "substance_painter.textureset.ChannelType.User24",
+    "substance_painter.textureset.ChannelType.User25",
+    "substance_painter.textureset.ChannelType.User26",
+    "substance_painter.textureset.ChannelType.User27",
+    "substance_painter.textureset.ChannelType.User28",
+    "substance_painter.textureset.ChannelType.User29",
+    "substance_painter.textureset.ChannelType.User3",
+    "substance_painter.textureset.ChannelType.User30",
+    "substance_painter.textureset.ChannelType.User31",
+    "substance_painter.textureset.ChannelType.User4",
+    "substance_painter.textureset.ChannelType.User5",
+    "substance_painter.textureset.ChannelType.User6",
+    "substance_painter.textureset.ChannelType.User7",
+    "substance_painter.textureset.ChannelType.User8",
+    "substance_painter.textureset.ChannelType.User9",
+    "substance_painter.textureset.MeshMapUsage",
+    "substance_painter.textureset.MeshMapUsage.AO",
+    "substance_painter.textureset.MeshMapUsage.BentNormals",
+    "substance_painter.textureset.MeshMapUsage.Curvature",
+    "substance_painter.textureset.MeshMapUsage.Height",
+    "substance_painter.textureset.MeshMapUsage.ID",
+    "substance_painter.textureset.MeshMapUsage.Normal",
+    "substance_painter.textureset.MeshMapUsage.Opacity",
+    "substance_painter.textureset.MeshMapUsage.Position",
+    "substance_painter.textureset.MeshMapUsage.Thickness",
+    "substance_painter.textureset.MeshMapUsage.WorldSpaceNormal",
+    "substance_painter.textureset.Resolution",
+    "substance_painter.textureset.Stack",
+    "substance_painter.textureset.Stack.add_channel",
+    "substance_painter.textureset.Stack.all_channels",
+    "substance_painter.textureset.Stack.edit_channel",
+    "substance_painter.textureset.Stack.from_name",
+    "substance_painter.textureset.Stack.get_channel",
+    "substance_painter.textureset.Stack.has_channel",
+    "substance_painter.textureset.Stack.material",
+    "substance_painter.textureset.Stack.name",
+    "substance_painter.textureset.Stack.remove_channel",
+    "substance_painter.textureset.TextureSet",
+    "substance_painter.textureset.TextureSet.all_stacks",
+    "substance_painter.textureset.TextureSet.description",
+    "substance_painter.textureset.TextureSet.from_name",
+    "substance_painter.textureset.TextureSet.get_mesh_map_resource",
+    "substance_painter.textureset.TextureSet.get_resolution",
+    "substance_painter.textureset.TextureSet.get_stack",
+    "substance_painter.textureset.TextureSet.is_layered_material",
+    "substance_painter.textureset.TextureSet.name",
+    "substance_painter.textureset.TextureSet.original_name",
+    "substance_painter.textureset.TextureSet.set_mesh_map_resource",
+    "substance_painter.textureset.TextureSet.set_resolution",
+    "substance_painter.textureset.all_texture_sets",
+    "substance_painter.textureset.get_active_stack",
+    "substance_painter.textureset.set_active_stack",
+    "substance_painter.textureset.set_resolutions"
+   ]
+  },
+  "substance_painter.ui": {
+   "in_scope_count": 7,
+   "outside_by_status": {
+    "desktop-only-omitted": 12,
+    "pending-evidence": 7
+   },
+   "in_scope": [
+    "substance_painter.ui",
+    "substance_painter.ui.UIMode",
+    "substance_painter.ui.UIMode.Baking",
+    "substance_painter.ui.UIMode.Edition",
+    "substance_painter.ui.UIMode.Visualisation",
+    "substance_painter.ui.get_current_mode",
+    "substance_painter.ui.switch_to_mode"
+   ]
+  },
+  "substance_painter_plugins": {
+   "in_scope_count": 8,
+   "outside_by_status": {
+    "pending-evidence": 4
+   },
+   "in_scope": [
+    "substance_painter_plugins",
+    "substance_painter_plugins.close_plugin",
+    "substance_painter_plugins.is_plugin_started",
+    "substance_painter_plugins.plugin_module_names",
+    "substance_painter_plugins.reload_plugin",
+    "substance_painter_plugins.start_plugin",
+    "substance_painter_plugins.startup_module_names",
+    "substance_painter_plugins.update_sys_path"
+   ]
+  },
+  "uzpainter": {
+   "in_scope_count": 5,
+   "outside_by_status": {
+    "pending-evidence": 21
+   },
+   "in_scope": [
+    "uzpainter",
+    "uzpainter.EditionContextException",
+    "uzpainter.ProjectError",
+    "uzpainter.ResourceNotFoundError",
+    "uzpainter.Transaction"
+   ]
+  },
+  "uzpainter.application": {
+   "in_scope_count": 3,
+   "outside_by_status": {
+    "pending-evidence": 3
+   },
+   "in_scope": [
+    "uzpainter.application",
+    "uzpainter.application.enable_engine_computations",
+    "uzpainter.application.engine_computations_status"
+   ]
+  },
+  "uzpainter.assets": {
+   "in_scope_count": 0,
+   "outside_by_status": {
+    "release-gap": 1
+   },
+   "in_scope": []
+  },
+  "uzpainter.baking": {
+   "in_scope_count": 10,
+   "outside_by_status": {
+    "pending-evidence": 6,
+    "release-gap": 17
+   },
+   "in_scope": [
+    "uzpainter.baking",
+    "uzpainter.baking.BakingParameters",
+    "uzpainter.baking.BakingParameters.baker",
+    "uzpainter.baking.BakingParameters.common",
+    "uzpainter.baking.BakingParameters.from_texture_set",
+    "uzpainter.baking.BakingParameters.get_curvature_method",
+    "uzpainter.baking.BakingParameters.get_enabled_bakers",
+    "uzpainter.baking.BakingParameters.is_textureset_enabled",
+    "uzpainter.baking.CurvatureMethod",
+    "uzpainter.baking.CurvatureMethod.FromMesh"
+   ]
+  },
+  "uzpainter.capabilities": {
+   "in_scope_count": 0,
+   "outside_by_status": {
+    "pending-evidence": 4
+   },
+   "in_scope": []
+  },
+  "uzpainter.colormanagement": {
+   "in_scope_count": 3,
+   "outside_by_status": {
+    "pending-evidence": 6
+   },
+   "in_scope": [
+    "uzpainter.colormanagement",
+    "uzpainter.colormanagement.Color",
+    "uzpainter.colormanagement.get_color_management"
+   ]
+  },
+  "uzpainter.diagnostics": {
+   "in_scope_count": 0,
+   "outside_by_status": {
+    "pending-evidence": 7
+   },
+   "in_scope": []
+  },
+  "uzpainter.display": {
+   "in_scope_count": 2,
+   "outside_by_status": {
+    "pending-evidence": 25
+   },
+   "in_scope": [
+    "uzpainter.display",
+    "uzpainter.display.get_environment_resource"
+   ]
+  },
+  "uzpainter.event": {
+   "in_scope_count": 5,
+   "outside_by_status": {
+    "pending-evidence": 3
+   },
+   "in_scope": [
+    "uzpainter.event",
+    "uzpainter.event.flush",
+    "uzpainter.event.hold",
+    "uzpainter.event.post",
+    "uzpainter.event.release"
+   ]
+  },
+  "uzpainter.exception": {
+   "in_scope_count": 4,
+   "outside_by_status": {
+    "pending-evidence": 15
+   },
+   "in_scope": [
+    "uzpainter.exception",
+    "uzpainter.exception.EditionContextException",
+    "uzpainter.exception.ProjectError",
+    "uzpainter.exception.ResourceNotFoundError"
+   ]
+  },
+  "uzpainter.export": {
+   "in_scope_count": 5,
+   "outside_by_status": {},
+   "in_scope": [
+    "uzpainter.export",
+    "uzpainter.export.export_project_textures",
+    "uzpainter.export.list_project_textures",
+    "uzpainter.export.plan",
+    "uzpainter.export.start"
+   ]
+  },
+  "uzpainter.jobs": {
+   "in_scope_count": 4,
+   "outside_by_status": {
+    "pending-evidence": 8
+   },
+   "in_scope": [
+    "uzpainter.jobs",
+    "uzpainter.jobs.Job",
+    "uzpainter.jobs.Job.wait",
+    "uzpainter.jobs.busy"
+   ]
+  },
+  "uzpainter.layerstack": {
+   "in_scope_count": 94,
+   "outside_by_status": {
+    "pending-evidence": 64,
+    "release-gap": 28
+   },
+   "in_scope": [
+    "uzpainter.layerstack",
+    "uzpainter.layerstack.FillEffectNode",
+    "uzpainter.layerstack.FillEffectNode.get_projection_mode",
+    "uzpainter.layerstack.FillEffectNode.get_projection_parameters",
+    "uzpainter.layerstack.FillEffectNode.get_source",
+    "uzpainter.layerstack.FillEffectNode.set_projection_mode",
+    "uzpainter.layerstack.FillEffectNode.set_source",
+    "uzpainter.layerstack.FillLayerNode",
+    "uzpainter.layerstack.FillLayerNode.get_projection_mode",
+    "uzpainter.layerstack.FillLayerNode.get_projection_parameters",
+    "uzpainter.layerstack.FillLayerNode.get_source",
+    "uzpainter.layerstack.FillLayerNode.reset_source",
+    "uzpainter.layerstack.FillLayerNode.set_projection_mode",
+    "uzpainter.layerstack.FillLayerNode.set_projection_parameters",
+    "uzpainter.layerstack.FillLayerNode.set_source",
+    "uzpainter.layerstack.FillLayerNode.source_mode",
+    "uzpainter.layerstack.FilteringMode",
+    "uzpainter.layerstack.FilteringMode.BilinearHQ",
+    "uzpainter.layerstack.FilteringMode.BilinearSharp",
+    "uzpainter.layerstack.FilteringMode.Nearest",
+    "uzpainter.layerstack.GroupLayerNode",
+    "uzpainter.layerstack.GroupLayerNode.is_collapsed",
+    "uzpainter.layerstack.GroupLayerNode.set_collapsed",
+    "uzpainter.layerstack.GroupLayerNode.sub_layers",
+    "uzpainter.layerstack.InsertPosition",
+    "uzpainter.layerstack.InsertPosition.above_node",
+    "uzpainter.layerstack.InsertPosition.below_node",
+    "uzpainter.layerstack.InsertPosition.from_textureset_stack",
+    "uzpainter.layerstack.InsertPosition.inside_node",
+    "uzpainter.layerstack.LayerNode",
+    "uzpainter.layerstack.LayerNode.add_mask",
+    "uzpainter.layerstack.LayerNode.content_effects",
+    "uzpainter.layerstack.LayerNode.enable_mask",
+    "uzpainter.layerstack.LayerNode.get_mask_background",
+    "uzpainter.layerstack.LayerNode.has_mask",
+    "uzpainter.layerstack.LayerNode.instances",
+    "uzpainter.layerstack.LayerNode.is_mask_enabled",
+    "uzpainter.layerstack.LayerNode.mask_effects",
+    "uzpainter.layerstack.LayerNode.remove_mask",
+    "uzpainter.layerstack.LayerNode.set_mask_background",
+    "uzpainter.layerstack.LevelsEffectNode",
+    "uzpainter.layerstack.LevelsEffectNode.get_parameters",
+    "uzpainter.layerstack.LevelsEffectNode.set_parameters",
+    "uzpainter.layerstack.MaskBackground",
+    "uzpainter.layerstack.MaskBackground.Black",
+    "uzpainter.layerstack.MaskBackground.White",
+    "uzpainter.layerstack.Node",
+    "uzpainter.layerstack.Node.get_blending_mode",
+    "uzpainter.layerstack.Node.get_name",
+    "uzpainter.layerstack.Node.get_next_sibling",
+    "uzpainter.layerstack.Node.get_opacity",
+    "uzpainter.layerstack.Node.get_parent",
+    "uzpainter.layerstack.Node.get_previous_sibling",
+    "uzpainter.layerstack.Node.get_stack",
+    "uzpainter.layerstack.Node.get_texture_set",
+    "uzpainter.layerstack.Node.get_type",
+    "uzpainter.layerstack.Node.has_blending",
+    "uzpainter.layerstack.Node.is_in_mask_stack",
+    "uzpainter.layerstack.Node.is_visible",
+    "uzpainter.layerstack.Node.set_blending_mode",
+    "uzpainter.layerstack.Node.set_name",
+    "uzpainter.layerstack.Node.set_opacity",
+    "uzpainter.layerstack.Node.set_visible",
+    "uzpainter.layerstack.Node.uid",
+    "uzpainter.layerstack.NodeStack",
+    "uzpainter.layerstack.NodeStack.Content",
+    "uzpainter.layerstack.NodeStack.Mask",
+    "uzpainter.layerstack.NodeStack.Substack",
+    "uzpainter.layerstack.NodeType",
+    "uzpainter.layerstack.NodeType.FillEffect",
+    "uzpainter.layerstack.NodeType.FillLayer",
+    "uzpainter.layerstack.NodeType.GroupLayer",
+    "uzpainter.layerstack.NodeType.LevelsEffect",
+    "uzpainter.layerstack.NodeType.PaintLayer",
+    "uzpainter.layerstack.PaintLayerNode",
+    "uzpainter.layerstack.ProjectionMode",
+    "uzpainter.layerstack.ProjectionMode.Fill",
+    "uzpainter.layerstack.ProjectionMode.UV",
+    "uzpainter.layerstack.ScaleMode",
+    "uzpainter.layerstack.ScaleMode.Factors",
+    "uzpainter.layerstack.UVProjectionParams",
+    "uzpainter.layerstack.UVTransformationParams",
+    "uzpainter.layerstack.UVWrapMode",
+    "uzpainter.layerstack.UVWrapMode.Repeat",
+    "uzpainter.layerstack.UVWrapMode.RepeatNone",
+    "uzpainter.layerstack.delete_node",
+    "uzpainter.layerstack.find_nodes_by_name",
+    "uzpainter.layerstack.get_node_by_name",
+    "uzpainter.layerstack.get_node_by_uid",
+    "uzpainter.layerstack.get_root_layer_nodes",
+    "uzpainter.layerstack.insert_fill",
+    "uzpainter.layerstack.insert_group",
+    "uzpainter.layerstack.insert_levels_effect",
+    "uzpainter.layerstack.insert_paint"
+   ]
+  },
+  "uzpainter.levels": {
+   "in_scope_count": 3,
+   "outside_by_status": {
+    "pending-evidence": 12
+   },
+   "in_scope": [
+    "uzpainter.levels",
+    "uzpainter.levels.LevelsParamsMono",
+    "uzpainter.levels.LevelsParamsRGB"
+   ]
+  },
+  "uzpainter.logging": {
+   "in_scope_count": 5,
+   "outside_by_status": {
+    "pending-evidence": 6
+   },
+   "in_scope": [
+    "uzpainter.logging",
+    "uzpainter.logging.error",
+    "uzpainter.logging.info",
+    "uzpainter.logging.log",
+    "uzpainter.logging.warning"
+   ]
+  },
+  "uzpainter.project": {
+   "in_scope_count": 34,
+   "outside_by_status": {
+    "pending-evidence": 12,
+    "release-gap": 2
+   },
+   "in_scope": [
+    "uzpainter.project",
+    "uzpainter.project.Metadata",
+    "uzpainter.project.Metadata.get",
+    "uzpainter.project.Metadata.list",
+    "uzpainter.project.Metadata.set",
+    "uzpainter.project.NormalMapFormat",
+    "uzpainter.project.NormalMapFormat.DirectX",
+    "uzpainter.project.NormalMapFormat.OpenGL",
+    "uzpainter.project.ProjectSaveMode",
+    "uzpainter.project.ProjectSaveMode.Full",
+    "uzpainter.project.ProjectSaveMode.Incremental",
+    "uzpainter.project.ProjectWorkflow",
+    "uzpainter.project.ProjectWorkflow.Default",
+    "uzpainter.project.Settings",
+    "uzpainter.project.TangentSpace",
+    "uzpainter.project.TangentSpace.PerFragment",
+    "uzpainter.project.TangentSpace.PerVertex",
+    "uzpainter.project.checkpoints",
+    "uzpainter.project.close",
+    "uzpainter.project.create",
+    "uzpainter.project.file_path",
+    "uzpainter.project.get_uuid",
+    "uzpainter.project.is_open",
+    "uzpainter.project.last_imported_mesh_path",
+    "uzpainter.project.name",
+    "uzpainter.project.needs_saving",
+    "uzpainter.project.open",
+    "uzpainter.project.reload_mesh",
+    "uzpainter.project.revert",
+    "uzpainter.project.revision",
+    "uzpainter.project.save",
+    "uzpainter.project.save_as",
+    "uzpainter.project.save_as_copy",
+    "uzpainter.project.templates"
+   ]
+  },
+  "uzpainter.properties": {
+   "in_scope_count": 10,
+   "outside_by_status": {},
+   "in_scope": [
+    "uzpainter.properties",
+    "uzpainter.properties.Property",
+    "uzpainter.properties.Property.enum_value",
+    "uzpainter.properties.Property.enum_values",
+    "uzpainter.properties.Property.label",
+    "uzpainter.properties.Property.name",
+    "uzpainter.properties.Property.properties",
+    "uzpainter.properties.Property.short_name",
+    "uzpainter.properties.Property.value",
+    "uzpainter.properties.Property.widget_type"
+   ]
+  },
+  "uzpainter.render": {
+   "in_scope_count": 0,
+   "outside_by_status": {
+    "pending-evidence": 16
+   },
+   "in_scope": []
+  },
+  "uzpainter.resource": {
+   "in_scope_count": 13,
+   "outside_by_status": {
+    "pending-evidence": 11
+   },
+   "in_scope": [
+    "uzpainter.resource",
+    "uzpainter.resource.Resource",
+    "uzpainter.resource.Resource.identifier",
+    "uzpainter.resource.ResourceID",
+    "uzpainter.resource.Usage",
+    "uzpainter.resource.Usage.GENERATOR",
+    "uzpainter.resource.Usage.SMART_MATERIAL",
+    "uzpainter.resource.Usage.TEXTURE",
+    "uzpainter.resource.import_project_resource",
+    "uzpainter.resource.list_project_resources",
+    "uzpainter.resource.list_used_resources",
+    "uzpainter.resource.resource_origin",
+    "uzpainter.resource.update_layer_stack_resource"
+   ]
+  },
+  "uzpainter.source": {
+   "in_scope_count": 16,
+   "outside_by_status": {
+    "pending-evidence": 6
+   },
+   "in_scope": [
+    "uzpainter.source",
+    "uzpainter.source.SourceBitmap",
+    "uzpainter.source.SourceBitmap.get_color_space",
+    "uzpainter.source.SourceBitmap.resource_id",
+    "uzpainter.source.SourceBitmap.set_color_space",
+    "uzpainter.source.SourceMode",
+    "uzpainter.source.SourceMode.Split",
+    "uzpainter.source.SourceSubstance",
+    "uzpainter.source.SourceSubstance.get_parameters",
+    "uzpainter.source.SourceSubstance.get_preset_list",
+    "uzpainter.source.SourceSubstance.get_properties",
+    "uzpainter.source.SourceSubstance.resource_id",
+    "uzpainter.source.SourceSubstance.set_parameters",
+    "uzpainter.source.SourceUniformColor",
+    "uzpainter.source.SourceUniformColor.get_color",
+    "uzpainter.source.SourceUniformColor.set_color"
+   ]
+  },
+  "uzpainter.textureset": {
+   "in_scope_count": 131,
+   "outside_by_status": {
+    "pending-evidence": 21
+   },
+   "in_scope": [
+    "uzpainter.textureset",
+    "uzpainter.textureset.Channel",
+    "uzpainter.textureset.Channel.bit_depth",
+    "uzpainter.textureset.Channel.edit",
+    "uzpainter.textureset.Channel.format",
+    "uzpainter.textureset.Channel.is_color",
+    "uzpainter.textureset.Channel.is_floating",
+    "uzpainter.textureset.Channel.label",
+    "uzpainter.textureset.Channel.type",
+    "uzpainter.textureset.ChannelFormat",
+    "uzpainter.textureset.ChannelFormat.L16",
+    "uzpainter.textureset.ChannelFormat.L16F",
+    "uzpainter.textureset.ChannelFormat.L32F",
+    "uzpainter.textureset.ChannelFormat.L8",
+    "uzpainter.textureset.ChannelFormat.RGB16",
+    "uzpainter.textureset.ChannelFormat.RGB16F",
+    "uzpainter.textureset.ChannelFormat.RGB32F",
+    "uzpainter.textureset.ChannelFormat.RGB8",
+    "uzpainter.textureset.ChannelFormat.sRGB8",
+    "uzpainter.textureset.ChannelType",
+    "uzpainter.textureset.ChannelType.AO",
+    "uzpainter.textureset.ChannelType.Anisotropyangle",
+    "uzpainter.textureset.ChannelType.BaseColor",
+    "uzpainter.textureset.ChannelType.BaseDiffuseRoughness",
+    "uzpainter.textureset.ChannelType.BaseMetalness",
+    "uzpainter.textureset.ChannelType.BaseWeight",
+    "uzpainter.textureset.ChannelType.BlendingMask",
+    "uzpainter.textureset.ChannelType.CoatColor",
+    "uzpainter.textureset.ChannelType.CoatNormal",
+    "uzpainter.textureset.ChannelType.CoatRoughness",
+    "uzpainter.textureset.ChannelType.CoatRoughnessAnisotropy",
+    "uzpainter.textureset.ChannelType.CoatSpecularLevel",
+    "uzpainter.textureset.ChannelType.CoatTangent",
+    "uzpainter.textureset.ChannelType.CoatWeight",
+    "uzpainter.textureset.ChannelType.Diffuse",
+    "uzpainter.textureset.ChannelType.Displacement",
+    "uzpainter.textureset.ChannelType.EmissionColor",
+    "uzpainter.textureset.ChannelType.FuzzColor",
+    "uzpainter.textureset.ChannelType.FuzzRoughness",
+    "uzpainter.textureset.ChannelType.FuzzWeight",
+    "uzpainter.textureset.ChannelType.Glossiness",
+    "uzpainter.textureset.ChannelType.Height",
+    "uzpainter.textureset.ChannelType.Ior",
+    "uzpainter.textureset.ChannelType.Normal",
+    "uzpainter.textureset.ChannelType.Opacity",
+    "uzpainter.textureset.ChannelType.Reflection",
+    "uzpainter.textureset.ChannelType.Specular",
+    "uzpainter.textureset.ChannelType.SpecularColor",
+    "uzpainter.textureset.ChannelType.SpecularRoughness",
+    "uzpainter.textureset.ChannelType.SpecularRoughnessAnisotropy",
+    "uzpainter.textureset.ChannelType.SpecularWeight",
+    "uzpainter.textureset.ChannelType.Specularlevel",
+    "uzpainter.textureset.ChannelType.SubsurfaceColor",
+    "uzpainter.textureset.ChannelType.SubsurfaceRadiusScale",
+    "uzpainter.textureset.ChannelType.SubsurfaceWeight",
+    "uzpainter.textureset.ChannelType.Tangent",
+    "uzpainter.textureset.ChannelType.ThinFilmWeight",
+    "uzpainter.textureset.ChannelType.TransmissionColor",
+    "uzpainter.textureset.ChannelType.TransmissionWeight",
+    "uzpainter.textureset.ChannelType.Transmissive",
+    "uzpainter.textureset.ChannelType.User0",
+    "uzpainter.textureset.ChannelType.User1",
+    "uzpainter.textureset.ChannelType.User10",
+    "uzpainter.textureset.ChannelType.User11",
+    "uzpainter.textureset.ChannelType.User12",
+    "uzpainter.textureset.ChannelType.User13",
+    "uzpainter.textureset.ChannelType.User14",
+    "uzpainter.textureset.ChannelType.User15",
+    "uzpainter.textureset.ChannelType.User16",
+    "uzpainter.textureset.ChannelType.User17",
+    "uzpainter.textureset.ChannelType.User18",
+    "uzpainter.textureset.ChannelType.User19",
+    "uzpainter.textureset.ChannelType.User2",
+    "uzpainter.textureset.ChannelType.User20",
+    "uzpainter.textureset.ChannelType.User21",
+    "uzpainter.textureset.ChannelType.User22",
+    "uzpainter.textureset.ChannelType.User23",
+    "uzpainter.textureset.ChannelType.User24",
+    "uzpainter.textureset.ChannelType.User25",
+    "uzpainter.textureset.ChannelType.User26",
+    "uzpainter.textureset.ChannelType.User27",
+    "uzpainter.textureset.ChannelType.User28",
+    "uzpainter.textureset.ChannelType.User29",
+    "uzpainter.textureset.ChannelType.User3",
+    "uzpainter.textureset.ChannelType.User30",
+    "uzpainter.textureset.ChannelType.User31",
+    "uzpainter.textureset.ChannelType.User4",
+    "uzpainter.textureset.ChannelType.User5",
+    "uzpainter.textureset.ChannelType.User6",
+    "uzpainter.textureset.ChannelType.User7",
+    "uzpainter.textureset.ChannelType.User8",
+    "uzpainter.textureset.ChannelType.User9",
+    "uzpainter.textureset.MeshMapUsage",
+    "uzpainter.textureset.MeshMapUsage.AO",
+    "uzpainter.textureset.MeshMapUsage.BentNormals",
+    "uzpainter.textureset.MeshMapUsage.Curvature",
+    "uzpainter.textureset.MeshMapUsage.Height",
+    "uzpainter.textureset.MeshMapUsage.ID",
+    "uzpainter.textureset.MeshMapUsage.Normal",
+    "uzpainter.textureset.MeshMapUsage.Opacity",
+    "uzpainter.textureset.MeshMapUsage.Position",
+    "uzpainter.textureset.MeshMapUsage.Thickness",
+    "uzpainter.textureset.MeshMapUsage.WorldSpaceNormal",
+    "uzpainter.textureset.Resolution",
+    "uzpainter.textureset.Stack",
+    "uzpainter.textureset.Stack.add_channel",
+    "uzpainter.textureset.Stack.all_channels",
+    "uzpainter.textureset.Stack.edit_channel",
+    "uzpainter.textureset.Stack.from_name",
+    "uzpainter.textureset.Stack.get_channel",
+    "uzpainter.textureset.Stack.has_channel",
+    "uzpainter.textureset.Stack.material",
+    "uzpainter.textureset.Stack.name",
+    "uzpainter.textureset.Stack.remove_channel",
+    "uzpainter.textureset.Stack.uid",
+    "uzpainter.textureset.TextureSet",
+    "uzpainter.textureset.TextureSet.all_stacks",
+    "uzpainter.textureset.TextureSet.description",
+    "uzpainter.textureset.TextureSet.from_name",
+    "uzpainter.textureset.TextureSet.get_mesh_map_resource",
+    "uzpainter.textureset.TextureSet.get_resolution",
+    "uzpainter.textureset.TextureSet.get_stack",
+    "uzpainter.textureset.TextureSet.name",
+    "uzpainter.textureset.TextureSet.original_name",
+    "uzpainter.textureset.TextureSet.set_mesh_map_resource",
+    "uzpainter.textureset.TextureSet.set_resolution",
+    "uzpainter.textureset.TextureSet.uid",
+    "uzpainter.textureset.all_texture_sets",
+    "uzpainter.textureset.get_active_stack",
+    "uzpainter.textureset.set_active_stack",
+    "uzpainter.textureset.set_resolutions"
+   ]
+  }
+ },
+ "operation_matrix": {
+  "available": [
+   "bake_apply_preset: bake.apply_preset",
+   "bake_capture_preset: bake.capture_preset",
+   "bake_configure: bake.configure",
+   "bake_inspect: bake.inspect",
+   "bake_set_mesh_inputs: bake.set_mesh_inputs",
+   "bake_start: bake.start",
+   "batch: batch",
+   "camera_get: camera.get",
+   "camera_set: camera.set",
+   "capture: capture.base_color",
+   "capture: capture.channel",
+   "capture: capture.mask",
+   "capture: capture.painter_viewport",
+   "capture: render.capture",
+   "diff_snapshots: diagnostics.diff",
+   "display_get: display.get",
+   "display_set: display.set",
+   "effect_insert: effect.insert_fill",
+   "effect_insert: effect.insert_levels",
+   "effect_set: effect.set",
+   "export: export.config",
+   "export: export.format.exr",
+   "export: export.format.png",
+   "export: export.preset",
+   "export_presets_list: export.presets_list",
+   "fill_set: projection.uv",
+   "isolate_layer: diagnostics.isolate_layer",
+   "job_cancel: job.cancel",
+   "job_list: job.list",
+   "job_result: job.result",
+   "job_status: job.status",
+   "layer_delete: layer.delete",
+   "layer_insert: layer.insert_fill",
+   "layer_insert: layer.insert_group",
+   "layer_insert: layer.insert_paint",
+   "layer_list: layer.get",
+   "layer_set: layer.set",
+   "lease_acquire: lease.acquire",
+   "lease_release: lease.release",
+   "lease_status: lease.status",
+   "mask_set: mask.set",
+   "material_views: diagnostics.material_views",
+   "mesh_certificate: mesh.certificate",
+   "mesh_reload: mesh.reload",
+   "project_close: project.close",
+   "project_create: project.create",
+   "project_inspect: project.inspect",
+   "project_open: project.open",
+   "project_recipe: project.recipe",
+   "project_revert: project.revert",
+   "project_save: project.save",
+   "project_save_as: project.save_as",
+   "region_stats: diagnostics.region_stats",
+   "resource_import: resource.import",
+   "resource_list: resource.list",
+   "resource_replace: resource.replace",
+   "set_channels: texture_set.channels",
+   "set_list: texture_set.list",
+   "set_mesh_maps: texture_set.mesh_maps",
+   "set_rename: texture_set.rename",
+   "set_resolution: texture_set.resolution",
+   "shader_get: shader.get",
+   "shader_set: shader.set",
+   "snapshot_layer_tree: diagnostics.snapshot",
+   "source_set: source.bitmap",
+   "source_set: source.uniform_color",
+   "status: status",
+   "sync_stack: stack.sync",
+   "wait_idle: job.wait_idle"
+  ],
+  "capability_gap": [
+   {
+    "tool": "anchor_list",
+    "operation": "anchor.list",
+    "symbols": [
+     "substance_painter.layerstack.AnchorPointEffectNode (any)"
+    ],
+    "notes": "Owner phase4.1_nodes-instances-anchors (instances, anchors and references)."
+   },
+   {
+    "tool": "apply_smart",
+    "operation": "recipe.apply_smart",
+    "symbols": [
+     "substance_painter.layerstack.insert_smart_material (any)"
+    ],
+    "notes": "Owner phase3.6_smart-presets-projections (smart presets)."
+   },
+   {
+    "tool": "assets_search",
+    "operation": "assets.search",
+    "symbols": [
+     "uzpainter.assets.search (any)"
+    ],
+    "notes": "Owner phase3.3_procedural-families (procedural backends and the asset library)."
+   },
+   {
+    "tool": "capture",
+    "operation": "capture.painter_iray",
+    "symbols": [
+     "uzpainter.render.capture (mode:painter_iray)"
+    ],
+    "notes": "Owner phase3.7_path-tracer: the capture tool refuses the mode with PathTracerUnavailable before any work (decision 148), capability_gap over MCP (decision 242)."
+   },
+   {
+    "tool": "effect_insert",
+    "operation": "effect.insert_anchor",
+    "symbols": [
+     "uzpainter.layerstack.insert_anchor_point_effect (any)"
+    ],
+    "notes": "Owner phase4.1_nodes-instances-anchors (instances, anchors and references)."
+   },
+   {
+    "tool": "effect_insert",
+    "operation": "effect.insert_color_selection",
+    "symbols": [
+     "uzpainter.layerstack.insert_color_selection_effect (any)",
+     "uzpainter.layerstack.insert_color_selection_effect (any)"
+    ],
+    "notes": "Owner phase4.1_nodes-mask-effects. The facade's insert is supported (Tier 0 readback), but the typed tool performs the native insert, a release gap that the evaluator's support check refuses; the tool's value map names the facade symbol, so the native one is listed here."
+   },
+   {
+    "tool": "effect_insert",
+    "operation": "effect.insert_compare_mask",
+    "symbols": [
+     "uzpainter.layerstack.insert_compare_mask_effect (any)",
+     "uzpainter.layerstack.insert_compare_mask_effect (any)"
+    ],
+    "notes": "Owner phase4.1_nodes-mask-effects. The facade's insert is supported (Tier 0 readback), but the typed tool performs the native insert, a release gap that the evaluator's support check refuses; the tool's value map names the facade symbol, so the native one is listed here."
+   },
+   {
+    "tool": "effect_insert",
+    "operation": "effect.insert_filter",
+    "symbols": [
+     "uzpainter.layerstack.insert_filter_effect (any)"
+    ],
+    "notes": "Owner phase3.2_proc-filter-families (filters)."
+   },
+   {
+    "tool": "effect_insert",
+    "operation": "effect.insert_generator",
+    "symbols": [
+     "uzpainter.layerstack.insert_generator_effect (any)"
+    ],
+    "notes": "Owner phase3.2_proc-generator-families (mesh-map generators)."
+   },
+   {
+    "tool": "effect_insert",
+    "operation": "effect.insert_paint",
+    "symbols": [
+     "uzpainter.layerstack.PaintEffectNode (any)"
+    ],
+    "notes": "Owner phase4.1_nodes-paint-layers (paint layers and effects receiving bitmaps and projections, LAY-12)."
+   },
+   {
+    "tool": "export",
+    "operation": "export.format.bmp",
+    "symbols": [
+     "substance_painter.export.export_project_textures (file-format:bmp)"
+    ],
+    "notes": "Owner phase3.2_unreal-ue56-packed-preset (the TGA, BMP, JPEG and DDS writers); the format has no manifest entry, so it is a gap."
+   },
+   {
+    "tool": "export",
+    "operation": "export.format.dds",
+    "symbols": [
+     "substance_painter.export.export_project_textures (file-format:dds)"
+    ],
+    "notes": "Owner phase3.2_unreal-ue56-packed-preset (the TGA, BMP, JPEG and DDS writers); the format has no manifest entry, so it is a gap."
+   },
+   {
+    "tool": "export",
+    "operation": "export.format.j2k",
+    "symbols": [
+     "substance_painter.export.export_project_textures (file-format:j2k)"
+    ],
+    "notes": "Not in v1 (08-export.md §3). A release gap of 10-python-api.md §3. Reported by phase5.3_parity-report-capability-gaps."
+   },
+   {
+    "tool": "export",
+    "operation": "export.format.jpeg",
+    "symbols": [
+     "substance_painter.export.export_project_textures (file-format:jpeg)"
+    ],
+    "notes": "Owner phase3.2_unreal-ue56-packed-preset (the TGA, BMP, JPEG and DDS writers); the format has no manifest entry, so it is a gap."
+   },
+   {
+    "tool": "export",
+    "operation": "export.format.psd",
+    "symbols": [
+     "substance_painter.export.export_project_textures (file-format:psd)"
+    ],
+    "notes": "Not in v1 (08-export.md §3). A release gap of 10-python-api.md §3. Reported by phase5.3_parity-report-capability-gaps."
+   },
+   {
+    "tool": "export",
+    "operation": "export.format.tga",
+    "symbols": [
+     "substance_painter.export.export_project_textures (file-format:tga)"
+    ],
+    "notes": "Owner phase3.2_unreal-ue56-packed-preset (the TGA, BMP, JPEG and DDS writers); the format has no manifest entry, so it is a gap."
+   },
+   {
+    "tool": "export",
+    "operation": "export.format.tiff",
+    "symbols": [
+     "substance_painter.export.export_project_textures (file-format:tiff)"
+    ],
+    "notes": "Not in v1 (08-export.md §3). A release gap of 10-python-api.md §3. Reported by phase5.3_parity-report-capability-gaps."
+   },
+   {
+    "tool": "export",
+    "operation": "export.format.webp",
+    "symbols": [
+     "substance_painter.export.export_project_textures (file-format:webp)"
+    ],
+    "notes": "Not in v1 (08-export.md §3). A release gap of 10-python-api.md §3. Reported by phase5.3_parity-report-capability-gaps."
+   },
+   {
+    "tool": "fill_set",
+    "operation": "projection.cylindrical",
+    "symbols": [
+     "substance_painter.layerstack.ProjectionMode.Cylindrical (any)"
+    ],
+    "notes": "Owner phase4.1_nodes-projections (3D projections)."
+   },
+   {
+    "tool": "fill_set",
+    "operation": "projection.planar",
+    "symbols": [
+     "substance_painter.layerstack.ProjectionMode.Planar (any)"
+    ],
+    "notes": "Owner phase4.1_nodes-projections (3D projections)."
+   },
+   {
+    "tool": "fill_set",
+    "operation": "projection.spherical",
+    "symbols": [
+     "substance_painter.layerstack.ProjectionMode.Spherical (any)"
+    ],
+    "notes": "Owner phase4.1_nodes-projections (3D projections)."
+   },
+   {
+    "tool": "fill_set",
+    "operation": "projection.triplanar",
+    "symbols": [
+     "substance_painter.layerstack.ProjectionMode.Triplanar (any)"
+    ],
+    "notes": "Owner phase4.1_nodes-projections (3D projections)."
+   },
+   {
+    "tool": "fill_set",
+    "operation": "projection.uv_set_to_uv_set",
+    "symbols": [
+     "substance_painter.layerstack.ProjectionMode.UVSetToUVSet (any)"
+    ],
+    "notes": "Owner phase4.1_nodes-projections (3D projections). A release gap of 10-python-api.md §3."
+   },
+   {
+    "tool": "fill_set",
+    "operation": "projection.warp",
+    "symbols": [
+     "substance_painter.layerstack.ProjectionMode.Warp (any)"
+    ],
+    "notes": "Owner phase4.1_nodes-projections (3D projections). A release gap of 10-python-api.md §3."
+   },
+   {
+    "tool": "fill_set",
+    "operation": "source.material",
+    "symbols": [
+     "substance_painter.layerstack.FillLayerNode.set_material_source (any)"
+    ],
+    "notes": "Owner phase4.2_remaining-nodes (material sources)."
+   },
+   {
+    "tool": "layer_instantiate",
+    "operation": "layer.instantiate",
+    "symbols": [
+     "substance_painter.layerstack.instantiate (any)"
+    ],
+    "notes": "Owner phase4.1_nodes-instances-anchors (instances, anchors and references)."
+   },
+   {
+    "tool": "layer_set",
+    "operation": "layer.geometry_mask",
+    "symbols": [
+     "substance_painter.layerstack.LayerNode.set_geometry_mask (any)"
+    ],
+    "notes": "Owner phase4.2_remaining-nodes (geometry masks)."
+   },
+   {
+    "tool": "procedural_set",
+    "operation": "stack.procedural",
+    "symbols": [
+     "uzpainter.layerstack.set_procedural (any)"
+    ],
+    "notes": "Owner phase3.3_procedural-families (procedural backends and the asset library)."
+   },
+   {
+    "tool": "project_create",
+    "operation": "project.workflow.texture_set_per_uv_tile",
+    "symbols": [
+     "substance_painter.project.ProjectWorkflow.TextureSetPerUVTile (any)"
+    ],
+    "notes": "Owner phase4.3_tiles-workflow (UV-tile workflows). A release gap of 10-python-api.md §3."
+   },
+   {
+    "tool": "project_create",
+    "operation": "project.workflow.uv_tile",
+    "symbols": [
+     "substance_painter.project.ProjectWorkflow.UVTile (any)"
+    ],
+    "notes": "Owner phase4.3_tiles-workflow (UV-tile workflows). A release gap of 10-python-api.md §3."
+   },
+   {
+    "tool": "resource_search",
+    "operation": "resource.search",
+    "symbols": [
+     "substance_painter.resource.search (any)"
+    ],
+    "notes": "Owner phase3.3_procedural-families (procedural backends and the asset library)."
+   },
+   {
+    "tool": "smart_export",
+    "operation": "smart.export",
+    "symbols": [
+     "substance_painter.layerstack.export_as_smart_material (any)"
+    ],
+    "notes": "Owner phase3.6_smart-presets-projections (smart presets)."
+   },
+   {
+    "tool": "smart_mask_insert",
+    "operation": "smart.mask_insert",
+    "symbols": [
+     "substance_painter.layerstack.insert_smart_mask (any)"
+    ],
+    "notes": "Owner phase3.6_smart-presets-projections (smart presets)."
+   },
+   {
+    "tool": "smart_material_insert",
+    "operation": "stack.smart_material",
+    "symbols": [
+     "substance_painter.layerstack.insert_smart_material (any)"
+    ],
+    "notes": "Owner phase3.6_smart-presets-projections (smart presets)."
+   },
+   {
+    "tool": "source_set",
+    "operation": "source.font",
+    "symbols": [
+     "substance_painter.source.SourceFont (any)"
+    ],
+    "notes": "Owner phase4.1_nodes-vector-font-sources (vector and font sources). A release gap of 10-python-api.md §3."
+   },
+   {
+    "tool": "source_set",
+    "operation": "source.reference",
+    "symbols": [
+     "substance_painter.layerstack.AnchorPointEffectNode (any)"
+    ],
+    "notes": "Owner phase4.1_nodes-instances-anchors (instances, anchors and references)."
+   },
+   {
+    "tool": "source_set",
+    "operation": "source.vector",
+    "symbols": [
+     "substance_painter.source.SourceVectorial (any)"
+    ],
+    "notes": "Owner phase4.1_nodes-vector-font-sources (vector and font sources). A release gap of 10-python-api.md §3."
+   }
+  ]
+ },
+ "refused_contexts_of_in_scope_symbols": [
+  {
+   "symbol": "substance_painter.colormanagement.Color",
+   "context": "compositor:ocio-unrecorded",
+   "status": "release-gap"
+  },
+  {
+   "symbol": "substance_painter.export.export_project_textures",
+   "context": "file-format:j2k",
+   "status": "release-gap"
+  },
+  {
+   "symbol": "substance_painter.export.export_project_textures",
+   "context": "file-format:psd",
+   "status": "release-gap"
+  },
+  {
+   "symbol": "substance_painter.export.export_project_textures",
+   "context": "file-format:tiff",
+   "status": "release-gap"
+  },
+  {
+   "symbol": "substance_painter.export.export_project_textures",
+   "context": "file-format:webp",
+   "status": "release-gap"
+  },
+  {
+   "symbol": "substance_painter.export.export_project_textures",
+   "context": "l8-material-channel-png-unrecorded",
+   "status": "release-gap"
+  },
+  {
+   "symbol": "substance_painter.layerstack.FillEffectNode",
+   "context": "compositor:content-stack",
+   "status": "release-gap"
+  },
+  {
+   "symbol": "substance_painter.layerstack.FilteringMode.BilinearHQ",
+   "context": "compositor:minification-rotated",
+   "status": "release-gap"
+  },
+  {
+   "symbol": "substance_painter.layerstack.FilteringMode.BilinearSharp",
+   "context": "compositor:minification-rotated",
+   "status": "release-gap"
+  },
+  {
+   "symbol": "substance_painter.layerstack.LevelsEffectNode",
+   "context": "compositor:mask-stack",
+   "status": "release-gap"
+  },
+  {
+   "symbol": "substance_painter.layerstack.PaintLayerNode",
+   "context": "bitmap-or-projection-content",
+   "status": "release-gap"
+  },
+  {
+   "symbol": "substance_painter.layerstack.PaintLayerNode",
+   "context": "compositor",
+   "status": "release-gap"
+  },
+  {
+   "symbol": "substance_painter.properties.Property.properties",
+   "context": "baking-parameter",
+   "status": "release-gap"
+  },
+  {
+   "symbol": "substance_painter.properties.Property.value",
+   "context": "default-unestablished",
+   "status": "release-gap"
+  },
+  {
+   "symbol": "substance_painter.source.SourceBitmap",
+   "context": "compositor:normal-unrecorded",
+   "status": "release-gap"
+  },
+  {
+   "symbol": "substance_painter.source.SourceBitmap.set_color_space",
+   "context": "compositor:srgb-unrecorded",
+   "status": "release-gap"
+  },
+  {
+   "symbol": "substance_painter.source.SourceMode",
+   "context": "compositor:material",
+   "status": "release-gap"
+  },
+  {
+   "symbol": "substance_painter.source.SourceSubstance",
+   "context": "arbitrary-sbsar",
+   "status": "release-gap"
+  },
+  {
+   "symbol": "substance_painter.source.SourceSubstance",
+   "context": "compositor",
+   "status": "release-gap"
+  },
+  {
+   "symbol": "substance_painter.source.SourceUniformColor",
+   "context": "compositor:normal-directx",
+   "status": "release-gap"
+  },
+  {
+   "symbol": "substance_painter.textureset.TextureSet",
+   "context": "material-layering",
+   "status": "release-gap"
+  },
+  {
+   "symbol": "uzpainter.export.export_project_textures",
+   "context": "l8-material-channel-png-unrecorded",
+   "status": "release-gap"
+  },
+  {
+   "symbol": "uzpainter.properties.Property.properties",
+   "context": "baking-parameter",
+   "status": "release-gap"
+  }
+ ]
+}

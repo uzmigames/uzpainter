@@ -218,6 +218,73 @@ project/session paths retain their existing contract. This guard protects the
 official adapter route against unverified input data; it does not sandbox hostile
 Python or arbitrary system calls, replace M8 governance, or grant G2/cutover.
 
+## M13 -- Amended scope of a production round (`scope.py`)
+
+Task `phase3.1_assets3d-cutover` item 2.6. A production call may name only what the shipped
+capability manifest marks `supported` (`10-python-api.md` §3). The owner-signed amendment of the
+Assets3D painting rule scopes UzPainter to that set; everything else stays with Adobe Substance 3D
+Painter until G5 (decision 026). The draft text is in `docs/analysis/assets3d-cutover/`; it is not
+signed. This check enforces the rule in software only, and grants no cutover.
+
+- **Client.** After the prerequisites (M11, M12) and the runtime probe, the client reads the code it
+  would run, without running it. It resolves every name the code binds to a module of
+  `substance_painter`, `uzpainter` or the shim `_substance_painter`, and every attribute chain read
+  from such a name. Each resolves to its manifest symbol (`capabilities.json` beside
+  `UzPainter.exe`; the shim's `save_viewport` is `uzpainter.render.capture`). A symbol is in scope
+  when its `any` entry is `supported`. Anything else refuses the call before the session lock, the
+  transport files or `run`: `pending-evidence`, `release-gap`, `desktop-only-omitted`, an unlisted
+  name, a star import, or code that does not parse. The refusal is
+  `{"type": "OutOfAmendedScope", "schema": "uzpainter/assets3d-scope-refusal/1", "operation",
+  "tool": "Adobe Substance 3D Painter", "outside": [{symbol, context, status}],
+  "capabilities_sha256"}`, exit 1. An accepted production reply carries
+  `scope: {capabilities_sha256, tool_outside}`.
+- **Entry.** In a production round a gated subcommand (`smart`, M5) is refused the same way before
+  any call, in place of `NotYetSupported`.
+- **Limits.** The reading is static.
+  - A reference on a branch the code never takes is refused all the same, so nothing of a refused
+    round runs. Measured on Assets3D HEAD `d61f0bd8`, `painter_layer_stack.py sync` names
+    `substance_painter.resource.Resource.retrieve` (`release-gap`, absent from the facade) for
+    masks with a cached URL, so a production `sync` is refused. The pinned `9a718b9` copy is in
+    scope.
+  - What a static reading cannot see is still checked where it is called: a method on an object,
+    `getattr`, a name bound at run time. The facade raises `NotYetSupported` before a
+    `release-gap` call mutates, and its context-specific gaps (export file formats, unrecorded
+    compositor cases) refuse in the same way. That refusal comes after the script's earlier calls
+    committed, as M5 states.
+  - The scope is the running host's manifest. Its SHA-256 is in every refusal and every reply, so
+    a round can be matched to the signed amendment's manifest. The adapter does not yet refuse a
+    host whose manifest differs from the signed one: there is no signed one.
+  - Diagnostic imports are not scope-checked. They stay possible and flagged (QG-02).
+- **In scope today.** The route-guard probes (M8) and the wand's `painter_create.py` and
+  `painter_export.py` name only `supported` symbols. `smart` and `capture` do not.
+
+## M14 -- Manifest blocks of a conformant export (`manifest_blocks.py`)
+
+Task `phase3.1_assets3d-cutover` item 2.7 (INT-20, INT-21). After a call, while it still holds the
+session, the client completes the `manifest` of every export that has one (M6).
+
+- **`export` (v2's `exportacao`, INT-21).** The receipt's `manifest_export`, rebased by the runner,
+  gains one `evidence` source `{"file": "painter-recipe"}`.
+- **`painter_recipe`-equivalent (INT-20).** The client reads the recipe dump of the exact revision
+  the export evaluated with `UzPainter.exe inspect <project_path> --revision N --recipe` (no GPU,
+  no lock). The runner now reports each export's `project_path`.
+  - **Check.** The dump must be `uzpainter/recipe/1`, carry a SHA-256 digest, and match the
+    receipt's `revision`, `evaluator_profile` and `compat_profile`.
+  - **File.** It is written to `<exportPath>/uzpainter-recipes/<generation>.recipe.json`, beside the
+    generations, which are never changed. Bytes already there must be the same: they are never
+    replaced.
+  - **Manifest.** The manifest gains the file `painter-recipe` (role `recipe`, path under the
+    Assets3D root, verified SHA-256, bytes, revision). It also gains a `painter_recipe` summary
+    `{schema, file, path, digest, revision, evaluator_profile, compat_profile, app_version}`.
+- **Failure.** An export whose recipe cannot be read, checked or written gets `manifest: null`, and
+  `manifest_unavailable` gives the reason. As in M6 the export itself stands, and nothing partial
+  reaches a manifest.
+- **Diagnostic measure exports.** They never get a manifest (decision 286), so no recipe is read
+  for them.
+- **Writing the Assets3D manifest.** The Assets3D piece manifest is written by Assets3D's own
+  tooling (`Pipeline/manifest/manifest.py`), under its protocol. The adapter supplies the blocks;
+  it never edits a manifest.
+
 ## Not adapted (UzPainter differs; owners named)
 
 - **The wand's five-map export:** its BaseColor is written exactly (decision 126), but `infinite` padding on the wand's UV islands is refused before writing, naming recording R-090 (decision 127). Owner: `phase1.25_pilot-wand` item 2.7.

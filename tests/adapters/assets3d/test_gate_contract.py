@@ -333,6 +333,10 @@ def test_client_propagates_verified_policy_and_requires_native_ack(
     monkeypatch.setenv(client.SCRATCH_ENV, str(root))
     monkeypatch.setenv(client.SESSION_ENV, str(root / "session.json"))
     monkeypatch.setattr(client, "painter_exe", lambda: root / "UzPainter.exe")
+    # The amended scope the production call is checked against (M13): the code names nothing.
+    (root / "capabilities.json").write_text(
+        json.dumps({"schema": "uzpainter/capabilities/1", "entries": []}), encoding="utf-8"
+    )
     acknowledge = True
     calls: list[list[str]] = []
 
@@ -360,6 +364,10 @@ def test_client_propagates_verified_policy_and_requires_native_ack(
     monkeypatch.setattr(client, "run_painter", run)
     reply, status = client.execute_python("result = None")
     assert status == client.OK and reply["production_guard"]["mode"] == "armed"
+    assert (
+        reply["scope"]["capabilities_sha256"]
+        == hashlib.sha256((root / "capabilities.json").read_bytes()).hexdigest()
+    )
     assert "diagnostic" not in reply
     assert not list(root.glob("uzp-a3d-*"))
     acknowledge = False
