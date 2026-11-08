@@ -2463,6 +2463,9 @@ ADMITTED = frozenset(
         "export-padding-normal-combine",
         "blend-subnormal-f32",
         "ao-mixed-grid",
+        # phase3.1_export-island-padding item 2.1 (Painter session of 2026-11-08, Legacy).
+        "export-padding-kernel-islands-256",
+        "export-padding-fold-tie",
     }
 )
 
@@ -2512,6 +2515,8 @@ PRESERVED_REQUESTS = frozenset(
         "export-presets-gltf-predefined-padding-legacy",
         "export-presets-gltf-predefined-padding-ocio",
         "srgb-bitmap-minification-random",
+        "export-padding-kernel-islands-256",
+        "export-padding-fold-tie",
     }
 )
 

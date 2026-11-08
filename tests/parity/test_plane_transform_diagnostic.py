@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from types import SimpleNamespace
@@ -12,6 +13,7 @@ import pytest
 
 from tools.parity.fit import plane_transform_diagnostic as diagnostic
 from tools.parity.fit.padding_plane_control import checked_bytes
+from tools.parity.recorder.job import canonical_json
 from tools.parity.schemas import REPO_ROOT
 
 
@@ -53,6 +55,51 @@ def test_raw_record_rejects_collapsing_or_mislabeled_identities(fault: str) -> N
         value["recordings"][1]["condition"] = "same_session"
     with pytest.raises(ValueError):
         diagnostic.validate_record(value, {})
+
+
+@pytest.mark.parametrize(
+    ("environment", "accepted"), [("current", True), ("equivalent", True), ("other", False)]
+)
+def test_record_environment_is_the_current_envelope_or_an_equivalent(
+    monkeypatch: pytest.MonkeyPatch, environment: str, accepted: bool
+) -> None:
+    manifest = {
+        "golden_id": "tier0/semantics/authored",
+        "instruction_sequence": {"steps": []},
+        "inputs": [{"input_id": "mesh", "sha256": "0" * 64}],
+    }
+    record = {
+        "golden_id": manifest["golden_id"],
+        "tier": "0",
+        "environment": {"name": environment},
+        "key": {
+            "painter_build": {"build_id": "authored-build"},
+            "instruction_sequence_sha256": hashlib.sha256(
+                canonical_json(manifest["instruction_sequence"])
+            ).hexdigest(),
+            "inputs": manifest["inputs"],
+        },
+        "recordings": [
+            {"recording_id": "r1", "condition": "same_session", "outputs": []},
+            {"recording_id": "r2", "condition": "after_save_reopen", "outputs": []},
+        ],
+    }
+    monkeypatch.setattr(diagnostic, "record_problems", lambda _record: [])
+    monkeypatch.setattr(diagnostic, "envelope_sha256", lambda env: env["name"])
+    monkeypatch.setattr(
+        diagnostic,
+        "current_envelope",
+        lambda: {
+            "painter_build": "authored-build",
+            "envelope_sha256": "current",
+            "equivalent_envelopes": ["equivalent"],
+        },
+    )
+    if accepted:
+        diagnostic.validate_record(record, manifest)
+    else:
+        with pytest.raises(ValueError, match="record identity mismatch"):
+            diagnostic.validate_record(record, manifest)
 
 
 def ring() -> Any:
