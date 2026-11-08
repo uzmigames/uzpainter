@@ -16,8 +16,9 @@ phase1.23 wand fixture (`tests/adapters/assets3d/wand.py`): the three pipeline s
 byte-unchanged, each pinned by SHA-256 from the golden's manifest (`--pin`: the adapter refuses a
 changed script before anything reaches UzPainter), on the same staged inputs and external mesh
 maps the Painter recording used. Each rebuild has its own work directory, and create, sync and
-export are each a separate `UzPainter.exe run` process; the backend is DX12, the verb's default
-(the adapter names none).
+export are each a separate `UzPainter.exe run` process; the backend is DX12, the verb's default,
+unless `UZP_ASSETS3D_GPU_BACKEND` names another (the adapter client passes it as `--gpu-backend`;
+the pilots' Tier 1 on Vulkan, phase3.1 item 3.6), and the report's run identity records it.
 
 The golden is `phase1/tier1/wand-v1` resolved through the current envelope
 (`verdict.resolve_golden`); until it is admitted the runs execute the R9 request (decision 099)
@@ -83,6 +84,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
 from collections.abc import Mapping
@@ -93,6 +95,7 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
+from adapters.assets3d.client import GPU_BACKEND_ENV
 from tests.adapters.assets3d import wand as wand_module
 from tests.adapters.assets3d.wand import REQUEST, Call, Wand, native_ocio_sha256
 from tools.parity.coverage import coverage, distance_bands, obj_materials, obj_triangles
@@ -120,7 +123,7 @@ from tools.parity.tier1.compare import (
 from tools.parity.verdict import resolve_golden
 
 GOLDEN_ID = "phase1/tier1/wand-v1"
-BACKEND = "dx12"  # `UzPainter.exe run`'s default; the adapter passes no --gpu-backend
+BACKEND = "dx12"  # `UzPainter.exe run`'s default, when `UZP_ASSETS3D_GPU_BACKEND` is unset
 REFUSAL = "NotYetSupported"
 NORMAL_SUFFIX = "_Normal"  # painter_export.py: f"{P}_Normal" from virtual map Normal_OpenGL
 # The decided refusals of an islanded export (src/export/padding.cpp `IslandNormalRefusal` and
@@ -141,6 +144,18 @@ IDENTITY = f"{_IMPORTS}result = {_READ}\n"
 SAVE = (
     f'{_IMPORTS}before = {_READ}\nproject.save()\nresult = {{"before": before, "after": {_READ}}}\n'
 )
+
+
+def backend() -> str:
+    """The backend every `UzPainter.exe run` of a rebuild uses: `UZP_ASSETS3D_GPU_BACKEND` (the
+    adapter client's `--gpu-backend`), else the verb's default `BACKEND`."""
+    return os.environ.get(GPU_BACKEND_ENV) or BACKEND
+
+
+def wand_backend(wand: Wand) -> str:
+    """The backend the adapter client passes to every `UzPainter.exe run` of `wand`: its
+    environment's `UZP_ASSETS3D_GPU_BACKEND`, else the verb's default `BACKEND`."""
+    return wand.env.get(GPU_BACKEND_ENV) or BACKEND
 
 
 class RunError(RuntimeError):
@@ -335,8 +350,14 @@ def checked_export(wand: Wand, diagnostic: bool = False) -> CandidateRun:
 
 
 def checked_receipt(wand: Wand, diagnostic: bool) -> None:
-    """The receipt of the export `wand` last published is (not) the measure mode's as `diagnostic`
-    says, and the measure mode bypassed only decided refusals (`DECIDED_REFUSALS`)."""
+    """The receipt of the export `wand` last published names the backend its run selected
+    (`wand_backend`), is (not) the measure mode's as `diagnostic` says, and the measure mode
+    bypassed only decided refusals (`DECIDED_REFUSALS`)."""
+    if receipt_of(wand)["backend"] != wand_backend(wand):
+        raise RunError(
+            f"the export's receipt names the backend {receipt_of(wand)['backend']!r}, "
+            f"not {wand_backend(wand)!r}"
+        )
     if non_conformant(wand) != diagnostic:
         raise RunError(f"the export's receipt is {'not ' * diagnostic}marked non_conformant")
     if not diagnostic:
@@ -574,7 +595,7 @@ def _evidence(
     identity = RunIdentity(
         hardware,
         driver,
-        BACKEND,
+        backend(),
         sha256_of(painter),
         tuple(sorted({str(item["sha256"]) for item in wand.pipeline.manifest["inputs"]})),
     )

@@ -33,6 +33,9 @@ Environment:
 - `UZP_ASSETS3D_GPU_DEADLINE_MS`: test fixture only (the Tunic's 4096 px Tier 1 run): passes
   `--gpu-deadline-ms <value>` to `UzPainter.exe run`, which validates it; unset or empty, the
   run's default deadline of 60 s applies.
+- `UZP_ASSETS3D_GPU_BACKEND`: test fixture only (the pilots' Tier 1 on Vulkan, phase3.1 item
+  3.6): passes `--gpu-backend <value>` to `UzPainter.exe run`, which validates it; unset or
+  empty, the run's default backend (DX12) applies.
 """
 
 from __future__ import annotations
@@ -64,6 +67,8 @@ IMPORT_DIAGNOSTIC_ENV = "UZP_ASSETS3D_DIAGNOSTIC_IMPORT"
 SCRATCH_ENV = "UZP_ASSETS3D_SCRATCH"
 GPU_DEADLINE_ENV = "UZP_ASSETS3D_GPU_DEADLINE_MS"
 GPU_DEADLINE_FLAG = "--gpu-deadline-ms"
+GPU_BACKEND_ENV = "UZP_ASSETS3D_GPU_BACKEND"
+GPU_BACKEND_FLAG = "--gpu-backend"
 PRODUCTION_FLAG = "--assets3d-production-required"
 OK, FAILED, USAGE, HOST_ERROR = 0, 1, 2, 3
 TOOL = "execute_python"
@@ -245,6 +250,13 @@ def deadline_flags() -> list[str]:
     return [GPU_DEADLINE_FLAG, value] if value else []
 
 
+def backend_flags() -> list[str]:
+    """`--gpu-backend <value>` when `UZP_ASSETS3D_GPU_BACKEND` is set (above), none when it is
+    unset or empty; UzPainter refuses an unknown backend (a host error)."""
+    value = os.environ.get(GPU_BACKEND_ENV, "")
+    return [GPU_BACKEND_FLAG, value] if value else []
+
+
 def report_line(stdout: str) -> dict[str, Any] | None:
     lines = [line for line in stdout.splitlines() if line.startswith(JSON_PREFIX)]
     return json.loads(lines[-1][len(JSON_PREFIX) :]) if lines else None
@@ -267,6 +279,7 @@ def execute_python(code: str) -> tuple[dict[str, Any], int]:
                 str(RUNNER),
                 *diagnostic,
                 *deadline_flags(),
+                *backend_flags(),
                 *([PRODUCTION_FLAG] if policy is not None else []),
                 "--",
                 str(code_file),
