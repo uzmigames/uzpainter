@@ -41,6 +41,7 @@ from tools.parity.recorder import vocabulary as ps
 from tools.parity.recorder.job import EXPORT
 from tools.parity.schemas import Schema, validation_errors
 from tools.parity.tier0_semantics import ao_operand_control as ao_control
+from tools.parity.tier0_semantics import ao_operand_probe as ao_probe
 from tools.parity.tier0_semantics import padding_fold_tie as fold_tie
 from tools.parity.tier0_semantics import padding_joint_bend as joint_bend
 from tools.parity.tier0_semantics import padding_plane_control as plane_control
@@ -120,6 +121,10 @@ def probe_generator(group: str, probe: str) -> Generate:
 
 # Authored inputs of the requests: id -> (kind, repository path, generator).
 REQUEST_FIXTURES: dict[str, tuple[str, str, Generate]] = {
+    **{
+        name: ("image", f"{FIXTURE_DIR}/bitmaps/{name}.exr", ao_probe.exr(name))
+        for name in ao_probe.IMAGES
+    },
     ao_control.MESH_VALUES: (
         "image",
         f"{FIXTURE_DIR}/bitmaps/{ao_control.MESH_VALUES}.exr",
@@ -2358,6 +2363,7 @@ def later_goldens() -> list[Golden]:
         ao_mixed_precomposed_probe(),
         ao_mixed_precomposed_scalar_probe(),
         ao_control.request(),
+        ao_probe.request(),
         *specularweight_base_probes(),
         height_normal_resolution(4096, "sharp"),
         padding_islands_kernel_probe(),
