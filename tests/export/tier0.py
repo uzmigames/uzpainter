@@ -628,6 +628,134 @@ def virtual_map_goldens(exe: Path, tmp: Path, repo_root: Path) -> dict[str, Any]
     return report
 
 
+# ── AO_Mixed through the plan (decision 411) ─────────────────────────────────
+
+# The AO goldens whose inputs the evaluator decodes (PNG): golden -> its texture sets outside
+# AO_Mixed's scope (a group and two fills on AO: the plan refuses them, decision 411). The goldens
+# with OpenEXR inputs (the mesh-float-product, precomposed and operand-probe controls) are fitted
+# in tools/parity/fit/ao_mixed_scan.py; the evaluator does not decode OpenEXR bitmaps.
+AO_GOLDENS: dict[str, tuple[str, ...]] = {
+    "semantics/ao-mixed": (),
+    "semantics/ao-mixed-opacity": ("s5", "s6"),
+    "semantics/ao-mixed-opacity-float": ("s5", "s6"),
+    "semantics/ao-mixed-isolation": (),
+    "semantics/ao-mixed-isolation-float": (),
+    "semantics/ao-mixed-isolation-8bit": (),
+    "semantics/ao-mixed-grid": (),
+    "semantics/ao-mixed-grid-l32f": (),
+    "semantics/ao-mixed-grid-l16-reopen3": (),
+}
+
+
+def write8(values: np.ndarray) -> np.ndarray:
+    """The 8-bit export of float32 values (arith::WriteUnorm at 8 bits)."""
+    j = np.floor(np.clip(np.asarray(values, np.float64), 0.0, 1.0) * float(1 << 12)).astype(
+        np.int64
+    )
+    codes: np.ndarray = (j * 255 + (1 << 11) - 1) >> 12
+    return codes
+
+
+def ao_config(root: str) -> dict[str, Any]:
+    """The recorder's AO_Mixed configuration on `root` (the plan's values do not depend on it)."""
+    step = export_step(
+        Step(
+            0,
+            "substance_painter.export.export_project_textures",
+            {
+                "maps": ["virtualMap/AO_Mixed:L"],
+                "file_format": "png",
+                "bit_depth": 16,
+                "padding": "infinite",
+                "dithering": False,
+            },
+        )
+    )
+    return step.config(Path("C:/export"), [root])
+
+
+def ao_stored(values: np.ndarray, container: str, bits: int) -> np.ndarray:
+    """What a file of `container` stores for the plan's float32 AO_Mixed values."""
+    if container == "exr":
+        return values
+    return write16(values) if bits == 16 else write8(values)
+
+
+def ao_mixed_goldens(exe: Path, tmp: Path) -> dict[str, Any]:
+    """AO_Mixed of every texture set of `AO_GOLDENS` compiled as a plan file and evaluated through
+    `EvaluateFileOn`, against every AO_Mixed export of r1 (PNG 8, PNG 16 and OpenEXR 32f, the
+    file's stored values) and of r2 wherever r2 equals r1; the sets outside the scope must be
+    refused when the plan compiles. Returns the counts, the differing exports, the refusals and
+    the residuals (golden, key, recording, unit, |delta| statistics)."""
+    needs_store()
+    report: dict[str, Any] = {
+        "maps": 0,
+        "differing": [],
+        "refused": [],
+        "unexpected": [],
+        "residuals": [],
+    }
+    for name, outside in AO_GOLDENS.items():
+        manifest, golden = envelope_manifest(name), envelope_golden(name)
+        r1 = golden.recordings["r1"].outputs
+        outputs = {oid: o for oid, o in r1.items() if o.get("map") == "AO_Mixed"}
+        for texture_set in sorted({o["texture_set"] for o in outputs.values()}):
+            workdir = tmp / "ao" / name.rsplit("/", 1)[-1] / texture_set
+            spec = export_spec(manifest, texture_set, workdir)
+            if texture_set in outside:
+                (workdir / "spec.json").write_text(json.dumps(spec), encoding="utf-8")
+                (workdir / "config.json").write_text(json.dumps(ao_config(texture_set)), "utf-8")
+                proc = subprocess.run(
+                    [
+                        str(exe),
+                        "files",
+                        str(TEMPLATES_DIR),
+                        str(workdir / "spec.json"),
+                        str(workdir / "config.json"),
+                        str(workdir / "out"),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    timeout=1200,
+                    check=False,
+                )
+                message = proc.stdout + proc.stderr
+                where = f"{golden.golden_id} {texture_set}"
+                ok = proc.returncode != 0 and "AO_Mixed" in message and "decision 411" in message
+                (report["refused"] if ok else report["unexpected"]).append(f"{where}: {message}")
+                continue
+            rasters, errors = evaluate_files_or_errors(exe, spec, ao_config(texture_set), workdir)
+            if errors:
+                report["unexpected"].append(f"{golden.golden_id} {texture_set}: {errors}")
+                continue
+            ours = rasters[f"{texture_set}_AO_Mixed.png"]
+            for oid, output in sorted(outputs.items()):
+                if output["texture_set"] != texture_set:
+                    continue
+                report["maps"] += 1
+                storage = output["storage_format"]
+                stored = ao_stored(ours, storage["container"], storage["bits_per_channel"])
+                unit = (
+                    "float32 value"
+                    if storage["container"] == "exr"
+                    else f"{storage['bits_per_channel']}-bit code value"
+                )
+                for recording in sorted(golden.recordings):
+                    if recording != "r1" and golden.map_sha256("r1", oid) != golden.map_sha256(
+                        recording, oid
+                    ):
+                        continue
+                    theirs = golden.map(recording, oid).values
+                    diff = difference(stored, theirs[..., :1].reshape(stored.shape))
+                    report["residuals"].append((golden.golden_id, oid, recording, unit, diff))
+                    if diff.differing:
+                        report["differing"].append(
+                            f"{golden.golden_id} {oid} {recording}: {diff.differing} values"
+                        )
+    return report
+
+
 # ── parity/semantics/virtual-maps.json ───────────────────────────────────────
 
 PYDOC = source(
@@ -675,6 +803,13 @@ DOCUMENTED: dict[str, tuple[str, int, str]] = {
     "View_2D": ("view-2d", 3, "the 2D view of the shaded material"),
 }
 FORMULAS = {
+    "AO_Mixed": (
+        "a' = (1 + a) - 1 with a the AO mesh map operand; c = fma(S, al, 1) - al, the AO fill "
+        "mixed over the white base (S the source, written as an L16 code first on an L16 channel; "
+        "al the layer opacity, its L16 code with ties down on an L16 channel, float32 on L32F), or "
+        "1 without a layer; v = a' c; AO_Mixed = WriteUnorm((v - 1) + 1, 8) / 255, every step one "
+        "float32 rounding (decision 411)."
+    ),
     "Normal_OpenGL": (
         "n = normalise(reoriented(normalise(reoriented(flat, H)), decode(C))) with H the "
         "height-derived normal of the texture set's method and C the Normal channel composited "
@@ -692,9 +827,6 @@ GAP_FORMULA = (
     "configuration naming it is refused with NotYetSupported before anything is written."
 )
 GAP_CORPUS = (
-    "tier0/semantics/ao-mixed",
-    "tier0/semantics/ao-mixed-opacity",
-    "tier0/semantics/ao-mixed-opacity-float",
     "tier0/semantics/virtual-maps-converted",
     "tier0/semantics/virtual-maps-converted-float",
 )
@@ -744,40 +876,38 @@ CONVERTED_NOTES = {
     ),
 }
 AO_MIXED_NOTES = (
-    "Not exact (decision 092). Recording R-086a (ao-mixed-opacity and its OpenEXR 32f twin, "
-    "decision 087) shows AO_Mixed on the 8-bit lattice before encoding, step A = step B, and r1"
-    " != r2 by one 8-bit step at 9 to 41 values per set, deterministically. Best model: alpha ="
-    " the layer opacity's L16 code / 65535 and C = the fill's stored L16 code / 65535 "
-    "(float32); c = fma(C - 1, alpha, 1), the AO channel before its L16 write (1 without a "
-    "layer; WriteUnorm16(c) is the channel's export, 0 differing on r1); a = the AO mesh map "
-    "code / 255; v = a c (float32); AO_Mixed = WriteUnorm(v, 8) (12 fractional bits, nearest, "
-    "ties down). It misses r1 at 31 values over the three goldens (ao-mixed-opacity s0-s7 "
-    "0/9/2/0/0/9/2/0, its twin the same, ao-mixed s0-s3 0/9/0/0), each within 3 ulps of v from "
-    "a 2^-12 boundary; r2 misses more and is not explained. On the row where C = 0, c = 1 - "
-    "alpha is exact in any order of operations, yet v must rise by 2 to 3 ulps, so no correctly"
-    " rounded float32 evaluation of the tested inputs reproduces r1. Rejected: more than 40 "
-    "orders of operations with and without fma, multiply blends over the mesh map, fixed-point "
-    "(2^12 to 2^29) and half-float intermediates, a 16-bit intermediate, other conversions of "
-    "a, C and alpha, and the recording GPU's measured exp2, log2 and reciprocal. Unknown: "
-    "Painter's operand conversions or arithmetic on this path. Recording R-092 isolates them: a"
-    " constant AO mesh map with a varying channel, a constant channel with a varying mesh map, "
-    "values at the missed coordinates, and the same exports after reopen. Calibrated is not "
-    "parity: the plan refuses AO_Mixed."
+    "Fitted exactly (decision 411; tools/parity/fit/ao_mixed_scan.py, recordings R-086a, R-092, "
+    "R-131 with its stability controls, and the operand probe ao-mixed-operand-probe): every "
+    "r1 AO_Mixed export of the 13 admitted AO goldens, PNG 8, PNG 16 and OpenEXR 32f, 0 differing. "
+    "The stored channel is not the operand: an L16 channel stores the mix quantized and an L32F "
+    "one fma(S - 1, al, 1). Fills of one source compose to one mix of opacity 1 - prod(1 - "
+    "opacity) (a group multiplies its children's opacity); the plan computes only no AO layer or "
+    "one root fill in Normal (grey uniform colour or 8- or 16-bit grey bitmap at 1:1 under the "
+    "identity UV projection), on an L16 or L32F channel, with an 8- or 16-bit grey AO mesh map at "
+    "the set's resolution, under legacy colour management, the default template and full UV "
+    "coverage, and refuses every other configuration before writing. After save and reopen (r2) "
+    "Painter's AO_Mixed differs from r1 on blended sets, deterministically (r2 = r3 = r4); r1 is "
+    "the target (decision 032)."
 )
 
 
-def publish(report: dict[str, Any]) -> dict[str, Any]:
-    """The `virtual-maps.json` document of a `virtual_map_goldens` report: the supported maps
-    with their residuals through the plan, every other documented virtual map a gap refused
-    before writing."""
+def publish(report: dict[str, Any], ao: dict[str, Any]) -> dict[str, Any]:
+    """The `virtual-maps.json` document of a `virtual_map_goldens` report and an
+    `ao_mixed_goldens` report: the supported maps with their residuals through the plan, every
+    other documented virtual map a gap refused before writing."""
     entries = []
-    corpus = sorted({f"tier0/{name}" for name in VIRTUAL_GOLDENS} | set(GAP_CORPUS))
+    corpus = sorted({f"tier0/{name}" for name in (*VIRTUAL_GOLDENS, *AO_GOLDENS)} | set(GAP_CORPUS))
     for name, (entry_id, components, meaning) in DOCUMENTED.items():
         residuals = [
             residual(g, key, recording, "16-bit code value", diff)
             for g, key, recording, diff in report["residuals"]
             if key.endswith("/" + name)
         ]
+        if name == "AO_Mixed":
+            residuals = [
+                residual(g, key, recording, unit, diff)
+                for g, key, recording, unit, diff in ao["residuals"]
+            ]
         supported = name in FORMULAS
         formula = FORMULAS.get(name, GAP_FORMULA)
         notes = AO_MIXED_NOTES if name == "AO_Mixed" else CONVERTED_NOTES.get(name)
@@ -797,7 +927,8 @@ def publish(report: dict[str, Any]) -> dict[str, Any]:
         "virtual-maps",
         "The documented virtualMap sources of the export plan (src/export/virtual_maps.h, "
         "decision 086): the operators reproduced exactly through the plan (evaluated by "
-        "EvaluateFileOn and written at 16 bits) and the documented maps without a golden yet.",
+        "EvaluateFileOn and written with each file's write rule) and the documented maps "
+        "without a golden yet.",
         corpus,
         entries,
         painter_build=str(current_envelope()["painter_build"]),
@@ -814,9 +945,12 @@ def main(argv: list[str]) -> int:
         print("oracle_unavailable: no private oracle store on this machine", file=sys.stderr)
         return 2
     report = virtual_map_goldens(Path(argv[0]), Path(argv[1]), REPO_ROOT)
-    PUBLISHED.write_text(json.dumps(publish(report), indent=2) + "\n", encoding="utf-8")
-    print(f"{PUBLISHED}: {report['maps']} maps, {len(report['differing'])} differing")
-    return 0 if not report["differing"] else 1
+    ao = ao_mixed_goldens(Path(argv[0]), Path(argv[1]))
+    PUBLISHED.write_text(json.dumps(publish(report, ao), indent=2) + "\n", encoding="utf-8")
+    print(f"{PUBLISHED}: {report['maps']} + {ao['maps']} maps")
+    print(json.dumps([report["differing"], ao["differing"], ao["unexpected"], ao["refused"]]))
+    failed = report["differing"] or ao["differing"] or ao["unexpected"]
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

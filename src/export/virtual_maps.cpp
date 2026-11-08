@@ -2,16 +2,20 @@
 
 #include "evaluator/arith.h"
 #include "evaluator/cpu_store.h"
+#include "evaluator/dag.h"
 #include "evaluator/error.h"
 #include "evaluator/evaluator.h"
 #include "evaluator/formats.h"
+#include "evaluator/sources.h"
 #include "export/padding.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
 #include <fstream>
+#include <variant>
 
 namespace uzp::exporter {
 
@@ -161,15 +165,244 @@ constexpr std::array<std::string_view, kVirtualMapCount> kNames{
     "Unity4Gloss",   "reflection",     "1/ior",      "Glossiness2", "f0",   "View_2D",
 };
 
+/// The goldens AO_Mixed equals (decision 411).
+constexpr std::string_view kAoMixedEvidence =
+    "tier0/semantics/ao-mixed, ao-mixed-opacity and its OpenEXR 32f twin, ao-mixed-isolation, -float, -8bit, "
+    "ao-mixed-grid, ao-mixed-grid-l32f, ao-mixed-grid-l16-reopen3, ao-mixed-mesh-float-product, "
+    "ao-mixed-precomposed-half-l32f, ao-mixed-precomposed-half-y-l32f and ao-mixed-operand-probe: every r1 texel at "
+    "PNG 8, PNG 16 and OpenEXR 32f (phase3.2_unreal-ue56-packed-preset item 2.10, decision 411)";
 /// The owners of the virtual maps not reproduced exactly (decision 092).
-constexpr std::string_view kAoMixedOwner =
-    "phase3.2_unreal-ue56-packed-preset item 2.10, decision 131: Painter's AO_Mixed arithmetic is not identified "
-    "(the best model misses r1 at 31 values); Tier 0 recording R-092 and its fit (decision 092)";
 constexpr std::string_view kConvertedOwner =
     "phase1.18_export-engine: fitted, but it needs each channel's per-texel coverage from the evaluator "
     "and the uncovered constants of Tier 0 recording R-092 (decision 092)";
 constexpr std::string_view kView2dOwner =
     "a reproduction of Painter's 2D view render, which no task owns yet (decision 092)";
+
+constexpr core::ChannelType kAo = core::ChannelType::AO;
+
+/// float32 fma with one rounding: x y is exact in double, and a double sum that falls on a float32
+/// midpoint is moved by the sum's rounding error (arith::Fma rounds twice there).
+float FmaOnce(float x, float y, float z) {
+    const double s = static_cast<double>(x) * static_cast<double>(y);
+    const double t = s + static_cast<double>(z);
+    const double back = t - s;
+    const double error = (s - (t - back)) + (static_cast<double>(z) - back);
+    const float r = static_cast<float>(t);
+    const bool above = static_cast<double>(r) > t;
+    const float lo = above ? std::nextafter(r, -INFINITY) : r;
+    const float hi = above ? r : std::nextafter(r, INFINITY);
+    if (error != 0.0 && t == (static_cast<double>(lo) + static_cast<double>(hi)) / 2.0) return error > 0.0 ? hi : lo;
+    return r;
+}
+
+bool EffectTouchesAo(const core::Effect& effect) {
+    if (!effect.visible) return false;
+    if (effect.active_channels.contains(kAo)) return true;
+    if (effect.fill && effect.fill->active_channels.contains(kAo)) return true;
+    return effect.paint && effect.paint->planes.contains(kAo);
+}
+
+/// Whether `layer` can change the AO channel.
+bool TouchesAo(const core::Layer& layer) {
+    if (!layer.visible || core::IsEmptyPaintLayer(layer)) return false;
+    switch (layer.kind) {
+        case core::LayerKind::fill:
+            if (layer.fill && layer.fill->active_channels.contains(kAo)) return true;
+            break;
+        case core::LayerKind::paint:
+            if (layer.paint && layer.paint->planes.contains(kAo)) return true;
+            break;
+        case core::LayerKind::group:
+            for (const core::Layer& child : layer.children) {
+                if (TouchesAo(child)) return true;
+            }
+            break;
+        case core::LayerKind::instance: return true;
+    }
+    return std::any_of(layer.content_effects.begin(), layer.content_effects.end(), EffectTouchesAo);
+}
+
+/// The AO fill of `stack` in AO_Mixed's scope (null: no AO layer), or why it is outside it.
+std::variant<const core::Layer*, std::string> AoMixedFill(const core::Project& project, const core::TextureSet& set,
+                                                          const core::Stack& stack) {
+    using Fill = std::variant<const core::Layer*, std::string>;
+    const std::string& mode = project.settings.color_management.mode;
+    if (!mode.empty() && mode != "legacy") return Fill(std::string("under legacy colour management only"));
+    const auto channel = stack.channels.find(kAo);
+    if (channel == stack.channels.end()) return Fill(std::string("on a stack with an AO channel only"));
+    if (channel->second.format != core::ChannelFormat::L16 && channel->second.format != core::ChannelFormat::L32F) {
+        return Fill("on an L16 or L32F AO channel only, not " + std::string(core::ToString(channel->second.format)));
+    }
+    const auto mesh = set.mesh_maps.find(core::MeshMapUsage::AO);
+    if (mesh == set.mesh_maps.end() || mesh->second.invalid) {
+        return Fill(std::string("with a valid AO mesh map bound only"));
+    }
+    const core::Layer* fill = nullptr;
+    for (const core::Layer& layer : stack.root_layers) {
+        if (!TouchesAo(layer)) continue;
+        if (fill != nullptr || layer.kind != core::LayerKind::fill) {
+            return Fill(std::string("with no AO layer or one root fill layer on AO only"));
+        }
+        fill = &layer;
+    }
+    if (fill == nullptr) return Fill(fill);
+    const core::FillContent& content = *fill->fill;
+    if (fill->mask || !fill->content_effects.empty() || fill->geometry_mask.inclusion_list ||
+        !fill->geometry_mask.items.empty()) {
+        return Fill(std::string("for a fill without a mask, content effects or a geometry mask only"));
+    }
+    const core::Blending blending = evaluator::EffectiveBlending(*fill, kAo);
+    if (blending.mode != core::BlendingMode::Normal || !(blending.opacity >= 0.0 && blending.opacity <= 1.0)) {
+        return Fill(std::string("for a fill in Normal with an opacity in [0, 1] only"));
+    }
+    const auto source = content.sources.find(kAo);
+    if (content.source_mode != core::SourceMode::Split || source == content.sources.end()) {
+        return Fill(std::string("for a fill with its own AO source only"));
+    }
+    const std::string sourceScope = "for a grey linear uniform colour or bitmap source only";
+    if (const auto* uniform = std::get_if<core::UniformColorSource>(&source->second.value)) {
+        const bool grey = uniform->rgb[0] == uniform->rgb[1] && uniform->rgb[0] == uniform->rgb[2];
+        if (!grey || evaluator::BitmapColourSpaceOf(uniform->color_space) != evaluator::BitmapColourSpace::Linear) {
+            return Fill(sourceScope);
+        }
+        return Fill(fill);
+    }
+    const auto* bitmap = std::get_if<core::BitmapSource>(&source->second.value);
+    if (bitmap == nullptr || bitmap->resource.sha256.empty() ||
+        evaluator::BitmapColourSpaceIn(project, bitmap->color_space) != evaluator::BitmapColourSpace::Linear) {
+        return Fill(sourceScope);
+    }
+    const core::Projection& projection = content.projection;
+    const core::UVTransformation& uv = projection.uv.uv_transformation;
+    const bool identity = uv.scale_mode == core::ScaleMode::Factors && uv.scale[0] == 1.0 && uv.scale[1] == 1.0 &&
+                          uv.rotation == 0.0 && uv.offset[0] == 0.0 && uv.offset[1] == 0.0;
+    const core::FilteringMode filtering = projection.uv.filtering_mode;
+    const core::UVWrapMode wrap = projection.uv.uv_wrapping_mode;
+    if (projection.mode != core::ProjectionMode::UV || content.symmetry.enabled || !identity ||
+        (filtering != core::FilteringMode::Nearest && filtering != core::FilteringMode::BilinearHQ) ||
+        (wrap != core::UVWrapMode::Repeat && wrap != core::UVWrapMode::RepeatNone)) {
+        return Fill(std::string("for a bitmap under the identity UV projection with Nearest or BilinearHQ filtering, "
+                                "Repeat or RepeatNone only"));
+    }
+    return Fill(fill);
+}
+
+/// The operands of an 8- or 16-bit grey image at `width` x `height`, or nothing.
+std::optional<std::vector<float>> GreyOperands(const evaluator::DecodedImage* image, uint32_t width, uint32_t height) {
+    if (image == nullptr || image->channels != 1 || image->srgb8 || image->width != width || image->height != height) {
+        return std::nullopt;
+    }
+    uint32_t bits = 0;
+    if (image->encoding == render::TexelEncoding::Unorm16) bits = 16;
+    if (image->encoding == render::TexelEncoding::Unorm8) bits = 8;
+    if (bits == 0) return std::nullopt;
+    const uint32_t max = (1u << bits) - 1u;
+    std::vector<float> out;
+    out.reserve(image->values.size());
+    for (const uint32_t code : image->values) out.push_back(evaluator::arith::UnormOperand(code & max, bits));
+    return out;
+}
+
+/// The layer opacity on an L16 channel: its 16-bit code, ties down.
+float L16Opacity(double opacity) {
+    const double scaled = opacity * 65535.0;
+    const double code = scaled - std::floor(scaled) == 0.5 ? std::floor(scaled) : std::round(scaled);
+    return evaluator::arith::UnormOperand(static_cast<uint32_t>(code), 16);
+}
+
+/// AO_Mixed (virtual_maps.h, decision 411).
+render::Result<VirtualMapResult> AoMixedOn(const core::Project& project, const VirtualMapRequest& request) {
+    const core::TextureSet* set = nullptr;
+    const core::Stack* stack = nullptr;
+    for (const core::TextureSet& candidate : project.texture_sets) {
+        if (candidate.id != request.textureSet) continue;
+        set = &candidate;
+        for (const core::Stack& s : candidate.stacks) {
+            if (s.id == request.stack) stack = &s;
+        }
+    }
+    if (set == nullptr || stack == nullptr) {
+        return EvalFail(EvalErrorKind::NotFound, "the stack of AO_Mixed is not in the project");
+    }
+    const std::string scope = "AO_Mixed is reproduced ";
+    const std::variant<const core::Layer*, std::string> fill = AoMixedFill(project, *set, *stack);
+    if (const std::string* refusal = std::get_if<std::string>(&fill)) {
+        return EvalFail(EvalErrorKind::UnsupportedSource, scope + *refusal + " (decision 411)");
+    }
+    if (request.templateId != evaluator::kDefaultTemplateId) {
+        return EvalFail(EvalErrorKind::UnsupportedSource, scope + "on the default template only (decision 411)");
+    }
+    const auto width = static_cast<uint32_t>(set->resolution.width);
+    const auto height = static_cast<uint32_t>(set->resolution.height);
+    const size_t texels = size_t{width} * height;
+    if (request.geometry) {
+        evaluator::GeometryMaskQuery query;
+        query.material = set->material_id;
+        query.width = width;
+        query.height = height;
+        const std::shared_ptr<const evaluator::DecodedImage> coverage = request.geometry->Coverage(query);
+        if (coverage) {
+            for (size_t t = 0; t < size_t{coverage->width} * coverage->height; ++t) {
+                if (coverage->values[t * coverage->channels] == 0) {
+                    return EvalFail(EvalErrorKind::UnsupportedSource,
+                                    scope + "on a texture set whose UV islands cover the tile only (decision 411)");
+                }
+            }
+        }
+    }
+    const auto fetch = [&](const std::string& sha) -> std::shared_ptr<const evaluator::DecodedImage> {
+        return request.resources ? request.resources->Fetch(sha) : nullptr;
+    };
+    const std::shared_ptr<const evaluator::DecodedImage> meshImage =
+        fetch(set->mesh_maps.at(core::MeshMapUsage::AO).resource);
+    const std::optional<std::vector<float>> mesh = GreyOperands(meshImage.get(), width, height);
+    if (!mesh) {
+        return EvalFail(EvalErrorKind::UnsupportedSource,
+                        scope + "with an 8- or 16-bit grey AO mesh map at the set's resolution only (decision 411)");
+    }
+    const core::ChannelFormat format = stack->channels.at(kAo).format;
+    std::vector<float> channel(texels, 1.0f);
+    if (const core::Layer* layer = std::get<const core::Layer*>(fill)) {
+        const core::Source& source = layer->fill->sources.at(kAo);
+        std::vector<float> values;
+        if (const auto* uniform = std::get_if<core::UniformColorSource>(&source.value)) {
+            values.assign(texels, static_cast<float>(uniform->rgb[0]));
+        } else {
+            const std::shared_ptr<const evaluator::DecodedImage> image =
+                fetch(std::get<core::BitmapSource>(source.value).resource.sha256);
+            std::optional<std::vector<float>> operands = GreyOperands(image.get(), width, height);
+            if (!operands) {
+                return EvalFail(EvalErrorKind::UnsupportedSource,
+                                scope + "with an 8- or 16-bit grey bitmap at the set's resolution only (decision 411)");
+            }
+            values = std::move(*operands);
+        }
+        const double opacity = evaluator::EffectiveBlending(*layer, kAo).opacity;
+        const float alpha = format == core::ChannelFormat::L16 ? L16Opacity(opacity) : static_cast<float>(opacity);
+        for (size_t t = 0; t < texels; ++t) {
+            float s = values[t];
+            if (!(s >= 0.0f && s <= 1.0f)) {
+                return EvalFail(EvalErrorKind::UnsupportedSource, scope + "for a source in [0, 1] only (decision 411)");
+            }
+            if (format == core::ChannelFormat::L16) {
+                s = evaluator::arith::UnormOperand(evaluator::arith::WriteUnorm(s, 16), 16);
+            }
+            channel[t] = FmaOnce(s, alpha, 1.0f) - alpha;
+        }
+    }
+    VirtualMapResult result;
+    result.values.width = width;
+    result.values.height = height;
+    result.values.components = 1;
+    result.values.values.resize(texels);
+    for (size_t t = 0; t < texels; ++t) {
+        const float a = (1.0f + (*mesh)[t]) - 1.0f;
+        const float v = a * channel[t];
+        const float w = (v - 1.0f) + 1.0f;
+        result.values.values[t] = evaluator::arith::UnormOperand(evaluator::arith::WriteUnorm(w, 8), 8);
+    }
+    return result;
+}
 
 }  // namespace
 
@@ -244,7 +477,7 @@ VirtualMapSupport Support(VirtualMap map) {
             return {true, 3,
                     "tier0/semantics/height-normal-plane-amplitudes, height-normal-sphere, height-normal-bevelled-cube, "
                     "blend-normal-channel and the semantics-ui height-normal goldens (phase1.12, decisions 064, 065)"};
-        case VirtualMap::AO_Mixed: return {false, 1, std::string(kAoMixedOwner)};
+        case VirtualMap::AO_Mixed: return {true, 1, std::string(kAoMixedEvidence)};
         case VirtualMap::Diffuse:
         case VirtualMap::Specular:
         case VirtualMap::reflection:
@@ -259,6 +492,13 @@ VirtualMapSupport Support(VirtualMap map) {
     return {};
 }
 
+std::optional<std::string> AoMixedRefusal(const core::Project& project, const core::TextureSet& set,
+                                          const core::Stack& stack) {
+    const std::variant<const core::Layer*, std::string> fill = AoMixedFill(project, set, stack);
+    if (const std::string* refusal = std::get_if<std::string>(&fill)) return *refusal;
+    return std::nullopt;
+}
+
 render::Result<VirtualMapResult> EvaluateVirtualMapOn(const core::Project& project, std::int64_t revision,
                                                       VirtualMap map, const VirtualMapRequest& request,
                                                       const evaluator::TemplateLibrary& templates,
@@ -268,7 +508,8 @@ render::Result<VirtualMapResult> EvaluateVirtualMapOn(const core::Project& proje
                         "the virtual map " + std::string(VirtualMapName(map)) + " is a release gap (" +
                             Support(map).evidenceOrOwner + ")");
     }
-    // The supported maps are the combined normals.
+    if (map == VirtualMap::AO_Mixed) return AoMixedOn(project, request);
+    // The other supported maps are the combined normals.
     evaluator::VirtualNormalRequest normal;
     normal.textureSet = request.textureSet;
     normal.stack = request.stack;

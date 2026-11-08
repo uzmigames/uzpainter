@@ -155,11 +155,11 @@ def test_candidate_refusals_keep_the_model(export_tests: Path, tmp_path: Path) -
         assert message in report["message"] and "reason_code" not in report, label
         assert "tga" not in report and not (tmp_path / f"{label}.tga").exists(), label
     # Every NotYetSupported of the plan compiler's call has one reason code; the release-gap
-    # virtual maps the configuration names (AO_Mixed, decision 131) are context, not the cause.
-    ao = {"fileName": "$textureSet_ao", "channels": [chan("L", "virtualMap", "AO_Mixed")]}
+    # virtual maps the configuration names (Glossiness, decision 092) are context, not the cause.
+    ao = {"fileName": "$textureSet_ao", "channels": [chan("L", "virtualMap", "Glossiness")]}
     tga = PNG8 | {"fileFormat": "tga"}
     for label, cfg, maps in (
-        ("ao", configuration(tmp_path / "o5", [ao], PNG8), ["AO_Mixed"]),
+        ("ao", configuration(tmp_path / "o5", [ao], PNG8), ["Glossiness"]),
         ("tga", configuration(tmp_path / "o6", [GREY], tga), None),
     ):
         report = candidate(export_tests, tmp_path, with_mesh, cfg, label)

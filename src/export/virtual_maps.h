@@ -30,10 +30,19 @@
 //   `<set>-height-padded.f32`, raw rows top first); nothing else reads it.
 // - The geometry-only pass-through is the meshMap `normal_base` (the bound Normal mesh map,
 //   green inverted across conventions), tagged `geometry_only` (EXP-09).
-// - `AO_Mixed`: the best model of the opacity sweep (the AO mesh map times the AO channel before
-//   its L16 write, written at 8 bits) misses r1 at 31 values, each a few ulps from a 2^-12
-//   boundary: Painter's operand conversions or arithmetic there are not identified (decision
-//   092, recording R-092).
+// - `AO_Mixed` (decision 411; tools/parity/fit/ao_mixed_scan.py): the AO mesh map operand a enters
+//   as a' = (1 + a) - 1; the AO channel operand is its fill mixed over the white base,
+//   c = fma(S, al, 1) - al (S the source written as an L16 code first on an L16 channel; al the
+//   layer opacity, its L16 code with ties down on L16, its float32 value on L32F), or 1 without
+//   a layer; v = a' c, re-composited as (v - 1) + 1, written at 8 bits (WriteUnorm), every step
+//   one float32 rounding. Exact on every r1 texel of the admitted AO goldens at PNG 8, PNG 16
+//   and OpenEXR 32f. It is computed only in that scope (`AoMixedRefusal`): legacy colour
+//   management, the default template, an L16 or L32F AO channel, a bound 8- or 16-bit grey AO
+//   mesh map at the set's resolution, full UV coverage, and either no AO layer or one root fill
+//   in Normal with a grey uniform colour or an 8- or 16-bit grey bitmap at the set's resolution
+//   under the identity UV projection. Not the stored channel: an L16 channel stores the mix
+//   quantized, an L32F one fma(S - 1, al, 1). After save and reopen Painter's AO_Mixed differs
+//   on blended sets (decision 411).
 // - `Diffuse`, `Specular`, `Glossiness`, `Glossiness2`, `Unity4Diff`, `Unity4Gloss`,
 //   `reflection`, `1/ior`, `f0`: fitted exactly on their goldens (virtual-maps.json), but they
 //   read each channel's per-texel coverage, which the evaluator does not give, and constants
@@ -91,6 +100,12 @@ struct VirtualMapSupport {
     std::string evidenceOrOwner;
 };
 [[nodiscard]] VirtualMapSupport Support(VirtualMap map);
+
+/// Why `AO_Mixed` of `stack` in `set` is outside the scope it is computed in (above), or nullopt
+/// when inside it, before any image is read (the images and the coverage are checked at
+/// evaluation).
+[[nodiscard]] std::optional<std::string> AoMixedRefusal(const core::Project& project, const core::TextureSet& set,
+                                                        const core::Stack& stack);
 
 /// What a virtual-map or mesh-map evaluation reads.
 struct VirtualMapRequest {

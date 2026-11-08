@@ -178,7 +178,8 @@ Resolved ResolveMesh(const ChannelSpec& spec, const Root& root, const std::strin
     return r;
 }
 
-Resolved ResolveVirtual(const ChannelSpec& spec, const Root& root, const std::string& what) {
+Resolved ResolveVirtual(const core::Project& project, const ChannelSpec& spec, const Root& root,
+                        const std::string& what) {
     Resolved r;
     r.source.type = spec.type;
     r.source.name = spec.name;
@@ -186,6 +187,12 @@ Resolved ResolveVirtual(const ChannelSpec& spec, const Root& root, const std::st
     const VirtualMapSupport support = Support(map);
     if (!support.supported) {
         Gap(what, "the virtualMap \"" + spec.name + "\" is not reproduced exactly", support.evidenceOrOwner);
+    }
+    if (map == VirtualMap::AO_Mixed) {
+        if (std::optional<std::string> refusal = AoMixedRefusal(project, *root.set, *root.stack)) {
+            Gap(what, "the virtualMap \"AO_Mixed\" is reproduced " + *refusal,
+                "phase3.2_unreal-ue56-packed-preset item 2.10, decision 411");
+        }
     }
     if (map == VirtualMap::Normal_OpenGL || map == VirtualMap::Normal_DirectX) {
         CheckVirtualNormal(root, what);
@@ -255,7 +262,7 @@ Resolved Resolve(const core::Project& project, const ChannelSpec& spec, const Ro
     switch (spec.type) {
         case SourceType::documentMap: return ResolveDocument(spec, root);
         case SourceType::meshMap: return ResolveMesh(spec, root, what);
-        case SourceType::virtualMap: return ResolveVirtual(spec, root, what);
+        case SourceType::virtualMap: return ResolveVirtual(project, spec, root, what);
         case SourceType::defaultMap: {
             Resolved r;
             r.presence = Presence::Constant;

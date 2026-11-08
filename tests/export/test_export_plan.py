@@ -8,11 +8,11 @@ without it (hosted CI, decision 028); the local run on the owner's machine
 
 - the dry run of every exporting golden of the current oracle envelope equals the files Painter
   wrote for that configuration (item 3.5, Painter's side);
-- the virtual maps marked supported (`Normal_OpenGL`, `Normal_DirectX`), evaluated through the
-  plan (`EvaluateFileOn`) and written with the 16-bit write rule, equal their goldens (item 3.6;
-  `AO_Mixed` and the converted maps are release gaps, decision 092), and the published
-  `parity/semantics/virtual-maps.json` is what that comparison derives. Painter 12.1.5's r1 is
-  the exact target where its two recordings differ (decision 032).
+- the virtual maps marked supported (`Normal_OpenGL`, `Normal_DirectX` and, in its scope,
+  `AO_Mixed`, decision 411), evaluated through the plan (`EvaluateFileOn`) and written with each
+  file's write rule, equal their goldens (item 3.6; the converted maps are release gaps,
+  decision 092), and the published `parity/semantics/virtual-maps.json` is what that comparison
+  derives. Painter's r1 is the exact target where its recordings differ (decision 032).
 """
 
 from __future__ import annotations
@@ -989,8 +989,9 @@ def test_presence_and_sources(export_tests: Path, tmp_path: Path) -> None:
     files = ok(r[4])["files"]
     assert files[0]["layout"] == "RGBA"
     assert files[0]["channels"][3]["source"]["constant"] == 1.0
-    refused(r[5], "NotYetSupported", '"AO_Mixed"', "not identified", "R-092")
-    refused(r[6], "NotYetSupported", '"AO_Mixed"', "R-092")
+    ao = ok(r[5])["files"][0]["channels"][0]["source"]
+    assert ao["virtualMap"] == "AO_Mixed"
+    refused(r[6], "NotYetSupported", '"AO_Mixed"', "AO channel", "item 2.10, decision 411")
     refused(r[7], "NotYetSupported", '"Diffuse"', "coverage", "R-092")
     refused(r[8], "NotYetSupported", '"Glossiness"', "coverage", "R-092")
     normal = ok(r[9])["files"][0]["channels"][0]["source"]
@@ -1212,12 +1213,16 @@ def test_virtual_map_goldens_exact(export_tests: Path, tmp_path: Path) -> None:
     Sobel plane-strength sweeps, compiled as plan files, evaluated through `EvaluateFileOn` on
     the CPU store and written with the 16-bit write rule, equal r1 on every texel and r2 wherever
     r2 equals r1; the published virtual-maps.json is exactly the document this run derives."""
-    from tests.export.tier0 import PUBLISHED, publish, virtual_map_goldens
+    from tests.export.tier0 import PUBLISHED, ao_mixed_goldens, publish, virtual_map_goldens
 
     report = virtual_map_goldens(export_tests, tmp_path, REPO_ROOT)
     assert report["maps"] == 40, report["maps"]
     assert report["differing"] == [], report["differing"]
-    assert json.loads(PUBLISHED.read_text(encoding="utf-8")) == publish(report)
+    ao = ao_mixed_goldens(export_tests, tmp_path)
+    assert ao["unexpected"] == [], ao["unexpected"]
+    assert len(ao["refused"]) == 4, ao["refused"]
+    assert ao["maps"] > 0 and ao["differing"] == [], ao["differing"]
+    assert json.loads(PUBLISHED.read_text(encoding="utf-8")) == publish(report, ao)
 
 
 def test_virtual_maps_semantics_published() -> None:
@@ -1232,11 +1237,10 @@ def test_virtual_maps_semantics_published() -> None:
     )
     assert publishable_problems(doc) == []
     status = {e["subject"].split(":")[0]: e["status"] for e in doc["entries"]}
-    gaps = ["AO_Mixed", "Diffuse", "Specular", "Glossiness", "Unity4Diff", "Unity4Gloss"]
+    gaps = ["Diffuse", "Specular", "Glossiness", "Unity4Diff", "Unity4Gloss"]
     gaps += ["reflection", "1/ior", "Glossiness2", "f0", "View_2D"]
-    assert status == {"Normal_OpenGL": "exact", "Normal_DirectX": "exact"} | dict.fromkeys(
-        gaps, "gap"
-    )
+    exact = {"Normal_OpenGL": "exact", "Normal_DirectX": "exact", "AO_Mixed": "exact"}
+    assert status == exact | dict.fromkeys(gaps, "gap")
     for e in doc["entries"]:
         assert e["public_sources"], e["entry_id"]
         if e["status"] == "exact":
@@ -1252,14 +1256,34 @@ def test_write16_rule() -> None:
     assert np.array_equal(write16((k / 255.0).astype(np.float32)), k * 257)
 
 
-def test_ao_mixed_refusal_names_its_owner(export_tests: Path, tmp_path: Path) -> None:
-    """Decision 131: the AO_Mixed refusal names its owner, `phase3.2_unreal-ue56-packed-preset`
-    item 2.10, and still refuses before anything is planned."""
-    [result] = plan_many(
+def test_ao_mixed_plans_in_its_scope_and_refuses_outside_it(
+    export_tests: Path, tmp_path: Path
+) -> None:
+    """Decision 411: AO_Mixed is planned on an L16 or L32F AO channel with a bound AO mesh map and
+    no AO layer (the skeleton's fills change no channel), and refused before anything is planned
+    otherwise, naming `phase3.2_unreal-ue56-packed-preset` item 2.10 and decision 411."""
+    ao = config([mapping("$textureSet_ao", grey("virtualMap", "AO_Mixed"))], ["s0"])
+    # Painter 12.1.5 substance OCIO config (evaluator/sources.h kPainterOcioConfigSha256).
+    PAINTER_OCIO = "15059d4b4e52893863f2063dfccb3902d182b522ad233564db32a5e30a43b7f4"
+
+    def with_ao(fmt: str, mesh_maps: tuple[str, ...] = ("AO",), **settings: Any) -> Any:
+        channels = {**FULL_CHANNELS, "AO": fmt}
+        return project(texture_set("s0", channels, mesh_maps, (500,)), **settings)
+
+    r = plan_many(
         export_tests,
-        [(TWO_SETS, config([mapping("$textureSet_ao", grey("virtualMap", "AO_Mixed"))], ["s0"]))],
+        [
+            (with_ao("L16"), ao),
+            (with_ao("L32F"), ao),
+            (with_ao("L16", ()), ao),
+            (with_ao("L8"), ao),
+            (with_ao("L16", color_management="ocio", config_hash=PAINTER_OCIO), ao),
+        ],
         tmp_path,
     )
-    message = refused(result, "NotYetSupported", '"AO_Mixed"', "not identified", "R-092")
-    assert "phase3.2_unreal-ue56-packed-preset item 2.10, decision 131" in message
-    assert "phase1.18_export-engine" not in message
+    for result in r[:2]:
+        assert ok(result)["files"][0]["channels"][0]["source"]["virtualMap"] == "AO_Mixed"
+    owner = "phase3.2_unreal-ue56-packed-preset item 2.10, decision 411"
+    refused(r[2], "NotYetSupported", '"AO_Mixed"', "AO mesh map", owner)
+    refused(r[3], "NotYetSupported", '"AO_Mixed"', "L16 or L32F AO channel only, not L8", owner)
+    refused(r[4], "NotYetSupported", '"AO_Mixed"', "legacy colour management", owner)

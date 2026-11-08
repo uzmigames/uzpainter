@@ -1,0 +1,13 @@
+{
+  "id": 411,
+  "slug": "411-ao-mixed-is-fitted-exactly-on-every-r1-texel-and-the-plan-computes-it-for-an-empty-ao-stack-or-one-root-fill",
+  "title": "AO_Mixed is fitted exactly on every r1 texel, and the plan computes it for an empty AO stack or one root fill",
+  "status": "accepted",
+  "date": "2026-11-08",
+  "relatedTasks": [
+    "phase3.2_unreal-ue56-packed-preset",
+    "phase3.1_unreal-gltf-pbr-preset",
+    "phase3.2_uze-uzmat-preset"
+  ],
+  "supersededBy": null
+}

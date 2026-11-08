@@ -364,9 +364,10 @@ def packing(file: dict[str, Any]) -> list[tuple[str, str, str, str]]:
 def test_gltf_preset_packs_the_gltf_slots(export_tests: Path, tmp_path: Path) -> None:
     """2.2, 2.5 (decision 314): the glTF preset's maps plan as the glTF 2.0 metallic-roughness
     material binds them: base colour RGB (A from opacity, dropped without an opacity channel),
-    occlusion R, roughness G and metalness B in one refused map, the OpenGL (+Y up) normal and
-    emissive RGB, each a PNG; the occlusion map reads AO_Mixed and is refused until it is fitted
-    (decision 131); SpecularWeight, which has no glTF core slot, is its own file, and the receipt
+    occlusion R, roughness G and metalness B in one map, the OpenGL (+Y up) normal and
+    emissive RGB, each a PNG; the occlusion map reads AO_Mixed, planned on a set with an L16 AO
+    channel and an AO mesh map (decision 411); SpecularWeight, which has no glTF core slot, is its
+    own file, and the receipt
     reports it as a consumer gap (decision 023); Height has no map."""
     one_set = project(texture_set("s0", GLTF_CHANNELS, mesh_maps=("AO",)))
     with_opacity = project(texture_set("s0", {**GLTF_CHANNELS, "Opacity": "L8"}))
@@ -401,7 +402,14 @@ def test_gltf_preset_packs_the_gltf_slots(export_tests: Path, tmp_path: Path) ->
     assert packing(files["s0_normal.png"]) == [(c, c, "virtualMap", "Normal_OpenGL") for c in "RGB"]
     assert packing(files["s0_emissive.png"]) == [(c, c, "documentMap", "emissive") for c in "RGB"]
     assert packing(files["s0_SpecularWeight.png"]) == [("L", "L", "documentMap", "specularweight")]
-    refused(occlusion, "NotYetSupported", '"$textureSet_occlusionRoughnessMetallic"', "AO_Mixed")
+    orm_file = {f["relativePath"]: f for f in occlusion["plan"]["files"]}[
+        "s0_occlusionRoughnessMetallic.png"
+    ]
+    assert packing(orm_file) == [
+        ("R", "L", "virtualMap", "AO_Mixed"),
+        ("G", "L", "documentMap", "roughness"),
+        ("B", "L", "documentMap", "metallic"),
+    ]
     [base] = alpha["plan"]["files"]
     assert base["layout"] == "RGBA" and packing(base)[3] == ("A", "L", "documentMap", "opacity")
     own = gltf_inline(*NO_OCCLUSION)
