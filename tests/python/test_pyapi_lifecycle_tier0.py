@@ -299,6 +299,11 @@ OBSERVED_PROBES = {
     # s9-s10 race in Painter itself (the reload starts before or after s10's call); s3-s8 only.
     "phase1-execute-when-not-busy": 8,
 }
+# probe -> the golden its replay compares against, when not its own (decision 404): the 12.2
+# golden of phase1-reload-mesh has an s8 reload that ran past the settle window (one asynchronous
+# LayerStacksModelDataChanged at s9 and at s11, r1 only); phase1-reload-mesh-repeat has the same
+# inputs, instruction sequence and settings, and its 8 recordings from 2 sessions agree.
+COMPARED_GOLDEN = {"phase1-reload-mesh": "phase1-reload-mesh-repeat"}
 
 
 def without_marker(events: Any) -> Any:
@@ -309,8 +314,9 @@ def without_marker(events: Any) -> Any:
 def test_observed_probe_events_equal_painter(facade: Run, tmp_path: Path, probe: str) -> None:
     """Item 3.1 (save) and 2.5, 2.7, 2.8: the events and callbacks every step of an observed R10
     probe delivered, in both recordings."""
-    data = manifest(probe)
-    _, golden = golden_record(probe)
+    compared = COMPARED_GOLDEN.get(probe, probe)
+    data = manifest(compared)
+    _, golden = golden_record(compared, repeats=compared != probe)
     staged = stage(data, tmp_path / "inputs")
     steps = [step_payload(s, staged) for s in data["instruction_sequence"]["steps"]]
     last = OBSERVED_PROBES[probe]
@@ -320,7 +326,8 @@ def test_observed_probe_events_equal_painter(facade: Run, tmp_path: Path, probe:
         if s["call"] != "substance_painter.export.export_project_textures"
         and (last is None or s["step"] <= last)
     ]
-    expected: dict[str, dict[str, Any]] = {}
+    # condition -> recording id -> compared outputs; the facade must equal every recording.
+    expected: dict[str, dict[str, dict[str, Any]]] = {}
     for recording in golden["recordings"]:
         outputs = {
             o["output_id"]: {"value": o["value"]}
@@ -328,8 +335,13 @@ def test_observed_probe_events_equal_painter(facade: Run, tmp_path: Path, probe:
             if (o["output_id"].endswith("/events") and o["output_id"] != "start/events")
             or o["output_id"].endswith(tuple("/" + c.rsplit(".", 1)[1] for c in READBACK_CALLS))
         }
-        expected[recording["condition"]] = normalised(outputs)
-    second_steps = {int(key[1:].split("/")[0]) for key in expected["after_save_reopen"]}
+        recorded = expected.setdefault(recording["condition"], {})
+        recorded[recording["recording_id"]] = normalised(outputs)
+    second_steps = {
+        int(key[1:].split("/")[0])
+        for outputs in expected["after_save_reopen"].values()
+        for key in outputs
+    }
     payload = {
         "create": {**steps[0], "resolved": {"mesh": staged[steps[0]["args"]["mesh"]].as_posix()}},
         "connect": steps[1],
@@ -344,18 +356,20 @@ def test_observed_probe_events_equal_painter(facade: Run, tmp_path: Path, probe:
     for condition in ("same_session", "after_save_reopen"):
         excluded = EXCLUDED.get(probe, {}).get(condition, {})
         mine = normalised({key: {"value": value} for key, value in ours[condition].items()})
-        for output_id, painter in expected[condition].items():
-            if last is not None and int(output_id[1:].split("/")[0]) > last:
-                continue
-            value = mine.get(output_id)
-            if output_id in asynchronous and value is not None:
-                value = {"value": without_marker(value["value"])}
-                painter = {"value": without_marker(painter["value"])}
-            if output_id in excluded:
-                assert value != painter, f"{condition} {output_id} is equal now: drop its exclusion"
-                continue
-            if value != painter:
-                differences.append(f"{condition} {output_id}: facade {value!r} != {painter!r}")
+        for recording_id, recorded in expected[condition].items():
+            for output_id, painter in recorded.items():
+                if last is not None and int(output_id[1:].split("/")[0]) > last:
+                    continue
+                value = mine.get(output_id)
+                if output_id in asynchronous and value is not None:
+                    value = {"value": without_marker(value["value"])}
+                    painter = {"value": without_marker(painter["value"])}
+                where = f"{condition} {recording_id} {output_id}"
+                if output_id in excluded:
+                    assert value != painter, f"{where} is equal now: drop its exclusion"
+                    continue
+                if value != painter:
+                    differences.append(f"{where}: facade {value!r} != {painter!r}")
     assert differences == [], "\n".join(differences)
     skipped = {o.split("/")[0] + "/events" for c in EXCLUDED.get(probe, {}).values() for o in c}
-    check_trace(f"facade-events/{probe}", f"tier0/api-probes/{probe}", exercised(trace, skipped))
+    check_trace(f"facade-events/{probe}", f"tier0/api-probes/{compared}", exercised(trace, skipped))

@@ -1,0 +1,9 @@
+{
+  "id": 404,
+  "slug": "the-facade-events-replay-of-phase1-reload-mesh-compares-against-phase1-reload-mesh-repeat-whose-8-recordings-agree",
+  "title": "The facade-events replay of phase1-reload-mesh compares against phase1-reload-mesh-repeat, whose 8 recordings agree",
+  "status": "accepted",
+  "date": "2026-11-08",
+  "relatedTasks": ["phase1.26_gate-g1", "phase1.24_python-api-facade"],
+  "supersededBy": null
+}

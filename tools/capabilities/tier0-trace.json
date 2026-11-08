@@ -738,7 +738,7 @@
   ]
  },
  "facade-events/phase1-reload-mesh": {
-  "golden": "tier0/api-probes/phase1-reload-mesh",
+  "golden": "tier0/api-probes/phase1-reload-mesh-repeat",
   "symbols": [
    "substance_painter.application.engine_computations_status",
    "substance_painter.colormanagement.Color",
@@ -750,6 +750,7 @@
    "substance_painter.colormanagement.GenericColorSpace.Working",
    "substance_painter.colormanagement.GenericColorSpace.sRGB",
    "substance_painter.event.BusyStatusChanged",
+   "substance_painter.event.BusyStatusChanged.busy",
    "substance_painter.event.DISPATCHER",
    "substance_painter.event.DISPATCHER.connect",
    "substance_painter.event.Dispatcher",
@@ -807,6 +808,7 @@
    "substance_painter.layerstack.ScaleMode.Factors",
    "substance_painter.layerstack.UVProjectionParams",
    "substance_painter.layerstack.UVProjectionParams.filtering_mode",
+   "substance_painter.layerstack.UVProjectionParams.uv_transformation",
    "substance_painter.layerstack.UVProjectionParams.uv_wrapping_mode",
    "substance_painter.layerstack.UVTransformationParams",
    "substance_painter.layerstack.UVTransformationParams.offset",
