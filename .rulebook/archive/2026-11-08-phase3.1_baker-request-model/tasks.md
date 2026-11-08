@@ -24,7 +24,7 @@
 - [x] 3.5 Linked-set transaction test: a failing `set` on one linked set leaves every set unchanged; capability error test on an unqualified ISA configuration
 
 ## 4. Acceptance
-- [ ] 4.1 Acceptance: defaults and property metadata exact against Tier 0 goldens; repeatable across thread counts; linked-set changes atomic — open (2026-11-05, §13): thread counts and linked sets pass; the Tier 0 replay compares every value and named metadata field exactly, then fails its capability-trace check on `project.get_uuid` (2daad902).
+- [x] 4.1 Acceptance: defaults and property metadata exact against Tier 0 goldens; repeatable across thread counts; linked-set changes atomic — met (2026-11-08, §14): G1's second full suite on 58f7260b passed all 9 `test_baking_defaults_equal_painter` cases after the trace fixes 1f830aca and 58f7260b (decision 403); thread counts and linked sets as in §13.
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [x] 5.1 Update or create documentation covering the implementation
@@ -163,3 +163,9 @@
   - Defaults: `tests/bake/test_bake_defaults.py` passed 17 of 17, with `test_the_private_capture_equals_the_table` run, not skipped. It was run again on its own with Ruff and mypy clean on the five baking test and tool files.
   - Property metadata and values against the Tier 0 goldens: `tests/python/test_pyapi_baking.py::test_baking_defaults_equal_painter[*]` failed 9 of 9. In each case `differences == []` and the refused-set assertion pass first, so every compared value and named metadata field is exact on all nine captures. The test then fails in `check_trace`: the replay exercises `substance_painter.project.get_uuid` and `uzpainter.project.get_uuid`, which `tools/capabilities/tier0-trace.json` does not record for `facade/baking-defaults*`. The cause is 2daad902 (2026-10-25), which made `painter_side.create_project` call `project.get_uuid()` for the own-project guard after the traces were last written (ae45b4bc). The same drift fails 71 Tier 0 replay tests across `tests/python/`, so this is not specific to baking.
   - To close 4.1, the coordinator or Codex root decides whether the guard's `get_uuid` belongs in replay traces, which would mean regenerating them with `UZP_UPDATE_TIER0_TRACE=1`, or should be excluded from them. Then `test_baking_defaults_equal_painter` must pass. Adding the symbol here would claim `get_uuid` evidence from goldens that never compared its value, so this attempt does not do it.
+
+## 14. Acceptance (2026-11-08)
+
+- 4.1 met. The capability-trace drift of §13 was fixed at the root: the recorder's `get_uuid` ownership check counts as bookkeeping (1f830aca) and the stale Tier 0 traces were regenerated after an evidence audit (58f7260b, decision 403); `tools/capabilities/tier0-trace.json` gained no `get_uuid`.
+- Evidence: G1's second full decision-200 suite on 58f7260b (`tmp/scratch/g1r2-fullsuite.xml`, cited by `parity/reports/phase1/gate-g1.md` §9): `tests/python/test_pyapi_baking.py::test_baking_defaults_equal_painter` 9 of 9 passed; `tests/bake/test_bake_feasibility.py`, `tests/bake/test_baking_project.py` and `tests/bake/test_bake_defaults.py` passed. No later commit touches baking.
+- The archive rests on the affected tests (CLAUDE.md's test-time override of 2026-10-12).
