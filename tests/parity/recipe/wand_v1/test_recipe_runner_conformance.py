@@ -93,7 +93,7 @@ def scenario(
 
     manifest = tmp_path / "manifest.json"
     manifest.write_text("{}", "utf-8")
-    monkeypatch.setattr(runner, "job_manifest", lambda: manifest)
+    monkeypatch.setattr(runner, "job_manifest", lambda *_: manifest)
     monkeypatch.setattr(runner, "built", lambda painter, work, job: wand)
     monkeypatch.setattr(runner, "resources", lambda painter, project, work: work / "resources")
     monkeypatch.setattr(runner, "report", report)

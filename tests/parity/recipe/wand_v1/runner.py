@@ -28,6 +28,10 @@ receipt must be marked `non_conformant` and name only the decided refusals it by
 same bytes, not a conformant delivery.
 Nothing is written under the Assets3D root or into the repository except the report, when
 `UZP_RECIPE_REBUILD_REPORT` names it.
+
+`run(..., golden_id, request)` runs the same scenario on another pilot of the same three pipeline
+steps, as the Tier 1 runner's `run` does: the Sash v5 (Belt v5) current round
+(`tests/parity/tier1/sash_v5`, gate G2), whose caller sets the manifest's `OCIO`.
 """
 
 from __future__ import annotations
@@ -110,16 +114,24 @@ def resources(painter: Path, project_file: Path, work: Path) -> Path:
     return folder
 
 
-def job_manifest() -> Path:
-    """The golden admitted from the R9 request, or the request until it is."""
-    resolved = resolve_golden(GOLDEN_ID)
-    return resolved.manifest_path if resolved is not None else REQUEST
+def job_manifest(golden_id: str = GOLDEN_ID, request: Path = REQUEST) -> Path:
+    """The golden admitted from `request` (the Wand's R9 request by default), or the request
+    until it is."""
+    resolved = resolve_golden(golden_id)
+    return resolved.manifest_path if resolved is not None else request
 
 
-def run(painter: Path, work: Path, diagnostic: bool = False) -> Scenario:
-    """The original wand, its rebuild from the dump, both exports and the report. `diagnostic`:
-    both exports in the diagnostic measure mode (above)."""
-    manifest = job_manifest()
+def run(
+    painter: Path,
+    work: Path,
+    diagnostic: bool = False,
+    golden_id: str = GOLDEN_ID,
+    request: Path = REQUEST,
+) -> Scenario:
+    """The original pilot (the Wand by default), its rebuild from the dump, both exports and the
+    report. `diagnostic`: both exports in the diagnostic measure mode (above); `golden_id` and its
+    `request` name another pilot of the same three pipeline steps."""
+    manifest = job_manifest(golden_id, request)
     wand = built(painter, work / "original", manifest)
     first = checked_export(wand, diagnostic)
     original = wand.probe("dump-original", DUMP)
@@ -149,7 +161,7 @@ def run(painter: Path, work: Path, diagnostic: bool = False) -> Scenario:
     second = checked_export(wand, diagnostic)
     rebuilt = wand.probe("dump-rebuilt", DUMP)
     document = report(
-        GOLDEN_ID,
+        golden_id,
         sha256_of(manifest),
         sha256_of(painter),
         side(original, first, diagnostic),

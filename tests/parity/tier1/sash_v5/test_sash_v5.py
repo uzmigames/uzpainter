@@ -15,9 +15,17 @@ before writing, the round test is an expected failure naming that refusal (the e
 refusal fails). In the measure mode, as decision 398 §4 closed the Tunic's, the round sends no
 export and its saved project is exported by the diagnostic measure export in its own `run`
 process; that round must complete with every map byte-identical to the Tier 1 run's (also the
-measure export), and it writes the round's report. They need the UzmiGames asset repository
-(`UZP_TEST_ASSETS3D`), `zig` for a fresh `zig build painter -Doptimize=ReleaseFast`, the private
-store and the admitted golden; hosted CI has none of them and skips with the reason.
+measure export), and it writes the round's report.
+
+The dump-and-rebuild (gate G2, `parity/reports/phase2/gate-g2.md` §3.6) runs the Wand's recipe
+scenario (`tests/parity/recipe/wand_v1/runner.py`) on the Sash: built through the adapter, its
+recipe dumped, a new project rebuilt from the dump and the bundle's resources alone, both projects
+exported by the diagnostic measure export; the digests must be equal and every exported file
+byte-identical. Not conformant: it proves the rebuild reproduces the same bytes.
+
+The tests need the UzmiGames asset repository (`UZP_TEST_ASSETS3D`), `zig` for a fresh `zig build
+painter -Doptimize=ReleaseFast`, the private store and the admitted golden; hosted CI has none of
+them and skips with the reason.
 """
 
 from __future__ import annotations
@@ -31,8 +39,10 @@ from pathlib import Path
 import pytest
 
 from tests.adapters.assets3d.wand import ASSETS3D, REPO_ROOT
+from tests.parity.recipe.wand_v1 import runner as recipe
 from tests.parity.tier1.mcp_round import REFUSAL, Round, round_report, run_round
-from tests.parity.tier1.sash_v5.runner import GOLDEN_ID, Evidence, painter_ocio, run
+from tests.parity.tier1.sash_v5.runner import GOLDEN_ID, REQUEST, Evidence, painter_ocio, run
+from tools.parity.recipe_rebuild import write_report as write_recipe_report
 from tools.parity.schemas import Schema, validation_errors
 from tools.parity.store.store import locate
 from tools.parity.tier1.compare import write_report
@@ -42,6 +52,7 @@ from tools.parity.verdict import resolve_golden
 
 REPORT_ENV = "UZP_TIER1_REPORT"  # repository-relative path of the report to write
 ROUND_ENV = "UZP_MCP_ROUND_REPORT"  # the same for the MCP-only round's report
+RECIPE_ENV = "UZP_RECIPE_REBUILD_REPORT"  # the same for the dump-and-rebuild's report
 # The only exception the Sash's equality may rely on (decision 399).
 EXC012 = {"exception_id": "EXC-012", "version": 1}
 # The production refusals of an islanded export the round may meet (src/export/padding.cpp
@@ -193,6 +204,36 @@ def test_sash_v5_round_through_typed_mcp_tools_closes_on_the_measure_export(
     assert report["export_mode"] == "diagnostic_measure"
     assert report["outcome"] == "completed", report["calls"][-1]
     assert report["equal_to_tier1"] == "equal", report["maps"]
+
+
+@_needs_the_sash
+def test_sash_v5_rebuilt_from_its_dump_exports_byte_identical_files(
+    painter: Path, tmp_path: Path
+) -> None:
+    """Gate G2's dump-and-rebuild on the Sash (the Tunic's pass criterion): the project built
+    through the adapter and the one rebuilt from its recipe dump and its bundle's resources dump the
+    same body, rebuild block and digest, and their diagnostic measure exports (decision 286; each
+    receipt `non_conformant`, bypassing only decided refusals) are byte-identical, all five maps.
+    No export may be refused. The report goes to `UZP_RECIPE_REBUILD_REPORT` when that is set."""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("OCIO", str(painter_ocio()))
+        scenario = recipe.run(
+            painter, tmp_path / "rebuild", diagnostic=True, golden_id=GOLDEN_ID, request=REQUEST
+        )
+    report, original, rebuilt = scenario.report, scenario.original, scenario.rebuilt
+    assert validation_errors(report, Schema.RECIPE_REBUILD_REPORT) == []
+    if os.environ.get(RECIPE_ENV):
+        write_recipe_report(report, REPO_ROOT / os.environ[RECIPE_ENV])
+    assert scenario.refusals == ()
+    assert rebuilt["digest"] == original["digest"]
+    assert rebuilt["recipe"] == original["recipe"]
+    assert rebuilt["rebuild"] == original["rebuild"]
+    assert report["equality"]["digests_equal"] is True
+    files = report["original"]["export"]["files"]
+    assert len(files) == 5
+    assert report["rebuilt"]["export"]["files"] == files
+    assert report["equality"]["files"] == "identical", report["equality"]
+    assert report["equality"]["outcome"] == "pass", report["equality"]
 
 
 def test_only_the_islanded_export_refusal_is_expected() -> None:

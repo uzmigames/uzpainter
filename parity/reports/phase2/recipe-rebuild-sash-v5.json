@@ -1,0 +1,113 @@
+{
+  "schema": "uzpainter/parity/recipe-rebuild-report/1",
+  "golden_id": "phase2/tier1/sash-v5-current",
+  "manifest_sha256": "b3028e5a2a729a3340eeedbd8b76907802f10ced88f13a8159164f532ee1b44c",
+  "run": {
+    "uzpainter_build_hash": "bafbd3027d182ef0b7bd169003c543064613147fa8f5fd14f159194c6d517b16",
+    "compat_profile": "painter-12.1-api-0.3.7",
+    "app_version": "0.0.0"
+  },
+  "resources": [
+    "0536fb8fe4c97780658dbb2f0405bb4d0bcb0f2122410ad22626a11c85d44eea",
+    "171682eee23920d45dface8d9bc444d7a8b884fceaef0b05223199f6081967f9",
+    "24c8e0a0e553a7f2ebb6c5b1fae201167d2ab8e573310edcff9e372ee075c8aa",
+    "30dfdc76815bffd24f14e275d3fc9d05a5f37b0304db74f4528f47ac4b6ee2f4",
+    "34c6da71c08a848f06e47e1a434bf79d9bd257db100b69551635adebec53eee9",
+    "3df0e27eef4f9c5af844878d9be5845f28774074e14da1b919ca8b14b88a1bd1",
+    "4ceec2c2e89a55a3f79d899b1a09223241998e38106f0b273db7cb43274aa007",
+    "646bba8546ad9dcd6475eb366fced896f35f592b088e1286d1a30ec957249944",
+    "678e92d4f27b8c95903d0147479befc44ee5bc9d06c821e8a4a60e7ec14a3102",
+    "6eb0d92300cdf189f57ec5ccdefe32bcf485a3a5abb784361dcbe87ffd4df3c2",
+    "768c098fcd7ab9347c820ecd4157c9a90afa73e604d3d3be703d0ddbf4f63fb2",
+    "8267722cc7f13cd2bc644282aa58d90174be4c5cbd0ea2490533f3a8e2489d48",
+    "831fbf81fcd14f56469eed020de445fe64c125493eaa00f64b6de0c503e08c86",
+    "94f9b78cf2ebf47d2c12e0fe61848b66343fed235fdba8d29841908ff5d43437",
+    "a40246630088bc6274ed5bc662bed512223507a5a2019d10d9c2ef060c6279ce",
+    "b38bc043c09f48f885fefb3864d6fe6313d419b7601a9a236502bb57a47f5ad4",
+    "ba466d5b912025fc25113de369ba94020014cb7fb9020e08ef243e0d2df44c5c",
+    "bc6858a658d1ca1117bc9fe360930d9723e6469b36c17eb067b804a63a560153",
+    "c58e85785e29f69328098918eb7f16ed98ee51f03fb6a288b63e017f94a4d68c",
+    "c61c7917465fcbc029cc6562e725089477d9258f44be3e6c17c529ffc60e579d",
+    "cfcb22a61ca2f790162758425b16379478da40925ef01b8dabf18c90f826f145",
+    "dd717411247e2a2dcf297f4cf80eee0be843a90a4c47e3f5e620f3e9244183ea",
+    "ec05be82d5c551926b81f2e443faf227d297b37b0fba6aed14da63b397d58276"
+  ],
+  "original": {
+    "recipe_digest": "19750bade7fcda017805144aabd966e8ee4ffb0b9c5e8c4d1254e71a99ef96d9",
+    "revision": 223,
+    "export": {
+      "status": "written",
+      "mode": "diagnostic_measure",
+      "files": [
+        {
+          "name": "25-Faixa-Cintura_BaseColor.png",
+          "sha256": "66e04f7f68461dbe5a64accf6dc9629b45797ed18bdaddb81e92eb46d08e9e2b",
+          "bytes": 7866723
+        },
+        {
+          "name": "25-Faixa-Cintura_Height.png",
+          "sha256": "0ca1a19a3192cc25e9bf8a25814a30ef276ff451914ea64c3e602f14985c7d2f",
+          "bytes": 2316237
+        },
+        {
+          "name": "25-Faixa-Cintura_Metallic.png",
+          "sha256": "537c59bf6206c8a29d89a0f0433ae285254a2b7deac15ba730f547b6d678ca33",
+          "bytes": 8243
+        },
+        {
+          "name": "25-Faixa-Cintura_Normal.png",
+          "sha256": "055926b42fc58064bf61d08703bcb7418d4b9d1e9d08926fc6e387ce096b58b9",
+          "bytes": 12168741
+        },
+        {
+          "name": "25-Faixa-Cintura_Roughness.png",
+          "sha256": "356b148fff1d0b14dacd6fd9392733ba6909847150ae8f8cb3ce3f12dc23ed56",
+          "bytes": 325465
+        }
+      ]
+    }
+  },
+  "rebuilt": {
+    "recipe_digest": "19750bade7fcda017805144aabd966e8ee4ffb0b9c5e8c4d1254e71a99ef96d9",
+    "revision": 1,
+    "export": {
+      "status": "written",
+      "mode": "diagnostic_measure",
+      "files": [
+        {
+          "name": "25-Faixa-Cintura_BaseColor.png",
+          "sha256": "66e04f7f68461dbe5a64accf6dc9629b45797ed18bdaddb81e92eb46d08e9e2b",
+          "bytes": 7866723
+        },
+        {
+          "name": "25-Faixa-Cintura_Height.png",
+          "sha256": "0ca1a19a3192cc25e9bf8a25814a30ef276ff451914ea64c3e602f14985c7d2f",
+          "bytes": 2316237
+        },
+        {
+          "name": "25-Faixa-Cintura_Metallic.png",
+          "sha256": "537c59bf6206c8a29d89a0f0433ae285254a2b7deac15ba730f547b6d678ca33",
+          "bytes": 8243
+        },
+        {
+          "name": "25-Faixa-Cintura_Normal.png",
+          "sha256": "055926b42fc58064bf61d08703bcb7418d4b9d1e9d08926fc6e387ce096b58b9",
+          "bytes": 12168741
+        },
+        {
+          "name": "25-Faixa-Cintura_Roughness.png",
+          "sha256": "356b148fff1d0b14dacd6fd9392733ba6909847150ae8f8cb3ce3f12dc23ed56",
+          "bytes": 325465
+        }
+      ]
+    }
+  },
+  "equality": {
+    "digests_equal": true,
+    "files": "identical",
+    "differing": [],
+    "missing": [],
+    "extra": [],
+    "outcome": "pass"
+  }
+}
