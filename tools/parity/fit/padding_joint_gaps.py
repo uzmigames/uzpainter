@@ -47,6 +47,10 @@ def census(probe: str, policy: str) -> tuple[dict[str, Any], list[dict[str, Any]
         t = r.tris[s[0]].t
         return t[(s[1] + 1) % 3], t[(s[1] + 2) % 3]
 
+    def snapped(s: Seam) -> tuple[tuple[float, float], tuple[float, float]]:
+        t = r.tris[s[0]].s
+        return t[(s[1] + 1) % 3], t[(s[1] + 2) % 3]
+
     gaps: dict[tuple[int, int], tuple[list[Seam], float]] = {}
     for (_, v), lst in ends.items():
         if len(lst) < 2:
@@ -54,7 +58,7 @@ def census(probe: str, policy: str) -> tuple[dict[str, Any], list[dict[str, Any]
         for gx in range(math.floor(v[0]) - 1, math.floor(v[0]) + 2):
             for gy in range(math.floor(v[1]) - 1, math.floor(v[1]) + 2):
                 px, py = gx + 0.5, gy + 0.5
-                if any(ref.strip_covers(*seg(s), px, py) for s in grid.get((gx, gy), [])):
+                if any(ref.strip_covers(*snapped(s), px, py) for s in grid.get((gx, gy), [])):
                     continue
                 owners = []
                 for s in lst:

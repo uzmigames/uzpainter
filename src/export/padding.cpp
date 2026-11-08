@@ -75,8 +75,6 @@ constexpr double kReachHigh = 1.787242;
 // Decision 366: the reach of the open windows whose J may shorten a far tap's distance; Painter's
 // lies in [1.15943297, 1.18234014) texels (bevelled-cube-256).
 constexpr double kWindowReach = 1.17;
-// Decision 368: a seam strip's UV ends lie on decision 281's 1/256-texel vertex grid.
-constexpr double kStripSubTexel = 256.0;
 // Legacy corner sensitivity diagnostic (decision 294): a seam edge outside tau's planar face whose nearest
 // point to the ring texel's centre is an end V, and which is not collinear (UV |sin| at most
 // kCollinear) with another seam edge of the island ending at V, reaches kCornerGated texels when
@@ -150,6 +148,7 @@ Vec3 Unit(const Vec3& a) { return Scale(a, 1.0 / Norm(a)); }
 struct KernelTriangle {
     std::array<Vec3, 3> p{};                        // 3D position
     std::array<std::array<double, 2>, 3> t{};       // texel space (u W, (1 - v) H): centres at + 1/2
+    std::array<std::array<double, 2>, 3> s{};       // the coverage's vertices (evaluator::SnappedVertex)
     std::array<uint32_t, 3> vertex{};               // the position's identity (its value)
     std::array<uint32_t, 3> corner{};               // the (position, UV) pair's identity
     std::array<std::array<float, 2>, 3> uv{};       // the comparator's float32 UV (v up)
@@ -418,6 +417,7 @@ RingGeometry::RingGeometry(const Coverage& coverage) : width(coverage.width), he
             const auto& p = source.position[c];
             k.p[c] = {p[0], p[1], p[2]};
             k.t[c] = {uv[c][0] * w, (1.0 - static_cast<double>(uv[c][1])) * h};
+            k.s[c] = evaluator::SnappedVertex(uv[c], width, height);
             k.uv[c] = uv[c];
             for (size_t d = 0; d < 3; ++d) {
                 const float scaled = p[d] * scale;
@@ -862,15 +862,11 @@ double SegmentDistance(const KernelTriangle& k, size_t edge, double px, double p
 
 /// Whether the one-texel seam strip of edge `edge` of `k` (straight ends) covers the sample point
 /// (px, py): inside, or on an edge of the strip whose outward normal points to -u, or to -v (up the
-/// tile) for an edge with no u component (the top-left fill rule). The edge's ends are first rounded
-/// to the nearest 1/256 texel (ties to even), decision 281's vertex grid (decision 368).
+/// tile) for an edge with no u component (the top-left fill rule). The edge's ends are the
+/// coverage's vertices (`KernelTriangle::s`; decisions 368 and 408).
 bool StripCovers(const KernelTriangle& k, size_t edge, double px, double py) {
-    const auto snapped = [](const std::array<double, 2>& p) {
-        return std::array<double, 2>{std::nearbyint(p[0] * kStripSubTexel) / kStripSubTexel,
-                                     std::nearbyint(p[1] * kStripSubTexel) / kStripSubTexel};
-    };
-    const std::array<double, 2> a = snapped(k.t[(edge + 1) % 3]);
-    const std::array<double, 2> b = snapped(k.t[(edge + 2) % 3]);
+    const std::array<double, 2>& a = k.s[(edge + 1) % 3];
+    const std::array<double, 2>& b = k.s[(edge + 2) % 3];
     const double ex = b[0] - a[0];
     const double ey = b[1] - a[1];
     const double length2 = ex * ex + ey * ey;

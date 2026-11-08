@@ -1,0 +1,9 @@
+{
+  "id": 408,
+  "slug": "the-uv-coverage-places-vertices-through-float32-device-coordinates-and-keeps-on-edge-centres-by-the-top-left-rule",
+  "title": "The UV coverage places vertices through float32 device coordinates and keeps on-edge centres by the top-left rule",
+  "status": "accepted",
+  "date": "2026-11-08",
+  "relatedTasks": ["phase3.1_export-island-padding"],
+  "supersededBy": null
+}

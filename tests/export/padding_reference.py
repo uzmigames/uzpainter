@@ -195,11 +195,8 @@ def seam_gate(
 def strip_covers(a: tuple[float, float], b: tuple[float, float], px: float, py: float) -> bool:
     """Whether the one-texel seam strip of the UV segment a b (straight ends) covers the sample
     point (px, py): inside, or on an edge of the strip whose outward normal points to -u, or to -v
-    (up the tile) for an edge with no u component (the top-left fill rule). The segment's ends are
-    first rounded to the nearest 1/256 texel (ties to even), decision 281's vertex grid (decision
-    368)."""
-    a = (round(a[0] * SUB_TEXEL) / SUB_TEXEL, round(a[1] * SUB_TEXEL) / SUB_TEXEL)
-    b = (round(b[0] * SUB_TEXEL) / SUB_TEXEL, round(b[1] * SUB_TEXEL) / SUB_TEXEL)
+    (up the tile) for an edge with no u component (the top-left fill rule). `a` and `b` are the
+    segment's ends on the coverage's vertex grid (`snapped_vertex`; decisions 368 and 408)."""
     ex, ey = b[0] - a[0], b[1] - a[1]
     length2 = ex * ex + ey * ey
     along = (px - a[0]) * ex + (py - a[1]) * ey
@@ -234,19 +231,30 @@ def tap_count(cands: Sequence[tuple[float, bool, tuple[int, int]]]) -> int:
     return min(4, len(cands)) if cands[0][0] > ZERO_DISTANCE * nearest else 1
 
 
+def snapped_vertex(u: float, v: float, width: int, height: int) -> tuple[float, float]:
+    """The texel-space vertex (x, y; rows top first) of the float32 UV (u, v) (v up) as the
+    coverage places it (decision 408): each coordinate t goes through float32 device coordinates,
+    p = ((2 t - 1) + 1) N / 2, each operation rounded to float32, then p is rounded to the nearest
+    1/256 texel (ties to even, decision 281) and the rows are flipped, y = H - p_v."""
+
+    def device(t: float, n: int) -> float:
+        d = f32(f32(F32(2) * f32(t)) - F32(1))
+        return float(f32(f32(d + F32(1)) * f32(n / 2)))
+
+    return (
+        round(device(u, width) * SUB_TEXEL) / SUB_TEXEL,
+        height - round(device(v, height) * SUB_TEXEL) / SUB_TEXEL,
+    )
+
+
 def covered_texels(
     uv: Sequence[tuple[float, float]], width: int, height: int
 ) -> list[tuple[int, int]]:
-    """The texels (col, row) whose centre the triangle of float32 UVs `uv` (v up) covers: inside or
-    on its boundary, each vertex first rounded in texel space to the nearest 1/256 texel (decision
-    281), nothing when the snapped triangle is degenerate."""
-    t = [
-        (
-            round(u * width * SUB_TEXEL) / SUB_TEXEL,
-            round((1.0 - v) * height * SUB_TEXEL) / SUB_TEXEL,
-        )
-        for u, v in uv
-    ]
+    """The texels (col, row) whose centre the triangle of float32 UVs `uv` (v up) covers, its
+    vertices placed by `snapped_vertex` (decision 408): nothing when the snapped triangle is
+    degenerate; else, wound to a positive area (rows top first), a centre strictly inside every
+    edge, or on an edge with dy < 0 or horizontal with dx < 0 (the top-left rule)."""
+    t = [snapped_vertex(u, v, width, height) for u, v in uv]
 
     def edge(a: tuple[float, float], b: tuple[float, float], x: float, y: float) -> float:
         return (b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0])
@@ -254,6 +262,13 @@ def covered_texels(
     area = edge(t[0], t[1], t[2][0], t[2][1])
     if area == 0.0:
         return []
+    if area < 0.0:
+        t = [t[0], t[2], t[1]]
+    tie = [
+        t[(i + 1) % 3][1] - t[i][1] < 0.0
+        or (t[(i + 1) % 3][1] == t[i][1] and t[(i + 1) % 3][0] - t[i][0] < 0.0)
+        for i in range(3)
+    ]
     xs, ys = [c[0] for c in t], [c[1] for c in t]
     out = []
     for row in range(
@@ -265,7 +280,7 @@ def covered_texels(
             int(min(width - 1.0, math.ceil(max(xs) - 0.5))) + 1,
         ):
             w = [edge(t[i], t[(i + 1) % 3], col + 0.5, row + 0.5) for i in range(3)]
-            if all(e >= 0.0 for e in w) if area > 0.0 else all(e <= 0.0 for e in w):
+            if all(e > 0.0 or (e == 0.0 and tie[i]) for i, e in enumerate(w)):
                 out.append((col, row))
     return out
 
@@ -415,6 +430,7 @@ class Triangle:
         self.p = p
         self.uv = np.array(uv, F32)
         self.t = [(u * width, (1.0 - v) * height) for u, v in uv]
+        self.s = [snapped_vertex(u, v, width, height) for u, v in uv]  # coverage vertices
         self.vertex: list[int] = []
         self.corner: list[int] = []
         self.chart = 0
@@ -888,7 +904,7 @@ class Ring:
                 winner = None
                 for e, edge, j in self.seams.get(chart, []):
                     triangle = self.tris[e]
-                    a, b = triangle.t[(edge + 1) % 3], triangle.t[(edge + 2) % 3]
+                    a, b = triangle.s[(edge + 1) % 3], triangle.s[(edge + 2) % 3]
                     if strip_covers(a, b, x + dx + 0.5, y + dy + 0.5):
                         winner = (e, edge, j)
                 if winner is not None:
@@ -918,7 +934,7 @@ class Ring:
                 winner = None
                 for e, edge, j in grid.get((x + dx, y + dy), []):
                     triangle = self.tris[e]
-                    a, b = triangle.t[(edge + 1) % 3], triangle.t[(edge + 2) % 3]
+                    a, b = triangle.s[(edge + 1) % 3], triangle.s[(edge + 2) % 3]
                     if strip_covers(a, b, x + dx + 0.5, y + dy + 0.5):
                         winner = (e, edge, j)
                 if winner is not None:

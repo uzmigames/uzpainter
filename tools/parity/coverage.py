@@ -6,10 +6,13 @@ The convention of `src/evaluator/geometry_mask.h` and the OBJ reading of `src/me
   fanned from their last corner, (c[i], c[i+1], c[n-1]); faces before any `usemtl` belong to the
   material `default`;
 - row 0 is the top of UV tile 1001 (v = 1); texel (col, row) has its centre at
-  u = (col + 1/2) / W, v = 1 - (row + 1/2) / H, and is covered when that centre lies inside or on
-  the boundary of a triangle of the material whose vertices are first rounded in texel space
-  (u W, (1 - v) H) to the nearest 1/256 texel, ties to even, and which is not degenerate after
-  that rounding (decision 281).
+  u = (col + 1/2) / W, v = 1 - (row + 1/2) / H. Each vertex coordinate t goes through float32
+  device coordinates, p = ((2 t - 1) + 1) N / 2 (each operation rounded to float32), is rounded to
+  the nearest 1/256 texel, ties to even (decision 281), and the rows are flipped, y = H - p_v
+  (decision 408). A texel is covered when its centre lies strictly inside a triangle of the
+  material that is not degenerate after that rounding, or on an edge that the top-left rule keeps:
+  with the triangle wound to a positive area (rows top first), an edge with dy < 0, or horizontal
+  with dx < 0 (decision 408).
 
 The coverage separates the texels inside the UV islands from the padding texels, which the Tier 1
 report publishes apart (exception EXC-007 excepted them until the owner withdrew it, decision
@@ -24,6 +27,8 @@ from typing import Any
 
 import numpy as np
 import numpy.typing as npt
+
+F32 = np.float32
 
 Triangles = npt.NDArray[np.float64]  # (n, 3, 2): the float32 UVs of each triangle, widened
 Mask = npt.NDArray[np.bool_]
@@ -88,35 +93,48 @@ def _cross(
 SUB_TEXEL = 256  # the coverage's vertex precision, in texels (decision 281)
 
 
+def ndc_vertex(t: npt.ArrayLike, size: int) -> npt.NDArray[np.float64]:
+    """((2 t - 1) + 1) * size / 2 of float32 coordinates `t`, each operation rounded to float32
+    (decision 408)."""
+    v = np.asarray(t, dtype=F32)
+    device = F32(2) * v - F32(1)
+    result: npt.NDArray[np.float64] = ((device + F32(1)) * F32(size / 2)).astype(np.float64)
+    return result
+
+
+def snapped(triangles: Triangles, width: int, height: int) -> npt.NDArray[np.float64]:
+    """(n, 3, 2) texel-space vertices, rows top first: the float32 device round trip, the 1/256
+    texel rounding (ties to even), then the row flip (decision 408)."""
+    out = np.empty(triangles.shape, dtype=np.float64)
+    out[..., 0] = np.round(ndc_vertex(triangles[..., 0], width) * SUB_TEXEL) / SUB_TEXEL
+    out[..., 1] = height - np.round(ndc_vertex(triangles[..., 1], height) * SUB_TEXEL) / SUB_TEXEL
+    return out
+
+
 def coverage(triangles: Triangles, width: int, height: int) -> Mask:
     """The covered texels (rows top first) of `triangles` at `width` x `height`."""
     covered = np.zeros((height, width), dtype=bool)
-    for uv in triangles:
-        p = np.empty((3, 2), dtype=np.float64)
-        p[:, 0] = np.round(uv[:, 0] * width * SUB_TEXEL) / SUB_TEXEL
-        p[:, 1] = np.round((1.0 - uv[:, 1]) * height * SUB_TEXEL) / SUB_TEXEL
+    for p in snapped(triangles, width, height):
         area = float(_cross(p[0], p[1], p[2][0], p[2][1]))
         if area == 0.0:
             continue
+        if area < 0.0:
+            p = p[[0, 2, 1]]
         col_lo = max(0.0, np.floor(p[:, 0].min() - 0.5))
         col_hi = min(width - 1.0, np.ceil(p[:, 0].max() - 0.5))
         row_lo = max(0.0, np.floor(p[:, 1].min() - 0.5))
         row_hi = min(height - 1.0, np.ceil(p[:, 1].max() - 0.5))
         if col_lo > col_hi or row_lo > row_hi:
             continue
-        cols = np.arange(int(col_lo), int(col_hi) + 1, dtype=np.float64)
-        rows = np.arange(int(row_lo), int(row_hi) + 1, dtype=np.float64)
-        px = (cols + 0.5)[None, :]
-        py = (rows + 0.5)[:, None]
-        w0, w1, w2 = (
-            _cross(p[0], p[1], px, py),
-            _cross(p[1], p[2], px, py),
-            _cross(p[2], p[0], px, py),
-        )
-        if area > 0.0:
-            inside = (w0 >= 0.0) & (w1 >= 0.0) & (w2 >= 0.0)
-        else:
-            inside = (w0 <= 0.0) & (w1 <= 0.0) & (w2 <= 0.0)
+        px = (np.arange(int(col_lo), int(col_hi) + 1, dtype=np.float64) + 0.5)[None, :]
+        py = (np.arange(int(row_lo), int(row_hi) + 1, dtype=np.float64) + 0.5)[:, None]
+        inside = np.ones((py.shape[0], px.shape[1]), dtype=bool)
+        for i in range(3):
+            a, b = p[i], p[(i + 1) % 3]
+            dx, dy = b[0] - a[0], b[1] - a[1]
+            tie = bool(dy < 0.0 or (dy == 0.0 and dx < 0.0))
+            w = _cross(a, b, px, py)
+            inside &= (w > 0.0) | ((w == 0.0) & tie)
         covered[int(row_lo) : int(row_hi) + 1, int(col_lo) : int(col_hi) + 1] |= inside
     return covered
 

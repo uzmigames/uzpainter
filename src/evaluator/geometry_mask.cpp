@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <set>
+#include <utility>
 
 #include "mesh/texturing_mesh.h"
 
@@ -23,21 +24,45 @@ double Cross(const Point& a, const Point& b, const Point& p) {
 // The coverage's vertex precision: 1/256 texel (decision 281).
 constexpr double kSubTexel = 256.0;
 
+/// ((2 t - 1) + 1) * n / 2, each operation rounded to float32 (decision 408).
+float DeviceCoordinate(float t, uint32_t n) {
+    const float twice = 2.0f * t;
+    const float device = twice - 1.0f;
+    const float shifted = device + 1.0f;
+    const float half = static_cast<float>(n) / 2.0f;
+    return shifted * half;
+}
+
 }  // namespace
+
+std::array<double, 2> SnappedVertex(const std::array<float, 2>& uv, uint32_t width, uint32_t height) {
+    const double x = std::nearbyint(static_cast<double>(DeviceCoordinate(uv[0], width)) * kSubTexel) / kSubTexel;
+    const double v = std::nearbyint(static_cast<double>(DeviceCoordinate(uv[1], height)) * kSubTexel) / kSubTexel;
+    return {x, static_cast<double>(height) - v};
+}
 
 void CoveredTexels(const std::array<std::array<float, 2>, 3>& uv, uint32_t width, uint32_t height,
                    const std::function<void(uint32_t col, uint32_t row)>& cover) {
     const double w = width;
     const double h = height;
-    // Each vertex rounded to the nearest 1/256 texel (ties to even); the products and the edge
-    // functions below are exact in double for float32 UVs on tiles up to 2^16 texels.
+    // The snapped vertices lie on the 1/256 grid of tiles up to 2^16 texels, so the edge functions
+    // below are exact in double.
     std::array<Point, 3> p{};
     for (size_t k = 0; k < 3; ++k) {
-        p[k] = {std::nearbyint(static_cast<double>(uv[k][0]) * w * kSubTexel) / kSubTexel,
-                std::nearbyint((1.0 - static_cast<double>(uv[k][1])) * h * kSubTexel) / kSubTexel};
+        const std::array<double, 2> s = SnappedVertex(uv[k], width, height);
+        p[k] = {s[0], s[1]};
     }
     const double area = Cross(p[0], p[1], p[2]);
     if (area == 0.0) return;
+    if (area < 0.0) std::swap(p[1], p[2]);
+    // The top-left rule: a centre on edge i (p[i] to p[i + 1]) is covered only when the edge has
+    // dy < 0, or dy = 0 and dx < 0.
+    std::array<bool, 3> tie{};
+    for (size_t i = 0; i < 3; ++i) {
+        const Point& a = p[i];
+        const Point& b = p[(i + 1) % 3];
+        tie[i] = b.y - a.y < 0.0 || (b.y == a.y && b.x - a.x < 0.0);
+    }
     // Texel centres (col + 1/2, row + 1/2) inside the bounds.
     const double colLo = std::max(0.0, std::floor(std::min({p[0].x, p[1].x, p[2].x}) - 0.5));
     const double colHi = std::min(w - 1.0, std::ceil(std::max({p[0].x, p[1].x, p[2].x}) - 0.5));
@@ -46,11 +71,11 @@ void CoveredTexels(const std::array<std::array<float, 2>, 3>& uv, uint32_t width
     for (double row = rowLo; row <= rowHi; row += 1.0) {
         for (double col = colLo; col <= colHi; col += 1.0) {
             const Point centre{col + 0.5, row + 0.5};
-            const double w0 = Cross(p[0], p[1], centre);
-            const double w1 = Cross(p[1], p[2], centre);
-            const double w2 = Cross(p[2], p[0], centre);
-            const bool inside =
-                area > 0.0 ? (w0 >= 0.0 && w1 >= 0.0 && w2 >= 0.0) : (w0 <= 0.0 && w1 <= 0.0 && w2 <= 0.0);
+            bool inside = true;
+            for (size_t i = 0; i < 3 && inside; ++i) {
+                const double e = Cross(p[i], p[(i + 1) % 3], centre);
+                inside = e > 0.0 || (e == 0.0 && tie[i]);
+            }
             if (inside) cover(static_cast<uint32_t>(col), static_cast<uint32_t>(row));
         }
     }

@@ -39,6 +39,7 @@ from tests.export.padding_reference import (
     box_normalised,
     chain,
     compare_distance,
+    covered_texels,
     fractions,
     hinge,
     norm,
@@ -75,22 +76,11 @@ class Mesh:
         self.normalised = [box_normalised(t, lo, hi) for t, _ in self.triangles]
         self.owner = -np.ones((size, size), int)
         for k, (_, tuv) in enumerate(self.triangles):
-            # Vertices snapped to 1/256 texel (decision 281), v down, centres at + 1/2.
-            t = [
-                (round(float(u) * size * 256) / 256, round((1 - float(v)) * size * 256) / 256)
-                for u, v in tuv
-            ]
-            for row in range(size):
-                for col in range(size):
-                    w = [
-                        (t[(i + 1) % 3][0] - t[i][0]) * (row + 0.5 - t[i][1])
-                        - (t[(i + 1) % 3][1] - t[i][1]) * (col + 0.5 - t[i][0])
-                        for i in range(3)
-                    ]
-                    if (all(x >= 0 for x in w) or all(x <= 0 for x in w)) and self.owner[
-                        row, col
-                    ] < 0:
-                        self.owner[row, col] = k
+            # The coverage's own test (decision 408), the first triangle in mesh order.
+            uv = [(float(u), float(v)) for u, v in tuv]
+            for col, row in covered_texels(uv, size, size):
+                if self.owner[row, col] < 0:
+                    self.owner[row, col] = k
 
     def obj(self, path: Path) -> Path:
         lines = ["usemtl m"]
@@ -574,8 +564,10 @@ def test_ring_point_neighbours_and_reach_follow_decision_279(
     values, out, ring = run(export_tests, tmp_path, lone, "lone", 279)
     _matches_reference(tmp_path, "lone", values, out, ring)
     assert not [r for r in ring if "reach-bracket" in r["undecided"]]
-    texel = next(r for r in ring if (r["x"], r["y"]) == (8, 15))
-    assert not [c for c in texel["candidates"] if c[3]]
+    # The lone quad's right edge holds column 7's centres, which the top-left rule leaves uncovered
+    # (decision 408), so (8, 15) is no ring texel; no ring texel discovers the lone 1.7768 edge.
+    assert (8, 15) not in {(r["x"], r["y"]) for r in ring}
+    assert not [c for r in ring for c in r["candidates"] if c[3] and 1.772 <= c[2] < 1.788]
 
 
 class Triangles:
@@ -930,15 +922,17 @@ def test_own_ties_follow_the_neighbour_order(export_tests: Path, tmp_path: Path)
 
 
 def test_coverage_snaps_vertices_to_a_256th_of_a_texel(export_tests: Path, tmp_path: Path) -> None:
-    """Decision 281: a texel centre 1/1000 texel outside an island's edge is covered (the edge
-    snaps onto it), one 3/1000 texel outside is not, in UzPainter's coverage, `padding_reference`'s
-    and tools/parity/coverage's alike."""
+    """Decision 281: a texel centre 1/1000 texel outside an island's left edge is covered (the edge
+    snaps onto it, and the top-left rule keeps a left edge, decision 408), one 3/1000 texel outside
+    is not; a centre on a right edge is not covered (decision 408). In UzPainter's coverage,
+    `padding_reference`'s and tools/parity/coverage's alike."""
     from tools.parity.coverage import coverage, obj_triangles
 
     mesh = Mesh(
         [
-            _quad((1.0, 2.12475), (4.0, 8.499), (12.0, 16.0), 16.0),
-            _quad((1.0, 2.12425), (4.0, 8.497), (20.0, 24.0), 16.0),
+            _quad((1.0, 2.12475), (8.501, 13.0), (12.0, 16.0), 16.0),
+            _quad((1.0, 2.12425), (8.503, 13.0), (20.0, 24.0), 16.0),
+            _quad((3.0, 4.12475), (20.0, 24.499), (12.0, 16.0), 16.0),
         ],
         32,
     )
@@ -948,11 +942,13 @@ def test_coverage_snaps_vertices_to_a_256th_of_a_texel(export_tests: Path, tmp_p
     covered = coverage(obj_triangles(tmp_path / "snap.obj", "m"), 32, 32)
     assert np.array_equal(covered, reference.owner >= 0)
     assert np.array_equal(covered, mesh.owner >= 0)
-    assert covered[12:16, 8].all() and not covered[12:16, 9].any()
-    assert not covered[20:24, 8].any()
+    assert covered[12:16, 8].all() and not covered[12:16, 7].any()
+    assert not covered[20:24, 8].any() and covered[20:24, 9].all()
+    assert covered[12:16, 23].all() and not covered[12:16, 24].any()
     ring_texels = {(r["x"], r["y"]) for r in ring}
-    assert {(9, y) for y in range(12, 16)} <= ring_texels
+    assert {(7, y) for y in range(12, 16)} <= ring_texels
     assert {(8, y) for y in range(20, 24)} <= ring_texels
+    assert {(24, y) for y in range(12, 16)} <= ring_texels
 
 
 def _own(reference: Ring, x: int, y: int) -> list[tuple[int, int]]:
@@ -1687,13 +1683,13 @@ def test_seam_strip_ends_lie_on_the_vertex_grid(export_tests: Path, tmp_path: Pa
         return 0 <= along <= ex * ex + ey * ey and abs(cross) <= 0.5 * math.hypot(ex, ey)
 
     for (x, y), g, far in (((59, 20), (59, 21), [(64, 22)]), ((448, 262), (448, 263), [])):
-        ends = [
-            (reference.tris[e].t[(edge + 1) % 3], reference.tris[e].t[(edge + 2) % 3])
-            for lst in reference.seams.values()
-            for e, edge, _ in lst
+        seams = [
+            (reference.tris[e], edge) for lst in reference.seams.values() for e, edge, _ in lst
         ]
-        rounded = [s for s in ends if strip_covers(*s, g[0] + 0.5, g[1] + 0.5)]
-        straight = [s for s in ends if analytic(*s, g[0] + 0.5, g[1] + 0.5)]
+        snapped = [(k.s[(edge + 1) % 3], k.s[(edge + 2) % 3]) for k, edge in seams]
+        exact = [(k.t[(edge + 1) % 3], k.t[(edge + 2) % 3]) for k, edge in seams]
+        rounded = [s for s in snapped if strip_covers(*s, g[0] + 0.5, g[1] + 0.5)]
+        straight = [s for s in exact if analytic(*s, g[0] + 0.5, g[1] + 0.5)]
         assert bool(rounded) == bool(far) != bool(straight)
         own = [
             ((x + dx) % size, y + dy)

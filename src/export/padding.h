@@ -4,8 +4,8 @@
 // decision 090): what a file holds outside the UV islands of its texture set.
 //
 // The coverage is the texture set's texel-centre UV coverage (evaluator/geometry_mask.h: a texel
-// is covered when its centre lies inside or on a triangle of the set's material, its vertices
-// snapped to 1/256 texel, decision 281). The evaluator
+// is covered when a triangle of the set's material covers its centre, its vertices placed through
+// float32 device coordinates on the 1/256-texel grid, with the top-left rule, decision 408). The evaluator
 // fills the whole UV tile, so every texel of a raster holds the stack's value there.
 //
 // - Complete coverage (every texel covered, as on the grid meshes of the Tier 0 corpus): padding

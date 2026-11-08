@@ -106,7 +106,7 @@ def sample_winners(m: Any, r: Any, x: int, y: int) -> dict[tuple[int, int], Any]
             sx, sy = x + dx, y + dy
             winner = None
             for s in grid.get((sx, sy), []):
-                t = r.tris[s[0]].t
+                t = r.tris[s[0]].s
                 if m.strip_covers(t[(s[1] + 1) % 3], t[(s[1] + 2) % 3], sx + 0.5, sy + 0.5):
                     winner = s
             if winner is None and hasattr(r, "mitred"):
