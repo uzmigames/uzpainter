@@ -1,0 +1,9 @@
+{
+  "id": 405,
+  "slug": "an-ocio-golden-recorded-in-a-decision-037-equivalent-environment-is-admissible-when-the-admitted-ocio-control-re-records-identical-there",
+  "title": "An OCIO golden recorded in a decision-037 equivalent environment is admissible when the admitted OCIO control re-records identical there",
+  "status": "accepted",
+  "date": "2026-11-08",
+  "relatedTasks": ["phase0.9_oracle-envelope", "phase3.2_unreal-ue56-packed-preset", "phase1.26_gate-g1"],
+  "supersededBy": null
+}

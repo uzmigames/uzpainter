@@ -20,6 +20,14 @@ that differs is `other_environment` too. No reference, references that disagree 
 under another host, an anchor-less envelope or an unreadable environment record refuse the
 check: the first OCIO identity of an envelope needs its own decision. The registry is read,
 never changed. A request that names no `OCIO` keeps `refresh.detect`'s answer unchanged.
+
+Decision 405: a host the Legacy canary proved equivalent (decision 037, `equivalent_envelopes`)
+has another five-field hash than the references, so an OCIO session there would be
+`other_environment`. Its hash is admissible when an admitted golden naming the same configuration
+carries a control re-recording made there (records `hostcheck-<id>`, admitted beside the golden's
+own) whose key, recordings' outputs and blobs equal the golden's and whose colour configuration
+is the golden's. Goldens recorded there join the references under that hash; any other hash still
+splits them.
 """
 
 from __future__ import annotations
@@ -37,6 +45,7 @@ from tools.parity.recorder.environment import (
     UNKNOWN,
     envelope_sha256,
 )
+from tools.parity.recorder.output import GOLDEN_RECORD_ID
 from tools.parity.recorder.session import RecorderError
 from tools.parity.schemas import REPO_ROOT, load_json
 from tools.parity.store.store import OracleStore, StoreError, load_oracle
@@ -44,6 +53,10 @@ from tools.parity.store.store import OracleStore, StoreError, load_oracle
 OCIO_REFERENCE = "ocio_reference"
 COLOUR_FIELD = "colour_configuration_sha256"
 HOST_FIELDS = tuple(f for f in ENVELOPE_FIELDS if f != COLOUR_FIELD)
+# The record prefix of a control re-recording of an admitted OCIO golden (decision 405), and the
+# key `ocio_identities` adds to the environment of a verified one: the golden's id.
+CONTROL_PREFIX = "hostcheck-"
+CONTROL_OF = "ocio_control_of"
 
 
 def named_ocio(manifest: Mapping[str, Any]) -> str | None:
@@ -62,13 +75,53 @@ def host_of(environment: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(str(environment.get(f, UNKNOWN)) for f in HOST_FIELDS)
 
 
+def _reproduced(record: Mapping[str, Any]) -> tuple[Any, ...]:
+    """What a re-recording must reproduce: the golden id, the key, and each recording's id,
+    condition and outputs (the outputs name every exported blob by hash), not its session or
+    time."""
+    recordings = [(r["recording_id"], r["condition"], r["outputs"]) for r in record["recordings"]]
+    return record.get("golden_id"), record.get("key"), recordings
+
+
+def control_environment(
+    store: OracleStore, manifest: Mapping[str, Any], prefix: str
+) -> dict[str, Any] | None:
+    """The environment of the manifest's control re-recording (records `<prefix>hostcheck-<id>`)
+    with `CONTROL_OF` added, when it reproduces the golden exactly (decision 405); else None."""
+    control = f"{prefix}{CONTROL_PREFIX}"
+    refs = {r["record_id"]: r for r in manifest.get("private_records", [])}
+    names = (GOLDEN_RECORD_ID, ENVIRONMENT_RECORD_ID)
+    if any(f"{p}{n}" not in refs for p in (prefix, control) for n in names):
+        return None
+    blobs = {k[len(control) :]: r for k, r in refs.items() if k.startswith(control)}
+    if any(
+        refs.get(f"{prefix}{k}", {}).get("sha256") != r["sha256"]
+        for k, r in blobs.items()
+        if k not in names
+    ):
+        return None
+    loaded = [load_oracle(store, refs[f"{p}{n}"]) for p in (prefix, control) for n in names]
+    if any(data is None for data in loaded):
+        raise RecorderError(f"{manifest.get('golden_id')}: a control record is unreadable")
+    golden, environment, record, rerecorded = (json.loads(d or b"") for d in loaded)
+    if (
+        _reproduced(record) != _reproduced(golden)
+        or rerecorded.get(COLOUR_FIELD) != environment.get(COLOUR_FIELD)
+        or rerecorded.get("painter_build") != environment.get("painter_build")
+    ):
+        return None
+    return {**rerecorded, CONTROL_OF: str(manifest.get("golden_id"))}
+
+
 def ocio_identities(
     current: Mapping[str, Any],
     store: OracleStore | None,
     configuration: str,
     repo_root: Path = REPO_ROOT,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """(anchors, references) of the current envelope for `configuration`, read from the store."""
+    """(anchors, references) of the current envelope for `configuration`, read from the store.
+    The references include the environment of every verified control re-recording, marked with
+    `CONTROL_OF` (decision 405)."""
     if store is None:
         raise RecorderError("no private store here: the OCIO check reads its environment records")
     known = {current["envelope_sha256"], *current["equivalent_envelopes"]}
@@ -88,6 +141,9 @@ def ocio_identities(
         environment: dict[str, Any] = json.loads(data.decode("utf-8"))
         if named_ocio(manifest) == configuration:
             references.append(environment)
+            control = control_environment(store, manifest, current["record_prefix"])
+            if control is not None:
+                references.append(control)
         elif envelope_sha256(environment) in known:
             anchors.append(environment)
     return anchors, references
@@ -100,26 +156,41 @@ def ocio_reference_state(
     configuration: str,
 ) -> tuple[str, str]:
     """(state, reason) of an OCIO session: `ocio_reference` or `other_environment`. Raises
-    `RecorderError` when the current envelope gives no single OCIO identity to compare with."""
+    `RecorderError` when the current envelope gives no single OCIO identity to compare with.
+
+    References marked `CONTROL_OF` are verified control re-recordings (decision 405): on a host
+    of the anchors (the registry's or a decision-037 equivalent environment) with the identity's
+    colour configuration, their hash is admissible too, for the session and for the goldens
+    recorded there."""
     hosts = {host_of(a) for a in anchors}
     if not hosts:
         raise RecorderError("no admitted golden of the current envelope carries its identity")
-    if not references:
+    controls = [r for r in references if CONTROL_OF in r]
+    goldens = [r for r in references if CONTROL_OF not in r]
+    if not goldens:
         raise RecorderError(
             f"no admitted golden of the current envelope names OCIO {configuration}: the first "
             "OCIO identity of an envelope needs its own decision"
         )
-    hashes = {envelope_sha256(r) for r in references}
+    controlled = {envelope_sha256(c) for c in controls if host_of(c) in hosts}
+    own = [r for r in goldens if envelope_sha256(r) not in controlled] or goldens
+    hashes = {envelope_sha256(r) for r in own}
     if len(hashes) > 1:
         raise RecorderError(
-            f"the {len(references)} admitted goldens naming OCIO {configuration} disagree on "
+            f"the {len(own)} admitted goldens naming OCIO {configuration} disagree on "
             f"{len(hashes)} envelope identities"
         )
-    if host_of(references[0]) not in hosts:
+    if host_of(own[0]) not in hosts:
         raise RecorderError(
             f"the admitted goldens naming OCIO {configuration} were recorded under other host "
             "fields than the current envelope's"
         )
+    colour = own[0].get(COLOUR_FIELD)
+    equivalent = {
+        envelope_sha256(c)
+        for c in controls
+        if host_of(c) in hosts and c.get(COLOUR_FIELD) == colour
+    } - hashes
     if host_of(running) not in hosts:
         differing = ", ".join(
             f for i, f in enumerate(HOST_FIELDS) if host_of(running)[i] not in {h[i] for h in hosts}
@@ -128,13 +199,25 @@ def ocio_reference_state(
             f"host fields differ from the current envelope's ({differing or 'their combination'}):"
             " run the Legacy envelope check and canary first (decision 034 (d))"
         )
-    if envelope_sha256(running) != next(iter(hashes)):
+    running_hash = envelope_sha256(running)
+    if running_hash in equivalent:
+        return OCIO_REFERENCE, (
+            "the five envelope fields equal those of an identical control re-recording of an "
+            f"admitted golden naming OCIO {configuration}, on a host the canary proved "
+            "equivalent (decisions 037, 405)"
+        )
+    if running_hash not in hashes:
+        if host_of(running) != host_of(own[0]) and running.get(COLOUR_FIELD) == colour:
+            return OTHER_ENVIRONMENT, (
+                "the host is one the canary proved equivalent, but no admitted golden naming "
+                f"OCIO {configuration} has an identical control re-recording there (decision 405)"
+            )
         return OTHER_ENVIRONMENT, (
-            f"{COLOUR_FIELD} differs from that of the {len(references)} admitted goldens naming "
+            f"{COLOUR_FIELD} differs from that of the {len(own)} admitted goldens naming "
             f"OCIO {configuration}"
         )
     return OCIO_REFERENCE, (
-        f"the five envelope fields equal those of the {len(references)} admitted goldens naming "
+        f"the five envelope fields equal those of the {len(own)} admitted goldens naming "
         f"OCIO {configuration}, and the host fields equal the current envelope's"
     )
 

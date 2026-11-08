@@ -292,6 +292,54 @@
       "kind": "oracle_environment_record",
       "sha256": "8036d80eeeb96355e365110e3dbb51f328cda525a28b69717d343b5640e8f48c",
       "size_bytes": 402
+    },
+    {
+      "record_id": "hostcheck-golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "8f3257a33a4510acac1028aa6094f42b7cd56c85faf892fa55877ca4f3c9f026",
+      "size_bytes": 11030
+    },
+    {
+      "record_id": "hostcheck-r1-uzp_plane-basecolor-step13",
+      "kind": "exported_map",
+      "sha256": "ac1ed9e69295a26f82fb9faed1986933c44f9e5a1b06d413ef199bd08652a64e",
+      "size_bytes": 1570
+    },
+    {
+      "record_id": "hostcheck-r1-uzp_plane-basecolor-step14",
+      "kind": "exported_map",
+      "sha256": "cb6742af1004722b26bc0e5d8ede471ccf3939e880770db861ba8886b453ff92",
+      "size_bytes": 4108
+    },
+    {
+      "record_id": "hostcheck-r1-uzp_plane-basecolor-step15",
+      "kind": "exported_map",
+      "sha256": "47819c6ab80ef200ff32bb0dda01131e7d7dbc01346a671b4e4be1b30b1f2136",
+      "size_bytes": 50517
+    },
+    {
+      "record_id": "hostcheck-r2-uzp_plane-basecolor-step13",
+      "kind": "exported_map",
+      "sha256": "ac1ed9e69295a26f82fb9faed1986933c44f9e5a1b06d413ef199bd08652a64e",
+      "size_bytes": 1570
+    },
+    {
+      "record_id": "hostcheck-r2-uzp_plane-basecolor-step14",
+      "kind": "exported_map",
+      "sha256": "cb6742af1004722b26bc0e5d8ede471ccf3939e880770db861ba8886b453ff92",
+      "size_bytes": 4108
+    },
+    {
+      "record_id": "hostcheck-r2-uzp_plane-basecolor-step15",
+      "kind": "exported_map",
+      "sha256": "47819c6ab80ef200ff32bb0dda01131e7d7dbc01346a671b4e4be1b30b1f2136",
+      "size_bytes": 50517
+    },
+    {
+      "record_id": "hostcheck-oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "0dbe20a7f7595554b3100bc295fb75f6998ce119acd79eb898263e0025d523a2",
+      "size_bytes": 403
     }
   ]
 }

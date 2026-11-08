@@ -235,15 +235,16 @@ def test_duplicate_record_reference_fails_before_loading(
 
 
 @pytest.mark.parametrize(
-    "change", ["golden", "tier", "build", "envelope", "sequence", "inputs", "duplicate"]
+    "change", ["golden", "tier", "build", "envelope", "sequence", "inputs", "duplicate", None]
 )
 def test_raw_identity_and_duplicates_are_not_hidden_by_loader(
-    golden: Golden, change: str, monkeypatch: pytest.MonkeyPatch
+    golden: Golden, change: str | None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Isolate identity checks; the schema's own gate is exercised separately.
     monkeypatch.setattr(verifier, "record_problems", lambda record: [])
     monkeypatch.setattr(verifier, "envelope_sha256", lambda environment: environment["digest"])
-    envelope = current_envelope()
+    envelope = {**current_envelope(), "equivalent_envelopes": ["e" * 64]}
+    monkeypatch.setattr(verifier, "current_envelope", lambda: envelope)
     record: dict[str, Any] = {
         "golden_id": verifier.GOLDEN,
         "tier": "0",
@@ -261,6 +262,11 @@ def test_raw_identity_and_duplicates_are_not_hidden_by_loader(
         ],
     }
     verifier.validate_record(record, golden.manifest)
+    # an environment the canary proved equivalent is the current envelope (decision 037)
+    record["environment"]["digest"] = "e" * 64
+    verifier.validate_record(record, golden.manifest)
+    if change is None:
+        return
     if change == "golden":
         record["golden_id"] = "other"
     elif change == "tier":

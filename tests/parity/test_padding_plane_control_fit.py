@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -16,7 +17,7 @@ from tools.parity.envelope.registry import current_envelope
 from tools.parity.fit import padding_plane_control as control
 from tools.parity.fit.decode import Decoded, decode
 from tools.parity.fit.oracle import Golden, Recording
-from tools.parity.recorder.job import ExportStep, OutputMap
+from tools.parity.recorder.job import ExportStep, OutputMap, canonical_json
 from tools.parity.recorder.session import PainterSession
 from tools.parity.recorder.texture import export_outputs
 from tools.parity.tier0_semantics import padding_plane_control as authored
@@ -255,6 +256,47 @@ def test_raw_duplicate_ids_are_refused_before_indexing(duplicate: str) -> None:
         recording["outputs"].append({"output_id": "sample"})
     with pytest.raises(ValueError, match="duplicate"):
         control.validate_record(record, {})
+
+
+@pytest.mark.parametrize(
+    ("environment", "accepted"), [("current", True), ("equivalent", True), ("other", False)]
+)
+def test_record_environment_is_the_current_envelope_or_an_equivalent(
+    monkeypatch: pytest.MonkeyPatch, environment: str, accepted: bool
+) -> None:
+    manifest = golden().manifest
+    record = {
+        "golden_id": control.GOLDEN,
+        "tier": "0",
+        "environment": {"name": environment},
+        "key": {
+            "painter_build": {"build_id": "authored-build"},
+            "instruction_sequence_sha256": hashlib.sha256(
+                canonical_json(manifest["instruction_sequence"])
+            ).hexdigest(),
+            "inputs": [
+                {"input_id": row["input_id"], "sha256": row["sha256"]} for row in manifest["inputs"]
+            ],
+        },
+        "recordings": [{"recording_id": "r1", "outputs": []}],
+    }
+    monkeypatch.setattr(control, "record_problems", lambda _record: [])
+    monkeypatch.setattr(control, "validate_protocol", lambda _manifest: None)
+    monkeypatch.setattr(control, "envelope_sha256", lambda env: env["name"])
+    monkeypatch.setattr(
+        control,
+        "current_envelope",
+        lambda: {
+            "painter_build": "authored-build",
+            "envelope_sha256": "current",
+            "equivalent_envelopes": ["equivalent"],
+        },
+    )
+    if accepted:
+        control.validate_record(record, manifest)
+    else:
+        with pytest.raises(ValueError, match="identity or envelope mismatch"):
+            control.validate_record(record, manifest)
 
 
 def test_cli_missing_blob_reports_no_private_traceback(

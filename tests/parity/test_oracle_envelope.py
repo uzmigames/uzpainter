@@ -33,7 +33,9 @@ from tools.parity.envelope.compare import RecordSource, normalise_text, normalis
 from tools.parity.envelope.corpus import recorder_kind
 from tools.parity.envelope.drift import DriftInput, golden_drift
 from tools.parity.envelope.ocio import (
+    CONTROL_OF,
     OCIO_REFERENCE,
+    control_environment,
     detect_for_colour,
     named_ocio,
     ocio_reference_state,
@@ -1121,6 +1123,133 @@ def test_ocio_references_must_share_the_current_envelope_host() -> None:
     running = {**anchor, "colour_configuration_sha256": "ocio"}
     recorded = {**running, "recorder_version": "x"}  # provenance, not part of the match
     assert ocio_reference_state(running, [anchor], [recorded], OCIO_VALUE)[0] == OCIO_REFERENCE
+
+
+def equivalent_host_case() -> tuple[dict[str, str], ...]:
+    """An anchor on the registry's host, one on a decision-037 equivalent host, the OCIO golden
+    on the registry's host and an OCIO session on the equivalent host."""
+    anchor = {
+        "painter_build": "b",
+        "gpu_model": "g",
+        "driver_version": "1",
+        "os_build": "o",
+        "colour_configuration_sha256": "legacy",
+    }
+    equivalent = {**anchor, "driver_version": "2", "os_build": "p"}
+    golden = {**anchor, "colour_configuration_sha256": "ocio"}
+    running = {**equivalent, "colour_configuration_sha256": "ocio"}
+    return anchor, equivalent, golden, running
+
+
+def test_ocio_on_an_equivalent_host_needs_an_identical_control() -> None:
+    """Decision 405: the equivalent host's OCIO hash is admissible only through a verified
+    control re-recording made there, with the golden's colour configuration."""
+    anchor, equivalent, golden, running = equivalent_host_case()
+    anchors = [anchor, equivalent]
+    state, reason = ocio_reference_state(running, anchors, [golden], OCIO_VALUE)
+    assert state == "other_environment" and "decision 405" in reason
+    control = {**running, CONTROL_OF: "tier0/x"}
+    state, reason = ocio_reference_state(running, anchors, [golden, control], OCIO_VALUE)
+    assert state == OCIO_REFERENCE and "control re-recording" in reason
+    # the registry's host still answers as before
+    assert ocio_reference_state(golden, anchors, [golden, control], OCIO_VALUE)[0] == OCIO_REFERENCE
+    # a golden recorded on the equivalent host joins the references under the control's hash
+    references = [golden, control, dict(running)]
+    assert ocio_reference_state(running, anchors, references, OCIO_VALUE)[0] == OCIO_REFERENCE
+    # without the control that golden splits the references
+    with pytest.raises(RecorderError, match="disagree on 2 envelope identities"):
+        ocio_reference_state(running, anchors, [golden, dict(running)], OCIO_VALUE)
+    # a control on a host the canary did not prove equivalent, or with another colour
+    # configuration, admits nothing
+    foreign = {**running, "gpu_model": "other", CONTROL_OF: "tier0/x"}
+    assert ocio_reference_state(running, anchors, [golden, foreign], OCIO_VALUE)[0] != (
+        OCIO_REFERENCE
+    )
+    recoloured = {**running, "colour_configuration_sha256": "other", CONTROL_OF: "tier0/x"}
+    other = {**running, "colour_configuration_sha256": "other"}
+    state, reason = ocio_reference_state(other, anchors, [golden, recoloured], OCIO_VALUE)
+    assert state == "other_environment" and "colour_configuration_sha256" in reason
+    # a control alone is no reference
+    with pytest.raises(RecorderError, match="needs its own decision"):
+        ocio_reference_state(running, anchors, [control], OCIO_VALUE)
+
+
+def control_case(
+    mutate: Callable[[dict[str, Any], dict[str, Any], dict[str, Any]], None] | None = None,
+) -> tuple[Mock, dict[str, Any], dict[str, Any]]:
+    """A store and a manifest holding a golden and its `hostcheck-` control re-recording."""
+    _, _, golden_environment, running = equivalent_host_case()
+    output = {"output_id": "m/basecolor/step1", "value": {"blob": {"sha256": "a" * 64}}}
+    golden: dict[str, Any] = {
+        "golden_id": "tier0/x",
+        "key": {"k": 1},
+        "recordings": [
+            {
+                "recording_id": "r1",
+                "condition": "same_session",
+                "session_id": "s",
+                "outputs": [output],
+            }
+        ],
+    }
+    record = copy.deepcopy(golden)
+    record["recordings"][0]["session_id"] = "t"
+    environment = dict(running)
+    if mutate is not None:
+        mutate(golden, record, environment)
+    blobs = {
+        "golden-record": golden,
+        "oracle-environment": golden_environment,
+        "hostcheck-golden-record": record,
+        "hostcheck-oracle-environment": environment,
+    }
+    data = {name: json.dumps(value).encode("utf-8") for name, value in blobs.items()}
+    refs = [
+        {"record_id": name, "sha256": name, "size_bytes": len(value)}
+        for name, value in data.items()
+    ]
+    refs += [
+        {"record_id": f"{p}r1-m-basecolor-step1", "sha256": "a" * 64, "size_bytes": 1}
+        for p in ("", "hostcheck-")
+    ]
+    store = Mock(spec=OracleStore)
+    store.load.side_effect = lambda sha, size: data.get(sha)
+    return store, {"golden_id": "tier0/x", "private_records": refs}, running
+
+
+def test_control_environment_reads_an_identical_rerecording() -> None:
+    store, manifest, running = control_case()
+    assert control_environment(store, manifest, "") == {**running, CONTROL_OF: "tier0/x"}
+    # no control records: none
+    plain = {
+        **manifest,
+        "private_records": [
+            r for r in manifest["private_records"] if not r["record_id"].startswith("hostcheck-")
+        ],
+    }
+    assert control_environment(store, plain, "") is None
+    # a control blob under another hash than the golden's: none
+    other = copy.deepcopy(manifest)
+    other["private_records"][-1]["sha256"] = "b" * 64
+    assert control_environment(store, other, "") is None
+
+
+@pytest.mark.parametrize("change", ["output", "key", "recording", "colour", "build"])
+def test_control_environment_refuses_a_differing_rerecording(change: str) -> None:
+    def mutate(golden: dict[str, Any], record: dict[str, Any], environment: dict[str, Any]) -> None:
+        if change == "output":
+            record["recordings"][0]["outputs"][0]["value"] = {"blob": {"sha256": "c" * 64}}
+        elif change == "key":
+            record["key"] = {"k": 2}
+        elif change == "recording":
+            record["recordings"][0]["condition"] = "after_save_reopen"
+        elif change == "colour":
+            environment["colour_configuration_sha256"] = "other"
+        else:
+            environment["painter_build"] = "other"
+
+    store, manifest, _ = control_case(mutate)
+    assert control_environment(store, manifest, "") is None
 
 
 def test_named_ocio_reads_the_manifest_setting() -> None:

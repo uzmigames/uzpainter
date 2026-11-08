@@ -68,7 +68,9 @@ def validate_record(record: dict[str, Any], manifest: dict[str, Any]) -> None:
         record["golden_id"] != GOLDEN
         or record["tier"] != "0"
         or key["painter_build"]["build_id"] != envelope["painter_build"]
-        or envelope_sha256(record.get("environment", {})) != envelope["envelope_sha256"]
+        # An environment the canary proved equivalent is the current envelope (decision 037).
+        or envelope_sha256(record.get("environment", {}))
+        not in {envelope["envelope_sha256"], *envelope["equivalent_envelopes"]}
         or key["instruction_sequence_sha256"]
         != digest(canonical_json(manifest["instruction_sequence"]))
         or key["inputs"]
