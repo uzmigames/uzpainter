@@ -2377,6 +2377,7 @@ def later_goldens() -> list[Golden]:
 ADMITTED = frozenset(
     {
         "ao-mixed-mesh-float-product",
+        "ao-mixed-operand-probe",
         "export-padding-plane-control",
         "export-padding-joint-bend",
         "export-padding-world-offset",
@@ -2502,6 +2503,7 @@ def all_goldens() -> list[Golden]:
 PRESERVED_REQUESTS = frozenset(
     {
         "ao-mixed-mesh-float-product",
+        "ao-mixed-operand-probe",
         "export-padding-plane-control",
         "export-padding-joint-bend",
         "export-padding-world-offset",
