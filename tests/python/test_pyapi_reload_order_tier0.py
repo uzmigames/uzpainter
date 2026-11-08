@@ -21,7 +21,7 @@ def test_reload_results_equal_every_painter_recording(
     facade: Run, tmp_path: Path, order: str
 ) -> None:
     probe = f"p22b-reload-order-{order}-all-origins"
-    replayed, golden, job = replay_observed(facade, probe, tmp_path)
+    replayed, golden, job = replay_observed(facade, probe, tmp_path, repeats=True)
     write_raw_replay(tmp_path, replayed)
     assert len(golden["recordings"]) == 6
     assert len({r["session_id"] for r in golden["recordings"]}) == 3
@@ -46,7 +46,7 @@ def test_independent_alias_origin_equals_every_painter_recording(
     facade: Run, tmp_path: Path, order: str
 ) -> None:
     probe = f"p22b-reload-order-{order}"
-    replayed, golden, job = replay_observed(facade, probe, tmp_path)
+    replayed, golden, job = replay_observed(facade, probe, tmp_path, repeats=True)
     write_raw_replay(tmp_path, replayed)
     assert len(golden["recordings"]) == 6
     assert len({r["session_id"] for r in golden["recordings"]}) == 3

@@ -1413,11 +1413,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     record.add_argument("--host", default=REMOTE_HOST)
     record.add_argument("--port", type=int, default=REMOTE_PORT)
     record.add_argument("--assets-root", type=Path, help="the Assets3D root (Assets3D inputs)")
+    record.add_argument(
+        "--record-prefix",
+        default="",
+        help="put in front of every record id: a repeated recording of an admitted golden",
+    )
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
     try:
         job = load_probe_job(args.manifest, assets_root=args.assets_root)
         session = ProbeSession(HttpTransport(args.host, args.port))
-        run = record_probe_golden(session, job, work_root(), inbox_root())
+        run = record_probe_golden(
+            session, job, work_root(), inbox_root(), record_prefix=args.record_prefix
+        )
     except UnseenBuild as error:
         from tools.parity.recorder.__main__ import refresh_after_unseen_build
 

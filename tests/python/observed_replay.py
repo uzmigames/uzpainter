@@ -442,7 +442,7 @@ def create_resolved(job: ProbeJob, staged: dict[str, Path], run: Path) -> dict[s
 
 
 def replay_observed(
-    facade: Run, probe: str, work: Path, timeout_s: float = TIMEOUT_S
+    facade: Run, probe: str, work: Path, timeout_s: float = TIMEOUT_S, repeats: bool = False
 ) -> tuple[dict[str, Any], dict[str, Any], ProbeJob]:
     """The facade's replay of the observed probe golden `probe`, the golden record and the job.
     A replay still running after `timeout_s` seconds ends with an error naming the output it was
@@ -451,7 +451,8 @@ def replay_observed(
     The replay's outputs are `{condition: {"outputs": {output id: {"value", "raised"?}}, "files":
     {"<step>/<map>": [written files] | {"raised": ...}}}}`, with `defaults` (the golden key's
     effective defaults), `cleanup_failures` (the recorder's restoring stages that failed) and
-    `trace` (the symbols each output exercised, `capability_trace.py`)."""
+    `trace` (the symbols each output exercised, `capability_trace.py`). With `repeats`, the golden
+    record carries the recordings of the golden's repeated recordings too (`golden_record`)."""
     from tools.parity.recorder.probes import (
         EVENT_CONNECT,
         PROJECT_CLOSE,
@@ -460,7 +461,7 @@ def replay_observed(
         SHELVES_ADD,
     )
 
-    manifest, golden = golden_record(probe)
+    manifest, golden = golden_record(probe, repeats)
     job = probe_job_from_manifest(json.loads(json.dumps(manifest)))
     assert not job.lifecycle, f"{probe} is a lifecycle golden, not an observed probe"
     assert job.observed, f"{probe} connects no events in step 2"

@@ -207,6 +207,30 @@
       "kind": "oracle_environment_record",
       "sha256": "332ddce6024e25f9b84ec9ce03850aa0c52809a6ba64a43283ef0ef7cf1edd4b",
       "size_bytes": 402
+    },
+    {
+      "record_id": "repeat2-golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "10434e13c298d529616f6e1983fb197a1192a226f31fb47ae84c9618ea6504bc",
+      "size_bytes": 13186
+    },
+    {
+      "record_id": "repeat2-oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "a07886e1b0612bf4011e79ac40d652ab68deba8a508682ee7fbe891e608a9c39",
+      "size_bytes": 403
+    },
+    {
+      "record_id": "repeat3-golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "eff97bf1d002b3bd7a9dee0581f1dab9badadcfb8babbd26e8cba78ffd31d141",
+      "size_bytes": 13175
+    },
+    {
+      "record_id": "repeat3-oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "a07886e1b0612bf4011e79ac40d652ab68deba8a508682ee7fbe891e608a9c39",
+      "size_bytes": 403
     }
   ]
 }

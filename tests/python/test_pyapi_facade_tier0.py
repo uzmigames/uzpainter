@@ -307,15 +307,43 @@ def step_payload(step: Any, staged: dict[str, Path]) -> dict[str, Any]:
     return {"step": step.step, "call": step.call, "args": step.args, "resolved": resolved}
 
 
-def golden_record(probe: str) -> tuple[dict[str, Any], dict[str, Any]]:
+REPEAT_RECORD = re.compile(r"repeat(\d+)-golden-record")
+
+
+def golden_record(probe: str, repeats: bool = False) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The golden record of `probe`. With `repeats`, the recordings of every repeated recording
+    the manifest names (`repeat<N>-golden-record`, recorded with that record prefix) follow the
+    golden record's own, their ids prefixed `repeat<N>-`, in the order of N."""
     manifest = current_manifest(f"tier0/api-probes/{probe}")
     store = locate()
     if store is None:
         pytest.skip("no private oracle store on this machine (decision 028)")
-    record = next(r for r in manifest["private_records"] if r["record_id"] == "golden-record")
-    data = store.load(record["sha256"])
-    assert data is not None, f"{probe}: the golden record is not in the private store"
-    return manifest, json.loads(data)
+
+    def load(ref: dict[str, Any]) -> dict[str, Any]:
+        data = store.load(ref["sha256"])
+        assert data is not None, f"{probe}: {ref['record_id']} is not in the private store"
+        loaded: dict[str, Any] = json.loads(data)
+        return loaded
+
+    refs = manifest["private_records"]
+    golden = load(next(r for r in refs if r["record_id"] == "golden-record"))
+    if not repeats:
+        return manifest, golden
+    numbered = sorted(
+        (int(match.group(1)), ref)
+        for ref in refs
+        if (match := REPEAT_RECORD.fullmatch(ref["record_id"])) is not None
+    )
+    for number, ref in numbered:
+        repeat = load(ref)
+        assert repeat["golden_id"] == golden["golden_id"] and repeat["key"] == golden["key"], (
+            f"{probe}: {ref['record_id']} is not a repetition of the golden record"
+        )
+        golden["recordings"] += [
+            {**recording, "recording_id": f"repeat{number}-{recording['recording_id']}"}
+            for recording in repeat["recordings"]
+        ]
+    return manifest, golden
 
 
 def replay(facade: Run, probe: str, work: Path) -> tuple[dict[str, Any], dict[str, Any], Any]:
