@@ -404,3 +404,40 @@ The 31 skips name their reason (for example the OCIO16 export cases that need an
 | `9035bae1` | `tests/vendoring/test_modifications.py` sets the native input stamp commands apart: language `c`, inside the build's own cache, one each for `uzrendercore` and `uzp-vendor-tests`; every other command is checked as before | the node id under the native lock: 1 passed (90.6 s) |
 
 After these, the full gate's only failures are the 7 known ones of §9.1. G1 is not archived while any test is red.
+
+### 9.3 The 2026-11-08 recording batch and re-run of the 7 known node ids
+
+Recordings (`03cd9f97` to `31db48c4`): the host is a decision-037 equivalent environment (`820cb084…`, canary 10/10 unchanged); the four `p22b-reload-order-*` goldens hold 6 recordings from 3 sessions (`6ea94f87`); `phase1-reload-mesh-repeat` holds 8 recordings from 2 sessions (`2504cdf8`). Decisions after them:
+
+| Decision | Subject | Effect on §9.1 |
+|---|---|---|
+| 404 | The `facade-events` replay of `phase1-reload-mesh` compares against `phase1-reload-mesh-repeat`, every recording exactly; the original golden's s9/s11 events are a settle-window race kept as evidence | `phase1-reload-mesh` passes (`4480e89a`; evidence follows the trace, `ba0fa817`) |
+| 405 | An OCIO golden recorded in a decision-037 equivalent environment is admissible when the admitted OCIO control re-records identical there (`hostcheck-` control of `ocio16-bitmap-srgb-basecolor`: 6/6 maps equal by hash) | admits `ocio16-bitmap-srgb-basecolor-rgb32f`; no node id |
+| 406 | Confirming probe `ocio-srgb8-threshold-ties` (OCIO, r1 and r2 byte-identical): on all 255 thresholds Painter stores the upper code (native rule: 0 misses of 196,608 samples; strict rule: 65,280 misses). The strict-comparison hypothesis is refuted; no native change | the TGA diagnostic keeps its cause |
+
+`scripts/tmp/`'s two patch files were deleted with the owner's OK on 2026-11-08.
+
+Re-run 2026-11-08 on `4480e89a` plus the uncommitted decision-405/406 work (no native source changed), one command under the native lock, no other GPU run: **6 passed, 1 failed** in 64.5 s.
+
+| Node id | Result |
+|---|---|
+| `test_pyapi_reload_order_tier0.py::test_reload_results_equal_every_painter_recording[zam]`, `[mza]` | passed |
+| `test_pyapi_reload_order_tier0.py::test_independent_alias_origin_equals_every_painter_recording[zam]`, `[mza]` | passed |
+| `test_render_core_integration.py::test_no_submodule_runtime_lib_or_patch_queue` | passed |
+| `test_pyapi_lifecycle_tier0.py::test_observed_probe_events_equal_painter[phase1-reload-mesh]` | passed |
+| `test_tga_capture_replay.py::test_r322_tga_capture_diagnostic` | **failed**: the OCIO RGB16 bitmap of the R-322 setup is still `unsupported_source` (decision 190); the value its decode hands the sRGB8 store at the three tie codes is not identified (decision 406 item 4). Owner `phase3.2_unreal-ue56-packed-preset` item 2.5 |
+
+Capability manifest: the trace and evidence inputs changed after `cac4a8cf` (`4480e89a`, `ba0fa817`). `zig build painter -Doptimize=ReleaseFast -j4` exit 0 on `ba0fa817`: `zig-out/bin/UzPainter.exe` SHA-256 `bafbd3027d182ef0b7bd169003c543064613147fa8f5fd14f159194c6d517b16` (18 036 224 bytes); `zig-out/bin/capabilities.json` SHA-256 **`9f4d2abc558a43bbdf32bb751b78bb0570e257d4851693ff342cb2b4655a16e5`** (1 564 459 bytes): 985 `supported`, 327 `pending-evidence`, 328 `release-gap`, 15 `desktop-only-omitted` (counts unchanged from §6.3; 224 entries cite `phase1-reload-mesh-repeat` instead of `phase1-reload-mesh`). The conformance and capability selection of §4: 8 passed.
+
+| Input | SHA-256 (at `ba0fa817`) |
+|---|---|
+| `tools/capabilities/generate_capabilities.py` | `c68b1ed4ac954efcf44ca609b6b5095132ae8efb12fa901d47ed24cea847cee6` |
+| `tools/capabilities/painter-api-inventory.json` | `161f577b0efd24d9afd34f1e5dde6396f957967c93a2a10d394a69cd2c520284` |
+| `tools/capabilities/uzpainter-additions.json` | `77886d8163fa7a2ec7eb8df7a07e915a08e436a868a07a9b6ccb89c4ed18a721` |
+| `tools/capabilities/compositor-capabilities.json` | `1fb927707bca11ecf335fd5f253c3b6a126e21dc5a4326cbc5931c779a5dff78` |
+| `tools/capabilities/tier0-trace.json` | `8d595c5642dbe2d93ee8f7fcb097de7b1202203f1abf4d9b31781d4e25cfa837` |
+| `tools/capabilities/mcp-tools.json` | `29613ff0be65caad8640a2d5487e9b79a31baf870e3510e3d1000253d18df0d3` |
+| `tools/capabilities/operation-matrix.json` | `9fd7e1ae96b00ced0aa9476a43bb7adabc78617e7cd8552120d37b0ee3a3250e` |
+| `parity/envelopes/registry.json` | `c64a70858c2baa671f7a2b7ab963012622f9af5f5097778762aaa80ac67871f6` |
+
+**G1 stays open**: one of the 7 known node ids is red, so it is not archived.
