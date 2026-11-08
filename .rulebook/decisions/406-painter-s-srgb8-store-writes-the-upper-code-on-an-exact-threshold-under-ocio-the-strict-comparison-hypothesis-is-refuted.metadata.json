@@ -1,0 +1,9 @@
+{
+  "id": 406,
+  "slug": "painter-s-srgb8-store-writes-the-upper-code-on-an-exact-threshold-under-ocio-the-strict-comparison-hypothesis-is-refuted",
+  "title": "Painter's sRGB8 store writes the upper code on an exact threshold under OCIO; the strict-comparison hypothesis is refuted",
+  "status": "accepted",
+  "date": "2026-11-08",
+  "relatedTasks": ["phase3.2_unreal-ue56-packed-preset", "phase1.26_gate-g1"],
+  "supersededBy": null
+}
