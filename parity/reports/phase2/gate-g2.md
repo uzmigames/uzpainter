@@ -2,9 +2,13 @@
 
 Task `phase2.11_gate-g2` (`docs/dag.md` G2, D14; `docs/roadmap.md` Phase 2 gate, rules 2, 3 and 6). Written 2026-11-08 on the owner's machine (Windows 11 Pro 10.0.26200, NVIDIA GeForce RTX 4090, Zig 0.15.2, Python 3.13.9) on the shared checkout at `main` `a0e07449b5ac0c23524e0010b5622077fcc067e9`, after every Phase 2 feature task was archived (decision 397). Numbers and hashes only: every recorded Painter output stays in the private store. SHA-256 values are of the committed file bytes at `a0e07449` (`git show a0e07449:<path>`), as in the G0 and G1 records, unless marked otherwise.
 
-**Result: G2 open.** Every joined task is archived and accepted (§3), the exceptions relied on are owner-approved and none relaxes a structural difference (§4), the capability manifest is current (§6), and every Phase 2 task but this gate is archived (§8). One clause has no evidence: **the Belt v5 (Sash v5) dump-and-rebuild** (§3.6). `docs/roadmap.md` G2 reads "Tier 1 map comparisons and dump-and-rebuild checks pass for belt and tunic v10", and this task's spec requires that "Belt v5 and Tunic v10 Tier 1 maps and dump-and-rebuild pass". The Tunic's passes; the Sash has no dump-and-rebuild test, run or report. G2 is not archived.
+**Result: G2 closed on gate commit `68c61b18` (2026-11-08).**
+- Every joined task is archived and accepted (§3).
+- The exceptions relied on are owner-approved, and none relaxes a structural difference (§4).
+- The capability manifest is current (§6), and every Phase 2 task but this gate is archived (§8).
+- The first version of this record (`0ab57847`, on `a0e07449`) left G2 open on one clause, the Belt v5 (Sash v5) dump-and-rebuild, which had no evidence. The coordinator chose to run it. The new test passed once under the native lock: equal recipe digests, five byte-identical measure-export maps (§3.6).
 
-No new run was made for this record (§5).
+The only run made for this gate is that one node; the rest reuses G1's full-gate evidence (§5).
 
 ## 1. Oracle envelope
 
@@ -18,7 +22,7 @@ Unchanged since G1's closure: `parity/envelopes/registry.json` SHA-256 `c64a7085
 | Tier 1 map comparisons pass for Belt v5 under the exception policy | `phase2.9_pilot-belt` | §3.5 | met **under EXC-012, not exact** (decision 399) |
 | Tier 1 map comparisons pass for Tunic v10 under the exception policy | `phase2.10_pilot-tunic-recovery` | §3.4 | met **under EXC-011 v2, not exact** (decisions 398, 401) |
 | Dump-and-rebuild checks pass for Tunic v10 | `phase2.10_pilot-tunic-recovery` | §3.4 | met (digests equal, measure exports byte-identical) |
-| Dump-and-rebuild checks pass for Belt v5 | `phase2.9_pilot-belt` | §3.6 | **not evidenced** |
+| Dump-and-rebuild checks pass for Belt v5 | `phase2.9_pilot-belt`; this gate | §3.6 | met (digests equal, measure exports byte-identical; `68c61b18`) |
 | The Belt round completed through MCP only with Python disabled | `phase2.9_pilot-belt` | §3.5 | met (measure export, decision 398 §4's route) |
 | Worker-kill, lost-acknowledgement and stalled-fence recovery tests pass | `phase2.4_supervisor-worker` | §3.2 | met (DX12 and the GPU-free Vulkan cases, decision 221) |
 | Captures window-independent | `phase2.3_realtime-preview` | §3.3 | met (capture evidence only, §9) |
@@ -108,21 +112,39 @@ Every one of these archives has no unchecked item.
 | `.rulebook/archive/2026-11-03-phase2.2_recipe-and-diagnostics/tasks.md` | `debd49150ff2c39fd34582fef9d651b6fc359bc6a13202d69eeeb15c8829e648` |
 | `.rulebook/archive/2026-10-20-phase2.8_mcp-server/tasks.md` | `018de99c10928abd4f8ba05479e7c45e49fb9de620af3a19dec891c62ff882f3` |
 
-### 3.6 The missing clause: the Belt v5 dump-and-rebuild
+### 3.6 The Belt v5 dump-and-rebuild (closed 2026-11-08, gate commit `68c61b18`)
 
-What G2 asks: `docs/roadmap.md` "Tier 1 map comparisons and dump-and-rebuild checks pass for belt and tunic v10 under the exception policy". This task's spec ("G2 MUST record that Belt v5 and Tunic v10 Tier 1 maps and dump-and-rebuild pass") and proposal ("Tier 1 maps and dump-and-rebuild pass under the exception policy (Belt v5 and Tunic v10)") say the same. `parity/CONTRACT.md` §Tier 1 lists dump-and-rebuild among the Belt v5 recipe's checks.
+What G2 asks: `docs/roadmap.md` "Tier 1 map comparisons and dump-and-rebuild checks pass for belt and tunic v10 under the exception policy". This task's spec ("G2 MUST record that Belt v5 and Tunic v10 Tier 1 maps and dump-and-rebuild pass") and proposal say the same. `parity/CONTRACT.md` §Tier 1 lists dump-and-rebuild among the Belt v5 recipe's checks. `docs/dag.md`'s P2-BELT row does not ask for it.
 
-What exists for the Sash: two rebuilds through the adapter (repeatability) and the save/reopen export. Neither is a dump-and-rebuild, which rebuilds a new project from the recipe dump and compares recipe digests and exports, as `test_wand_recipe.py` and the Tunic's recipe nodes do. Searched on 2026-11-08: the Belt archive's `tasks.md`, decisions 192, 260, 399 and 400, `tests/parity/recipe/` (Wand only), `tests/parity/tier1/sash_v5/` (five nodes, no recipe), `tests/parity/tier1/test_mcp_round.py` (Wand and Tunic only) and `parity/reports/phase2/` (only `recipe-rebuild-wand.json`). No Sash dump-and-rebuild test, run or report exists.
+**What was missing on `a0e07449`.** No Sash dump-and-rebuild test, run or report existed. The Sash had two rebuilds through the adapter (repeatability) and the save/reopen export, but neither rebuilds a new project from the recipe dump. Searched: the Belt archive, decisions 192, 260, 399 and 400, `tests/parity/recipe/`, `tests/parity/tier1/` and `parity/reports/phase2/`. The record of `0ab57847` left G2 open on it.
 
-The two readings:
+**Decision.** The coordinator chose to run the check, not narrow the gate (2026-11-08). The pass criterion is the Tunic's: equal recipe digests, and the rebuilt project's measure export byte-identical to the original's.
 
-- `docs/dag.md` gives P2-BELT the acceptance "Equal maps; Python-disabled MCP integration round completed" and P2-TUNIC "Equal maps; rebuild equal"; its G2 row says "Tier 1 maps and dump-and-rebuild pass" without naming the pilots. This task's item 2.5 confirms the Belt for "Tier 1 and the Python-disabled MCP-only round" only. On this reading the Tunic's dump-and-rebuild suffices.
-- The roadmap, this task's spec and proposal, and the contract name the Belt's dump-and-rebuild. On this reading G2 needs it.
+**Implementation (`68c61b18`).** The Sash is a script job of the same three pipeline steps as the Wand, so the Wand's recipe scenario fits it as it stands. The Tunic's flow is for a native job. `tests/parity/recipe/wand_v1/runner.py` `run` and `job_manifest` take a golden id and its request, with the Wand's as defaults (no Wand or Tunic behaviour changed). The scenario:
+1. builds the pilot through the adapter;
+2. dumps its recipe;
+3. gathers the bundle's resources;
+4. rebuilds a new project from the dump and those resources alone;
+5. exports both projects with the pinned `painter_export.py` in the diagnostic measure mode, each receipt `non_conformant` and bypassing only decided refusals (decisions 245, 259).
 
-Dropping the Belt's dump-and-rebuild would narrow a gate clause, so this record does not choose: it is a root decision (Codex root; never pre-approved by a coordinator). Either route closes the clause:
+The new node `tests/parity/tier1/sash_v5/test_sash_v5.py::test_sash_v5_rebuilt_from_its_dump_exports_byte_identical_files` runs it on `sash-v5-current` under the manifest's `OCIO`.
 
-1. **Run it.** A Sash measure-mode dump-and-rebuild on `sash-v5-current`, as the Tunic's: the typed round's saved project dumped, rebuilt into a new project in a separate `run` process, recipe digests equal and both measure exports byte-identical; a report `parity/reports/phase2/recipe-rebuild-sash-v5.json` under the `recipe-rebuild-report` schema. It needs a test node (the Tunic's `tunic_recipe` flow is Tunic-specific) and one GPU run under the native lock.
-2. **Record the narrower reading.** A decision recording that G2's dump-and-rebuild is the Tunic's (with the Wand's of P2-RECIPE), and the roadmap and spec text aligned to `docs/dag.md`.
+**Run** (2026-11-08): once, alone, under `python -m tools.native_lock` (owner `g2-sash-recipe`), with no other GPU test or build running. The module fixture's `zig build painter -Doptimize=ReleaseFast` gave `UzPainter.exe` `bafbd3027d182ef0b7bd169003c543064613147fa8f5fd14f159194c6d517b16`, the same bytes as the manifest build of §6. Result: **1 passed** in 55.46 s. The CPU host tests of the touched runner gave 8 passed: `test_recipe_runner_conformance.py` and the Sash's refusal-predicate test.
+
+**Report** `parity/reports/phase2/recipe-rebuild-sash-v5.json`, valid against `recipe-rebuild-report`:
+- outcome `pass`, `digests_equal` true, digest `19750bade7fcda017805144aabd966e8ee4ffb0b9c5e8c4d1254e71a99ef96d9` on both sides;
+- `files` `identical`: 5 maps, both `diagnostic_measure`, none differing, missing or extra;
+- the five maps are byte-identical to the Tier 1 run's that passes under EXC-012 (their SHA-256 equal `sash-v5-mcp-round.json`'s `tier1_sha256`).
+
+The rebuild comparison is exact: UzPainter compared with itself, no exception relied on. Production still refuses the islanded export.
+
+| Evidence | SHA-256 (at `68c61b18`) |
+|---|---|
+| `parity/reports/phase2/recipe-rebuild-sash-v5.json` | `0caf38a03a970ee5f277d2aaec87fbc8f7426c655b3d8b6267ad1f25af483d2d` |
+| `tests/parity/tier1/sash_v5/test_sash_v5.py` | `ccdfc456aeed01999617f300ccfd487ba5a244fd275e103f6e01e7670d855f89` |
+| `tests/parity/recipe/wand_v1/runner.py` | `1461dcf6727a65e1c4c34c42d8147aa2a04553b3dfcdc61864b1092ed5ab6958` |
+
+The Tunic's dump-and-rebuild report was not published. That needs a Tunic GPU run, and its evidence is the test node and archive item 3.4 (§3.4).
 
 ## 4. Exceptions relied on
 
@@ -141,7 +163,7 @@ Each is basis `owner_scope_split`, quotes the owner's answer, and names its defe
 - **The full local gate.** The last full decision-200 gate ran on `58f7260b` (gate-g1.md §9): 7441 passed, 31 skipped, 2 xfailed, 10 failed, all 10 resolved before G1 closed on `6112a539` (§9.4 there). Every Phase 2 acceptance node passed in it (§3.2 to §3.5 above). JUnit `tmp/scratch/g1r2-fullsuite.xml` (untracked, SHA-256 of the file `b9fc347e31832e5cd4e09cf2dc424db6b7550477782252d458f8140fe0631186`).
 - **What changed since.** `git log 6112a539..a0e07449`: one commit, `a0e07449`, which moves G1 to the archive and edits `gate-g1.md` and the archived `tasks.md`; no code, test, manifest or native source. Between `58f7260b` and `6112a539` the changes were Tier 0 manifests and requests, the envelope registry, capability inputs, parity tools and tests, all re-verified by G1's affected runs (§9.2 to §9.4 there). None touches `src/`, the supervisor, preview, MCP, recipe or pilot code paths, or `tests/parity/tier1/`.
 - So the G1 full-gate evidence covers G2, under CLAUDE.md's test-time override (2026-10-12) and decision 397. The Python-disabled MCP-only Belt round, the recovery tests and the window-independent captures all have archived acceptance evidence, and each passed again in that full gate; none needed a re-run.
-- The one clause without evidence (§3.6) needs new work, not a re-run.
+- The one clause without evidence (§3.6) needed new work, not a re-run. Its node ran once (§3.6). It shares no code with the Tunic's nodes and changes no default of the Wand's scenario, so neither was re-run.
 
 ## 6. Capability manifest (roadmap rule 3)
 
@@ -170,12 +192,15 @@ Not rebuilt. The eight build inputs have the same SHA-256 at `a0e07449` as at `b
 | Preview settling | 2026-10-19 to 2026-10-23 | `ee810a0e…`, `c416de4f…`, `90c0ecc0…`, `694332a5…` | DX12, Vulkan, CPU |
 | Second full local gate | `58f7260b` | `4c5788b0f5885198be92222a75460a01206e96d16a7f2792c733b2e27d9eb62c` (ReleaseFast) | DX12 and Vulkan selftest slices passed |
 | Capability manifest | `ba0fa817` | `bafbd3027d182ef0b7bd169003c543064613147fa8f5fd14f159194c6d517b16` (ReleaseFast) | — |
+| Sash dump-and-rebuild | `68c61b18` | `bafbd3027d182ef0b7bd169003c543064613147fa8f5fd14f159194c6d517b16` (ReleaseFast, rebuilt by the test's fixture) | DX12 (the adapter's `run` default) |
 
-Hardware and driver, from both pilot reports' `run` block: `AMD Radeon(TM) Graphics | NVIDIA GeForce RTX 4090`, driver `32.0.11024.2 | 32.0.16.1714`. On 2026-11-08 the NVIDIA driver is still `32.0.16.1714`; the AMD integrated GPU's is `32.0.21042.62`. Painter `12.2.0+js-api.1.1.20`. G2 has no gate commit yet; it will be the commit that closes §3.6.
+Hardware and driver, from both pilot reports' `run` block: `AMD Radeon(TM) Graphics | NVIDIA GeForce RTX 4090`, driver `32.0.11024.2 | 32.0.16.1714`. On 2026-11-08 the NVIDIA driver is still `32.0.16.1714`; the AMD integrated GPU's is `32.0.21042.62`. Painter `12.2.0+js-api.1.1.20`. Gate commit: `68c61b18` (the Sash dump-and-rebuild, §3.6). Its run used ReleaseFast `UzPainter.exe` `bafbd302…7b16` on the adapter's default backend (DX12).
 
 ## 8. Phase 2 tasks (roadmap rule 3)
 
 Checked 2026-11-08 on `a0e07449`: `docs/task-index.md` names 18 Phase 2 tasks. 17 are archived under `.rulebook/archive/` with no unchecked item: 14 on 2026-10-20 (`909457ca`, `bb2745dd`), `phase2.2_recipe-and-diagnostics` and `phase2.9_pilot-belt` on 2026-11-03, `phase2.10_pilot-tunic-recovery` on 2026-11-05. The only `phase2.*` task under `.rulebook/tasks/` is this gate.
+
+At closure (2026-11-08) this gate is archived as `.rulebook/archive/2026-11-08-phase2.11_gate-g2/`, so all 18 Phase 2 tasks are archived.
 
 ## 9. Render parity is not part of G2
 

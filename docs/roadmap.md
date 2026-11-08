@@ -65,11 +65,11 @@ The Wand v1 pilot completed on 2026-11-03: its Tier 1 run passes under EXC-010, 
 
 ## Schedule checkpoint: gate G2 (2026-11-08)
 
-Revised at G2's record (owner Q14, rule 6; `parity/reports/phase2/gate-g2.md`). G2 is open on one clause, the Belt v5 dump-and-rebuild, which has no evidence and waits on a root decision (gate record §3.6). Measured means read from the archives, task notes, decisions and gate records on 2026-11-08. Hypothesis means extrapolated, not validated.
+Revised at G2's record (owner Q14, rule 6; `parity/reports/phase2/gate-g2.md`). G2 closed on 2026-11-08 on gate commit `68c61b18`. Its record first stayed open on the Belt v5 dump-and-rebuild, which had no evidence. The coordinator chose to run it, and the new Sash test passed once (gate record §3.6). Measured means read from the archives, task notes, decisions and gate records on 2026-11-08. Hypothesis means extrapolated, not validated.
 
 **Measured.**
 - **Phase 1:** tasks created 2026-10-10, G1 closed 2026-11-08 (gate commit `6112a539`): 29 calendar days, against a 5–6 week Hypothesis.
-- **Phase 2:** tasks created 2026-10-10. The last feature task (`phase2.10_pilot-tunic-recovery`) was archived 2026-11-05: 26 calendar days, against 5–6 weeks. 17 of its 18 tasks are archived. Each pilot passes under its own owner exception, not exactly: Wand EXC-010, Sash EXC-012, Tunic EXC-011 v2.
+- **Phase 2:** tasks created 2026-10-10. The last feature task (`phase2.10_pilot-tunic-recovery`) was archived 2026-11-05: 26 calendar days, against 5–6 weeks. G2 closed on 2026-11-08: 29 calendar days for the phase. Each pilot passes under its own owner exception, not exactly: Wand EXC-010, Sash EXC-012, Tunic EXC-011 v2.
 - **Gate closure:** G1 took 5 calendar days from the Wand's pass (2026-11-03) to closure.
   - Two full local gates of 4 h 43 min and 4 h 29 min (17,001 s and 16,165 s of suite time).
   - The first was red with 96 failed and 3 errors, about 20 root causes left by features archived on their affected tests. The second had 10 failures.
@@ -81,7 +81,7 @@ Revised at G2's record (owner Q14, rule 6; `parity/reports/phase2/gate-g2.md`). 
 
 | Phase | Was (2026-11-03) | Now | Basis |
 |---|---|---|---|
-| 2 (rest) | G2 record, under 1 week | G2 closes after the root decision on the Belt dump-and-rebuild: days if it is recorded as covered by the Tunic's, about one GPU run plus one test node if it must run | Hypothesis. The record itself is measured: written on 2026-11-08 with no new run (gate record §5) |
+| 2 (rest) | G2 record, under 1 week | done: G2 closed on 2026-11-08, the same day as its record. One test node was added and run once (55 s) | Measured |
 | 3 | 9–12 weeks, plus `phase3.1_export-island-padding` with no estimate | unchanged: 9–12 weeks after G2, plus `phase3.1_export-island-padding` with no estimate | Hypothesis. The parallel start is measured, but not the effort left in the 24 tasks in progress, so no reduction is claimed. The path tracer (Tier 3 exceptions only, decision 017) and the exact island padding are residual-bound, the factor that set Phases 1 and 2 |
 | 4 | 5–7 weeks | unchanged | Hypothesis. Hat v8 and body v6b have no checked item; the 6 checked items are in `phase4.1_nodes-paint-layers` and `phase4.1_nodes-projections` |
 | 5 | 3–4 weeks | unchanged | Hypothesis. G5's full Tier 0–3 report on DX12 and Vulkan is larger than G1's suite |
