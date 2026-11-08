@@ -116,3 +116,18 @@ context unchanged. The resolved output enters the snapshot signature, so an
 Auto resize cannot silently reuse the previous snapshot. Filter overrides remain
 prohibited, including final transaction validation when no filter-content context
 was supplied. These native rules do not establish SourceSubstance facade parity.
+
+Scope as implemented (decision 393). `phase3.1_proc-backend-seam` implements and
+compares against recordings: `get_parameters`/`set_parameters` (booleans as int,
+Painter's refusal text), `get_properties`, `get_preset_list`, the `image_inputs`
+and `image_outputs` lists, `active_output`, `resource_id`, `resolution` with its
+`ResolutionOverride` constraints and the Filter restriction, and the observed
+Filter source getters. Mesh maps are bound by usage with a loud failure
+(`BindMeshMaps`, decision 329). An unservable value refuses before mutation; that
+evidence is authored, not recorded. `apply_preset`, the image-input
+`get_source`/`set_source`/`reset_source`/`remove_source`, `output_mapping` and
+`mask_output` have no recording, because every recorded source has zero presets,
+zero image inputs and one output. They stay release gaps, owned by
+`phase3.2_source-substance-presets-inputs`; as absent documented symbols they raise
+`AttributeError` (decision 107), and nothing here infers their behaviour.
+`docs/procedural-snapshots.md` describes the snapshot-backed handles.
