@@ -219,6 +219,28 @@ Differing outputs:
 | `tier0/semantics/height-normal-sphere` | previous.r2~new.r2 | `uzp_sphere/Normal_OpenGL` | png/uint16/3ch/linear | `c9681bf694f7b618`, `86f31f854a74c8fe` | 21106 | 12.3135 | 12 | 2520 / 196608 | 1007 / 65536 |
 | `tier0/semantics/height-normal-sphere` | previous.r2~new.r2 | `uzp_sphere/height` | exr/float32/1ch/linear | `4185adcd17508243`, `e2f71c3f3e133b7e` | 0.878784 | 0.000398306 | 0 | 604 / 65536 | 604 / 65536 |
 
+### canary: `painter-12.2.0+js-api.1.1.20-env-a981b586eae7-env-820cb084fe1a` against `painter-12.2.0+js-api.1.1.20-env-a981b586eae7`
+
+`parity/reports/phase0/oracle-envelope-drift-canary-painter-12.2.0_js-api.1.1.20-env-a981b586eae7-env-820cb084fe1a.json`, generated 2026-11-08; Painter build `12.2.0+js-api.1.1.20` against `12.2.0+js-api.1.1.20`; envelope SHA-256 `820cb084fe1ad671`. Goldens: goldens 10, unchanged 10, changed 0, unstable 0, unavailable 0, new 0, missing 0, equal_pairs 21.
+
+- Divergence candidates (UzPainter verdicts to re-establish): none
+- New evaluator profile needed (a Tier 0 semantics golden changed): no
+- Stale Tier 3 references (never pass until re-recorded): none
+- Fits to re-check: `parity/semantics/ao-mixed.json` (new_envelope), `parity/semantics/blend-kernels.json` (new_envelope), `parity/semantics/blend-modes.json` (new_envelope), `parity/semantics/colour-transfer.json` (new_envelope), `parity/semantics/evaluator-profile.json` (new_envelope), `parity/semantics/export-processing.json` (new_envelope), `parity/semantics/height-to-normal.json` (new_envelope), `parity/semantics/iray.json` (new_envelope), `parity/semantics/masks-levels.json` (new_envelope), `parity/semantics/polygon-triangulation.json` (new_envelope), `parity/semantics/procedural-feasibility.json` (new_envelope), `parity/semantics/quantisation-profile.json` (new_envelope), `parity/semantics/resampling.json` (new_envelope), `parity/semantics/srgb-transfer.json` (new_envelope), `parity/semantics/tangent-frame.json` (new_envelope), `parity/semantics/uv-sampling.json` (new_envelope), `parity/semantics/virtual-maps.json` (new_envelope)
+
+| Golden | Status | Previous record | New record | Changed recordings |
+|---|---|---|---|---|
+| `phase0/normal-convention/hemisphere/per-fragment` | unchanged | `a9e716b5faf03111` | `8acd6037a885e173` | — |
+| `tier0/api-probes/fill-layer-readback` | unchanged | `46b6067aec4df939` | `b37124ccbb881a57` | — |
+| `tier0/defaults-templates/baking-defaults` | unchanged | `d9035d90c6952a6f` | `1287d34f1cd761f5` | — |
+| `tier0/semantics/blend-basic` | unchanged | `efaae7ff287b2347` | `0a716ef3027b4514` | — |
+| `tier0/semantics/blend-component` | unchanged | `ac6dc60b321f5df8` | `71fc0a59b82a74dd` | — |
+| `tier0/semantics/colour-ramps-srgb` | unchanged | `acf1a8c2cc3e5f9e` | `736d579c22a1b4d1` | — |
+| `tier0/semantics/height-normal-sphere` | unchanged | `3e56c39464d3aa3f` | `2f40defe4cdeb953` | — |
+| `tier0/semantics/levels-clamp` | unchanged | `1b3dab9786c5c2cb` | `178e344114677844` | — |
+| `tier0/semantics/quantisation-thirds` | unchanged | `f532f94579e5af83` | `6aef85d7e91c26d4` | — |
+| `tier0/semantics/resample-uv` | unchanged | `2cfcc1a5dcb0667b` | `09511b762b8e3025` | — |
+
 ### canary: `painter-12.2.0+js-api.1.1.20-env-a981b586eae7` against `painter-12.1.5+js-api.1.1.20`
 
 `parity/reports/phase0/oracle-envelope-drift-canary-painter-12.2.0_js-api.1.1.20-env-a981b586eae7.json`, generated 2026-10-23; Painter build `12.2.0+js-api.1.1.20` against `12.1.5+js-api.1.1.20`; envelope SHA-256 `a981b586eae7042e`. Goldens: goldens 10, unchanged 9, changed 1, unstable 0, unavailable 0, new 0, missing 0, equal_pairs 18.

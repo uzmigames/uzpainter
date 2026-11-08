@@ -42,7 +42,9 @@
       "record_prefix": "",
       "envelope_sha256": "a981b586eae7042e972f42fa291550ceece70a3572af24ab3a84cfb87820931a",
       "environment_known": true,
-      "equivalent_envelopes": [],
+      "equivalent_envelopes": [
+        "820cb084fe1ad6712848f476922573697b8ca6ab076078e4768d70b1b3078e88"
+      ],
       "previous": "painter-12.1.5+js-api.1.1.20",
       "promoted_on": "2026-10-23",
       "superseded_on": null,
