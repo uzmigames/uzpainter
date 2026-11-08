@@ -56,6 +56,26 @@ class SetupFailure(RuntimeError):
     """A malformed experiment, protocol or input; never a measured difference or refusal."""
 
 
+class Ocio16BitmapUnsupported(SetupFailure):
+    """The evaluator's decision-190 refusal of the R-322 setup's RGB16 colour bitmap under OCIO
+    at encode_export: the gap the owner closed G1 with (decision 407)."""
+
+
+# The exact native refusal of decision 190 (src/evaluator/evaluate.cpp), nothing broader.
+OCIO16_REFUSAL = {
+    "blocked": False,
+    "code": "request_failed",
+    "error": "Failure",
+    "eval_class": "NotYetSupported",
+    "eval_kind": "unsupported_source",
+    "stage": "encode_export",
+}
+OCIO16_MESSAGE = (
+    "under OCIO, only an 8-bit colour bitmap on an sRGB8 channel sampled 1:1 is recorded",
+    "decision 190",
+)
+
+
 def valid_sha256(value: Any) -> bool:
     return isinstance(value, str) and len(value) == 64 and set(value) <= set("0123456789abcdef")
 
@@ -494,12 +514,28 @@ def replay_targets(
     return report
 
 
+@pytest.mark.xfail(
+    strict=True,
+    raises=Ocio16BitmapUnsupported,
+    reason=(
+        "owner-approved G1 gap (decision 407): the R-322 setup's RGB16 colour bitmap under OCIO is "
+        "unsupported (decision 190); phase3.2_unreal-ue56-packed-preset item 2.5 removes this "
+        "mark when the route lands"
+    ),
+)
 def test_r322_tga_capture_diagnostic(export_tests: Path, tmp_path: Path) -> None:
     diagnostics: list[Any] = []
     report = new_replay_report()
     problem = ""
+    refused: Ocio16BitmapUnsupported | None = None
     try:
         replay_targets(export_tests, tmp_path, locate(), diagnostics, report=report)
+    except Ocio16BitmapUnsupported as error:
+        diagnostics.append({"error_type": type(error).__name__, "error": str(error)})
+        report.update(
+            execution_status="failed", complete=False, failure_code="tga_diagnostic_failed"
+        )
+        refused = error
     except Exception as error:
         diagnostics.append({"error_type": type(error).__name__, "error": str(error)})
         report.update(
@@ -517,6 +553,8 @@ def test_r322_tga_capture_diagnostic(export_tests: Path, tmp_path: Path) -> None
         pass
     if problem or not saved:
         pytest.fail(problem or "TGA diagnostic private report could not be saved", pytrace=False)
+    if refused is not None:
+        raise refused
     counts = {
         status: sum(row["status"] == status for row in report["maps"])
         for status in ("exact", "different", "blocked")
@@ -567,6 +605,14 @@ def classify(
             "stage": report["stage"],
             "diagnostic_pixels": "blocked",
         }
+    message = report.get("message")
+    if (
+        all(report.get(key) == value for key, value in OCIO16_REFUSAL.items())
+        and isinstance(message, str)
+        and all(part in message for part in OCIO16_MESSAGE)
+        and candidate is None
+    ):
+        raise Ocio16BitmapUnsupported("RGB16 colour bitmap under OCIO refused (decision 190)")
     if set(report) & {
         "error",
         "message",
@@ -807,6 +853,33 @@ def test_native_refusal_is_blocked_but_setup_error_fails() -> None:
     assert classify(report, None, None)["status"] == "blocked"
     with pytest.raises(SetupFailure):
         classify({**report, "error": "ValueError"}, None, None)
+
+
+@pytest.mark.parametrize("change", [None, "stage", "kind", "message", "candidate"])
+def test_only_the_exact_decision_190_refusal_is_the_recorded_gap(change: str | None) -> None:
+    """Decision 407: the xfail expects this refusal alone; any other failure stays a failure."""
+    report: dict[str, Any] = {
+        "model": MODEL,
+        "non_conformant": True,
+        **OCIO16_REFUSAL,
+        "message": "evaluator:unsupported_source node=1: " + " (".join(OCIO16_MESSAGE) + ")",
+    }
+    candidate = None
+    if change == "stage":
+        report["stage"] = "compile_plan"
+    elif change == "kind":
+        report["eval_kind"] = "missing_resource"
+    elif change == "message":
+        report["message"] = "evaluator:unsupported_source node=1: another source"
+    elif change == "candidate":
+        candidate = _authored_tga()
+    if change is None:
+        with pytest.raises(Ocio16BitmapUnsupported):
+            classify(report, candidate, None)
+        return
+    with pytest.raises(SetupFailure) as raised:
+        classify(report, candidate, None)
+    assert not isinstance(raised.value, Ocio16BitmapUnsupported)
 
 
 @pytest.mark.parametrize("field,value", [("sha256", "wrong"), ("size", 1), ("channels", 4)])

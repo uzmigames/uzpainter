@@ -7,6 +7,7 @@
 - [ ] 2.3 Provenance record `assets/export-presets/unreal-engine-packed.provenance.json` with public sources, observed-output hashes, packing decisions and parity status
 - [x] 2.4 Compatibility alias so `defaultExportPreset: "Unreal Engine (Packed)"` resolves to the shipped preset (CLR-06)
 - [ ] 2.5 TGA 8-bit output path through stb for the default encoding
+  - 2026-11-08 (decision 407, owner): G1 closed with `tests/export/test_tga_capture_replay.py::test_r322_tga_capture_diagnostic` as `xfail(strict=True, raises=Ocio16BitmapUnsupported)`: the R-322 setup's RGB16 colour bitmap under OCIO is `unsupported_source` at `encode_export` (decision 190). Decision 406 refuted strict sRGB8 comparison; the decode-to-store value at the three tie codes 2429, 6548, 14017 is unidentified. When this item lands the RGB16 OCIO route, remove the xfail mark (it turns into an XPASS failure, or a plain failure on any other error)
 - [ ] 2.6 DDS header writer and the DDS variant: BC7 for BaseColor, ORM and Emissive, BC5 for Normal, through the BC encoder adapter
 - [ ] 2.7 `_SpecularWeight` written as a separate map when the channel exists and listed as a consumer gap in the receipt
 - [ ] 2.8 UE 5.6 import fixture manifest `parity/manifests/consumers/unreal/wand-v1.json` and runner, run locally on the owner's machine (decision 028), consuming through the delivery adapter or publication lock

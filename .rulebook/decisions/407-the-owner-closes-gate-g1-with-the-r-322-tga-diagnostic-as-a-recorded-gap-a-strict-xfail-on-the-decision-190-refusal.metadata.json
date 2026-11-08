@@ -1,0 +1,9 @@
+{
+  "id": 407,
+  "slug": "the-owner-closes-gate-g1-with-the-r-322-tga-diagnostic-as-a-recorded-gap-a-strict-xfail-on-the-decision-190-refusal",
+  "title": "The owner closes gate G1 with the R-322 TGA diagnostic as a recorded gap: a strict xfail on the decision-190 refusal",
+  "status": "accepted",
+  "date": "2026-11-08",
+  "relatedTasks": ["phase1.26_gate-g1", "phase3.2_unreal-ue56-packed-preset"],
+  "supersededBy": null
+}
