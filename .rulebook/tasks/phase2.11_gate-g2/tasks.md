@@ -1,27 +1,40 @@
 ## 1. Prerequisites
-- [ ] 1.1 Prerequisites accepted: phase1.26_gate-g1, phase2.10_pilot-tunic-recovery, phase2.3_realtime-preview, phase2.4_supervisor-worker
+- [x] 1.1 Prerequisites accepted: phase1.26_gate-g1, phase2.10_pilot-tunic-recovery, phase2.3_realtime-preview, phase2.4_supervisor-worker
+  - Met 2026-11-08 on `a0e07449`: all four archived (`2026-11-08-phase1.26_gate-g1`, gate commit `6112a539`; `2026-11-05-phase2.10_pilot-tunic-recovery` under EXC-011 v2; `2026-10-20-phase2.3_realtime-preview`; `2026-10-20-phase2.4_supervisor-worker`). Every Phase 2 feature task was archived before this gate's record (decision 397); gate record §3
   - Runs last (decision 397, owner 2026-11-03): this gate's runs start only after every feature task of Phase 2 has passed its own tests
 
 ## 2. Joined items
-- [ ] 2.1 phase1.26_gate-g1 accepted (previous gate)
+- [x] 2.1 phase1.26_gate-g1 accepted (previous gate)
+  - Reconciled 2026-11-08: archived `.rulebook/archive/2026-11-08-phase1.26_gate-g1/` (`a0e07449`), gate commit `6112a539`, every item checked; the R-322 TGA diagnostic is an owner-approved gap (decision 407). `parity/reports/phase1/gate-g1.md` SHA-256 `18084da8…3ac9`; gate record §3.1
 - [x] 2.2 phase2.4_supervisor-worker accepted: worker-kill, lost-acknowledgement and stalled-fence recovery evidence in `parity/reports/phase2/supervisor-settling.json`
   - Reconciled 2026-11-02 against `.rulebook/archive/2026-10-20-phase2.4_supervisor-worker/tasks.md`, item 4.1 and the acceptance run of 2026-10-20: 14 DX12 cases and 13 GPU-free Vulkan cases passed. Decision 326 records the Wand prerequisite scope split; decision 221 assigns the real-Vulkan obligations to `phase3.1_vulkan-compute-parity`. This join records the existing acceptance, not a new run or acceptance of Wand or G1.
 - [x] 2.3 phase2.3_realtime-preview accepted: window-independent captures and non-pausing preview in `parity/reports/phase2/preview-settling.json`
   - Reconciled 2026-11-02 against `.rulebook/archive/2026-10-20-phase2.3_realtime-preview/tasks.md`, section 12: acceptance includes six refreshed DX12/CPU preview tests and section 11's full-size Wand run. Decisions 326 and 221 retain the Wand parity and Vulkan obligations in their owning tasks. G2 prerequisites, pilot joins and acceptance remain open.
-- [ ] 2.4 phase2.10_pilot-tunic-recovery accepted: Tunic v10 Tier 1 maps and dump-and-rebuild under the exception policy
-- [ ] 2.5 Reached through P2-TUNIC and confirmed: phase2.8_mcp-server, phase2.2_recipe-and-diagnostics, phase2.9_pilot-belt (Belt v5 Tier 1 and the Python-disabled MCP-only round)
+- [x] 2.4 phase2.10_pilot-tunic-recovery accepted: Tunic v10 Tier 1 maps and dump-and-rebuild under the exception policy
+  - Reconciled 2026-11-08 against `.rulebook/archive/2026-11-05-phase2.10_pilot-tunic-recovery/tasks.md` (`fa25190d`), items 3.1, 3.4 and 4.1. `parity/reports/phase2/tier1-tunic-v10.json` (`18388770…48cc`) is `pass` relying on EXC-011 version 2 (decisions 398, 401): structural empty, oracle `stable`, rebuilds `repeatable`, covered interior 0 on all five maps. The dump-and-rebuild's recipe digests are equal and both measure exports byte-identical. All six Tunic nodes of `tests/parity/tier1/test_mcp_round.py` passed again in G1's second full gate on `58f7260b`. Not exact: the maps are the diagnostic measure export's, and production refuses the islanded export (`phase3.1_export-island-padding`). Gate record §3.4
+- [x] 2.5 Reached through P2-TUNIC and confirmed: phase2.8_mcp-server, phase2.2_recipe-and-diagnostics, phase2.9_pilot-belt (Belt v5 Tier 1 and the Python-disabled MCP-only round)
+  - Reconciled 2026-11-08: all three archived with no unchecked item (`2026-10-20-phase2.8_mcp-server` `909457ca`, `2026-11-03-phase2.2_recipe-and-diagnostics` `434c1f32`, `2026-11-03-phase2.9_pilot-belt` `fc864900`). Belt v5 is the Sash v5 (decision 260; golden `sash-v5-current`, decision 399). `tier1-sash-v5.json` (`b7948c63…59fb`) is `pass` relying on EXC-012 v1, structural empty. `sash-v5-mcp-round.json` (`58875ead…9ec3`) is `completed`: `allow_python` false, `run_python` not listed, 67 tools, 6 typed calls, maps byte-identical to the Tier 1 run's (measure export). `tests/parity/tier1/sash_v5` gave 4 passed, 1 xfailed (the production round's islanded refusal) in G1's second full gate. The Belt has no dump-and-rebuild: that G2 clause is open under 4.1. Gate record §3.5, §3.6
 
 ## 3. Gate record
-- [ ] 3.1 Every exception relied on is an owner-approved entry in `parity/exceptions.json` with its `.rulebook/decisions/` record; none relaxes a structural difference
-- [ ] 3.2 Capability manifest regenerated on the gate build; Phase 2 gaps listed (including `painter_iray` unavailable)
+- [x] 3.1 Every exception relied on is an owner-approved entry in `parity/exceptions.json` with its `.rulebook/decisions/` record; none relaxes a structural difference
+  - Met 2026-11-08: register SHA-256 `1678b0f2…4d815`, unchanged since G1's gate run. The entries relied on: EXC-012 v1 (owner 2026-11-03, decision 399), EXC-011 v2 (owner 2026-11-05, decision 401; v1 decision 398) and, through G1, EXC-010 v1 (owner 2026-11-03, decision 395). Each has its decision file, basis `owner_scope_split` and a named defect test. Every bound is `max_abs_diff` 0 on `covered_interior` (unexcepted) and on `covered` except the listed island-edge outputs; padding is free. Both pilot reports have `structural` empty, and a refused export stays a structural failure (decision 255). No exception created or widened. Gate record §4
+- [x] 3.2 Capability manifest regenerated on the gate build; Phase 2 gaps listed (including `painter_iray` unavailable)
+  - Met 2026-11-08: the gate's manifest is the ReleaseFast build of `ba0fa817`, `capabilities.json` SHA-256 `9f4d2abc558a43bbdf32bb751b78bb0570e257d4851693ff342cb2b4655a16e5` (`UzPainter.exe` `bafbd302…7b16`), still in `zig-out/bin/`. Not rebuilt: the eight build inputs are byte-identical at `a0e07449`. Three Tier 0 manifests the generator reads changed after `ba0fa817`, so the generator was run by hand with the build's arguments on the current tree: exit 0, byte-identical (`9f4d2abc…16e5`). 985 `supported`, 327 `pending-evidence`, 328 `release-gap`, 15 `desktop-only-omitted`. Phase 2 gaps listed (gate record §6): `uzpainter.render.capture` `mode:painter_iray` `release-gap` (owner `phase3.7_path-tracer`); 37 of 106 operation-matrix rows `capability gap`; the islanded production export refusal (decisions 245, 259; no manifest entry); the pilots' exceptions; the Vulkan device cases (decision 221); the R-322 TGA (decision 407)
 - [ ] 3.3 Gate record written to `parity/reports/phase2/gate-g2.md`: joined items, evidence paths and hashes, exceptions, build hash, hardware, driver, backend; states that render parity is not part of G2
-- [ ] 3.4 Duration Hypotheses of Phases 3–5 revised in `docs/roadmap.md` (owner Q14)
-- [ ] 3.5 Phase 2 tasks archived in `.rulebook`
+  - Written 2026-11-08 on `a0e07449`. Sections: every clause with its evidence (§2, §3), the exceptions (§4), why no new run was made (§5), the manifest and Phase 2 gaps (§6), builds, hardware, driver and backend (§7), the Phase 2 archive check (§8), render parity excluded (§9). Result: **G2 open** on the Belt v5 dump-and-rebuild (§3.6). Final at closure, with the gate commit
+- [x] 3.4 Duration Hypotheses of Phases 3–5 revised in `docs/roadmap.md` (owner Q14)
+  - Met 2026-11-08: section "Schedule checkpoint: gate G2 (2026-11-08)". Measured facts (Phase 1 in 29 days, Phase 2 features in 26, G1's closure in 5 days with two full gates of 4 h 43 min and 4 h 29 min, Phase 3's parallel start) are kept apart from the Hypotheses. Phases 3–5 stay at 9–12, 5–7 and 3–4 weeks, plus about 1 week per gate closure, with `phase3.1_export-island-padding` unestimated
+- [x] 3.5 Phase 2 tasks archived in `.rulebook`
+  - Met 2026-11-08 on `a0e07449`: 17 of the 18 Phase 2 tasks of `docs/task-index.md` are archived with no unchecked item; the only `phase2.*` task under `.rulebook/tasks/` is this gate (gate record §8)
 
 ## 4. Acceptance
 - [ ] 4.1 G2 accepted: Tier 1 maps and dump-and-rebuild pass under the exception policy; Python-disabled MCP-only Belt round done; recovery tests pass; captures window-independent
+  - Open 2026-11-08. Evidenced (gate record §2, §3): Tier 1 passes for both pilots (Sash under EXC-012, Tunic under EXC-011 v2), the Tunic's dump-and-rebuild passes, the Python-disabled MCP-only Belt round is done, recovery tests pass and captures are window-independent. **The Belt v5 (Sash) dump-and-rebuild has no test, run or report** (§3.6). The roadmap, this task's spec and proposal, and `parity/CONTRACT.md` name it; `docs/dag.md`'s P2-BELT row and item 2.5 do not. Dropping it would narrow a gate clause, so it goes to the root decision. Either run a Sash measure-mode dump-and-rebuild with report `parity/reports/phase2/recipe-rebuild-sash-v5.json`, or record by decision that the Tunic's covers G2 and align the texts. Not archived
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
-- [ ] 5.1 Update or create documentation covering the implementation
+- [x] 5.1 Update or create documentation covering the implementation
+  - Met 2026-11-08: `parity/reports/phase2/gate-g2.md` and the G2 schedule checkpoint in `docs/roadmap.md`
 - [ ] 5.2 Write tests covering the new behavior
+  - 2026-11-08: the record adds no behaviour. If the root decision is to run the Sash dump-and-rebuild, its test node is this item
 - [ ] 5.3 Run tests and confirm they pass
+  - 2026-11-08: no run needed for what is evidenced. G1's second full gate on `58f7260b` passed every Phase 2 acceptance node, and only `a0e07449` (docs and rulebook) followed `6112a539` (gate record §5). Open until §3.6 closes

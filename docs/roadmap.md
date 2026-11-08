@@ -62,3 +62,29 @@ The Wand v1 pilot completed on 2026-11-03: its Tier 1 run passes under EXC-010, 
 | 5 | 3–4 weeks | unchanged | Extrapolated |
 
 **What the slice measured.** Recorded, fitted semantics went fast: Phase 0 and most of Phase 1 took about 11 days. The calendar was set by exact-equality residuals that no recorded probe yet decides, and by the time it took to reach an exception decision. Those two factors, not implementation throughput, are the Hypotheses' main risk for Phases 2 to 5.
+
+## Schedule checkpoint: gate G2 (2026-11-08)
+
+Revised at G2's record (owner Q14, rule 6; `parity/reports/phase2/gate-g2.md`). G2 is open on one clause, the Belt v5 dump-and-rebuild, which has no evidence and waits on a root decision (gate record §3.6). Measured means read from the archives, task notes, decisions and gate records on 2026-11-08. Hypothesis means extrapolated, not validated.
+
+**Measured.**
+- **Phase 1:** tasks created 2026-10-10, G1 closed 2026-11-08 (gate commit `6112a539`): 29 calendar days, against a 5–6 week Hypothesis.
+- **Phase 2:** tasks created 2026-10-10. The last feature task (`phase2.10_pilot-tunic-recovery`) was archived 2026-11-05: 26 calendar days, against 5–6 weeks. 17 of its 18 tasks are archived. Each pilot passes under its own owner exception, not exactly: Wand EXC-010, Sash EXC-012, Tunic EXC-011 v2.
+- **Gate closure:** G1 took 5 calendar days from the Wand's pass (2026-11-03) to closure.
+  - Two full local gates of 4 h 43 min and 4 h 29 min (17,001 s and 16,165 s of suite time).
+  - The first was red with 96 failed and 3 errors, about 20 root causes left by features archived on their affected tests. The second had 10 failures.
+  - Then one Painter recording batch and four decisions (404 to 407).
+- **Phase 3 started in parallel:** 45 tasks indexed, 2 archived. 24 open tasks have at least one checked item. `phase3.1_export-island-padding` has 1 of 11, `phase3.1_assets3d-cutover` 3 of 19 (it waits on G2) and `phase3.4_path-tracer-transport` 4 of 25.
+- **Phases 4 and 5:** 19 tasks with 6 checked items in all; 8 tasks with 2.
+
+**Re-forecast of Phases 3–5** (from 2026-11-08).
+
+| Phase | Was (2026-11-03) | Now | Basis |
+|---|---|---|---|
+| 2 (rest) | G2 record, under 1 week | G2 closes after the root decision on the Belt dump-and-rebuild: days if it is recorded as covered by the Tunic's, about one GPU run plus one test node if it must run | Hypothesis. The record itself is measured: written on 2026-11-08 with no new run (gate record §5) |
+| 3 | 9–12 weeks, plus `phase3.1_export-island-padding` with no estimate | unchanged: 9–12 weeks after G2, plus `phase3.1_export-island-padding` with no estimate | Hypothesis. The parallel start is measured, but not the effort left in the 24 tasks in progress, so no reduction is claimed. The path tracer (Tier 3 exceptions only, decision 017) and the exact island padding are residual-bound, the factor that set Phases 1 and 2 |
+| 4 | 5–7 weeks | unchanged | Hypothesis. Hat v8 and body v6b have no checked item; the 6 checked items are in `phase4.1_nodes-paint-layers` and `phase4.1_nodes-projections` |
+| 5 | 3–4 weeks | unchanged | Hypothesis. G5's full Tier 0–3 report on DX12 and Vulkan is larger than G1's suite |
+| Each gate closure (G3, G4, G5) | not counted | about 1 week each, on top of its phase | From G1's measured 5 days and its two full gates of about 4.5 h each. Applied to later gates, it is a Hypothesis |
+
+Total for Phases 3–5, Hypothesis: 17–23 weeks plus about 3 weeks of gate closures, with `phase3.1_export-island-padding` unestimated. As at the Wand checkpoint, the main risk is exact-equality residuals and the time to reach an owner decision, not implementation throughput.
