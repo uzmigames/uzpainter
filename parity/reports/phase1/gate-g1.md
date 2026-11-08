@@ -1,4 +1,4 @@
-# G1 "Foundation green" — gate record (draft)
+# G1 "Foundation green" — gate record
 
 Task `phase1.26_gate-g1` (`docs/dag.md` G1, D14; `docs/roadmap.md` Phase 1 gate, rules 2, 3 and 6). **Draft, pre-verified 2026-10-19** on the owner's machine (Windows 11 Pro 10.0.26200, NVIDIA GeForce RTX 4090, Zig 0.15.2, Python 3.13.9) on a clean checkout of `main` `39d8d7b`. Every check below is CPU only: no GPU run was made for this draft. Numbers and hashes only: every recorded Painter output stays in the private store. SHA-256 values are of the committed file bytes at `39d8d7b` (`git show 39d8d7b:<path>`), as in the G0 record.
 
@@ -11,6 +11,8 @@ Gate run, 2026-11-05, after every Phase 1 feature task was archived (decision 39
 Second gate run, 2026-11-05 evening, on `58f7260ba745f2051808dbb56f67c59b2187f74e` after the repairs of §8.4, on a quiet checkout with the native lock held for the whole run (§4.3, §6.3, §9).
 
 **Result: G1 open.** Every clause of the roadmap is evidenced (§2), the Wand's under EXC-010 and not exactly, and every other Phase 1 task is archived (§5). The first full gate was red, 96 failed and 3 errors (§8). The second (§9) has 10 failures: 3 were fixed at their root after the run and pass on re-run, and 7 are known failures owned elsewhere (two need new Painter recordings, one a root decision on the R-322 TGA gap, one the owner's OK to remove a leftover folder). G1 closes on a gate commit where the full gate is green, with the guard, `store verify` and the capability manifest re-run on that commit.
+
+**Closure, 2026-11-08: G1 closed on gate commit `6112a539`** (§9.4). All 7 known failures of §9.1 are resolved: 6 pass on re-run after the 2026-11-08 recording batch and decisions 404 to 406, and the R-322 TGA diagnostic is an owner-approved gap, a strict xfail on the decision-190 refusal alone (decision 407). The full gate on `58f7260b` had no failure outside those 7 and the 3 fixed in §9.2. On `6112a539` the guard, `store verify` and the capability manifest were re-run (§9.4, §9.3).
 
 ## 1. Oracle envelope used by this gate (decision 037)
 
@@ -440,4 +442,30 @@ Capability manifest: the trace and evidence inputs changed after `cac4a8cf` (`44
 | `tools/capabilities/operation-matrix.json` | `9fd7e1ae96b00ced0aa9476a43bb7adabc78617e7cd8552120d37b0ee3a3250e` |
 | `parity/envelopes/registry.json` | `c64a70858c2baa671f7a2b7ab963012622f9af5f5097778762aaa80ac67871f6` |
 
-**G1 stays open**: one of the 7 known node ids is red, so it is not archived.
+At that point one of the 7 known node ids was still red; §9.4 resolves it.
+
+### 9.4 Resolution and closure (2026-11-08, gate commit `6112a539`)
+
+Owner decision (2026-11-08, through the coordinator; decision 407): G1 closes with the R-322 TGA diagnostic as a recorded gap. `test_r322_tga_capture_diagnostic` is `xfail(strict=True, raises=Ocio16BitmapUnsupported)`: `classify` raises that exception only for the exact native refusal of decision 190 (`unsupported_source` at `encode_export`, the RGB16 colour bitmap under OCIO, no candidate file); any other failure stays a failure, and a pass is a strict XPASS failure. `phase3.2_unreal-ue56-packed-preset` item 2.5 removes the mark when the route lands (note on that item). Run alone on `6112a539` under the native lock: **1 xfailed** in 14.7 s.
+
+| §9.1 node ids | Resolution |
+|---|---|
+| the two `test_only_successful_owned_creation_can_arm_cleanup` cases | fixed, `78eb9e3b` (§9.2) |
+| `test_standalone_static_library_build` | fixed, `9035bae1` (§9.2) |
+| reload-order ×4 | pass: 6 recordings from 3 sessions (`6ea94f87`); re-run §9.3 |
+| `test_no_submodule_runtime_lib_or_patch_queue` | pass: `scripts/tmp/`'s two patches deleted with the owner's OK; re-run §9.3 |
+| `test_observed_probe_events_equal_painter[phase1-reload-mesh]` | pass: decision 404 (`4480e89a`, `ba0fa817`); re-run §9.3 |
+| `test_r322_tga_capture_diagnostic` | owner-approved gap, xfail: decision 407 (`6112a539`) |
+
+Checks on `6112a539`:
+
+| Check | Exit | Result |
+|---|---|---|
+| `python -m tools.parity.guard` | 0 | store-hash rule against the store (4856 hashes); 5369 files checked, 0 blocked |
+| `python -m tools.parity.store verify` on the current envelope's manifests | 0 | 433 manifests, 24434 blobs, all `available` |
+| the same on `parity/envelopes/painter-12.1.5_js-api.1.1.20/manifests` | 0 | 333 manifests, 22578 blobs, all `available` |
+| the same on `parity/manifests` | 0 | 82 manifests, 2686 blobs, all `available` |
+| `python -m tools.parity.store verify` | 0 | whole store: `parity-store: ok` |
+| capability manifest | — | §9.3: `capabilities.json` `9f4d2abc…16e5` from the ReleaseFast build of `ba0fa817`; `6112a539` changes a test, a task note and a decision only, no manifest input |
+
+**G1 closed.** Archived as `.rulebook/archive/2026-11-08-phase1.26_gate-g1/`.
