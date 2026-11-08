@@ -131,6 +131,41 @@ def test_request_closed_matrix_and_persisted_identity(source: str) -> None:
     ]
 
 
+@pytest.mark.parametrize("profile", control.FLOAT_PROFILES)
+def test_rgb32f_decode_control_request(profile: str) -> None:
+    data = control.float_request(profile)
+    assert validation_errors(data, Schema.GOLDEN_PUBLIC) == []
+    assert manifest_symbol_problems(data) == []
+    assert data["private_records"] == data["expectations"] == []
+    name = control.float_request_name(profile)
+    assert data["golden_id"] == f"tier0/api-probes/{name}"
+    path = rr.request_root(REPO_ROOT) / "tier0/api-probes" / f"{name}.json"
+    assert json.loads(path.read_text()) == data
+    assert {i["input_id"] for i in data["inputs"]} == {"plane", "field-a"}
+    for item in data["inputs"]:
+        assert hashlib.sha256((REPO_ROOT / item["path"]).read_bytes()).hexdigest() == item["sha256"]
+    job = probe_job_from_manifest(data)
+    edits = [p.args for p in job.state_steps if p.call.endswith("Stack.edit_channel")]
+    assert edits == [{"channel": "BaseColor", "format": "RGB32F"}]
+    setters = [p.args for p in job.state_steps if p.call == control.SET_SPACE]
+    assert setters == (
+        [{"node_step": 4, "channel": "BaseColor", "color_space": "sRGB", "color_space_type": "str"}]
+        if profile == "ocio"
+        else []
+    )
+    assert [(p.call, p.args["typed"]) for p in job.probe_steps] == [(control.GET_SPACE, True)]
+    assert len(job.exports) == 1
+    config = job.exports[0].config(Path("unused"), ["uzp_plane"])
+    assert config["exportParameters"][0]["parameters"] == {
+        "fileFormat": "exr",
+        "bitDepth": "32f",
+        "dithering": False,
+        "paddingAlgorithm": "passthrough",
+    }
+    ocio = [item for item in data["applied_settings"] if item["name"] == "OCIO"]
+    assert ocio == ([rr.OCIO_SETTING] if profile == "ocio" else [])
+
+
 def dispatcher() -> tuple[Any, dict[str, Any]]:
     tree = ast.parse(PAINTER_PROBES.read_text())
     function = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "edit")

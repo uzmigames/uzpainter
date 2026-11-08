@@ -151,6 +151,79 @@ def request(source: str = "field-a") -> dict[str, Any]:
     return result
 
 
+# Decode-stage control (phase3.2 item 2.5, R-322): the same RGB16 field-a, whose B channel holds
+# every 16-bit code, into BaseColor stored as RGB32F instead of sRGB8, so that the export shows the
+# bitmap's value before any 8-bit channel storage. One OCIO request and its Legacy twin.
+FLOAT_PROFILES = ("ocio", "legacy")
+FLOAT_FORMAT = "RGB32F"
+
+
+def float_request_name(profile: str) -> str:
+    if profile not in FLOAT_PROFILES:
+        raise ValueError("unrecorded RGB32F decode control profile")
+    base = f"{NAME}-rgb32f"
+    return base if profile == "ocio" else f"{base}-legacy"
+
+
+def float_request(profile: str = "ocio") -> dict[str, Any]:
+    name = float_request_name(profile)
+    s = start("plane", resolution=256)
+    s.add(
+        "substance_painter.textureset.Stack.edit_channel", channel="BaseColor", format=FLOAT_FORMAT
+    )
+    resources = s.imports("field-a")
+    node = s.fill(["BaseColor"], position="top", texture_set="uzp_plane")
+    s.blend(node, "BaseColor", "Normal", 1.0)
+    s.add(SET_MODE, node_step=node, projection_mode="UV")
+    s.add(SET_PROJECTION, node_step=node, **UV)
+    s.add(ps.SET_SOURCE, node_step=node, channel="BaseColor", resource_step=resources["field-a"])
+    if profile == "ocio":
+        s.add(
+            SET_SPACE,
+            node_step=node,
+            channel="BaseColor",
+            color_space="sRGB",
+            color_space_type="str",
+        )
+    s.add(GET_SPACE, node_step=node, channel="BaseColor", typed=True)
+    s.add(
+        EXPORT,
+        maps=["documentMap/basecolor:RGB"],
+        file_format="exr",
+        bit_depth="32f",
+        padding="passthrough",
+        dithering=False,
+        key_by_step=True,
+    )
+    space = (
+        "the explicit literal configuration string sRGB"
+        if profile == "ocio"
+        else "its Legacy default colour space, no setter"
+    )
+    golden = Golden(
+        name,
+        "tier0/api-probes/ocio16-input",
+        f"Decode-stage control ({profile}): the RGB16 field-a bitmap, whose B channel holds "
+        f"every 16-bit code, into BaseColor stored as RGB32F on the authored 256px full-UV "
+        f"plane, with {space}. Nearest identity UV, Normal opacity 1. Setup runs once. Read the "
+        "typed bitmap space before one OpenEXR 32f capture export with no dithering or padding; "
+        "Full save/reopen repeats that getter and export without any setter. Records the "
+        "bitmap's value before any 8-bit channel storage, beside the sRGB8 controls; no fit, "
+        "preset parity or capability promotion.",
+        "plane",
+        ["plane", "field-a"],
+        s,
+        [dict(rr.OCIO_SETTING)] if profile == "ocio" else [],
+    )
+    hashes = {
+        key: hashlib.sha256((REPO_ROOT / rr.fixture(key)[1]).read_bytes()).hexdigest()
+        for key in golden.inputs
+    }
+    result = rr.request_manifest(golden, hashes, current_envelope())
+    result["golden_id"] = "tier0/api-probes/" + name
+    return result
+
+
 def write_authored() -> None:
     """Write only durable public inputs and the current envelope's request."""
     for path, data in authored_files().items():
@@ -160,6 +233,13 @@ def write_authored() -> None:
             rr.request_root(REPO_ROOT) / "tier0/api-probes" / f"{request_name(source)}.json"
         )
         request_path.write_text(json.dumps(request(source), indent=2) + "\n", encoding="utf-8")
+    for profile in FLOAT_PROFILES:
+        request_path = (
+            rr.request_root(REPO_ROOT) / "tier0/api-probes" / f"{float_request_name(profile)}.json"
+        )
+        request_path.write_text(
+            json.dumps(float_request(profile), indent=2) + "\n", encoding="utf-8"
+        )
 
 
 NATIVE_BASELINES = ("srgb8-ramp", "uniform")
