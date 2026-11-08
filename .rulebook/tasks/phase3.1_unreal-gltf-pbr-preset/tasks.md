@@ -1,5 +1,5 @@
 ## 1. Prerequisites
-- [ ] 1.1 Prerequisites accepted: `phase2.10_pilot-tunic-recovery` (parent input)
+- [x] 1.1 Prerequisites accepted: `phase2.10_pilot-tunic-recovery` (parent input) — done 2026-11-08: accepted and archived in fa25190d (`.rulebook/archive/2026-11-05-phase2.10_pilot-tunic-recovery/`, item 4.1 checked: pass under EXC-011 v2, decision 401)
 
 ## 2. Implementation
 - [x] 2.1 Record the private observed outputs: Painter's files for `glTF PBR Metal Roughness` on a UzmiGames fixture project and the documented `list_output_maps()` result, hashes in `parity/manifests/`
@@ -14,7 +14,9 @@
 
 ## 3. Tests
 - [ ] 3.1 Output parity on wand v1, belt v5 and tunic v10: every preset file equals Painter's export of the same preset in decoded values
+  - Blocked (2026-11-08, see section 8): the ORM file's R reads `virtualMap AO_Mixed`, which the plan refuses in every mode (`src/export/plan.cpp` `ResolveVirtual`, decision 131, owner `phase3.2_unreal-ue56-packed-preset` item 2.10), so the preset export is refused whole on every pilot, the diagnostic measure export included. No pilot glTF golden exists in the private store and none was recorded.
 - [ ] 3.2 glTF consumer fixture on wand v1: the asset validates and loads with base colour, metallic-roughness, normal, occlusion and emissive bound as specified
+  - Blocked (2026-11-08, see section 8): no Wand publication of this preset can be written (AO_Mixed refusal; production also refuses the islanded export, decisions 245 and 259). The consumer stays fastgltf 0.9.1 with `fastgltf::validate` (item 2.6).
 - [x] 3.3 Defect detection: a metallic-roughness texture with swapped channels fails the packing check — independent roughness/metallic references, including consistently repinned corrupted publication
 - [x] 3.4 Provenance record validates against its schema on the local CPU lane (decision 200)
   - Done (decision 314): tests/export/test_export_presets.py test_provenance_records_are_complete validates every shipped record, this one included, against src/export/preset-provenance.schema.json on the CPU lane
@@ -38,3 +40,11 @@
 - Six admitted goldens preserve rejected original URLs and successful corrected PNG8/PNG16 exports, with both recording conditions in Legacy and OCIO. See `parity/reports/phase3/r314-gltf-preset.md` for hashes and scope.
 - Final affected suite: 29 passed, 43.41 s; `scripts/tmp/commits/r314-final.xml`. It covers authored preset planning/defaults, retained AO_Mixed refusal, actual private layout and repeat hashes at both depths, consumer bindings and padding-only request isolation. Ruff, mypy and scoped diff checks passed. Full suite remains the coordinator's gate.
 - Coordinator review: padding-only planning also covers the supplemental SpecularWeight map, whose missing depth/dithering initially failed. Authored PNG8/no-dithering defaults fix that case while preserving explicit overrides. Final rerun: 29 passed, 41.86 s (`scripts/tmp/commits/r314-root-final.xml`); global Ruff and mypy passed.
+
+## 8. Closure attempt (2026-11-08): items 3.1, 3.2 and 4.1 blocked
+- Item 1.1 holds: `phase2.10_pilot-tunic-recovery` is accepted and archived (fa25190d).
+- **No recording was made.** The private store holds no Painter export of `glTF PBR Metal Roughness` on any pilot: its glTF goldens are R-314's six Tier 0 captures on the authored bevelled cube only. A pilot golden would also need a new recorder route, because each pinned pilot request exports through its own fixed step (the Wand's and the Sash's `painter_export.py`, the Tunic's five-map export configuration). Recording one now would not unblock 3.1 (next point), so the shared Painter was not taken.
+- **Blocker 1, a refusal no exception can cover.** The preset's ORM R reads `virtualMap AO_Mixed`. The plan refuses it in every mode (`src/export/plan.cpp` `ResolveVirtual`, `Support(AO_Mixed)` false; decision 131, owner `phase3.2_unreal-ue56-packed-preset` item 2.10). An export with one refused map is refused whole (decision 245 C6). The diagnostic measure export bypasses only decisions 245's and 259's island refusals (`src/export/write.cpp`), not this one. So no pilot can write the preset, and nothing can be compared or consumed: 3.1 on wand v1, belt (Sash) v5 and tunic v10, and the Wand consumer run of 3.2.
+- **Blocker 2, needing an owner exception, once AO_Mixed is exact.** All three pilots are UV-islanded, so their padding (decision 259) and the Normal's island-edge texels (decision 245) are known to differ, as are the Tunic's 3 near-tie edge texels on every map (decision 401). EXC-010, EXC-011 v2 and EXC-012 cover only their Tier 1 goldens (`domain.goldens`: `phase1/tier1/wand-v1`, `phase2/tier1/tunic-v10-current`, `phase2/tier1/sash-v5-current`). A glTF-preset golden of the same piece is another golden, so its comparison would fail on those classes unless the owner approves a new or widened exception, or `phase3.1_export-island-padding` makes them exact. No exception was created or widened here (decision 259 §6).
+- **Open questions, not measured.** The preset's base-colour alpha (`opacity`) and its `emissive` file on pilots that have neither channel, and the PNG8 normal with dithering against Painter's PNG8 default, have no pilot recording.
+- Item 4.1 does not hold, and the task stays open. It unblocks after `phase3.2_unreal-ue56-packed-preset` item 2.10 (AO_Mixed), then the pilot glTF recordings, then exact island padding or the owner's exception decision.
