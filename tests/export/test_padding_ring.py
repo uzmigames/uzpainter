@@ -762,7 +762,8 @@ def test_padding_runs_in_the_document_format(
 ) -> None:
     """Decision 274: a documentMap channel is padded on its document operands, each filled texel
     stored as its format stores it (L8: the 8-bit UNORM write; sRGB8: the GPU's float-to-sRGB8
-    conversion; L16F: the half toward zero) and then written as the file writes the channel (PNG
+    conversion; L16F: the half toward zero of the raw chain, decision 409) and then written as the
+    file writes the channel (PNG
     16: the UNORM write, the OCIO sRGB8 code table, a Height's v * 0.5 + 0.5). Synthetic codes over
     two islands sharing a seam: `process` with `document_format` equals `ring`'s padding of the
     operands passed through that store and write on every texel; the same codes padded as UNORM
@@ -823,6 +824,7 @@ def test_padding_runs_in_the_document_format(
         "channels": channels,
         "values": str(tmp_path / "operands.f32"),
         "out": str(tmp_path / "padded.f32"),
+        "raw": domain == "L16F-height",
     }
     (tmp_path / "ring.json").write_text(json.dumps([ring_case]), encoding="utf-8")
     proc = subprocess.run(
@@ -864,6 +866,98 @@ def test_padding_runs_in_the_document_format(
     assert 0 < covered.sum() < covered.size
     assert np.array_equal(document, expected)
     assert not np.array_equal(by_codes[~covered], expected[~covered])
+
+
+def test_a_float32_channel_pads_its_operands_before_the_read_out(
+    export_tests: Path, tmp_path: Path
+) -> None:
+    """Decision 409: an L32F documentMap channel is padded on its values before the read-out
+    (`FileRaster::operands`), not on the values it writes: `process` with `operands` writes the
+    covered values unchanged and, outside them, `ring`'s padding of the operands (each chain
+    through 1 - (1 - m), the read-out over the white base); without them, the values are padded."""
+    from tools.parity.fit.decode import decode
+
+    s = 1 / 32
+    a = (
+        [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 0.0, 1.0), (0.0, 0.0, 1.0)],
+        [(4 * s, 16 * s), (8 * s, 16 * s), (8 * s, 20 * s), (4 * s, 20 * s)],
+    )
+    b = (
+        [(1.0, 0.0, 0.0), (2.0, 0.0, 0.0), (2.0, 0.0, 1.0), (1.0, 0.0, 1.0)],
+        [(16 * s, 16.3 * s), (20 * s, 16.3 * s), (20 * s, 20.3 * s), (16 * s, 20.3 * s)],
+    )
+    mesh = Mesh([a, b], 32)
+    obj = mesh.obj(tmp_path / "mesh.obj")
+    k = np.random.default_rng(409).integers(0, 256, (32, 32, 1))
+    # The values an OpenEXR 32f export of 8-bit codes holds: float32(k / 255).
+    source = tmp_path / "codes.png"
+    png.write(source, (k * 257).astype(np.int64), 16)
+    exr = tmp_path / "values.exr"
+    first = {"source": str(source), "target": str(source), "format": "exr", "bit_depth": "32f"}
+    (tmp_path / "values.json").write_text(json.dumps([first | {"out": str(exr)}]), "utf-8")
+    proc = subprocess.run(
+        [str(export_tests), "process", str(tmp_path / "values.json")],
+        capture_output=True,
+        text=True,
+        timeout=600,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    values = np.asarray(decode(exr.read_bytes()).values, F32).reshape(32, 32, 1)
+    assert np.array_equal(values, (k / 255).astype(F32))
+    # Operands that differ from the values (as a read-out moves them).
+    operands = (values + F32(1 / 4096)).astype(F32)
+    (tmp_path / "operands.f32").write_bytes(operands.tobytes())
+    ring_case = {
+        "mesh": str(obj),
+        "material": "m",
+        "width": 32,
+        "height": 32,
+        "channels": 1,
+        "values": str(tmp_path / "operands.f32"),
+        "out": str(tmp_path / "padded.f32"),
+    }
+    (tmp_path / "ring.json").write_text(json.dumps([ring_case]), encoding="utf-8")
+    proc = subprocess.run(
+        [str(export_tests), "ring", str(tmp_path / "ring.json")],
+        capture_output=True,
+        text=True,
+        timeout=600,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    padded = np.frombuffer((tmp_path / "padded.f32").read_bytes(), F32).reshape(32, 32, 1)
+    covered = mesh.owner >= 0
+    common = {
+        "source": str(exr),
+        "target": str(exr),
+        "format": "exr",
+        "bit_depth": "32f",
+        "document_format": "L32F",
+        "mesh": str(obj),
+        "material": "m",
+    }
+    cases = [
+        common | {"operands": str(tmp_path / "operands.f32"), "out": str(tmp_path / "a.exr")},
+        common | {"out": str(tmp_path / "b.exr")},
+    ]
+    (tmp_path / "process.json").write_text(json.dumps(cases), encoding="utf-8")
+    proc = subprocess.run(
+        [str(export_tests), "process", str(tmp_path / "process.json")],
+        capture_output=True,
+        text=True,
+        timeout=600,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    with_operands = np.asarray(decode((tmp_path / "a.exr").read_bytes()).values, F32)
+    without = np.asarray(decode((tmp_path / "b.exr").read_bytes()).values, F32)
+    with_operands, without = with_operands.reshape(32, 32, 1), without.reshape(32, 32, 1)
+    assert 0 < covered.sum() < covered.size
+    expected = np.where(covered[..., None], values, padded)
+    assert np.array_equal(with_operands.view(np.uint32), expected.view(np.uint32))
+    assert np.array_equal(without[covered], values[covered])
+    assert not np.array_equal(without[~covered], padded[~covered])
 
 
 def test_far_ties_follow_the_window_order_and_all_far_lists_are_not_copies(

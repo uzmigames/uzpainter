@@ -98,3 +98,17 @@ def test_ring_mask_and_differs() -> None:
     b = a.copy()
     b[1, 0, 0] = F32(-0.0)  # signed zero differs bit for bit
     assert pg.differs(a, b).tolist() == [[False, False], [True, False]]
+
+
+def test_a_float32_channel_pads_its_values_before_the_read_out() -> None:
+    # The read-out over the white base is 1 - (1 - v).
+    v = F32(10 / 255)
+    assert pg.readout(v) == F32(F32(1) - F32(F32(1) - v))
+    assert pg.readout(v) != v  # below 1/2 the read-out moves an 8-bit decode
+    # A covered value that is the read-out of an 8-bit decode pads from that decode (decision 409).
+    assert pg.before_readout(pg.readout(v)) == v
+    assert TABLE["float32"].operand(pg.readout(v)) == v
+    # Any other value is its own operand; every other store keeps its operands.
+    other = F32(0.1)
+    assert pg.before_readout(other) == other
+    assert TABLE["UNORM8"].operand(F32(10 / 255)) == F32(10 / 255)

@@ -58,6 +58,55 @@ render::Result<ChannelResult> EvaluateOn(const core::Project& project, const Eva
     return result;
 }
 
+render::Result<ChannelResult> EvaluateBeforeReadoutOn(const core::Project& project, const EvaluateRequest& request,
+                                                      const TemplateLibrary& templates, ITileStore& store,
+                                                      TileCache& cache) {
+    render::Result<void> admitted = Admit(project, request.textureSet, cache.limits());
+    if (!admitted) return render::Unexpected(admitted.error());
+    render::Result<ChannelDag> dag = BuildDag(project, request.textureSet, request.stack,
+                                              request.channel, templates, request.templateId, request.procedurals.get());
+    if (!dag) return render::Unexpected(dag.error());
+    if (dag->tileFormat.encoding != render::TexelEncoding::Float32 || dag->tileFormat.alpha) {
+        return EvalFail(EvalErrorKind::UnsupportedSource,
+                        "the values before the read-out are those of a 32-bit float channel (decision 409)");
+    }
+    if (!ProceduralInputsAvailable(*dag, request.procedurals.get()))
+        return EvalFail(EvalErrorKind::MissingResource, "procedural snapshot is unavailable");
+    EvalEnvironment env{store, cache, request.resources.get(), request.geometry.get()};
+    env.procedurals = request.procedurals.get();
+    ChannelResult result;
+    result.channel = dag->channel;
+    result.format = dag->format;
+    result.tileFormat = dag->tileFormat;
+    result.width = dag->grid.width;
+    result.height = dag->grid.height;
+    const std::array<float, 3> zero{0.0f, 0.0f, 0.0f};
+    for (uint32_t ty = 0; ty < dag->grid.TilesY(); ++ty) {
+        for (uint32_t tx = 0; tx < dag->grid.TilesX(); ++tx) {
+            TileResult tile;
+            tile.x0 = tx * kTileSize;
+            tile.y0 = ty * kTileSize;
+            tile.width = dag->grid.TileWidth(tx);
+            tile.height = dag->grid.TileHeight(ty);
+            ++result.stats.tiles;
+            render::Result<Operand> output = EvaluateFloat32Readout(*dag, env, tx, ty, zero, result.stats);
+            if (!output) return render::Unexpected(output.error());
+            if (output->kind == Operand::Kind::Constant) {
+                // An empty stack: its read-out is the base.
+                tile.constant = dag->readoutBase;
+                ++result.stats.constantTiles;
+            } else {
+                render::Result<TileImage> image = store.Read(output->tile);
+                cache.Unpin(output->tile);
+                if (!image) return render::Unexpected(image.error());
+                tile.texels = std::move(image->texels);
+            }
+            result.tiles.push_back(std::move(tile));
+        }
+    }
+    return result;
+}
+
 // ── Evaluator (GPU, engine thread) ───────────────────────────────────────────
 
 struct Evaluator::State {

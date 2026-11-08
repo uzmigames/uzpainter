@@ -1565,9 +1565,13 @@ void CheckValues(const Coverage& coverage, uint32_t channels, const std::vector<
 }
 
 // `infinite` padding over incomplete coverage (padding.h): the ring, then the jump flood; the
-// ring's chain rounded through 1 - (1 - m) when `rounded`.
-void InfinitePadding(const Coverage& coverage, uint32_t channels, std::vector<float>& values, bool rounded = true) {
+// ring's chain rounded through 1 - (1 - m) except on the channels `rawChain` marks (empty: none).
+void InfinitePadding(const Coverage& coverage, uint32_t channels, std::vector<float>& values,
+                     const std::vector<uint8_t>& rawChain = {}) {
     CheckValues(coverage, channels, values);
+    if (!rawChain.empty() && rawChain.size() != channels) {
+        throw std::invalid_argument("export: infinite padding takes one raw-chain flag per channel");
+    }
     const auto index = [&](auto y, auto x) { return static_cast<size_t>(y) * coverage.width + static_cast<size_t>(x); };
     // 1. The ring, from the covered texels only.
     std::vector<uint8_t> seed(coverage.covered);
@@ -1580,7 +1584,7 @@ void InfinitePadding(const Coverage& coverage, uint32_t channels, std::vector<fl
             for (uint32_t i = 0; i < r.taps; ++i) {
                 v[i] = values[index(r.candidates[i].y, r.candidates[i].x) * channels + c];
             }
-            ring.push_back(Chain(v, r.taps, r.fractions, rounded));
+            ring.push_back(Chain(v, r.taps, r.fractions, rawChain.empty() || rawChain[c] == 0));
         }
     }
     for (size_t i = 0; i < ringTexels.size(); ++i) {
@@ -1702,7 +1706,7 @@ void CheckIslandNormal(const PlannedFile& file, const Coverage& coverage) {
 }
 
 void PadIslandHeight(const Coverage& coverage, std::vector<float>& operands) {
-    InfinitePadding(coverage, 1, operands, false);
+    InfinitePadding(coverage, 1, operands, {1});
 }
 
 bool NormalRingAcrossBorder(const Coverage& coverage) {
@@ -1745,7 +1749,7 @@ void PadIslandNormal(const Coverage& coverage, std::vector<float>& normals) {
 }
 
 bool ApplyPadding(const PlannedFile& file, const Coverage& coverage, uint32_t channels, std::vector<float>& stored,
-                  InexactPadding inexact) {
+                  InexactPadding inexact, const std::vector<uint8_t>& rawChain) {
     CheckPadding(file, coverage, inexact);
     // Every other case keeps the values: complete coverage, or `passthrough`.
     if (file.layout == FileLayout::Statistics || file.parameters->paddingAlgorithm != Padding::infinite ||
@@ -1754,7 +1758,7 @@ bool ApplyPadding(const PlannedFile& file, const Coverage& coverage, uint32_t ch
         })) {
         return false;
     }
-    InfinitePadding(coverage, channels, stored);
+    InfinitePadding(coverage, channels, stored, rawChain);
     return true;
 }
 

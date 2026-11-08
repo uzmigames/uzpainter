@@ -23,7 +23,7 @@
 //   decision 259, before anything is written. The rule below is not proven to be Painter's outside
 //   the islands, and the owner withdrew exception EXC-007, which had excepted those texels
 //   (decision 259: every texel identical). It is applied only when a caller asks to measure it
-//   against Painter (`InexactPadding::measure`, the exact hunt of phase1.25_pilot-wand item 2.7),
+//   against Painter (`InexactPadding::measure`, the exact hunt of phase3.1_export-island-padding),
 //   over the coverage's triangles (`IslandTriangles`); the export never does. Covered texels keep
 //   their evaluated values; the others are filled in two steps.
 //   1. The ring, every uncovered texel with a covered 8-neighbour (x wraps, y does not), is an FMA
@@ -116,7 +116,8 @@
 //      - level l of the n - 1 levels codes tap l's share s among taps l..n with (k, L) = (4, 1023),
 //        (3, 255), (2, 63): u = round((s - 1/k) k / (k - 1) L) in [0, L], t = float32(1/k +
 //        (k - 1)/k u / L); the value is m = fma(1 - t, v_n - v_n-1, v_n-1) for the last level, then
-//        m = fma(t, v_l - m, m) outward, rounded through 1 - (1 - m) (decision 206).
+//        m = fma(t, v_l - m, m) outward, rounded through 1 - (1 - m) (decision 206), except on a
+//        16-bit float document channel, which keeps the raw chain (decision 409).
 //      Painter's ring is not this at pole tap sets, on multi-facet bevels, on anisotropic
 //      islands, at far points on an exact texel centre, at V-gap boundaries, across concave
 //      hinges, on curved shared islands and at the Wand's convex seam texels whose Height no chain
@@ -128,14 +129,16 @@
 //   Each channel is padded in its document format (decision 274, which corrects decision 223's
 //   padding of the PNG 16 codes). A channel that reads a documentMap is padded on the operands of
 //   its stack channel's format (`FileRaster::documentFormat`): an sRGB8 channel's linear operands,
-//   an 8- or 16-bit UNORM channel's operands, a float channel's floats. Each filled texel is stored
+//   an 8- or 16-bit UNORM channel's operands, a 16-bit float channel's floats, a 32-bit float
+//   channel's values before its read-out (`FileRaster::operands`; the read-out 1 + (v - 1) over the
+//   white base is decision 206's step, decision 409). Each filled texel is stored
 //   as that format stores it (evaluator/cpu_store.h `StoreValue`: the GPU's float-to-sRGB8
 //   conversion, the UNORM write, the half toward zero) and written as the file writes the
 //   channel's other texels (encode.h). Any other channel (a mesh map, a virtual map, a luma, a
 //   constant) is padded on the values the file stores, as decision 223 did: OpenEXR floats, and
 //   PNG codes as UNORM operands written back with the UNORM write rule. No recording shows
 //   Painter's domain for those.
-//   The refusal is lifted only when the rule is exact (phase1.25_pilot-wand item 2.7).
+//   The refusal is lifted only when the rule is exact (phase3.1_export-island-padding).
 // - A combined virtual normal (`Normal_OpenGL`, `Normal_DirectX`, or a diagnosticMap that
 //   isolates, compares or summarises one) with incomplete coverage, under every padding and in
 //   statistics files (decision 245): its island-edge texels, the covered texels with an
@@ -278,9 +281,11 @@ void CheckIslandNormal(const PlannedFile& file, const Coverage& coverage);
 /// Applies `file`'s padding over `coverage` to `stored`, the values the file stores (above),
 /// `channels` per texel, rows top first, after CheckPadding (which it repeats with `inexact`):
 /// `infinite` on incomplete coverage, measured only, fills the uncovered texels; every other
-/// admitted case keeps the values. Returns whether any texel was filled.
+/// admitted case keeps the values. Returns whether any texel was filled. `rawChain`, empty or one
+/// entry per channel: 1 where the ring keeps its chain's raw value, without the 1 - (1 - m) step
+/// (a 16-bit float document channel, decision 409).
 bool ApplyPadding(const PlannedFile& file, const Coverage& coverage, uint32_t channels, std::vector<float>& stored,
-                  InexactPadding inexact = InexactPadding::refuse);
+                  InexactPadding inexact = InexactPadding::refuse, const std::vector<uint8_t>& rawChain = {});
 
 // The diagnostic measure export's combined virtual normal on UV islands (write.h, decision 308),
 // never production: Painter's rule as recorded, not proven exact.

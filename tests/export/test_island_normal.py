@@ -231,8 +231,7 @@ def test_gutter_floods_the_padded_normal_under_the_mesh_map(sphere: dict[str, An
     assert np.array_equal(bits(with_mesh[~covered]), bits(combination[~covered]))
     assert sphere["mesh"]["written"]["uzp_sphere_n.exr"]["undecided"] == int((~covered).sum())
     assert sphere["mesh"]["written"]["uzp_sphere_h.exr"]["undecided"] == 0
-    # Stored as the L16F channel stores it (decision 274): the half toward zero.
-    height = model.half_toward_zero(
-        padding_reference.padding(sphere["free"]["height"][..., None], SPHERE, "uzp_sphere")[..., 0]
-    )
+    # Stored as the L16F channel stores it (decision 274): the half toward zero of the raw chain
+    # (decision 409), the padded Height the stencil reads.
+    height = model.half_toward_zero(sphere["padded_height"])
     assert np.array_equal(bits(sphere["mesh"]["height"]), bits(height))

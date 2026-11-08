@@ -77,6 +77,23 @@ std::optional<core::ChannelFormat> DocumentFormat(const FileRaster& raster, uint
     return c < raster.documentFormat.size() ? raster.documentFormat[c] : std::nullopt;
 }
 
+/// The padding operand of value `i` of `raster` (`FileRaster::operands`, decision 409).
+float PaddingOperand(const FileRaster& raster, size_t i) {
+    return raster.operands.empty() ? raster.values[i] : raster.operands[i];
+}
+
+/// Per written channel, 1 where the measured ring keeps its raw chain: a 16-bit float document
+/// channel, which stores the half toward zero of the chain without its 1 - (1 - m) step (decision
+/// 409, as the Height the virtual normal reads, decisions 263 and 288 (a)).
+std::vector<uint8_t> RawChains(const FileRaster& raster, uint32_t written) {
+    std::vector<uint8_t> raw(written, 0);
+    for (uint32_t c = 0; c < written; ++c) {
+        const std::optional<core::ChannelFormat> format = DocumentFormat(raster, c);
+        raw[c] = format && (*format == core::ChannelFormat::L16F || *format == core::ChannelFormat::RGB16F) ? 1 : 0;
+    }
+    return raw;
+}
+
 /// True when channel `c` of `raster` was padded by its source (`FileRaster::padded`).
 bool SourcePadded(const FileRaster& raster, uint32_t c) { return c < raster.padded.size() && raster.padded[c] != 0; }
 
@@ -118,6 +135,10 @@ EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster, const
         throw std::invalid_argument("export: the document formats of " + file.relativePath +
                                     " do not match its layout");
     }
+    if (!raster.operands.empty() && raster.operands.size() != raster.values.size()) {
+        throw std::invalid_argument("export: the padding operands of " + file.relativePath +
+                                    " do not match its values");
+    }
     // An alpha of 1 everywhere is dropped (recordings R-085 P6/P7 for RGB+A, R-090 P6 for L+A).
     const bool alpha = file.layout == FileLayout::LA || file.layout == FileLayout::RGBA;
     const bool drop = alpha && OpaqueAlpha(raster);
@@ -143,10 +164,10 @@ EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster, const
             std::vector<float> operands(image.values);
             for (size_t t = 0; t < texels; ++t) {
                 for (uint32_t c = 0; c < written; ++c) {
-                    if (DocumentFormat(raster, c)) operands[t * written + c] = raster.values[t * components + c];
+                    if (DocumentFormat(raster, c)) operands[t * written + c] = PaddingOperand(raster, t * components + c);
                 }
             }
-            if (ApplyPadding(file, *coverage, written, operands, inexact)) {
+            if (ApplyPadding(file, *coverage, written, operands, inexact, RawChains(raster, written))) {
                 for (size_t t = 0; t < texels; ++t) {
                     if (coverage->covered[t] != 0) continue;
                     for (uint32_t c = 0; c < written; ++c) {
@@ -193,11 +214,11 @@ EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster, const
         for (size_t t = 0; t < texels; ++t) {
             for (uint32_t c = 0; c < written; ++c) {
                 const size_t i = t * written + c;
-                operands[i] = DocumentFormat(raster, c) ? raster.values[t * components + c]
+                operands[i] = DocumentFormat(raster, c) ? PaddingOperand(raster, t * components + c)
                                                         : evaluator::arith::UnormOperand(image.samples[i], bits);
             }
         }
-        if (ApplyPadding(file, *coverage, written, operands, inexact)) {
+        if (ApplyPadding(file, *coverage, written, operands, inexact, RawChains(raster, written))) {
             for (size_t t = 0; t < texels; ++t) {
                 if (coverage->covered[t] != 0) continue;
                 for (uint32_t c = 0; c < written; ++c) {

@@ -1377,6 +1377,7 @@ render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int
     FileRaster raster;
     std::map<std::string, DiagnosticMap> evaluated;  // by srcMapType/srcMapName
     std::map<std::string, core::ChannelFormat> stored;  // documentMap sources: the channel's format
+    std::map<std::string, DiagnosticMap> beforeReadout;  // 32-bit float documentMaps (decision 409)
     std::set<std::string> padded;                       // sources that padded themselves
     for (const PlannedChannel& channel : file.channels) {
         const PlannedSource& s = channel.source;
@@ -1401,6 +1402,19 @@ render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int
                 // constant included, and written to PNG sRGB-encoded (SrgbEncodedRead).
                 stored[key] = result->format;
                 evaluated[key] = evaluator::MapOf(*result);
+                // Measured `infinite` padding pads a 32-bit float channel's values before its
+                // read-out (decision 409); a profile whose root is not isolated keeps the values.
+                if ((result->format == core::ChannelFormat::L32F || result->format == core::ChannelFormat::RGB32F) &&
+                    file.parameters && file.parameters->paddingAlgorithm == Padding::infinite) {
+                    render::Result<evaluator::ChannelResult> before =
+                        evaluator::EvaluateBeforeReadoutOn(project, r, templates, store, cache);
+                    if (before) {
+                        beforeReadout[key] = evaluator::MapOf(*before);
+                    } else if (evaluator::EvalErrorKindOf(before.error()) !=
+                               evaluator::EvalErrorKind::UnsupportedSource) {
+                        return render::Unexpected(before.error());
+                    }
+                }
                 break;
             }
             case SourceType::meshMap:
@@ -1475,6 +1489,22 @@ render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int
         }
         for (size_t t = 0; t < texels; ++t) {
             raster.values[t * raster.channels + c] = map.values[t * map.components + channel.component];
+        }
+    }
+    // The measured `infinite` padding pads a 32-bit float documentMap channel's values before its
+    // read-out (decision 409); every other channel pads its values.
+    if (!beforeReadout.empty()) {
+        raster.operands = raster.values;
+        for (uint32_t c = 0; c < raster.channels; ++c) {
+            const PlannedChannel& channel = file.channels[c];
+            const PlannedSource& s = channel.source;
+            if (s.type == SourceType::defaultMap || channel.luma) continue;
+            const auto before = beforeReadout.find(std::string(SourceTypeName(s.type)) + "/" + s.name);
+            if (before == beforeReadout.end()) continue;
+            const DiagnosticMap& map = before->second;
+            for (size_t t = 0; t < texels; ++t) {
+                raster.operands[t * raster.channels + c] = map.values[t * map.components + channel.component];
+            }
         }
     }
     raster.ocio = evaluator::PainterOcio(project);

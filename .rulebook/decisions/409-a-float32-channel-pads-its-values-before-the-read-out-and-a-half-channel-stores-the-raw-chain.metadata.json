@@ -1,0 +1,9 @@
+{
+  "id": 409,
+  "slug": "a-float32-channel-pads-its-values-before-the-read-out-and-a-half-channel-stores-the-raw-chain",
+  "title": "A 32-bit float channel pads its values before the read-out, and a 16-bit float channel stores the raw chain",
+  "status": "accepted",
+  "date": "2026-11-08",
+  "relatedTasks": ["phase3.1_export-island-padding"],
+  "supersededBy": null
+}

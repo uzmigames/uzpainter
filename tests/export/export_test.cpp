@@ -52,15 +52,17 @@
 //       sRGB-encoded in a PNG), "l8_material"? (an L8 one, each channel read through its own letter:
 //       `SrgbEncodedRead`), "append_opaque_alpha"? (an alpha of 1 appended), "ocio"? (OCIO with
 //       Painter's substance config), "document_format"? (every channel a documentMap stored in that
-//       ChannelFormat: a PNG source's codes read back as its operands, `DocumentOperands`)}: the
-//       source's values as the
+//       ChannelFormat: a PNG source's codes read back as its operands, `DocumentOperands`),
+//       "operands"? (raw float32 texels, rows top first: the padding operands,
+//       `FileRaster::operands`, decision 409)}: the source's values as the
 //       raster of an L, L+A, RGB or RGB+A file, encoded by EncodeFile; prints one JSON line per case
 //       {"target", "equal", "layout", "size", "target_size"}.
 //   uzp-export-tests ring <cases.json>
 //       (phase1.25 item 2.7) A list of cases {"mesh": an OBJ path, "material", "width", "height",
-//       "channels": 1 or 3, "values": raw float32 texels, rows top first, "out": a path}: the values
-//       padded `infinite` over the material's coverage and triangles, measured (padding.h), written
-//       raw to "out"; prints one JSON line per case {"ring": the measured ring (`RingJson`)}.
+//       "channels": 1 or 3, "values": raw float32 texels, rows top first, "out": a path, "raw"?
+//       (every channel's ring keeps its raw chain, decision 409)}: the values padded `infinite`
+//       over the material's coverage and triangles, measured (padding.h), written raw to "out";
+//       prints one JSON line per case {"ring": the measured ring (`RingJson`)}.
 //   uzp-export-tests roundtrip <out dir>
 //       (phase1.16) Encodes synthetic PNG16 and OpenEXR 32f images twice (ramps, runs, noise, signed
 //       zero, infinities, NaN payloads, odd sizes), decodes them back and writes the files; prints
@@ -1479,7 +1481,9 @@ int RunRing(const fs::path& casesPath) {
         parameters.fileFormat = exporter::FileFormat::exr;
         parameters.bitDepth = exporter::BitDepth::f32;
         file.parameters = parameters;
-        exporter::ApplyPadding(file, coverage, channels, values, exporter::InexactPadding::measure);
+        const bool rawChain = c.contains("raw") && std::get<bool>(c.at("raw").data);
+        exporter::ApplyPadding(file, coverage, channels, values, exporter::InexactPadding::measure,
+                               std::vector<uint8_t>(channels, rawChain ? 1 : 0));
         std::ofstream(Str(Key(c, "out"), "out"), std::ios::binary)
             .write(reinterpret_cast<const char*>(values.data()),
                    static_cast<std::streamsize>(values.size() * sizeof(float)));
@@ -1641,15 +1645,20 @@ int RunProcess(const fs::path& casesPath) {
                 values = DocumentOperands(file, srgbEncoded, ocio, *format, DecodePng(source));
             }
         }
-        const exporter::FileRaster raster{width,
-                                          height,
-                                          channels,
-                                          std::move(values),
-                                          std::nullopt,
-                                          std::nullopt,
-                                          std::move(srgbEncoded),
-                                          ocio,
-                                          std::move(documentFormat)};
+        exporter::FileRaster raster{width,
+                                    height,
+                                    channels,
+                                    std::move(values),
+                                    std::nullopt,
+                                    std::nullopt,
+                                    std::move(srgbEncoded),
+                                    ocio,
+                                    std::move(documentFormat)};
+        if (c.contains("operands")) {
+            const std::string bytes = ReadText(Str(c.at("operands"), "operands"));
+            raster.operands.resize(bytes.size() / sizeof(float));
+            std::memcpy(raster.operands.data(), bytes.data(), raster.operands.size() * sizeof(float));
+        }
         // `mesh` (and `material`): the case is padded `infinite` over that mesh's texel-centre
         // coverage and triangles first (padding.h), measured: the export refuses that padding
         // (decision 259); `coverage_out` receives the coverage, one byte per texel, and `ring_out`

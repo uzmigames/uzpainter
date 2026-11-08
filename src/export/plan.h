@@ -347,6 +347,11 @@ struct FileRaster {
     /// for every other channel. The measured `infinite` padding pads such a channel in that format
     /// (padding.h, decision 274).
     std::vector<std::optional<core::ChannelFormat>> documentFormat;
+    /// The measured `infinite` padding's operands, laid out as `values`, when they differ from
+    /// them: an L32F or RGB32F documentMap channel pads its values before the read-out (decision
+    /// 409, evaluator.h `EvaluateBeforeReadoutOn`); every other channel's operands are its values.
+    /// Empty: the operands are `values`.
+    std::vector<float> operands{};
     /// Per channel, 1 where the source padded its own uncovered texels (`VirtualMapResult::padded`):
     /// the export's padding leaves them (encode.h). Empty: none.
     std::vector<uint8_t> padded{};

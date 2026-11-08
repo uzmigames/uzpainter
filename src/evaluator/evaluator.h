@@ -140,4 +140,14 @@ private:
                                                        const TemplateLibrary& templates,
                                                        ITileStore& store, TileCache& cache);
 
+/// The values of `request`'s 32-bit float channel before its read-out (decision 409): per tile,
+/// the isolated root composited over a zero base (`EvaluateFloat32Readout`), which is the root's
+/// value where the stack covers the texel fully; the read-out base itself for an empty stack. The
+/// measured `infinite` padding of an L32F or RGB32F documentMap pads these (padding.h). Fails with
+/// `unsupported_source` for another format or under a profile whose root is not isolated.
+[[nodiscard]] render::Result<ChannelResult> EvaluateBeforeReadoutOn(const core::Project& project,
+                                                                    const EvaluateRequest& request,
+                                                                    const TemplateLibrary& templates,
+                                                                    ITileStore& store, TileCache& cache);
+
 }  // namespace uzp::evaluator

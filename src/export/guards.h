@@ -32,8 +32,8 @@
 
 namespace uzp::exporter {
 
-/// The owner of padding on UV-islanded sets (decisions 103, 245 and 259).
-inline constexpr std::string_view kIslandsOwner = "owner phase1.25_pilot-wand item 2.7";
+/// The owner of padding on UV-islanded sets (decisions 103, 245, 259 and 396).
+inline constexpr std::string_view kIslandsOwner = "owner phase3.1_export-island-padding";
 
 /// The refusal of the processing `file` (planned on `project`) asks for outside the recorded
 /// domain (encode.h); none for a statistics file. Throws std::invalid_argument when the file's

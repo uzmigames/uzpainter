@@ -784,7 +784,7 @@ def test_padding_on_islands(export_tests: Path, tmp_path: Path) -> None:
         "is not exact" in message
     ), message
     assert "recording R-090" in message and "decision 259" in message, message
-    assert "phase1.25_pilot-wand item 2.7" in message, message
+    assert "phase3.1_export-island-padding" in message, message
     assert files_under(out) == {}
 
     cases: list[dict[str, Any]] = [
@@ -864,7 +864,7 @@ def test_virtual_normal_on_islands(export_tests: Path, tmp_path: Path) -> None:
                 assert f'the {kind} "{source}" reads the combined virtual normal' in message
                 assert "island-edge texels" in message and "recording R-090" in message, message
                 assert "no recording shows it for a Height without layers" in message, message
-                assert "phase1.25_pilot-wand item 2.7" in message and "decision 245" in message
+                assert "phase3.1_export-island-padding" in message and "decision 245" in message
                 assert files_under(out) == {}, case
 
     # The five-map export, refused as a whole: its first map under `infinite` (decision 259), its
