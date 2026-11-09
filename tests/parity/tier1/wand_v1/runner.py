@@ -78,6 +78,14 @@ of the first rebuild that differ from Painter's r1 (in any component), per class
 covered texels), `edge` (the covered texels with an uncovered 8-neighbour, a part of `interior`),
 `ring` (the uncovered texels with a covered 8-neighbour, x wrapping as the ring does) and `gutter`
 (every other uncovered texel).
+
+The production mode (`compared`, `diagnostic=False`; decisions 414 and 417): production writes the
+islanded five-map export under the owner's EXC-013 (the padding) and EXC-014 (the combined virtual
+Normal's island edge), a conformant generation (`checked_receipt`: no `non_conformant`). Each
+rebuild's receipt names, per file, the exceptions it relies on (`exceptions_relied_on`), and
+`relied_exceptions` passes them to the comparison as that file's `candidate_exceptions`
+(`CandidateRun.exceptions`): a production-export entry covers only the files its receipt names. The
+measure mode's maps never carry them.
 """
 
 from __future__ import annotations
@@ -342,11 +350,33 @@ def rebuild(
 
 
 def checked_export(wand: Wand, diagnostic: bool = False) -> CandidateRun:
-    """The export of `rebuild` on a built `wand`, its receipt checked by `checked_receipt`."""
+    """The export of `rebuild` on a built `wand`, its receipt checked by `checked_receipt`; a
+    production export's files carry the exceptions its receipt names for them
+    (`relied_exceptions`)."""
     run = exported(wand, wand.export(diagnostic=diagnostic))
     if not run.refused:
         checked_receipt(wand, diagnostic)
+        if not diagnostic:
+            run = CandidateRun(run.files, exceptions=relied_exceptions(receipt_of(wand), run.files))
     return run
+
+
+def relied_exceptions(
+    receipt: Mapping[str, Any], files: Mapping[MapKey, Path]
+) -> dict[MapKey, frozenset[str]]:
+    """Per file of `files`, the exception ids `receipt`'s `exceptions_relied_on` lists for it
+    (decisions 414, 417), matched by file name; a receipt naming one file name twice, or a file it
+    does not list, stops the run."""
+    listed = [Path(str(f["path"])).name for f in receipt["files"]]
+    if len(set(listed)) != len(listed):
+        raise RunError(f"the receipt lists one file name twice: {sorted(listed)}")
+    if unlisted := sorted(p.name for p in files.values() if p.name not in listed):
+        raise RunError(f"the receipt does not list {unlisted}")
+    names: dict[str, set[str]] = {}
+    for entry in receipt.get("exceptions_relied_on") or []:
+        for path in entry["paths"]:
+            names.setdefault(Path(str(path)).name, set()).add(str(entry["exception_id"]))
+    return {key: frozenset(names.get(path.name, ())) for key, path in files.items()}
 
 
 def checked_receipt(wand: Wand, diagnostic: bool) -> None:
@@ -436,7 +466,7 @@ def preserved(run: CandidateRun, folder: Path) -> tuple[CandidateRun, dict[MapKe
         if sha256_of(copy) != digest:
             raise RunError(f"the copy of {path} differs from it")
         files[key], hashes[key] = copy, digest
-    return CandidateRun(files), hashes
+    return CandidateRun(files, exceptions=run.exceptions), hashes
 
 
 def contents(folder: Path) -> dict[str, str | None]:

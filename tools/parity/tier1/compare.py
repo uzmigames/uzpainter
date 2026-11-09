@@ -61,10 +61,11 @@ Padding (decision 223): for a texture set whose UV triangles the subject names, 
 by the set's texel-centre coverage (`tools.parity.coverage`). The verdict receives the coverage,
 the golden's id and the map's recorded output id, for an entry that bounds the covered texels only
 (an owner scope split: EXC-007 is withdrawn, decision 259; EXC-010 excepts the Wand v1 padding
-and its Normal's island-edge texels, decision 395), and the map's `padding` block publishes the
-covered statistics, those of the island-edge texels among them (covered, with an uncovered
-8-neighbour, x wrapping), the uncovered statistics and the uncovered ones within 1, 2, 4 and 8
-texels of coverage, whatever the verdict.
+and its Normal's island-edge texels, decision 395; a production export's files are judged with
+the exceptions their receipt names, `CandidateRun.exceptions`, decisions 414 and 417), and the
+map's `padding` block publishes the covered statistics, those of the island-edge texels among them
+(covered, with an uncovered 8-neighbour, x wrapping), the uncovered statistics and the uncovered
+ones within 1, 2, 4 and 8 texels of coverage, whatever the verdict.
 
 Nothing here writes into the repository except `write_report`: decoded values stay in memory, and
 the report holds numbers and hashes only.
@@ -128,11 +129,15 @@ Mask = npt.NDArray[np.bool_]
 @dataclass(frozen=True)
 class CandidateRun:
     """One UzPainter rebuild: its exported files by (texture set, map name), or its refusal and
-    the refusal's message (kept for the caller; the public report holds no message)."""
+    the refusal's message (kept for the caller; the public report holds no message). `exceptions`
+    names, per file of a production export, the exception ids its receipt's
+    `exceptions_relied_on` lists for that file (decisions 414, 417): the file's
+    `Comparison.candidate_exceptions`. A diagnostic measure export, never production, has none."""
 
     files: Mapping[MapKey, Path] = field(default_factory=dict)
     refused: bool = False
     refusal: str = ""
+    exceptions: Mapping[MapKey, frozenset[str]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -613,6 +618,7 @@ def equality(
                 covered=covered,
                 golden_id=str(subject.manifest["golden_id"]),
                 output_id=output_id,
+                candidate_exceptions=run.exceptions.get(key, frozenset()),
             ),
             register_entries,
         )

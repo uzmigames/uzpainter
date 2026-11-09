@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -57,6 +58,17 @@ def painter_ocio() -> Path:
     if hashlib.sha256(config.read_bytes()).hexdigest() != PAINTER_OCIO_CONFIG_SHA256:
         pytest.skip(f"{config} is not the pinned substance configuration")
     return config
+
+
+def production(
+    painter: Path, work: Path
+) -> tuple[dict[str, Any], tuple[CandidateRun, CandidateRun]]:
+    """The report and the two rebuilds, every export the production export (decisions 414, 417:
+    conformant under EXC-013 and EXC-014, each map judged with the exceptions its receipt names),
+    under the manifest's `OCIO`."""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("OCIO", str(painter_ocio()))
+        return wand_runner.compared(painter, work, GOLDEN_ID, REQUEST)
 
 
 def run(painter: Path, work: Path) -> Evidence:

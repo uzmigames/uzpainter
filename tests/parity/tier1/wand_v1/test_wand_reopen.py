@@ -19,6 +19,7 @@ import pytest
 
 from tests.adapters.assets3d.wand import Call, Wand
 from tests.parity.tier1.wand_v1.runner import (
+    BACKEND,
     DECIDED_REFUSALS,
     IDENTITY,
     SAVE,
@@ -26,6 +27,7 @@ from tests.parity.tier1.wand_v1.runner import (
     RunError,
     exported,
     initial_project,
+    relied_exceptions,
     reopened,
 )
 from tools.parity.tier1.compare import CandidateRun
@@ -57,6 +59,7 @@ class Stand:
         self.modes: list[bool] = []
         self.bypassed = [{"path": name, "refusal": DECIDED_REFUSALS[0]} for name in maps]
         self.unmarked = False
+        self.env: dict[str, str] = {}  # no `UZP_ASSETS3D_GPU_BACKEND`: the verb's default backend
         work.mkdir()
 
     def argument(self, step: str, key: str) -> Path:
@@ -86,6 +89,7 @@ class Stand:
             (self.out / name).write_bytes(data)
             files.append({"path": name, "sha256": hashlib.sha256(data).hexdigest()})
         receipt: dict[str, Any] = {
+            "backend": BACKEND,
             "files": files,
             "manifest_files": {"project": {"path": self.receipt_project}},
         }
@@ -304,3 +308,36 @@ def test_a_measured_reopen_bypassing_an_undecided_refusal_stops_the_run(stand: S
     stand.bypassed = [{"path": "wand_Normal.png", "refusal": "a resize is not recorded"}]
     with pytest.raises(RunError, match="no decision names"):
         reopened(cast(Wand, stand), first, initial, diagnostic=True)
+
+
+# --- decision 417: a production export's exceptions, per file ------------------------------------
+
+
+def test_a_production_receipt_names_its_exceptions_per_file(tmp_path: Path) -> None:
+    """`relied_exceptions`: each file gets the ids its receipt's `exceptions_relied_on` lists for
+    its path (EXC-013 for every padded file, EXC-014 for the Normal only), none without the
+    field; a file the receipt does not list, or a file name it lists twice, stops the run."""
+    files = {(SET, "wand_BaseColor"): tmp_path / "wand_BaseColor.png"}
+    files[SET, "wand_Normal"] = tmp_path / "wand_Normal.png"
+    listed = [{"path": p.name, "sha256": "0" * 64} for p in files.values()]
+    receipt: dict[str, Any] = {
+        "files": listed,
+        "exceptions_relied_on": [
+            {"exception_id": "EXC-013", "version": 1, "decision": "414", "paths": list(MAPS)},
+            {
+                "exception_id": "EXC-014",
+                "version": 1,
+                "decision": "417",
+                "paths": ["wand_Normal.png"],
+            },
+        ],
+    }
+    assert relied_exceptions(receipt, files) == {
+        (SET, "wand_BaseColor"): frozenset({"EXC-013"}),
+        (SET, "wand_Normal"): frozenset({"EXC-013", "EXC-014"}),
+    }
+    assert relied_exceptions({"files": listed}, files) == dict.fromkeys(files, frozenset())
+    with pytest.raises(RunError, match="does not list"):
+        relied_exceptions({"files": listed[:1]}, files)
+    with pytest.raises(RunError, match="twice"):
+        relied_exceptions({"files": [*listed, listed[0]]}, files)
