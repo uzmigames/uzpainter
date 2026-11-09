@@ -1672,10 +1672,16 @@ void IslandTriangles(Coverage& coverage, const mesh::TexturingMesh& mesh, const 
 
 std::vector<RingTexel> MeasuredRing(const Coverage& coverage) { return RingOf(coverage); }
 
-void CheckPadding(const PlannedFile& file, const Coverage& coverage, InexactPadding inexact) {
-    if (std::optional<std::string> refusal = PaddingRefusal(file, coverage, inexact)) {
+void CheckPadding(const PlannedFile& file, const Coverage& coverage) {
+    if (std::optional<std::string> refusal = PaddingRefusal(file, coverage)) {
         throw core::NotYetSupported(*refusal);
     }
+}
+
+bool PadsIslands(const PlannedFile& file, const Coverage& coverage) {
+    return file.layout != FileLayout::Statistics && file.parameters->paddingAlgorithm == Padding::infinite &&
+           !coverage.Complete() &&
+           std::any_of(coverage.covered.begin(), coverage.covered.end(), [](uint8_t c) { return c != 0; });
 }
 
 bool ReadsCombinedNormal(const PlannedSource& source) {
@@ -1749,15 +1755,10 @@ void PadIslandNormal(const Coverage& coverage, std::vector<float>& normals) {
 }
 
 bool ApplyPadding(const PlannedFile& file, const Coverage& coverage, uint32_t channels, std::vector<float>& stored,
-                  InexactPadding inexact, const std::vector<uint8_t>& rawChain) {
-    CheckPadding(file, coverage, inexact);
+                  const std::vector<uint8_t>& rawChain) {
+    CheckPadding(file, coverage);
     // Every other case keeps the values: complete coverage, or `passthrough`.
-    if (file.layout == FileLayout::Statistics || file.parameters->paddingAlgorithm != Padding::infinite ||
-        coverage.Complete() || std::none_of(coverage.covered.begin(), coverage.covered.end(), [](uint8_t c) {
-            return c != 0;
-        })) {
-        return false;
-    }
+    if (!PadsIslands(file, coverage)) return false;
     InfinitePadding(coverage, channels, stored, rawChain);
     return true;
 }

@@ -19,13 +19,13 @@
 //   (R-090 exports a virtual normal with `passthrough` only from layers and no mesh map, where
 //   Painter's r1 and r2 differ on 37095 of 37214 uncovered texels; owner phase1.25_pilot-wand
 //   item 2.7, decision 245). A combined virtual normal is refused before that (below).
-// - `infinite` with incomplete coverage: refused with `core::NotYetSupported` naming R-090 and
-//   decision 259, before anything is written. The rule below is not proven to be Painter's outside
-//   the islands, and the owner withdrew exception EXC-007, which had excepted those texels
-//   (decision 259: every texel identical). It is applied only when a caller asks to measure it
-//   against Painter (`InexactPadding::measure`, the exact hunt of phase3.1_export-island-padding),
-//   over the coverage's triangles (`IslandTriangles`); the export never does. Covered texels keep
-//   their evaluated values; the others are filled in two steps.
+// - `infinite` with incomplete coverage: written under the owner's exception EXC-013 (decision
+//   414, which lifts decision 259's refusal): every covered texel exact, the texels outside the
+//   coverage free. The rule below is not proven to be Painter's outside the islands (the exact
+//   rule is phase4.1_export-island-padding-exact's), so each file it fills relies on EXC-013 and
+//   its receipt says so (`PadsIslands`, receipt.h). It runs over the coverage's triangles
+//   (`IslandTriangles`, from the texturing mesh). Covered texels keep their evaluated values; the
+//   others are filled in two steps.
 //   1. The ring, every uncovered texel with a covered 8-neighbour (x wraps, y does not), is an FMA
 //      lerp chain over at most 4 taps (decisions 267, 268, 270, 273, 275, 278 to 282, 285, 288,
 //      290 to 292, 294):
@@ -138,7 +138,7 @@
 //   constant) is padded on the values the file stores, as decision 223 did: OpenEXR floats, and
 //   PNG codes as UNORM operands written back with the UNORM write rule. No recording shows
 //   Painter's domain for those.
-//   The refusal is lifted only when the rule is exact (phase3.1_export-island-padding).
+//   EXC-013 is withdrawn only when the rule is exact (phase4.1_export-island-padding-exact).
 // - A combined virtual normal (`Normal_OpenGL`, `Normal_DirectX`, or a diagnosticMap that
 //   isolates, compares or summarises one) with incomplete coverage, under every padding and in
 //   statistics files (decision 245): its island-edge texels, the covered texels with an
@@ -160,6 +160,7 @@
 #include <array>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "export/plan.h"
@@ -254,15 +255,21 @@ struct RingTexel {
 /// top first. Throws std::invalid_argument when the coverage has no triangles or is not theirs.
 [[nodiscard]] std::vector<RingTexel> MeasuredRing(const Coverage& coverage);
 
-/// Whether an `infinite` padding on incomplete coverage, which is not exact (above), is refused, as
-/// the export always does, or written to be measured against Painter (decision 259).
-enum class InexactPadding : uint8_t { refuse, measure };
+/// The owner's exception an `infinite` padding on incomplete coverage relies on (above): its id,
+/// version and decision, as the export receipt lists them (`exceptions_relied_on`).
+inline constexpr std::string_view kIslandPaddingException = "EXC-013";
+inline constexpr int kIslandPaddingExceptionVersion = 1;
+inline constexpr std::string_view kIslandPaddingDecision = "414";
 
 /// Throws `core::NotYetSupported` (see above) when `file`'s padding over `coverage` is not fitted,
 /// and std::invalid_argument when the coverage does not have the file's size. A statistics file
-/// has no padding and always passes.
-void CheckPadding(const PlannedFile& file, const Coverage& coverage,
-                  InexactPadding inexact = InexactPadding::refuse);
+/// has no padding and always passes; `infinite` passes under EXC-013.
+void CheckPadding(const PlannedFile& file, const Coverage& coverage);
+
+/// Whether `ApplyPadding` fills texels of `file` over `coverage`: `infinite` over incomplete
+/// coverage with a covered texel, not a statistics file. Such a file is written under EXC-013 and
+/// needs the coverage's triangles.
+[[nodiscard]] bool PadsIslands(const PlannedFile& file, const Coverage& coverage);
 
 /// Whether `source` reads a combined virtual normal: the virtualMap Normal_OpenGL or
 /// Normal_DirectX, or a diagnosticMap that isolates, compares or summarises one.
@@ -279,13 +286,13 @@ void CheckPadding(const PlannedFile& file, const Coverage& coverage,
 void CheckIslandNormal(const PlannedFile& file, const Coverage& coverage);
 
 /// Applies `file`'s padding over `coverage` to `stored`, the values the file stores (above),
-/// `channels` per texel, rows top first, after CheckPadding (which it repeats with `inexact`):
-/// `infinite` on incomplete coverage, measured only, fills the uncovered texels; every other
+/// `channels` per texel, rows top first, after CheckPadding (which it repeats): `infinite` on
+/// incomplete coverage fills the uncovered texels (`PadsIslands`, under EXC-013); every other
 /// admitted case keeps the values. Returns whether any texel was filled. `rawChain`, empty or one
 /// entry per channel: 1 where the ring keeps its chain's raw value, without the 1 - (1 - m) step
 /// (a 16-bit float document channel, decision 409).
 bool ApplyPadding(const PlannedFile& file, const Coverage& coverage, uint32_t channels, std::vector<float>& stored,
-                  InexactPadding inexact = InexactPadding::refuse, const std::vector<uint8_t>& rawChain = {});
+                  const std::vector<uint8_t>& rawChain = {});
 
 // The diagnostic measure export's combined virtual normal on UV islands (write.h, decision 308),
 // never production: Painter's rule as recorded, not proven exact.

@@ -584,6 +584,19 @@ json::Object BuildReceipt(const ReceiptInputs& in) {
         if (!undecided.empty()) marked["undecided"] = std::move(undecided);
         nonConformant = std::move(marked);
     }
+    // The owner's exception EXC-013 (padding.h, decision 414): the files whose padding it covers.
+    json::Value reliedOn = nullptr;
+    json::Array islandPadded;
+    for (size_t i = 0; i < plan.files.size(); ++i) {
+        if (in.encoded[i].islandPadding) islandPadded.push_back(plan.files[i].relativePath);
+    }
+    if (!islandPadded.empty()) {
+        openItems.emplace_back(std::string(kIslandPaddingNote));
+        reliedOn = json::Array{json::Object{{"exception_id", std::string(kIslandPaddingException)},
+                                            {"version", static_cast<int64_t>(kIslandPaddingExceptionVersion)},
+                                            {"decision", std::string(kIslandPaddingDecision)},
+                                            {"paths", std::move(islandPadded)}}};
+    }
     json::Array skipped;
     for (const SkippedMap& s : plan.skipped) {
         skipped.push_back(json::Object{{"root_path", s.rootPath},
@@ -633,6 +646,7 @@ json::Object BuildReceipt(const ReceiptInputs& in) {
     receipt["manifest_files"] = std::move(manifestFiles);
     receipt["manifest_export"] = std::move(manifestExport);
     if (!nonConformant.IsNull()) receipt["non_conformant"] = std::move(nonConformant);
+    if (!reliedOn.IsNull()) receipt["exceptions_relied_on"] = std::move(reliedOn);
     return receipt;
 }
 

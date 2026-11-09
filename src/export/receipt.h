@@ -33,6 +33,13 @@
 // export block names it in `open_items`
 // (`kNonConformantNote`). A conformant generation has no `non_conformant`.
 //
+// A generation with a file whose `infinite` padding filled texels outside the UV islands
+// (`EncodedFile::islandPadding`) relies on the owner's exception EXC-013 (decision 414: every
+// covered texel exact, the padding free): it carries `exceptions_relied_on`: [{exception_id,
+// version, decision, paths}], and its manifest export block names it in `open_items`
+// (`IslandPaddingNote`). Such a generation is conformant, never exact; without such a file it has
+// no `exceptions_relied_on`.
+//
 // resource_hashes is the set of resources the planned files read: the bitmaps of every channel DAG
 // they evaluate (fills, content effects, masks, groups), the masks of a diagnostic's material and
 // its enclosing groups, the mesh maps read, and the texturing mesh whose UV coverage drives the
@@ -80,6 +87,10 @@ inline constexpr std::string_view kDiagnosticMeasureMode = "diagnostic-measure";
 inline constexpr std::string_view kNonConformantNote =
     "NON-CONFORMANT: diagnostic measure export (decision 286), written past production's refusals; "
     "not Painter's output, never deliver it";
+/// The manifest export block's open item of a generation relying on EXC-013 (above).
+inline constexpr std::string_view kIslandPaddingNote =
+    "RELIES ON EXC-013 v1 (decision 414): the `infinite` padding outside the UV islands of the listed files is "
+    "not Painter's (the exact rule is phase4.1_export-island-padding-exact); every covered texel is exact";
 /// `non_conformant.undecided[].rule`: the uncovered texels of a combined virtual normal with a
 /// bound Normal mesh map (write.h, decision 308).
 inline constexpr std::string_view kUndecidedNormalRule =

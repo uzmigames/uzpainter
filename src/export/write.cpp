@@ -247,7 +247,9 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
                 return ExportFail("the padding of " + file.relativePath + " needs the UV coverage of the texture set \"" +
                                   set->name + "\", and no texturing mesh provides it");
             }
-            if (diagnostic != nullptr) IslandTriangles(*coverage, *diagnostic->mesh, set->material_id);
+            // The `infinite` padding on the set's islands reads its triangles (padding.h, EXC-013).
+            const mesh::TexturingMesh* islands = diagnostic != nullptr ? diagnostic->mesh.get() : inputs.mesh.get();
+            if (islands != nullptr) IslandTriangles(*coverage, *islands, set->material_id);
             coverages.emplace(set->id, std::move(*coverage));
         }
         resizes[i] = ResizeOf(static_cast<uint32_t>(set->resolution.width),
@@ -267,20 +269,20 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
             resizes[i] != Resize::none ? resizedCoverages.at(i) : coverages.at(set->id);
         if (diagnostic == nullptr) {
             CheckIslandNormal(file, coverage);
-            CheckPadding(file, coverage);
-            continue;
-        }
-        // The diagnostic measure export: production's two island refusals recorded, not thrown.
-        const auto record = [&](const auto& check) {
+        } else {
+            // The diagnostic measure export: production's island Normal refusal recorded, not thrown.
             try {
-                check();
+                CheckIslandNormal(file, coverage);
             } catch (const core::NotYetSupported& refusal) {
                 bypassed[i].emplace_back(refusal.what());
             }
-        };
-        record([&] { CheckIslandNormal(file, coverage); });
-        record([&] { CheckPadding(file, coverage); });
-        CheckPadding(file, coverage, InexactPadding::measure);
+        }
+        CheckPadding(file, coverage);
+        if (PadsIslands(file, coverage) && coverage.triangles.empty()) {
+            return ExportFail("the padding \"infinite\" of " + file.relativePath +
+                              " on the UV islands of the texture set \"" + set->name +
+                              "\" needs the texturing mesh's triangles, and none is given");
+        }
     }
     // 2. Every file evaluated, padded and encoded in memory. Every check passed in step 1, so a
     // padding or an encoder that throws here is a failure of this export, returned as such: the
@@ -339,11 +341,11 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
                                                                       : &coverages.at(file.textureSetId);
             const auto canonical = canonicals.find(i);
             EncodedImage image = EncodeFile(file, *raster, coverage,
-                                            diagnostic != nullptr ? InexactPadding::measure : InexactPadding::refuse,
                                             canonical != canonicals.end() ? &canonical->second.samples : nullptr);
             if (canonical != canonicals.end()) canonical->second.layout = image.layout;
             encoded.push_back({std::move(image.bytes), raster->normalTag, image.layout, diagnostic != nullptr,
                                std::move(bypassed[i]), raster->undecided, std::nullopt});
+            encoded.back().islandPadding = image.padded;
         } catch (const std::exception& e) {
             return ExportFail("encoding " + file.relativePath + " failed: " + e.what());
         }

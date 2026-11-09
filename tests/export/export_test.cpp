@@ -658,6 +658,7 @@ int RunExport(const fs::path& templatesDir, const fs::path& specPath, const fs::
         inputs.templateId = spec.templateId;
         inputs.resources = spec.resources;
         inputs.geometry = spec.geometry;
+        inputs.mesh = spec.mesh;
         const auto write = [&](evaluator::ITileStore& store, evaluator::TileCache& cache) {
             return exporter::WriteExport(spec.project, 1, plan, inputs, *templates, store, cache);
         };
@@ -763,6 +764,7 @@ int RunExportDiagnostic(const fs::path& templatesDir, const fs::path& specPath, 
         inputs.templateId = spec.templateId;
         inputs.resources = spec.resources;
         inputs.geometry = spec.geometry;
+        inputs.mesh = spec.mesh;
         const exporter::DiagnosticMeasure diagnostic{spec.mesh};
         render::Result<std::vector<exporter::EncodedFile>> encoded = exporter::EncodeExport(
             spec.project, 1, plan, inputs, *templates, cpu.store(), cpu.cache(), &diagnostic);
@@ -942,6 +944,7 @@ int RunTgaProcessingCandidate(const fs::path& templatesDir, const fs::path& spec
         inputs.templateId = spec.templateId;
         inputs.resources = spec.resources;
         inputs.geometry = spec.geometry;
+        inputs.mesh = spec.mesh;
         const exporter::DiagnosticMeasure diagnostic{spec.mesh};
         stage = "encode_export";
         const render::Result<std::vector<exporter::EncodedFile>> encoded = exporter::EncodeExport(
@@ -1265,6 +1268,7 @@ int RunOcio16InputCandidate(const fs::path& templatesDir, const fs::path& specPa
         inputs.templateId = spec.templateId;
         inputs.resources = counting;
         inputs.geometry = spec.geometry;
+        inputs.mesh = spec.mesh;
         render::Result<exporter::FileRaster> raster =
             exporter::EvaluateFileOn(clone, 1, cloneFile, inputs, *templates, cpu.store(), cpu.cache());
         if (!raster) return refuse("Failure", raster.error().reason);
@@ -1296,7 +1300,7 @@ int RunOcio16InputCandidate(const fs::path& templatesDir, const fs::path& specPa
 
         stage = "encode";
         const exporter::EncodedImage encoded =
-            exporter::EncodeFile(file, *raster, nullptr, exporter::InexactPadding::refuse);
+            exporter::EncodeFile(file, *raster, nullptr);
 
         if (core::ProjectToJson(original) != originalJson) return refuse("Setup", "the evaluation changed the project");
 
@@ -1482,8 +1486,7 @@ int RunRing(const fs::path& casesPath) {
         parameters.bitDepth = exporter::BitDepth::f32;
         file.parameters = parameters;
         const bool rawChain = c.contains("raw") && std::get<bool>(c.at("raw").data);
-        exporter::ApplyPadding(file, coverage, channels, values, exporter::InexactPadding::measure,
-                               std::vector<uint8_t>(channels, rawChain ? 1 : 0));
+        exporter::ApplyPadding(file, coverage, channels, values, std::vector<uint8_t>(channels, rawChain ? 1 : 0));
         std::ofstream(Str(Key(c, "out"), "out"), std::ios::binary)
             .write(reinterpret_cast<const char*>(values.data()),
                    static_cast<std::streamsize>(values.size() * sizeof(float)));
@@ -1660,8 +1663,8 @@ int RunProcess(const fs::path& casesPath) {
             std::memcpy(raster.operands.data(), bytes.data(), raster.operands.size() * sizeof(float));
         }
         // `mesh` (and `material`): the case is padded `infinite` over that mesh's texel-centre
-        // coverage and triangles first (padding.h), measured: the export refuses that padding
-        // (decision 259); `coverage_out` receives the coverage, one byte per texel, and `ring_out`
+        // coverage and triangles first (padding.h; the export writes it under EXC-013, decision 414);
+        // `coverage_out` receives the coverage, one byte per texel, and `ring_out`
         // the measured ring (`RingJson`).
         std::int64_t coveredTexels = -1;
         std::optional<exporter::Coverage> padding;
@@ -1685,7 +1688,7 @@ int RunProcess(const fs::path& casesPath) {
             padding = std::move(coverage);
         }
         const exporter::EncodedImage encoded =
-            exporter::EncodeFile(file, raster, padding ? &*padding : nullptr, exporter::InexactPadding::measure);
+            exporter::EncodeFile(file, raster, padding ? &*padding : nullptr);
         if (c.contains("out")) {
             std::ofstream(Str(c.at("out"), "out"), std::ios::binary)
                 .write(encoded.bytes.data(), static_cast<std::streamsize>(encoded.bytes.size()));
@@ -1833,6 +1836,7 @@ int RunPublish(const fs::path& templatesDir, const fs::path& specPath, const fs:
         inputs.templateId = spec.templateId;
         inputs.resources = spec.resources;
         inputs.geometry = spec.geometry;
+        inputs.mesh = spec.mesh;
         exporter::PublishRequest request;
         request.identity = {"0.0.0-test", "uzp-export-tests"};
         request.projectPath = "C:/projects/fixture.uzp";
@@ -2041,6 +2045,7 @@ int RunPreflight(const fs::path& templatesDir, const fs::path& specPath, const f
         inputs.templateId = spec.templateId;
         inputs.resources = spec.resources;
         inputs.geometry = spec.geometry;
+        inputs.mesh = spec.mesh;
         render::Result<std::vector<exporter::WrittenFile>> written =
             exporter::WriteExport(spec.project, 1, plan, inputs, *templates, cpu.store(), cpu.cache());
         if (!written) {

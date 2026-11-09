@@ -8,7 +8,8 @@
 // Order, so that a refusal or a failure leaves nothing written:
 // 1. every file's processing is checked (CheckProcessing: NotYetSupported for an unrecorded one),
 //    then a combined virtual normal on a UV-islanded set (CheckIslandNormal, statistics files
-//    included) and the padding (CheckPadding);
+//    included) and the padding (CheckPadding); an `infinite` file on UV islands, written under
+//    EXC-013 (decision 414), needs the triangles of `inputs.mesh` (padding.h `PadsIslands`);
 // 2. every file is evaluated (EvaluateFileOn), padded over its texture set's coverage
 //    (ApplyPadding) and encoded (EncodeFile) in memory, and its `.uztexture` derivative, when the
 //    plan requests one, cooked from the encoded samples (`EncodedUzTexture`, decision 316);
@@ -22,9 +23,9 @@
 // The diagnostic measure export (`DiagnosticMeasure`, decision 286) is NOT conformant and never
 // the default: only `UzPainter.exe run --diagnostic-measure-export` reaches it (python/run.h). It
 // writes what production refuses on a UV-islanded set so that the whole pipeline can be scored
-// against Painter: step 1 records the refusals of CheckIslandNormal and of CheckPadding instead of
-// throwing them (`EncodedFile::bypassed`; every other check still throws), and step 2 pads with
-// `InexactPadding::measure` over the coverage and its triangles. A combined virtual normal
+// against Painter: step 1 records the refusal of CheckIslandNormal instead of throwing it
+// (`EncodedFile::bypassed`; every other check still throws), and step 2 pads over the coverage and
+// the triangles of the diagnostic's mesh, as production does. A combined virtual normal
 // (`Normal_OpenGL`, `Normal_DirectX`) is computed and padded by Painter's recorded rule
 // (virtual_maps.h `VirtualMapRequest::islandNormal`, decision 308): its stencil reads the padded
 // Height at the island edge (decisions 263, 288), its ring copies the nearest covered mesh-free
@@ -150,6 +151,9 @@ struct EncodedFile {
     std::optional<EncodedUzMaterial> material{};
     /// The explicit DDS companion requested through RequestDds.
     std::optional<EncodedDds> dds{};
+    /// Its `infinite` padding filled texels outside the UV islands: written under EXC-013
+    /// (`EncodedImage::padded`, decision 414), listed in the receipt's `exceptions_relied_on`.
+    bool islandPadding = false;
 };
 
 /// Steps 1 and 2 above: every file of `plan` (compiled from revision `revision` of `project`)

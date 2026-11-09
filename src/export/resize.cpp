@@ -88,7 +88,7 @@ std::optional<std::string> ResizeCoverageRefusal(const PlannedFile& file, const 
     return "export: " + file.rootPath + " map \"" + file.fileName + "\" (" + file.relativePath +
            "): resizing a texture set whose UV islands do not cover the whole tile is not recorded (Painter's "
            "padding around the resize; export-resize records sets that cover it) (owner "
-           "phase3.2_unreal-ue56-packed-preset item 2.9, decision 349; phase1.25_pilot-wand item 2.7)";
+           "phase3.2_unreal-ue56-packed-preset item 2.9, decision 349; phase4.1_export-island-padding-exact)";
 }
 
 render::Result<FileRaster> Downscale(const PlannedFile& file, const FileRaster& native) {

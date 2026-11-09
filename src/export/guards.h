@@ -11,7 +11,8 @@
 //
 // The preflight (`PreflightExport`) runs them over a compiled plan in the order of
 // `EncodeExport`'s step 1 (write.h): the processing, then, for a file that needs the coverage, a
-// combined virtual normal on UV islands (decision 245) and the padding (decision 259). Per file:
+// combined virtual normal on UV islands (decision 245) and the padding (padding.h; `infinite` is
+// admitted under EXC-013, decision 414). Per file:
 // - `blocked`: a guard refuses it, with the export's exact reason;
 // - `needs_evaluation`: the file needs its texture set's UV coverage and none is available, so the
 //   island and padding checks did not run;
@@ -32,8 +33,9 @@
 
 namespace uzp::exporter {
 
-/// The owner of padding on UV-islanded sets (decisions 103, 245, 259 and 396).
-inline constexpr std::string_view kIslandsOwner = "owner phase3.1_export-island-padding";
+/// The owner of the exact padding and Normal on UV-islanded sets (decisions 103, 245, 259, 396
+/// and 414).
+inline constexpr std::string_view kIslandsOwner = "owner phase4.1_export-island-padding-exact";
 
 /// The refusal of the processing `file` (planned on `project`) asks for outside the recorded
 /// domain (encode.h); none for a statistics file. Throws std::invalid_argument when the file's
@@ -44,11 +46,10 @@ inline constexpr std::string_view kIslandsOwner = "owner phase3.1_export-island-
 /// whatever the padding, a statistics file included (padding.h, decision 245).
 [[nodiscard]] std::optional<std::string> IslandNormalFileRefusal(const PlannedFile& file, const Coverage& coverage);
 
-/// The refusal of `file`'s padding over `coverage` when it is not fitted (padding.h, decision
-/// 259); none for a statistics file. Throws std::invalid_argument when the coverage does not have
-/// the file's size.
-[[nodiscard]] std::optional<std::string> PaddingRefusal(const PlannedFile& file, const Coverage& coverage,
-                                                        InexactPadding inexact = InexactPadding::refuse);
+/// The refusal of `file`'s padding over `coverage` when it is not fitted (padding.h); none for a
+/// statistics file, nor for `infinite`, written under EXC-013 (decision 414). Throws
+/// std::invalid_argument when the coverage does not have the file's size.
+[[nodiscard]] std::optional<std::string> PaddingRefusal(const PlannedFile& file, const Coverage& coverage);
 
 enum class PreflightStatus : uint8_t { blocked, needs_evaluation, no_known_blocker };
 [[nodiscard]] std::string_view PreflightStatusName(PreflightStatus status);

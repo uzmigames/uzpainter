@@ -75,6 +75,10 @@
 #include "uzp_core/types/ids.h"
 #include "uzp_core/types/project.h"
 
+namespace uzp::mesh {
+struct TexturingMesh;
+}
+
 namespace uzp::exporter {
 
 /// The plan's JSON schema id.
@@ -310,6 +314,11 @@ struct SourceInputs {
     std::string templateId{evaluator::kDefaultTemplateId};
     std::shared_ptr<const evaluator::IResourceProvider> resources;
     std::shared_ptr<const evaluator::IGeometryMaskProvider> geometry;
+    /// The texturing mesh `geometry` rasterises, or null: the `infinite` padding of a texture set
+    /// whose UV islands do not cover the tile reads its triangles (padding.h `IslandTriangles`;
+    /// written under EXC-013, decision 414). Without it such a file fails before anything is
+    /// written.
+    std::shared_ptr<const mesh::TexturingMesh> mesh;
     /// Called before file `file` (of `files`) is evaluated (`EncodeExport` step 2); false stops the
     /// export there with an `export:` failure and nothing written (a job's file checkpoint).
     std::function<bool(size_t file, size_t files)> beforeFile;

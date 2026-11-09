@@ -64,8 +64,8 @@ render::Result<Publication> ExportProject(const ProjectExportRequest& request) {
     if (project.mesh) {
         mesh::ImportResult imported = mesh::RederiveMesh(
             project, [&projectStore](const std::string& sha) { return projectStore.ReadResource(sha); });
-        inputs.geometry = std::make_shared<evaluator::MeshGeometryMasks>(
-            std::make_shared<const mesh::TexturingMesh>(std::move(imported.mesh)));
+        inputs.mesh = std::make_shared<const mesh::TexturingMesh>(std::move(imported.mesh));
+        inputs.geometry = std::make_shared<evaluator::MeshGeometryMasks>(inputs.mesh);
     }
     PublishRequest publish;
     publish.identity = request.identity;

@@ -27,7 +27,6 @@ from tests.export.test_export_encoders import (
     spec,
 )
 
-INFINITE = 'the padding "infinite" on a texture set whose UV islands do not cover the whole tile'
 ISLAND_NORMAL = "reads the combined virtual normal on a texture set whose UV islands do not cover"
 
 
@@ -60,28 +59,19 @@ def test_an_admitted_plan_has_no_known_blocker(export_tests: Path, tmp_path: Pat
     assert sorted(result["export"]["written"]) == sorted(planned) == sorted(files_under(out))
 
 
-def test_infinite_padding_on_islands_is_blocked_with_the_exports_reason(
+def test_infinite_padding_on_islands_is_admitted_under_exc013(
     export_tests: Path, tmp_path: Path
 ) -> None:
-    """Decision 259: on the sphere, whose UV islands leave texels uncovered, `infinite` padding is
-    `blocked` for every file with exactly the message the export then raises, naming its owner,
-    recording and decisions; nothing is written."""
+    """Decision 414: on the sphere, whose UV islands leave texels uncovered, `infinite` padding is
+    no longer refused (the owner's EXC-013: every covered texel exact, the padding free), so every
+    file is `no_known_blocker` and the export writes them all."""
     out = tmp_path / "out"
     sphere = spec(tmp_path / "spec", SPHERE, "uzp_sphere")
     result = preflight(export_tests, sphere, config(out, root="uzp_sphere"), tmp_path / "run")
-    files = result["preflight"]["files"]
-    assert result["preflight"]["status"] == "blocked"
-    assert {f["status"] for f in files} == {"blocked"}
-    assert all(INFINITE in f["reason"] and f["type"] == "NotYetSupported" for f in files), files
-    assert files[0]["references"] == [
-        "decision 220",
-        "phase1.25_pilot-wand",
-        "R-090",
-        "decision 090",
-        "decision 259",
-    ], files[0]
-    assert result["export"] == {"error": "NotYetSupported", "message": files[0]["reason"]}
-    assert files_under(out) == {}
+    planned = [f["relativePath"] for f in result["plan"]["files"]]
+    assert set(statuses(result).values()) == {"no_known_blocker"}, result["preflight"]
+    assert result["preflight"]["status"] == "no_known_blocker"
+    assert sorted(result["export"]["written"]) == sorted(planned) == sorted(files_under(out))
 
 
 def test_an_island_normal_is_blocked_with_and_without_a_height(

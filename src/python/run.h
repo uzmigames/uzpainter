@@ -26,7 +26,7 @@
 //
 // `--diagnostic-measure-export`, anywhere before `--`, makes every export of this process the
 // diagnostic measure export of decision 286 (export/write.h): NOT conformant, it writes what
-// production refuses on UV-islanded sets, `InexactPadding::measure` included, and marks the
+// production refuses on UV-islanded sets (a combined virtual normal on them), and marks the
 // generation's receipt `non_conformant`. The report then holds `diagnostic: "diagnostic-measure"`.
 // No other verb, no MCP or worker process and no Python call can turn it on.
 //

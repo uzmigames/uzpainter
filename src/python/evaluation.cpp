@@ -78,6 +78,7 @@ std::shared_ptr<RevisionEvaluation> Build(const OpenProject& open, const core::S
             mesh::RederiveMesh(project, [store](const std::string& sha256) { return store->ReadResource(sha256); });
         evaluation->mesh = std::make_shared<const mesh::TexturingMesh>(std::move(imported.mesh));
         evaluation->inputs.geometry = std::make_shared<evaluator::MeshGeometryMasks>(evaluation->mesh);
+        evaluation->inputs.mesh = evaluation->mesh;
     }
     return evaluation;
 }

@@ -7,8 +7,8 @@ channel is left out of the rebuild (its bitmap's default colour space on Opacity
 not recorded); every other documentMap of the `infinite` OpenEXR 32f steps is compared, covered
 texels, ring and gutter alike. User1 is the decision 409 case (its padding runs on the values
 before the float32 read-out) and Height the half store's raw chain. The virtual Normal's covered
-island edge is item 2.2's and is not compared. The production export still refuses this padding
-(decision 259); this mode is not conformant.
+island edge is `phase4.1_export-island-padding-exact`'s and is not compared. Since decision 414
+production writes the same padding under EXC-013; this mode stays not conformant.
 """
 
 from __future__ import annotations

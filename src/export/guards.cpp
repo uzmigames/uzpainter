@@ -245,7 +245,7 @@ std::optional<std::string> IslandNormalFileRefusal(const PlannedFile& file, cons
            "): " + IslandNormalRefusal(normal->source);
 }
 
-std::optional<std::string> PaddingRefusal(const PlannedFile& file, const Coverage& coverage, InexactPadding inexact) {
+std::optional<std::string> PaddingRefusal(const PlannedFile& file, const Coverage& coverage) {
     if (file.layout == FileLayout::Statistics) return std::nullopt;
     if (coverage.width != file.width || coverage.height != file.height ||
         coverage.covered.size() != size_t{coverage.width} * coverage.height) {
@@ -253,14 +253,9 @@ std::optional<std::string> PaddingRefusal(const PlannedFile& file, const Coverag
     }
     if (coverage.Complete()) return std::nullopt;
     const Padding padding = file.parameters->paddingAlgorithm;
-    if (padding == Padding::infinite) {
-        if (inexact == InexactPadding::measure) return std::nullopt;
-        return Refused(file,
-                       "the padding \"infinite\" on a texture set whose UV islands do not cover the whole tile is not "
-                       "exact: Painter's ring across UV seams, at seam corners and at poles is not identified, and the "
-                       "best-known rule misses Painter's padding texels by up to 59150 PNG 16 codes (decision 220)",
-                       std::string(kIslandsOwner) + ", " + std::string(kProcessingRecording) + ", decision 259");
-    }
+    // Written under the owner's EXC-013 (decision 414, lifting decision 259's refusal): every covered
+    // texel exact, the padding outside the coverage free (padding.h `PadsIslands`).
+    if (padding == Padding::infinite) return std::nullopt;
     if (padding != Padding::passthrough) {
         return Refused(file,
                        "the padding \"" + std::string(PaddingName(padding)) +

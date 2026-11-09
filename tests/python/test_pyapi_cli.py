@@ -174,14 +174,16 @@ RECEIPT_SCHEMA = REPO_ROOT / "src" / "export" / "schema" / "receipt.schema.json"
 
 def test_run_diagnostic_measure_export_is_explicit(painter: Path, tmp_path: Path) -> None:
     """Decision 286: the export of a Height and its `Normal_OpenGL` with `infinite` padding on the
-    sphere's UV islands, which production refuses (decisions 245 and 259):
+    sphere's UV islands, which production refuses for its Normal (decision 245):
     - without `--diagnostic-measure-export`, and with it after `--` (it is then the script's
-      argument), the export is refused before anything is written and the report says nothing of
-      a diagnostic; no Python call can turn the mode on;
+      argument), the export is refused before anything is written, naming decision 245, and the
+      report says nothing of a diagnostic; no Python call can turn the mode on;
     - with it, both files are written, and the job's result, the run's report and the
       generation's receipt (valid against its schema) say the export is NOT conformant: the
-      receipt lists, per file, the production refusals it bypassed, and its manifest export block
-      names it in `open_items`."""
+      receipt lists the Normal's bypassed refusal (decision 245 only: decision 414 lifted the
+      padding's), and its manifest export block names it in `open_items`;
+    - decision 414: the Height alone is written by the production export, conformant (no
+      `non_conformant`), its receipt relying on EXC-013 version 1 for its `infinite` padding."""
     channel = {"destChannel": "L", "srcChannel": "L", "srcMapType": "documentMap"}
     virtual = {"srcMapType": "virtualMap", "srcMapName": "Normal_OpenGL"}
     rgb = [{"destChannel": c, "srcChannel": c, **virtual} for c in "RGB"]
@@ -214,6 +216,8 @@ def test_run_diagnostic_measure_export_is_explicit(painter: Path, tmp_path: Path
         fill.active_channels = {{ts.ChannelType.Height}}
         fill.set_source(ts.ChannelType.Height, cm.Color(0.25, 0.25, 0.25, "Raw"))
         config = dict(json.loads({json.dumps(config)!r}), exportPath=work + "/export")
+        if sys.argv[2:] == ["height-only"]:
+            config["exportPresets"][0]["maps"] = config["exportPresets"][0]["maps"][:1]
         hidden = [n for n in dir(uzpainter.export) if "diagnostic" in n or "measure" in n]
         try:
             out = export.export_project_textures(config)
@@ -246,7 +250,7 @@ def test_run_diagnostic_measure_export_is_explicit(painter: Path, tmp_path: Path
         result = report["result"]
         assert result["out"] is None and result["hidden"] == [], (name, result)
         assert result["refusal"].startswith("NotYetSupported: "), (name, result)
-        assert "decision 259" in result["refusal"] or "decision 245" in result["refusal"]
+        assert "decision 245" in result["refusal"], result["refusal"]
         assert [f for f in result["files"] if f not in ("publication.lock",)] == [], result
 
     work = tmp_path / "diagnostic"
@@ -271,12 +275,36 @@ def test_run_diagnostic_measure_export_is_explicit(painter: Path, tmp_path: Path
     bypassed: dict[str, list[str]] = {}
     for entry in marked["bypassed"]:
         bypassed.setdefault(entry["path"], []).append(entry["refusal"])
-    assert sorted(bypassed) == ["uzp_sphere_height.png", "uzp_sphere_normal.png"], bypassed
-    assert all("decision 259" in r for r in bypassed["uzp_sphere_height.png"]), bypassed
+    assert sorted(bypassed) == ["uzp_sphere_normal.png"], bypassed
     normal = bypassed["uzp_sphere_normal.png"]
-    assert len(normal) == 2 and "decision 245" in normal[0] and "decision 259" in normal[1], normal
+    assert len(normal) == 1 and "decision 245" in normal[0], normal
     assert any(
         item.startswith("NON-CONFORMANT: diagnostic measure export (decision 286)")
+        for item in receipt["manifest_export"]["open_items"]
+    ), receipt["manifest_export"]["open_items"]
+
+    work = tmp_path / "production-height"
+    work.mkdir()
+    status, documents, stderr = cli(painter, "run", path, str(work), "height-only")
+    assert status == 0, stderr
+    (report,) = documents
+    assert report["status"] == "ok" and "diagnostic" not in report, report
+    result = report["result"]
+    assert result["refusal"] is None, result
+    out, receipt = result["out"], result["receipt"]
+    assert "non_conformant" not in out and "non_conformant" not in receipt, receipt
+    assert [f["relative_path"] for f in out["files"]] == ["uzp_sphere_height.png"]
+    assert [e.message for e in validator.iter_errors(receipt)] == []
+    assert receipt["exceptions_relied_on"] == [
+        {
+            "exception_id": "EXC-013",
+            "version": 1,
+            "decision": "414",
+            "paths": ["uzp_sphere_height.png"],
+        }
+    ], receipt["exceptions_relied_on"]
+    assert any(
+        item.startswith("RELIES ON EXC-013 v1 (decision 414)")
         for item in receipt["manifest_export"]["open_items"]
     ), receipt["manifest_export"]["open_items"]
 

@@ -102,6 +102,44 @@
         }
       ]
     },
+    "exceptions_relied_on": {
+      "description": "Only in a generation with a file whose `infinite` padding filled texels outside the UV islands (src/export/receipt.h, decision 414): the owner's exception it relies on (EXC-013: every covered texel exact, the padding free) and those files, in plan order. Conformant under the exception, never exact.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "exception_id",
+          "version",
+          "decision",
+          "paths"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "exception_id": {
+            "type": "string",
+            "pattern": "^EXC-[0-9]{3,}$"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "decision": {
+            "type": "string",
+            "pattern": "^[0-9]{3}$"
+          },
+          "paths": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
     "non_conformant": {
       "description": "Only in a generation of the diagnostic measure export (src/export/write.h, decision 286): not Painter's output. The production refusals it bypassed, per file.",
       "type": "object",

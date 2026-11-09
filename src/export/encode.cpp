@@ -117,7 +117,7 @@ std::optional<uint16_t> OcioSrgbPng16Code(float v) {
 }
 
 EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster, const Coverage* coverage,
-                        InexactPadding inexact, std::vector<uint16_t>* samples) {
+                        std::vector<uint16_t>* samples) {
     if (samples != nullptr) samples->clear();
     if (file.layout == FileLayout::Statistics) {
         if (!raster.statistics) throw std::invalid_argument("export: a statistics file without statistics");
@@ -150,6 +150,7 @@ EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster, const
         // OpenEXR 32f: the float unchanged; 16f: the half rounded toward zero (R-090 P2).
         const bool half = p.bitDepth == BitDepth::f16;
         ExrImage image{raster.width, raster.height, written, {}, half};
+        bool padded = false;
         image.values.reserve(texels * written);
         for (size_t t = 0; t < texels; ++t) {
             for (uint32_t c = 0; c < written; ++c) {
@@ -167,7 +168,8 @@ EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster, const
                     if (DocumentFormat(raster, c)) operands[t * written + c] = PaddingOperand(raster, t * components + c);
                 }
             }
-            if (ApplyPadding(file, *coverage, written, operands, inexact, RawChains(raster, written))) {
+            if (ApplyPadding(file, *coverage, written, operands, RawChains(raster, written))) {
+                padded = true;
                 for (size_t t = 0; t < texels; ++t) {
                     if (coverage->covered[t] != 0) continue;
                     for (uint32_t c = 0; c < written; ++c) {
@@ -181,7 +183,7 @@ EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster, const
                 }
             }
         }
-        return {EncodeExr(image), layout};
+        return {EncodeExr(image), layout, padded};
     }
     // PNG 8 and 16: the UNORM write rule at the file's depth (R-090 P1), of the sRGB encode of an
     // sRGB8 material channel's linear value (R-090 P10, decision 126).
@@ -202,6 +204,7 @@ EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster, const
         return static_cast<uint16_t>(evaluator::arith::WriteUnorm(v, bits));
     };
     PngImage image{raster.width, raster.height, written, bits, {}};
+    bool padded = false;
     image.samples.reserve(texels * written);
     for (size_t t = 0; t < texels; ++t) {
         for (uint32_t c = 0; c < written; ++c) image.samples.push_back(sample(c, raster.values[t * components + c]));
@@ -218,7 +221,8 @@ EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster, const
                                                         : evaluator::arith::UnormOperand(image.samples[i], bits);
             }
         }
-        if (ApplyPadding(file, *coverage, written, operands, inexact, RawChains(raster, written))) {
+        if (ApplyPadding(file, *coverage, written, operands, RawChains(raster, written))) {
+            padded = true;
             for (size_t t = 0; t < texels; ++t) {
                 if (coverage->covered[t] != 0) continue;
                 for (uint32_t c = 0; c < written; ++c) {
@@ -231,7 +235,7 @@ EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster, const
             }
         }
     }
-    EncodedImage encoded{EncodePng(image), layout};
+    EncodedImage encoded{EncodePng(image), layout, padded};
     if (samples != nullptr) *samples = std::move(image.samples);
     return encoded;
 }

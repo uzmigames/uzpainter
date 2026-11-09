@@ -75,11 +75,15 @@ void CheckProcessing(const core::Project& project, const PlannedFile& file);
 struct EncodedImage {
     std::string bytes;
     FileLayout layout = FileLayout::L;
+    /// The `infinite` padding filled texels outside the UV islands: the file relies on EXC-013
+    /// (padding.h `PadsIslands`, decision 414).
+    bool padded = false;
 };
 
 /// The bytes of `file` from its evaluated raster (CheckProcessing must have passed): the PNG or
 /// OpenEXR file, or the statistics JSON of a statistics file. With `coverage`, the values are
-/// padded over it (padding.h `ApplyPadding`, with `inexact`) before they are written, each channel
+/// padded over it (padding.h `ApplyPadding`; `padded` when it filled texels, under EXC-013) before
+/// they are written, each channel
 /// in its document format when it has one (`FileRaster::documentFormat`, decision 274), on its
 /// padding operands (`FileRaster::operands`: a 32-bit float channel's values before its read-out),
 /// a 16-bit float channel's ring keeping its raw chain (decision 409), except a channel whose
@@ -90,7 +94,6 @@ struct EncodedImage {
 /// cooked from (decision 316). They are left empty for any other file.
 [[nodiscard]] EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster,
                                       const Coverage* coverage = nullptr,
-                                      InexactPadding inexact = InexactPadding::refuse,
                                       std::vector<uint16_t>* samples = nullptr);
 
 }  // namespace uzp::exporter

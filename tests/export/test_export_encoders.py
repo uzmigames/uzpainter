@@ -746,21 +746,28 @@ def test_no_export_reads_an_inferred_template_base(export_tests: Path, tmp_path:
 
 
 def test_padding_on_islands(export_tests: Path, tmp_path: Path) -> None:
-    """2.2 (decision 090) and decision 259: on the sphere, whose UV islands leave texels uncovered:
+    """2.2 (decision 090) and decision 414: on the sphere, whose UV islands leave texels uncovered:
     - `passthrough` writes every texel's evaluated value (the L16 roughness holds the ramp's codes
       inside and outside the islands);
-    - `infinite` is refused before anything is written, naming R-090, the owner and decision 259:
-      its padding texels are not Painter's, and the owner withdrew exception EXC-007;
-    - the rule of padding.h stays behind that refusal, applied only when measured (`process`
-      over the sphere's coverage): the covered texels keep their values, and the OpenEXR 32f
-      Height equals that padding written independently (`padding_reference`: the ring of
-      decisions 267, 268, 270, 273, 275, 278 and 279 over the sphere's triangles, then the jump
-      flood), value for value, over the coverage of `tools.parity.coverage`;
+    - `infinite` is written by the production export under the owner's EXC-013 (every covered
+      texel exact, the padding outside the coverage free): the covered texels keep their
+      evaluated values, the uncovered ones hold the padding of padding.h, and the OpenEXR 32f
+      Height (an L16F document channel) equals that padding written independently
+      (`padding_reference`: the ring of decisions 267 to 279 over the sphere's triangles with the
+      raw chain of a 16-bit float channel, decision 409, then the jump flood, stored as halves
+      toward zero), value for value, over the coverage of `tools.parity.coverage`;
+    - its published receipt is conformant (no `non_conformant`), valid against its schema, and
+      lists EXC-013 version 1 (decision 414) in `exceptions_relied_on` with every padded file; its
+      manifest export block names it in `open_items`; the grid, whose coverage is complete,
+      relies on nothing;
     - without a texturing mesh the export fails before writing."""
+    from jsonschema import Draft202012Validator
+
     from tests.export import padding_reference
     from tools.parity.coverage import coverage, obj_triangles
     from tools.parity.feasibility import png
     from tools.parity.fit.decode import decode
+    from tools.parity.fit.normal import half_toward_zero
 
     covered = coverage(obj_triangles(SPHERE, "uzp_sphere"), 256, 256)
     assert 0 < covered.sum() < covered.size
@@ -769,43 +776,51 @@ def test_padding_on_islands(export_tests: Path, tmp_path: Path) -> None:
     cfg = config(passthrough, root="uzp_sphere", paddingAlgorithm="passthrough")
     result = export(export_tests, sphere, cfg, tmp_path / "run-passthrough")
     assert "error" not in result, result
-    roughness = passthrough / "maps" / "uzp_sphere_Roughness.png"
-    rough = png.decode(roughness.read_bytes()).astype(np.int64)
-    assert np.array_equal(rough.reshape(256, 256), ramp_codes())
-    height_file = passthrough / "uzp_sphere_Height.exr"
-    evaluated = decode(height_file.read_bytes()).values
+    rough = png.decode((passthrough / "maps" / "uzp_sphere_Roughness.png").read_bytes())
+    assert np.array_equal(rough.astype(np.int64).reshape(256, 256), ramp_codes())
+    evaluated = decode((passthrough / "uzp_sphere_Height.exr").read_bytes()).values
 
     out = tmp_path / "infinite"
-    result = export(export_tests, sphere, config(out, root="uzp_sphere"), tmp_path / "run-infinite")
-    assert result.get("error") == "NotYetSupported", result
-    message = result["message"]
-    assert (
-        'the padding "infinite" on a texture set whose UV islands do not cover the whole tile '
-        "is not exact" in message
-    ), message
-    assert "recording R-090" in message and "decision 259" in message, message
-    assert "phase3.1_export-island-padding" in message, message
-    assert files_under(out) == {}
-
-    cases: list[dict[str, Any]] = [
-        {"source": str(roughness), "format": "png", "bit_depth": "16", "height": False},
-        {"source": str(height_file), "format": "exr", "bit_depth": "32f", "height": True},
-    ]
-    for index, case in enumerate(cases):
-        case["target"] = case["source"]
-        case["mesh"], case["material"] = str(SPHERE), "uzp_sphere"
-        case["out"] = str(tmp_path / f"measured-{index}.{case['format']}")
-    listing = tmp_path / "measured.json"
-    listing.write_text(json.dumps(cases), encoding="utf-8")
-    lines = run(export_tests, "process", str(listing))
-    assert [line["covered_texels"] for line in lines] == [int(covered.sum())] * 2, lines
-    padded = png.decode(Path(cases[0]["out"]).read_bytes()).astype(np.int64).reshape(256, 256)
+    cfg = config(out, root="uzp_sphere")
+    result = export(export_tests, sphere, cfg, tmp_path / "run-infinite")
+    assert "error" not in result, result
+    codes = png.decode((out / "maps" / "uzp_sphere_Roughness.png").read_bytes())
+    padded = codes.astype(np.int64).reshape(256, 256)
     assert np.array_equal(padded[covered], ramp_codes()[covered])
     assert not np.array_equal(padded[~covered], ramp_codes()[~covered])
-    height = decode(Path(cases[1]["out"]).read_bytes()).values
+    height = decode((out / "uzp_sphere_Height.exr").read_bytes()).values
     height, evaluated = height.reshape(256, 256, -1), evaluated.reshape(256, 256, -1)
-    expected = padding_reference.padding(evaluated.astype(np.float32), SPHERE, "uzp_sphere")
+    raw = padding_reference.padding(evaluated.astype(np.float32), SPHERE, "uzp_sphere", False)
+    expected = half_toward_zero(raw)
     assert np.array_equal(height.astype(np.float32).view(np.uint32), expected.view(np.uint32))
+
+    schema = REPO_ROOT / "src" / "export" / "schema" / "receipt.schema.json"
+    validator = Draft202012Validator(json.loads(schema.read_text(encoding="utf-8")))
+    for name, spec_path, root, relied in (
+        ("sphere", sphere, "uzp_sphere", True),
+        ("grid", spec(tmp_path / "grid"), "s0", False),
+    ):
+        published = tmp_path / f"published-{name}"
+        run_dir = tmp_path / f"run-publish-{name}"
+        run_dir.mkdir()
+        cfg_path = run_dir / "config.json"
+        cfg_path.write_text(json.dumps(config(published, root=root)), encoding="utf-8")
+        [result] = run(export_tests, "publish", str(TEMPLATES), str(spec_path), str(cfg_path))
+        assert "error" not in result, (name, result)
+        receipt_path = published / "generations" / result["generation"] / "receipt.json"
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        assert [e.message for e in validator.iter_errors(receipt)] == [], name
+        assert "non_conformant" not in receipt, name
+        items = receipt["manifest_export"]["open_items"]
+        if not relied:
+            assert "exceptions_relied_on" not in receipt, name
+            assert not any("EXC-013" in item for item in items), items
+            continue
+        [relied_on] = receipt["exceptions_relied_on"]
+        identity = (relied_on["exception_id"], relied_on["version"], relied_on["decision"])
+        assert identity == ("EXC-013", 1, "414"), relied_on
+        assert sorted(relied_on["paths"]) == sorted(f["relativePath"] for f in result["files"])
+        assert any(item.startswith("RELIES ON EXC-013 v1 (decision 414)") for item in items), items
 
     out = tmp_path / "no-mesh"
     result = export(export_tests, spec(tmp_path / "bare", None), config(out), tmp_path / "run-bare")
@@ -820,8 +835,8 @@ def test_virtual_normal_on_islands(export_tests: Path, tmp_path: Path) -> None:
     - Normal_OpenGL and Normal_DirectX are refused before anything is written under `infinite` and
       `passthrough`, naming the cause, the evidence and the owner, with a layer writing the Height
       and with none (no recording shows Painter's empty Height outside the islands), and so is the
-      pipeline's five-map export that holds one, as a whole (under `infinite` its first map is
-      refused first, decision 259);
+      pipeline's five-map export that holds one, as a whole, under both paddings (decision 414
+      lifts only the padding refusal);
     - so is every diagnosticMap that isolates, compares or summarises one (`regionStats` a
       statistics file);
     - on the grid, whose coverage is complete, the same sources are written."""
@@ -864,12 +879,13 @@ def test_virtual_normal_on_islands(export_tests: Path, tmp_path: Path) -> None:
                 assert f'the {kind} "{source}" reads the combined virtual normal' in message
                 assert "island-edge texels" in message and "recording R-090" in message, message
                 assert "no recording shows it for a Height without layers" in message, message
-                assert "phase3.1_export-island-padding" in message and "decision 245" in message
+                assert "phase4.1_export-island-padding-exact" in message, message
+                assert "decision 245" in message, message
                 assert files_under(out) == {}, case
 
-    # The five-map export, refused as a whole: its first map under `infinite` (decision 259), its
-    # Normal under `passthrough`.
-    for padding, refusal in (("infinite", "decision 259"), ("passthrough", "island-edge texels")):
+    # The five-map export, refused as a whole by its Normal under both paddings (decision 414).
+    for padding in ("infinite", "passthrough"):
+        refusal = "island-edge texels"
         out = tmp_path / f"five-{padding}"
         cfg = config(out, root="uzp_sphere", paddingAlgorithm=padding)
         cfg["exportPresets"][0]["maps"] += normal_map()

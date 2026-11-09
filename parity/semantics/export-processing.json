@@ -20401,7 +20401,7 @@
       "entry_id": "padding-islands",
       "subject": "Padding infinite outside the UV islands of a texture set that does not cover the tile",
       "status": "gap",
-      "formula": "Release gap (decisions 090, 259): no rule is exact outside the islands; a configuration asking for it is refused with NotYetSupported before anything is written, naming recording R-090. Decision 223's coverage-only rule (src/export/padding.h: the straight-edge 8-neighbour ring mean of decisions 176 and 206, x wrapping, then the jump flood of decision 197) is kept for measurement only; Painter's ring across UV seams, at seam corners and at poles is not identified.",
+      "formula": "Gap (decisions 090, 259, 414): no rule is exact on every texel outside the islands (owner phase4.1_export-island-padding-exact). Since decision 414 production writes it under the owner's EXC-013: every covered texel exact, the padding texels outside the coverage by src/export/padding.h's measured rule (ring chains over the set's triangles, then the jump flood of decision 197), each such file listed in the receipt's exceptions_relied_on. A combined virtual normal on islanded sets stays refused (decision 245).",
       "public_sources": [
         {
           "source_id": "A-PYDOC",
