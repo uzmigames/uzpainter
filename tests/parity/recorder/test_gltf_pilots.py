@@ -71,3 +71,14 @@ def test_the_committed_gltf_request_is_the_generator_s(pilot: str) -> None:
     job = pipeline_job_from_manifest(request, ASSETS)
     assert job.config_export is not None and job.config_export.config_id == CONFIG_ID
     assert isinstance(job, NativeJob) == (pilot == "tunic-v10")
+
+
+@pytest.mark.parametrize("pilot", sorted(PILOT_GOLDENS))
+def test_the_runner_names_the_gltf_normal_of_each_pilot(pilot: str) -> None:
+    """The Tier 1 runner resolves Painter's predefined glTF URL to the authored preset and names
+    the pilot's glTF normal map (`<set>_normal`), so its comparison reports normal statistics."""
+    from tests.parity.tier1.wand_v1.runner import normal_maps_of
+
+    config = load_json(REPO_ROOT / f"parity/fixtures/tier1/{pilot}-gltf/export-config.json")
+    root = config["exportList"][0]["rootPath"]
+    assert normal_maps_of(config) == {f"{root}_normal"}

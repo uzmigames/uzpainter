@@ -46,7 +46,14 @@ A native job (decision 300 item 7; the Wand's native create, sync and config exp
 same way. Its normal maps come from its closing configuration (`normal_maps_of`), read before any
 rebuild runs: an inline preset, else the authored catalogue preset its Painter alias names (only
 the Blender preset, the Tunic's), named under OCIO. Any other preset or file-name token is
-refused then (`NativeSubjectRefused`), with nothing rebuilt.
+refused then (`NativeSubjectRefused`), with nothing rebuilt. Painter's predefined glTF preset,
+named by its URL `export-preset-generator://gltf`, resolves to the authored
+`gltf-pbr-metal-roughness` (`GENERATOR_ALIASES`; the glTF pilots, phase3.1 item 3.1).
+
+A script job closed by a config export (the glTF pilots' Wand and Sash) runs that configuration
+after the script's export, in its own `UzPainter.exe run` process over the saved project, into
+`closing-export` (`Wand.closing_export`); its files join the run, its receipt checked and read
+like the export's, and its normal maps join the subject's.
 
 Item 3.3, save/reopen (`reopened_compared` only): between the first rebuild's sync and its export,
 an adapter call reads the project's file and UUID, and the file must be the create step's `dst`.
@@ -182,6 +189,11 @@ STARTER_ASSETS = "resource://starter_assets/"
 PRESET_ALIASES = {
     "Blender (Principled BSDF)": ("blender-principled-bsdf", frozenset({"13120355637414252359"}))
 }
+# Painter's predefined presets by the URL Painter names them (R-314, decision 314): the URL -> its
+# Painter name and the authored catalogue preset (`src/export/preset_aliases.cpp`).
+GENERATOR_ALIASES = {
+    "export-preset-generator://gltf": ("glTF PBR Metal Roughness", "gltf-pbr-metal-roughness")
+}
 CATALOGUE = REPO_ROOT / "assets" / "export-presets"
 # `$colorSpace` of a normal map under OCIO with Painter's substance configuration, a native job's
 # only profile: Painter names it Raw (the Blender preset's provenance, `<set>_Normal_Raw`).
@@ -198,6 +210,8 @@ def preset_maps(config: Mapping[str, Any]) -> list[Any]:
     inline = {p.get("name"): p for p in config.get("exportPresets", [])}
     if reference in inline:
         return list(inline[reference].get("maps", []))
+    if reference in GENERATOR_ALIASES:
+        return catalogue_maps(*GENERATOR_ALIASES[reference])
     painter, _, query = reference.removeprefix(STARTER_ASSETS).partition("?")
     if painter not in PRESET_ALIASES:
         raise NativeSubjectRefused(
@@ -208,6 +222,11 @@ def preset_maps(config: Mapping[str, Any]) -> list[Any]:
     version = query.removeprefix("version=")
     if query and (version == query or version not in versions):
         raise NativeSubjectRefused(f"the preset {reference!r}: the query {query!r} is not recorded")
+    return catalogue_maps(painter, preset_id)
+
+
+def catalogue_maps(painter: str, preset_id: str) -> list[Any]:
+    """The maps of the authored catalogue preset `preset_id`, checked to answer to `painter`."""
     preset = json.loads((CATALOGUE / f"{preset_id}.json").read_text(encoding="utf-8"))
     provenance = json.loads(
         (CATALOGUE / f"{preset_id}.provenance.json").read_text(encoding="utf-8")
@@ -352,12 +371,32 @@ def rebuild(
 def checked_export(wand: Wand, diagnostic: bool = False) -> CandidateRun:
     """The export of `rebuild` on a built `wand`, its receipt checked by `checked_receipt`; a
     production export's files carry the exceptions its receipt names for them
-    (`relied_exceptions`)."""
-    run = exported(wand, wand.export(diagnostic=diagnostic))
+    (`relied_exceptions`). A script job's closing config export (`Wand.closing_export`, the glTF
+    pilots) follows a written export and is checked the same way in its own directory; the run is
+    both exports' files, or the first refusal."""
+    out = wand.argument("export", "out")
+    run = _checked(wand, wand.export(diagnostic=diagnostic), out, diagnostic)
+    if run.refused:
+        return run
+    closing = wand.closing_export(diagnostic=diagnostic)
+    if closing is None:
+        return run
+    more = _checked(wand, closing, wand.closing_out, diagnostic)
+    if more.refused:
+        return more
+    if shared := sorted(set(run.files) & set(more.files)):
+        raise RunError(f"the script's and the closing export both write {shared}")
+    files, exceptions = {**run.files, **more.files}, {**run.exceptions, **more.exceptions}
+    return CandidateRun(files, exceptions=exceptions)
+
+
+def _checked(wand: Wand, call: Call, out: Path, diagnostic: bool) -> CandidateRun:
+    run = exported(wand, call, out)
     if not run.refused:
-        checked_receipt(wand, diagnostic)
+        checked_receipt(wand, diagnostic, out)
         if not diagnostic:
-            run = CandidateRun(run.files, exceptions=relied_exceptions(receipt_of(wand), run.files))
+            receipt = receipt_of(wand, out)
+            run = CandidateRun(run.files, exceptions=relied_exceptions(receipt, run.files))
     return run
 
 
@@ -379,20 +418,21 @@ def relied_exceptions(
     return {key: frozenset(names.get(path.name, ())) for key, path in files.items()}
 
 
-def checked_receipt(wand: Wand, diagnostic: bool) -> None:
-    """The receipt of the export `wand` last published names the backend its run selected
-    (`wand_backend`), is (not) the measure mode's as `diagnostic` says, and the measure mode
-    bypassed only decided refusals (`DECIDED_REFUSALS`)."""
-    if receipt_of(wand)["backend"] != wand_backend(wand):
+def checked_receipt(wand: Wand, diagnostic: bool, out: Path | None = None) -> None:
+    """The receipt of the export `wand` last published (in `out`, default the export's) names the
+    backend its run selected (`wand_backend`), is (not) the measure mode's as `diagnostic` says,
+    and the measure mode bypassed only decided refusals (`DECIDED_REFUSALS`)."""
+    receipt = receipt_of(wand, out)
+    if receipt["backend"] != wand_backend(wand):
         raise RunError(
-            f"the export's receipt names the backend {receipt_of(wand)['backend']!r}, "
+            f"the export's receipt names the backend {receipt['backend']!r}, "
             f"not {wand_backend(wand)!r}"
         )
-    if non_conformant(wand) != diagnostic:
+    if ("non_conformant" in receipt) != diagnostic:
         raise RunError(f"the export's receipt is {'not ' * diagnostic}marked non_conformant")
     if not diagnostic:
         return
-    bypassed = receipt_of(wand)["non_conformant"]["bypassed"]
+    bypassed = receipt["non_conformant"]["bypassed"]
     undecided = [b for b in bypassed if not any(k in b["refusal"] for k in DECIDED_REFUSALS)]
     if undecided:
         raise RunError(f"the measure export bypassed refusals no decision names: {undecided}")
@@ -404,9 +444,9 @@ def non_conformant(wand: Wand) -> bool:
     return "non_conformant" in receipt_of(wand)
 
 
-def receipt_of(wand: Wand) -> dict[str, Any]:
-    """The receipt of the generation the last export published in its `out`."""
-    out = wand.argument("export", "out")
+def receipt_of(wand: Wand, out: Path | None = None) -> dict[str, Any]:
+    """The receipt of the generation the last export published in `out` (default its `out`)."""
+    out = wand.argument("export", "out") if out is None else out
     current = json.loads((out / "current.json").read_text(encoding="utf-8"))
     receipt: dict[str, Any] = json.loads((out / current["receipt"]).read_text(encoding="utf-8"))
     return receipt
@@ -431,10 +471,10 @@ def refusal(call: Call) -> str:
         return str(raised[-1])
 
 
-def exported(wand: Wand, call: Call) -> CandidateRun:
+def exported(wand: Wand, call: Call, out: Path | None = None) -> CandidateRun:
     """The files of a finished export call by (texture set, map name), or its explicit refusal
-    with the refusal's message."""
-    out = wand.argument("export", "out")
+    with the refusal's message; `out` is its directory (default the export's `out`)."""
+    out = wand.argument("export", "out") if out is None else out
     if call.status != 0:
         written = sorted(p.name for p in out.iterdir()) if out.is_dir() else []
         if call.status == 1 and REFUSAL in call.stderr and not written:
@@ -607,6 +647,8 @@ def _evidence(
     if native_normals is None:
         assert wand.job.export.arguments is not None
         normals = frozenset({f"{wand.job.export.arguments['prefix']}{NORMAL_SUFFIX}"})
+        if wand.job.config_export is not None:  # its closing export's (the glTF pilots)
+            normals |= normal_maps_of(wand.job.config_export.config)
     else:
         normals = native_normals
     meshes = [

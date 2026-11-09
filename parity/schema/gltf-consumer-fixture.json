@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:uzpainter:parity:schema:gltf-consumer-fixture:1",
   "title": "Public glTF consumer selection",
-  "description": "Pinned authored consumer configuration only. No observed output, private image, free-form readback or real-fixture pass is admitted by this schema.",
+  "description": "Pinned authored consumer configuration and its status only. No observed output, private image or free-form readback is admitted by this schema; a real-fixture pass names only the public report of UzPainter's own Wand run (phase3.1_unreal-gltf-pbr-preset item 3.2).",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -24,7 +24,7 @@
     "loader_origin": {"const": "thirdparty/fastgltf/ORIGIN.md"},
     "fixture_runner": {"const": "tools/consumers/gltf.py"},
     "consumer_target": {"const": "gltf-consumer"},
-    "status": {"const": "pending-real-fixture"},
+    "status": {"enum": ["pending-real-fixture", "real-fixture-passed"]},
     "validation_scope": {
       "const": "fastgltf structural validation, loaded triangle geometry, decoded PNG resources and material bindings; no Khronos validator or rendered-image claim"
     },
@@ -41,8 +41,20 @@
       "const": "Independent native-depth single-channel roughness and metallic PNG files, each pinned by SHA-256; every G/B texel must equal its reference"
     },
     "blocked_by": {
-      "const": ["phase1.25_pilot-wand exact export", "AO_Mixed and unsupported padding parity", "real Wand glTF consumer run"]
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"enum": ["phase1.25_pilot-wand exact export", "AO_Mixed and unsupported padding parity", "real Wand glTF consumer run"]}
     },
-    "wand_report": {"type": "null"}
-  }
+    "wand_report": {"oneOf": [{"type": "null"}, {"const": "parity/reports/phase3/gltf-consumer-wand-v1.md"}]}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "pending-real-fixture"}}},
+      "then": {"properties": {"blocked_by": {"minItems": 1}, "wand_report": {"type": "null"}}}
+    },
+    {
+      "if": {"properties": {"status": {"const": "real-fixture-passed"}}},
+      "then": {"properties": {"blocked_by": {"maxItems": 0}, "wand_report": {"type": "string"}}}
+    }
+  ]
 }

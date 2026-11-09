@@ -1006,6 +1006,18 @@ def test_mcp_round_report_holds_numbers_identifiers_and_hashes_only(
 REBUILD_PATH = "parity/reports/phase2/recipe-rebuild-wand.json"
 
 GLTF_CONSUMER_PATH = "parity/manifests/consumers/gltf/wand-v1.json"
+# Pending, a blocker named and no report; a real-fixture pass (phase3.1 item 3.2): no blocker
+# left, the public report of the Wand run.
+PENDING = {
+    "status": "pending-real-fixture",
+    "blocked_by": ["real Wand glTF consumer run"],
+    "wand_report": None,
+}
+PASSED = {
+    "status": "real-fixture-passed",
+    "blocked_by": [],
+    "wand_report": "parity/reports/phase3/gltf-consumer-wand-v1.md",
+}
 
 
 @pytest.mark.parametrize(
@@ -1018,7 +1030,14 @@ GLTF_CONSUMER_PATH = "parity/manifests/consumers/gltf/wand-v1.json"
         (lambda m: {**m, "consumer": {**m["consumer"], "version": "unverified"}}, False),
         (lambda m: {**m, "loader_archive_sha256": "0" * 64}, False),
         (lambda m: {**m, "required_slots": {**m["required_slots"], "pixels": [1, 2]}}, False),
-        (lambda m: {**m, "blocked_by": []}, False),
+        (lambda m: {**m, **PENDING}, True),
+        (lambda m: {**m, **PENDING, "blocked_by": []}, False),
+        (lambda m: {**m, "blocked_by": ["private observation"]}, False),
+        (lambda m: {**m, **PASSED}, True),
+        (lambda m: {**m, **PASSED, "blocked_by": ["real Wand glTF consumer run"]}, False),
+        (lambda m: {**m, **PASSED, "wand_report": None}, False),
+        (lambda m: {**m, **PASSED, "wand_report": "parity/reports/phase3/private.md"}, False),
+        (lambda m: {**m, **PENDING, "wand_report": PASSED["wand_report"]}, False),
     ],
 )
 def test_gltf_consumer_selection_admits_no_private_output(

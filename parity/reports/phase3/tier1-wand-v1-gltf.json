@@ -1,0 +1,3264 @@
+{
+  "schema": "uzpainter/parity/comparison-report/1",
+  "record_class": "comparison_report",
+  "golden_id": "phase3/tier1/wand-v1-gltf",
+  "tier": "1",
+  "domain": "tier1/pilot/wand-v1-gltf",
+  "manifest_sha256": "69473bdced7abc6299faee230c3baeaad99b7965036b03f2ae11141e9d18e108",
+  "envelope_id": "painter-12.2.0+js-api.1.1.20-env-a981b586eae7",
+  "run": {
+    "hardware": "AMD Radeon(TM) Graphics | NVIDIA GeForce RTX 4090",
+    "driver": "32.0.21042.62 | 32.0.16.1714",
+    "backend": "dx12",
+    "uzpainter_build_hash": "db55ab68d599ac006dc3ecaf1f7333f44383e0ab321e5683cca1f160f785d9a2",
+    "painter_build_id": "12.2.0+js-api.1.1.20",
+    "resource_hashes": [
+      "071a7123e3f87c2d9a63a6dd403a223cc42904ec233cf199c581da612e3dea3f",
+      "1581237aadc1d6f8f49e0b4454531797ee275ca91f319bd2b14a9ed95c5bb180",
+      "1dd1ed013f00ec042c365a36e17496342279c22ecd912108d91ec5c61ae31b0a",
+      "208ab74350e928535e15e421b05e6fae6f386ff648cbba450408deb6e14aeefe",
+      "31325861e16d9b40f49b3cdc26f538578c66bf746e3c2776ee7d6815ba8de6f8",
+      "39e57464995fb42dbfda5f474aa8c25bf08d921d7cdc0ea5ae314c5b96526883",
+      "436b4cba82cd01b9a01dd844be8d56c384a2100667767c9b5d76a32b3b702759",
+      "569ad61f3be06f2e55e8601006efc77b09ae70c20e5e17ae23ddf72bd5560c67",
+      "6820831ccd59b66314eaab5a010607f7f55d720e6d2e628aadf9d44a6018535f",
+      "6dbbf901b9b03667126746fd46fbf804bc9e40330c93be3f62ad4513e35f8183",
+      "777ac278c7ce376bd8652bdd8400f0e5e5e1bef561262ccb7c22a9ac1c95c468",
+      "7c59118950b05e76f4e896ae841b6b458bb4f675a3b7de0f75d5db658c356411",
+      "819658ba4d0c1fd40f9c97c6aa797d0caa4b3a44d4d008436506aed8d43d388b",
+      "87153c74d3cc759f4202163c3253c7f392f0bbb46dfc44f00e3ec66e286f5a23",
+      "9204eadce68755f6eeb42175322cdf4bbc1acc5296c413f827d5efd3f83fa32e",
+      "a24c4e8e92f768994dc3b8559663675f7b57e0c8ce7eb1861b0e4c2c2e1f07c7",
+      "aebe5b6e883d0ebb5722fee1a5306fb45b43e28f9a28b0140f7aafc60c82fe4b",
+      "b22e299993f8934f6a80573678b407222bd0e9de455b529e050b5bc986f63759",
+      "bf7006e256198879e5108b415439fb64d7e50b82d49afc58d2febaf3891ef62d",
+      "cbca4daae07df9235bfbf2321e65a7fd56a8a6aa3dad14b34ef04b86e7a9653b",
+      "cc252f0cc25bdc7ff8172c82b692941da698fd86ec9a4f4e4085969a88a92c90",
+      "d2024ead911d86527e4702fb74cccc7ddeeeebe425c86ee61cfd8f094f87dbc8",
+      "d26d984d94460b11fee3648f66c12c939ac77624e1907ce0bcb23d11e39486e1",
+      "dcab1ddc9ffa7f8feb25a5b09d7e2dc32c74eb3bde713793a1afa2641e46a187",
+      "e67ffd2cf28268884daf749111c0dbfad3523fe1f753b2bb042089f7ff6cbdac",
+      "f7b6644640ab7853e54b9e37947d7b871c038e5ef7796319549c45b47663d00a"
+    ]
+  },
+  "uzpainter_repeatability": {
+    "status": "repeatable",
+    "maps": [
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_baseColor",
+        "storage_format": {
+          "container": "png",
+          "sample_type": "uint",
+          "bits_per_channel": 16,
+          "channels": 3,
+          "encoding": "undetermined"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 12582912
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 4035153
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 3774321
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2434866
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2338572
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_normal",
+        "storage_format": {
+          "container": "png",
+          "sample_type": "uint",
+          "bits_per_channel": 16,
+          "channels": 3,
+          "encoding": "undetermined"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 12582912
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 4035153
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 3774321
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2434866
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2338572
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_occlusionRoughnessMetallic",
+        "storage_format": {
+          "container": "png",
+          "sample_type": "uint",
+          "bits_per_channel": 16,
+          "channels": 3,
+          "encoding": "undetermined"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 12582912
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 4035153
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 3774321
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2434866
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2338572
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_v1r2_BaseColor",
+        "storage_format": {
+          "container": "png",
+          "sample_type": "uint",
+          "bits_per_channel": 16,
+          "channels": 3,
+          "encoding": "undetermined"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 12582912
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 4035153
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 3774321
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2434866
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2338572
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_v1r2_Height",
+        "storage_format": {
+          "container": "png",
+          "sample_type": "uint",
+          "bits_per_channel": 16,
+          "channels": 1,
+          "encoding": "undetermined"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 4194304
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 1345051
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 1258107
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 811622
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 779524
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_v1r2_Metallic",
+        "storage_format": {
+          "container": "png",
+          "sample_type": "uint",
+          "bits_per_channel": 16,
+          "channels": 1,
+          "encoding": "undetermined"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 4194304
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 1345051
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 1258107
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 811622
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 779524
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_v1r2_Normal",
+        "storage_format": {
+          "container": "png",
+          "sample_type": "uint",
+          "bits_per_channel": 16,
+          "channels": 3,
+          "encoding": "undetermined"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 12582912
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 4035153
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 3774321
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2434866
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2338572
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_v1r2_Roughness",
+        "storage_format": {
+          "container": "png",
+          "sample_type": "uint",
+          "bits_per_channel": 16,
+          "channels": 1,
+          "encoding": "undetermined"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 4194304
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 1345051
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 1258107
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 811622
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 779524
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "oracle_stability": {
+    "status": "stable",
+    "maps": [
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_baseColor@r1-repeat",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 12582912
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 4035153
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 3774321
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2434866
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2338572
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_baseColor@r2",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 12582912
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 4035153
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 3774321
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2434866
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2338572
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_normal@r1-repeat",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 12582912
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 4035153
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 3774321
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2434866
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2338572
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_normal@r2",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 12582912
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 4035153
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 3774321
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2434866
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2338572
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_occlusionRoughnessMetallic@r1-repeat",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 12582912
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 4035153
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 3774321
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2434866
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2338572
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_occlusionRoughnessMetallic@r2",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 12582912
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 4035153
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 3774321
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2434866
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2338572
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_v1r2_BaseColor@r1-repeat",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 12582912
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 4035153
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 3774321
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2434866
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2338572
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_v1r2_BaseColor@r2",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 12582912
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 4035153
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 3774321
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2434866
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2338572
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_v1r2_Height@r1-repeat",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 1,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 4194304
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 1345051
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 1258107
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 811622
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 779524
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_v1r2_Height@r2",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 1,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 4194304
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 1345051
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 1258107
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 811622
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 779524
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_v1r2_Metallic@r1-repeat",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 1,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 4194304
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 1345051
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 1258107
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 811622
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 779524
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_v1r2_Metallic@r2",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 1,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 4194304
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 1345051
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 1258107
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 811622
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 779524
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_v1r2_Normal@r1-repeat",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 12582912
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 4035153
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 3774321
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2434866
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2338572
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_v1r2_Normal@r2",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 12582912
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 4035153
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 3774321
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2434866
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 2338572
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_v1r2_Roughness@r1-repeat",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 1,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 4194304
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 1345051
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 1258107
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 811622
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 779524
+            }
+          }
+        ]
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_v1r2_Roughness@r2",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 1,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 0,
+          "mean": 0,
+          "p99": 0
+        },
+        "differing": {
+          "count": 0,
+          "percent": 0.0,
+          "total": 4194304
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 1345051
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 1258107
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 811622
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 779524
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "equality_to_painter": {
+    "outcome": "pass",
+    "exceptions_relied_on": [
+      {
+        "exception_id": "EXC-013",
+        "version": 1
+      },
+      {
+        "exception_id": "EXC-014",
+        "version": 1
+      }
+    ],
+    "maps": [
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_baseColor",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 2806,
+          "mean": 0.7968973318735758,
+          "p99": 0
+        },
+        "differing": {
+          "count": 34374,
+          "percent": 0.2731800079345703,
+          "total": 12582912
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 306,
+              "mean": 0.33890883443576986,
+              "p99": 0
+            },
+            "differing": {
+              "count": 5790,
+              "percent": 0.1434889829456281,
+              "total": 4035153
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 801,
+              "mean": 1.5806464262048723,
+              "p99": 0
+            },
+            "differing": {
+              "count": 18631,
+              "percent": 0.49362521099821666,
+              "total": 3774321
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 2806,
+              "mean": 0.18709243136993986,
+              "p99": 0
+            },
+            "differing": {
+              "count": 1783,
+              "percent": 0.07322784908902584,
+              "total": 2434866
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 1068,
+              "mean": 0.9571345248296824,
+              "p99": 0
+            },
+            "differing": {
+              "count": 8170,
+              "percent": 0.3493584974078198,
+              "total": 2338572
+            }
+          }
+        ],
+        "private_difference_map_sha256": "afdfb2f606765327f371db7f8f2afb57acb0f59a060c3a8dcee343bde5f2195e",
+        "flip_mean": 0.00022853666450828314,
+        "padding": {
+          "covered_texels": 508307,
+          "uncovered_texels": 3685997,
+          "covered": {
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 1524921
+            }
+          },
+          "edge_texels": 6301,
+          "edge": {
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 18903
+            }
+          },
+          "uncovered": {
+            "abs_diff": {
+              "max": 2806,
+              "mean": 0.9067912064677933,
+              "p99": 0
+            },
+            "differing": {
+              "count": 34374,
+              "percent": 0.3108521249474701,
+              "total": 11057991
+            }
+          },
+          "bands": [
+            {
+              "within_texels": 1,
+              "texels": 6334,
+              "abs_diff": {
+                "max": 2806,
+                "mean": 2.7402904957372907,
+                "p99": 0
+              },
+              "differing": {
+                "count": 147,
+                "percent": 0.7736027786548785,
+                "total": 19002
+              }
+            },
+            {
+              "within_texels": 2,
+              "texels": 12698,
+              "abs_diff": {
+                "max": 2806,
+                "mean": 2.6977739276526487,
+                "p99": 0
+              },
+              "differing": {
+                "count": 291,
+                "percent": 0.7638998267443692,
+                "total": 38094
+              }
+            },
+            {
+              "within_texels": 4,
+              "texels": 25518,
+              "abs_diff": {
+                "max": 2806,
+                "mean": 2.5677169057136138,
+                "p99": 0
+              },
+              "differing": {
+                "count": 589,
+                "percent": 0.7693915406118557,
+                "total": 76554
+              }
+            },
+            {
+              "within_texels": 8,
+              "texels": 51527,
+              "abs_diff": {
+                "max": 2806,
+                "mean": 2.467301932320272,
+                "p99": 0
+              },
+              "differing": {
+                "count": 1215,
+                "percent": 0.785995691579172,
+                "total": 154581
+              }
+            }
+          ]
+        }
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_normal",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 169,
+          "mean": 0.004468123118082683,
+          "p99": 0
+        },
+        "differing": {
+          "count": 4715,
+          "percent": 0.03747145334879557,
+          "total": 12582912
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 4035153
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 51,
+              "mean": 0.014706486279253937,
+              "p99": 0
+            },
+            "differing": {
+              "count": 4702,
+              "percent": 0.12457869905606862,
+              "total": 3774321
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 169,
+              "mean": 0.00029200785587379344,
+              "p99": 0
+            },
+            "differing": {
+              "count": 9,
+              "percent": 0.00036963019730859933,
+              "total": 2434866
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 1,
+              "mean": 1.7104455197445278e-06,
+              "p99": 0
+            },
+            "differing": {
+              "count": 4,
+              "percent": 0.0001710445519744528,
+              "total": 2338572
+            }
+          }
+        ],
+        "normal": {
+          "angular_max_deg": 0.29568880925855257,
+          "angular_mean_deg": 2.328531991584842e-05,
+          "non_finite_count": 0,
+          "unnormalised_count": 0,
+          "negative_z_count": 0
+        },
+        "private_difference_map_sha256": "bc48772de0e34f816a267acba16823591284ddfc7cfc7561b44b1a1251c7e5f8",
+        "flip_mean": 2.803966026476701e-06,
+        "padding": {
+          "covered_texels": 508307,
+          "uncovered_texels": 3685997,
+          "covered": {
+            "abs_diff": {
+              "max": 168,
+              "mean": 0.00023411048834660943,
+              "p99": 0
+            },
+            "differing": {
+              "count": 42,
+              "percent": 0.0027542410393718757,
+              "total": 1524921
+            }
+          },
+          "edge_texels": 6301,
+          "edge": {
+            "abs_diff": {
+              "max": 168,
+              "mean": 0.01888589112839232,
+              "p99": 0
+            },
+            "differing": {
+              "count": 42,
+              "percent": 0.22218695445167433,
+              "total": 18903
+            }
+          },
+          "uncovered": {
+            "abs_diff": {
+              "max": 169,
+              "mean": 0.00505200266486019,
+              "p99": 0
+            },
+            "differing": {
+              "count": 4673,
+              "percent": 0.04225903240471077,
+              "total": 11057991
+            }
+          },
+          "bands": [
+            {
+              "within_texels": 1,
+              "texels": 6334,
+              "abs_diff": {
+                "max": 168,
+                "mean": 0.024892116619303233,
+                "p99": 0
+              },
+              "differing": {
+                "count": 51,
+                "percent": 0.26839280075781496,
+                "total": 19002
+              }
+            },
+            {
+              "within_texels": 2,
+              "texels": 12698,
+              "abs_diff": {
+                "max": 169,
+                "mean": 0.02598834462120019,
+                "p99": 0
+              },
+              "differing": {
+                "count": 103,
+                "percent": 0.2703837874730929,
+                "total": 38094
+              }
+            },
+            {
+              "within_texels": 4,
+              "texels": 25518,
+              "abs_diff": {
+                "max": 169,
+                "mean": 0.02579878255871672,
+                "p99": 0
+              },
+              "differing": {
+                "count": 208,
+                "percent": 0.27170363403610526,
+                "total": 76554
+              }
+            },
+            {
+              "within_texels": 8,
+              "texels": 51527,
+              "abs_diff": {
+                "max": 169,
+                "mean": 0.02613516538255025,
+                "p99": 0
+              },
+              "differing": {
+                "count": 447,
+                "percent": 0.2891687852970287,
+                "total": 154581
+              }
+            }
+          ]
+        }
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_occlusionRoughnessMetallic",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 65535,
+          "mean": 18194.022249539692,
+          "p99": 65535
+        },
+        "differing": {
+          "count": 3698537,
+          "percent": 29.393331209818523,
+          "total": 12582912
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 65535,
+              "mean": 21032.82195123704,
+              "p99": 65535
+            },
+            "differing": {
+              "count": 1334471,
+              "percent": 33.07113757520471,
+              "total": 4035153
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 65535,
+              "mean": 18541.86044801171,
+              "p99": 65535
+            },
+            "differing": {
+              "count": 1180565,
+              "percent": 31.278871087011414,
+              "total": 3774321
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 65535,
+              "mean": 17018.91427248974,
+              "p99": 65535
+            },
+            "differing": {
+              "count": 651272,
+              "percent": 26.74775531795179,
+              "total": 2434866
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 65535,
+              "mean": 13957.841499000244,
+              "p99": 65535
+            },
+            "differing": {
+              "count": 532229,
+              "percent": 22.758717713202756,
+              "total": 2338572
+            }
+          }
+        ],
+        "private_difference_map_sha256": "6118eb861692c0f0ac50e24bd13358bc10049e2282eac2520f4914fd6f02b30d",
+        "flip_mean": 0.8256255388259888,
+        "padding": {
+          "covered_texels": 508307,
+          "uncovered_texels": 3685997,
+          "covered": {
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 1524921
+            }
+          },
+          "edge_texels": 6301,
+          "edge": {
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 18903
+            }
+          },
+          "uncovered": {
+            "abs_diff": {
+              "max": 65535,
+              "mean": 20703.01747324627,
+              "p99": 65535
+            },
+            "differing": {
+              "count": 3698537,
+              "percent": 33.44673548748593,
+              "total": 11057991
+            }
+          },
+          "bands": [
+            {
+              "within_texels": 1,
+              "texels": 6334,
+              "abs_diff": {
+                "max": 8481,
+                "mean": 88.85596253025997,
+                "p99": 1470
+              },
+              "differing": {
+                "count": 4841,
+                "percent": 25.47626565624671,
+                "total": 19002
+              }
+            },
+            {
+              "within_texels": 2,
+              "texels": 12698,
+              "abs_diff": {
+                "max": 8481,
+                "mean": 144.07297737176458,
+                "p99": 2313
+              },
+              "differing": {
+                "count": 9923,
+                "percent": 26.048721583451464,
+                "total": 38094
+              }
+            },
+            {
+              "within_texels": 4,
+              "texels": 25518,
+              "abs_diff": {
+                "max": 64759,
+                "mean": 491.48832196880636,
+                "p99": 6970
+              },
+              "differing": {
+                "count": 20517,
+                "percent": 26.800689709224862,
+                "total": 76554
+              }
+            },
+            {
+              "within_texels": 8,
+              "texels": 51527,
+              "abs_diff": {
+                "max": 65535,
+                "mean": 3291.153783453335,
+                "p99": 64199
+              },
+              "differing": {
+                "count": 43133,
+                "percent": 27.90317050607772,
+                "total": 154581
+              }
+            }
+          ]
+        }
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_v1r2_BaseColor",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 2806,
+          "mean": 0.7968973318735758,
+          "p99": 0
+        },
+        "differing": {
+          "count": 34374,
+          "percent": 0.2731800079345703,
+          "total": 12582912
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 306,
+              "mean": 0.33890883443576986,
+              "p99": 0
+            },
+            "differing": {
+              "count": 5790,
+              "percent": 0.1434889829456281,
+              "total": 4035153
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 801,
+              "mean": 1.5806464262048723,
+              "p99": 0
+            },
+            "differing": {
+              "count": 18631,
+              "percent": 0.49362521099821666,
+              "total": 3774321
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 2806,
+              "mean": 0.18709243136993986,
+              "p99": 0
+            },
+            "differing": {
+              "count": 1783,
+              "percent": 0.07322784908902584,
+              "total": 2434866
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 1068,
+              "mean": 0.9571345248296824,
+              "p99": 0
+            },
+            "differing": {
+              "count": 8170,
+              "percent": 0.3493584974078198,
+              "total": 2338572
+            }
+          }
+        ],
+        "private_difference_map_sha256": "afdfb2f606765327f371db7f8f2afb57acb0f59a060c3a8dcee343bde5f2195e",
+        "flip_mean": 0.00022853666450828314,
+        "padding": {
+          "covered_texels": 508307,
+          "uncovered_texels": 3685997,
+          "covered": {
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 1524921
+            }
+          },
+          "edge_texels": 6301,
+          "edge": {
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 18903
+            }
+          },
+          "uncovered": {
+            "abs_diff": {
+              "max": 2806,
+              "mean": 0.9067912064677933,
+              "p99": 0
+            },
+            "differing": {
+              "count": 34374,
+              "percent": 0.3108521249474701,
+              "total": 11057991
+            }
+          },
+          "bands": [
+            {
+              "within_texels": 1,
+              "texels": 6334,
+              "abs_diff": {
+                "max": 2806,
+                "mean": 2.7402904957372907,
+                "p99": 0
+              },
+              "differing": {
+                "count": 147,
+                "percent": 0.7736027786548785,
+                "total": 19002
+              }
+            },
+            {
+              "within_texels": 2,
+              "texels": 12698,
+              "abs_diff": {
+                "max": 2806,
+                "mean": 2.6977739276526487,
+                "p99": 0
+              },
+              "differing": {
+                "count": 291,
+                "percent": 0.7638998267443692,
+                "total": 38094
+              }
+            },
+            {
+              "within_texels": 4,
+              "texels": 25518,
+              "abs_diff": {
+                "max": 2806,
+                "mean": 2.5677169057136138,
+                "p99": 0
+              },
+              "differing": {
+                "count": 589,
+                "percent": 0.7693915406118557,
+                "total": 76554
+              }
+            },
+            {
+              "within_texels": 8,
+              "texels": 51527,
+              "abs_diff": {
+                "max": 2806,
+                "mean": 2.467301932320272,
+                "p99": 0
+              },
+              "differing": {
+                "count": 1215,
+                "percent": 0.785995691579172,
+                "total": 154581
+              }
+            }
+          ]
+        }
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_v1r2_Height",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 1,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 8,
+          "mean": 0.006453752517700195,
+          "p99": 0
+        },
+        "differing": {
+          "count": 11268,
+          "percent": 0.2686500549316406,
+          "total": 4194304
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 1345051
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 3,
+              "mean": 0.021449685917016598,
+              "p99": 0
+            },
+            "differing": {
+              "count": 11244,
+              "percent": 0.8937236657931321,
+              "total": 1258107
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 8,
+              "mean": 2.9570415784687946e-05,
+              "p99": 0
+            },
+            "differing": {
+              "count": 3,
+              "percent": 0.00036963019730859933,
+              "total": 811622
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 3,
+              "mean": 7.568721424869536e-05,
+              "p99": 0
+            },
+            "differing": {
+              "count": 21,
+              "percent": 0.0026939516935976316,
+              "total": 779524
+            }
+          }
+        ],
+        "private_difference_map_sha256": "63e4991deab2d5b410f153f6b73e0437a6e26552c7264e916e74be1d94a17b5d",
+        "flip_mean": 3.16077080242394e-06,
+        "padding": {
+          "covered_texels": 508307,
+          "uncovered_texels": 3685997,
+          "covered": {
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 508307
+            }
+          },
+          "edge_texels": 6301,
+          "edge": {
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 6301
+            }
+          },
+          "uncovered": {
+            "abs_diff": {
+              "max": 8,
+              "mean": 0.007343739020948742,
+              "p99": 0
+            },
+            "differing": {
+              "count": 11268,
+              "percent": 0.30569748157689763,
+              "total": 3685997
+            }
+          },
+          "bands": [
+            {
+              "within_texels": 1,
+              "texels": 6334,
+              "abs_diff": {
+                "max": 8,
+                "mean": 0.0036311967161351435,
+                "p99": 0
+              },
+              "differing": {
+                "count": 11,
+                "percent": 0.17366592990211557,
+                "total": 6334
+              }
+            },
+            {
+              "within_texels": 2,
+              "texels": 12698,
+              "abs_diff": {
+                "max": 8,
+                "mean": 0.004410143329658214,
+                "p99": 0
+              },
+              "differing": {
+                "count": 26,
+                "percent": 0.2047566545912742,
+                "total": 12698
+              }
+            },
+            {
+              "within_texels": 4,
+              "texels": 25518,
+              "abs_diff": {
+                "max": 8,
+                "mean": 0.0057606395485539615,
+                "p99": 0
+              },
+              "differing": {
+                "count": 68,
+                "percent": 0.2664785641507955,
+                "total": 25518
+              }
+            },
+            {
+              "within_texels": 8,
+              "texels": 51527,
+              "abs_diff": {
+                "max": 8,
+                "mean": 0.007743513109631843,
+                "p99": 0
+              },
+              "differing": {
+                "count": 191,
+                "percent": 0.3706794496089429,
+                "total": 51527
+              }
+            }
+          ]
+        }
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_v1r2_Metallic",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 1,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 8481,
+          "mean": 1.5268149375915527,
+          "p99": 0
+        },
+        "differing": {
+          "count": 14103,
+          "percent": 0.3362417221069336,
+          "total": 4194304
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 1345051
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 2570,
+              "mean": 5.0656152457620856,
+              "p99": 257
+            },
+            "differing": {
+              "count": 14079,
+              "percent": 1.119062210129981,
+              "total": 1258107
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 8481,
+              "mean": 0.03134833703374231,
+              "p99": 0
+            },
+            "differing": {
+              "count": 3,
+              "percent": 0.00036963019730859933,
+              "total": 811622
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 257,
+              "mean": 0.006923455852545913,
+              "p99": 0
+            },
+            "differing": {
+              "count": 21,
+              "percent": 0.0026939516935976316,
+              "total": 779524
+            }
+          }
+        ],
+        "private_difference_map_sha256": "9392931769c834b1bcbb5086abecd2c0e9311b76f0f65f9bae9091dc5cc19638",
+        "flip_mean": 0.00015219979104585946,
+        "padding": {
+          "covered_texels": 508307,
+          "uncovered_texels": 3685997,
+          "covered": {
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 508307
+            }
+          },
+          "edge_texels": 6301,
+          "edge": {
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 6301
+            }
+          },
+          "uncovered": {
+            "abs_diff": {
+              "max": 8481,
+              "mean": 1.7373660369229817,
+              "p99": 0
+            },
+            "differing": {
+              "count": 14103,
+              "percent": 0.3826101866062289,
+              "total": 3685997
+            }
+          },
+          "bands": [
+            {
+              "within_texels": 1,
+              "texels": 6334,
+              "abs_diff": {
+                "max": 8481,
+                "mean": 2.677928639090622,
+                "p99": 0
+              },
+              "differing": {
+                "count": 15,
+                "percent": 0.2368171771392485,
+                "total": 6334
+              }
+            },
+            {
+              "within_texels": 2,
+              "texels": 12698,
+              "abs_diff": {
+                "max": 8481,
+                "mean": 2.8335170893054022,
+                "p99": 0
+              },
+              "differing": {
+                "count": 31,
+                "percent": 0.24413293432036542,
+                "total": 12698
+              }
+            },
+            {
+              "within_texels": 4,
+              "texels": 25518,
+              "abs_diff": {
+                "max": 8481,
+                "mean": 2.7897562504898503,
+                "p99": 0
+              },
+              "differing": {
+                "count": 82,
+                "percent": 0.32134179794654755,
+                "total": 25518
+              }
+            },
+            {
+              "within_texels": 8,
+              "texels": 51527,
+              "abs_diff": {
+                "max": 8481,
+                "mean": 3.1771498437712267,
+                "p99": 0
+              },
+              "differing": {
+                "count": 253,
+                "percent": 0.49100471597414946,
+                "total": 51527
+              }
+            }
+          ]
+        }
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_v1r2_Normal",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 3,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 169,
+          "mean": 0.004468123118082683,
+          "p99": 0
+        },
+        "differing": {
+          "count": 4715,
+          "percent": 0.03747145334879557,
+          "total": 12582912
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 4035153
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 51,
+              "mean": 0.014706486279253937,
+              "p99": 0
+            },
+            "differing": {
+              "count": 4702,
+              "percent": 0.12457869905606862,
+              "total": 3774321
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 169,
+              "mean": 0.00029200785587379344,
+              "p99": 0
+            },
+            "differing": {
+              "count": 9,
+              "percent": 0.00036963019730859933,
+              "total": 2434866
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 1,
+              "mean": 1.7104455197445278e-06,
+              "p99": 0
+            },
+            "differing": {
+              "count": 4,
+              "percent": 0.0001710445519744528,
+              "total": 2338572
+            }
+          }
+        ],
+        "normal": {
+          "angular_max_deg": 0.29568880925855257,
+          "angular_mean_deg": 2.328531991584842e-05,
+          "non_finite_count": 0,
+          "unnormalised_count": 0,
+          "negative_z_count": 0
+        },
+        "private_difference_map_sha256": "bc48772de0e34f816a267acba16823591284ddfc7cfc7561b44b1a1251c7e5f8",
+        "flip_mean": 2.803966026476701e-06,
+        "padding": {
+          "covered_texels": 508307,
+          "uncovered_texels": 3685997,
+          "covered": {
+            "abs_diff": {
+              "max": 168,
+              "mean": 0.00023411048834660943,
+              "p99": 0
+            },
+            "differing": {
+              "count": 42,
+              "percent": 0.0027542410393718757,
+              "total": 1524921
+            }
+          },
+          "edge_texels": 6301,
+          "edge": {
+            "abs_diff": {
+              "max": 168,
+              "mean": 0.01888589112839232,
+              "p99": 0
+            },
+            "differing": {
+              "count": 42,
+              "percent": 0.22218695445167433,
+              "total": 18903
+            }
+          },
+          "uncovered": {
+            "abs_diff": {
+              "max": 169,
+              "mean": 0.00505200266486019,
+              "p99": 0
+            },
+            "differing": {
+              "count": 4673,
+              "percent": 0.04225903240471077,
+              "total": 11057991
+            }
+          },
+          "bands": [
+            {
+              "within_texels": 1,
+              "texels": 6334,
+              "abs_diff": {
+                "max": 168,
+                "mean": 0.024892116619303233,
+                "p99": 0
+              },
+              "differing": {
+                "count": 51,
+                "percent": 0.26839280075781496,
+                "total": 19002
+              }
+            },
+            {
+              "within_texels": 2,
+              "texels": 12698,
+              "abs_diff": {
+                "max": 169,
+                "mean": 0.02598834462120019,
+                "p99": 0
+              },
+              "differing": {
+                "count": 103,
+                "percent": 0.2703837874730929,
+                "total": 38094
+              }
+            },
+            {
+              "within_texels": 4,
+              "texels": 25518,
+              "abs_diff": {
+                "max": 169,
+                "mean": 0.02579878255871672,
+                "p99": 0
+              },
+              "differing": {
+                "count": 208,
+                "percent": 0.27170363403610526,
+                "total": 76554
+              }
+            },
+            {
+              "within_texels": 8,
+              "texels": 51527,
+              "abs_diff": {
+                "max": 169,
+                "mean": 0.02613516538255025,
+                "p99": 0
+              },
+              "differing": {
+                "count": 447,
+                "percent": 0.2891687852970287,
+                "total": 154581
+              }
+            }
+          ]
+        }
+      },
+      {
+        "output_id": "11-Varinha-Madeira/11-Varinha-Madeira_v1r2_Roughness",
+        "storage_format": {
+          "bits_per_channel": 16,
+          "channels": 1,
+          "container": "png",
+          "encoding": "undetermined",
+          "sample_type": "uint"
+        },
+        "abs_diff": {
+          "max": 1542,
+          "mean": 0.8351588249206543,
+          "p99": 0
+        },
+        "differing": {
+          "count": 7667,
+          "percent": 0.18279552459716797,
+          "total": 4194304
+        },
+        "regions": [
+          {
+            "region": "M_gem",
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 1345051
+            }
+          },
+          {
+            "region": "M_iron",
+            "abs_diff": {
+              "max": 1542,
+              "mean": 2.5601804933920564,
+              "p99": 0
+            },
+            "differing": {
+              "count": 6579,
+              "percent": 0.522928494953132,
+              "total": 1258107
+            }
+          },
+          {
+            "region": "M_leather",
+            "abs_diff": {
+              "max": 1028,
+              "mean": 0.003799798428332401,
+              "p99": 0
+            },
+            "differing": {
+              "count": 3,
+              "percent": 0.00036963019730859933,
+              "total": 811622
+            }
+          },
+          {
+            "region": "M_wood",
+            "abs_diff": {
+              "max": 257,
+              "mean": 0.35771188571487217,
+              "p99": 0
+            },
+            "differing": {
+              "count": 1085,
+              "percent": 0.13918750416921097,
+              "total": 779524
+            }
+          }
+        ],
+        "private_difference_map_sha256": "4785108f245d69758435c5e5e85cb726eaff15cb8ae5bdadc6471bfdf23d6039",
+        "flip_mean": 9.327453881269321e-05,
+        "padding": {
+          "covered_texels": 508307,
+          "uncovered_texels": 3685997,
+          "covered": {
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 508307
+            }
+          },
+          "edge_texels": 6301,
+          "edge": {
+            "abs_diff": {
+              "max": 0,
+              "mean": 0,
+              "p99": 0
+            },
+            "differing": {
+              "count": 0,
+              "percent": 0.0,
+              "total": 6301
+            }
+          },
+          "uncovered": {
+            "abs_diff": {
+              "max": 1542,
+              "mean": 0.9503290425901052,
+              "p99": 0
+            },
+            "differing": {
+              "count": 7667,
+              "percent": 0.2080034248535742,
+              "total": 3685997
+            }
+          },
+          "bands": [
+            {
+              "within_texels": 1,
+              "texels": 6334,
+              "abs_diff": {
+                "max": 1542,
+                "mean": 1.338964319545311,
+                "p99": 0
+              },
+              "differing": {
+                "count": 20,
+                "percent": 0.3157562361856647,
+                "total": 6334
+              }
+            },
+            {
+              "within_texels": 2,
+              "texels": 12698,
+              "abs_diff": {
+                "max": 1542,
+                "mean": 1.4977161757757127,
+                "p99": 0
+              },
+              "differing": {
+                "count": 44,
+                "percent": 0.34651126161600254,
+                "total": 12698
+              }
+            },
+            {
+              "within_texels": 4,
+              "texels": 25518,
+              "abs_diff": {
+                "max": 1542,
+                "mean": 1.6416255192413198,
+                "p99": 0
+              },
+              "differing": {
+                "count": 100,
+                "percent": 0.3918802413982287,
+                "total": 25518
+              }
+            },
+            {
+              "within_texels": 8,
+              "texels": 51527,
+              "abs_diff": {
+                "max": 1542,
+                "mean": 2.0349719564500166,
+                "p99": 0
+              },
+              "differing": {
+                "count": 240,
+                "percent": 0.4657752246395094,
+                "total": 51527
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "structural": []
+  },
+  "flip_tool": {
+    "version": "1.7",
+    "sha256": "2081f715ea8190a5f58bc578b0cccd36a9a3f3cf78ad13fe6f86e5a75615bda7"
+  }
+}

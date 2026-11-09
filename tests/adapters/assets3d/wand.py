@@ -210,6 +210,21 @@ result = {
 }
 """
 
+# A script job's closing config export (the glTF pilots, phase3.1 item 3.1): the configuration
+# only, on the document the script's export saved (`__SPEC__`: {"config": ...} as a literal).
+CLOSING_EXPORT_CODE = """import json
+
+import substance_painter.export
+
+spec = json.loads(__SPEC__)
+exported = substance_painter.export.export_project_textures(spec["config"])
+result = {
+    "status": str(exported.status),
+    "message": exported.message,
+    "files": {str(key): list(files) for key, files in exported.textures.items()},
+}
+"""
+
 
 class NotAScriptJob(RuntimeError):
     """A script-only part of the Wand asked of a native job, which has no create or export
@@ -494,6 +509,26 @@ class Wand:
             )
             return self.call("run", str(code), diagnostic=diagnostic)
         return self.call("run", str(self.script("painter-export-py")), diagnostic=diagnostic)
+
+    @property
+    def closing_out(self) -> Path:
+        """The directory of a script job's closing config export (`closing_export`)."""
+        return self.work / "closing-export"
+
+    def closing_export(self, diagnostic: bool = False) -> Call | None:
+        """A script job's closing config export after `export`, as the recorder runs it (decision
+        283): the configuration only, into `closing_out`, in its own `UzPainter.exe run` process
+        over the project the script's export saved; None for a job without one. A native job's
+        closing configuration is its `export`."""
+        if isinstance(self.pipeline, NativeJob) or self.pipeline.config_export is None:
+            return None
+        out = self.closing_out
+        out.mkdir(parents=True, exist_ok=True)
+        config = {**self.pipeline.config_export.config, "exportPath": out.as_posix()}
+        code = self.work / "closing-export.py"
+        spec = repr(json.dumps({"config": config}))
+        code.write_text(CLOSING_EXPORT_CODE.replace("__SPEC__", spec), encoding="utf-8")
+        return self.call("run", str(code), diagnostic=diagnostic)
 
     def run_file(self, path: Path) -> Call:
         """A test's own Painter-side file through the script's `run` command."""

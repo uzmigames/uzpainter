@@ -3,7 +3,8 @@
 
 ## 2. Children (mandatory)
 - [ ] 2.1 Child accepted: `phase3.2_unreal-ue56-packed-preset`
-- [ ] 2.2 Child accepted: `phase3.1_unreal-gltf-pbr-preset`
+- [x] 2.2 Child accepted: `phase3.1_unreal-gltf-pbr-preset`
+  - Accepted and archived 2026-11-09 (`.rulebook/archive/2026-11-09-phase3.1_unreal-gltf-pbr-preset/`, its section "Closure"): the glTF preset's files equal Painter's own glTF export of Wand v1, Sash v5 and Tunic v10 in decoded values under EXC-013 and EXC-014 (`parity/reports/phase3/tier1-*-gltf.json`); the fastgltf fixture loads the production Wand v1 export with ORM packing confirmed (`parity/reports/phase3/gltf-consumer-wand-v1.md`; this also gives item 4.2's evidence). Decision 419 (AO_Mixed without an AO mesh map under OCIO; the Legacy twin).
 
 ## 3. Integration
 - [ ] 3.1 Run both presets on wand v1, belt v5 and tunic v10 through the plan compiler and generational publication
