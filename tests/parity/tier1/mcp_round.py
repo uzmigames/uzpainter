@@ -51,8 +51,9 @@ A settings value (`project_create`) or a configuration (`export`) that UzPainter
 release gap ends the round as `refused`, naming it; any other failed call fails the round.
 
 **The measure mode** (`run_round(..., diagnostic=True)`, a script job only; decisions 286, 398 §4
-and 399): production refuses an islanded set's export (decisions 245, 259), so the round sends no
-`export`. After the session closes, its saved project is exported by the diagnostic measure export
+and 399; written while production refused an islanded set's export, decisions 245 and 259, lifted
+under EXC-013 and EXC-014 by decisions 414 and 417): the round sends no `export`. After the session
+closes, its saved project is exported by the diagnostic measure export
 in a separate `UzPainter.exe run --diagnostic-measure-export` process
 (`tunic_recipe.measured_config_export`, the Tunic recipe's), with the configuration the export
 script builds, and its receipt is checked the same way: marked `non_conformant`, every bypassed
@@ -272,10 +273,12 @@ def run_round(
     backend: str = BACKEND,
     state: StateScenario | None = None,
     diagnostic: bool = False,
+    gpu_deadline_ms: int | None = None,
 ) -> Round:
     """The round over the manifest's inputs staged in `work` (a fresh directory); a native job's
     with the `state` scenario's checks, if one is given; with `diagnostic`, a script job's saved
-    project exported by the measure mode after the session (the module's docstring)."""
+    project exported by the measure mode after the session (the module's docstring).
+    `gpu_deadline_ms` is the supervisor's `--gpu-deadline-ms` (its workers' default otherwise)."""
     job = load_pipeline_job(manifest, ASSETS3D)
     if diagnostic and isinstance(job, NativeJob):  # refused before UzPainter starts
         raise RoundFailed(f"the round's measure mode applies to a script job, not {job.golden_id}")
@@ -284,7 +287,8 @@ def run_round(
         if not isinstance(job, NativeJob):
             raise RoundFailed(f"a state scenario applies to a native job, not {job.golden_id}")
         expected_of(state, job, staged, native_ocio_sha256(job))
-    session = Mcp(painter, work, "--gpu-backend", backend)
+    deadline = [] if gpu_deadline_ms is None else ["--gpu-deadline-ms", str(gpu_deadline_ms)]
+    session = Mcp(painter, work, "--gpu-backend", backend, *deadline)
     try:
         tools = {tool["name"] for tool in session.request("tools/list", {})["tools"]}
         log = Round(len(tools), "run_python" in tools)
@@ -317,11 +321,19 @@ def measured_round(painter: Path, log: Round, folder: Path, backend: str = BACKE
         log.files[(made.sets[name], PurePosixPath(path.as_posix()).stem)] = path
 
 
-def run_tunic_current(painter: Path, work: Path, manifest: Path, backend: str = BACKEND) -> Round:
+def run_tunic_current(
+    painter: Path,
+    work: Path,
+    manifest: Path,
+    backend: str = BACKEND,
+    gpu_deadline_ms: int | None = None,
+) -> Round:
     """The Tunic current round (`phase2/tier1/tunic-v10-current`) with its state checks before
     the export (`tunic_state.TUNIC_CURRENT`); refused before UzPainter starts unless the manifest
-    is that golden's and its pinned job fits the scenario."""
-    return run_round(painter, work, manifest, backend, tunic_state.TUNIC_CURRENT)
+    is that golden's and its pinned job fits the scenario. `gpu_deadline_ms` as `run_round`'s."""
+    return run_round(
+        painter, work, manifest, backend, tunic_state.TUNIC_CURRENT, gpu_deadline_ms=gpu_deadline_ms
+    )
 
 
 def expected_of(

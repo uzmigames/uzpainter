@@ -4,15 +4,14 @@ decisions 028, 192, 260, 399).
 Rebuilds Sash v5 twice through the pipeline adapter on DX12 (`runner.py`), saves and reopens the
 first rebuild's project and exports it again, and compares both rebuilds with the private golden
 `phase2/tier1/sash-v5-current`, the re-run waist-v5 round (decision 399). Every export is the
-diagnostic measure export (decision 286): production refuses the Sash's islanded Normal and
-`infinite` padding (decisions 245, 259), and the owner's EXC-012 (decision 399, EXC-010's terms)
-excepts exactly what that mode writes inexactly. A pass is a pass under EXC-012, never exact.
+diagnostic measure export (decision 286), and the owner's EXC-012 (decision 399, EXC-010's terms)
+excepts exactly what that mode writes inexactly. A pass is a pass under EXC-012, never exact. The
+production export's Tier 1 is `test_sash_production.py` (decisions 414, 417).
 
 The MCP-only round runs the same request through typed MCP tools with Python disabled
-(`../mcp_round.py`), twice. With the production `export` tool, which refuses the islanded set
-before writing, the round test is an expected failure naming that refusal (the export,
-`NotYetSupported`, and a reason naming the islands and decision 245's or 259's refusal; any other
-refusal fails). In the measure mode, as decision 398 §4 closed the Tunic's, the round sends no
+(`../mcp_round.py`), twice. With the production `export` tool, which writes the islanded set under
+EXC-013 and EXC-014 (decisions 414, 417), the round must complete with every map byte-identical to
+the Tier 1 run's. In the measure mode, as decision 398 §4 closed the Tunic's, the round sends no
 export and its saved project is exported by the diagnostic measure export in its own `run`
 process; that round must complete with every map byte-identical to the Tier 1 run's (also the
 measure export), and it writes the round's report.
@@ -40,7 +39,7 @@ import pytest
 
 from tests.adapters.assets3d.wand import ASSETS3D, REPO_ROOT
 from tests.parity.recipe.wand_v1 import runner as recipe
-from tests.parity.tier1.mcp_round import REFUSAL, Round, round_report, run_round
+from tests.parity.tier1.mcp_round import round_report, run_round
 from tests.parity.tier1.sash_v5.runner import GOLDEN_ID, REQUEST, Evidence, painter_ocio, run
 from tools.parity.recipe_rebuild import write_report as write_recipe_report
 from tools.parity.schemas import Schema, validation_errors
@@ -55,24 +54,6 @@ ROUND_ENV = "UZP_MCP_ROUND_REPORT"  # the same for the MCP-only round's report
 RECIPE_ENV = "UZP_RECIPE_REBUILD_REPORT"  # the same for the dump-and-rebuild's report
 # The only exception the Sash's equality may rely on (decision 399).
 EXC012 = {"exception_id": "EXC-012", "version": 1}
-# The production refusals of an islanded export the round may meet (src/export/padding.cpp
-# `IslandNormalRefusal`, src/export/guards.cpp `CheckPadding`): the only expected failure.
-ISLAND_REFUSAL = {"tool": "export", "error_code": REFUSAL, "type": "NotYetSupported"}
-ISLANDS = "on a texture set whose UV islands do not cover the whole tile"
-ISLAND_DECISIONS = ("decision 245", "decision 259")
-
-
-def island_refusal(log: Round) -> bool:
-    """Whether the round ended on exactly the export's islanded refusal: the export, the release
-    gap `NotYetSupported`, and a reason naming the islands and decision 245's or 259's refusal."""
-    reason = log.refusal_reason
-    return (
-        log.outcome == "refused"
-        and log.refusal == ISLAND_REFUSAL
-        and ISLANDS in reason
-        and any(decision in reason for decision in ISLAND_DECISIONS)
-    )
-
 
 GOLDEN = resolve_golden(GOLDEN_ID)
 _NEEDS_THE_SASH = [
@@ -86,8 +67,7 @@ _NEEDS_THE_SASH = [
 
 
 def _needs_the_sash[T: Callable[..., None]](test: T) -> T:
-    """`test` skipped, with the reason, where the Sash's inputs or its golden are absent; the
-    host test of the round's expected refusal runs everywhere."""
+    """`test` skipped, with the reason, where the Sash's inputs or its golden are absent."""
     for mark in _NEEDS_THE_SASH:
         test = mark(test)
     return test
@@ -163,9 +143,8 @@ def test_sash_v5_round_through_typed_mcp_tools_with_python_disabled(
 ) -> None:
     """The production round through typed tools against a supervisor without `--allow-python`;
     `run_python` is not listed, every call is typed, the round completes and its maps equal the
-    Tier 1 run's byte for byte. The production `export` tool refuses the islanded set before
-    writing (decisions 245, 259); while it does, this is an expected failure naming the refusal.
-    The round's report is the measure mode's (below)."""
+    Tier 1 run's byte for byte. The production `export` tool writes the islanded set under
+    EXC-013 and EXC-014 (decisions 414, 417). The round's report is the measure mode's (below)."""
     assert GOLDEN is not None
     _, (tier1, _), _ = evidence
     with pytest.MonkeyPatch.context() as patch:
@@ -174,8 +153,6 @@ def test_sash_v5_round_through_typed_mcp_tools_with_python_disabled(
     report = round_report(log, tier1, GOLDEN.manifest_path, painter)
     assert report["python"] == {"allow_python": False, "run_python_listed": False}
     assert all(call["typed"] for call in report["calls"])
-    if island_refusal(log):
-        pytest.xfail(f"the production export refuses the Sash's UV islands: {log.refusal_reason}")
     assert report["outcome"] == "completed", report.get("refusal", report["calls"][-1])
     assert report["equal_to_tier1"] == "equal", report["maps"]
 
@@ -234,33 +211,3 @@ def test_sash_v5_rebuilt_from_its_dump_exports_byte_identical_files(
     assert report["rebuilt"]["export"]["files"] == files
     assert report["equality"]["files"] == "identical", report["equality"]
     assert report["equality"]["outcome"] == "pass", report["equality"]
-
-
-def test_only_the_islanded_export_refusal_is_expected() -> None:
-    """The round's expected failure is exactly the export's islanded refusal: the export, the
-    `NotYetSupported` gap and a reason naming the islands and decision 245's or 259's refusal. Any
-    other refused call, gap type or reason, and a completed or failed round, is not."""
-    normal = (
-        'the layer "n" reads the combined virtual normal on a texture set whose UV islands do not '
-        "cover the whole tile: (owner: the Height outside the UV islands; decision 245)"
-    )
-    padding = (
-        'the padding "infinite" on a texture set whose UV islands do not cover the whole tile is '
-        "not exact (owner, decision 259)"
-    )
-
-    def refused(reason: str, **refusal: str) -> Round:
-        log = Round(67, False, outcome="refused", refusal={**ISLAND_REFUSAL, **refusal})
-        log.refusal_reason = reason
-        return log
-
-    assert island_refusal(refused(normal)) and island_refusal(refused(padding))
-    assert not island_refusal(refused("a 4096 height-to-normal scaling is not recorded"))
-    assert not island_refusal(refused(normal.replace("decision 245", "decision 999")))
-    assert not island_refusal(refused(normal, tool="project_create"))
-    assert not island_refusal(refused(normal, type="UVOutsideTile"))
-    assert not island_refusal(refused(normal, error_code="call_failed"))
-    for outcome in ("completed", "failed"):
-        log = refused(normal)
-        log.outcome = outcome
-        assert not island_refusal(log)

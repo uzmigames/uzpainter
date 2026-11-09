@@ -214,16 +214,21 @@ TUNIC_CURRENT = "phase2/tier1/tunic-v10-current"
     resolve_golden(TUNIC_CURRENT) is None, reason=f"{TUNIC_CURRENT} is not admitted"
 )
 def test_tunic_current_round_checks_its_state_before_the_export(
-    painter: Path, tmp_path: Path, record_property: Callable[[str, object], None]
+    fast_painter: Path, tmp_path: Path, record_property: Callable[[str, object], None]
 ) -> None:
     """The real Tunic current round through typed tools, as a state-check test: every state check
     after the sync and after the reopen passes before the one export, and a failed check raises
-    before the export is sent. The export either writes or is refused before writing as an
-    explicit capability refusal; which refusal fired is not proved here. The round's aggregate
-    (hashes, calls, outcome, refusal) is recorded as the `tunic_current_round` property."""
+    before the export is sent. The production export writes the islanded set under EXC-013 and
+    EXC-014 (decisions 414, 417), so the round completes. Its 4096 px export runs on the
+    ReleaseFast build with the Tunic's GPU deadline (`tunic_recipe.GPU_DEADLINE_MS`), as the Tier 1
+    rebuilds do. The round's aggregate (hashes, calls, outcome, refusal) is recorded as the
+    `tunic_current_round` property."""
     manifest = resolve_golden(TUNIC_CURRENT)
     assert manifest is not None
-    log = run_tunic_current(painter, tmp_path / "round", manifest.manifest_path)
+    painter = fast_painter
+    log = run_tunic_current(
+        painter, tmp_path / "round", manifest.manifest_path, gpu_deadline_ms=GPU_DEADLINE_MS
+    )
     record_property(
         "tunic_current_round",
         json.dumps(
@@ -244,10 +249,8 @@ def test_tunic_current_round_checks_its_state_before_the_export(
     assert tools[-1] == "export", log.calls
     assert all(call["outcome"] != "error" for call in log.calls[:-1]), log.calls
     assert tools.count("layer_list") == 2 and "project_open" in tools, tools
-    if log.outcome == "refused":
-        assert log.refusal is not None and log.refusal["tool"] == "export", log.refusal
-    else:
-        assert log.outcome == "completed", log.calls
+    assert log.outcome == "completed", (log.refusal, log.calls[-1])
+    assert len(log.files) == 5, sorted(log.files)
 
 
 @pytest.mark.skipif(
