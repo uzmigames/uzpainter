@@ -386,11 +386,27 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
         }
     }
     for (size_t m = 0; m < plan.materials.size(); ++m) {
+        std::optional<EncodedUzTexture> emissive;
+        if (const std::optional<SynthesizedUzTexture>& black = plan.materials[m].synthesizedEmissive) {
+            // cook-uzengine's emissive without --emissive: (0, 0, 0) with alpha 1 (decision 420).
+            Rgba16Image image{black->width, black->height,
+                              std::vector<uint16_t>(size_t{black->width} * black->height * 4, 0)};
+            for (size_t a = 3; a < image.rgba.size(); a += 4) image.rgba[a] = 65535;
+            try {
+                render::Result<EncodedUzTexture> cooked =
+                    CookUzEngineDerivative(black->output, "(synthesized emissive)", image, FileLayout::RGB);
+                if (!cooked) return render::Unexpected(cooked.error());
+                emissive = std::move(*cooked);
+            } catch (const std::exception& e) {
+                return ExportFail("cooking " + black->output.relativePath + " failed: " + e.what());
+            }
+        }
         try {
             encoded[plan.materials[m].after].material = WriteMaterial(plan, m, encoded);
         } catch (const std::exception& e) {
             return ExportFail("writing " + plan.materials[m].relativePath + " failed: " + e.what());
         }
+        encoded[plan.materials[m].after].material->emissive = std::move(emissive);
     }
     return encoded;
 }
@@ -428,7 +444,11 @@ render::Result<std::vector<WrittenFile>> WriteExport(const core::Project& projec
         }
         if (done && (*encoded)[i].material) {
             const UzMaterialOutput& material = plan.materials[(*encoded)[i].material->index];
-            done = write(material.rootPath, material.relativePath, (*encoded)[i].material->bytes);
+            if ((*encoded)[i].material->emissive) {
+                done = write(material.rootPath, material.synthesizedEmissive->output.relativePath,
+                             (*encoded)[i].material->emissive->bytes);
+            }
+            if (done) done = write(material.rootPath, material.relativePath, (*encoded)[i].material->bytes);
         }
         if (!done) return render::Unexpected(done.error());
     }

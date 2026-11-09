@@ -24,13 +24,14 @@ namespace {
 Point g_point = Point::none;
 std::size_t g_index = 0;
 
-constexpr std::array<std::pair<std::string_view, Point>, 12> kNames{{
+constexpr std::array<std::pair<std::string_view, Point>, 13> kNames{{
     {"fail_encode", Point::fail_encode},
     {"fail_write", Point::fail_write},
     {"kill_after_file", Point::kill_after_file},
     {"kill_after_uztexture", Point::kill_after_uztexture},
     {"kill_after_dds", Point::kill_after_dds},
     {"kill_after_uzmat", Point::kill_after_uzmat},
+    {"kill_after_synthesized", Point::kill_after_synthesized},
     {"kill_after_plan", Point::kill_after_plan},
     {"kill_after_receipt", Point::kill_after_receipt},
     {"kill_before_pointer_rename", Point::kill_before_pointer_rename},

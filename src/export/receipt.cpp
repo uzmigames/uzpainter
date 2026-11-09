@@ -513,6 +513,50 @@ json::Object BuildReceipt(const ReceiptInputs& in) {
         // the inline scene-material block and the writer's consumer gaps.
         if (const std::optional<EncodedUzMaterial>& material = encoded.material) {
             const UzMaterialOutput& planned = plan.materials[material->index];
+            // Its synthesized black emissive derivative, written right before it (decision 420): no
+            // canonical file, no delivered file and no channel are its source.
+            if (const std::optional<EncodedUzTexture>& black = material->emissive) {
+                const SynthesizedUzTexture& synthesized = *planned.synthesizedEmissive;
+                const UzTextureOutput& output = synthesized.output;
+                const std::string blackSha = core::Sha256Hex(black->bytes);
+                const std::string blackKey = ManifestKey(output.relativePath, used);
+                const std::string blackSpace = output.srgb ? "sRGB" : "linear";
+                const json::Array blackSize{static_cast<std::int64_t>(synthesized.width),
+                                            static_cast<std::int64_t>(synthesized.height)};
+                openItems.emplace_back(output.relativePath + ": synthesized " + std::string(kSynthesizedEmissive));
+                files.push_back(json::Object{
+                    {"path", output.relativePath},
+                    {"key", blackKey},
+                    {"root_path", planned.rootPath},
+                    {"preset", planned.preset},
+                    {"bytes", static_cast<std::int64_t>(black->bytes.size())},
+                    {"sha256", blackSha},
+                    {"format", "uztexture"},
+                    {"bit_depth", "8"},
+                    {"colour_space", blackSpace},
+                    {"size", blackSize},
+                    {"layout", std::string(FileLayoutName(black->layout))},
+                    {"channels", json::Array{}},
+                    {"normal", nullptr},
+                    {"consumer_gaps", json::Array{}},
+                    {"uztexture",
+                     json::Object{{"source", nullptr},
+                                  {"delivery", nullptr},
+                                  {"binding", output.binding.empty() ? json::Value(nullptr) : json::Value(output.binding)},
+                                  {"format", black->format},
+                                  {"srgb", output.srgb},
+                                  {"mips", static_cast<std::int64_t>(black->mips)},
+                                  {"encoder", black->encoder},
+                                  {"negative_z", nullptr},
+                                  {"synthesized", std::string(kSynthesizedEmissive)}}},
+                });
+                manifestFiles[blackKey] = json::Object{{"path", "files/" + output.relativePath},
+                                                       {"role", "map"},
+                                                       {"sha256", Sha256Field(blackSha, true)},
+                                                       {"bytes", static_cast<std::int64_t>(black->bytes.size())}};
+                outputs.emplace_back(blackKey);
+                maps[blackKey] = json::Object{{"resolution", blackSize}, {"bit_depth", 8}, {"color_space", blackSpace}};
+            }
             const std::string materialSha = core::Sha256Hex(material->bytes);
             const std::string materialKey = ManifestKey(planned.relativePath, used);
             json::Array materialGaps;

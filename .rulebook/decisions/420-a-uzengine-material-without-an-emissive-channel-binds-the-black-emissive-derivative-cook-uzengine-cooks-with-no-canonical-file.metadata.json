@@ -1,0 +1,9 @@
+{
+  "id": 420,
+  "slug": "a-uzengine-material-without-an-emissive-channel-binds-the-black-emissive-derivative-cook-uzengine-cooks-with-no-canonical-file",
+  "title": "A UzEngine material without an Emissive channel binds the black emissive derivative cook-uzengine cooks, with no canonical file",
+  "status": "accepted",
+  "date": "2026-11-09",
+  "relatedTasks": ["phase3.2_uze-uzmat-preset", "phase3.3_uze-png-cook-cli", "phase3.4_uzengine-preset"],
+  "supersededBy": null
+}

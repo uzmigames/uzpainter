@@ -791,20 +791,35 @@ json::Value FileJson(const PlannedFile& f) {
 }
 
 json::Value MaterialJson(const UzMaterialOutput& m) {
-    return json::Object{{"textureSet", m.textureSet},
-                        {"stack", m.stack},
-                        {"rootPath", m.rootPath},
-                        {"preset", m.preset},
-                        {"fileName", m.fileName},
-                        {"relativePath", m.relativePath},
-                        {"path", m.path},
-                        {"format", "uzmat"},
-                        {"albedo", m.albedo},
-                        {"normal", m.normal},
-                        {"orm", m.orm},
-                        {"emissive", m.emissive},
-                        {"height", m.height.empty() ? json::Value(nullptr) : json::Value(m.height)},
-                        {"after", static_cast<std::int64_t>(m.after)}};
+    json::Object material{{"textureSet", m.textureSet},
+                          {"stack", m.stack},
+                          {"rootPath", m.rootPath},
+                          {"preset", m.preset},
+                          {"fileName", m.fileName},
+                          {"relativePath", m.relativePath},
+                          {"path", m.path},
+                          {"format", "uzmat"},
+                          {"albedo", m.albedo},
+                          {"normal", m.normal},
+                          {"orm", m.orm},
+                          {"emissive", m.emissive},
+                          {"height", m.height.empty() ? json::Value(nullptr) : json::Value(m.height)},
+                          {"after", static_cast<std::int64_t>(m.after)}};
+    // Only a material with a synthesized emissive has the member, so every other plan keeps its hash.
+    if (m.synthesizedEmissive) {
+        const UzTextureOutput& u = m.synthesizedEmissive->output;
+        material["synthesizedEmissive"] =
+            json::Object{{"relativePath", u.relativePath},
+                         {"path", u.path},
+                         {"binding", u.binding.empty() ? json::Value(nullptr) : json::Value(u.binding)},
+                         {"format", std::string(UzTextureStorageName(u.format))},
+                         {"srgb", u.srgb},
+                         {"mips", std::string(DerivativeMipsName(u.mips))},
+                         {"width", static_cast<std::int64_t>(m.synthesizedEmissive->width)},
+                         {"height", static_cast<std::int64_t>(m.synthesizedEmissive->height)},
+                         {"value", std::string(kSynthesizedEmissive)}};
+    }
+    return material;
 }
 
 /// True when `source` holds normal vectors: the Normal channel, a virtual normal or `normal_base`.
@@ -966,7 +981,35 @@ void AttachUzEngine(ExportPlan& plan, size_t first, const ExportListEntry& entry
     derivative(material.albedo, out.albedo, true);
     derivative(material.normal, out.normal, true);
     derivative(material.orm, out.orm, true);
-    derivative(material.emissive, out.emissive, true);
+    // A stack without an Emissive channel (its emissive map skipped as absent) binds the black
+    // emissive derivative cook-uzengine cooks without --emissive (decision 420, decision 380 §6).
+    const bool emissiveAbsent = std::any_of(plan.skipped.begin(), plan.skipped.end(), [&](const SkippedMap& s) {
+        return s.rootPath == root.rootPath && s.preset == preset.name && s.fileName == material.emissive &&
+               s.kind == SkipKind::absent;
+    });
+    const PlannedFile* albedo = fileOf(material.albedo);
+    if (emissiveAbsent && fileOf(material.emissive) == nullptr && albedo != nullptr && albedo->uztexture) {
+        const auto target = std::find_if(targets.textures.begin(), targets.textures.end(),
+                                         [&](const UzEngineTexture& t) { return t.map == material.emissive; });
+        const auto canonical = std::find_if(plan.files.begin() + static_cast<std::ptrdiff_t>(first), plan.files.end(),
+                                            [&](const PlannedFile& f) { return f.relativePath == albedo->uztexture->canonical; });
+        if (target != targets.textures.end() && canonical != plan.files.end()) {
+            const std::string stem = ExpandName(material.emissive, project, context, root, naming, what);
+            SynthesizedUzTexture black;
+            black.output.relativePath = stem + ".uztexture";
+            black.output.path = JoinPath(exportPath, black.output.relativePath);
+            black.output.negativeZ = target->negativeZ;
+            black.output.binding = target->binding;
+            black.output.format = target->format;
+            black.output.srgb = target->srgb;
+            black.output.mips = target->mips;
+            black.width = canonical->width;
+            black.height = canonical->height;
+            out.emissive = black.output.relativePath;
+            out.synthesizedEmissive = std::move(black);
+        }
+    }
+    if (!out.synthesizedEmissive) derivative(material.emissive, out.emissive, true);
     derivative(material.height, out.height, false);
     if (!missing.empty()) {
         plan.skipped.push_back({root.set->name, root.stack->name, root.rootPath, preset.name, preset.maps.size(),
@@ -1025,7 +1068,10 @@ void CheckEngineOutputs(const ExportPlan& plan) {
         if (f.uztexture) outputs.push_back({&f.rootPath, &f.uztexture->relativePath, true});
         if (f.dds) outputs.push_back({&f.rootPath, &f.dds->relativePath, true});
     }
-    for (const UzMaterialOutput& m : plan.materials) outputs.push_back({&m.rootPath, &m.relativePath, true});
+    for (const UzMaterialOutput& m : plan.materials) {
+        if (m.synthesizedEmissive) outputs.push_back({&m.rootPath, &m.synthesizedEmissive->output.relativePath, true});
+        outputs.push_back({&m.rootPath, &m.relativePath, true});
+    }
     for (size_t a = 0; a < outputs.size(); ++a) {
         for (size_t b = a + 1; b < outputs.size(); ++b) {
             // Two Painter-form files follow Painter's rule (CompilePlan, R-091).
@@ -1278,7 +1324,9 @@ std::vector<StackFiles> FilesByStack(const ExportPlan& plan) {
         if (f.uztexture) it->files.push_back(f.uztexture->path);
         if (f.dds) it->files.push_back(f.dds->path);
         for (const UzMaterialOutput& m : plan.materials) {
-            if (&plan.files[m.after] == &f) it->files.push_back(m.path);
+            if (&plan.files[m.after] != &f) continue;
+            if (m.synthesizedEmissive) it->files.push_back(m.synthesizedEmissive->output.path);
+            it->files.push_back(m.path);
         }
     }
     return out;

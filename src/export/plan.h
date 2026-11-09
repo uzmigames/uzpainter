@@ -162,9 +162,24 @@ struct DdsOutput {
     DerivativeMips mips = DerivativeMips::linear;
 };
 
+/// What a synthesized emissive derivative holds, as the plan and the receipt state it.
+inline constexpr std::string_view kSynthesizedEmissive =
+    "black (0, 0, 0): the stack has no Emissive channel (decision 420)";
+
+/// The black emissive derivative of a UzEngine material whose stack has no Emissive channel
+/// (decision 420, after decision 380 §6): the preset's emissive target cooked from (0, 0, 0) with
+/// alpha 1 at `width` x `height` (the albedo canonical's size). It has no canonical file
+/// (`output.canonical` is empty): no channel is its source.
+struct SynthesizedUzTexture {
+    UzTextureOutput output;
+    uint32_t width = 0;
+    uint32_t height = 0;
+};
+
 /// A `.uzmat` of a UzEngine preset (`UzEngineMaterial`; uzmat_writer.h), planned for one stack: at
 /// the delivery root, binding the stack's albedo, normal, ORM and emissive derivatives (and its
-/// height derivative, when there is one). It is written after plan file `after`, its stack's last.
+/// height derivative, when there is one). It is written after plan file `after`, its stack's last,
+/// right after its synthesized emissive derivative when it has one.
 struct UzMaterialOutput {
     std::string textureSet;
     std::string stack;
@@ -182,6 +197,8 @@ struct UzMaterialOutput {
     std::string emissive;
     std::string height;
     size_t after = 0;
+    /// Set when the stack has no Emissive channel: `emissive` is its relativePath (decision 420).
+    std::optional<SynthesizedUzTexture> synthesizedEmissive;
 };
 
 struct PlannedFile {

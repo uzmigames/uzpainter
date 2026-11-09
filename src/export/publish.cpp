@@ -458,6 +458,19 @@ render::Result<Publication> PublishExport(const core::Project& project, std::int
         // The `.uzmat` of a UzEngine preset, after its stack's last file (phase3.2_uze-uzmat-preset).
         if (const std::optional<EncodedUzMaterial>& material = (*encoded)[i].material) {
             const UzMaterialOutput& planned = plan.materials[material->index];
+            // Its synthesized black emissive derivative first, which it binds (decision 420).
+            if (material->emissive) {
+                const std::string& emissivePath = planned.synthesizedEmissive->output.relativePath;
+                const fs::path black = directory / "files" / Utf8Path(emissivePath);
+                render::Result<void> blackWritten = WriteDurable(black, material->emissive->bytes);
+                if (!blackWritten) return failed(blackWritten.error());
+#if defined(UZP_EXPORT_FAULT_HOOKS)
+                fault::Reach(fault::Point::kill_after_synthesized, material->index);
+#endif
+                publication.files.push_back({planned.rootPath, emissivePath, Utf8String(black),
+                                             material->emissive->bytes.size(),
+                                             core::Sha256Hex(material->emissive->bytes)});
+            }
             const fs::path written = directory / "files" / Utf8Path(planned.relativePath);
             render::Result<void> materialWritten = WriteDurable(written, material->bytes);
             if (!materialWritten) return failed(materialWritten.error());

@@ -6,14 +6,15 @@ Every case runs `uzp-export-tests.exe` on the CPU. No case runs Painter, UzEngin
 
 What these cases establish, and what they do not:
 - The shipped preset's own content, its targets and its provenance record (CPU lane, decision 200).
-- The full shipped preset is refused before anything is planned: its `<set>_orm` reads `AO_Mixed`,
-  which is not fitted (decision 131). So no case here exports the full shipped preset, and none of
-  them is wand v1 acceptance.
+- The full shipped preset plans and publishes on a set in AO_Mixed's scope (decisions 411, 418 and
+  419; here legacy colour management, an L16 AO channel and a bound 16-bit grey AO mesh map), and
+  is refused outside it: every output of the table, each derivative beside its canonical map, the
+  `.uzmat`, and the interruption of every `.uztexture` and `.uzmat` write.
+- A stack without an Emissive channel binds the black emissive derivative cook-uzengine cooks
+  without --emissive (decision 420), with no canonical file.
 - The shipped preset with its ORM maps filtered out, on an authored texture set: canonical maps,
   derivatives, receipts and gaps.
-- A test-only variant of the preset, whose ORM R reads `documentMap ambientOcclusion`: the
-  `.uzmat` and the interruption of every `.uztexture` and `.uzmat` write. The variant exercises the
-  same code; it is not the shipped preset.
+- Wand v1 is `tests/parity/tier1/test_uze_wand.py` (GPU, opt-in).
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ import hashlib
 import json
 import shutil
 import struct
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -69,7 +71,27 @@ TABLE = {
     "$textureSet_height": ("16", "$textureSet_height", "BC4", False, "heightmap"),
     "$textureSet_specularweight": ("16", "$textureSet_specularweight", "BC4", False, None),
 }
-SKELETON = project(texture_set("s0", FULL_CHANNELS | {"Emissive": "sRGB8"}))
+# A bound AO mesh map puts AO_Mixed in scope (legacy, an L16 AO channel without a layer).
+SKELETON = project(texture_set("s0", FULL_CHANNELS | {"Emissive": "sRGB8"}, mesh_maps=("AO",)))
+# Every file of the full shipped preset on SKELETON, in plan order (each derivative after its file).
+FULL_LIST = [
+    "s0_albedo.png",
+    "s0_albedo.uztexture",
+    "canonical/s0_albedo.png",
+    "s0_normal.png",
+    "s0_normal.uztexture",
+    "s0_orm.png",
+    "s0_orm.uztexture",
+    "canonical/s0_orm.png",
+    "s0_emissive.png",
+    "s0_emissive.uztexture",
+    "canonical/s0_emissive.png",
+    "s0_height.png",
+    "s0_height.uztexture",
+    "s0_specularweight.png",
+    "s0_specularweight.uztexture",
+    "s0.uzmat",
+]
 
 
 def shipped_config(out: str, output_maps: list[str] | None = None) -> dict[str, Any]:
@@ -145,8 +167,9 @@ def test_shipped_preset_loads_with_its_targets(export_tests: Path, tmp_path: Pat
 
 
 def test_provenance_validates_and_names_the_preset(export_tests: Path, tmp_path: Path) -> None:
-    """3.6 (decision 200, CPU lane): the record validates against its schema and pends on AO_Mixed;
-    without it the preset fails naming `uzengine`; an inline preset cannot carry the targets."""
+    """3.6 (decision 200, CPU lane): the record validates against its schema and pends only on
+    AO stacks outside AO_Mixed's computed scope (R-131; decisions 411, 418, 419); without it the
+    preset fails naming `uzengine`; an inline preset cannot carry the targets."""
     record = json.loads(RECORD.read_text(encoding="utf-8"))
     validator = Draft202012Validator(json.loads(PROVENANCE_SCHEMA.read_text(encoding="utf-8")))
     assert [e.message for e in validator.iter_errors(record)] == []
@@ -167,14 +190,106 @@ def test_provenance_validates_and_names_the_preset(export_tests: Path, tmp_path:
     refused(inline, "NotYetSupported", '"uzengine"', "not documented")
 
 
-# ── Plan and dry run (2.9, 3.1 partial) ──────────────────────────────────────
+# ── Plan and dry run (2.9) ───────────────────────────────────────────────────
 
 
-def test_full_preset_is_refused_naming_ao_mixed(export_tests: Path, tmp_path: Path) -> None:
-    """The full shipped preset is refused before anything is planned: `<set>_orm` reads AO_Mixed,
-    whose owner is phase3.2_unreal-ue56-packed-preset item 2.10 (decision 131)."""
-    [result] = plan_many(export_tests, [(SKELETON, shipped_config("C:/export"))], tmp_path)
-    refused(result, "NotYetSupported", '"AO_Mixed"', "phase3.2_unreal-ue56-packed-preset item 2.10")
+def test_full_preset_plans_every_output_in_ao_mixed_scope(
+    export_tests: Path, tmp_path: Path
+) -> None:
+    """2.9: `defaultExportPreset: "uzengine"` resolves to the shipped preset, and on a set with
+    every source channel and AO_Mixed in scope its dry run lists every output of the table, each
+    derivative after its file and the `.uzmat` last; the plan states each one's format, colour
+    space, binding and canonical map, and the `.uzmat` binds the four derivatives and the height.
+    Without the AO mesh map (legacy colour management) AO_Mixed is out of scope and the whole
+    preset is refused before anything is planned (decisions 411, 418, 419)."""
+    no_mesh_map = project(texture_set("s0", FULL_CHANNELS | {"Emissive": "sRGB8"}))
+    result, outside = plan_many(
+        export_tests,
+        [(SKELETON, shipped_config("C:/export")), (no_mesh_map, shipped_config("C:/export"))],
+        tmp_path,
+    )
+    assert "error" not in result, result
+    [[_, _, listed]] = result["list"]
+    assert [p.removeprefix("C:/export/") for p in listed] == FULL_LIST
+    plan = result["plan"]
+    assert plan["skipped"] == []
+    files = {f["fileName"]: f for f in plan["files"]}
+    for name, (depth, canonical, fmt, srgb, binding) in TABLE.items():
+        f = files[name]
+        assert (f["parameters"]["fileFormat"], f["parameters"]["bitDepth"]) == ("png", depth)
+        derivative = f["uztexture"]
+        assert derivative["format"] == fmt and derivative["srgb"] is srgb
+        assert derivative["binding"] == binding
+        assert derivative["canonical"] == files[canonical]["relativePath"]
+        assert ("negativeZ" in derivative) == (fmt == "BC5")
+    orm = files["$textureSet_orm"]["channels"]
+    assert [(c["source"]["srcMapType"], c["source"]["srcMapName"]) for c in orm] == [
+        ("virtualMap", "AO_Mixed"),
+        ("documentMap", "roughness"),
+        ("documentMap", "metallic"),
+    ]
+    [material] = plan["materials"]
+    assert {k: material[k] for k in ("relativePath", "albedo", "normal", "orm", "emissive")} == {
+        "relativePath": "s0.uzmat",
+        "albedo": "s0_albedo.uztexture",
+        "normal": "s0_normal.uztexture",
+        "orm": "s0_orm.uztexture",
+        "emissive": "s0_emissive.uztexture",
+    }
+    assert material["height"] == "s0_height.uztexture"
+    assert "synthesizedEmissive" not in material
+    refused(outside, "NotYetSupported", '"AO_Mixed"', "AO mesh map", "decision 411")
+
+
+def test_a_stack_without_emissive_binds_a_synthesized_black_emissive(
+    export_tests: Path, tmp_path: Path
+) -> None:
+    """Decision 420: without an Emissive channel the emissive maps are skipped as absent, and the
+    `.uzmat` binds the black emissive derivative cook-uzengine cooks without --emissive (the
+    preset's emissive target, BC7 sRGB, at the albedo canonical's size), listed right before the
+    `.uzmat`, with no canonical file. An emissive map filtered out of a stack that has the channel
+    is not synthesized: the `.uzmat` stays skipped, naming it."""
+    no_emissive = project(texture_set("s0", FULL_CHANNELS, mesh_maps=("AO",)))
+    preset = json.loads(PRESET.read_text(encoding="utf-8"))
+    kept = [m["fileName"] for m in preset["maps"] if "emissive" not in m["fileName"]]
+    result, unchosen = plan_many(
+        export_tests,
+        [
+            (no_emissive, shipped_config("C:/export")),
+            (SKELETON, shipped_config("C:/export", [*kept, "$textureSet"])),
+        ],
+        tmp_path,
+    )
+    assert "error" not in result, result
+    [[_, _, listed]] = result["list"]
+    without = [m for m in FULL_LIST if "emissive" not in m]
+    assert [p.removeprefix("C:/export/") for p in listed] == [
+        *without[:-1],
+        "s0_emissive.uztexture",
+        "s0.uzmat",
+    ]
+    plan = result["plan"]
+    assert {s["fileName"]: s["kind"] for s in plan["skipped"]} == {
+        "$textureSet_emissive": "absent",
+        "canonical/$textureSet_emissive": "absent",
+    }
+    [material] = plan["materials"]
+    assert material["emissive"] == "s0_emissive.uztexture"
+    assert material["synthesizedEmissive"] == {
+        "relativePath": "s0_emissive.uztexture",
+        "path": "C:/export/s0_emissive.uztexture",
+        "binding": "emissive",
+        "format": "BC7",
+        "srgb": True,
+        "mips": "colour",
+        "width": SIZE,
+        "height": SIZE,
+        "value": "black (0, 0, 0): the stack has no Emissive channel (decision 420)",
+    }
+    assert "error" not in unchosen, unchosen
+    assert "materials" not in unchosen["plan"]
+    [skipped] = [s for s in unchosen["plan"]["skipped"] if s["fileName"] == "$textureSet"]
+    assert "$textureSet_emissive" in skipped["reason"]
 
 
 def test_dry_run_lists_outputs_with_formats(export_tests: Path, tmp_path: Path) -> None:
@@ -244,9 +359,15 @@ def test_linear_basecolor_is_refused_for_an_srgb_texture(
 # ── Publication on an authored texture set ──────────────────────────────────
 
 
-def authored_spec(root: Path) -> Path:
+def authored_spec(root: Path, in_scope: bool = False, emissive: bool = True) -> Path:
     """Every channel the preset reads but SpecularWeight, filled from the 16-bit ramp (opacity
-    varies, so the albedo keeps its alpha), on the grid mesh (full UV coverage)."""
+    varies, so the albedo keeps its alpha), on the grid mesh (full UV coverage). `in_scope`: the
+    set of AO_Mixed's scope (decisions 411, 418): the default template (the only one AO_Mixed is
+    computed on), an L16 SpecularWeight channel filled too (its default-template base is recorded,
+    section 9 of the task), no Opacity channel (no base of it is recorded on that template, so the
+    albedo is RGB), and the ramp (16-bit grey, the set's size) bound as the AO mesh map; the fill's
+    AO source is a 16-bit grey bitmap at identity UV on the L16 AO channel. `emissive`: False drops
+    the Emissive channel (decision 420)."""
     root.mkdir(parents=True, exist_ok=True)
     sha = ramp_png(root / "ramp.png")
     bitmap = {"bitmap": sha, "color_space": "Raw"}
@@ -260,17 +381,24 @@ def authored_spec(root: Path) -> Path:
         "Height": "L16F",
         "Normal": "RGB16F",
     }
-    document = {
+    if in_scope:
+        channels["SpecularWeight"] = "L16"
+        del channels["Opacity"]
+    if not emissive:
+        del channels["Emissive"]
+    document: dict[str, Any] = {
         "name": "s0",
         # Alpha-test supplies Opacity; its SpecularWeight base is not observed, so that
-        # channel remains absent in this fixture.
-        "template": "pbr-metallic-roughness-alpha-test",
+        # channel remains absent in this fixture unless `in_scope` picks the default template.
+        "template": "default" if in_scope else "pbr-metallic-roughness-alpha-test",
         "resolution": [SIZE, SIZE],
         "mesh": str(GRID),
         "channels": [{"type": t, "format": f} for t, f in channels.items()],
         "resources": [{"sha256": sha, "png": "ramp.png"}],
         "layers": [{"kind": "fill", "sources": {t: bitmap for t in channels if t != "Normal"}}],
     }
+    if in_scope:
+        document["mesh_maps"] = {"AO": sha}
     path = root / "spec.json"
     path.write_text(json.dumps(document), encoding="utf-8")
     return path
@@ -553,22 +681,20 @@ def test_normal_is_directx_with_its_relief_round(
     assert relief["revision"] >= 1 and len(relief["height_hash"]) == 64 and relief["method"]
 
 
-# ── The .uzmat and interruption (variant preset) ─────────────────────────────
+# ── The full shipped preset: canonical maps, .uzmat and interruption ─────────
 
 
-@pytest.fixture(scope="module")
-def variant(export_tests: Path, tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
-    tmp = tmp_path_factory.mktemp("uze-variant")
-    presets = variant_presets(tmp / "presets")
-    spec_path = authored_spec(tmp / "spec")
+def full_publication(exe: Path, tmp: Path, emissive: bool = True) -> dict[str, Any]:
+    """The full shipped preset published on `authored_spec(in_scope=True, emissive=...)`."""
+    spec_path = authored_spec(tmp / "spec", in_scope=True, emissive=emissive)
     out = tmp / "out"
     config = shipped_config(out.as_posix())
-    code, lines, err = publish(export_tests, spec_path, config, tmp, presets)
+    code, lines, err = publish(exe, spec_path, config, tmp)
     assert code == 0 and len(lines) == 1 and "error" not in lines[0], (code, lines, err)
-    generation, receipt = published(export_tests, out)
+    generation, receipt = published(exe, out)
     return {
         "tmp": tmp,
-        "presets": presets,
+        "presets": None,
         "spec": spec_path,
         "out": out,
         "config": config,
@@ -577,22 +703,78 @@ def variant(export_tests: Path, tmp_path_factory: pytest.TempPathFactory) -> dic
     }
 
 
-def test_uzmat_binds_the_generation_derivatives(variant: dict[str, Any]) -> None:
+@pytest.fixture(scope="module")
+def full(export_tests: Path, tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
+    return full_publication(export_tests, tmp_path_factory.mktemp("uze-full"))
+
+
+@pytest.fixture(scope="module")
+def black(export_tests: Path, tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
+    return full_publication(export_tests, tmp_path_factory.mktemp("uze-black"), emissive=False)
+
+
+def test_canonical_maps_sit_beside_every_derivative(full: dict[str, Any]) -> None:
+    """2.3 (EXP-10): the full shipped preset publishes every output of the table in one
+    generation, and each of its six `.uztexture` derivatives, the ORM's BC7 included, sits beside
+    its canonical 16-bit map, which the receipt links (`source`) and lists with its own hash and
+    size; the ORM's canonical map holds AO_Mixed, roughness and metallic at PNG 16 beside the
+    PNG 8 delivery."""
+    generation, receipt = full["generation"], full["receipt"]
+    files = {f["path"]: f for f in receipt["files"]}
+    assert list(files) == FULL_LIST
+    assert receipt["skipped"] == []
+    derivatives = {p: f for p, f in files.items() if f["format"] == "uztexture"}
+    assert len(derivatives) == len(TABLE) == 6
+    for path, entry in derivatives.items():
+        meta = entry["uztexture"]
+        canonical = files[meta["source"]]
+        assert canonical["format"] == "png" and canonical["bit_depth"] == "16", path
+        assert (generation / "files" / meta["source"]).is_file()
+        assert meta["delivery"] == path.removesuffix(".uztexture") + ".png"
+        assert "synthesized" not in meta
+    orm = derivatives["s0_orm.uztexture"]["uztexture"]
+    assert (orm["source"], orm["format"], orm["srgb"], orm["binding"]) == (
+        "canonical/s0_orm.png",
+        "BC7",
+        False,
+        "orm",
+    )
+    assert files["s0_orm.png"]["bit_depth"] == "8"
+    assert [
+        (c["dest_channel"], c["src_map_type"], c["src_map_name"])
+        for c in files["canonical/s0_orm.png"]["channels"]
+    ] == [
+        ("R", "virtualMap", "AO_Mixed"),
+        ("G", "documentMap", "roughness"),
+        ("B", "documentMap", "metallic"),
+    ]
+    canonical = png.decode((generation / "files" / "canonical/s0_orm.png").read_bytes())
+    delivered = png.decode((generation / "files" / "s0_orm.png").read_bytes())
+    assert canonical.shape == delivered.shape == (SIZE, SIZE, 3)
+    # Both quantise the same values: the PNG 8 code is within one code of the canonical 16-bit
+    # code scaled to 8 bits.
+    scaled = np.round(canonical.astype(np.int64) / 257) - delivered.astype(np.int64)
+    assert int(np.abs(scaled).max()) <= 1
+    assert gaps(files["s0_specularweight.uztexture"]) == {"SpecularWeight"}
+
+
+def test_uzmat_binds_the_generation_derivatives(full: dict[str, Any]) -> None:
     """The `.uzmat` sits at the delivery root after its stack's files, binds the albedo, ORM,
-    normal and emissive derivatives of the same generation, blends Masked (opacity in albedo
-    alpha), and the receipt carries its inline block and the SM5 opacity and height gaps."""
-    receipt, generation = variant["receipt"], variant["generation"]
+    normal and emissive derivatives of the same generation, blends Opaque (the set has no Opacity
+    channel, so the albedo has no alpha; the Masked rule is the PNG cook's test, decision 380), and
+    the receipt carries its inline block and the height and blend gaps."""
+    receipt, generation = full["receipt"], full["generation"]
     paths = [f["path"] for f in receipt["files"]]
     assert paths[-1] == "s0.uzmat"
     [entry] = [f for f in receipt["files"] if f["format"] == "uzmat"]
     meta = entry["uzmat"]
     assert meta["albedo"] == "s0_albedo.uztexture" and meta["orm"] == "s0_orm.uztexture"
     assert meta["normal"] == "s0_normal.uztexture" and meta["emissive"] == "s0_emissive.uztexture"
-    assert meta["height"] == "s0_height.uztexture" and meta["blend"] == "Masked"
+    assert meta["height"] == "s0_height.uztexture" and meta["blend"] == "Opaque"
     for texture in (meta["albedo"], meta["orm"], meta["normal"], meta["emissive"]):
         assert texture in paths
     # The blend rule is authored (an alpha does not tell cutout from translucent): a gap too.
-    assert gaps(entry) == {"opacity", "height", "blend"}
+    assert gaps(entry) == {"height", "blend"}
     graph = json.loads((generation / "files" / "s0.uzmat").read_text(encoding="utf-8"))
     textures = {
         e["name"]: e["stringParams"]["texturePath"]
@@ -605,7 +787,7 @@ def test_uzmat_binds_the_generation_derivatives(variant: dict[str, Any]) -> None
         "ORM": meta["orm"],
         "Emissive": meta["emissive"],
     }
-    assert graph["blendMode"] == "Masked"
+    assert graph["blendMode"] == "Opaque"
     inline = meta["inline_material"]
     assert inline["material_graph"] == "s0.uzmat" and inline["orm"] == meta["orm"]
     orm = {f["path"]: f for f in receipt["files"]}["s0_orm.uztexture"]["uztexture"]
@@ -617,34 +799,109 @@ def test_uzmat_binds_the_generation_derivatives(variant: dict[str, Any]) -> None
     )
 
 
-def test_interrupting_each_uztexture_and_uzmat_write_keeps_the_previous_generation(
-    export_tests: Path, variant: dict[str, Any]
-) -> None:
-    """3.5 (EXP-06): killing the export after each `.uztexture` write and after the `.uzmat` write
-    leaves the previous generation selected, and a consumer reads it whole."""
-    out = variant["out"]
-    plan = json.loads((variant["generation"] / "plan.json").read_text(encoding="utf-8"))
-    derivatives = [i for i, f in enumerate(plan["files"]) if "uztexture" in f]
-    # albedo, normal, ORM, emissive, height (the authored set has no SpecularWeight channel).
-    assert len(derivatives) == 5
-    points = [f"kill_after_uztexture:{i}" for i in derivatives] + ["kill_after_uzmat:0"]
+def interrupted(exe: Path, publication: dict[str, Any], points: list[str]) -> None:
+    """Killing the export at each of `points` leaves the previous generation selected, and a
+    consumer reads it whole; recovery publishes nothing."""
+    out = publication["out"]
     pointer = (out / "current.json").read_bytes()
-    before = consumed(export_tests, out)
+    before = consumed(exe, out)
     for point in points:
         code, lines, err = publish(
-            export_tests,
-            variant["spec"],
-            variant["config"],
-            variant["tmp"],
-            variant["presets"],
+            exe,
+            publication["spec"],
+            publication["config"],
+            publication["tmp"],
+            publication["presets"],
             point,
         )
         assert code == KILLED, (point, code, lines, err)
         assert (out / "current.json").read_bytes() == pointer, point
-        assert consumed(export_tests, out) == before, point
-    recovered = one(export_tests, "recover", "--recover", str(out))
+        assert consumed(exe, out) == before, point
+    recovered = one(exe, "recover", "--recover", str(out))
     assert recovered.get("published") is None, recovered
-    assert consumed(export_tests, out) == before
+    assert consumed(exe, out) == before
+
+
+def test_interrupting_each_uztexture_and_uzmat_write_keeps_the_previous_generation(
+    export_tests: Path, full: dict[str, Any]
+) -> None:
+    """3.5 (EXP-06): killing the full shipped preset's export after each `.uztexture` write and
+    after the `.uzmat` write leaves the previous generation selected, and a consumer reads it
+    whole."""
+    plan = json.loads((full["generation"] / "plan.json").read_text(encoding="utf-8"))
+    derivatives = [i for i, f in enumerate(plan["files"]) if "uztexture" in f]
+    # albedo, normal, ORM, emissive, height, SpecularWeight.
+    assert len(derivatives) == 6
+    points = [f"kill_after_uztexture:{i}" for i in derivatives] + ["kill_after_uzmat:0"]
+    interrupted(export_tests, full, points)
+
+
+def cook_verb(exe: Path, *args: str) -> dict[str, Any]:
+    """`uzp-export-tests cook-uzengine` (decision 380): its receipt."""
+    proc = subprocess.run(
+        [str(exe), "cook-uzengine", *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=600,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    receipt: dict[str, Any] = json.loads(proc.stdout)
+    return receipt
+
+
+def test_synthesized_emissive_is_the_cooks_black_and_bound(
+    export_tests: Path, black: dict[str, Any], tmp_path: Path
+) -> None:
+    """Decision 420: on a set without an Emissive channel the generation holds the black emissive
+    derivative, written right before the `.uzmat` that binds it, with no canonical or delivered
+    PNG; the receipt marks it `synthesized` (source and delivery null) with its hash, size and
+    engine format, and the manifest block lists it as an open item. Its bytes, and the `.uzmat`'s,
+    are cook-uzengine's without --emissive on the same generation's canonical maps."""
+    generation, receipt = black["generation"], black["receipt"]
+    files = {f["path"]: f for f in receipt["files"]}
+    assert list(files)[-2:] == ["s0_emissive.uztexture", "s0.uzmat"]
+    assert not any(p.endswith("emissive.png") for p in files)
+    entry = files["s0_emissive.uztexture"]
+    assert (entry["colour_space"], entry["layout"], entry["size"]) == ("sRGB", "RGB", [SIZE, SIZE])
+    assert entry["channels"] == [] and entry["consumer_gaps"] == []
+    assert entry["uztexture"] == {
+        "source": None,
+        "delivery": None,
+        "binding": "emissive",
+        "format": "BC7",
+        "srgb": True,
+        "mips": 9,
+        "encoder": entry["uztexture"]["encoder"],
+        "negative_z": None,
+        "synthesized": "black (0, 0, 0): the stack has no Emissive channel (decision 420)",
+    }
+    assert any(
+        item.startswith("s0_emissive.uztexture: synthesized black")
+        for item in receipt["manifest_export"]["open_items"]
+    )
+    assert files["s0.uzmat"]["uzmat"]["emissive"] == "s0_emissive.uztexture"
+    cooked_out = tmp_path / "cooked"
+    root = generation / "files"
+    cook = cook_verb(
+        export_tests,
+        *("--set", "s0", "--out", str(cooked_out), "--normal-convention", "directx"),
+        *("--albedo", str(root / "canonical/s0_albedo.png")),
+        *("--normal", str(root / "s0_normal.png")),
+        *("--orm", str(root / "canonical/s0_orm.png"), "--height", str(root / "s0_height.png")),
+    )
+    assert any(i.get("synthesized") for i in cook["inputs"] if i["map"] == "emissive")
+    for name in ("s0_emissive.uztexture", "s0.uzmat"):
+        assert (cooked_out / name).read_bytes() == (root / name).read_bytes(), name
+
+
+def test_interrupting_the_synthesized_emissive_write_keeps_the_previous_generation(
+    export_tests: Path, black: dict[str, Any]
+) -> None:
+    """3.5 for decision 420's file: killing the export after the synthesized emissive write (and
+    after the `.uzmat` that follows it) leaves the previous generation selected."""
+    interrupted(export_tests, black, ["kill_after_synthesized:0", "kill_after_uzmat:0"])
 
 
 # ── Receipt colour space: what changed for every receipt (regression) ───────

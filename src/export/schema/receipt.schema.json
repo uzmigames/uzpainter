@@ -504,12 +504,46 @@
                 "type": "string"
               },
               "channels": {
-                "minItems": 1,
                 "items": {
                   "required": [
                     "transfer"
                   ]
                 }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "anyOf": [
+              {
+                "properties": {
+                  "format": {
+                    "enum": [
+                      "json",
+                      "uzmat"
+                    ]
+                  }
+                }
+              },
+              {
+                "required": [
+                  "uztexture"
+                ],
+                "properties": {
+                  "uztexture": {
+                    "required": [
+                      "synthesized"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "else": {
+            "properties": {
+              "channels": {
+                "minItems": 1
               }
             }
           }
@@ -697,7 +731,7 @@
       ]
     },
     "uztexture_derivative": {
-      "description": "A .uztexture derivative (src/export/write.h EncodedUzTexture; decision 316, phase3.2_uze-uzmat-preset): cooked from the PNG 16 samples of its canonical file `source`, written beside its delivered file `delivery` (the same file when that file is the canonical one). Its engine binding (null: the engine has no slot, a consumer gap), stored format and colour space are the plan's, never inferred from a name. A normal map is stored as BC5, or as RGBA8 when the negative-Z policy rgb routed a map holding negative-Z texels (B <= 32767); policy fail with such texels publishes nothing. `negative_z` is null for every other map.",
+      "description": "A .uztexture derivative (src/export/write.h EncodedUzTexture; decision 316, phase3.2_uze-uzmat-preset): cooked from the PNG 16 samples of its canonical file `source`, written beside its delivered file `delivery` (the same file when that file is the canonical one). Its engine binding (null: the engine has no slot, a consumer gap), stored format and colour space are the plan's, never inferred from a name. A normal map is stored as BC5, or as RGBA8 when the negative-Z policy rgb routed a map holding negative-Z texels (B <= 32767); policy fail with such texels publishes nothing. `negative_z` is null for every other map. A UzEngine material's emissive derivative synthesized black for a stack without an Emissive channel (decision 420) states what it holds in `synthesized`; it has no `source` or `delivery` file (null) and its file entry no channels.",
       "type": "object",
       "required": [
         "source",
@@ -712,10 +746,28 @@
       "additionalProperties": false,
       "properties": {
         "source": {
-          "$ref": "#/$defs/delivery_path"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/delivery_path"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "delivery": {
-          "$ref": "#/$defs/delivery_path"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/delivery_path"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "synthesized": {
+          "type": "string",
+          "minLength": 1
         },
         "binding": {
           "type": [
@@ -861,6 +913,33 @@
               },
               "negative_z": {
                 "type": "object"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "synthesized"
+            ]
+          },
+          "then": {
+            "properties": {
+              "source": {
+                "const": null
+              },
+              "delivery": {
+                "const": null
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "source": {
+                "type": "string"
+              },
+              "delivery": {
+                "type": "string"
               }
             }
           }

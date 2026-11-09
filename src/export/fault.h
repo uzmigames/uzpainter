@@ -27,6 +27,9 @@ enum class Point {
     kill_after_dds,
     /// Terminates the process after the `.uzmat` n of the plan was written and flushed.
     kill_after_uzmat,
+    /// Terminates the process after the synthesized emissive `.uztexture` of `.uzmat` n was written
+    /// and flushed (decision 420).
+    kill_after_synthesized,
     /// Terminates the process after the generation's plan.json was written.
     kill_after_plan,
     /// Terminates the process after the generation's receipt was written.

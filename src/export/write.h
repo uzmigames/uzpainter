@@ -128,6 +128,10 @@ struct EncodedUzMaterial {
     std::string blend;
     /// The writer's consumer gaps: {binding, path, reason}.
     std::vector<std::array<std::string, 3>> gaps;
+    /// The black emissive derivative it binds when its stack has no Emissive channel (plan.h
+    /// `SynthesizedUzTexture`, decision 420), cooked as cook-uzengine cooks it without
+    /// --emissive; written right before the `.uzmat`.
+    std::optional<EncodedUzTexture> emissive{};
 };
 
 /// The `.uzmat` of `material` (its derivative paths), blending `Masked` when `alpha` (the albedo
