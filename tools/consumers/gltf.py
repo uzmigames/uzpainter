@@ -2,6 +2,13 @@
 
 This CPU fixture uses the pinned fastgltf loader and its structural validator.
 It does not render, certify Painter parity or enable the pending glTF preset.
+
+Base colour, metallic-roughness, normal and occlusion are always bound. Emissive is
+bound only when the preset wrote an emissive file: glTF 2.0 makes `emissiveTexture`
+optional and `emissiveFactor` default to [0, 0, 0] (the `material` schema), so a set
+without an emissive channel yields a material with no emissive texture and the default
+factor. The absence must be the export's own: its receipt lists the emissive map as
+skipped, and the report names that entry as the slot's consumer gap.
 """
 
 from __future__ import annotations
@@ -23,6 +30,7 @@ import numpy as np
 from tools.parity.feasibility import png
 
 SLOTS = ("baseColor", "metallicRoughness", "normal", "occlusion", "emissive")
+REQUIRED_SLOTS = SLOTS[:4]  # emissive is optional in glTF 2.0 (module docstring)
 CONSUMER = {"loader": "fastgltf", "version": "0.9.1", "validator": "fastgltf::validate"}
 ARCHIVE_SHA256 = "d8705a496deb2831775baeef5009be36d24bf3d10f8d29ab016e977d0119c872"
 MAX_FILE_BYTES = 256 * 1024 * 1024
@@ -75,6 +83,7 @@ class Published:
     receipt_sha256: str
     files: dict[str, bytes]
     entries: dict[str, dict[str, Any]]
+    skipped: tuple[dict[str, Any], ...] = ()
 
 
 def _published(root: Path) -> Published:
@@ -114,7 +123,10 @@ def _published(root: Path) -> Published:
         files[name], entries[name] = data, entry
     if not files:
         raise ValueError("empty published generation")
-    return Published(generation, digest, files, entries)
+    skipped = receipt.get("skipped", [])
+    if not isinstance(skipped, list) or not all(isinstance(s, dict) for s in skipped):
+        raise ValueError("receipt skipped maps are invalid")
+    return Published(generation, digest, files, entries, tuple(skipped))
 
 
 def _pixels(data: bytes) -> tuple[png.Samples, int]:
@@ -262,7 +274,7 @@ def _geometry(path: Path, material: str | None) -> tuple[bytes, dict[str, Any]]:
     return vertex_bytes + index_bytes, metadata
 
 
-def _asset(mesh: dict[str, Any]) -> dict[str, Any]:
+def _asset(mesh: dict[str, Any], slots: tuple[str, ...] = SLOTS) -> dict[str, Any]:
     attributes = {"POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2}
     accessors: list[dict[str, Any]] = []
     for offset, kind in ((0, "VEC3"), (12, "VEC3"), (24, "VEC2")):
@@ -298,25 +310,31 @@ def _asset(mesh: dict[str, Any]) -> dict[str, Any]:
         "meshes": [
             {"primitives": [{"attributes": attributes, "indices": 3, "material": 0, "mode": 4}]}
         ],
-        "images": [{"uri": f"{slot}.png"} for slot in SLOTS],
-        "textures": [{"source": i} for i in range(len(SLOTS))],
-        "materials": [
-            {
-                "pbrMetallicRoughness": {
-                    "baseColorTexture": {"index": 0},
-                    "metallicRoughnessTexture": {"index": 1},
-                    "baseColorFactor": [1, 1, 1, 1],
-                    "metallicFactor": 1,
-                    "roughnessFactor": 1,
-                },
-                "normalTexture": {"index": 2, "scale": 1},
-                "occlusionTexture": {"index": 3, "strength": 1},
-                "emissiveTexture": {"index": 4},
-                "emissiveFactor": [1, 1, 1],
-                "alphaMode": "BLEND",
-            }
-        ],
+        "images": [{"uri": f"{slot}.png"} for slot in slots],
+        "textures": [{"source": i} for i in range(len(slots))],
+        "materials": [_material(slots)],
     }
+
+
+def _material(slots: tuple[str, ...]) -> dict[str, Any]:
+    """The material binding `slots`, emissive only when it is bound (with no emissive texture
+    the factor keeps the glTF 2.0 default [0, 0, 0] and is not written)."""
+    material: dict[str, Any] = {
+        "pbrMetallicRoughness": {
+            "baseColorTexture": {"index": 0},
+            "metallicRoughnessTexture": {"index": 1},
+            "baseColorFactor": [1, 1, 1, 1],
+            "metallicFactor": 1,
+            "roughnessFactor": 1,
+        },
+        "normalTexture": {"index": 2, "scale": 1},
+        "occlusionTexture": {"index": 3, "strength": 1},
+    }
+    if "emissive" in slots:
+        material["emissiveTexture"] = {"index": 4}
+        material["emissiveFactor"] = [1, 1, 1]
+    material["alphaMode"] = "BLEND"
+    return material
 
 
 def _write_json(path: Path, value: dict[str, Any]) -> None:
@@ -336,9 +354,22 @@ def run_fixture(
     *,
     mesh_material: str | None = None,
 ) -> dict[str, Any]:
-    """Verify, assemble and consume a fresh fixture; invalid input raises ValueError."""
-    if set(bindings) != set(SLOTS):
-        raise ValueError("fixture needs exactly the five glTF texture bindings")
+    """Verify, assemble and consume a fresh fixture; invalid input raises ValueError. Emissive
+    is bound only when `bindings` names it (the module's docstring)."""
+    if not set(REQUIRED_SLOTS) <= set(bindings) <= set(SLOTS):
+        raise ValueError(
+            "fixture needs the four core glTF texture bindings and at most an emissive one"
+        )
+    slots = tuple(slot for slot in SLOTS if slot in bindings)
+    published = _published(export_root)
+    gaps = []
+    for slot in SLOTS:
+        if slot in slots:
+            continue
+        reported = [s for s in published.skipped if slot in str(s.get("file_name", "")).lower()]
+        if not reported:
+            raise ValueError(f"the receipt does not report the unbound {slot} map as skipped")
+        gaps.append({"slot": slot, "receipt_skipped": reported})
     manifest_bytes = _read(manifest_path)
     manifest = _json(manifest_bytes)
     if (
@@ -347,7 +378,6 @@ def run_fixture(
         or manifest.get("loader_archive_sha256") != ARCHIVE_SHA256
     ):
         raise ValueError("unsupported glTF consumer manifest identity")
-    published = _published(export_root)
     selected: dict[str, bytes] = {}
     image_info: dict[str, dict[str, Any]] = {}
     for slot, name in bindings.items():
@@ -381,7 +411,7 @@ def run_fixture(
         (output_dir / f"{slot}.png").write_bytes(data)
     (output_dir / "mesh.bin").write_bytes(mesh_bytes)
     asset_path = output_dir / "asset.gltf"
-    _write_json(asset_path, _asset(mesh))
+    _write_json(asset_path, _asset(mesh, slots))
     executable_hash = _sha(_read(consumer_exe))
     try:
         result = subprocess.run(
@@ -414,7 +444,7 @@ def run_fixture(
         "baseColorFactor": [1, 1, 1, 1],
         "metallicFactor": 1,
         "roughnessFactor": 1,
-        "emissiveFactor": [1, 1, 1],
+        "emissiveFactor": [1, 1, 1] if "emissive" in slots else [0, 0, 0],
         "alphaMode": "BLEND",
         "normalScale": 1,
         "occlusionStrength": 1,
@@ -436,7 +466,8 @@ def run_fixture(
         "bindings": bindings,
         "consumer_gaps": [
             gap for entry in published.entries.values() for gap in entry.get("consumer_gaps", [])
-        ],
+        ]
+        + gaps,
         "scope": "CPU structure, geometry and bindings; no render or Painter parity",
     }
     _write_json(output_dir / "report.json", report)

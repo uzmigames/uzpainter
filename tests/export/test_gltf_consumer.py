@@ -256,6 +256,69 @@ def test_swapped_packing_rejected_with_coherent_receipt(
         consume(publication, gltf_consumer, tmp_path / "consumer")
 
 
+CORE = {slot: name for slot, name in BINDINGS.items() if slot != "emissive"}
+
+
+def consume_core(publication: Publication, exe: Path, output: Path) -> dict[str, Any]:
+    manifest = Path(__file__).resolve().parents[2] / "parity/manifests/consumers/gltf/wand-v1.json"
+    return run_fixture(
+        publication.root,
+        publication.mesh,
+        CORE,
+        publication.references,
+        output,
+        exe,
+        manifest,
+        mesh_material="s0",
+    )
+
+
+def test_an_unbound_emissive_needs_the_receipt_to_report_it_skipped(
+    publication: Publication, gltf_consumer: Path, tmp_path: Path
+) -> None:
+    """A set without an emissive channel (the pilots) publishes no emissive file: glTF 2.0 leaves
+    `emissiveTexture` unset and `emissiveFactor` at [0, 0, 0]. The fixture binds the four core
+    slots only when the receipt itself reports the emissive map skipped."""
+    with pytest.raises(ValueError, match="does not report the unbound emissive"):
+        consume_core(publication, gltf_consumer, tmp_path / "unreported")
+    receipt = publication.receipt()
+    skipped = {
+        "root_path": "s0",
+        "preset": "authored-five-slots",
+        "file_name": "$textureSet_Emissive",
+        "kind": "absent",
+        "reason": "the stack has no Emissive channel",
+    }
+    receipt["skipped"] = [skipped]
+    publication.repin(receipt)
+    output = tmp_path / "consumer"
+    report = consume_core(publication, gltf_consumer, output)
+    assert report["status"] == "pass"
+    assert report["consumer"]["material"]["emissiveFactor"] == [0, 0, 0]
+    assert set(report["consumer"]["bindings"]) == set(CORE)
+    assert {"slot": "emissive", "receipt_skipped": [skipped]} in report["consumer_gaps"]
+    asset = json.loads((output / "asset.gltf").read_bytes())
+    material = asset["materials"][0]
+    assert "emissiveTexture" not in material and "emissiveFactor" not in material
+    assert [image["uri"] for image in asset["images"]] == [f"{slot}.png" for slot in CORE]
+
+
+def test_the_core_slots_are_required(publication: Publication, tmp_path: Path) -> None:
+    manifest = Path(__file__).resolve().parents[2] / "parity/manifests/consumers/gltf/wand-v1.json"
+    partial = {slot: name for slot, name in CORE.items() if slot != "occlusion"}
+    with pytest.raises(ValueError, match="four core glTF texture bindings"):
+        run_fixture(
+            publication.root,
+            publication.mesh,
+            partial,
+            publication.references,
+            tmp_path / "consumer",
+            tmp_path / "unused.exe",
+            manifest,
+            mesh_material="s0",
+        )
+
+
 @pytest.mark.parametrize("mutation", ["receipt", "hash", "size", "path", "missing", "reference"])
 def test_invalid_publication_rejected(
     publication: Publication, gltf_consumer: Path, tmp_path: Path, mutation: str

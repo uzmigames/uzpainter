@@ -219,13 +219,15 @@ json::Value Consume(const fs::path& path) {
     auto mesh = Mesh(asset);
     const auto& material = asset.materials[0];
     const auto& pbr = material.pbrData;
+    // Emissive is optional in glTF 2.0 (emissiveTexture unset, emissiveFactor [0, 0, 0] by default): a set
+    // without an emissive channel binds the four core slots only.
     Require(pbr.baseColorTexture && pbr.metallicRoughnessTexture && material.normalTexture &&
-                material.occlusionTexture && material.emissiveTexture, "five material bindings required");
+                material.occlusionTexture, "four core material bindings required");
     json::Object bindings{{"baseColor", Binding(asset, *pbr.baseColorTexture, image_uris)},
                           {"metallicRoughness", Binding(asset, *pbr.metallicRoughnessTexture, image_uris)},
                           {"normal", Binding(asset, *material.normalTexture, image_uris)},
-                          {"occlusion", Binding(asset, *material.occlusionTexture, image_uris)},
-                          {"emissive", Binding(asset, *material.emissiveTexture, image_uris)}};
+                          {"occlusion", Binding(asset, *material.occlusionTexture, image_uris)}};
+    if (material.emissiveTexture) bindings.emplace("emissive", Binding(asset, *material.emissiveTexture, image_uris));
     const auto& base = pbr.baseColorFactor;
     const auto& emission = material.emissiveFactor;
     const char* alpha = material.alphaMode == fastgltf::AlphaMode::Blend ? "BLEND" :
