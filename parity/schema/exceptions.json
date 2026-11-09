@@ -96,11 +96,12 @@
                 "procedural_asset",
                 "bake_map",
                 "render_fixture_class",
-                "backend_pair"
+                "backend_pair",
+                "production_export"
               ]
             },
             "selector": {
-              "description": "The comparison domain covered, exactly as named by the public manifests (golden-public.json `domain`).",
+              "description": "The comparison domain covered, exactly as named by the public manifests (golden-public.json `domain`). For `production_export` (decision 414) it names the export path the entry lets production write; a comparison is in that domain only when its candidate's export receipt names the entry in `exceptions_relied_on` (`Comparison.candidate_exceptions`), whatever golden it is compared with.",
               "type": "string",
               "pattern": "^[a-z0-9][a-z0-9._:-]*(/[A-Za-z0-9][A-Za-z0-9._:-]*)*$"
             },
@@ -234,7 +235,7 @@
               "domain": {
                 "properties": {
                   "kind": {
-                    "enum": ["channel", "asset_map", "procedural_asset", "bake_map", "backend_pair"]
+                    "enum": ["channel", "asset_map", "procedural_asset", "bake_map", "backend_pair", "production_export"]
                   }
                 }
               },
@@ -280,6 +281,18 @@
                   "not": { "required": ["excepted_outputs"] }
                 }
               }
+            }
+          }
+        },
+        {
+          "description": "Decision 414: a production export domain is the files a production export writes under the entry, named by their receipts, never some goldens or outputs; it is an owner scope split.",
+          "if": {
+            "properties": { "domain": { "properties": { "kind": { "const": "production_export" } } } }
+          },
+          "then": {
+            "properties": {
+              "domain": { "not": { "anyOf": [{ "required": ["goldens"] }, { "required": ["outputs"] }] } },
+              "evidence": { "properties": { "basis": { "const": "owner_scope_split" } } }
             }
           }
         },

@@ -985,6 +985,60 @@
       "approved_by": "owner",
       "approved_on": "2026-11-03",
       "notes": "The owner's own yes to these terms (decision 259 §6), recorded verbatim in decisions 398 and 399, which apply decision 395's partial supersessions of decisions 245 §1, 259 §2 and §4 and 286 §2 to this golden only. The Sash's Tier 1 candidate is the diagnostic measure export (decision 286), whose receipt records the refusals it bypassed; production keeps refusing both cases on every asset."
+    },
+    {
+      "exception_id": "EXC-013",
+      "version": 1,
+      "tier": "1",
+      "domain": {
+        "kind": "production_export",
+        "selector": "export/islanded-infinite-padding"
+      },
+      "bounds": [
+        {
+          "metric": "max_abs_diff",
+          "scope": "covered",
+          "max": 0
+        }
+      ],
+      "evidence": {
+        "basis": "owner_scope_split",
+        "summary": "The owner approved this scope himself on 2026-11-09 (decision 414): asked how to unblock the exports of UV-islanded texture sets, he chose \"Liberar com exceção\" (release under an exception): production may export UV-islanded texture sets with `infinite` padding where every covered texel is exact and only the padding ring and gutter texels outside the UV coverage may differ from Painter; the remaining exact-padding classes (exact-tie sides at seam ends on Pythagorean folds, multi-facet chains, window-side ties, poles; the cube, sphere and kernel-probe residuals) move to phase4.1_export-island-padding-exact. He approved only texels outside the coverage: the virtual Normal's covered island-edge texels (decision 245) are not included, so a combined virtual Normal on an islanded set stays refused in production (CheckIslandNormal) until he decides separately. Domain: the files a production export pads `infinite` over incomplete UV coverage, every map but a combined virtual Normal; a comparison is in it only when the candidate's export receipt names EXC-013 in `exceptions_relied_on` (decision 414 §4). Terms: every covered texel of every map is exactly equal (max |delta| 0 over `covered`, no excepted output); the uncovered (padding) texels may differ, with no numeric bound (decision 223 §3, kept). A comparison without a coverage mask, with a mask of another size or with no covered texel is not covered; a shape mismatch fails as structural. Evidence that the covered texels are exact under the measured padding and decision 408's coverage: the Wand v1, Sash v5 and Tunic v10 Tier 1 runs (decisions 395, 399, 410; parity/reports/phase1/tier1-wand-v1.json, parity/reports/phase2/tier1-sash-v5.json and tier1-tunic-v10.json) differ on 0 covered values of every map but the Normal, whose covered island-edge texels CheckIslandNormal keeps refusing; and every recorded islanded golden's padding writes no covered texel (phase3.1_export-island-padding notes, padding_goldens.py: covered 0). A pass under it is reported as \"pass under EXC-013\", never as exact.",
+        "private_evidence": [
+          {
+            "sha256": "54fbcc2c259b578acd116412554e70940b472a500627a90177093e6fd4b3809f",
+            "description": "private golden record of phase1/tier1/wand-v1 under the current envelope painter-12.2.0+js-api.1.1.20-env-a981b586eae7: r1, r1-repeat and r2, the five exported maps of each and their blob hashes (its Tier 1 run: 0 covered values differing on the four material maps)"
+          },
+          {
+            "sha256": "2cc1ba7ee67aca08798a9d8fcb001eda7fff3212903624ccd5867d3f95a0ed8b",
+            "description": "private golden record of phase2/tier1/sash-v5-current under the current envelope painter-12.2.0+js-api.1.1.20-env-a981b586eae7: r1, r1-repeat and r2, the five exported maps of each and their blob hashes (its Tier 1 run after decision 408: 0 covered values differing on the four material maps)"
+          },
+          {
+            "sha256": "3165bacb90ddd61486736f95bcd370fb4ea6444e03a09ab6877f70a143392d1e",
+            "description": "private golden record of phase2/tier1/tunic-v10-current under the current envelope painter-12.2.0+js-api.1.1.20-env-a981b586eae7: r1, r1-repeat and r2, the five exported maps of each and their blob hashes (its Tier 1 run after decision 408: 0 covered values differing on the four material maps)"
+          }
+        ],
+        "uncontrolled_settings": []
+      },
+      "defect_detection_test": {
+        "test_id": "tests/parity/test_verdict.py::test_exc013_catches_injected_defects",
+        "injected_defects": [
+          "one_covered_interior_value_off_by_one_code",
+          "one_covered_edge_value_off_by_one_code",
+          "one_normal_edge_value_off_by_one_code",
+          "one_wrong_covered_region",
+          "uniform_offset_one_code",
+          "structural_shape_mismatch",
+          "no_coverage_mask",
+          "coverage_mask_of_another_size",
+          "receipt_not_relying_on_the_entry"
+        ],
+        "outcome": "every_injected_defect_fails"
+      },
+      "decision_id": "414",
+      "approved_by": "owner",
+      "approved_on": "2026-11-09",
+      "notes": "The owner's own yes to these terms (decision 259 §6), recorded in decision 414, which supersedes in part decision 259 §4 (production lifts CheckPadding's `infinite` refusal on UV-islanded sets; the other padding refusals stay) and keeps decision 245's CheckIslandNormal. EXC-010, EXC-011 v3 and EXC-012 are unchanged. Narrowed by a new version as phase4.1_export-island-padding-exact makes the padding exact, and withdrawn when it is exact on every texel."
     }
   ]
 }

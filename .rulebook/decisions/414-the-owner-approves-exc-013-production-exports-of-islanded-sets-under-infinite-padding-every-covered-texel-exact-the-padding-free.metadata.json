@@ -1,0 +1,9 @@
+{
+  "id": 414,
+  "slug": "the-owner-approves-exc-013-production-exports-of-islanded-sets-under-infinite-padding-every-covered-texel-exact-the-padding-free",
+  "title": "The owner approves EXC-013: production exports of islanded sets under infinite padding, every covered texel exact, the padding free",
+  "status": "accepted",
+  "date": "2026-11-09",
+  "relatedTasks": ["phase3.1_export-island-padding", "phase4.1_export-island-padding-exact", "phase3.1_assets3d-cutover"],
+  "supersededBy": null
+}

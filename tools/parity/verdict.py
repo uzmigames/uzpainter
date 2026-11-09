@@ -35,6 +35,10 @@
   them (`Comparison.golden_id`), and with `outputs` only those outputs (`Comparison.output_id`);
   an entry without them covers its whole domain. Two goldens of one domain thus keep their own
   entries and bounds.
+- Decision 414: an entry of domain kind `production_export` (EXC-013) covers the comparisons whose
+  candidate's export receipt names it in `exceptions_relied_on` (`Comparison.candidate_exceptions`),
+  whatever their golden; its bound holds every covered texel exact, so only the padding outside
+  the coverage may differ. A receipt that does not name the entry is outside its domain.
 - Diagnostics are computed and reported; they never grant a pass on their own.
 
 Envelope (decisions 034, 037; CONTRACT.md §6.5):
@@ -137,6 +141,8 @@ class Comparison:
     `candidate_environment` are then the two environment records (`recorder/environment.py`).
     `candidate_display_state` is, for a Tier 3 candidate render, the display state of the
     revision it captured (`uzpainter.render.display.state()`, decision 196).
+    `candidate_exceptions` are the exception ids the candidate's export receipt says it relies on
+    (`exceptions_relied_on`, decision 414): the domain of a `production_export` entry.
     """
 
     tier: str
@@ -155,6 +161,7 @@ class Comparison:
     golden_id: str | None = None
     output_id: str | None = None
     candidate_display_state: Mapping[str, Any] | None = None
+    candidate_exceptions: frozenset[str] = frozenset()
 
 
 def _flat(values: Values) -> npt.NDArray[Any]:
@@ -257,8 +264,12 @@ def in_force(entries: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
 
 def _scope_holds(entry: Mapping[str, Any], comparison: Comparison) -> bool:
     """The entry's domain names the comparison: its selector, and its `goldens` and `outputs`
-    when it lists them (decision 307; a comparison that names none is outside a scoped entry)."""
+    when it lists them (decision 307; a comparison that names none is outside a scoped entry). A
+    production export entry names the comparisons whose candidate's receipt relies on it
+    (decision 414)."""
     domain = entry["domain"]
+    if domain.get("kind") == "production_export":
+        return entry["exception_id"] in comparison.candidate_exceptions
     if domain["selector"] != comparison.domain:
         return False
     goldens = domain.get("goldens")
