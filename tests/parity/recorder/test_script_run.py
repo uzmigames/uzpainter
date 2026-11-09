@@ -2269,6 +2269,22 @@ def test_two_exports_writing_maps_of_one_name_are_refused(
         record_script_golden(session, job, tmp_path / "work", tmp_path / "inbox")
 
 
+def test_a_closing_export_map_differing_only_in_case_keeps_its_own_record_id(
+    painter: tuple[Any, ScriptSession], manifest: dict[str, Any], assets: Path, tmp_path: Path
+) -> None:
+    """Painter's glTF preset names `<set>_baseColor` next to a script's `<set>_BaseColor` (the
+    Sash): two maps, and record ids (lowercase) that the closing export's prefix keeps apart."""
+    world, session = painter
+    changed = with_config_export(manifest, tmp_path / "repo", world.texture_set, "W_v1_height")
+    job = script_job_from_manifest(changed, assets, repo_root=tmp_path / "repo")
+    run = record_script_golden(session, job, tmp_path / "work", tmp_path / "inbox")
+    data = json.loads((run / "record.json").read_text(encoding="utf-8"))
+    for recording in data["recordings"]:
+        maps = {o["map"]: o["output_id"] for o in recording["outputs"] if "map" in o}
+        assert maps["W_v1_Height"] == "export/W_v1_Height"
+        assert maps["W_v1_height"] == "config/W_v1_height"
+
+
 def test_job_refuses_a_repository_input_no_config_export_names(
     assets: Path, manifest: dict[str, Any], tmp_path: Path
 ) -> None:

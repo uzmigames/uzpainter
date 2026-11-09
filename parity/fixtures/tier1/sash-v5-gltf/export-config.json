@@ -1,0 +1,20 @@
+{
+  "exportShaderParams": false,
+  "defaultExportPreset": "export-preset-generator://gltf",
+  "exportList": [
+    {
+      "rootPath": "25-Faixa-Cintura"
+    }
+  ],
+  "exportParameters": [
+    {
+      "parameters": {
+        "fileFormat": "png",
+        "bitDepth": "16",
+        "sizeLog2": 11,
+        "paddingAlgorithm": "infinite",
+        "dithering": false
+      }
+    }
+  ]
+}

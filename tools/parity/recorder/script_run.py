@@ -2,7 +2,8 @@ r"""Tier 1 goldens from UzmiGames pipeline scripts run byte-unchanged in Painter
 
     python -m tools.parity.recorder record-script <manifest.json> --assets-root <Assets3D>
     python -m tools.parity.recorder.script_run manifest --assets-root <Assets3D> --out <path> \
-        [--pilot wand|wand-float|wand-normal-float|belt|sash|tunic|tunic-rebuild] [--store]
+        [--pilot wand|wand-float|wand-normal-float|belt|sash|tunic|tunic-rebuild|
+                 wand-gltf|sash-gltf|tunic-gltf] [--store]
 
 The manifest's `instruction_sequence.interface` is `uzmigames_pipeline_scripts`: every step is one
 script run (`uzmigames.pipeline.run_script`), and its inputs live in the UzmiGames asset
@@ -100,6 +101,7 @@ from tools.parity.recorder.job import (
 )
 from tools.parity.recorder.output import ensure_outside_repository, run_name, write_run
 from tools.parity.recorder.session import PainterIdentity, PainterSession, RecorderError
+from tools.parity.recorder.sidecars import gltf_sidecars
 from tools.parity.recorder.texture import (
     UNDETERMINED,
     Now,
@@ -1222,10 +1224,15 @@ def run_export(
 
 
 def run_config_export(
-    session: PainterSession, export: ConfigExport, base: Path, basis: str
+    session: PainterSession, export: ConfigExport, base: Path, basis: str, prefix: str = "export"
 ) -> tuple[list[dict[str, Any]], list[Path]]:
     """The authored configuration exported into a fresh directory `base/export`, verified like a
-    texture golden's export; `basis` is the encoding basis of a map whose file tells none."""
+    texture golden's export; `basis` is the encoding basis of a map whose file tells none. The
+    glTF scene files Painter writes beside a glTF preset's textures, absent from its reply
+    (R-314, decision 314), are admitted only as validated glTF sidecars (`gltf_sidecars`) and
+    recorded as `exported_sidecar` blobs, never as maps. `prefix` heads the output id of every
+    file (a script job's closing export takes its own, so that its maps never share a record id
+    with the script's: record ids are lowercase)."""
     out = base / "export"
     out.mkdir(parents=True)
     session.wait_ready()
@@ -1235,7 +1242,11 @@ def run_config_export(
     if reply["status"] != "Success":
         raise RecorderError(f"{base.name}: export {reply['status']}: {reply['message']}")
     files = [Path(f) for entry in reply["textures"] for f in entry["files"]]
-    verify_current_outputs(files, out, fence_ns)
+    root = out.resolve()
+    listed = {f.resolve() for f in files}
+    unlisted = sorted(p.resolve() for p in root.rglob("*") if p.is_file())
+    sidecars = gltf_sidecars([p for p in unlisted if p not in listed], root)
+    verify_current_outputs(files + sorted(sidecars), out, fence_ns)
     value = {"status": reply["status"], "message": reply["message"], "textures": reply["textures"]}
     outputs: list[dict[str, Any]] = [
         {
@@ -1258,7 +1269,7 @@ def run_config_export(
             )
             outputs.append(
                 {
-                    "output_id": f"export/{output_safe(path.stem)}",
+                    "output_id": f"{prefix}/{output_safe(path.stem)}",
                     "kind": "exported_map",
                     "texture_set": texture_set,
                     "map": path.stem,
@@ -1275,7 +1286,22 @@ def run_config_export(
                     },
                 }
             )
-    return outputs, files
+    for path, media_type in sorted(sidecars.items()):
+        name = path.relative_to(root).as_posix()
+        outputs.append(
+            {
+                "output_id": "/".join([prefix, *(output_safe(part) for part in name.split("/"))]),
+                "kind": "exported_sidecar",
+                "file": name,
+                "blob": {
+                    "sha256": sha256_file(path),
+                    "size_bytes": path.stat().st_size,
+                    "media_type": media_type,
+                },
+                "export_settings": {"step": export.step, "config": export.config_id},
+            }
+        )
+    return outputs, files + sorted(sidecars)
 
 
 def run_exports(
@@ -1285,10 +1311,12 @@ def run_exports(
     outputs, files = run_export(session, job, directory, recording)
     if job.config_export is not None:
         more, more_files = run_config_export(
-            session, job.config_export, directory / recording / "config", "config_export"
+            session, job.config_export, directory / recording / "config", "config_export", "config"
         )
-        ids = [o["output_id"] for o in outputs + more]
-        if len(set(ids)) != len(ids):
+        names = [
+            (o["texture_set"], o["map"]) for o in outputs + more if o["kind"] == "exported_map"
+        ]
+        if len(set(names)) != len(names):
             raise RecorderError(f"{recording}: the two exports write maps of the same name")
         outputs, files = outputs + more, files + more_files
     return outputs, files
@@ -2395,9 +2423,14 @@ def store_inputs(manifest: dict[str, Any], assets_root: Path, store: OracleStore
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    from tools.parity.recorder.gltf_pilots import PILOTS as GLTF_PILOTS  # imports this module
     from tools.parity.recorder.tunic import PILOTS as TUNIC_PILOTS  # imports this module
 
-    pilots: dict[str, Callable[[Path], dict[str, Any]]] = {**PILOTS, **TUNIC_PILOTS}
+    pilots: dict[str, Callable[[Path], dict[str, Any]]] = {
+        **PILOTS,
+        **TUNIC_PILOTS,
+        **GLTF_PILOTS,
+    }
     parser = argparse.ArgumentParser(prog="python -m tools.parity.recorder.script_run")
     commands = parser.add_subparsers(dest="command", required=True)
     write = commands.add_parser("manifest", help="write a pilot's manifest (hashes Assets3D)")

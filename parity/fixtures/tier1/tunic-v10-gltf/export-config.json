@@ -1,0 +1,20 @@
+{
+  "exportShaderParams": false,
+  "defaultExportPreset": "export-preset-generator://gltf",
+  "exportList": [
+    {
+      "rootPath": "DefaultMaterial"
+    }
+  ],
+  "exportParameters": [
+    {
+      "parameters": {
+        "fileFormat": "png",
+        "bitDepth": "16",
+        "sizeLog2": 12,
+        "paddingAlgorithm": "infinite",
+        "dithering": false
+      }
+    }
+  ]
+}

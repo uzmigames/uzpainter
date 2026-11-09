@@ -15,6 +15,7 @@ from jsonschema import Draft202012Validator
 from tools.parity.recorder.capture import StaleCaptureError
 from tools.parity.recorder.job import ExportProbe
 from tools.parity.recorder.output import write_run
+from tools.parity.recorder.script_run import ConfigExport, run_config_export
 from tools.parity.recorder.session import PainterSession, RecorderError
 from tools.parity.recorder.sidecars import gltf_sidecars
 from tools.parity.recorder.texture import probe_outputs
@@ -156,3 +157,42 @@ def test_sidecars_publish_normal_inbox_records_and_public_hashes(tmp_path: Path)
         hashlib.sha256(p.read_bytes()).hexdigest() for p in blobs
     }
     assert (run / "READY").is_file()
+
+
+# --- a pilot's closing config export of the glTF preset (phase3.1 item 3.1) ---------------------
+
+
+def config_capture(tmp_path: Path, **options: Any) -> tuple[list[dict[str, Any]], list[Path]]:
+    session = cast(PainterSession, SidecarSession(**options))
+    return run_config_export(session, ConfigExport(4, "gltf-export-config", {}), tmp_path, "c")
+
+
+def test_a_closing_config_export_keeps_gltf_sidecars_as_sidecars(tmp_path: Path) -> None:
+    outputs, blobs = config_capture(tmp_path)
+    assert [b.name for b in blobs] == ["mesh.bin", "scene.gltf"]
+    sidecars = [o for o in outputs if o["kind"] == "exported_sidecar"]
+    assert [(o["output_id"], o["file"]) for o in sidecars] == [
+        ("export/mesh.bin", "mesh.bin"),
+        ("export/scene.gltf", "scene.gltf"),
+    ]
+    schema = load_schema(Schema.GOLDEN_PRIVATE)
+    validator = Draft202012Validator({"$defs": schema["$defs"], "$ref": "#/$defs/output"})
+    for output, path in zip(sidecars, blobs, strict=True):
+        assert output["export_settings"] == {"step": 4, "config": "gltf-export-config"}
+        assert output["blob"]["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
+        assert not list(validator.iter_errors(output))
+
+
+def test_a_closing_config_export_refuses_other_unlisted_files(tmp_path: Path) -> None:
+    with pytest.raises(StaleCaptureError, match="unlisted"):
+        config_capture(tmp_path, extra=True)
+
+
+def test_a_closing_config_export_refuses_an_external_gltf_buffer(tmp_path: Path) -> None:
+    with pytest.raises(RecorderError, match="glTF buffer"):
+        config_capture(tmp_path, uri="../mesh.bin")
+
+
+def test_a_closing_config_export_keeps_its_fence(tmp_path: Path) -> None:
+    with pytest.raises(StaleCaptureError, match="before the last applied instruction"):
+        config_capture(tmp_path, stale=True)

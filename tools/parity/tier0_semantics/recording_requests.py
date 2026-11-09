@@ -1122,6 +1122,29 @@ def ao_mixed_islands_ocio() -> Golden:
     )
 
 
+def ao_mixed_islands_legacy() -> Golden:
+    """The Legacy twin of `ao_mixed_islands_ocio` (decision 418 item 2 admitted no AO channel under
+    legacy colour management by inference): the same steps and exports, no OCIO."""
+    twin = ao_mixed_islands_ocio()
+    return Golden(
+        "ao-mixed-islands-legacy",
+        twin.domain,
+        "AO_Mixed on UV islands without an AO channel under legacy colour management, the Legacy "
+        "twin of ao-mixed-islands-ocio (decision 418 item 2, phase3.1_unreal-gltf-pbr-preset): "
+        "the authored bevelled cube (UV islands with a padding ring) at 256 px, OpenGL, no "
+        "template (the default project's channels, none of them AO, and no AO channel added), no "
+        "OCIO; grey A (16-bit grey) bound as the AO mesh map; no layer. AO_Mixed and the AO mesh "
+        "map are exported as PNG 16 and as PNG 8, infinite padding, no dithering, each twice in "
+        "a row; the recorder repeats every export after Full save/close/reopen (r2). Check that "
+        "the mesh-map export equals grey A on the covered texels before interpreting AO_Mixed. "
+        "No operator result is presumed.",
+        twin.mesh,
+        twin.inputs,
+        twin.sequence,
+        [],
+    )
+
+
 def export_ocio_encode(ocio: bool) -> Golden:
     s = start("grid4x2")
     res = s.imports("srgb8-ramp", "grey-a")
@@ -2401,6 +2424,7 @@ def later_goldens() -> list[Golden]:
         ao_control.request(),
         ao_probe.request(),
         ao_mixed_islands_ocio(),
+        ao_mixed_islands_legacy(),
         *specularweight_base_probes(),
         height_normal_resolution(4096, "sharp"),
         padding_islands_kernel_probe(),
@@ -2414,6 +2438,7 @@ def later_goldens() -> list[Golden]:
 # live under the envelope's `manifests/`; retained sources are excluded from the pending queue.
 ADMITTED = frozenset(
     {
+        "ao-mixed-islands-legacy",
         "ao-mixed-islands-ocio",
         "ao-mixed-mesh-float-product",
         "ao-mixed-operand-probe",
@@ -2542,6 +2567,7 @@ def all_goldens() -> list[Golden]:
 
 PRESERVED_REQUESTS = frozenset(
     {
+        "ao-mixed-islands-legacy",
         "ao-mixed-islands-ocio",
         "ao-mixed-mesh-float-product",
         "ao-mixed-operand-probe",
