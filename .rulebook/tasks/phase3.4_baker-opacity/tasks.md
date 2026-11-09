@@ -32,3 +32,6 @@
 
 ## 7. Recording requests (2026-11-02, decision 384)
 - No Painter request: Opacity has no documented export map name (`docs/analysis/painter-recording-backlog/03-bake-and-iray-requests.md` §3).
+
+## 8. Shared-core comparison (2026-11-09, decision 415)
+- The shared core now samples texels by decision 408's rasterisation and casts `SmoothNormals` primary rays along the averaged normal. Opacity has no admitted Tier 2b golden, so nothing was compared. No item is ticked.

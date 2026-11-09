@@ -30,3 +30,9 @@
 
 ## 7. Recording requests (2026-11-02, decision 384)
 - Item 3.1's Painter recordings are requested: `parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/requests/tier2b/bakes/thickness-{slab,sphere,bevelled-cube}-<MaximizeRange>.json` (9). Not yet recorded; 3.2 has no request.
+
+## 8. Shared-core comparison (2026-11-09, decision 415)
+- `python -m tools.bake.usage_tier2b` bakes each admitted golden (admitted 2026-11-02, b0f751e2) from its own sequence with `bake-files` and compares Painter's nonzero texels with the native hits and covered texels (counts only; `tests/bake/test_usage_tier2b.py`). The core before 5bcb3c03 and HEAD (decision 408 samples, `SmoothNormals`) were both run through the same driver; r1 = r2 in every golden.
+- Coverage, `None` and `Relative to min/max (per UV tile)`: slab and sphere equal before and after (65536, 241782 hits). Bevelled cube: 2136 Painter-only texels before, equal after (108192).
+- `Relative to ray distances`: Painter writes a value on all 262144 texels, so the hit set does not apply. Its Painter-only counts (slab 196608, sphere 20362) are unchanged, and the bevelled cube's goes from 156088 to 153952 (the 2136 hits). No golden regressed.
+- Maps not compared: every `MaximizeRange` is refused (no thickness value, decision 341). No item is ticked.

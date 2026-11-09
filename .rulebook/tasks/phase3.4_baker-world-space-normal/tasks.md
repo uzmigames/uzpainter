@@ -28,3 +28,9 @@
 
 ## 7. Recording requests (2026-11-02, decision 384)
 - Item 3.1's Painter recordings are requested: `parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/requests/tier2b/bakes/world-space-normal-<scene>.json` (3). Not yet recorded; 3.2 has no request.
+
+## 8. Shared-core comparison (2026-11-09, decision 415)
+- `python -m tools.bake.usage_tier2b` bakes each admitted golden (admitted 2026-11-02, b0f751e2) from its own sequence with `bake-files` and compares Painter's nonzero texels with the native hits and covered texels (counts only; `tests/bake/test_usage_tier2b.py`). The core before 5bcb3c03 and HEAD (decision 408 samples, `SmoothNormals`) were both run through the same driver; r1 = r2 in every golden.
+- Coverage: plane and sphere equal before and after (65536, 241782).
+- Bevelled cube: Painter writes 129024 texels. Painter texels outside the native hits fall from 22968 to 20832, and the 20832 are exactly the native `CentreMiss` texels: Painter writes a value on covered texels whose ray misses. The native covered set (129024) is equal to Painter's before and after. No golden regressed.
+- The native world normal on the sphere depends on the box-size metric (as Normal's does), before and after. Maps are not compared, because no channel format or value mapping is established (2.2). No item is ticked.

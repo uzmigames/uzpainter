@@ -63,3 +63,13 @@
 - Open: item 3.3 (the Wand and Hat high/cage pairs are not pinned; no request), the hemisphere's facet-edge ties and one-code residue, the sphere's sign pattern. No exception was created or widened; items 2.1, 3.1-3.4 and 4.1 stay open. Toward 3.4: the cube's bytes are identical at 1, 4 and all threads on this machine's only qualified ISA (AVX2).
 - Tests (CPU only; no GPU): `tests/bake/test_bake_feasibility.py`, `tests/bake/test_normal_tier2b.py`, `tests/parity/tier2b_bakes/test_fixtures.py` and `tests/bake/test_baking_project.py`: 129 passed and 5 failed on the first run, expectations of the old sampling and of SmoothNormals off (`subsampling_coverage`, `position_sphere`, `position_parameters`, `height_parameters`, `thickness_parameters`); with those expectations updated the five passed by node id. A 512 px bake took 84 s in the driver: `CheckConservation` compared the whole Normal map once per texel; hoisted out of the loop, 2 s.
 
+## 12. The shared core's other usages (2026-11-09, decision 415)
+- Decision 415 records section 11's two core changes (decision 408 texel samples; `SmoothNormals` primary rays along the averaged normal) for every usage. It leaves the averaging rule open: bitwise position, unweighted distinct normals, per part. A split vertex with unequal faces settles it.
+- `tools/bake/usage_tier2b.py` replays the 60 non-Normal goldens. The driver's `bake-files --set Usage:Key=value` now sets a baker's own parameter. The core before 5bcb3c03 and HEAD were both run through the same driver:
+  - No golden regressed.
+  - The bevelled cube's AO, ID and Thickness hit sets go from 2136 Painter-only texels to equal.
+  - WorldSpaceNormal and Position on the bevelled cube go from 22968 to 20832 Painter texels outside the hits. Those 20832 are the native `CentreMiss` texels, which those usages fill in Painter.
+  - Every plane, sphere and slab golden is unchanged.
+  - Curvature is not baked natively.
+  - Counts per usage are in each `phase3.4_baker-*` task.
+- Tests: `tests/bake/test_usage_tier2b.py` (19), with `test_normal_tier2b.py::test_bake_arguments_replay_each_golden_sequence` and `::test_normal_equals_painter`: 22 passed.

@@ -1,0 +1,17 @@
+{
+  "id": 415,
+  "slug": "415-the-cpu-baker-samples-texels-by-decision-408-s-rasterisation-and-casts-smoothnormals-primary-rays-along-the-averaged-normal",
+  "title": "The CPU baker samples texels by decision 408's rasterisation and casts SmoothNormals primary rays along the averaged normal",
+  "status": "accepted",
+  "date": "2026-11-09",
+  "relatedTasks": [
+    "phase3.2_baker-normal",
+    "phase3.4_baker-ao",
+    "phase3.4_baker-id",
+    "phase3.4_baker-thickness",
+    "phase3.4_baker-world-space-normal",
+    "phase3.4_baker-position",
+    "phase3.4_baker-curvature"
+  ],
+  "supersededBy": null
+}

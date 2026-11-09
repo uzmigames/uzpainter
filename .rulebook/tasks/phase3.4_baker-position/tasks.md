@@ -31,3 +31,9 @@
 
 ## 7. Recording requests (2026-11-02, decision 384)
 - Item 3.1's Painter recordings are requested: `parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/requests/tier2b/bakes/position-<scene>-*.json` (27: All axis x Normalization x NormalizationScale, One axis x Axis). Not yet recorded; 3.2 has no request.
+
+## 8. Shared-core comparison (2026-11-09, decision 415)
+- `python -m tools.bake.usage_tier2b` bakes each admitted golden (admitted 2026-11-02, b0f751e2) from its own sequence with `bake-files` and compares Painter's nonzero texels with the native hits and covered texels (counts only; `tests/bake/test_usage_tier2b.py`). The core before 5bcb3c03 and HEAD (decision 408 samples, `SmoothNormals`) were both run through the same driver; r1 = r2 in every golden.
+- Painter texels outside the native hits: 0 on every plane and sphere golden, before and after.
+- Bevelled cube: 22968 before and 20832 after (19140 to 17360 for One axis Z; 20097 to 18228 for All axis None). Painter writes on covered texels whose ray misses, as WorldSpaceNormal does, and no Painter texel falls outside the native covered set (`test_coverage_against_painter`, All axis None on each scene). No golden regressed.
+- `BBox` and `BSphere` are refused (2.2), so for those goldens the classes come from the same sequence without them. The All axis None sphere map depends on the box-size metric, before and after. Maps are not compared. No item is ticked.

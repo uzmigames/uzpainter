@@ -2036,7 +2036,8 @@ PropertyValue ParsedValue(const Property& property, const std::string& value) {
 /// file baked as `bake_async` prepares it (`PrepareBakes`): the low mesh through the project
 /// importer (`ImportMeshFile`, its unit scale and bounds), each `HipolyMesh` file through the bake
 /// mesh reader, the request from the texture set's `BakingParameters` after the `--set key=value`
-/// steps of a Painter golden. Writes the result's canonical bytes (`--out`) and prints its summary.
+/// steps of a Painter golden (`Usage:Key` for a baker's own parameter). Writes the result's
+/// canonical bytes (`--out`) and prints its summary.
 int BakeFilesCommand(int argc, char** argv) {
     std::filesystem::path low_path, out, dump_low;
     std::optional<BoxSizeMetric> box_size_metric;
@@ -2117,8 +2118,13 @@ int BakeFilesCommand(int argc, char** argv) {
     const std::map<std::string, Property> common = parameters.common();
     std::vector<std::pair<Property, PropertyValue>> values;
     for (const auto& [key, text] : sets) {
-        const auto found = common.find(key);
-        if (found == common.end()) throw ValueError("no common parameter " + key);
+        // `Usage:Key` names a baker's own parameter (a golden's `usage` step), `Key` a common one.
+        const std::size_t colon = key.find(':');
+        const std::map<std::string, Property> owner =
+            colon == std::string::npos ? common : parameters.baker(uzp::bake::UsageNamed(key.substr(0, colon)));
+        const std::string name = colon == std::string::npos ? key : key.substr(colon + 1);
+        const auto found = owner.find(name);
+        if (found == owner.end()) throw ValueError("no parameter " + key);
         values.emplace_back(found->second, ParsedValue(found->second, text));
     }
     if (!values.empty()) BakingParameters::set(values);
@@ -2157,7 +2163,7 @@ int Command(int argc, char** argv) {
     if (argc >= 2 && std::string(argv[1]) == "bake-files") return BakeFilesCommand(argc, argv);
     std::fprintf(stderr, "usage: uzp-bake-feasibility-tests run [case] | bake <fixture> <threads> "
                          "[--embree-build-threads K] [--diagnostic] [--out FILE] | bake-files --low FILE "
-                         "[--high FILE]... [--set KEY=VALUE]... [--texture-set NAME] [--usage USAGE] "
+                         "[--high FILE]... [--set [USAGE:]KEY=VALUE]... [--texture-set NAME] [--usage USAGE] "
                          "[--tangent-space PerVertex|PerFragment] [--format OpenGL|DirectX] [--threads N] "
                          "[--out FILE] [--dump-low FILE] [--box-size-metric Diagonal|LargestExtent]\n");
     return 2;

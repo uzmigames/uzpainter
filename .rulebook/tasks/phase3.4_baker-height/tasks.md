@@ -32,3 +32,6 @@
 
 ## 7. Recording requests (2026-11-02, decision 384)
 - No Painter request: Height has no documented export map name, and the `Divisor` values and inflated sphere are not chosen (`docs/analysis/painter-recording-backlog/03-bake-and-iray-requests.md` §3).
+
+## 8. Shared-core comparison (2026-11-09, decision 415)
+- The shared core now samples texels by decision 408's rasterisation and casts `SmoothNormals` primary rays along the averaged normal. Height has no admitted Tier 2b golden, so nothing was compared. The native expectation `height_parameters` now sets `SmoothNormals` on (5bcb3c03). No item is ticked.
