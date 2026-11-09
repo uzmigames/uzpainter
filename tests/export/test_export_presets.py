@@ -267,6 +267,36 @@ def test_gltf_preset_refuses_unfitted_ao_mixed(export_tests: Path, tmp_path: Pat
     refused(unresolved, "ValueError", "paddingAlgorithm is undefined")
 
 
+def test_gltf_preset_plans_on_a_pilot_shaped_set(export_tests: Path, tmp_path: Path) -> None:
+    """Decision 418: on a set shaped like the pilots' (OCIO with Painter's substance config, the
+    default project's channels, so no AO, Emissive, Opacity or SpecularWeight channel, and a bound
+    AO mesh map) the glTF preset plans: base colour RGB, the ORM with AO_Mixed in R, the normal;
+    emissive and SpecularWeight are skipped as absent channels."""
+    template = json.loads((REPO_ROOT / "assets/templates/default.json").read_text("utf-8"))
+    channels = {c["type"]: c["format"] for c in template["channels"]}
+    assert not {"AO", "Emissive", "Opacity", "SpecularWeight"} & set(channels)
+    pilot = project(
+        texture_set("s0", channels, mesh_maps=("AO", "Normal")),
+        color_management="ocio",
+        config_hash=OCIO_CONFIG_SHA256,
+    )
+    parameters = [{"parameters": {"paddingAlgorithm": "infinite"}}]
+    [result] = plan_many(
+        export_tests, [(pilot, shipped_config(GLTF_NAME, exportParameters=parameters))], tmp_path
+    )
+    assert "error" not in result, result
+    files = {f["relativePath"]: f for f in result["plan"]["files"]}
+    assert list(files) == ["s0_baseColor.png", "s0_occlusionRoughnessMetallic.png", "s0_normal.png"]
+    assert packing(files["s0_occlusionRoughnessMetallic.png"])[0] == (
+        "R",
+        "L",
+        "virtualMap",
+        "AO_Mixed",
+    )
+    # The preset's maps 3 and 4 (emissive, SpecularWeight).
+    assert {s["map"]: s["kind"] for s in result["plan"]["skipped"]} == {3: "absent", 4: "absent"}
+
+
 def test_preset_references_resolve_inline_first(export_tests: Path, tmp_path: Path) -> None:
     """Decision 095: an inline preset of the referenced name wins (Painter's documented
     behaviour); an inline preset that a shipped preset's id would collide with is refused; an

@@ -228,15 +228,19 @@ std::variant<const core::Layer*, std::string> AoMixedFill(const core::Project& p
                                                           const core::Stack& stack) {
     using Fill = std::variant<const core::Layer*, std::string>;
     const std::string& mode = project.settings.color_management.mode;
-    if (!mode.empty() && mode != "legacy") return Fill(std::string("under legacy colour management only"));
-    const auto channel = stack.channels.find(kAo);
-    if (channel == stack.channels.end()) return Fill(std::string("on a stack with an AO channel only"));
-    if (channel->second.format != core::ChannelFormat::L16 && channel->second.format != core::ChannelFormat::L32F) {
-        return Fill("on an L16 or L32F AO channel only, not " + std::string(core::ToString(channel->second.format)));
+    const bool ocio = evaluator::PainterOcio(project);
+    if (!mode.empty() && mode != "legacy" && !ocio) {
+        return Fill(std::string("under legacy colour management or OCIO with Painter's substance config only"));
     }
     const auto mesh = set.mesh_maps.find(core::MeshMapUsage::AO);
     if (mesh == set.mesh_maps.end() || mesh->second.invalid) {
         return Fill(std::string("with a valid AO mesh map bound only"));
+    }
+    // Without an AO channel the channel operand is 1, as with no AO layer (decision 418).
+    const auto channel = stack.channels.find(kAo);
+    if (channel == stack.channels.end()) return Fill(static_cast<const core::Layer*>(nullptr));
+    if (channel->second.format != core::ChannelFormat::L16 && channel->second.format != core::ChannelFormat::L32F) {
+        return Fill("on an L16 or L32F AO channel only, not " + std::string(core::ToString(channel->second.format)));
     }
     const core::Layer* fill = nullptr;
     for (const core::Layer& layer : stack.root_layers) {
@@ -259,6 +263,12 @@ std::variant<const core::Layer*, std::string> AoMixedFill(const core::Project& p
     const auto source = content.sources.find(kAo);
     if (content.source_mode != core::SourceMode::Split || source == content.sources.end()) {
         return Fill(std::string("for a fill with its own AO source only"));
+    }
+    // Under OCIO only R-314's fill is recorded: a 16-bit grey bitmap (checked when it is read) on an
+    // L16 channel at opacity 1 (decision 418).
+    if (ocio && (channel->second.format != core::ChannelFormat::L16 || blending.opacity != 1.0 ||
+                 !std::holds_alternative<core::BitmapSource>(source->second.value))) {
+        return Fill(std::string("under OCIO for a 16-bit grey bitmap fill on an L16 AO channel at opacity 1 only"));
     }
     const std::string sourceScope = "for a grey linear uniform colour or bitmap source only";
     if (const auto* uniform = std::get_if<core::UniformColorSource>(&source->second.value)) {
@@ -335,22 +345,9 @@ render::Result<VirtualMapResult> AoMixedOn(const core::Project& project, const V
     }
     const auto width = static_cast<uint32_t>(set->resolution.width);
     const auto height = static_cast<uint32_t>(set->resolution.height);
+    // Every texel takes the operator; on incomplete UV coverage the export pads the uncovered ones
+    // under `infinite` (EXC-013), the covered ones being exact (decision 418).
     const size_t texels = size_t{width} * height;
-    if (request.geometry) {
-        evaluator::GeometryMaskQuery query;
-        query.material = set->material_id;
-        query.width = width;
-        query.height = height;
-        const std::shared_ptr<const evaluator::DecodedImage> coverage = request.geometry->Coverage(query);
-        if (coverage) {
-            for (size_t t = 0; t < size_t{coverage->width} * coverage->height; ++t) {
-                if (coverage->values[t * coverage->channels] == 0) {
-                    return EvalFail(EvalErrorKind::UnsupportedSource,
-                                    scope + "on a texture set whose UV islands cover the tile only (decision 411)");
-                }
-            }
-        }
-    }
     const auto fetch = [&](const std::string& sha) -> std::shared_ptr<const evaluator::DecodedImage> {
         return request.resources ? request.resources->Fetch(sha) : nullptr;
     };
@@ -361,9 +358,9 @@ render::Result<VirtualMapResult> AoMixedOn(const core::Project& project, const V
         return EvalFail(EvalErrorKind::UnsupportedSource,
                         scope + "with an 8- or 16-bit grey AO mesh map at the set's resolution only (decision 411)");
     }
-    const core::ChannelFormat format = stack->channels.at(kAo).format;
     std::vector<float> channel(texels, 1.0f);
     if (const core::Layer* layer = std::get<const core::Layer*>(fill)) {
+        const core::ChannelFormat format = stack->channels.at(kAo).format;
         const core::Source& source = layer->fill->sources.at(kAo);
         std::vector<float> values;
         if (const auto* uniform = std::get_if<core::UniformColorSource>(&source.value)) {
@@ -375,6 +372,10 @@ render::Result<VirtualMapResult> AoMixedOn(const core::Project& project, const V
             if (!operands) {
                 return EvalFail(EvalErrorKind::UnsupportedSource,
                                 scope + "with an 8- or 16-bit grey bitmap at the set's resolution only (decision 411)");
+            }
+            if (evaluator::PainterOcio(project) && image->encoding != render::TexelEncoding::Unorm16) {
+                return EvalFail(EvalErrorKind::UnsupportedSource,
+                                scope + "under OCIO with a 16-bit grey bitmap only (decision 418)");
             }
             values = std::move(*operands);
         }

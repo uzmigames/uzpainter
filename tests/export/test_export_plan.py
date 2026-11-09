@@ -991,7 +991,8 @@ def test_presence_and_sources(export_tests: Path, tmp_path: Path) -> None:
     assert files[0]["channels"][3]["source"]["constant"] == 1.0
     ao = ok(r[5])["files"][0]["channels"][0]["source"]
     assert ao["virtualMap"] == "AO_Mixed"
-    refused(r[6], "NotYetSupported", '"AO_Mixed"', "AO channel", "item 2.10, decision 411")
+    # s1 has no AO channel (in scope, decision 418) but no AO mesh map either.
+    refused(r[6], "NotYetSupported", '"AO_Mixed"', "AO mesh map", "item 2.10, decision 411")
     refused(r[7], "NotYetSupported", '"Diffuse"', "coverage", "R-092")
     refused(r[8], "NotYetSupported", '"Glossiness"', "coverage", "R-092")
     normal = ok(r[9])["files"][0]["channels"][0]["source"]
@@ -1259,15 +1260,21 @@ def test_write16_rule() -> None:
 def test_ao_mixed_plans_in_its_scope_and_refuses_outside_it(
     export_tests: Path, tmp_path: Path
 ) -> None:
-    """Decision 411: AO_Mixed is planned on an L16 or L32F AO channel with a bound AO mesh map and
-    no AO layer (the skeleton's fills change no channel), and refused before anything is planned
-    otherwise, naming `phase3.2_unreal-ue56-packed-preset` item 2.10 and decision 411."""
+    """Decisions 411 and 418: AO_Mixed is planned on an L16 or L32F AO channel or without an AO
+    channel, with a bound AO mesh map and no AO layer (the skeleton's fills change no channel),
+    under legacy colour management or OCIO with Painter's substance config, and refused before
+    anything is planned otherwise, naming `phase3.2_unreal-ue56-packed-preset` item 2.10 and
+    decision 411."""
     ao = config([mapping("$textureSet_ao", grey("virtualMap", "AO_Mixed"))], ["s0"])
     # Painter 12.1.5 substance OCIO config (evaluator/sources.h kPainterOcioConfigSha256).
     PAINTER_OCIO = "15059d4b4e52893863f2063dfccb3902d182b522ad233564db32a5e30a43b7f4"
 
     def with_ao(fmt: str, mesh_maps: tuple[str, ...] = ("AO",), **settings: Any) -> Any:
         channels = {**FULL_CHANNELS, "AO": fmt}
+        return project(texture_set("s0", channels, mesh_maps, (500,)), **settings)
+
+    def without_ao(mesh_maps: tuple[str, ...] = ("AO",), **settings: Any) -> Any:
+        channels = {k: v for k, v in FULL_CHANNELS.items() if k != "AO"}
         return project(texture_set("s0", channels, mesh_maps, (500,)), **settings)
 
     r = plan_many(
@@ -1277,13 +1284,20 @@ def test_ao_mixed_plans_in_its_scope_and_refuses_outside_it(
             (with_ao("L32F"), ao),
             (with_ao("L16", ()), ao),
             (with_ao("L8"), ao),
+            (with_ao("L16", color_management="ocio", config_hash="0" * 64), ao),
             (with_ao("L16", color_management="ocio", config_hash=PAINTER_OCIO), ao),
+            (without_ao(), ao),
+            (without_ao(color_management="ocio", config_hash=PAINTER_OCIO), ao),
+            (without_ao(()), ao),
         ],
         tmp_path,
     )
-    for result in r[:2]:
+    # Decision 418: OCIO with Painter's config, and a stack without an AO channel (c = 1).
+    for result in (*r[:2], *r[5:8]):
         assert ok(result)["files"][0]["channels"][0]["source"]["virtualMap"] == "AO_Mixed"
     owner = "phase3.2_unreal-ue56-packed-preset item 2.10, decision 411"
     refused(r[2], "NotYetSupported", '"AO_Mixed"', "AO mesh map", owner)
     refused(r[3], "NotYetSupported", '"AO_Mixed"', "L16 or L32F AO channel only, not L8", owner)
-    refused(r[4], "NotYetSupported", '"AO_Mixed"', "legacy colour management", owner)
+    # Another OCIO configuration is refused by the plan before AO_Mixed is resolved.
+    refused(r[4], "NotYetSupported", "OCIO with Painter's substance config", "decision 190")
+    refused(r[8], "NotYetSupported", '"AO_Mixed"', "AO mesh map", owner)

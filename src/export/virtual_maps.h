@@ -39,9 +39,14 @@
 //   one float32 rounding. Exact on every r1 texel of the admitted AO goldens at PNG 8, PNG 16
 //   and OpenEXR 32f. It is computed only in that scope (`AoMixedRefusal`): legacy colour
 //   management, the default template, an L16 or L32F AO channel, a bound 8- or 16-bit grey AO
-//   mesh map at the set's resolution, full UV coverage, and either no AO layer or one root fill
-//   in Normal with a grey uniform colour or an 8- or 16-bit grey bitmap at the set's resolution
-//   under the identity UV projection. Not the stored channel: an L16 channel stores the mix
+//   mesh map at the set's resolution, and either no AO layer or one root fill in Normal with a
+//   grey uniform colour or an 8- or 16-bit grey bitmap at the set's resolution under the identity
+//   UV projection. Decision 418 widens it: any UV coverage (every texel takes the operator; on
+//   incomplete coverage the export pads the uncovered texels under `infinite`, EXC-013, the
+//   covered ones exact on R-314's islanded goldens); no AO channel (c = 1, recorded by
+//   ao-mixed-islands-ocio); OCIO with Painter's substance config, for no AO channel, no AO layer
+//   or R-314's fill only (a 16-bit grey bitmap on an L16 channel at opacity 1). Not the stored
+//   channel: an L16 channel stores the mix
 //   quantized, an L32F one fma(S - 1, al, 1). After save and reopen Painter's AO_Mixed differs
 //   on blended sets (decision 411).
 // - `Diffuse`, `Specular`, `Glossiness`, `Glossiness2`, `Unity4Diff`, `Unity4Gloss`,
@@ -103,8 +108,8 @@ struct VirtualMapSupport {
 [[nodiscard]] VirtualMapSupport Support(VirtualMap map);
 
 /// Why `AO_Mixed` of `stack` in `set` is outside the scope it is computed in (above), or nullopt
-/// when inside it, before any image is read (the images and the coverage are checked at
-/// evaluation).
+/// when inside it, before any image is read (the images are checked at evaluation; coverage is
+/// not a limit, decision 418).
 [[nodiscard]] std::optional<std::string> AoMixedRefusal(const core::Project& project, const core::TextureSet& set,
                                                         const core::Stack& stack);
 

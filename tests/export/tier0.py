@@ -885,7 +885,11 @@ AO_MIXED_NOTES = (
     "one root fill in Normal (grey uniform colour or 8- or 16-bit grey bitmap at 1:1 under the "
     "identity UV projection), on an L16 or L32F channel, with an 8- or 16-bit grey AO mesh map at "
     "the set's resolution, under legacy colour management, the default template and full UV "
-    "coverage, and refuses every other configuration before writing. After save and reopen (r2) "
+    "coverage, and refuses every other configuration before writing. Decision 418 widens it to "
+    "any UV coverage (covered texels exact on R-314's islanded goldens, the uncovered ones padded "
+    "under EXC-013), no AO channel (c = 1, ao-mixed-islands-ocio) and OCIO with Painter's "
+    "substance config for no AO channel, no AO layer or one 16-bit grey bitmap fill on L16 at "
+    "opacity 1. After save and reopen (r2) "
     "Painter's AO_Mixed differs from r1 on blended sets, deterministically (r2 = r3 = r4); r1 is "
     "the target (decision 032)."
 )

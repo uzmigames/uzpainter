@@ -1,0 +1,9 @@
+{
+  "id": 418,
+  "slug": "ao-mixed-is-computed-on-uv-islanded-sets-without-an-ao-channel-and-under-ocio-covered-texels-exact-padding-under-exc-013",
+  "title": "AO_Mixed is computed on UV-islanded sets, without an AO channel and under OCIO: covered texels exact, padding under EXC-013",
+  "status": "accepted",
+  "date": "2026-11-09",
+  "relatedTasks": ["phase3.1_unreal-gltf-pbr-preset", "phase3.2_unreal-ue56-packed-preset", "phase3.2_uze-uzmat-preset"],
+  "supersededBy": null
+}
