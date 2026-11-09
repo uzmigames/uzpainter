@@ -1,0 +1,9 @@
+{
+  "id": 417,
+  "slug": "the-owner-includes-the-virtual-normal-s-island-edge-exc-014-lets-its-covered-island-edge-texels-differ-in-production-everything-else-exact",
+  "title": "The owner includes the virtual Normal's island edge: EXC-014 lets its covered island-edge texels differ in production, everything else exact",
+  "status": "accepted",
+  "date": "2026-11-09",
+  "relatedTasks": ["phase4.1_export-island-padding-exact", "phase3.1_assets3d-cutover", "phase3.1_unreal-gltf-pbr-preset"],
+  "supersededBy": null
+}

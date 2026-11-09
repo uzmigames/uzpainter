@@ -1380,6 +1380,115 @@ def test_exc013_catches_injected_defects() -> None:
     assert entry["defect_detection_test"]["outcome"] == "every_injected_defect_fails"
 
 
+# --- decision 417: EXC-014, the virtual Normal's island edge in production exports -------------
+
+# A production Normal file: its receipt names EXC-013 (its padding) and EXC-014 (its island edge).
+EXC014 = frozenset({"EXC-013", "EXC-014"})
+
+
+def exc014() -> dict[str, Any]:
+    (entry,) = [e for e in load_json(REGISTER_PATH)["entries"] if e["exception_id"] == "EXC-014"]
+    return dict(entry)
+
+
+def test_exc014_excepts_the_normal_island_edge_of_production_exports_only() -> None:
+    """EXC-014 version 1 (decision 417), with the published register: a production Normal file
+    whose receipt names EXC-014 passes with its island-edge and padding texels differing, naming
+    EXC-014 and not EXC-013 (whose covered bound the edge breaks); the same difference on a file
+    the receipt names under EXC-013 only (any other map) fails; an exact Normal relies on nothing;
+    the entry lists no goldens and holds the covered interior exact."""
+    register: list[dict[str, Any]] = load_json(REGISTER_PATH)["entries"]
+    entry = exc014()
+    identity = (entry["version"], entry["tier"], entry["decision_id"], entry["approved_on"])
+    assert identity == (1, "1", "417", "2026-11-09")
+    assert entry["domain"] == {
+        "kind": "production_export",
+        "selector": "export/islanded-virtual-normal-edge",
+    }
+    assert entry["evidence"]["basis"] == "owner_scope_split"
+    assert entry["bounds"] == [{"metric": "max_abs_diff", "scope": "covered_interior", "max": 0}]
+    assert [e["exception_id"] for e in in_force(register)].count("EXC-014") == 1
+    assert [e["exception_id"] for e in in_force(register)].count("EXC-013") == 1
+    oracle, covered = scope_split_case()
+    edge, _ = island_classes(covered)
+    differing = oracle.copy()
+    differing[~covered] = 65535 - differing[~covered]  # every padding texel wrong
+    differing[edge] += 3  # every island-edge texel wrong
+    for golden, output in ((SASH_GOLDEN, SASH_NORMAL), (WAND_GOLDEN, WAND_NORMAL), (None, None)):
+        case = production_comparison(differing, covered, output, EXC014, golden)
+        verdict = evaluate(case, register)
+        assert verdict.outcome is Outcome.PASS, (golden, output)
+        assert ("EXC-014", 1) in verdict.exceptions_relied_on, (golden, output)
+        assert ("EXC-013", 1) not in verdict.exceptions_relied_on, (golden, output)
+    production = [exc013(), entry]
+    for output in (SASH_BASE, SASH_NORMAL):
+        case = production_comparison(differing, covered, output, EXC013, None)
+        other = evaluate(case, production)
+        assert other.outcome is Outcome.FAIL and other.exceptions_relied_on == (), output
+    exact = evaluate(production_comparison(oracle.copy(), covered, SASH_NORMAL, EXC014), production)
+    assert exact.outcome is Outcome.PASS and exact.exceptions_relied_on == ()
+    scoped = json.loads(json.dumps(entry))
+    scoped["domain"]["goldens"] = [SASH_GOLDEN]
+    register_document = {"schema": "uzpainter/parity/exceptions/1", "entries": [scoped]}
+    assert not is_valid(register_document, Schema.EXCEPTIONS)
+    assert register_problems(load_json(REGISTER_PATH)) == []
+
+
+def test_exc014_catches_injected_defects() -> None:
+    """EXC-014's defect test: with every padding texel wrong (excepted), one code on one covered
+    interior texel of the Normal, one on a covered interior or island-edge texel of another map
+    (whose receipt names EXC-013 only), a uniform offset, a shape mismatch (structural), a missing
+    or mis-sized coverage mask, and a Normal edge difference whose receipt does not name EXC-014
+    each fail and rely on nothing, against EXC-013 and EXC-014 and against the published
+    register; so does an island with no interior texel. The Normal's edge difference passes."""
+    entry = exc014()
+    oracle, covered = scope_split_case()
+    edge, interior = island_classes(covered)
+    padding = oracle.copy()
+    padding[~covered] += 7  # an excepted difference, present in every case below
+    inside = padding.copy()
+    inside[3, 4] += 1
+    assert interior[3, 4]
+    rim = padding.copy()
+    rim[2, 3] += 1
+    assert edge[2, 3]
+
+    def normal(candidate: np.ndarray, mask: np.ndarray | None) -> Comparison:
+        return production_comparison(candidate, mask, SASH_NORMAL, EXC014, None)
+
+    def other(candidate: np.ndarray) -> Comparison:
+        return production_comparison(candidate, covered, SASH_BASE, EXC013, None)
+
+    defects: dict[str, Comparison] = {
+        "one_normal_interior_value_off_by_one_code": normal(inside, covered),
+        "one_covered_interior_value_off_by_one_code_on_another_map": other(inside),
+        "one_edge_value_off_by_one_code_on_another_map": other(rim),
+        "uniform_offset_one_code": normal(padding + 1, covered),
+        "structural_shape_mismatch": normal(padding[:, :7], covered),
+        "no_coverage_mask": normal(padding, None),
+        "coverage_mask_of_another_size": normal(padding, np.ones((4, 4), dtype=bool)),
+        "receipt_not_relying_on_the_entry": production_comparison(
+            rim, covered, SASH_NORMAL, EXC013, None
+        ),
+    }
+    assert set(defects) == set(entry["defect_detection_test"]["injected_defects"])
+    register: list[dict[str, Any]] = load_json(REGISTER_PATH)["entries"]
+    for name, comparison in defects.items():
+        for entries in ([exc013(), entry], register):
+            verdict = evaluate(comparison, entries)
+            assert verdict.outcome is Outcome.FAIL, name
+            assert verdict.exceptions_relied_on == (), name
+    structural = evaluate(defects["structural_shape_mismatch"], [entry])
+    assert structural.reason == "structural difference: shape mismatch"
+    excepted = evaluate(normal(rim, covered), [exc013(), entry])
+    assert excepted.outcome is Outcome.PASS
+    assert excepted.exceptions_relied_on == (("EXC-014", 1),)
+    thin = np.zeros((8, 8), dtype=bool)
+    thin[2:4, 2:6] = True  # no interior texel: the bound has nothing to hold
+    assert evaluate(normal(padding, thin), [entry]).outcome is Outcome.FAIL
+    assert entry["defect_detection_test"]["outcome"] == "every_injected_defect_fails"
+
+
 # --- decisions 034 and 037: the envelope -------------------------------------------------------
 
 CURRENT = "painter-12.1.5+js-api.1.1.20"

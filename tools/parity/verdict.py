@@ -39,6 +39,10 @@
   candidate's export receipt names it in `exceptions_relied_on` (`Comparison.candidate_exceptions`),
   whatever their golden; its bound holds every covered texel exact, so only the padding outside
   the coverage may differ. A receipt that does not name the entry is outside its domain.
+- Decision 417: EXC-014, of the same domain kind, is named by a receipt only for the files whose
+  every channel is a combined virtual normal; it bounds their `covered_interior`, so their
+  island-edge texels may differ too. `candidate_exceptions` is per compared file: the ids the
+  receipt names for that file's path.
 - Diagnostics are computed and reported; they never grant a pass on their own.
 
 Envelope (decisions 034, 037; CONTRACT.md §6.5):

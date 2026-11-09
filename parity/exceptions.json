@@ -1039,6 +1039,59 @@
       "approved_by": "owner",
       "approved_on": "2026-11-09",
       "notes": "The owner's own yes to these terms (decision 259 §6), recorded in decision 414, which supersedes in part decision 259 §4 (production lifts CheckPadding's `infinite` refusal on UV-islanded sets; the other padding refusals stay) and keeps decision 245's CheckIslandNormal. EXC-010, EXC-011 v3 and EXC-012 are unchanged. Narrowed by a new version as phase4.1_export-island-padding-exact makes the padding exact, and withdrawn when it is exact on every texel."
+    },
+    {
+      "exception_id": "EXC-014",
+      "version": 1,
+      "tier": "1",
+      "domain": {
+        "kind": "production_export",
+        "selector": "export/islanded-virtual-normal-edge"
+      },
+      "bounds": [
+        {
+          "metric": "max_abs_diff",
+          "scope": "covered_interior",
+          "max": 0
+        }
+      ],
+      "evidence": {
+        "basis": "owner_scope_split",
+        "summary": "The owner approved this scope himself on 2026-11-09 (decision 417): asked whether production should also release the virtual Normal's island edge that EXC-013 left refused (decision 414 §3), he chose \"Incluir a borda\" (include the edge): only the Normal texels on the island edge whose value derives from the Height padding outside the islands may differ; the Normal's interior and every other map stay exact (bound 0 on every covered texel outside that band). Domain: the files a production export writes with every channel reading a combined virtual normal (virtualMap Normal_OpenGL or Normal_DirectX) under `infinite` padding over incomplete UV coverage, its Height having a layer, computed by decision 308's rule (the stencil reads the measured `infinite` padding of the Height outside the islands); a comparison is in it only when the candidate's export receipt names EXC-014 in `exceptions_relied_on` for the compared file (decision 417 §5). The band is the pilots' (EXC-010, EXC-011 v3, EXC-012): the covered texels with an uncovered 8-neighbour, x wrapping, rows not wrapping (tools.parity.coverage.distance_bands; the covered texels outside `covered_interior`), which holds every covered texel whose height-to-normal taps read an uncovered Height texel (decisions 245, 263). Terms: every covered interior texel of the named files is exactly equal (max |delta| 0 over `covered_interior`); the band and the uncovered (padding) texels may differ, with no numeric bound (decision 223 §3, kept). Every other file stays under EXC-013 v1 (every covered texel exact). A comparison without a coverage mask, with a mask of another size or with no covered interior texel is not covered; a shape mismatch fails as structural. Evidence that only the band differs under decision 308's rule: the Wand v1, Sash v5 and Tunic v10 Tier 1 runs (decisions 395, 399, 410) differ on 0 covered interior Normal values and on 42, 880 and 25,393 island-edge Normal values, every covered texel of the other four maps exact. A pass under it is reported as \"pass under EXC-014\", never as exact.",
+        "private_evidence": [
+          {
+            "sha256": "54fbcc2c259b578acd116412554e70940b472a500627a90177093e6fd4b3809f",
+            "description": "private golden record of phase1/tier1/wand-v1 under the current envelope painter-12.2.0+js-api.1.1.20-env-a981b586eae7: r1, r1-repeat and r2, the five exported maps of each and their blob hashes (its Tier 1 run: 0 covered interior values differing on the Normal, 42 island-edge values)"
+          },
+          {
+            "sha256": "2cc1ba7ee67aca08798a9d8fcb001eda7fff3212903624ccd5867d3f95a0ed8b",
+            "description": "private golden record of phase2/tier1/sash-v5-current under the current envelope painter-12.2.0+js-api.1.1.20-env-a981b586eae7: r1, r1-repeat and r2, the five exported maps of each and their blob hashes (its Tier 1 run: 0 covered interior values differing on the Normal, 880 island-edge values)"
+          },
+          {
+            "sha256": "3165bacb90ddd61486736f95bcd370fb4ea6444e03a09ab6877f70a143392d1e",
+            "description": "private golden record of phase2/tier1/tunic-v10-current under the current envelope painter-12.2.0+js-api.1.1.20-env-a981b586eae7: r1, r1-repeat and r2, the five exported maps of each and their blob hashes (its Tier 1 run after decision 408: 0 covered interior values differing on the Normal, 25,393 island-edge values)"
+          }
+        ],
+        "uncontrolled_settings": []
+      },
+      "defect_detection_test": {
+        "test_id": "tests/parity/test_verdict.py::test_exc014_catches_injected_defects",
+        "injected_defects": [
+          "one_normal_interior_value_off_by_one_code",
+          "one_covered_interior_value_off_by_one_code_on_another_map",
+          "one_edge_value_off_by_one_code_on_another_map",
+          "uniform_offset_one_code",
+          "structural_shape_mismatch",
+          "no_coverage_mask",
+          "coverage_mask_of_another_size",
+          "receipt_not_relying_on_the_entry"
+        ],
+        "outcome": "every_injected_defect_fails"
+      },
+      "decision_id": "417",
+      "approved_by": "owner",
+      "approved_on": "2026-11-09",
+      "notes": "The owner's own yes to these terms (decision 259 §6), recorded in decision 417, which supersedes in part decision 245 §1 (production lifts CheckIslandNormal for the files above only) and decision 414 §3. A new id rather than EXC-013 version 2: only the highest version of an id is in force, and EXC-013 v1 must keep holding every covered texel of every other padded file exact. Decision 245 §2 stays (a Height with no layer is refused), as do the diagnosticMap, statistics, passthrough, dilation and resize refusals. EXC-010, EXC-011 v3, EXC-012 and EXC-013 are unchanged. Narrowed by a new version as phase4.1_export-island-padding-exact makes the Height outside the islands exact (item 2.2), and withdrawn when the Normal's island edge is exact."
     }
   ]
 }
