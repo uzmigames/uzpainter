@@ -41,3 +41,22 @@ def test_only_unshifted_copies_tie_and_only_along_the_seam() -> None:
     unshifted = len(eo.FOLDS) * len(eo.OVERHANGS)
     assert set(ties) == {(True, 1, True)}
     assert ties[(True, 1, True)] % unshifted == 0 and ties[(True, 1, True)] > 0
+
+
+def test_brackets_intersect_each_class_and_set_aside_ambiguous_texels() -> None:
+    from tools.parity.fit import padding_end_overhang as fit
+
+    base = {"fold": "f37", "island": "A", "end": "high", "over": 0.625, "across": 0.25}
+    rows = [
+        # f - 1/2 = 3 + 1/64: the reference's row is 4; Painter's (move 0) puts delta in
+        # (-1/64, 1 - 1/64].
+        {**base, "fv": 3.5 + 1 / 64, "reproduce": [0], "sensitive": True},
+        # f - 1/2 = 3 - 1/64: row 3, move 0, delta in (-1 + 1/64, 1/64].
+        {**base, "fv": 3.5 - 1 / 64, "reproduce": [0], "sensitive": True},
+        {**base, "fv": 3.5, "reproduce": [0, 1], "sensitive": True},
+        {**base, "fv": 3.5, "reproduce": [0], "sensitive": False},
+    ]
+    ((key, cls),) = fit.brackets(rows).items()
+    assert key == ("f37", "A", "high", 0.625, 0.25)
+    assert (cls["n"], cls["labelled"], cls["ambiguous"], cls["moved"]) == (4, 2, 2, 0)
+    assert (float(cls["low"]), float(cls["high"])) == (-1 / 64, 1 / 64)
