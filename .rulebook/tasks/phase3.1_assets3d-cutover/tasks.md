@@ -27,6 +27,7 @@
     - **Entry.** It refuses a gated subcommand (`smart`) the same way.
     - **Limits.** Stated in M13.
   - Finding: Assets3D HEAD's `sync` names `Resource.retrieve` (`release-gap`, absent from the facade), so a production `sync` is refused today. The pinned `9a718b9` copy is in scope.
+  - 2026-11-09 (commit `7b8ee87a`): `Resource.retrieve` is now `supported`. Its evidence is the Tier 0 golden `resource-retrieve-cached-url`, whose compared replay is exact. HEAD's `sync` is in scope of any manifest built after that commit, but not of the G2 manifest `9f4d2abc…` that the draft pins. `capture` stays refused: `uzpainter.render.capture` is `pending-evidence`, and render parity is G5's (`test_head_sync_is_in_scope_and_capture_is_refused`).
 - [x] 2.7 Adapter manifest blocks: `exportacao` per export (INT-21) and the `painter_recipe`-equivalent block with defaults, evaluator version and content identity (INT-20)
   - `adapters/assets3d/manifest_blocks.py`, `MIGRATIONS.md` M14.
     - **Recipe.** For every export with a manifest, the client reads the recipe dump of the exported revision (`UzPainter.exe inspect <project> --revision N --recipe`). It checks the dump against the receipt (`revision`, `evaluator_profile`, `compat_profile`, a SHA-256 digest) and writes it once to `<exportPath>/uzpainter-recipes/<generation>.recipe.json`.
@@ -47,6 +48,15 @@
     - Tunic v10 production Tier 1 (`tests/parity/tier1/test_tunic_production.py`, commit `5bca6c60`): `pass` under EXC-013 and EXC-014. Every covered value is equal on BaseColor, Displacement, Metallic and Roughness. The Normal differs on 25,393 covered values, all on the island edge (305,405 edge texels of 4,222,246 covered). Both rebuilds are byte-identical.
     - The typed MCP rounds with Python disabled now send the production `export`. The Sash v5 round completes with every map byte-identical to its Tier 1 run's; its xfail on the island refusal is removed. The Tunic current round completes with its five maps; it no longer accepts a refused export (commit `0b159a0c`).
     - Not an accepted adapter round: `Resource.retrieve` out of scope and the gates `not-verified` still block this item; no manifest block was validated on a pilot (item 3.5).
+  - 2026-11-09 (`parity/reports/phase3/assets3d-cutover-adapter-checks.md`): the UzPainter-side blockers are removed, and the item stays open on Assets3D-side data.
+    - `Resource.retrieve` is supported (item 2.6 note).
+    - The gate preflight required piece-manifest `schema: 1`, but Assets3D v2 fixes it to 2, so it refused every real manifest. It now requires 2 (`442c5bd0`).
+    - Still blocking:
+      - Wand v1 has no v2 piece manifest, and its v1 files are gone from the Assets3D tree.
+      - The Sash, Belt and Tunic gates are `not-verified`, each with only a producer as reviewer; the Tunic's `uv-producao` is `fail`.
+      - Confirming a gate needs an independent session, a non-Claude one for UV (Assets3D `AGENTS.override.md` §3), and the owner's division of work.
+      - Open contract question: `meshes.low.file` names the `.blend`, while UzPainter's import report certifies an OBJ, FBX or glTF.
+    - The typed MCP rounds now require completed exports, each run once: the Wand round passed in 41 s and the Tunic recipe round in 418 s, both on ReleaseFast (`644ac7eb`).
 - [x] 3.2 Refusal test: a round whose upstream manifest gate failed is refused before any mutation (software fixture only)
   - `test_adapter_failed_upstream_gate_never_launches_or_mutates` in `tests/python/test_assets3d_production_guard.py`: a genuine native import report and saved adapter session, with an authored upstream gate changed to fail and its manifest pin updated. The real client refuses before even its capability probe, so runner/restore/script/save cannot run. Script sentinel remains absent; session/files/store bytes and SQLite `checkpoint('current')` stay unchanged.
 - [x] 3.3 Refusal test: a mesh certificate with `fail` refuses the round; a `warn` diagnostic import proceeds flagged (software fixtures only)
@@ -60,7 +70,12 @@
 - [ ] 3.5 Manifest-block schema test for `exportacao` and the recipe block on the three pilots
   - Synthetic part done: `test_an_export_gets_both_blocks_valid_under_the_assets3d_schema` validates the export block and every file it names under the pinned Assets3D v2 definitions (the receipt schema's `$defs`), plus 8 failure cases. Open on the pilots: no pilot has a conformant (non-measure) export to validate until `phase3.1_export-island-padding` lifts the islanded refusal. Decision 414 (2026-11-09) lifted the padding refusal: a pilot export without the combined virtual Normal is now conformant, relying on EXC-013 (receipt `exceptions_relied_on`); with the Normal it stays refused (owner `phase4.1_export-island-padding-exact`).
   - 2026-11-09 (decision 417): with the Normal too, under EXC-014; the Wand v1 and Sash v5 five-map production exports were written and compared (item 3.1 note). Their manifest blocks are written for a conformant generation, but none was validated here: that waits on an accepted round (item 3.1's other blockers).
+  - 2026-11-09: validated on one pilot export, not yet on an accepted round. `tests/parity/tier1/wand_v1/test_wand_manifest_blocks.py` (opt-in, `UZP_TIER1_PRODUCTION=1`) passed once.
+    - It rebuilds Wand v1 through the adapter as a diagnostic import and sends the pinned `painter_export.py` through the client.
+    - The conformant five-map generation relies on EXC-013 and EXC-014. Its `export` block and 9 files validate under the pinned Assets3D v2 definitions, and its recipe file is the verified dump of the exported revision (169).
+    - Still open: Sash and Tunic, and an accepted production round (item 3.1). The pipeline's own `execute()` also drops the reply's manifest blocks, so they do not yet reach an Assets3D piece manifest (report §3).
 - [ ] 3.6 Results written to `parity/reports/phase3/`
+  - 2026-11-09: `parity/reports/phase3/assets3d-cutover-adapter-checks.md` records the checks run so far. The item stays open until it holds the pilot results of 3.1 and 3.5.
 
 ## 4. Acceptance
 - [ ] 4.1 DAG gate P3-CUTOVER met: owner signed the amendment after Tunic v10 passed G2; adapter checks pass on the three pilots

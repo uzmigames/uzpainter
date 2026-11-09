@@ -10,6 +10,12 @@
 > under the owner's exceptions EXC-013 (decision 414: the padding outside the UV coverage) and
 > EXC-014 (decision 417: the combined virtual Normal's covered island-edge texels), and the
 > Tunic's exception is EXC-011 v3 (decision 410). The wording below follows them.
+>
+> Updated 2026-11-09 again, still unsigned: `Resource.retrieve`, which HEAD's `sync` calls, is
+> `supported` since the Tier 0 golden `resource-retrieve-cached-url` (commit `7b8ee87a`), in the
+> manifest of builds after it (ReleaseFast `capabilities.json` SHA-256 `f2b681ac…cbdc7`), not in
+> the G2 manifest `9f4d2abc…` that §2 and §3 pin. Signed as written, HEAD's `sync` stays outside.
+> The real piece manifests still hold no gate a production request can bind (§4 item 1).
 
 ## 1. What G2 proved, and what it did not
 
@@ -101,7 +107,7 @@ manifest (a static reading, `MIGRATIONS.md` M13):
 | `painter_create.py`, `painter_export.py` (Wand v1) | in scope |
 | `painter_layer_stack.py` route-guard probes | in scope |
 | `painter_layer_stack.py sync` at Assets3D `9a718b9` (the pinned wand copy) | in scope |
-| `painter_layer_stack.py sync` at Assets3D HEAD (`d61f0bd8`) | **outside**: it names `substance_painter.resource.Resource.retrieve` (`release-gap`, not in the facade) for masks with a cached resource URL |
+| `painter_layer_stack.py sync` at Assets3D HEAD (`d61f0bd8`) | **outside** in this manifest: it names `substance_painter.resource.Resource.retrieve` (`release-gap` here) for masks with a cached resource URL. In scope of a manifest built after `7b8ee87a`, where it is `supported` |
 | `painter_layer_stack.py smart` | outside: smart masks, resource search, triplanar projection |
 | `painter_layer_stack.py capture` | outside: `uzpainter.render.capture` is `pending-evidence` |
 
@@ -186,9 +192,12 @@ They are not edited. The text of new directives follows the skill.
 ## 4. What the owner must do
 
 1. **Read §1 and §2 and decide.** Is the amendment worth signing now? Today no pilot can complete
-   a production round in UzPainter: islanded export is now written under EXC-013 and EXC-014,
-   but HEAD's `sync` is out of scope. Signing now authorizes only the proven scope, and
-   practical use waits on `Resource.retrieve`.
+   a production round in UzPainter. Islanded export is written under EXC-013 and EXC-014, and
+   HEAD's `sync` is in scope of a manifest built after `7b8ee87a` (not of the G2 manifest). What
+   still blocks is on the Assets3D side: no pilot's piece manifest has an upstream gate that is
+   `pass` and `confirmed` with an independent reviewer, and Wand v1 has no v2 piece manifest at
+   all (`parity/reports/phase3/assets3d-cutover-adapter-checks.md`). Signing now authorizes only
+   the proven scope.
 2. **Approve or change the text of §3**, then sign it in your own words. A model panel, an agent
    message or silence does not count (decision 259 §6).
 3. **Choose the scope manifest.** Either sign §3 as written, pinned to `9f4d2abc…` (the G2
