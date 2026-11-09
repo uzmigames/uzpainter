@@ -42,6 +42,7 @@ from tools.parity.recorder.job import EXPORT
 from tools.parity.schemas import Schema, validation_errors
 from tools.parity.tier0_semantics import ao_operand_control as ao_control
 from tools.parity.tier0_semantics import ao_operand_probe as ao_probe
+from tools.parity.tier0_semantics import padding_end_overhang as end_overhang
 from tools.parity.tier0_semantics import padding_fold_tie as fold_tie
 from tools.parity.tier0_semantics import padding_joint_bend as joint_bend
 from tools.parity.tier0_semantics import padding_plane_control as plane_control
@@ -366,6 +367,12 @@ REQUEST_FIXTURES[fold_tie.MESH] = (
     f"{FIXTURE_DIR}/meshes/{fold_tie.MESH}.obj",
     fold_tie.mesh,
 )
+# Item 2.1's seam-end overhang sweep: far points past a seam end moved along the seam.
+REQUEST_FIXTURES[end_overhang.MESH] = (
+    "mesh",
+    f"{FIXTURE_DIR}/meshes/{end_overhang.MESH}.obj",
+    end_overhang.mesh,
+)
 
 REQUEST_FIXTURES["tau-prism"] = (
     "mesh",
@@ -461,6 +468,7 @@ MESH_SETS = {
     world_offset.MESH: [world_offset.MATERIAL],
     **{turn_exact.MESHES[t]: [turn_exact.MATERIAL] for t in turn_exact.TWINS},
     fold_tie.MESH: [fold_tie.MATERIAL],
+    end_overhang.MESH: [end_overhang.MATERIAL],
     "window-side": ["uzp_window_side"],
     "corner-reach": ["uzp_corner"],
     "normal-combine": list(rf.COMBINE_SETS),
@@ -2368,6 +2376,7 @@ def later_goldens() -> list[Golden]:
         height_normal_resolution(4096, "sharp"),
         padding_islands_kernel_probe(),
         fold_tie.request(),
+        end_overhang.request(),
     ]
 
 
