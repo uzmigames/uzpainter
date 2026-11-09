@@ -18,6 +18,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <memory>
+#include <set>
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
@@ -111,6 +112,78 @@ void Print(std::FILE* out, const json::Object& report) {
     std::fprintf(out, "UZP_JSON:%s\n", json::WriteCanonical(report).c_str());
     // Flushed here: a buffered report was observed lost at process exit (exit code kept).
     std::fflush(out);
+}
+
+/// The snapshots of one multi-output capture (`uzpainter/procedural-capture/2`, decision 412 §3):
+/// one per listed output and channel view (the paired L32F and RGB32F channels), each with its
+/// request, its first export, its decoded texels and the state's observations.
+struct CapturedOutput {
+    ProceduralRequest request;
+    std::string exportFile;
+    std::string texels;
+    store::SourceMetadata metadata;
+};
+
+/// Reads and checks every capture of a multi-output receipt before any project change: each file's
+/// hash, the repeat export identical at native precision, the signature in the capture domain
+/// (the requested resource's pin, a 128px raw F32 output of 1 or 3 channels named by the capture,
+/// the requested preset and plugged inputs, the quad mesh with one UV tile) and the state's
+/// observations, identical for every capture; every listed output has exactly both views.
+std::vector<CapturedOutput> ReadMultiOutputCapture(const json::Value& capture, const fs::path& work,
+                                                   const std::string& resource, const json::Object& requested) {
+    const auto& receipt = Object(capture);
+    const auto& hashes = Object(receipt.at("files"));
+    const json::Value& preset = requested.at("preset");
+    std::set<std::string> plugs;
+    for (const auto& [name, plug] : Object(requested.at("inputs"))) plugs.insert(name);
+    std::vector<CapturedOutput> result;
+    std::set<std::pair<std::string, uint32_t>> views;
+    for (const json::Value& item : std::get<json::Array>(receipt.at("captures").data)) {
+        const auto& entry = Object(item);
+        auto request = ReceiptRequestOfCapture(item);
+        if (!request) throw std::runtime_error("capture signature: " + request.error());
+        std::set<std::string> plugged;
+        for (const auto& [name, input] : request->sourceInputs) plugged.insert(name);
+        const bool presetMatches = preset.IsNull() ? !request->preset
+                                                   : request->preset && *request->preset == std::get<std::string>(preset.data);
+        if (core::FormatAssetUrl(request->asset) != "uzasset://snapshot/" + core::Sha256Hex(resource) + "@1" ||
+            request->output.resolution != 128 || request->output.format != ChannelFormat::F32 ||
+            request->output.colourSpace != "raw" || (request->output.channels != 1 && request->output.channels != 3) ||
+            request->outputId.empty() || request->outputId != String(entry, "output") || !presetMatches ||
+            !request->inputs.empty() || plugged != plugs || request->meshClass != "quad" || request->uvTiles != 1) {
+            throw std::runtime_error("capture signature lies outside the multi-output capture domain");
+        }
+        const std::string file = String(entry, "file");
+        const std::string repeat = String(entry, "repeat");
+        const std::string bytes = Read(work / Path(file));
+        const std::string again = Read(work / Path(repeat));
+        if (core::Sha256Hex(bytes) != String(hashes, file) || core::Sha256Hex(again) != String(hashes, repeat)) {
+            throw std::runtime_error("capture file hash differs");
+        }
+        const auto texels = SnapshotExportTexels(bytes, request->output);
+        const auto repeated = SnapshotExportTexels(again, request->output);
+        if (!texels) throw std::runtime_error(texels.error());
+        if (!repeated || *repeated != *texels) {
+            throw std::runtime_error("repeated capture differs at native float32 precision");
+        }
+        auto observed = ReceiptMultiOutputMetadata(capture, resource, *request);
+        if (!observed) throw std::runtime_error("capture observations: " + observed.error());
+        if (!result.empty() && *observed != result.front().metadata) {
+            throw std::runtime_error("the captures of one state observed different states");
+        }
+        if (!views.insert({request->outputId, request->output.channels}).second) {
+            throw std::runtime_error("an output view is captured twice");
+        }
+        result.push_back({std::move(*request), bytes, *texels, std::move(*observed)});
+    }
+    if (result.empty()) throw std::runtime_error("the capture holds no output");
+    std::set<std::pair<std::string, uint32_t>> expected;
+    for (const std::string& output : result.front().metadata.image_outputs) {
+        expected.insert({output, 1});
+        expected.insert({output, 3});
+    }
+    if (views != expected) throw std::runtime_error("the capture does not hold both views of every listed output");
+    return result;
 }
 
 /// A refusal of `assets bind-snapshot`: printed as `refused`, nothing was written.
@@ -241,7 +314,7 @@ BoundSnapshot FindSnapshot(store::ProjectStore& store, const core::Project& proj
     }
     auto request = RequestFromSignature(entry->signature);
     if (!request) throw BindRefusal("the snapshot signature is refused: " + request.error());
-    if (request->preset || !request->inputs.empty() || request->outputId.empty() ||
+    if (request->preset || !request->inputs.empty() || !request->sourceInputs.empty() || request->outputId.empty() ||
         request->output.format != ChannelFormat::F32 || request->output.colourSpace != "raw" ||
         request->output.channels != 1) {
         throw BindRefusal("the snapshot lies outside the bindable domain (no preset, no image inputs, one named raw F32 scalar output)");
@@ -278,8 +351,10 @@ int RunSnapshotCommand(const std::vector<std::string>& args, std::FILE* out, std
         const std::string painterSideHash = core::Sha256Hex(Read(painterSide));
         const json::Value requested = json::Parse(Read(Path(args[4])));
         const auto& requestObject = Object(requested);
-        if (requestObject.size() != 2 || !requestObject.contains("parameters")) {
-            throw std::runtime_error("request requires exactly resource and parameters");
+        // Decision 412 §3: `preset` and `inputs` beside them ask for every listed output of that state.
+        const bool multi = requestObject.size() == 4 && requestObject.contains("preset") && requestObject.contains("inputs");
+        if ((requestObject.size() != 2 && !multi) || !requestObject.contains("parameters")) {
+            throw std::runtime_error("request requires exactly resource and parameters (and preset and inputs)");
         }
         const std::string resource = String(requestObject, "resource");
         auto opened = store::ProjectStore::Open(Path(args[2]));
@@ -311,6 +386,43 @@ int RunSnapshotCommand(const std::vector<std::string>& args, std::FILE* out, std
         }
         const json::Value capture = json::Parse(Read(work / "capture.json"));
         const auto& receipt = Object(capture);
+        if (multi) {
+            if (String(receipt, "schema") != "uzpainter/procedural-capture/2" ||
+                String(receipt, "project_uuid") != opened.store->project_uuid() ||
+                std::get<int64_t>(receipt.at("revision").data) != document.revision() ||
+                String(receipt, "resource") != resource) {
+                throw std::runtime_error("capture identity differs from request");
+            }
+            const std::vector<CapturedOutput> outputs = ReadMultiOutputCapture(capture, work, resource, requestObject);
+            json::Array signatures;
+            for (const CapturedOutput& output : outputs) {
+                const auto outcome = RecordSnapshotExport(*opened.store, document, output.request, output.exportFile,
+                                                          opened.store->project_uuid(), document.revision(), output.metadata);
+                if (!outcome) throw std::runtime_error(outcome.error());
+                if (!outcome->result || outcome->result->status != core::ResultStatus::committed) {
+                    throw std::runtime_error("snapshot transaction did not commit");
+                }
+                signatures.push_back(SignatureHash(output.request));
+            }
+            opened.store->Save(document);
+            const int64_t recordedRevision = document.revision();
+            opened.store->Close();
+            auto reopened = store::ProjectStore::Open(Path(args[2]));
+            const auto backend = SnapshotBackend::Load(*reopened.store, reopened.state.project);
+            if (!backend) throw std::runtime_error("saved snapshot backend did not reload: " + backend.error());
+            for (const CapturedOutput& output : outputs) {
+                const auto stored = backend->Stored(output.request);
+                const auto storedObservations = backend->Metadata(output.request);
+                if (!stored || (*stored)->bytes != output.texels || !storedObservations ||
+                    *storedObservations != output.metadata) {
+                    throw std::runtime_error("a saved snapshot did not keep its texels and observations after reopen");
+                }
+            }
+            Print(out, {{"status", "ok"}, {"asset", core::FormatAssetUrl(outputs.front().request.asset)},
+                        {"signatures", std::move(signatures)}, {"revision", recordedRevision},
+                        {"verified_after_reopen", true}, {"receipt", Utf8(work / "capture.json")}});
+            return 0;
+        }
         if (String(receipt, "schema") != "uzpainter/procedural-capture/1" ||
             String(receipt, "project_uuid") != opened.store->project_uuid() ||
             std::get<int64_t>(receipt.at("revision").data) != document.revision() ||
@@ -320,7 +432,7 @@ int RunSnapshotCommand(const std::vector<std::string>& args, std::FILE* out, std
         const ProceduralRequest& request = *parsed;
         if (core::FormatAssetUrl(request.asset) != "uzasset://snapshot/" + core::Sha256Hex(resource) + "@1" ||
             request.output != RasterSpec{128, ChannelFormat::F32, "raw", 1} || request.preset ||
-            !request.inputs.empty() || request.meshClass != "quad" || request.uvTiles != 1 || request.outputId.empty()) {
+            !request.inputs.empty() || !request.sourceInputs.empty() || request.meshClass != "quad" || request.uvTiles != 1 || request.outputId.empty()) {
             throw std::runtime_error("capture signature lies outside the supported domain");
         }
         // Only the receipt's explicit, paired readback gives the observations; nothing is inferred.

@@ -78,6 +78,17 @@ struct ImageInput {
     bool operator==(const ImageInput&) const = default;
 };
 
+/// An image input a recorded source plugs (decision 412 §3, `SourceSubstance.set_source`): a
+/// bitmap by the SHA-256 of its file bytes and the colour space Painter reads back, or a uniform
+/// colour by its working-space value. An unplugged input is absent from the request.
+struct InputSource {
+    std::string bitmapSha256;                          ///< A bitmap: nonempty.
+    std::string colourSpace;                           ///< A bitmap: its colour space.
+    std::optional<std::array<double, 3>> workingColour;  ///< A uniform colour.
+
+    bool operator==(const InputSource&) const = default;
+};
+
 /// The part of the texture a request evaluates; an empty rectangle is the whole texture.
 struct TileRect {
     uint32_t x = 0;
@@ -95,6 +106,9 @@ struct ProceduralRequest {
     Params params;
     std::optional<std::string> preset;
     std::map<std::string, ImageInput> inputs;  ///< By usage or input name.
+    /// The image inputs a recorded source plugs (decision 412 §3), by input name. A name is never
+    /// both a raster input and a plugged source.
+    std::map<std::string, InputSource> sourceInputs;
     std::string meshClass;                     ///< The mesh class the geometry stands for.
     uint32_t uvTiles = 1;
     RasterSpec output;
@@ -113,7 +127,8 @@ struct ProceduralRequest {
 /// The request's exact signature (05 §4, decision 327) as a JSON object: `asset` (the asset id,
 /// `uzasset://<family>/<id>`), `version`, `params` (the effective parameters, defaults
 /// included), `preset`, `seed`, `output` {id, resolution, format, colour_space, channels},
-/// `inputs` {name: {sha256, resolution, format, colour_space, channels}}, `mesh` {class,
+/// `inputs` {name: {sha256, resolution, format, colour_space, channels}}, with a plugged source
+/// input as {name: {bitmap_sha256, colour_space}} or {name: {working_colour: [r, g, b]}}, `mesh` {class,
 /// uv_tiles} and `settings` (the project settings that affect evaluation). Numbers compare by
 /// value: an integral double is written as an integer, so 1 and 1.0 give one signature; a
 /// non-finite number is `{"non_finite": "nan" | "inf" | "-inf"}`. The tile is not part of it:

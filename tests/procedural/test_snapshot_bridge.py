@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import runpy
 import sys
@@ -230,6 +231,7 @@ def painter_module(monkeypatch: pytest.MonkeyPatch) -> tuple[dict[str, Any], dic
     modules: dict[str, Any] = {}
     for name in (
         "application",
+        "colormanagement",
         "export",
         "layerstack",
         "project",
@@ -249,7 +251,20 @@ def painter_module(monkeypatch: pytest.MonkeyPatch) -> tuple[dict[str, Any], dic
     return module_globals, modules
 
 
-@pytest.mark.parametrize("operation", ["configure", "readback", "export", "close", "ready", "idle"])
+@pytest.mark.parametrize(
+    "operation",
+    [
+        "configure",
+        "readback",
+        "export",
+        "close",
+        "ready",
+        "idle",
+        "set_output",
+        "preset_parameters",
+        "contexts",
+    ],
+)
 def test_painter_dispatch_refuses_lost_ownership_before_operation(
     monkeypatch: pytest.MonkeyPatch,
     operation: str,
@@ -429,3 +444,201 @@ def test_shipped_painter_operations_are_in_provenance_scan() -> None:
     paths = [p for p in recorder_sources() if "uzpainter_snapshot" in p.parts]
     assert {p.name for p in paths} == {"__init__.py", "bridge.py", "painter_side.py"}
     assert check_files(paths) == []
+
+
+# ── Multi-output captures (decision 412 §3) ─────────────────────────────────────────────────────
+
+UNPLUGGED = {"raised": {"type": "ValueError", "message": "authored unplugged input"}}
+REFUSED = {"raised": {"type": "EditionContextException", "message": "authored refusal"}}
+
+
+def multi_request(tmp_path: Path, **inputs: Any) -> dict[str, Any]:
+    bitmap = tmp_path / "authored.png"
+    bitmap.write_bytes(b"authored bitmap bytes")
+    plugs = {
+        name: {"bitmap": str(bitmap)} if plug == "bitmap" else plug for name, plug in inputs.items()
+    }
+    return bridge.capture_request(
+        {"resource": RESOURCE, "parameters": {}, "preset": "authored preset", "inputs": plugs}
+    )
+
+
+class MultiRemote(FakeRemote):
+    """Two outputs, one image input, one preset; every readback is computed from the state."""
+
+    def __init__(self, mesh: str) -> None:
+        super().__init__(mesh)
+        self.active = "first"
+        self.plugs: dict[str, Any] = {}
+        self.bitmaps: dict[str, str] = {}
+        self.calls: list[str] = []
+        self.material_parameters: dict[str, Any] | None = None
+
+    def input_source(self) -> dict[str, Any]:
+        plug = self.plugs.get("mask")
+        if plug is None:
+            return UNPLUGGED
+        if "color" in plug:
+            return {"class": "SourceUniformColor", "working": plug["color"]}
+        if "remove" in plug:
+            return {"class": "SourceUniformColor", "working": [0.0, 0.0, 0.0]}
+        url = self.bitmaps[plug["bitmap"]]
+        return {"class": "SourceBitmap", "resource": url, "colour_space": "Data"}
+
+    def state(self) -> dict[str, Any]:
+        observed = observed_readback()
+        for source in observed["sources"]:
+            source["outputs"] = ["first", "second"]
+            source["active_output"] = self.active
+            source["inputs"] = ["mask"]
+            source["input_sources"] = {"mask": self.input_source()}
+        observed["bitmaps"] = dict(self.bitmaps)
+        return observed
+
+    def call(self, operation: str, args: dict[str, Any] | None = None) -> Any:
+        self.calls.append(operation)
+        if operation == "configure":
+            assert args is not None
+            self.plugs = dict(args["inputs"])
+            for plug in self.plugs.values():
+                if "bitmap" in plug:
+                    self.bitmaps[plug["bitmap"]] = "resource://project1/authored?version=1"
+            return None
+        if operation == "readback":
+            return self.state()
+        if operation == "set_output":
+            assert args is not None
+            self.active = args["output"]
+            return None
+        if operation == "preset_parameters":
+            parameters = {"gain": 0.25, "$randomseed": 7, "integer": 1, "double": 1.0}
+            return {"authored preset": [parameters, dict(parameters)]}
+        if operation == "contexts":
+            source = self.state()["sources"][0]
+            return {
+                "split": {
+                    "output_mapping": REFUSED,
+                    "mask_output": REFUSED,
+                },
+                "material": {
+                    "output_mapping": {"Height": "second", "Normal": "first"},
+                    "mask_output": "authored_alpha",
+                    "active_channels": [],
+                    "parameters": self.material_parameters or source["parameters"],
+                    "input_sources": source["input_sources"],
+                    "active_output": REFUSED,
+                },
+            }
+        return super().call(operation, args)
+
+
+def test_multi_request_shape_and_refusals(tmp_path: Path) -> None:
+    request = multi_request(tmp_path, mask={"color": [0.25, 0.5, 1]})
+    assert request["preset"] == "authored preset"
+    assert request["inputs"] == {"mask": {"color": [0.25, 0.5, 1.0]}}
+    legacy = bridge.capture_request({"resource": RESOURCE, "parameters": {}})
+    assert "inputs" not in legacy and "preset" not in legacy
+    base: dict[str, Any] = {"resource": RESOURCE, "parameters": {}, "preset": None}
+    for plug in (
+        {"color": [0, 0]},
+        {"color": [0, 0, True]},
+        {"color": [0, 0, float("nan")]},
+        {"bitmap": "relative.png"},
+        {"bitmap": str(tmp_path / "missing.png")},
+        {"remove": False},
+        {"color": [0, 0, 0], "remove": True},
+        {},
+    ):
+        with pytest.raises(ValueError):
+            bridge.capture_request({**base, "inputs": {"mask": plug}})
+    with pytest.raises(ValueError, match="no parameter overrides"):
+        bridge.capture_request({**base, "parameters": {"gain": 1}, "preset": "p", "inputs": {}})
+    with pytest.raises(ValueError, match="preset"):
+        bridge.capture_request({**base, "preset": "", "inputs": {}})
+    with pytest.raises(ValueError, match="exactly resource"):
+        bridge.capture_request({**base, "inputs": {}, "extra": 1})
+
+
+@pytest.mark.parametrize(
+    "plug,expected",
+    [
+        (None, {}),
+        ({"color": [0.25, 0.5, 0.75]}, {"mask": {"working_colour": [0.25, 0.5, 0.75]}}),
+        ({"remove": True}, {"mask": {"working_colour": [0.0, 0.0, 0.0]}}),
+        ("bitmap", "bitmap"),
+    ],
+)
+def test_multi_capture_records_every_output_through_both_channels(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, plug: Any, expected: Any
+) -> None:
+    remote = MultiRemote(str(tmp_path / "mesh.obj"))
+    monkeypatch.setattr(bridge, "Remote", lambda: remote)
+    request = multi_request(tmp_path, **({} if plug is None else {"mask": plug}))
+    context = {"mesh_path": remote.mesh, "project_uuid": "authored", "revision": 5, "settings": {}}
+    work = tmp_path / "work"
+    work.mkdir()
+    report = bridge.record(context, request, work)
+    assert remote.created and remote.closed
+    assert report["schema"] == "uzpainter/procedural-capture/2"
+    captures = report["captures"]
+    assert [(c["output"], c["signature"]["output"]["channels"]) for c in captures] == [
+        ("first", 1),
+        ("first", 3),
+        ("second", 1),
+        ("second", 3),
+    ]
+    assert captures[1]["file"] == "output0-export1/user1.exr"
+    assert captures[1]["repeat"] == "output0-export2/user1.exr"
+    signature = captures[0]["signature"]
+    assert signature["preset"] == "authored preset"
+    if expected == "bitmap":
+        digest = hashlib.sha256(b"authored bitmap bytes").hexdigest()
+        expected = {"mask": {"bitmap_sha256": digest, "colour_space": "Data"}}
+        assert report["bitmaps"] == {(work / "inputs" / "0.png").as_posix(): digest}
+    assert signature["inputs"] == expected
+    assert report["preset_parameters"]["authored preset"]["gain"] == 0.25
+    assert report["contexts"]["material"]["mask_output"] == "authored_alpha"
+    # The active output is restored before the presets and contexts are read.
+    assert remote.active == "first"
+    assert remote.calls.index("preset_parameters") > remote.calls.index("export")
+
+
+def test_multi_capture_refuses_another_material_state(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    remote = MultiRemote(str(tmp_path / "mesh.obj"))
+    remote.material_parameters = {"gain": 1}
+    monkeypatch.setattr(bridge, "Remote", lambda: remote)
+    context = {"mesh_path": remote.mesh, "project_uuid": "authored", "revision": 5, "settings": {}}
+    with pytest.raises(ValueError, match="material source"):
+        bridge.record(context, multi_request(tmp_path), tmp_path)
+    assert remote.closed
+
+
+def test_multi_capture_refuses_a_plug_painter_did_not_apply(tmp_path: Path) -> None:
+    request = multi_request(tmp_path, mask={"color": [0.25, 0.5, 0.75]})
+    readback = MultiRemote("mesh.obj").state()
+    source = readback["sources"][0]
+    with pytest.raises(ValueError, match="does not read back a uniform colour"):
+        bridge.signature_inputs(source, request, readback, {})
+    source["input_sources"]["mask"] = {"class": "SourceUniformColor", "working": [0.25, 0.5, 0.7]}
+    with pytest.raises(ValueError, match="another working colour"):
+        bridge.signature_inputs(source, request, readback, {})
+    source["input_sources"]["mask"] = {"class": "SourceUniformColor", "working": [0, 0, 0]}
+    unplugged = dict(request, inputs={})
+    with pytest.raises(ValueError, match="request leaves it unplugged"):
+        bridge.signature_inputs(source, unplugged, readback, {})
+
+
+def test_unplugged_input_reads_back_as_a_bitmap_without_resource(tmp_path: Path) -> None:
+    """Painter returns a `SourceBitmap` whose `resource_id` raises for an unplugged input."""
+    readback = MultiRemote("mesh.obj").state()
+    source = readback["sources"][0]
+    source["input_sources"]["mask"] = {
+        "class": "SourceBitmap",
+        "resource_id": UNPLUGGED,
+        "colour_space": "Data",
+    }
+    assert bridge.signature_inputs(source, multi_request(tmp_path), readback, {}) == {}
+    with pytest.raises(ValueError, match="requested bitmap"):
+        bridge.signature_inputs(source, multi_request(tmp_path, mask="bitmap"), readback, {})

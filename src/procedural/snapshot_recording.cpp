@@ -10,6 +10,8 @@
 #include "uzp_core/manifest/sha256.h"
 
 #include <algorithm>
+#include <array>
+#include <optional>
 #include <bit>
 #include <cmath>
 #include <limits>
@@ -116,6 +118,39 @@ std::expected<ProceduralRequest, std::string> RequestFromSignature(const core::j
         request.uvTiles = static_cast<uint32_t>(tiles);
         for (const auto& [name, value] : Object(object.at("inputs"), "inputs")) {
             const auto& input = Object(value, "input");
+            if (name.empty()) throw std::invalid_argument("input needs a name");
+            if (input.contains("working_colour")) {
+                // Decision 412 §3: a uniform colour plugged into an image input, by working value.
+                Keys(input, {"working_colour"}, "input");
+                const auto* components = std::get_if<json::Array>(&input.at("working_colour").data);
+                if (components == nullptr || components->size() != 3) {
+                    throw std::invalid_argument("input working_colour must be three numbers");
+                }
+                std::array<double, 3> colour{};
+                for (size_t i = 0; i < 3; ++i) {
+                    const json::Value& component = (*components)[i];
+                    if (component.IsInt()) {
+                        colour[i] = static_cast<double>(std::get<int64_t>(component.data));
+                    } else if (component.IsDouble() && std::isfinite(std::get<double>(component.data))) {
+                        colour[i] = std::get<double>(component.data);
+                    } else {
+                        throw std::invalid_argument("input working_colour must be finite numbers");
+                    }
+                }
+                request.sourceInputs.emplace(name, InputSource{{}, {}, colour});
+                continue;
+            }
+            if (input.contains("bitmap_sha256")) {
+                // Decision 412 §3: a bitmap plugged into an image input, by file hash and colour space.
+                Keys(input, {"bitmap_sha256", "colour_space"}, "input");
+                const std::string hash = String(input.at("bitmap_sha256"), "input.bitmap_sha256");
+                const std::string space = String(input.at("colour_space"), "input.colour_space");
+                if (!Hash(hash) || space.empty()) {
+                    throw std::invalid_argument("a bitmap input needs a lowercase SHA-256 and a colour space");
+                }
+                request.sourceInputs.emplace(name, InputSource{hash, space, std::nullopt});
+                continue;
+            }
             Keys(input, {"sha256", "resolution", "format", "colour_space", "channels"}, "input");
             const std::string hash = String(input.at("sha256"), "input.sha256");
             if (name.empty() || !Hash(hash)) throw std::invalid_argument("input needs a name and lowercase SHA-256");
@@ -207,6 +242,143 @@ std::expected<core::RequestOutcome, std::string> RecordSnapshotExport(
                         [&](core::Edit& edit) { RecordSnapshot(store, edit, request, *texels, observed); });
 }
 
+namespace {
+
+/// The recorded parameters of a paired source, equal to the request's effective parameters as the
+/// signature encodes them, key for key; every value int64, finite double or string.
+const json::Object& RecordedParameters(const json::Object& source, const ProceduralRequest& request) {
+    // The recorded parameters are the request's effective parameters as the signature encodes
+    // them (ParamJson: numbers by value, so 15.0 and 15, or -0.0 and 0.0, are one identity; a
+    // string never equals a number). Comparing raw readback JSON would refuse real captures.
+    const json::Object& recorded = Object(source.at("parameters"), "source parameters");
+    if (recorded.size() != request.params.size()) {
+        throw std::invalid_argument("the paired sources' parameters differ from the capture signature");
+    }
+    for (const auto& [name, value] : recorded) {
+        const auto expected = request.params.find(name);
+        const auto parsed = ParamFromJson(value);
+        if (expected == request.params.end() || !parsed ||
+            json::WriteCanonical(ParamJson(*parsed)) != json::WriteCanonical(ParamJson(expected->second))) {
+            throw std::invalid_argument("the paired sources' parameter " + name + " differs from the capture signature");
+        }
+        // Decision 361: a value outside the typed domain refuses the capture rather than losing its type.
+        if (!store::ParamByValue(value)) {
+            throw std::invalid_argument("the paired sources' parameter " + name + " is not an int64, finite double or string");
+        }
+    }
+    return recorded;
+}
+
+/// The observed ResourceID of a paired source, which must name the requested resource.
+store::ObservedResourceId ObservedIdentity(const json::Object& source, std::string_view resource) {
+    const auto& parts = Object(source.at("resource_id"), "source resource_id");
+    if (parts.size() != 4) throw std::invalid_argument("source resource_id must hold exactly url, context, name and version");
+    store::ObservedResourceId observed{String(parts.at("url"), "resource_id url"),
+                                       String(parts.at("context"), "resource_id context"),
+                                       String(parts.at("name"), "resource_id name"),
+                                       String(parts.at("version"), "resource_id version")};
+    if (observed.url != resource || observed.url != String(source.at("resource"), "source resource")) {
+        throw std::invalid_argument("source resource_id url is not the requested resource");
+    }
+    return observed;
+}
+
+std::vector<std::string> Names(const json::Object& source, std::string_view key) {
+    const auto* list = std::get_if<json::Array>(&source.at(std::string(key)).data);
+    if (list == nullptr) throw std::invalid_argument("source " + std::string(key) + " must be an array");
+    std::vector<std::string> names;
+    for (const json::Value& item : *list) names.push_back(String(item, "source " + std::string(key)));
+    return names;
+}
+
+}  // namespace
+
+std::expected<ProceduralRequest, std::string> ReceiptRequestOfCapture(const core::json::Value& capture) {
+    try {
+        return RequestFromSignature(Object(capture, "capture").at("signature"));
+    } catch (const std::out_of_range&) {
+        return std::expected<ProceduralRequest, std::string>::unexpected_type("a capture lacks its signature");
+    } catch (const std::exception& error) {
+        return std::expected<ProceduralRequest, std::string>::unexpected_type(error.what());
+    }
+}
+
+std::expected<store::SourceMetadata, std::string> ReceiptMultiOutputMetadata(
+    const core::json::Value& receipt, std::string_view resource, const ProceduralRequest& request) {
+    using Result = std::expected<store::SourceMetadata, std::string>;
+    try {
+        const auto& top = Object(receipt, "receipt");
+        const auto& readback = Object(top.at("readback"), "readback");
+        const auto* sources = std::get_if<json::Array>(&readback.at("sources").data);
+        if (sources == nullptr || sources->size() != 2) {
+            throw std::invalid_argument("readback.sources must hold exactly the two paired sources");
+        }
+        // Canonical JSON keeps what Value equality does not: the sign of zero and int versus double.
+        if (json::WriteCanonical((*sources)[0]) != json::WriteCanonical((*sources)[1])) {
+            throw std::invalid_argument("the paired sources' readbacks differ");
+        }
+        const auto& source = Object((*sources)[0], "readback source");
+        if (String(source.at("resource"), "source resource") != resource) {
+            throw std::invalid_argument("the paired sources name another resource");
+        }
+        store::SourceMetadata metadata;
+        metadata.image_outputs = Names(source, "outputs");
+        const auto listed = [&](const std::string& name) {
+            return std::find(metadata.image_outputs.begin(), metadata.image_outputs.end(), name) !=
+                   metadata.image_outputs.end();
+        };
+        if (!listed(request.outputId) || !listed(String(source.at("active_output"), "source active_output"))) {
+            throw std::invalid_argument("the capture's output or the active output is not a listed output");
+        }
+        metadata.typed_effective_parameters = RecordedParameters(source, request);
+        metadata.image_inputs = Names(source, "inputs");
+        metadata.presets = Names(source, "presets");
+        metadata.properties = Object(source.at("properties"), "source properties");
+        metadata.observed_resource_id = ObservedIdentity(source, resource);
+        metadata.preset_parameters = Object(top.at("preset_parameters"), "preset_parameters");
+        // Each input's source as read back; a bitmap by the SHA-256 of the file the bridge staged
+        // for the ResourceID Painter reads back (never by Painter's project-instance identifier).
+        const auto& staged = Object(readback.at("bitmaps"), "readback bitmaps");
+        const auto& hashes = Object(top.at("bitmaps"), "receipt bitmaps");
+        json::Object inputs;
+        for (const auto& [name, value] : Object(source.at("input_sources"), "source input_sources")) {
+            const auto& observed = Object(value, "input source");
+            // An unplugged input reads back as a bitmap whose resource_id raised: kept as observed.
+            if (!observed.contains("class") || String(observed.at("class"), "input class") != "SourceBitmap" ||
+                !observed.contains("resource")) {
+                inputs[name] = value;
+                continue;
+            }
+            const std::string url = String(observed.at("resource"), "input resource");
+            std::optional<std::string> sha;
+            for (const auto& [path, imported] : staged) {
+                if (String(imported, "readback bitmap") == url) sha = String(hashes.at(path), "receipt bitmap hash");
+            }
+            if (!sha) throw std::invalid_argument("input " + name + " reads back a bitmap the capture did not stage");
+            inputs[name] = json::Object{{"class", std::string("SourceBitmap")}, {"sha256", *sha},
+                                        {"colour_space", observed.at("colour_space")}};
+        }
+        metadata.input_sources = std::move(inputs);
+        const auto& contexts = Object(top.at("contexts"), "contexts");
+        json::Object material = Object(contexts.at("material"), "material context");
+        if (json::WriteCanonical(material.at("parameters")) != json::WriteCanonical(source.at("parameters")) ||
+            json::WriteCanonical(material.at("input_sources")) != json::WriteCanonical(source.at("input_sources"))) {
+            throw std::invalid_argument("the material source of the same state reads another state");
+        }
+        material.erase("parameters");
+        material.erase("input_sources");
+        metadata.contexts = json::Object{{"split", contexts.at("split")}, {"material", std::move(material)}};
+        const json::Value signature = SignatureJson(request);
+        const std::string problem = store::SourceMetadataProblem(signature, store::SourceMetadataJson(signature, metadata));
+        if (!problem.empty()) throw std::invalid_argument(problem);
+        return metadata;
+    } catch (const std::out_of_range&) {
+        return Result(std::unexpect, "the multi-output receipt lacks a readback, preset, input or context member");
+    } catch (const std::exception& error) {
+        return Result(std::unexpect, error.what());
+    }
+}
+
 std::expected<std::vector<std::string>, std::string> ReceiptImageOutputs(
     const core::json::Value& receipt, std::string_view resource, const ProceduralRequest& request) {
     using Result = std::expected<std::vector<std::string>, std::string>;
@@ -263,62 +435,23 @@ std::expected<store::SourceMetadata, std::string> ReceiptSourceMetadata(
             throw std::invalid_argument("the paired sources' readbacks differ");
         }
         const auto& source = Object(sources[0], "readback source");
-        // The recorded parameters are the request's effective parameters as the signature encodes
-        // them (ParamJson: numbers by value, so 15.0 and 15, or -0.0 and 0.0, are one identity; a
-        // string never equals a number). Comparing raw readback JSON would refuse real captures.
-        const json::Object& recorded = Object(source.at("parameters"), "source parameters");
-        if (recorded.size() != request.params.size()) {
-            throw std::invalid_argument("the paired sources' parameters differ from the capture signature");
-        }
-        for (const auto& [name, value] : recorded) {
-            const auto expected = request.params.find(name);
-            const auto parsed = ParamFromJson(value);
-            if (expected == request.params.end() || !parsed ||
-                json::WriteCanonical(ParamJson(*parsed)) != json::WriteCanonical(ParamJson(expected->second))) {
-                throw std::invalid_argument("the paired sources' parameter " + name + " differs from the capture signature");
-            }
-        }
+        const json::Object& recorded = RecordedParameters(source, request);
         store::SourceMetadata metadata{std::move(*outputs), std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt};
-        const auto names = [&](std::string_view key) {
-            std::vector<std::string> list;
-            for (const json::Value& item : std::get<json::Array>(source.at(std::string(key)).data)) {
-                list.push_back(String(item, "source " + std::string(key)));
-            }
-            return list;
-        };
         if (!source.at("inputs").IsArray()) throw std::invalid_argument("source inputs must be an array");
-        metadata.image_inputs = names("inputs");
+        metadata.image_inputs = Names(source, "inputs");
         if (const auto presets = source.find("presets"); presets != source.end()) {
             if (!presets->second.IsArray()) throw std::invalid_argument("source presets must be an array");
-            metadata.presets = names("presets");
+            metadata.presets = Names(source, "presets");
         }
         if (const auto properties = source.find("properties"); properties != source.end()) {
             if (!properties->second.IsObject()) throw std::invalid_argument("source properties must be an object");
             metadata.properties = std::get<json::Object>(properties->second.data);
         }
         // Decision 361: the raw parameter map as get_parameters returned it, JSON types kept (the
-        // paired sources are canonically identical above). A value outside the typed domain refuses
-        // the capture rather than losing its type.
-        for (const auto& [name, value] : recorded) {
-            if (!store::ParamByValue(value)) {
-                throw std::invalid_argument("the paired sources' parameter " + name +
-                                            " is not an int64, finite double or string");
-            }
-        }
+        // paired sources are canonically identical above).
         metadata.typed_effective_parameters = recorded;
         // The ResourceID parts, only when the bridge observed them through the documented getters.
-        if (const auto id = source.find("resource_id"); id != source.end()) {
-            const auto& parts = Object(id->second, "source resource_id");
-            if (parts.size() != 4) throw std::invalid_argument("source resource_id must hold exactly url, context, name and version");
-            store::ObservedResourceId observed{String(parts.at("url"), "resource_id url"),
-                                               String(parts.at("context"), "resource_id context"),
-                                               String(parts.at("name"), "resource_id name"),
-                                               String(parts.at("version"), "resource_id version")};
-            if (observed.url != resource || observed.url != String(source.at("resource"), "source resource")) {
-                throw std::invalid_argument("source resource_id url is not the requested resource");
-            }
-            metadata.observed_resource_id = std::move(observed);
-        }
+        if (source.contains("resource_id")) metadata.observed_resource_id = ObservedIdentity(source, resource);
         const json::Value signature = SignatureJson(request);
         const std::string problem = store::SourceMetadataProblem(signature, store::SourceMetadataJson(signature, metadata));
         if (!problem.empty()) throw std::invalid_argument(problem);

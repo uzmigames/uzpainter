@@ -1,6 +1,7 @@
 #include "store/snapshots.h"
 
 #include "uzp_core/manifest/sha256.h"
+#include "uzp_core/types/enums.h"
 #include "uzp_core/types/errors.h"
 #include "uzp_core/types/resource_url.h"
 
@@ -157,6 +158,161 @@ std::expected<ObservedResourceId, std::string> ParseObservedResourceId(const Val
     return id;
 }
 
+/// `{"raised": {"type": <nonempty>, "message": <string>}}` or `{"returned": <nonempty>}`; with
+/// `value`, also `{"value": <nonempty>}`.
+bool Outcome(const Value& outcome, bool value = false) {
+    const auto* object = std::get_if<Object>(&outcome.data);
+    if (object == nullptr || object->size() != 1) return false;
+    const auto text = [](const Value& item) { return item.IsString() && !std::get<std::string>(item.data).empty(); };
+    if (const auto it = object->find("raised"); it != object->end()) {
+        const auto* raised = std::get_if<Object>(&it->second.data);
+        return raised != nullptr && raised->size() == 2 && raised->contains("type") && raised->contains("message") &&
+               text(raised->at("type")) && raised->at("message").IsString();
+    }
+    if (const auto it = object->find("returned"); it != object->end()) return text(it->second);
+    if (const auto it = object->find("value"); value && it != object->end()) return text(it->second);
+    return false;
+}
+
+/// Exactly the names of `observed` when it is given, as a set.
+bool SameKeys(const Object& object, const std::optional<std::vector<std::string>>& observed) {
+    if (!observed) return true;
+    if (object.size() != observed->size()) return false;
+    return std::all_of(observed->begin(), observed->end(), [&](const std::string& name) { return object.contains(name); });
+}
+
+/// Why `value` is not the `/4` `preset_parameters` of a snapshot of `signature` (decision 413).
+std::string PresetParametersProblem(const Value& signature, const Value& value,
+                                    const std::optional<std::vector<std::string>>& presets) {
+    const auto* map = std::get_if<Object>(&value.data);
+    if (map == nullptr || !SameKeys(*map, presets)) return "preset_parameters must be an object keyed by the presets";
+    const auto* object = std::get_if<Object>(&signature.data);
+    const auto params = object ? object->find("params") : Object::const_iterator{};
+    const auto* expected = object && params != object->end() ? std::get_if<Object>(&params->second.data) : nullptr;
+    if (expected == nullptr) return "preset_parameters needs a signature with params";
+    for (const auto& [preset, parameters] : *map) {
+        const auto* values = std::get_if<Object>(&parameters.data);
+        if (preset.empty() || values == nullptr || values->size() != expected->size()) {
+            return "preset_parameters." + preset + " must map exactly the signature's parameters";
+        }
+        for (const auto& [name, item] : *values) {
+            if (!expected->contains(name) || !ParamByValue(item)) {
+                return "preset_parameters." + preset + "." + name + " must be a signature parameter of int64, finite double or string";
+            }
+        }
+    }
+    return {};
+}
+
+/// Why `value` is not the `/4` `input_sources` of a snapshot of `signature` (decision 413).
+std::string InputSourcesProblem(const Value& signature, const Value& value,
+                                const std::optional<std::vector<std::string>>& inputs) {
+    const auto* map = std::get_if<Object>(&value.data);
+    if (map == nullptr || !SameKeys(*map, inputs)) return "input_sources must be an object keyed by the image inputs";
+    const auto* object = std::get_if<Object>(&signature.data);
+    const auto member = object ? object->find("inputs") : Object::const_iterator{};
+    const auto* plugged = object && member != object->end() ? std::get_if<Object>(&member->second.data) : nullptr;
+    if (plugged == nullptr) return "input_sources needs a signature with inputs";
+    std::size_t sources = 0;
+    for (const auto& [name, input] : *plugged) {
+        const auto* fields = std::get_if<Object>(&input.data);
+        if (fields != nullptr && (fields->contains("working_colour") || fields->contains("bitmap_sha256"))) ++sources;
+    }
+    std::size_t matched = 0;
+    for (const auto& [name, source] : *map) {
+        const auto* fields = std::get_if<Object>(&source.data);
+        const auto signed_input = plugged->find(name);
+        if (fields != nullptr && fields->contains("raised")) {
+            if (!Outcome(source) || signed_input != plugged->end()) {
+                return "input_sources." + name + ": an unplugged input is a raised outcome absent from the signature";
+            }
+            continue;
+        }
+        const Value* kind = fields && fields->contains("class") ? &fields->at("class") : nullptr;
+        // An unplugged input whose `get_source` returns a bitmap: its `resource_id` raised, and its
+        // colour space read or raised (decision 413). It is absent from the signature.
+        if (kind && kind->IsString() && std::get<std::string>(kind->data) == "SourceBitmap" &&
+            fields->contains("resource_id")) {
+            const bool space = fields->size() == 3 &&
+                               ((fields->contains("colour_space") && fields->at("colour_space").IsString()) ||
+                                (fields->contains("colour_space_raised") && Outcome(fields->at("colour_space_raised"))));
+            const auto* id = std::get_if<Object>(&fields->at("resource_id").data);
+            if (!space || id == nullptr || !id->contains("raised") || !Outcome(fields->at("resource_id")) ||
+                signed_input != plugged->end()) {
+                return "input_sources." + name + ": an unplugged bitmap is a raised resource_id absent from the signature";
+            }
+            continue;
+        }
+        Object expected;
+        if (kind && kind->IsString() && std::get<std::string>(kind->data) == "SourceUniformColor" && fields->size() == 2 &&
+            fields->contains("working")) {
+            const auto* working = std::get_if<core::json::Array>(&fields->at("working").data);
+            core::json::Array components;
+            for (const Value& component : working ? *working : core::json::Array{}) {
+                const auto byValue = ParamByValue(component);
+                if (!byValue || byValue->IsString()) return "input_sources." + name + ": working must be finite numbers";
+                components.push_back(*byValue);
+            }
+            if (components.size() != 3) return "input_sources." + name + ": working must be three numbers";
+            expected = Object{{"working_colour", std::move(components)}};
+        } else if (kind && kind->IsString() && std::get<std::string>(kind->data) == "SourceBitmap" && fields->size() == 3 &&
+                   fields->contains("sha256") && fields->contains("colour_space")) {
+            expected = Object{{"bitmap_sha256", fields->at("sha256")}, {"colour_space", fields->at("colour_space")}};
+        } else {
+            return "input_sources." + name + " must be a raised outcome, a SourceUniformColor or a SourceBitmap";
+        }
+        if (signed_input == plugged->end() ||
+            core::json::WriteCanonical(signed_input->second) != core::json::WriteCanonical(Value(expected))) {
+            return "input_sources." + name + " is not the signature's plugged input";
+        }
+        ++matched;
+    }
+    if (matched != sources) return "input_sources must describe every plugged input of the signature";
+    return {};
+}
+
+/// True when `name` is a channel type name.
+bool ChannelName(const std::string& name) {
+    return core::FromString<core::ChannelType>(name).has_value();
+}
+
+/// Why `value` is not the `/4` `contexts` of a snapshot listing `outputs` (decision 413).
+std::string ContextsProblem(const Value& value, const std::vector<std::string>& outputs) {
+    const auto* object = std::get_if<Object>(&value.data);
+    if (object == nullptr || object->size() != 2 || !object->contains("split") || !object->contains("material")) {
+        return "contexts must hold exactly split and material";
+    }
+    const auto* split = std::get_if<Object>(&object->at("split").data);
+    if (split == nullptr || split->size() != 2 || !split->contains("output_mapping") || !split->contains("mask_output") ||
+        !Outcome(split->at("output_mapping")) || !Outcome(split->at("mask_output"))) {
+        return "contexts.split must hold exactly the output_mapping and mask_output outcomes";
+    }
+    const auto* material = std::get_if<Object>(&object->at("material").data);
+    static constexpr std::array<std::string_view, 4> kMaterial = {"output_mapping", "mask_output", "active_channels",
+                                                                  "active_output"};
+    if (material == nullptr || material->size() != kMaterial.size() ||
+        !std::all_of(kMaterial.begin(), kMaterial.end(), [&](std::string_view k) { return material->contains(std::string(k)); })) {
+        return "contexts.material must hold exactly output_mapping, mask_output, active_channels and active_output";
+    }
+    const auto* mapping = std::get_if<Object>(&material->at("output_mapping").data);
+    if (mapping == nullptr) return "contexts.material.output_mapping must be an object";
+    for (const auto& [channel, output] : *mapping) {
+        if (!ChannelName(channel) || !output.IsString() ||
+            std::find(outputs.begin(), outputs.end(), std::get<std::string>(output.data)) == outputs.end()) {
+            return "contexts.material.output_mapping must map channel types to listed outputs";
+        }
+    }
+    const Value& mask = material->at("mask_output");
+    if (!mask.IsString() || std::get<std::string>(mask.data).empty()) return "contexts.material.mask_output must be a nonempty string";
+    auto channels = DistinctNames(material->at("active_channels"), "contexts.material.active_channels", false);
+    if (!channels) return channels.error();
+    if (!std::all_of(channels->begin(), channels->end(), ChannelName)) {
+        return "contexts.material.active_channels must name channel types";
+    }
+    if (!Outcome(material->at("active_output"), true)) return "contexts.material.active_output must be an outcome or a value";
+    return {};
+}
+
 }  // namespace
 
 std::optional<Value> ParamByValue(const Value& value) {
@@ -173,9 +329,13 @@ std::optional<Value> ParamByValue(const Value& value) {
 }
 
 Value SourceMetadataJson(const Value& signature, const SourceMetadata& metadata) {
+    const bool v4 = metadata.preset_parameters || metadata.input_sources || metadata.contexts;
     const bool v3 = metadata.typed_effective_parameters || metadata.observed_resource_id;
     const bool v2 = metadata.image_inputs || metadata.presets || metadata.properties;
-    const std::string_view schema = v3 ? kSourceMetadataSchemaV3 : v2 ? kSourceMetadataSchemaV2 : kSourceMetadataSchema;
+    const std::string_view schema = v4   ? kSourceMetadataSchemaV4
+                                    : v3 ? kSourceMetadataSchemaV3
+                                    : v2 ? kSourceMetadataSchemaV2
+                                         : kSourceMetadataSchema;
     Object object{{"schema", std::string(schema)},
                   {"asset", PinAndOutput(signature).first},
                   {"image_outputs", Strings(metadata.image_outputs)}};
@@ -187,6 +347,9 @@ Value SourceMetadataJson(const Value& signature, const SourceMetadata& metadata)
         object["observed_resource_id"] =
             Object{{"url", id->url}, {"context", id->context}, {"name", id->name}, {"version", id->version}};
     }
+    if (metadata.preset_parameters) object["preset_parameters"] = *metadata.preset_parameters;
+    if (metadata.input_sources) object["input_sources"] = *metadata.input_sources;
+    if (metadata.contexts) object["contexts"] = *metadata.contexts;
     return object;
 }
 
@@ -201,19 +364,22 @@ std::expected<SourceMetadata, std::string> ParseSourceMetadata(const Value& sign
     const bool v1 = schema && schema->IsString() && std::get<std::string>(schema->data) == kSourceMetadataSchema;
     const bool v2 = schema && schema->IsString() && std::get<std::string>(schema->data) == kSourceMetadataSchemaV2;
     const bool v3 = schema && schema->IsString() && std::get<std::string>(schema->data) == kSourceMetadataSchemaV3;
+    const bool v4 = schema && schema->IsString() && std::get<std::string>(schema->data) == kSourceMetadataSchemaV4;
     if (object == nullptr || !object->contains("asset") || !object->contains("image_outputs") || schema == nullptr) {
         return Result(std::unexpect, "source_metadata must be an object of schema, asset and image_outputs");
     }
-    if (!v1 && !v2 && !v3) {
+    if (!v1 && !v2 && !v3 && !v4) {
         return Result(std::unexpect, "source_metadata schema must be " + std::string(kSourceMetadataSchema) + ", " +
-                                         std::string(kSourceMetadataSchemaV2) + " or " +
-                                         std::string(kSourceMetadataSchemaV3));
+                                         std::string(kSourceMetadataSchemaV2) + ", " +
+                                         std::string(kSourceMetadataSchemaV3) + " or " +
+                                         std::string(kSourceMetadataSchemaV4));
     }
     for (const auto& [name, ignored] : *object) {
         const bool required = name == "schema" || name == "asset" || name == "image_outputs";
         const bool optional = name == "image_inputs" || name == "presets" || name == "properties";
         const bool observed = name == "typed_effective_parameters" || name == "observed_resource_id";
-        if (!required && !((v2 || v3) && optional) && !(v3 && observed)) {
+        const bool contexts = name == "preset_parameters" || name == "input_sources" || name == "contexts";
+        if (!required && !((v2 || v3 || v4) && optional) && !((v3 || v4) && observed) && !(v4 && contexts)) {
             return Result(std::unexpect, v1 ? "source_metadata must be an object of exactly schema, asset and image_outputs"
                                             : "source_metadata has the unknown member " + name);
         }
@@ -221,6 +387,9 @@ std::expected<SourceMetadata, std::string> ParseSourceMetadata(const Value& sign
     // One encoding per observation set: /3 exists only for its own members.
     if (v3 && !object->contains("typed_effective_parameters") && !object->contains("observed_resource_id")) {
         return Result(std::unexpect, "source_metadata /3 needs typed_effective_parameters or observed_resource_id");
+    }
+    if (v4 && !object->contains("preset_parameters") && !object->contains("input_sources") && !object->contains("contexts")) {
+        return Result(std::unexpect, "source_metadata /4 needs preset_parameters, input_sources or contexts");
     }
     const auto [pin, output] = PinAndOutput(signature);
     if (pin.empty() || output.empty()) {
@@ -261,6 +430,21 @@ std::expected<SourceMetadata, std::string> ParseSourceMetadata(const Value& sign
         auto observed = ParseObservedResourceId(id->second, pin);
         if (!observed) return Result(std::unexpect, "source_metadata " + observed.error());
         parsed.observed_resource_id = std::move(*observed);
+    }
+    if (const auto presets = object->find("preset_parameters"); presets != object->end()) {
+        const std::string problem = PresetParametersProblem(signature, presets->second, parsed.presets);
+        if (!problem.empty()) return Result(std::unexpect, "source_metadata " + problem);
+        parsed.preset_parameters = std::get<Object>(presets->second.data);
+    }
+    if (const auto inputs = object->find("input_sources"); inputs != object->end()) {
+        const std::string problem = InputSourcesProblem(signature, inputs->second, parsed.image_inputs);
+        if (!problem.empty()) return Result(std::unexpect, "source_metadata " + problem);
+        parsed.input_sources = std::get<Object>(inputs->second.data);
+    }
+    if (const auto contexts = object->find("contexts"); contexts != object->end()) {
+        const std::string problem = ContextsProblem(contexts->second, parsed.image_outputs);
+        if (!problem.empty()) return Result(std::unexpect, "source_metadata " + problem);
+        parsed.contexts = std::get<Object>(contexts->second.data);
     }
     return parsed;
 }

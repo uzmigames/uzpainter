@@ -2139,6 +2139,7 @@ int RunSnapshot(const fs::path& work) {
 #include "typed_params_cases.h"
 #include "resolution_cases.h"
 #include "snapshot_recording_cases.h"
+#include "snapshot_multi_output_cases.h"
 
 }  // namespace
 
@@ -2679,6 +2680,7 @@ int main(int argc, char** argv) {
     if (mode == "resolution") return RunResolution(dir);
     if (mode == "snapshot-recording") return RunSnapshotRecording(dir);
     if (mode == "snapshot-metadata") return RunSnapshotSourceMetadata(dir);
+    if (mode == "snapshot-multi-output") return RunSnapshotMultiOutput(dir);
     if (mode == "primitives") return RunPrimitives();
     if (mode == "kernels") return RunKernels(dir);
     if (mode == "gpu") return RunGpu(dir);

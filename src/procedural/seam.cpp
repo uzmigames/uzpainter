@@ -327,6 +327,16 @@ core::json::Value SignatureJson(const ProceduralRequest& request) {
     for (const auto& [name, input] : request.inputs) {
         inputs[name] = spec(input.spec, json::Object{{"sha256", input.sha256}});
     }
+    for (const auto& [name, input] : request.sourceInputs) {
+        if (inputs.contains(name)) throw core::ValueError("image input " + name + " is both a raster and a plugged source");
+        if (input.workingColour) {
+            json::Array components;
+            for (const double component : *input.workingColour) components.push_back(ParamJson(ParamValue(component)));
+            inputs[name] = json::Object{{"working_colour", std::move(components)}};
+        } else {
+            inputs[name] = json::Object{{"bitmap_sha256", input.bitmapSha256}, {"colour_space", input.colourSpace}};
+        }
+    }
     return json::Object{
         {"asset", "uzasset://" + request.asset.family + "/" + request.asset.id},
         {"version", request.asset.version},

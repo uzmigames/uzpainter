@@ -19,9 +19,53 @@ The request has exactly two fields:
 Use the exact `Resource.identifier().url()` of a documented `PROCEDURAL` Substance
 resource. `parameters` supplies finite scalar overrides; an empty object keeps the
 source's effective defaults. The recorder reads all resulting parameters back.
-Unversioned resources, image inputs, multiple outputs, vectors and colours are
-outside this initial recording domain and are refused. No substitute asset or
-compatibility alias is selected.
+Unversioned resources, vectors and colours are outside the recording domain and are
+refused. No substitute asset or compatibility alias is selected. This two-field request
+records a source with one output and no image input; a source with presets, image inputs
+or several outputs uses the multi-output request below.
+
+## Multi-output captures
+
+A request with exactly four fields records every output of one Substance source state, a
+material included (decision 412 §3, decision 413):
+
+```json
+{
+  "resource": "resource://<shelf>/<resource>?version=<exact-version>",
+  "parameters": {},
+  "preset": "<preset name>" | null,
+  "inputs": {"<image input>": {"color": [r, g, b]} | {"bitmap": "<absolute path>"} | {"remove": true}}
+}
+```
+
+The recorder sets the parameters, then applies the preset with Painter's own
+`apply_preset` (a preset excludes parameter overrides), then plugs each named image input:
+a working-space `Color`, a bitmap imported as a project texture (its file is staged in the
+private work directory), or Painter's own `remove_source`. Inputs the request does not name
+stay unplugged and must read back as unplugged. Each output the source lists is then
+selected in turn and exported twice through both paired channels, User0 L32F and User1
+RGB32F. Every output gives two snapshots, one per channel view (1 and 3 channels), each the
+exact float32 export of that channel; neither view is derived from the other, and each
+repeat must equal its first export at the float32 bit level.
+
+The signature's `preset` is the requested preset, and its `inputs` hold each plugged input
+as Painter reads it back: `{"bitmap_sha256": <SHA-256 of the file>, "colour_space": <read
+back>}` or `{"working_colour": [r, g, b]}`, compared by value. A requested colour must read
+back unchanged and a bitmap must read back as the staged file's import. An unplugged input
+is absent. Painter's `remove_source` reads back as a uniform colour, so its state and a
+uniform colour of the same working value have one signature; a project keeps the first one
+recorded.
+
+The receipt (`uzpainter/procedural-capture/2`) also records, for the same state: each
+preset applied by Painter with the resulting parameters, after which the captured
+parameters are set back and the whole readback must equal the captured one; and both
+output contexts, namely what the split sources' `output_mapping` and `mask_output` give,
+and a material fill of the same resource and state inserted, read (`output_mapping`,
+`mask_output`, its active channels, what `active_output` raises) and deleted again. The
+material source must read the same parameters and input sources. Each snapshot stores
+these observations as schema `/4` metadata (below). The command commits one transaction
+per snapshot, saves, reopens, checks every stored raster and its observations, and prints
+the asset pin and the list of signature hashes.
 
 ## Supported capture domain
 
@@ -254,6 +298,16 @@ Schema `/3` (decision 361) adds two observations, each optional on its own:
 - `observed_resource_id`: `{url, context, name, version}`, exactly as the documented ResourceID
   getters returned them, every part nonempty. The URL must be the requested resource of the
   capture and the resource whose SHA-256 the snapshot pin names (`uzasset://snapshot/<sha256(url)>@1`).
+
+Schema `/4` (decision 413) adds the multi-output observations, each optional on its own:
+`preset_parameters` (per preset, the raw parameter map Painter's `apply_preset` gave from the
+recorded state, keyed exactly by the observed presets and the signature's parameters),
+`input_sources` (each image input's source as read back: what `get_source` raised, a
+`SourceUniformColor` working value, a plugged `SourceBitmap` by file SHA-256 and colour space,
+or, for an unplugged input, the `SourceBitmap` Painter returns, whose `resource_id` raises;
+consistent with the signature's plugged inputs) and `contexts` (the split and material
+outcomes above, the material mapping from channel types to listed outputs). `/4` is written
+only when one of them is present.
 
 `/3` is written only when one of them is present, so `/1` and `/2` entries keep their bytes. A
 `/3` without either member, and either member under `/1` or `/2`, are refused. The receipt reader

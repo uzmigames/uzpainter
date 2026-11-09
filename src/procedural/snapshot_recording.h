@@ -51,4 +51,19 @@ std::expected<std::vector<std::string>, std::string> ReceiptImageOutputs(
 std::expected<store::SourceMetadata, std::string> ReceiptSourceMetadata(
     const core::json::Value& receipt, std::string_view resource, const ProceduralRequest& request);
 
+/// The request of one capture of a multi-output receipt (`uzpainter/procedural-capture/2`): its
+/// `signature` read by `RequestFromSignature`.
+std::expected<ProceduralRequest, std::string> ReceiptRequestOfCapture(const core::json::Value& capture);
+
+/// Everything a multi-output receipt (`uzpainter/procedural-capture/2`, decision 412 §3) observed
+/// about the captured state, for the snapshot of `request` (one output of it): the paired sources
+/// identical, naming `resource`, listing `request.outputId` and their active output among their
+/// outputs, with the request's effective parameters; the `/2` and `/3` members, all required; and
+/// the `/4` members: `preset_parameters` as the receipt gives them, each input's source as read
+/// back (a bitmap by the SHA-256 of the staged file whose ResourceID Painter reads back), and the
+/// single and multiple output contexts, whose material source must read the same parameters and
+/// input sources. Validated by `store::ParseSourceMetadata`; nothing is inferred.
+std::expected<store::SourceMetadata, std::string> ReceiptMultiOutputMetadata(
+    const core::json::Value& receipt, std::string_view resource, const ProceduralRequest& request);
+
 }  // namespace uzp::procedural

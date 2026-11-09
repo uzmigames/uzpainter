@@ -65,3 +65,24 @@ def test_snapshot_source_metadata(procedural_tests: Path, tmp_path: Path) -> Non
         "metadata v3: observations survive save and reopen",
     ):
         assert "PASS " + name in result.stdout, name
+
+
+def test_snapshot_multi_output(procedural_tests: Path, tmp_path: Path) -> None:
+    """Decision 412 §3 / 413: plugged image inputs in the signature, the `/4` source metadata and
+    the receipt of a multi-output capture (authored values only)."""
+    result = subprocess.run(
+        [str(procedural_tests), "snapshot-multi-output", str(tmp_path)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "FAIL " not in result.stdout
+    for name in (
+        "multi-output: a signature with plugged inputs reads back exactly",
+        "metadata v4: preset parameters, input sources and contexts roundtrip",
+        "metadata v4: the 3-channel snapshot keeps its texels and observations after reopen",
+        "multi-output receipt: the state's observations, a bitmap by its staged file's hash",
+    ):
+        assert f"PASS {name}" in result.stdout

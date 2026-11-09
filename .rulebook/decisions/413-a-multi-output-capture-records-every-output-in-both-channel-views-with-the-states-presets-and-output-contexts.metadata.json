@@ -1,0 +1,12 @@
+{
+  "id": 413,
+  "slug": "413-a-multi-output-capture-records-every-output-in-both-channel-views-with-the-states-presets-and-output-contexts",
+  "title": "A multi-output capture records every output in both channel views with the state's presets and output contexts, and material-channel consumption waits on its own recording",
+  "status": "accepted",
+  "date": "2026-11-08",
+  "relatedTasks": [
+    "phase3.2_source-substance-presets-inputs",
+    "phase3.3_procedural-families"
+  ],
+  "supersededBy": null
+}

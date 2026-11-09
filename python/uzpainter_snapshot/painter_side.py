@@ -7,6 +7,7 @@ from typing import Any
 
 import substance_painter as sp
 import substance_painter.application
+import substance_painter.colormanagement
 import substance_painter.export
 import substance_painter.layerstack
 import substance_painter.project
@@ -59,6 +60,7 @@ def configure(request: dict[str, Any]) -> None:
         if not isinstance(source, sp.source.SourceSubstance):
             raise RuntimeError("resource is not SourceSubstance")
         source.set_parameters(request["parameters"])
+        apply_state(source, request)
         fill.set_opacity(1.0, channel)
         fill.set_blending_mode(sp.layerstack.BlendingMode.Normal, channel)
     fill.set_projection_parameters(
@@ -76,6 +78,135 @@ def configure(request: dict[str, Any]) -> None:
     STATE["fill"] = fill
     STATE["stack"] = stack
     STATE["channels"] = channels
+
+
+def apply_state(source: Any, request: dict[str, Any]) -> None:
+    """The preset, then the image-input sources, of a multi-output capture (decision 412 §3).
+
+    The preset is applied by Painter's own `apply_preset`; a colour input is a working-space
+    `Color`, a bitmap input the project resource imported once per file, and `remove` Painter's
+    own `remove_source`. A legacy request has neither key and changes nothing here."""
+    preset = request.get("preset")
+    if preset is not None:
+        source.apply_preset(preset)
+    for name, plug in sorted((request.get("inputs") or {}).items()):
+        if "color" in plug:
+            r, g, b = (float(v) for v in plug["color"])
+            working = sp.colormanagement.GenericColorSpace.Working
+            source.set_source(name, sp.colormanagement.Color(r, g, b, working))
+        elif "bitmap" in plug:
+            if "bitmaps" not in STATE:
+                STATE["bitmaps"] = {}
+            bitmaps = STATE["bitmaps"]
+            if plug["bitmap"] not in bitmaps:
+                usage = sp.resource.Usage.TEXTURE
+                imported = sp.resource.import_project_resource(plug["bitmap"], usage)
+                bitmaps[plug["bitmap"]] = imported.identifier()
+            source.set_source(name, bitmaps[plug["bitmap"]])
+        elif plug.get("remove") is True:
+            source.remove_source(name)
+        else:
+            raise ValueError("an image input is plugged with color, bitmap or remove")
+
+
+def class_name(value: Any) -> str:
+    """A value's class name, from the repr of its type (`<class 'module.Name'>`)."""
+    return repr(type(value)).split("'")[1].split(".")[-1]
+
+
+def raised(error: Exception) -> dict[str, Any]:
+    return {"raised": {"type": class_name(error), "message": str(error)}}
+
+
+def described_input(source: Any, name: str) -> dict[str, Any]:
+    """An image input's source through its documented getters, or what `get_source` raised.
+
+    An unplugged input's `get_source` returns a `SourceBitmap` whose `resource_id` raises (Painter
+    12.2, the decision-413 capture), so each bitmap getter's outcome is recorded on its own."""
+    try:
+        plugged = source.get_source(name)
+    except ValueError as error:
+        return raised(error)
+    if isinstance(plugged, sp.source.SourceUniformColor):
+        return {"class": "SourceUniformColor", "working": list(plugged.get_color().working)}
+    if isinstance(plugged, sp.source.SourceBitmap):
+        result: dict[str, Any] = {"class": "SourceBitmap"}
+        try:
+            result["resource"] = plugged.resource_id.url()
+        except ValueError as error:
+            result["resource_id"] = raised(error)
+        try:
+            space = plugged.get_color_space()
+            result["colour_space"] = space if isinstance(space, str) else space.name
+        except ValueError as error:
+            result["colour_space_raised"] = raised(error)
+        return result
+    raise ValueError(f"image input {name!r} holds a source the snapshot cannot represent")
+
+
+def set_output(output: str) -> None:
+    """Both paired sources evaluate `output` (python-doc `SourceSubstance.active_output`)."""
+    fill = STATE["fill"]
+    for channel in STATE["channels"]:
+        fill.get_source(channel).active_output = output
+
+
+def preset_parameters() -> dict[str, Any]:
+    """Each preset applied by Painter to both sources and their parameters read, then the
+    captured parameters set back; the caller checks that the readback equals the captured one."""
+    fill = STATE["fill"]
+    channels = STATE["channels"]
+    original = [fill.get_source(channel).get_parameters() for channel in channels]
+    result: dict[str, Any] = {}
+    for preset in list(fill.get_source(channels[0]).get_preset_list()):
+        observed = []
+        for channel in channels:
+            fill.get_source(channel).apply_preset(preset)
+            observed.append(fill.get_source(channel).get_parameters())
+        result[preset] = observed
+        for channel, parameters in zip(channels, original, strict=True):
+            fill.get_source(channel).set_parameters(parameters)
+    return result
+
+
+def contexts(request: dict[str, Any]) -> dict[str, Any]:
+    """The single and multiple output contexts (decision 412): what the split sources'
+    `output_mapping` and `mask_output` give, and a material fill of the same resource and state,
+    read and deleted again. The captured fill is not changed."""
+    split = STATE["fill"].get_source(STATE["channels"][0])
+    result: dict[str, Any] = {"split": {}}
+    try:
+        result["split"]["output_mapping"] = {"returned": class_name(split.output_mapping)}
+    except Exception as error:
+        result["split"]["output_mapping"] = raised(error)
+    try:
+        result["split"]["mask_output"] = {"returned": class_name(split.mask_output)}
+    except Exception as error:
+        result["split"]["mask_output"] = raised(error)
+    stack = STATE["stack"]
+    material = sp.layerstack.insert_fill(sp.layerstack.InsertPosition.from_textureset_stack(stack))
+    try:
+        material.set_material_source(sp.resource.ResourceID.from_url(request["resource"]))
+        source = material.get_material_source()
+        source.set_parameters(request["parameters"])
+        apply_state(source, request)
+        source = material.get_material_source()
+        mapping = source.output_mapping
+        context: dict[str, Any] = {
+            "output_mapping": {key.name: mapping[key] for key in mapping},
+            "mask_output": source.mask_output,
+            "active_channels": sorted(c.name for c in material.active_channels),
+            "parameters": source.get_parameters(),
+            "input_sources": {n: described_input(source, n) for n in source.image_inputs},
+        }
+        try:
+            context["active_output"] = {"value": source.active_output}
+        except Exception as error:
+            context["active_output"] = raised(error)
+        result["material"] = context
+    finally:
+        sp.layerstack.delete_node(material)
+    return result
 
 
 def plain(value: Any) -> Any:
@@ -129,6 +260,7 @@ def readback() -> dict[str, Any]:
                 "inputs": list(source.image_inputs),
                 "outputs": list(source.image_outputs),
                 "presets": list(source.get_preset_list()),
+                "input_sources": {n: described_input(source, n) for n in source.image_inputs},
                 "properties": {name: described(properties[name]) for name in sorted(properties)},
                 "active_output": source.active_output,
                 "resolution": {
@@ -156,6 +288,8 @@ def readback() -> dict[str, Any]:
             "mask_effects": [node.uid() for node in fill.mask_effects()],
         },
         "sources": sources,
+        # The bitmaps a multi-output capture imported, by staged file: their ResourceID URLs.
+        "bitmaps": {path: key.url() for path, key in STATE.get("bitmaps", {}).items()},
         "source_mode": fill.source_mode.name,
         "projection_mode": fill.get_projection_mode().name,
         "active_channels": sorted(c.name for c in fill.active_channels),
@@ -180,7 +314,17 @@ def readback() -> dict[str, Any]:
 
 def dispatch(operation: str, args: dict[str, Any]) -> Any:
     """Closed operation vocabulary, no source text or dynamic API names in payloads."""
-    if operation in {"configure", "readback", "export", "close", "ready", "idle"}:
+    if operation in {
+        "configure",
+        "readback",
+        "export",
+        "close",
+        "ready",
+        "idle",
+        "set_output",
+        "preset_parameters",
+        "contexts",
+    }:
         check_owned()
     if operation == "identity":
         return identity()
@@ -222,6 +366,13 @@ def dispatch(operation: str, args: dict[str, Any]) -> Any:
         return None
     if operation == "readback":
         return readback()
+    if operation == "set_output":
+        set_output(args["output"])
+        return None
+    if operation == "preset_parameters":
+        return preset_parameters()
+    if operation == "contexts":
+        return contexts(args)
     if operation == "export":
         result = sp.export.export_project_textures(args)
         return {

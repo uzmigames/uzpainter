@@ -58,6 +58,7 @@ inline constexpr std::string_view kSourceMetadataKey = "source_metadata";
 inline constexpr std::string_view kSourceMetadataSchema = "uzpainter/procedural-source-metadata/1";
 inline constexpr std::string_view kSourceMetadataSchemaV2 = "uzpainter/procedural-source-metadata/2";
 inline constexpr std::string_view kSourceMetadataSchemaV3 = "uzpainter/procedural-source-metadata/3";
+inline constexpr std::string_view kSourceMetadataSchemaV4 = "uzpainter/procedural-source-metadata/4";
 
 /// The ResourceID a recording observed through its documented getters (decision 361): every part
 /// as Painter returned it. Provenance only: it never resolves, imports, binds or searches.
@@ -80,6 +81,16 @@ struct SourceMetadata {
     /// kept (an integral float stays a double), and the observed ResourceID.
     std::optional<core::json::Object> typed_effective_parameters;
     std::optional<ObservedResourceId> observed_resource_id;
+    /// `/4` (decision 413): per preset, the raw parameter map Painter's own `apply_preset` gave
+    /// from the recorded state; each image input's source as read back (`{"raised": {type,
+    /// message}}`, `{"class": "SourceUniformColor", "working": [r, g, b]}` or `{"class":
+    /// "SourceBitmap", "sha256", "colour_space"}`); and the single and multiple output contexts of
+    /// the same state (`{"split": {output_mapping, mask_output}, "material": {output_mapping,
+    /// mask_output, active_channels, active_output}}`, each outcome `{"raised": ...}`, `{"returned":
+    /// <class>}` or, for the material `active_output`, `{"value": <output>}`).
+    std::optional<core::json::Object> preset_parameters = std::nullopt;
+    std::optional<core::json::Object> input_sources = std::nullopt;
+    std::optional<core::json::Object> contexts = std::nullopt;
 
     bool operator==(const SourceMetadata&) const = default;
 };
@@ -97,9 +108,10 @@ struct SnapshotEntry {
     std::string error;  ///< Why the entry is malformed; empty when it is well-formed.
 };
 
-/// The `source_metadata` of a snapshot of `signature`: `/3` when `typed_effective_parameters` or
+/// The `source_metadata` of a snapshot of `signature`: `/4` when `preset_parameters`,
+/// `input_sources` or `contexts` is given, else `/3` when `typed_effective_parameters` or
 /// `observed_resource_id` is given, else `/1` when only `image_outputs` is given and `/2` with the
-/// optional members that are present otherwise (so `/1` and `/2` bytes are unchanged).
+/// optional members that are present otherwise (so `/1`, `/2` and `/3` bytes are unchanged).
 core::json::Value SourceMetadataJson(const core::json::Value& signature, const SourceMetadata& metadata);
 core::json::Value SourceMetadataJson(const core::json::Value& signature, const std::vector<std::string>& image_outputs);
 /// `metadata` read as the `source_metadata` of a snapshot of `signature`, or why it may not be:
@@ -114,6 +126,13 @@ core::json::Value SourceMetadataJson(const core::json::Value& signature, const s
 /// keys are exactly the signature's `params` and whose values equal them by value
 /// (`ParamByValue`); or `observed_resource_id` is not exactly four nonempty strings `url`,
 /// `context`, `name` and `version` with the signature's pin `uzasset://snapshot/<sha256(url)>@1`.
+/// Under `/4` only (which holds at least one of them): `preset_parameters` is an object, keyed
+/// exactly by the observed `presets` when they are present, of parameter maps keyed exactly by the
+/// signature's `params` with int64, finite double or string values; `input_sources` is an object
+/// keyed exactly by the observed `image_inputs` when present, each source one of the three forms,
+/// a plugged one equal to the signature's plugged input and an unplugged one absent from it;
+/// `contexts` holds exactly `split` and `material` as above, the material `output_mapping` from
+/// channel type names to listed outputs and `active_channels` distinct channel type names.
 std::expected<SourceMetadata, std::string> ParseSourceMetadata(const core::json::Value& signature,
                                                                const core::json::Value& metadata);
 /// A scalar parameter as the signature encodes it, by value (procedural/seam.h `ParamJson` for
