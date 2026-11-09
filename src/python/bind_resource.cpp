@@ -203,6 +203,18 @@ void BindResource(py::module_& m) {
         py::arg("resource_id"), "The file the entry was imported from, or None.");
 
     m.def(
+        "resource_usage",
+        [](const ResourceIdHandle& id) -> py::object {
+            const auto project = Read();
+            const std::string sha256 = ResolveResource(*project, id);
+            for (const core::ResourceMeta& meta : project->resources.at(sha256)) {
+                if (meta.name == id.name && !meta.usage.empty()) return py::str(meta.usage);
+            }
+            return py::none();
+        },
+        py::arg("resource_id"), "The usage the entry was imported with (`Usage` member name), or None.");
+
+    m.def(
         "replace_node_resource",
         [](const Node& node, const ResourceIdHandle& replacement, std::optional<core::ChannelType> channel) {
             core::json::Object args{{"node", static_cast<std::int64_t>(node.uid)},

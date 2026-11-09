@@ -3139,6 +3139,13 @@ def host_read(call: str, args: dict[str, Any]) -> Any:
             if any(type(v) is not str or not v for v in (imported.name, imported.version)):
                 raise ValueError("project resource query requires imported name and version")
             return resource_id(CURRENT["step"], ids.from_project(imported.name, imported.version))
+        if "version" in args:
+            # An authored identity (name and version) the project may not hold.
+            if set(args) != {"name", "version"} or any(
+                type(args[k]) is not str or not args[k] for k in ("name", "version")
+            ):
+                raise ValueError("an authored project resource query requires name and version")
+            return resource_id(CURRENT["step"], ids.from_project(args["name"], args["version"]))
         return resource_id(CURRENT["step"], ids.from_project(str(args["name"])))
     if call == RESOURCE_RETRIEVE:
         if set(args) != {"resource_step"} or type(args["resource_step"]) is not int:

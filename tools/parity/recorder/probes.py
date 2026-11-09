@@ -564,6 +564,20 @@ def check_connect(step: Step, probe: bool) -> None:
         raise RecorderError(f"step {step.step}: `events` must list the event class names")
 
 
+def versioned_query(source: Step, prior: dict[int, Step]) -> bool:
+    """Whether a step yields a resource id with a version for `Resource.retrieve`: a project
+    query of an import, a project query of an authored name and version, or `from_url` of an
+    import's URL (the URL a script cached from an earlier import, read again after a reopen in
+    the context it was imported in)."""
+    if source.call == CONSTANTS["RESOURCE_FROM_PROJECT"]:
+        return set(source.args) in ({"import_step"}, {"name", "version"})
+    if source.call == CONSTANTS["RESOURCE_FROM_URL"] and set(source.args) == {"resource_step"}:
+        step = source.args["resource_step"]
+        imported = prior.get(step) if type(step) is int else None
+        return imported is not None and imported.call == IMPORT_RESOURCE
+    return False
+
+
 def probe_job_from_manifest(
     manifest: dict[str, Any], repo_root: Path = REPO_ROOT, assets_root: Path | None = None
 ) -> ProbeJob:
@@ -586,16 +600,27 @@ def probe_job_from_manifest(
                 or source.call != IMPORT_RESOURCE
             ):
                 raise RecorderError("project resource query requires a prior import step")
+        if (
+            step.call == CONSTANTS["RESOURCE_FROM_PROJECT"]
+            and "version" in args
+            and (
+                set(args) != {"name", "version"}
+                or any(type(args[k]) is not str or not args[k] for k in ("name", "version"))
+            )
+        ):
+            raise RecorderError("an authored project resource query requires name and version")
         if step.call == CONSTANTS["RESOURCE_RETRIEVE"]:
             resource_step = args.get("resource_step")
             source = prior.get(resource_step) if type(resource_step) is int else None
             if (
                 set(args) != {"resource_step"}
                 or source is None
-                or source.call != CONSTANTS["RESOURCE_FROM_PROJECT"]
-                or set(source.args) != {"import_step"}
+                or not versioned_query(source, prior)
             ):
-                raise RecorderError("resource retrieval requires a prior imported project query")
+                raise RecorderError(
+                    "resource retrieval requires a prior versioned query: an imported project "
+                    "query, an authored name and version, or the URL of an import"
+                )
         if "owned_project" in args and (
             step.call != CONSTANTS["P295_GET_UUID"]
             or set(args) != {"owned_project"}

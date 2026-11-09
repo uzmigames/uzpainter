@@ -148,8 +148,8 @@ def test_anything_but_supported_is_outside_the_amended_scope(
 
 
 def test_a_branch_never_taken_is_refused_all_the_same() -> None:
-    """Nothing of a refused round runs, so the reading cannot depend on the data: the pipeline's
-    sync code names `Resource.retrieve` only for masks with a cached url, and is still refused."""
+    """Nothing of a refused round runs, so the reading cannot depend on the data: a reference on a
+    branch the code never takes is refused all the same."""
     code = "import substance_painter.resource as rs\nif False:\n    rs.search('x')\n"
     assert scope.outside(code, STATUSES)[0]["symbol"] == "substance_painter.resource.search"
 
@@ -594,4 +594,48 @@ def test_the_amended_scope_lists_supported_symbols_by_module() -> None:
             "context": "file-format:tiff",
             "status": "release-gap",
         }
+    ]
+
+
+# ── The pipeline's own code at Assets3D HEAD against the generated manifest (2.6, 3.4) ───────────
+
+ASSETS3D = Path("E:/UzmiGames/Assets3D")
+LAYER_STACK = ASSETS3D / "Pipeline" / "painting" / "painter_layer_stack.py"
+
+
+def pipeline_code(name: str) -> str:
+    """The `name` code constant of Assets3D HEAD's `painter_layer_stack.py`, read, never run."""
+    import ast
+
+    tree = ast.parse(LAYER_STACK.read_text(encoding="utf-8"))
+    for node in tree.body:
+        if (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and node.targets[0].id == name
+        ):
+            value = ast.literal_eval(node.value)
+            assert isinstance(value, str)
+            return value
+    raise AssertionError(f"{LAYER_STACK} has no {name}")
+
+
+@pytest.mark.skipif(
+    not LAYER_STACK.is_file(),
+    reason=f"the UzmiGames asset repository is not at {ASSETS3D} (local run, decision 028)",
+)
+def test_head_sync_is_in_scope_and_capture_is_refused() -> None:
+    """With `Resource.retrieve` supported (Tier 0 `resource-retrieve-cached-url`), HEAD's `sync`
+    names only `supported` symbols, so a production sync runs; `capture` stays outside, its shim
+    call being `uzpainter.render.capture`, `pending-evidence` (the preview pass is never parity
+    evidence; render parity is gate G5's), and is refused before anything runs."""
+    from tools.capabilities.generate_capabilities import generate
+
+    statuses = {e["symbol"]: e["status"] for e in generate()["entries"] if e["context"] == "any"}
+    sync = pipeline_code("SYNC_CODE")
+    assert "substance_painter.resource.Resource.retrieve" in scope.referenced(sync)
+    assert scope.outside(sync, statuses) == []
+    assert scope.outside(pipeline_code("CAPTURE_CODE"), statuses) == [
+        {"symbol": "uzpainter.render.capture", "context": "any", "status": "pending-evidence"}
     ]

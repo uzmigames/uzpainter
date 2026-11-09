@@ -168,6 +168,46 @@ class Resource:
             "Resource.identifier() to address the resource",
         )
 
+    @staticmethod
+    def retrieve(identifier: ResourceID) -> list[Resource]:
+        """Resources that match an identifier, as a list (Tier 0 `resource-retrieve-cached-url`,
+        both recordings): in the current project's context, the one resource the project holds
+        under that name and version, else an empty list (an absent name, or a version the name
+        does not hold); an identifier of another project's context, such as a URL cached before
+        the project was reopened, raises `ValueError("invalid resource id")`. An identifier
+        without a version, outside a project context or with no open project is unrecorded and
+        raises `NotYetSupported` before anything is read."""
+        if isinstance(identifier, Resource) or not isinstance(identifier, ResourceID):
+            raise TypeError("the identifier must be a resource.ResourceID")
+        refuse_observed(identifier)
+        unrecorded = (
+            "no open project"
+            if not uzpainter.project.is_open()
+            else "an identifier without a version"
+            if identifier.version is None
+            else "an identifier outside a project context"
+            if PROJECT_CONTEXT.match(identifier.context) is None
+            else None
+        )
+        if unrecorded is not None:
+            raise uzpainter.NotYetSupported(
+                f"Resource.retrieve of {unrecorded} is not recorded "
+                "(Tier 0 resource-retrieve-cached-url records versioned project identifiers)"
+            )
+        if identifier.context != SESSION.context():
+            raise ValueError("invalid resource id")
+        known = facts()
+        for native in uzpainter.resource.list_project_resources():
+            fact = known.get(native.version)
+            if native.name == identifier.name and fact and f"{fact[0]}.image" == identifier.version:
+                usage = uzpainter.resource.resource_usage(native)
+                if usage is None:
+                    raise uzpainter.NotYetSupported(
+                        f"Resource.retrieve of {identifier.url()}: the entry records no usage"
+                    )
+                return [Resource(from_native(native), getattr(Usage, usage))]
+        return []
+
     def __repr__(self) -> str:
         return f"Resource({self._id!r})"
 

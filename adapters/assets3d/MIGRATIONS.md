@@ -243,9 +243,12 @@ signed. This check enforces the rule in software only, and grants no cutover.
 - **Limits.** The reading is static.
   - A reference on a branch the code never takes is refused all the same, so nothing of a refused
     round runs. Measured on Assets3D HEAD `d61f0bd8`, `painter_layer_stack.py sync` names
-    `substance_painter.resource.Resource.retrieve` (`release-gap`, absent from the facade) for
-    masks with a cached URL, so a production `sync` is refused. The pinned `9a718b9` copy is in
-    scope.
+    `substance_painter.resource.Resource.retrieve` for masks with a cached URL. It was a
+    `release-gap` in the G2 manifest (`9f4d2abc`), so a production `sync` was refused there. Since
+    the Tier 0 `resource-retrieve-cached-url` golden (2026-11-09) it is `supported`, and HEAD's
+    `sync` is in scope of a manifest built after it
+    (`test_cutover.py::test_head_sync_is_in_scope_and_capture_is_refused`). The pinned `9a718b9`
+    copy is in scope of both.
   - What a static reading cannot see is still checked where it is called: a method on an object,
     `getattr`, a name bound at run time. The facade raises `NotYetSupported` before a
     `release-gap` call mutates, and its context-specific gaps (export file formats, unrecorded
@@ -255,8 +258,10 @@ signed. This check enforces the rule in software only, and grants no cutover.
     a round can be matched to the signed amendment's manifest. The adapter does not yet refuse a
     host whose manifest differs from the signed one: there is no signed one.
   - Diagnostic imports are not scope-checked. They stay possible and flagged (QG-02).
-- **In scope today.** The route-guard probes (M8) and the wand's `painter_create.py` and
-  `painter_export.py` name only `supported` symbols. `smart` and `capture` do not.
+- **In scope today.** The route-guard probes (M8), the wand's `painter_create.py` and
+  `painter_export.py`, and HEAD's `sync` name only `supported` symbols. `smart` and `capture` do
+  not: `capture`'s shim call is `uzpainter.render.capture`, `pending-evidence` because the preview
+  pass is never parity evidence (render parity is gate G5's), so a production `capture` is refused.
 
 ## M14 -- Manifest blocks of a conformant export (`manifest_blocks.py`)
 

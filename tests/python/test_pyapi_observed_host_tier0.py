@@ -1,8 +1,10 @@
 """Compared replays of the four P22-B host goldens (task phase1.24_python-api-facade item 4.1;
 decision 297; local run on the owner's machine, decision 028).
 
-`p22b-host-application`, `p22b-host-events`, `p22b-host-resources` and `p22b-host-plugins` run
-through the facade with the recorder's own Painter-side code (`observed_replay.replay_observed`).
+`p22b-host-application`, `p22b-host-events`, `p22b-host-resources` and `p22b-host-plugins`, and
+`resource-retrieve-cached-url` (`Resource.retrieve` on a cached URL, task
+phase3.1_assets3d-cutover), run through the facade with the recorder's own Painter-side code
+(`observed_replay.replay_observed`).
 Every output of both recordings is compared field by field with the golden read from the private
 store at run time (`compare_observed`). No Painter value is in this file.
 
@@ -76,6 +78,8 @@ EXCLUDED: dict[str, dict[str, str]] = {
     ),
     "p22b-host-events": {},
     "p22b-host-plugins": {},
+    # `Resource.retrieve` as the Assets3D sync calls it (task phase3.1_assets3d-cutover).
+    "resource-retrieve-cached-url": {},
     "p22b-host-resources": {
         "s5/import_project_resource": (
             "refused: a COLOR_LUT import raises UnsupportedInUzPainter before any change, as the "

@@ -91,6 +91,7 @@ Each quirk comes from a Tier 0 api-probe and is compared exactly by `test_pyapi_
 - `ResourceID(context, name, version)`: the context is `project<N>`, the session's N-th project created or opened.
 - The version is `<sha1>.image`. The facade computes the SHA-1 when it imports a file and keeps it in the project Metadata context `uzpainter.facade`, written in the same native transaction as the import.
 - A binding keeps, for the session, the context of the identifier it was given. A reopened project reads back in its new context.
+- `Resource.retrieve(identifier)` (Tier 0 `resource-retrieve-cached-url`): in the current context, the one resource held under that name and version, else `[]`; an identifier of another project context (a URL cached before a reopen) raises `ValueError("invalid resource id")`. Unversioned or non-project identifiers, and no open project, are unrecorded and raise `NotYetSupported`. The usage of the returned resource is the one its entry was imported with (`uzpainter.resource.resource_usage`).
 
 ## 6. `js.evaluate` (10 §3; decision 107 §6)
 
