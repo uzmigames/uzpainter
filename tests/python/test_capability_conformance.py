@@ -171,17 +171,9 @@ def recipes() -> dict[Any, tuple[str, str]]:
                 else f"uzpainter.project.create(PLANE, {settings})"
             )
             r[f"{root}.project.ProjectWorkflow.{workflow}"] = (CLOSED, create)
-    r["substance_painter.layerstack.FillLayerNode.set_material_source"] = (
-        "",
-        "fill.set_material_source(None)",
-    )
     r["substance_painter.layerstack.FillEffectNode.set_material_source"] = (
         "effect = ls.insert_fill(ls.InsertPosition.inside_node(masked, ls.NodeStack.Mask))",
         "effect.set_material_source(None)",
-    )
-    r["uzpainter.layerstack.FillLayerNode.set_material_source"] = (
-        "",
-        "nfill.set_material_source(None)",
     )
     # The capture mode `painter_iray` (decision 148): refused first, with any arguments.
     r[("uzpainter.render.capture", "mode:painter_iray")] = (
@@ -191,7 +183,8 @@ def recipes() -> dict[Any, tuple[str, str]]:
     r["uzpainter.layerstack.FillEffectNode.set_material_source"] = (
         "neffect = nls.get_node_by_uid(ls.insert_fill("
         "ls.InsertPosition.inside_node(masked, ls.NodeStack.Mask)).uid())",
-        "neffect.set_material_source(None)",
+        # The native call takes the resource URL (decision 416); a fill effect refuses it.
+        "neffect.set_material_source('resource://uzp/none?version=1')",
     )
     for field, value in (
         ("mesh_settings", "object()"),
