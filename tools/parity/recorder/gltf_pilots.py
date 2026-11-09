@@ -1,7 +1,9 @@
-r"""Painter's own `glTF PBR Metal Roughness` export on the three pilots (phase3.1 item 3.1).
+r"""Painter's own `glTF PBR Metal Roughness` export on the three pilots (phase3.1 item 3.1), and
+its `Unreal Engine (Packed)` export (phase3.2_unreal-ue56-packed-preset item 3.1).
 
     python -m tools.parity.recorder.script_run manifest --pilot wand-gltf|sash-gltf|tunic-gltf \
         --assets-root <Assets3D> --out parity/envelopes/<envelope>/requests/phase3/tier1/<id>.json
+    python -m tools.parity.recorder.script_run manifest --pilot wand-unreal|sash-unreal|tunic-unreal
 
 Each request is the pilot's admitted Tier 1 golden of the current envelope, its authored part
 unchanged except for the export: every input (pinned by SHA-256, resolved in Assets3D or by hash
@@ -19,6 +21,9 @@ predefined preset by the URL R-314 observed (`export-preset-generator://gltf`, d
 pilot's one texture set, and the pilot's own export parameters (PNG 16, its size, `infinite`
 padding, no dithering), as R-314's `gltf-pipeline` probe did. Painter writes glTF scene files
 beside the textures; the recorder keeps them as `exported_sidecar` blobs, never as maps.
+
+The Unreal requests are the same with `parity/fixtures/tier1/<pilot>-unreal/export-config.json`,
+which names Painter's starter-assets preset by the versioned URL R-322 observed (decision 322).
 """
 
 from __future__ import annotations
@@ -36,11 +41,14 @@ from tools.parity.schemas import REPO_ROOT, Schema, load_json, validation_errors
 from tools.parity.verdict import resolve_golden
 
 GLTF_URL = "export-preset-generator://gltf"  # R-314's observed predefined URL (decision 314)
+# R-322's observed starter-assets URL (decision 322, `unreal_preset_control.PRESET`).
+UNREAL_URL = "resource://starter_assets/Unreal Engine (Packed)?version=8339356058946582545.spexp"
 CONFIG_ID = "gltf-export-config"
+UNREAL_CONFIG_ID = "unreal-export-config"
 
 
-def fixture(pilot: str) -> str:
-    return f"parity/fixtures/tier1/{pilot}-gltf/export-config.json"
+def fixture(pilot: str, preset: str = "gltf") -> str:
+    return f"parity/fixtures/tier1/{pilot}-{preset}/export-config.json"
 
 
 # pilot -> (the admitted base golden, the glTF golden id, the domain)
@@ -57,6 +65,23 @@ PILOT_GOLDENS: dict[str, tuple[str, str, str]] = {
         "tier1/pilot/tunic-v10-gltf",
     ),
 }
+
+# pilot -> (the admitted base golden, the Unreal golden id, the domain)
+UNREAL_PILOT_GOLDENS: dict[str, tuple[str, str, str]] = {
+    pilot: (base, f"phase3/tier1/{pilot}-unreal", f"tier1/pilot/{pilot}-unreal")
+    for pilot, (base, _, _) in PILOT_GOLDENS.items()
+}
+
+UNREAL_DESCRIPTION = (
+    "Painter's own Unreal Engine (Packed) export of the Tier 1 pilot {base} "
+    "(phase3.2_unreal-ue56-packed-preset item 3.1). Every input, the create and the sync are the "
+    "admitted {base} golden's, byte for byte, run with the same recorder adaptations. {export} "
+    "The authored configuration export-config.json names Painter's starter-assets preset by the "
+    "versioned URL R-322 observed (decision 322) for the texture set {root}, with the pilot's own "
+    "export parameters: PNG 16, sizeLog2 {size}, infinite padding, no dithering, no shader "
+    "parameters. Recordings: r1 (same session), r1-repeat (same session, every export again) and "
+    "r2 (after save, close and reopen, every export again). No packing or value is presumed."
+)
 
 DESCRIPTION = (
     "Painter's own glTF PBR Metal Roughness export of the Tier 1 pilot {base} "
@@ -81,30 +106,41 @@ NATIVE_EXPORT = (
 )
 
 
-def gltf_manifest(pilot: str, assets_root: Path, repo_root: Path = REPO_ROOT) -> dict[str, Any]:
-    """The glTF request of `pilot` (the module's docstring), refused unless its base golden is
-    admitted under the current envelope and the request loads as a pipeline job."""
-    base_id, golden_id, domain = PILOT_GOLDENS[pilot]
+def gltf_manifest(
+    pilot: str, assets_root: Path, repo_root: Path = REPO_ROOT, preset: str = "gltf"
+) -> dict[str, Any]:
+    """The glTF (or, with `preset="unreal"`, the Unreal) request of `pilot` (the module's
+    docstring), refused unless its base golden is admitted under the current envelope and the
+    request loads as a pipeline job."""
+    unreal = preset == "unreal"
+    base_id, golden_id, domain = (UNREAL_PILOT_GOLDENS if unreal else PILOT_GOLDENS)[pilot]
+    config_id = UNREAL_CONFIG_ID if unreal else CONFIG_ID
     resolved = resolve_golden(base_id, repo_root)
     if resolved is None or resolved.stale:
         raise RecorderError(f"{golden_id}: {base_id} is not admitted under the current envelope")
     manifest = copy.deepcopy(dict(load_json(resolved.manifest_path)))
     manifest["private_records"] = []
-    path = fixture(pilot)
+    path = fixture(pilot, preset)
     config = load_json(repo_root / path)
     root = config["exportList"][0]["rootPath"]
     size = config["exportParameters"][0]["parameters"]["sizeLog2"]
     steps = manifest["instruction_sequence"]["steps"]
     item = {
-        "input_id": CONFIG_ID,
+        "input_id": config_id,
         "kind": "recipe_json",
         "path": path,
         "sha256": sha256_file(repo_root / path),
         "provenance": {
             "origin": "uzmigames_authored",
             "licence": "Apache-2.0",
-            "note": "Painter's predefined glTF preset on the pilot's texture set, with the "
-            "pilot's export parameters (phase3.1_unreal-gltf-pbr-preset item 3.1).",
+            "note": (
+                "Painter's starter-assets Unreal Engine (Packed) preset on the pilot's texture "
+                "set, with the pilot's export parameters (phase3.2_unreal-ue56-packed-preset "
+                "item 3.1)."
+                if unreal
+                else "Painter's predefined glTF preset on the pilot's texture set, with the "
+                "pilot's export parameters (phase3.1_unreal-gltf-pbr-preset item 3.1)."
+            ),
         },
     }
     if steps[-1]["call"] == CONFIG_EXPORT:  # the native job's one closing export, replaced
@@ -113,17 +149,19 @@ def gltf_manifest(pilot: str, assets_root: Path, repo_root: Path = REPO_ROOT) ->
         steps[-1] = {
             "step": steps[-1]["step"],
             "call": CONFIG_EXPORT,
-            "args": {"config": CONFIG_ID},
+            "args": {"config": config_id},
         }
         export = NATIVE_EXPORT
     else:
-        steps.append({"step": len(steps) + 1, "call": CONFIG_EXPORT, "args": {"config": CONFIG_ID}})
+        steps.append({"step": len(steps) + 1, "call": CONFIG_EXPORT, "args": {"config": config_id}})
         export = SCRIPT_EXPORT.format(base=base_id)
     manifest["inputs"] = [*manifest["inputs"], item]
     manifest.update(
         golden_id=golden_id,
         domain=domain,
-        description=DESCRIPTION.format(base=base_id, export=export, root=root, size=size),
+        description=(UNREAL_DESCRIPTION if unreal else DESCRIPTION).format(
+            base=base_id, export=export, root=root, size=size
+        ),
     )
     problems = validation_errors(manifest, Schema.GOLDEN_PUBLIC)
     if problems:
@@ -133,5 +171,9 @@ def gltf_manifest(pilot: str, assets_root: Path, repo_root: Path = REPO_ROOT) ->
 
 
 PILOTS: dict[str, Callable[[Path], dict[str, Any]]] = {
-    f"{pilot.split('-')[0]}-gltf": partial(gltf_manifest, pilot) for pilot in PILOT_GOLDENS
+    **{f"{pilot.split('-')[0]}-gltf": partial(gltf_manifest, pilot) for pilot in PILOT_GOLDENS},
+    **{
+        f"{pilot.split('-')[0]}-unreal": partial(gltf_manifest, pilot, preset="unreal")
+        for pilot in UNREAL_PILOT_GOLDENS
+    },
 }

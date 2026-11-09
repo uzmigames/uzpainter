@@ -7,10 +7,19 @@ from pathlib import Path
 
 import pytest
 
-from tools.parity.recorder.gltf_pilots import CONFIG_ID, GLTF_URL, PILOT_GOLDENS, gltf_manifest
+from tools.parity.recorder.gltf_pilots import (
+    CONFIG_ID,
+    GLTF_URL,
+    PILOT_GOLDENS,
+    UNREAL_CONFIG_ID,
+    UNREAL_PILOT_GOLDENS,
+    UNREAL_URL,
+    gltf_manifest,
+)
 from tools.parity.recorder.script_run import CONFIG_EXPORT, NativeJob, pipeline_job_from_manifest
 from tools.parity.schemas import REPO_ROOT, load_json
 from tools.parity.store.store import locate
+from tools.parity.tier0_semantics.unreal_preset_control import PRESET as R322_URL
 from tools.parity.verdict import resolve_golden
 
 ASSETS = Path(r"E:\UzmiGames\Assets3D")
@@ -82,3 +91,42 @@ def test_the_runner_names_the_gltf_normal_of_each_pilot(pilot: str) -> None:
     config = load_json(REPO_ROOT / f"parity/fixtures/tier1/{pilot}-gltf/export-config.json")
     root = config["exportList"][0]["rootPath"]
     assert normal_maps_of(config) == {f"{root}_normal"}
+
+
+# ── The Unreal Engine (Packed) requests (phase3.2_unreal-ue56-packed-preset item 3.1) ──────────
+
+
+@pytest.mark.parametrize("pilot", sorted(UNREAL_PILOT_GOLDENS))
+def test_the_unreal_request_is_its_pilot_golden_closed_by_the_unreal_preset(pilot: str) -> None:
+    """The same request as the glTF one, closed by the authored configuration naming Painter's
+    starter-assets preset by the versioned URL R-322 observed."""
+    assert UNREAL_URL == R322_URL
+    _, golden_id, domain = UNREAL_PILOT_GOLDENS[pilot]
+    assert (golden_id, domain) == (f"phase3/tier1/{pilot}-unreal", f"tier1/pilot/{pilot}-unreal")
+    request = load_json(committed(golden_id))
+    gltf = load_json(committed(PILOT_GOLDENS[pilot][1]))
+    steps = request["instruction_sequence"]["steps"]
+    assert steps[-1] == {
+        "step": len(steps),
+        "call": CONFIG_EXPORT,
+        "args": {"config": UNREAL_CONFIG_ID},
+    }
+    assert steps[:-1] == gltf["instruction_sequence"]["steps"][:-1]
+    assert request["inputs"][:-1] == gltf["inputs"][:-1]
+    assert request["applied_settings"] == gltf["applied_settings"]
+    config = next(i for i in request["inputs"] if i["input_id"] == UNREAL_CONFIG_ID)
+    data = load_json(REPO_ROOT / config["path"])
+    gltf_config = load_json(REPO_ROOT / f"parity/fixtures/tier1/{pilot}-gltf/export-config.json")
+    assert data == {**gltf_config, "defaultExportPreset": UNREAL_URL}
+
+
+@pytest.mark.parametrize("pilot", sorted(UNREAL_PILOT_GOLDENS))
+def test_the_committed_unreal_request_is_the_generator_s(pilot: str) -> None:
+    if not (ASSETS / "AGENTS.md").is_file() or locate() is None:
+        pytest.skip("the asset repository or the private store is not on this machine")
+    _, golden_id, _ = UNREAL_PILOT_GOLDENS[pilot]
+    request = load_json(committed(golden_id))
+    assert {**request, "private_records": []} == gltf_manifest(pilot, ASSETS, preset="unreal")
+    job = pipeline_job_from_manifest(request, ASSETS)
+    assert job.config_export is not None and job.config_export.config_id == UNREAL_CONFIG_ID
+    assert isinstance(job, NativeJob) == (pilot == "tunic-v10")

@@ -1,0 +1,20 @@
+{
+  "exportShaderParams": false,
+  "defaultExportPreset": "resource://starter_assets/Unreal Engine (Packed)?version=8339356058946582545.spexp",
+  "exportList": [
+    {
+      "rootPath": "11-Varinha-Madeira"
+    }
+  ],
+  "exportParameters": [
+    {
+      "parameters": {
+        "fileFormat": "png",
+        "bitDepth": "16",
+        "sizeLog2": 11,
+        "paddingAlgorithm": "infinite",
+        "dithering": false
+      }
+    }
+  ]
+}
