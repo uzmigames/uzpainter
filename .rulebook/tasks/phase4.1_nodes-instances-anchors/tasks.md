@@ -6,6 +6,7 @@
 - [ ] 2.2 Instance layers: creation, hierarchy-only insertion, evaluation of the source subtree at the instance's position with the instance's own blending and masks, source edits propagating, source deletion as probed
 - [ ] 2.3 Anchor effects publishing the current content under their name at their position in the content-effect list
 - [ ] 2.4 `reference` sources with channel mapping or referenced channel, alpha matte and levels, in fills, fill effects, masks and generator image inputs
+  - Note: decision 412 §5 (applied 2026-11-08) moves here from `phase3.2_source-substance-presets-inputs` the anchor clause of `SourceSubstance.set_source` on an image input: a `SourceReference` (`KeepAlpha`, `BaseColor`) returned and read back, then `reset_source` restoring the unplugged state. Recorded evidence: `tier0/api-probes/source-substance-input-anchor` steps 8-13, both recordings (admitted, golden `27c8faa1fdc7`). Until this item, that call keeps refusing before mutation.
 - [ ] 2.5 Instances and references in the evaluation DAG with subtree-hash invalidation; cycles raise `ValueError` before mutation
 - [ ] 2.6 `layer_instantiate`, `anchor_list` and reference sources in `uzpainter`, the facade and the MCP stack family with set→get readback and recipe-dump entries
 - [ ] 2.7 Capability-manifest entries with evidence ids; operation-matrix rows with Python-disabled conformance fixtures

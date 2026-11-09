@@ -10,6 +10,7 @@
 - [ ] 2.3 Extend the snapshot capture domain to preset and image-input signatures and multiple outputs (needs a decision); exact-signature serving only
   - Note: the decision is 412 item 3 (output per snapshot, `preset` in the signature reached by Painter's own apply_preset, inputs by bitmap hash and colour space or working colour; anchors outside). Native implementation and the capture of this asset are not done.
 - [ ] 2.4 Implement the moved methods in the native module and the facade from the recorded observations; unrecorded behaviour keeps refusing before mutation
+  - Note: scope split (decision 412 §5, applied by the coordinator 2026-11-08): the anchor clause (`set_source` with an anchor point and the readbacks that depend on it, `source-substance-input-anchor` steps 8-13) moves to `phase4.1_nodes-instances-anchors` item 2.4. This task keeps that golden's steps 6-7; `set_source` with an anchor point keeps refusing before mutation.
 
 ## 3. Tests
 - [ ] 3.1 Compared replay of both recordings, exact, with the decision 112 trace; only then promote the capability entries

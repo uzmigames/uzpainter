@@ -1,6 +1,6 @@
 # 412. The presets, inputs and outputs probe runs on the first surveyed starter material, and its observations scope the capture domain
 
-**Status**: accepted (item 5 proposed, pending the coordinator)
+**Status**: accepted (item 5 applied by the coordinator, 2026-11-08)
 **Date**: 2026-11-08
 **Related Tasks**: phase3.2_source-substance-presets-inputs, phase3.3_procedural-families, phase4.1_nodes-instances-anchors
 
@@ -30,7 +30,7 @@ Measured facts (Painter `12.2.0+js-api.1.1.20`, Legacy, under the shared Painter
    - **Image inputs.** The signature's `inputs` names each plugged input: a bitmap by the SHA-256 of its file bytes and its colour space, a uniform colour by its working-space value. An unplugged input is absent. A source with an anchor reference stays outside the domain.
    - The default `mask_output`, the unplugged `get_source` error and the refusals of each context are served from the recorded metadata of the snapshot of the current exact signature, as `/2` and `/3` serve presets and properties.
 4. **Evidence.** The capability entries of the moved methods stay `release-gap` until the compared, traced replay of both recordings (decision 112) passes over a project-private capture of this asset.
-5. **Proposed: the anchor clause moves to `phase4.1_nodes-instances-anchors`.** Anchor reference sources are that task's scope and are not implemented. `source-substance-input-anchor` is recorded evidence for it. This narrows this task's acceptance, so it waits for the coordinator; until then the anchor clause stays open here.
+5. **The anchor clause moves to `phase4.1_nodes-instances-anchors`** (applied 2026-11-08 by the coordinator, under the owner's rule to close through scope splits). Anchor reference sources are that task's scope (its item 2.4 covers `reference` sources in fills and in image inputs; anchor effects and reference sources are release gaps it owns) and are not implemented here. `set_source` of an image input with an anchor point, and every readback that depends on it, are owned by that task, with `source-substance-input-anchor` steps 8-13 as its recorded evidence. This task keeps that golden's steps 6 and 7 (`image_inputs` and the unplugged `get_source` error of a fresh material source), which do not depend on the anchor. Until that task implements reference sources, `set_source` with an anchor point keeps refusing before mutation.
 
 ## Alternatives Considered
 
@@ -42,4 +42,4 @@ Measured facts (Painter `12.2.0+js-api.1.1.20`, Legacy, under the shared Painter
 ## Consequences
 
 - `phase3.2_source-substance-presets-inputs` items 2.1 and 2.2 are done; item 2.3 has its decision but no implementation. The native extension (signature inputs, preset field and metadata, multi-output material references, the bridge's capture of every output), the capture of this asset, the facade methods and the traced replay remain.
-- `phase4.1_nodes-instances-anchors` gains a recorded anchor-input observation once item 5 is confirmed.
+- `phase4.1_nodes-instances-anchors` owns the anchor-input clause and its recorded observation (`source-substance-input-anchor` steps 8-13), noted in its item 2.4.
