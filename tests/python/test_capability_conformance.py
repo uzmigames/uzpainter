@@ -180,6 +180,11 @@ def recipes() -> dict[Any, tuple[str, str]]:
         "",
         "uzpainter.render.capture(WORK + '/iray.png', 'painter_iray')",
     )
+    # Its Vulkan entry (phase3.2_vulkan-ray-tracing 2.13): the refusal comes before the process's
+    # GPU backend is consulted (`RefuseUnavailableMode`), so the same call proves it.
+    r[("uzpainter.render.capture", "mode:painter_iray:backend:vulkan")] = r[
+        ("uzpainter.render.capture", "mode:painter_iray")
+    ]
     r["uzpainter.layerstack.FillEffectNode.set_material_source"] = (
         "neffect = nls.get_node_by_uid(ls.insert_fill("
         "ls.InsertPosition.inside_node(masked, ls.NodeStack.Mask)).uid())",
