@@ -27,7 +27,7 @@ def request_for(root: Path, mesh: Path, report: dict[str, Any]) -> Path:
     proof = root / "proof.json"
     write_json(proof, {"inspection": True, "low_high_fidelity": {"pass": True}})
     manifest: dict[str, Any] = {
-        "schema": 1,
+        "schema": 2,
         "type": "piece-manifest",
         "files": {},
         "meshes": {"low": {"file": "mesh"}},

@@ -17,6 +17,9 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Never
 
 SCHEMA = "uzpainter/assets3d-admission/1"
+# `schema` of an Assets3D piece manifest: `Pipeline/manifest/manifest-schema-v2.json`
+# `$defs/manifest/properties/schema` is `{"const": 2}`, as every real piece manifest holds.
+MANIFEST_SCHEMA = 2
 ROLES = {
     "geometry_fit": frozenset({"geometry", "fit"}),
     "low_uv": frozenset({"low_uv"}),
@@ -226,10 +229,10 @@ def assess(
         evidence.manifest = manifest
         if (
             type(manifest.get("schema")) is not int
-            or manifest.get("schema") != 1
+            or manifest.get("schema") != MANIFEST_SCHEMA
             or manifest.get("type") != "piece-manifest"
         ):
-            raise EvidenceError("expected Assets3D v2 piece-manifest (schema=1)")
+            raise EvidenceError(f"expected Assets3D v2 piece-manifest (schema={MANIFEST_SCHEMA})")
         low = object_of(pointer(manifest, "/meshes/low"), "meshes.low")
         mesh_bytes = evidence.file(low.get("file"))
         mesh_hash = hashlib.sha256(mesh_bytes).hexdigest()

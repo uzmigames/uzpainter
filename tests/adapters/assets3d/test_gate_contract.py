@@ -29,7 +29,7 @@ def evidence(tmp_path: Path) -> tuple[dict[str, Any], dict[str, Any], Path]:
         tmp_path / "proof.json", {"inspection": True, "low_high_fidelity": {"pass": True}}
     )
     manifest: dict[str, Any] = {
-        "schema": 1,
+        "schema": 2,
         "type": "piece-manifest",
         "files": {
             "mesh": {
@@ -571,3 +571,30 @@ def test_empty_selected_text_is_not_evidence(
     proof["bytes"] = (root / "proof.json").stat().st_size
     refresh(request, manifest, root)
     assert "selected evidence is empty" in gates.assess(request).problems[0]
+
+
+@pytest.mark.parametrize("schema", [1, "2", 3, None])
+def test_only_the_v2_piece_manifest_schema_is_read(
+    evidence: tuple[dict[str, Any], dict[str, Any], Path], schema: Any
+) -> None:
+    """Assets3D `manifest-schema-v2.json` fixes a piece manifest's `schema` to 2 (`$defs/manifest`),
+    as the real piece manifests hold; any other value is refused before a gate is read."""
+    request, manifest, root = evidence
+    manifest["schema"] = schema
+    refresh(request, manifest, root)
+    result = gates.assess(request)
+    assert not result.eligible
+    assert result.problems == ("expected Assets3D v2 piece-manifest (schema=2)",)
+
+
+ASSETS3D_SCHEMA = Path("E:/UzmiGames/Assets3D/Pipeline/manifest/manifest-schema-v2.json")
+
+
+@pytest.mark.skipif(
+    not ASSETS3D_SCHEMA.is_file(),
+    reason=f"the UzmiGames asset repository is not at {ASSETS3D_SCHEMA.parents[2]} (local run)",
+)
+def test_the_manifest_schema_matches_the_assets3d_definition() -> None:
+    definition = json.loads(ASSETS3D_SCHEMA.read_text(encoding="utf-8"))["$defs"]["manifest"]
+    assert definition["properties"]["schema"] == {"const": gates.MANIFEST_SCHEMA}
+    assert definition["properties"]["type"] == {"const": "piece-manifest"}

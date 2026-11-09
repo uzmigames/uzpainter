@@ -140,7 +140,9 @@ the producer's for that requirement. Fidelity must explicitly reference the
 `/low_high_fidelity` evidence selector as well as cover the bake stage; a generic
 bake tag cannot silently discharge it.
 
-The manifest is schema-v2's `type: piece-manifest, schema: 1` document. All declared
+The manifest is schema-v2's `type: piece-manifest, schema: 2` document (`manifest-schema-v2.json`
+`$defs/manifest` fixes `schema` to 2, as every real piece manifest holds; the check named 1 until
+2026-11-09 and refused every real manifest). All declared
 upstream gates covering geometry, fit, coverage, low_uv or bake are checked, not
 only the requested bindings. A parallel pending/fail or unverified/reopened gate
 cannot be hidden by another pass. A confirmed `not_applicable` gate requires a
