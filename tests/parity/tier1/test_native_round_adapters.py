@@ -608,6 +608,22 @@ def test_the_runner_takes_a_native_jobs_normal_maps_from_its_configuration() -> 
     assert runner.normal_maps_of(inline_first) == {"Own_Normal"}  # an inline preset comes first
 
 
+def test_the_runner_names_the_unreal_normal_with_the_mesh() -> None:
+    """The Unreal pilots (decision 422): R-322's versioned URL resolves to the authored
+    `unreal-engine-packed`, whose Normal is named `$mesh_$textureSet_Normal(_$colorSpace)(.$udim)`:
+    `$mesh` is the imported mesh's stem when the runner knows it, and refused otherwise."""
+    unreal = REPO_ROOT / "parity/fixtures/tier1/tunic-v10-unreal/export-config.json"
+    config = json.loads(unreal.read_text(encoding="utf-8"))
+    assert runner.normal_maps_of(config, mesh="tunic_low") == {
+        "tunic_low_DefaultMaterial_Normal_Raw"
+    }
+    with pytest.raises(runner.NativeSubjectRefused, match=r"another token \$mesh"):
+        runner.normal_maps_of(config)
+    unrecorded = {**config, "defaultExportPreset": config["defaultExportPreset"] + "0"}
+    with pytest.raises(runner.NativeSubjectRefused, match="is not recorded"):
+        runner.normal_maps_of(unrecorded, mesh="tunic_low")
+
+
 TUNIC_CONFIG = REPO_ROOT / "parity/fixtures/tier1/tunic-v10/export-config.json"
 
 

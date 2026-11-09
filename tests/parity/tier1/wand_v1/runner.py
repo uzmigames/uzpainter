@@ -187,7 +187,9 @@ STARTER_ASSETS = "resource://starter_assets/"
 # The one Painter preset a native subject resolves, as `src/export/preset_aliases.cpp` aliases it:
 # its Painter name -> the authored catalogue preset and the recorded versions of its URL.
 PRESET_ALIASES = {
-    "Blender (Principled BSDF)": ("blender-principled-bsdf", frozenset({"13120355637414252359"}))
+    "Blender (Principled BSDF)": ("blender-principled-bsdf", frozenset({"13120355637414252359"})),
+    # R-322's versioned URL (decision 322; the Unreal pilots, phase3.2 item 3.1, decision 422).
+    "Unreal Engine (Packed)": ("unreal-engine-packed", frozenset({"8339356058946582545.spexp"})),
 }
 # Painter's predefined presets by the URL Painter names them (R-314, decision 314): the URL -> its
 # Painter name and the authored catalogue preset (`src/export/preset_aliases.cpp`).
@@ -238,7 +240,7 @@ def catalogue_maps(painter: str, preset_id: str) -> list[Any]:
     return list(preset["maps"])
 
 
-def map_name(file_name: str, root: str) -> str:
+def map_name(file_name: str, root: str, mesh: str | None = None) -> str:
     """A normal map's file name for the export root `root`: `$textureSet` the root, `$colorSpace`
     Raw, `$udim` empty (a native job is in the Default workflow, `src/export/EXPORT.md`), and each
     `( ... )` group kept without its parentheses, or dropped when its only tokens are `$udim`; a
@@ -249,6 +251,8 @@ def map_name(file_name: str, root: str) -> str:
             token = match.group(1)
             if token == "textureSet":
                 return root
+            if token == "mesh" and mesh is not None:
+                return mesh
             if token == "colorSpace":
                 return NORMAL_COLOUR_SPACE
             if token == "udim":
@@ -269,7 +273,18 @@ def map_name(file_name: str, root: str) -> str:
     return name
 
 
-def normal_maps_of(config: Mapping[str, Any]) -> frozenset[str]:
+def mesh_stem(job: Any) -> str | None:
+    """`$mesh` of a pipeline job: the stem of its one OBJ mesh input, the file both Painter's
+    recording and the rebuild import under its Assets3D name (`stage_inputs`); None without one."""
+    stems = {
+        Path(str(item.assets3d_path)).stem
+        for item in job.inputs.values()
+        if item.kind == "mesh" and str(item.assets3d_path).lower().endswith(".obj")
+    }
+    return stems.pop() if len(stems) == 1 else None
+
+
+def normal_maps_of(config: Mapping[str, Any], mesh: str | None = None) -> frozenset[str]:
     """The tangent-space normal maps a native job's closing configuration exports, under OCIO (a
     native job's only profile): each map of its default preset (`preset_maps`) whose every
     channel is a `Normal_OpenGL` or `Normal_DirectX` virtual map, named for each `exportList`
@@ -288,7 +303,7 @@ def normal_maps_of(config: Mapping[str, Any]) -> frozenset[str]:
             for c in channels
         ):
             continue
-        names |= {map_name(str(item["fileName"]), root) for root in roots}
+        names |= {map_name(str(item["fileName"]), root, mesh) for root in roots}
     return frozenset(names)
 
 
@@ -631,7 +646,7 @@ def _evidence(
         job = pipeline_job_from_manifest(load_manifest(manifest), wand_module.ASSETS3D)
         assert isinstance(job, NativeJob)
         native_ocio_sha256(job)  # OCIO only, the profile `normal_maps_of` names maps under
-        native_normals = normal_maps_of(job.config_export.config)
+        native_normals = normal_maps_of(job.config_export.config, mesh_stem(job))
     record = None
     if reopen:
         wand = built(painter, work / "run-1", manifest)
@@ -647,8 +662,8 @@ def _evidence(
     if native_normals is None:
         assert wand.job.export.arguments is not None
         normals = frozenset({f"{wand.job.export.arguments['prefix']}{NORMAL_SUFFIX}"})
-        if wand.job.config_export is not None:  # its closing export's (the glTF pilots)
-            normals |= normal_maps_of(wand.job.config_export.config)
+        if wand.job.config_export is not None:  # its closing export's (the glTF and Unreal pilots)
+            normals |= normal_maps_of(wand.job.config_export.config, mesh_stem(wand.job))
     else:
         normals = native_normals
     meshes = [
