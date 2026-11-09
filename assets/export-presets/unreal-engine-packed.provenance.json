@@ -1,9 +1,9 @@
 {
   "schema": "uzpainter/export-preset-provenance/1",
-  "version": 1,
+  "version": 2,
   "author": "UzmiGames",
   "licence": "Apache-2.0",
-  "date": "2026-10-20",
+  "date": "2026-11-09",
   "reviewer": null,
   "preset": "unreal-engine-packed",
   "answersTo": [
@@ -33,67 +33,84 @@
       "page": "UzPainter decision 023 (owner answer Q10); docs/architecture/08-export.md §4 Unreal Engine (Packed)",
       "section": "UE 5.6 target, encodings and the SpecularWeight consumer gap",
       "facts": "Target UE 5.6; PNG/TGA 8-bit by default and an optional DDS variant (BC7 BaseColor, ORM and Emissive, BC5 Normal); SpecularWeight exported as a separate map and reported in the receipt as a consumer gap, its mapping Specular = 0.5 x SpecularWeight left to the consumer."
+    },
+    {
+      "kind": "uzmigames-observation",
+      "page": "Recording R-322 (decision 322): export-presets-unreal-packed-legacy and -ocio, Painter 12.2.0, on the UzmiGames-authored bevelled cube",
+      "section": "ResourceExportPreset.list_output_maps of the versioned starter-assets URL; dry-run lists and exports of five configurations, r1 and r2",
+      "facts": "Confirms, never sources: the URL resource://starter_assets/Unreal Engine (Packed)?version=8339356058946582545.spexp; four maps BaseColor (RGB baseColor, A opacity), OcclusionRoughnessMetallic (R AO_Mixed, G roughness, B metallic), Normal (Normal_DirectX) and Emissive (emissive), each named $mesh_$textureSet_<map>(_$colorSpace)(.$udim) at PNG 8, dithering on the Normal only; no padding (own parameters raise 'padding algorithm could not be resolved'); no SpecularWeight map; under OCIO the names end _sRGB (BaseColor, Emissive) and _Raw (OcclusionRoughnessMetallic, Normal); TGA 8 files equal the PNG 8 files in decoded values on every map, r1 = r2."
     }
   ],
-  "privateRecords": [],
+  "privateRecords": [
+    {
+      "golden_id": "tier0/semantics/export-presets-unreal-packed-legacy",
+      "record_sha256": "313c261b65d68c511404e3b24a99df6f223d3110b9db6ba1d32e1f7a56f8d599"
+    },
+    {
+      "golden_id": "tier0/semantics/export-presets-unreal-packed-ocio",
+      "record_sha256": "fd227d2a18fec4daac9b919c4e482dc77cf2365cbce237f1f0c021c885107dc7"
+    }
+  ],
   "packing": [
     {
-      "fileName": "$mesh_$textureSet_BaseColor",
-      "decision": "RGB from documentMap basecolor, A from documentMap opacity (dropped when the stack has no opacity channel, probe P7); the colour is written in its channel's encoding (an sRGB8 BaseColor sRGB-encoded, decision 126); PNG 8",
-      "source": "08-export.md §4 (RGB basecolor, A opacity); UE 5.6 texture import (base colour sampled sRGB); decision 023 (8-bit default)",
-      "status": "hypothesis"
+      "fileName": "$mesh_$textureSet_BaseColor(_$colorSpace)(.$udim)",
+      "decision": "RGB from documentMap basecolor, A from documentMap opacity (dropped when the stack has no opacity channel, probe P7); the colour is written in its channel's encoding (an sRGB8 BaseColor sRGB-encoded, decision 126); PNG 8, no dithering",
+      "source": "08-export.md §4 (RGB basecolor, A opacity); UE 5.6 texture import (base colour sampled sRGB); decision 023 (8-bit default); confirmed by R-322",
+      "status": "confirmed"
     },
     {
-      "fileName": "$mesh_$textureSet_OcclusionRoughnessMetallic",
-      "decision": "R from virtualMap AO_Mixed, G from documentMap roughness, B from documentMap metallic, linear; PNG 8; refused until AO_Mixed is fitted (decision 131, item 2.10)",
-      "source": "08-export.md §4 (R AO_Mixed, G roughness, B metallic, linear); UE 5.6 ORM packing (occlusion R, roughness G, metallic B, no sRGB)",
-      "status": "hypothesis"
+      "fileName": "$mesh_$textureSet_OcclusionRoughnessMetallic(_$colorSpace)(.$udim)",
+      "decision": "R from virtualMap AO_Mixed, G from documentMap roughness, B from documentMap metallic, linear; PNG 8, no dithering; AO_Mixed is computed in decisions 411, 418 and 419's scope and refused outside it",
+      "source": "08-export.md §4 (R AO_Mixed, G roughness, B metallic, linear); UE 5.6 ORM packing (occlusion R, roughness G, metallic B, no sRGB); confirmed by R-322",
+      "status": "confirmed"
     },
     {
-      "fileName": "$mesh_$textureSet_Normal",
-      "decision": "RGB from virtualMap Normal_DirectX, linear; PNG 8",
-      "source": "08-export.md §4 (Normal_DirectX); UE 5.6 normal maps (DirectX convention)",
-      "status": "hypothesis"
+      "fileName": "$mesh_$textureSet_Normal(_$colorSpace)(.$udim)",
+      "decision": "RGB from virtualMap Normal_DirectX, linear; PNG 8 with dithering (an export that keeps it is refused until dithering is fitted, item 2.9)",
+      "source": "08-export.md §4 (Normal_DirectX); UE 5.6 normal maps (DirectX convention); confirmed by R-322",
+      "status": "confirmed"
     },
     {
-      "fileName": "$mesh_$textureSet_Emissive",
-      "decision": "RGB from documentMap emissive, written in its channel's encoding; PNG 8",
-      "source": "08-export.md §4 (_Emissive); UE 5.6 texture import (emissive sampled sRGB)",
-      "status": "hypothesis"
+      "fileName": "$mesh_$textureSet_Emissive(_$colorSpace)(.$udim)",
+      "decision": "RGB from documentMap emissive, written in its channel's encoding; PNG 8, no dithering; absent when the stack has no emissive channel (decision 091)",
+      "source": "08-export.md §4 (_Emissive); UE 5.6 texture import (emissive sampled sRGB); confirmed by R-322",
+      "status": "confirmed"
     },
     {
-      "fileName": "$mesh_$textureSet_SpecularWeight",
-      "decision": "L from documentMap specularweight, written when the stack has the channel (an absent documentMap makes the map absent, decision 091); PNG 8; the receipt reports it as a consumer gap",
-      "source": "decision 023; 08-export.md §4 (a separate _SpecularWeight map, Specular = 0.5 x SpecularWeight belongs to the consumer)",
-      "status": "hypothesis"
+      "fileName": "$mesh_$textureSet_SpecularWeight(_$colorSpace)(.$udim)",
+      "decision": "UzPainter extension: L from documentMap specularweight, written when the stack has the channel (an absent documentMap makes the map absent, decision 091); PNG 8, no dithering; the receipt reports it as a consumer gap. Painter's preset writes no such file (R-322, which has the channel); this is not a Painter parity claim.",
+      "source": "decision 023; 08-export.md §4 (a separate _SpecularWeight map, Specular = 0.5 x SpecularWeight belongs to the consumer); R-322 (Painter writes four maps)",
+      "status": "defined"
     },
     {
       "fileName": "(all)",
-      "decision": "Files named $mesh_$textureSet_<map>, each with fileFormat png and bitDepth 8 (the owner's 8-bit default); padding and dithering come from exportParameters until the recording shows what the preset itself sets; TGA is selected by an exportParameters rule and stays refused until its writer and Painter's TGA files exist (item 2.5); the DDS variant is the separate preset unreal-engine-packed-dds (decision 322)",
-      "source": "decision 023; 08-export.md §4; decision 322",
-      "status": "hypothesis"
+      "decision": "The reference is the starter-assets URL R-322 observed; the preset sets no padding (an export without an exportParameters padding is refused, as Painter raises); exportParameters override the maps' format, depth and dithering. TGA 8 holds the PNG 8 codes (R-322: equal in decoded values on all four maps, Legacy and OCIO). The DDS variant is the separate preset unreal-engine-packed-dds (decision 322).",
+      "source": "decision 023; 08-export.md §4; decision 322; R-322",
+      "status": "confirmed"
     }
   ],
   "parity": {
-    "layout": "unconfirmed",
+    "layout": "confirmed",
     "status": "pending",
     "pending": [
       {
         "recording": "R-322",
-        "owner": "phase3.2_unreal-ue56-packed-preset item 2.1",
-        "what": "Painter's files and dry run for Unreal Engine (Packed), by the reference the preset lists give, on a UzmiGames fixture with every channel the preset reads filled distinctly (BaseColor, Opacity, Roughness, Metallic, AO, Emissive, SpecularWeight, Normal, Height) and the AO and Normal mesh maps bound, with the preset's own parameters and with the pipeline's, at PNG 8 and at TGA 8, plus the preset lists and the preset's list_output_maps() (decision 322): confirms or corrects every map, its channels, its name, the preset's own parameters, its reference and Painter's TGA files."
+        "owner": "phase3.2_unreal-ue56-packed-preset items 2.1, 2.3 and 3.1",
+        "what": "Layout, names, URL and the preset's own parameters confirmed by R-322 Legacy/OCIO r1/r2. Decoded parity on the three pilots is item 3.1 (their Unreal goldens under EXC-013 and EXC-014); Painter's own PNG 8 defaults dither the Normal (item 2.9); SpecularWeight is a deliberate UzPainter extension with no Painter counterpart."
       }
     ],
     "tests": [
       "tests/export/test_export_presets.py::test_provenance_records_are_complete",
       "tests/export/test_export_presets.py::test_shipped_presets_pass_the_guard",
-      "tests/export/test_unreal_preset.py::test_unreal_presets_load_unconfirmed",
+      "tests/export/test_unreal_preset.py::test_unreal_presets_load_confirmed",
       "tests/export/test_unreal_preset.py::test_unreal_preset_packs_the_documented_layout",
-      "tests/export/test_unreal_preset.py::test_unreal_presets_are_refused_naming_r322",
+      "tests/export/test_unreal_preset.py::test_unreal_layout_matches_private_r322",
+      "tests/export/test_unreal_preset.py::test_unreal_presets_plan_by_every_reference",
       "tests/export/test_unreal_preset.py::test_variant_dry_run_lists_the_png8_maps",
-      "tests/export/test_unreal_preset.py::test_ao_mixed_stays_refused_in_the_variant",
       "tests/export/test_unreal_preset.py::test_specularweight_is_a_separate_map_and_a_consumer_gap",
-      "tests/export/test_unreal_preset.py::test_tga_is_refused_naming_r322"
+      "tests/export/test_unreal_preset.py::test_tga_holds_the_png8_codes",
+      "tests/export/test_unreal_preset.py::test_tga_outside_r322_is_refused",
+      "tests/export/test_unreal_preset.py::test_shipped_preset_publishes_in_ao_mixed_scope"
     ]
   }
 }

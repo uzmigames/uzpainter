@@ -107,9 +107,16 @@ struct DagSource {
     /// must be, checked against the image at evaluation (decision 190). `Srgb8Fill`: an 8-bit
     /// colour image in sRGB on an sRGB8 channel at 1:1, decoded as under legacy; `Raw8Fill`: an
     /// 8-bit colour image in Raw on an sRGB8 channel at 1:1 (`OcioRawDecoded`); `Grey16Mask`: a
-    /// 16-bit grey image in a linear space as a mask source at 1:1, read as under legacy.
-    enum class Ocio : uint8_t { None, Srgb8Fill, Raw8Fill, Grey16Mask };
+    /// 16-bit grey image in a linear space as a mask source at 1:1, read as under legacy;
+    /// `DataFill`: a 16-bit image in Data, DataSigned or NormalXYZLeft on a channel that is not
+    /// sRGB8 at 1:1, read as under legacy (R-322, decision 422). `Srgb8Fill` also admits a 16-bit
+    /// colour image when `ocioSoleFill` (`OcioSrgb16Code`, decision 422).
+    enum class Ocio : uint8_t { None, Srgb8Fill, Raw8Fill, Grey16Mask, DataFill };
     Ocio ocio = Ocio::None;
+    /// Under OCIO, this bitmap is the content of the one layer of its channel's root stack, a fill
+    /// in Normal mode at opacity 1 without mask or effects (dag.cpp `OcioSoleFill`): the only
+    /// place R-322 records a 16-bit sRGB bitmap's stored codes (decision 422).
+    bool ocioSoleFill = false;
     /// Hash of the content (source, projection, channel, format, profile, OCIO use).
     Digest hash{};
 };

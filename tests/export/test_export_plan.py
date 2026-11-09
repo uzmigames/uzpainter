@@ -353,9 +353,9 @@ def test_ocio_colour_space_of_normal_opengl_png16(export_tests: Path, tmp_path: 
     names it (`export-presets-ocio` step 35, `tunic-v10`): through the shipped Blender preset's
     maps given inline, and through its Normal map as Painter's readback lists it (s31). Not
     recorded, so refused: that file at PNG 8, as OpenEXR, as L, with its channels swapped or read
-    as luma, Normal_DirectX, another virtual map, and Normal_OpenGL mixed with a document channel.
-    The document channels keep their names, and under Legacy the wildcard stays empty. This pins
-    names only, not pixel parity."""
+    as luma, another virtual map, and Normal_OpenGL mixed with a document channel. Normal_DirectX's
+    RGB is `Raw` (R-322's `Normal_Raw`, decision 422). The document channels keep their names, and
+    under Legacy the wildcard stays empty. This pins names only, not pixel parity."""
     channels = {"BaseColor": "sRGB8", "Height": "L16F", "Normal": "RGB16F"}
     ocio = project(
         texture_set("s0", channels), color_management="ocio", config_hash=OCIO_CONFIG_SHA256
@@ -426,9 +426,10 @@ def test_ocio_colour_space_of_normal_opengl_png16(export_tests: Path, tmp_path: 
     assert paths(r[0]) == ["s0_BaseColor_sRGB.png", "s0_Normal_Raw.png", "s0_Displacement_Raw.png"]
     assert paths(r[1]) == ["s0_Normal_Raw.png"]
     assert paths(r[2]) == ["s0_Normal.png"]
-    for refusal in (r[3], *r[5:9], r[10]):
+    for refusal in (r[3], *r[5:8], r[10]):
         refused(refusal, "NotYetSupported", "$colorSpace under OCIO", "is not recorded")
-    refused(r[4], "NotYetSupported", "$colorSpace under OCIO is recorded for PNG files only")
+    refused(r[4], "NotYetSupported", "$colorSpace under OCIO is recorded for PNG and TGA files only")
+    assert paths(r[8]) == ["s0_Normal_Raw.png"]
     refused(r[9], "NotYetSupported", '"Diffuse"', "R-092")
 
 
@@ -725,8 +726,9 @@ def test_mixed_ao_is_rejected_with_ao_mixed(export_tests: Path, tmp_path: Path) 
 
 
 def test_refused_formats_raise_before_any_file(export_tests: Path, tmp_path: Path) -> None:
-    """3.4: TIFF (not in v1) and TGA (a later package) raise NotYetSupported naming the owner,
-    before any file exists; an unknown format is a ValueError with the alternatives."""
+    """3.4: TIFF (not in v1) raises NotYetSupported naming the owner, before any file exists;
+    TGA is written at 8 bits only (decision 422), so at 16 it is a ValueError; an unknown format
+    is a ValueError with the alternatives."""
     out = tmp_path / "out"
     cases = []
     for fmt in ("tiff", "tif", "tga", "jpeg", "dds", "psd", "webp", "sbsar", "pngx"):
@@ -737,7 +739,7 @@ def test_refused_formats_raise_before_any_file(export_tests: Path, tmp_path: Pat
     r = plan_many(export_tests, cases, tmp_path)
     refused(r[0], "NotYetSupported", '"tiff"', "not in v1")
     refused(r[1], "NotYetSupported", '"tif"', "not in v1")
-    refused(r[2], "NotYetSupported", '"tga"', "phase3.2_unreal-ue56-packed-preset")
+    refused(r[2], "ValueError", "is not supported by the format tga", "valid: 8")
     refused(r[3], "NotYetSupported", '"jpeg"', "phase3.2")
     refused(r[4], "NotYetSupported", '"dds"', "phase3.2")
     for i in (5, 6, 7):

@@ -55,6 +55,7 @@ def test_every_requested_golden_is_committed_once() -> None:
     assert ocio_goldens() == {
         "ao-mixed-islands-ocio",
         "export-ocio-encode",
+        "ocio-added-channel-bases",
         "export-presets-ocio",
         "export-presets-gltf-ocio",
         "export-presets-gltf-predefined-ocio",

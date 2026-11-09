@@ -22,6 +22,10 @@ constexpr std::string_view kRecording = "recording R-095, decision 095";
 /// (`SM/10-Chapeu/report.json → painter_recipe.export.preset_details.preset.url`).
 constexpr std::array<std::string_view, 1> kBlenderVersions{"13120355637414252359"};
 
+/// The `?version=` of the Unreal preset's starter-assets URL R-322 observes in Painter's preset
+/// list (decision 322, `tools/parity/tier0_semantics/unreal_preset_control.py` `PRESET`).
+constexpr std::array<std::string_view, 1> kUnrealVersions{"8339356058946582545.spexp"};
+
 constexpr std::array<std::string_view, 7> kShippedIds{"pbr-metallic-roughness",   "blender-principled-bsdf",
                                                        "assets3d-inline-five-map", "gltf-pbr-metal-roughness",
                                                        "uzengine",                 "unreal-engine-packed",
@@ -34,7 +38,7 @@ const std::array<PresetAlias, 4> kAliases{{
     {"glTF PBR Metal Roughness", "gltf-pbr-metal-roughness", {}, "recording R-314, decision 314",
      "export-preset-generator://gltf"},
     // phase3.2_unreal-ue56-packed-preset item 2.4 (CLR-06); its URL's versions: recording R-322.
-    {"Unreal Engine (Packed)", "unreal-engine-packed", {}, "recording R-322, decision 322"},
+    {"Unreal Engine (Packed)", "unreal-engine-packed", kUnrealVersions, "recording R-322, decision 322"},
 }};
 
 [[noreturn]] void Fail(std::string_view id, const std::string& problem) {

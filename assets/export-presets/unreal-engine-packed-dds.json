@@ -2,7 +2,7 @@
   "name": "unreal-engine-packed-dds",
   "maps": [
     {
-      "fileName": "$mesh_$textureSet_BaseColor",
+      "fileName": "$mesh_$textureSet_BaseColor(_$colorSpace)(.$udim)",
       "channels": [
         {
           "destChannel": "R",
@@ -31,11 +31,12 @@
       ],
       "parameters": {
         "fileFormat": "png",
-        "bitDepth": "16"
+        "bitDepth": "16",
+        "dithering": false
       }
     },
     {
-      "fileName": "$mesh_$textureSet_OcclusionRoughnessMetallic",
+      "fileName": "$mesh_$textureSet_OcclusionRoughnessMetallic(_$colorSpace)(.$udim)",
       "channels": [
         {
           "destChannel": "R",
@@ -58,11 +59,12 @@
       ],
       "parameters": {
         "fileFormat": "png",
-        "bitDepth": "16"
+        "bitDepth": "16",
+        "dithering": false
       }
     },
     {
-      "fileName": "$mesh_$textureSet_Normal",
+      "fileName": "$mesh_$textureSet_Normal(_$colorSpace)(.$udim)",
       "channels": [
         {
           "destChannel": "R",
@@ -85,11 +87,12 @@
       ],
       "parameters": {
         "fileFormat": "png",
-        "bitDepth": "16"
+        "bitDepth": "16",
+        "dithering": false
       }
     },
     {
-      "fileName": "$mesh_$textureSet_Emissive",
+      "fileName": "$mesh_$textureSet_Emissive(_$colorSpace)(.$udim)",
       "channels": [
         {
           "destChannel": "R",
@@ -112,11 +115,12 @@
       ],
       "parameters": {
         "fileFormat": "png",
-        "bitDepth": "16"
+        "bitDepth": "16",
+        "dithering": false
       }
     },
     {
-      "fileName": "$mesh_$textureSet_SpecularWeight",
+      "fileName": "$mesh_$textureSet_SpecularWeight(_$colorSpace)(.$udim)",
       "channels": [
         {
           "destChannel": "L",
@@ -127,28 +131,29 @@
       ],
       "parameters": {
         "fileFormat": "png",
-        "bitDepth": "16"
+        "bitDepth": "16",
+        "dithering": false
       }
     }
   ],
   "dds": [
     {
-      "map": "$mesh_$textureSet_BaseColor",
+      "map": "$mesh_$textureSet_BaseColor(_$colorSpace)(.$udim)",
       "format": "BC7_SRGB",
       "mips": "colour"
     },
     {
-      "map": "$mesh_$textureSet_OcclusionRoughnessMetallic",
+      "map": "$mesh_$textureSet_OcclusionRoughnessMetallic(_$colorSpace)(.$udim)",
       "format": "BC7",
       "mips": "linear"
     },
     {
-      "map": "$mesh_$textureSet_Normal",
+      "map": "$mesh_$textureSet_Normal(_$colorSpace)(.$udim)",
       "format": "BC5",
       "mips": "normal"
     },
     {
-      "map": "$mesh_$textureSet_Emissive",
+      "map": "$mesh_$textureSet_Emissive(_$colorSpace)(.$udim)",
       "format": "BC7_SRGB",
       "mips": "colour"
     }

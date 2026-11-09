@@ -225,16 +225,46 @@ std::shared_ptr<const DecodedImage> OcioRawDecoded(const DecodedImage& image) {
 /// `role` names, at 1:1: the image is the set's size and the projection is the identity (the only
 /// sampling Session O records under OCIO; decision 190). The support check refuses the same uses
 /// before mutation from the PNG header (sources.h `OcioBitmapRecorded`, support.h).
-render::Result<void> CheckOcioBitmap(DagSource::Ocio role, const UvProjection& projection, uint32_t width,
-                                     uint32_t height, const DecodedImage& image, core::Id node) {
+render::Result<void> CheckOcioBitmap(const DagSource& source, uint32_t width, uint32_t height,
+                                     const DecodedImage& image, core::Id node) {
     const BitmapShape shape{image.width, image.height, image.channels, image.encoding};
-    if (OcioBitmapRecorded(role == DagSource::Ocio::Grey16Mask, projection, width, height, shape)) return {};
+    const DagSource::Ocio role = source.ocio;
+    const OcioBitmapUse use = role == DagSource::Ocio::Grey16Mask ? OcioBitmapUse::Grey16Mask
+                              : role == DagSource::Ocio::Raw8Fill ? OcioBitmapUse::RawFill
+                              : role == DagSource::Ocio::DataFill ? OcioBitmapUse::DataFill
+                                                                  : OcioBitmapUse::SrgbFill;
+    const bool sixteenSrgb = use == OcioBitmapUse::SrgbFill && image.encoding == render::TexelEncoding::Unorm16;
+    if (OcioBitmapRecorded(use, source.projection, width, height, shape) && (!sixteenSrgb || source.ocioSoleFill)) {
+        return {};
+    }
+    if (sixteenSrgb && OcioBitmapRecorded(use, source.projection, width, height, shape)) {
+        return EvalFail(EvalErrorKind::UnsupportedSource,
+                        "under OCIO, a 16-bit colour bitmap in sRGB on an sRGB8 channel is recorded as the one fill "
+                        "of its stack, in Normal mode at opacity 1 without mask or effects, only (R-322, decision 422)",
+                        node);
+    }
+    if (use == OcioBitmapUse::DataFill) {
+        return EvalFail(EvalErrorKind::UnsupportedSource,
+                        "under OCIO, only a 16-bit bitmap in Data, DataSigned or NormalXYZLeft sampled 1:1 is recorded "
+                        "on a channel that is not sRGB8 (R-322; phase1.15_compositor-colour-fits, decision 422)",
+                        node);
+    }
     return EvalFail(EvalErrorKind::UnsupportedSource,
                     std::string("under OCIO, only ") +
                         (role == DagSource::Ocio::Grey16Mask ? "a 16-bit grey mask source"
                                                              : "an 8-bit colour bitmap on an sRGB8 channel") +
                         " sampled 1:1 is recorded (Session O; phase1.15_compositor-colour-fits, decision 190)",
                     node);
+}
+
+/// A 16-bit sRGB colour bitmap filled alone on an sRGB8 channel under OCIO (decision 422): each
+/// code c is the sRGB8 operand of the code Painter stores for it (`OcioSrgb16Code`), so the fill's
+/// store writes that code. Valid at 1:1 as the one Normal fill at opacity 1 only (CheckOcioBitmap).
+std::shared_ptr<const DecodedImage> OcioSrgb16Decoded(const DecodedImage& image) {
+    auto decoded = std::make_shared<DecodedImage>(image);
+    decoded->encoding = render::TexelEncoding::Float32;
+    for (uint32_t& value : decoded->values) value = std::bit_cast<uint32_t>(arith::Srgb8Operand(OcioSrgb16Code(value)));
+    return decoded;
 }
 
 /// One tile evaluation: pins, deferred unpins and the retry that flushes the store when the
@@ -440,17 +470,23 @@ private:
                                                       m_dag.grid.height, *image, source.signedRange, node);
         if (!sampling) return render::Unexpected(sampling.error());
         if (source.ocio != DagSource::Ocio::None) {
-            render::Result<void> recorded =
-                CheckOcioBitmap(source.ocio, source.projection, m_dag.grid.width, m_dag.grid.height, *image, node);
+            render::Result<void> recorded = CheckOcioBitmap(source, m_dag.grid.width, m_dag.grid.height, *image, node);
             if (!recorded) return render::Unexpected(recorded.error());
         }
+        const bool ocioSrgb16 =
+            source.ocio == DagSource::Ocio::Srgb8Fill && image->encoding == render::TexelEncoding::Unorm16;
         if (source.ocio == DagSource::Ocio::Raw8Fill) {
             imageKey += "/ocio-raw";
             std::shared_ptr<const DecodedImage>& decoded = m_env.ocioRawDecoded[source.sha256];
             if (!decoded) decoded = OcioRawDecoded(*image);
             image = decoded;
         }
-        if (source.srgbDecode) {
+        if (ocioSrgb16) {
+            imageKey += "/ocio-srgb16";
+            std::shared_ptr<const DecodedImage>& decoded = m_env.ocioRawDecoded[source.sha256 + "/srgb16"];
+            if (!decoded) decoded = OcioSrgb16Decoded(*image);
+            image = decoded;
+        } else if (source.srgbDecode) {
             if (source.l8Material) {
                 render::Result<void> recorded = CheckSrgbL8MaterialBitmap(source.projection, m_dag.grid.width,
                                                                           m_dag.grid.height, *image, node);

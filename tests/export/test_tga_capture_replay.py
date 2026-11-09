@@ -11,6 +11,7 @@ import ast
 import hashlib
 import json
 import os
+import re
 import struct
 import subprocess
 from copy import deepcopy
@@ -58,7 +59,14 @@ class SetupFailure(RuntimeError):
 
 class Ocio16BitmapUnsupported(SetupFailure):
     """The evaluator's decision-190 refusal of the R-322 setup's RGB16 colour bitmap under OCIO
-    at encode_export: the gap the owner closed G1 with (decision 407)."""
+    at encode_export: the gap the owner closed G1 with (decision 407), lifted by decision 422."""
+
+
+class OcioAddedBaseUnrecorded(SetupFailure):
+    """What remains of decision 407's gap after decision 422 admits the setup's 16-bit bitmaps
+    under OCIO: the evaluator's missing_base_value for Opacity, which the OCIO session adds as L8
+    to the default project's channels and whose empty base no recording shows yet (request
+    `ocio-added-channel-bases`)."""
 
 
 # The exact native refusal of decision 190 (src/evaluator/evaluate.cpp), nothing broader.
@@ -74,6 +82,14 @@ OCIO16_MESSAGE = (
     "under OCIO, only an 8-bit colour bitmap on an sRGB8 channel sampled 1:1 is recorded",
     "decision 190",
 )
+# The exact refusal of the added Opacity's unrecorded base under OCIO (decision 422), nothing
+# broader.
+OCIO_BASE_REFUSAL = {
+    **OCIO16_REFUSAL,
+    "eval_kind": "missing_base_value",
+    "eval_class": "RuntimeError",
+}
+OCIO_BASE_MESSAGE = "channel Opacity is neither in template 'default' nor in the channel defaults"
 
 
 def valid_sha256(value: Any) -> bool:
@@ -169,6 +185,11 @@ def authored_inputs(manifest: dict[str, Any]) -> dict[str, Path]:
     return result
 
 
+def stem(file_name: str) -> str:
+    """A preset map's file name without its optional `( ... )` groups."""
+    return re.sub(r"\([^()]*\)", "", file_name)
+
+
 def candidate_config(recipe: dict[str, Any], map_name: str, directory: Path) -> dict[str, Any]:
     if (
         recipe.get("defaultExportPreset") != PRESET_URL
@@ -180,7 +201,8 @@ def candidate_config(recipe: dict[str, Any], map_name: str, directory: Path) -> 
         raise SetupFailure("explicit TGA recipe preconditions changed")
     # This shipped, hand-authored layout remains a hypothesis. Its provenance is not changed.
     layout = json.loads((REPO_ROOT / "assets/export-presets/unreal-engine-packed.json").read_text())
-    maps = [m for m in layout["maps"] if m["fileName"].rsplit("_", 1)[-1].lower() == map_name]
+    # Its names end with the optional groups `(_$colorSpace)(.$udim)` (R-322, decision 422).
+    maps = [m for m in layout["maps"] if stem(m["fileName"]).rsplit("_", 1)[-1].lower() == map_name]
     if len(maps) != 1:
         raise SetupFailure("candidate layout does not name exactly one map")
     mapping = deepcopy(maps[0])
@@ -514,23 +536,26 @@ def replay_targets(
     return report
 
 
+# Decision 407's strict xfail on the decision-190 refusal narrows (decision 422): the R-322 setup's
+# RGB16 colour bitmaps under OCIO are admitted, so that refusal coming back is a failure; what
+# remains is the added Opacity's unrecorded base under OCIO, and only that refusal is expected.
 @pytest.mark.xfail(
     strict=True,
-    raises=Ocio16BitmapUnsupported,
+    raises=OcioAddedBaseUnrecorded,
     reason=(
-        "owner-approved G1 gap (decision 407): the R-322 setup's RGB16 colour bitmap under OCIO is "
-        "unsupported (decision 190); phase3.2_unreal-ue56-packed-preset item 2.5 removes this "
-        "mark when the route lands"
+        "decision 422: the empty base of Opacity added as L8 under OCIO is not recorded (request "
+        "ocio-added-channel-bases); phase3.2_unreal-ue56-packed-preset item 2.5 removes this mark "
+        "once it is admitted"
     ),
 )
 def test_r322_tga_capture_diagnostic(export_tests: Path, tmp_path: Path) -> None:
     diagnostics: list[Any] = []
     report = new_replay_report()
     problem = ""
-    refused: Ocio16BitmapUnsupported | None = None
+    refused: OcioAddedBaseUnrecorded | None = None
     try:
         replay_targets(export_tests, tmp_path, locate(), diagnostics, report=report)
-    except Ocio16BitmapUnsupported as error:
+    except OcioAddedBaseUnrecorded as error:
         diagnostics.append({"error_type": type(error).__name__, "error": str(error)})
         report.update(
             execution_status="failed", complete=False, failure_code="tga_diagnostic_failed"
@@ -613,6 +638,13 @@ def classify(
         and candidate is None
     ):
         raise Ocio16BitmapUnsupported("RGB16 colour bitmap under OCIO refused (decision 190)")
+    if (
+        all(report.get(key) == value for key, value in OCIO_BASE_REFUSAL.items())
+        and isinstance(message, str)
+        and OCIO_BASE_MESSAGE in message
+        and candidate is None
+    ):
+        raise OcioAddedBaseUnrecorded("the added Opacity's base under OCIO is unrecorded")
     if set(report) & {
         "error",
         "message",

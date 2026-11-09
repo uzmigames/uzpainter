@@ -1473,6 +1473,32 @@ def specularweight_base_probes() -> list[Golden]:
     return probes
 
 
+def ocio_added_channel_bases() -> Golden:
+    """The empty base of Opacity (L8) and EmissionColor (sRGB8) added to the default project's
+    channels under OCIO (phase3.2_unreal-ue56-packed-preset item 2.5, decision 422): R-322's OCIO
+    session adds both, and their base is recorded under neither OCIO nor the default template."""
+    s = start("plane")
+    s.channels((("Opacity", "L8"), ("EmissionColor", "sRGB8")))
+    maps = ["documentMap/opacity:L", "documentMap/emissive:RGB"]
+    export(s, maps, EXR32F, "infinite")
+    export(s, maps, PNG16, "infinite")
+    return Golden(
+        "ocio-added-channel-bases",
+        "tier0/stack/base-values",
+        "Empty-channel bases under OCIO (phase3.2_unreal-ue56-packed-preset item 2.5, decision "
+        "422): an empty plane at 256 px, no template (the default project's channels), under "
+        "OCIO with Painter's substance configuration, with Opacity freshly added as L8 and "
+        "EmissionColor as sRGB8, as R-322's OCIO session adds them; no layer, no source. Export "
+        "documentMap/opacity:L and documentMap/emissive:RGB twice as OpenEXR 32f and twice as PNG "
+        "16, infinite padding, no dithering; the recorder repeats every export after save and "
+        "reopen. No base is presumed; other channels, formats and templates are not covered.",
+        "plane",
+        ["plane"],
+        s,
+        [OCIO_SETTING],
+    )
+
+
 def template_base(template: str) -> Golden:
     s = start("plane", template)
     export(s, TEMPLATE_BASE_MAPS, EXR32F, "infinite")
@@ -2426,6 +2452,7 @@ def later_goldens() -> list[Golden]:
         ao_mixed_islands_ocio(),
         ao_mixed_islands_legacy(),
         *specularweight_base_probes(),
+        ocio_added_channel_bases(),
         height_normal_resolution(4096, "sharp"),
         padding_islands_kernel_probe(),
         fold_tie.request(),

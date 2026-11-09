@@ -180,6 +180,8 @@ constexpr std::string_view kView2dOwner =
     "a reproduction of Painter's 2D view render, which no task owns yet (decision 092)";
 
 constexpr core::ChannelType kAo = core::ChannelType::AO;
+/// The Alpha-blend template's id (`assets/templates/pbr-metallic-roughness-alpha-blend.json`).
+constexpr std::string_view kAlphaBlendTemplateId = "pbr-metallic-roughness-alpha-blend";
 
 /// float32 fma with one rounding: x y is exact in double, and a double sum that falls on a float32
 /// midpoint is moved by the sum's rounding error (arith::Fma rounds twice there).
@@ -345,8 +347,17 @@ render::Result<VirtualMapResult> AoMixedOn(const core::Project& project, const V
     if (const std::string* refusal = std::get_if<std::string>(&fill)) {
         return EvalFail(EvalErrorKind::UnsupportedSource, scope + *refusal + " (decision 411)");
     }
-    if (request.templateId != evaluator::kDefaultTemplateId) {
-        return EvalFail(EvalErrorKind::UnsupportedSource, scope + "on the default template only (decision 411)");
+    // The Alpha-blend template: R-314's and R-322's Legacy cube (an L16 AO channel filled at opacity
+    // 1, or none), equal to the operator on every covered texel (decisions 418 and 422).
+    const bool alphaBlend = request.templateId == kAlphaBlendTemplateId;
+    if (request.templateId != evaluator::kDefaultTemplateId && !alphaBlend) {
+        return EvalFail(EvalErrorKind::UnsupportedSource,
+                        scope + "on the default and Alpha-blend templates only (decisions 411 and 422)");
+    }
+    if (const core::Layer* layer = std::get<const core::Layer*>(fill);
+        alphaBlend && layer != nullptr && evaluator::EffectiveBlending(*layer, kAo).opacity != 1.0) {
+        return EvalFail(EvalErrorKind::UnsupportedSource,
+                        scope + "on the Alpha-blend template with an AO fill at opacity 1 only (decision 422)");
     }
     const auto width = static_cast<uint32_t>(set->resolution.width);
     const auto height = static_cast<uint32_t>(set->resolution.height);

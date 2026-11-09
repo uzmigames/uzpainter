@@ -5,14 +5,14 @@ plan,receipt}`; decisions 023, 131 and 322).
 Every case runs `uzp-export-tests.exe` on the CPU. No case runs Painter, Unreal Engine or the GPU.
 
 What these cases establish, and what they do not:
-- The two shipped presets' own content and provenance, and their refusal before anything is
-  planned: no recording of Painter's `Unreal Engine (Packed)` confirms the layout yet (R-322,
-  decision 322). So no case here exports a shipped preset, and none is wand v1, Painter-parity or
-  UE 5.6 acceptance.
-- A test-only copy of the presets (`variant_presets`) whose provenance says `confirmed` and whose
-  ORM R reads `documentMap ambientOcclusion` instead of the refused `AO_Mixed` (decision 131):
-  the dry run, the DDS companions, the receipts and the SpecularWeight gap. The copy exercises the
-  shipped code paths; it is not the shipped preset, and its layout is not confirmed.
+- The two shipped presets' own content and provenance: recording R-322 (decision 322, admitted
+  Legacy and OCIO) confirms the layout, names, URL and the preset's own parameters, and the
+  layout test reads it from the private store. None of these cases is pilot parity (item 3.1)
+  or UE 5.6 acceptance.
+- A test-only copy of the presets (`variant_presets`) whose ORM R reads `documentMap
+  ambientOcclusion` instead of `AO_Mixed`, which the authored skeleton (no AO mesh map) is outside
+  of (decisions 411, 418, 419): the dry run, the DDS companions, the receipts and the
+  SpecularWeight gap on the shipped code paths.
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 import jsonschema
+import numpy as np
 import pytest
 from jsonschema import Draft202012Validator
 from PIL import Image
@@ -35,39 +36,49 @@ from tests.export.test_export_plan import FULL_CHANNELS, project, refused, textu
 from tests.export.test_export_presets import resolve, run
 from tests.export.test_export_publication import call, consumed
 from tests.export.test_uze_preset import authored_spec
+from tests.export.tier0 import needs_store
+from tools.parity.envelope.registry import current_envelope, manifest_root
+from tools.parity.fit.oracle import load
+from tools.parity.store.store import locate
 
 PRESETS = REPO_ROOT / "assets" / "export-presets"
 PACKED = "unreal-engine-packed"
 DDS = "unreal-engine-packed-dds"
 PAINTER_NAME = "Unreal Engine (Packed)"
 PAINTER_URL = f"resource://starter_assets/{PAINTER_NAME}"
+# R-322's observed versioned URL (decision 322).
+RECORDED_URL = f"{PAINTER_URL}?version=8339356058946582545.spexp"
 PROVENANCE_SCHEMA = REPO_ROOT / "src" / "export" / "preset-provenance.schema.json"
 RECEIPT_SCHEMA = REPO_ROOT / "src" / "export" / "schema" / "receipt.schema.json"
 PARAMETERS = {"dithering": False, "paddingAlgorithm": "infinite"}
 P = "$mesh_$textureSet"
-# 08-export.md §4: map -> its sources (destChannel, srcMapType, srcMapName).
+S = "(_$colorSpace)(.$udim)"
+# 08-export.md §4, confirmed by R-322: map -> its sources (destChannel, srcMapType, srcMapName).
 LAYOUT = {
-    f"{P}_BaseColor": [
+    f"{P}_BaseColor{S}": [
         ("R", "documentMap", "basecolor"),
         ("G", "documentMap", "basecolor"),
         ("B", "documentMap", "basecolor"),
         ("A", "documentMap", "opacity"),
     ],
-    f"{P}_OcclusionRoughnessMetallic": [
+    f"{P}_OcclusionRoughnessMetallic{S}": [
         ("R", "virtualMap", "AO_Mixed"),
         ("G", "documentMap", "roughness"),
         ("B", "documentMap", "metallic"),
     ],
-    f"{P}_Normal": [(c, "virtualMap", "Normal_DirectX") for c in "RGB"],
-    f"{P}_Emissive": [(c, "documentMap", "emissive") for c in "RGB"],
-    f"{P}_SpecularWeight": [("L", "documentMap", "specularweight")],
+    f"{P}_Normal{S}": [(c, "virtualMap", "Normal_DirectX") for c in "RGB"],
+    f"{P}_Emissive{S}": [(c, "documentMap", "emissive") for c in "RGB"],
+    f"{P}_SpecularWeight{S}": [("L", "documentMap", "specularweight")],
 }
+# R-322: the Normal alone dithers among Painter's four maps (SpecularWeight, UzPainter's own
+# extension, does not); the DDS variant's canonical PNG 16 files never dither.
+DITHERED = {f"{P}_Normal{S}"}
 # Decision 023: map -> (DDS format, mip class); SpecularWeight has no DDS.
 DDS_TARGETS = {
-    f"{P}_BaseColor": ("BC7_SRGB", "colour"),
-    f"{P}_OcclusionRoughnessMetallic": ("BC7", "linear"),
-    f"{P}_Normal": ("BC5", "normal"),
-    f"{P}_Emissive": ("BC7_SRGB", "colour"),
+    f"{P}_BaseColor{S}": ("BC7_SRGB", "colour"),
+    f"{P}_OcclusionRoughnessMetallic{S}": ("BC7", "linear"),
+    f"{P}_Normal{S}": ("BC5", "normal"),
+    f"{P}_Emissive{S}": ("BC7_SRGB", "colour"),
 }
 # DXGI_FORMAT of each DDS format (docs/DDS.md).
 DXGI = {"BC5": 83, "BC7": 98, "BC7_SRGB": 99}
@@ -99,8 +110,8 @@ def plan(
 
 
 def variant_presets(root: Path, ao_mixed: bool = False) -> Path:
-    """A test-only copy of both presets: provenance layout `confirmed` (so they plan) and, unless
-    `ao_mixed`, the ORM's R reading documentMap ambientOcclusion instead of AO_Mixed."""
+    """A test-only copy of both presets whose ORM's R, unless `ao_mixed`, reads documentMap
+    ambientOcclusion instead of AO_Mixed (the skeleton binds no AO mesh map)."""
     root.mkdir(parents=True)
     for preset_id in (PACKED, DDS):
         preset = json.loads((PRESETS / f"{preset_id}.json").read_text(encoding="utf-8"))
@@ -109,9 +120,7 @@ def variant_presets(root: Path, ao_mixed: bool = False) -> Path:
                 if c["srcMapName"] == "AO_Mixed" and not ao_mixed:
                     c.update(srcMapType="documentMap", srcMapName="ambientOcclusion")
         (root / f"{preset_id}.json").write_text(json.dumps(preset), encoding="utf-8")
-        record = json.loads((PRESETS / f"{preset_id}.provenance.json").read_text(encoding="utf-8"))
-        record["parity"]["layout"] = "confirmed"
-        (root / f"{preset_id}.provenance.json").write_text(json.dumps(record), encoding="utf-8")
+        shutil.copy(PRESETS / f"{preset_id}.provenance.json", root)
     return root
 
 
@@ -128,25 +137,32 @@ def gaps(entry: dict[str, Any]) -> set[str]:
 # ── The presets and their provenance (2.2, 2.3, 2.4, 3.6) ────────────────────
 
 
-def test_unreal_presets_load_unconfirmed(export_tests: Path, tmp_path: Path) -> None:
-    """2.3, 2.4, 3.6: the Painter name and its URL resolve to `unreal-engine-packed`; both
-    presets load with layout `unconfirmed`, pending R-322; their records validate against the
-    provenance schema; an unrecorded `?version=` is refused naming R-322."""
+def test_unreal_presets_load_confirmed(export_tests: Path, tmp_path: Path) -> None:
+    """2.3, 2.4, 3.6: the Painter name, its URL and R-322's versioned URL resolve to
+    `unreal-engine-packed`; both presets load with layout `confirmed`; their records validate
+    against the provenance schema and name R-322's two private records; an unrecorded
+    `?version=` is refused naming R-322."""
     installed = export_tests.parent / "assets" / "export-presets"
-    references = [PAINTER_NAME, PAINTER_URL, PACKED, DDS, f"{PAINTER_URL}?version=1"]
+    references = [PAINTER_NAME, PAINTER_URL, RECORDED_URL, PACKED, DDS, f"{PAINTER_URL}?version=1"]
     r = resolve(export_tests, installed, references, tmp_path)
-    assert [x.get("id") for x in r[:4]] == [PACKED, PACKED, PACKED, DDS]
-    for x in r[:4]:
-        assert x["name"] == x["id"] and x["layout"] == "unconfirmed" and x["pending"] == ["R-322"]
+    assert [x.get("id") for x in r[:5]] == [PACKED, PACKED, PACKED, PACKED, DDS], r
+    for x in r[:5]:
+        assert x["name"] == x["id"] and x["layout"] == "confirmed" and x["pending"] == ["R-322"]
         assert x["maps"] == list(LAYOUT)
-    assert r[4]["error"] == "NotYetSupported" and "R-322" in r[4]["message"], r[4]
+    assert r[5]["error"] == "NotYetSupported" and "R-322" in r[5]["message"], r[5]
     validator = Draft202012Validator(json.loads(PROVENANCE_SCHEMA.read_text(encoding="utf-8")))
     for preset_id, answers in ((PACKED, [PAINTER_NAME]), (DDS, [])):
         record = json.loads((PRESETS / f"{preset_id}.provenance.json").read_text(encoding="utf-8"))
         assert [e.message for e in validator.iter_errors(record)] == []
-        assert record["answersTo"] == answers and record["privateRecords"] == []
+        assert record["answersTo"] == answers
+        assert {r["golden_id"].rsplit("-", 1)[-1] for r in record["privateRecords"]} == {
+            "legacy",
+            "ocio",
+        }
         assert record["parity"]["status"] == "pending"
-        assert all(p["status"] == "hypothesis" for p in record["packing"])
+        statuses = {p["fileName"]: p["status"] for p in record["packing"]}
+        assert statuses.pop(f"{P}_SpecularWeight{S}") == "defined"
+        assert set(statuses.values()) == {"confirmed"}
 
 
 def test_unreal_preset_packs_the_documented_layout(export_tests: Path, tmp_path: Path) -> None:
@@ -159,29 +175,91 @@ def test_unreal_preset_packs_the_documented_layout(export_tests: Path, tmp_path:
         for m in preset["maps"]:
             sources = [(c["destChannel"], c["srcMapType"], c["srcMapName"]) for c in m["channels"]]
             assert sources == LAYOUT[m["fileName"]], m["fileName"]
-            assert m["parameters"] == {"fileFormat": "png", "bitDepth": depth}
+            dithering = preset_id == PACKED and m["fileName"] in DITHERED
+            assert m["parameters"] == {
+                "fileFormat": "png",
+                "bitDepth": depth,
+                "dithering": dithering,
+            }
         targets = {t["map"]: (t["format"], t["mips"]) for t in preset.get("dds", [])}
         assert targets == ({} if preset_id == PACKED else DDS_TARGETS)
 
 
-def test_unreal_presets_are_refused_naming_r322(export_tests: Path, tmp_path: Path) -> None:
-    """Decisions 095 and 322: by its Painter name, its URL or its id, named by
-    `defaultExportPreset` or an `exportList` entry, each preset is refused before anything is
-    planned until R-322 confirms the layout."""
+def test_unreal_layout_matches_private_r322() -> None:
+    """2.1, 2.3: R-322 (Legacy and OCIO, r1 and r2) confirms the shipped preset: Painter's
+    `list_output_maps` of the versioned URL gives its first four maps (names, sources up to the
+    case of the map names, parameters), and no SpecularWeight map; the explicit PNG 8 and TGA 8
+    probes write the same four files, equal in decoded values, every map stable r1 = r2.
+    Counts and identities only; no private value leaves the store."""
+    needs_store()
+    preset = json.loads((PRESETS / f"{PACKED}.json").read_text(encoding="utf-8"))
+    # session -> (the PNG 8 probe steps, the TGA 8 probe steps, the `$colorSpace` of each map)
+    probes = {
+        "legacy": ((52, 53), (54, 55), {}),
+        "ocio": (
+            (54, 55),
+            (56, 57),
+            {
+                "BaseColor": "_sRGB",
+                "OcclusionRoughnessMetallic": "_Raw",
+                "Normal": "_Raw",
+                "Emissive": "_sRGB",
+            },
+        ),
+    }
+    for session, (png8, tga8, spaces) in probes.items():
+        manifest = manifest_root(current_envelope()) / (
+            f"tier0/semantics/export-presets-unreal-packed-{session}.json"
+        )
+        golden = load(locate(), manifest)
+        for recording in ("r1", "r2"):
+            [capture] = [
+                o
+                for o in golden.recordings[recording].outputs.values()
+                if o.get("call", "").endswith("ResourceExportPreset.list_output_maps")
+            ]
+            observed = capture["value"]
+            assert len(observed) == 4
+            for authored, oracle in zip(preset["maps"][:4], observed, strict=True):
+                assert oracle["fileName"] == authored["fileName"]
+                assert oracle["parameters"] == authored["parameters"]
+                assert [
+                    {**c, "srcMapName": c["srcMapName"].lower()} for c in oracle["channels"]
+                ] == [{**c, "srcMapName": c["srcMapName"].lower()} for c in authored["channels"]]
+            for steps, extension in ((png8, "png"), (tga8, "tga")):
+                for step in steps:
+                    expected = {
+                        f"probe/s{step}/bevelled-cube_uzp_bevelled_cube_{m}{spaces.get(m, '')}"
+                        f".{extension}"
+                        for m in ("BaseColor", "OcclusionRoughnessMetallic", "Normal", "Emissive")
+                    }
+                    assert {
+                        k for k in golden.maps(recording) if k.startswith(f"probe/s{step}/")
+                    } == expected
+            for output_id in golden.maps(recording):
+                assert golden.map_sha256("r1", output_id) == golden.map_sha256("r2", output_id)
+            for png_step, tga_step in zip(png8, tga8, strict=True):
+                for output_id in golden.maps(recording):
+                    if not output_id.startswith(f"probe/s{png_step}/"):
+                        continue
+                    twin = output_id.replace(f"/s{png_step}/", f"/s{tga_step}/")[:-4] + ".tga"
+                    png, tga = golden.map(recording, output_id), golden.map(recording, twin)
+                    assert png.bits == tga.bits == 8
+                    assert np.array_equal(png.values, tga.values), (session, output_id)
+
+
+def test_unreal_presets_plan_by_every_reference(export_tests: Path, tmp_path: Path) -> None:
+    """Decisions 095 and 322: now that R-322 confirms the layout, by its Painter name, its URLs
+    or its id, named by `defaultExportPreset` or an `exportList` entry, the shipped preset reaches
+    the plan; on the skeleton (no AO mesh map) its ORM is AO_Mixed's refusal, nothing else."""
     cases = []
-    for reference in (PAINTER_NAME, PAINTER_URL, PACKED, DDS):
+    for reference in (PAINTER_NAME, PAINTER_URL, RECORDED_URL, PACKED, DDS):
         cases.append((SKELETON, config(reference)))
         entry = config("assets3d-inline-five-map")
         entry["exportList"] = [{"rootPath": "s0", "exportPreset": reference}]
         cases.append((SKELETON, entry))
     for result in plan(export_tests, cases, tmp_path, None):
-        refused(
-            result,
-            "NotYetSupported",
-            "no recording of Painter's output confirms its layout",
-            "R-322",
-            "decision 095",
-        )
+        refused(result, "NotYetSupported", '"AO_Mixed"')
 
 
 # ── The plan on the test-only copy (2.2, 2.6, 2.7, 2.10) ─────────────────────
@@ -253,7 +331,7 @@ def test_specularweight_is_a_separate_map_and_a_consumer_gap(
         export_tests, [(SKELETON, config(PACKED)), (without, config(PACKED))], tmp_path, presets
     )
     assert listed(absent) == [f"grid2x2_s0_{stem}.png" for stem in STEMS[:-1]]
-    [skipped] = [s for s in absent["plan"]["skipped"] if s["fileName"] == f"{P}_SpecularWeight"]
+    [skipped] = [s for s in absent["plan"]["skipped"] if s["fileName"] == f"{P}_SpecularWeight{S}"]
     assert skipped["kind"] == "absent"
     (tmp_path / "skeleton.json").write_text(json.dumps(SKELETON), encoding="utf-8")
     (tmp_path / "config.json").write_text(json.dumps(config(PACKED)), encoding="utf-8")
@@ -278,20 +356,104 @@ def test_specularweight_is_a_separate_map_and_a_consumer_gap(
         assert gaps(files[f"grid2x2_s0_{stem}.png"]) == set(), stem
 
 
-def test_tga_is_refused_naming_r322(export_tests: Path, tmp_path: Path) -> None:
-    """2.5: TGA stays refused before writing, naming item 2.5 and R-322.
-    Painter-compatible TGA processing and files have not been recorded or admitted.
-    The native quantized-byte writer does not establish that compatibility."""
+def published(
+    exe: Path,
+    root: Path,
+    reference: str,
+    presets: Path | None,
+    in_scope: bool = False,
+    **parameters: Any,
+) -> tuple[int, list[dict[str, Any]], Path]:
+    """`uzp-export-tests publish` of `reference` on the authored set (`authored_spec`; `in_scope`:
+    AO_Mixed in its scope and a SpecularWeight channel), the shipped presets unless `presets`:
+    the exit code, the output lines and the output directory."""
+    root.mkdir(parents=True)
+    spec_path = authored_spec(root / "spec", in_scope=in_scope)
+    out = root / "out"
+    path = root / "config.json"
+    path.write_text(json.dumps(config(reference, out.as_posix(), **parameters)), encoding="utf-8")
+    extra = [] if presets is None else ["--presets", str(presets)]
+    code, lines, _ = call(exe, "publish", str(TEMPLATES), str(spec_path), str(path), *extra)
+    return code, lines, out
+
+
+def publish(exe: Path, root: Path, reference: str, presets: Path | None, **parameters: Any) -> Path:
+    """`published`, which must succeed: the published generation's files directory."""
+    code, lines, out = published(exe, root, reference, presets, **parameters)
+    assert code == 0 and len(lines) == 1 and "error" not in lines[0], (code, lines)
+    selected = consumed(exe, out)
+    assert "error" not in selected, selected
+    return out / "generations" / str(selected["generation"]) / "files"
+
+
+def test_tga_holds_the_png8_codes(export_tests: Path, tmp_path: Path) -> None:
+    """2.5, decision 422: a TGA 8 export writes, for every map, the codes of the same PNG 8
+    (R-322: equal in decoded values on every map, Legacy and OCIO), RGBA where the PNG keeps its
+    alpha."""
     presets = variant_presets(tmp_path / "presets")
-    out = tmp_path / "out"
-    [result] = plan(
+    png = publish(export_tests, tmp_path / "png", PACKED, presets, fileFormat="png", bitDepth="8")
+    tga = publish(export_tests, tmp_path / "tga", PACKED, presets, fileFormat="tga", bitDepth="8")
+    stems = STEMS[:-1]  # the authored set has no SpecularWeight
+    assert sorted(f.name for f in tga.iterdir()) == sorted(f"grid2x2_s0_{s}.tga" for s in stems)
+    for stem in stems:
+        with (
+            Image.open(png / f"grid2x2_s0_{stem}.png") as a,
+            Image.open(tga / f"grid2x2_s0_{stem}.tga") as b,
+        ):
+            assert a.mode == b.mode and a.size == b.size, stem
+            assert np.array_equal(np.asarray(a), np.asarray(b)), stem
+    with Image.open(tga / "grid2x2_s0_BaseColor.tga") as image:
+        assert image.mode == "RGBA"
+
+
+def test_tga_outside_r322_is_refused(export_tests: Path, tmp_path: Path) -> None:
+    """2.5, decision 422: R-322 records TGA 8 RGB and RGBA files without dithering only: a 16-bit
+    TGA is invalid at the plan; with the shipped preset on a set holding SpecularWeight (an L
+    file) or with dithering, the export is refused before any file is written."""
+    [depth] = plan(
         export_tests,
-        [(SKELETON, config(PACKED, out.as_posix(), fileFormat="tga"))],
+        [(SKELETON, config(PACKED, fileFormat="tga", bitDepth="16"))],
         tmp_path,
-        presets,
+        None,
     )
-    refused(result, "NotYetSupported", '"tga"', "item 2.5", "R-322")
-    assert not out.exists()
+    refused(depth, "ValueError", "is not supported by the format tga", "valid: 8")
+    for name, parameters, fragment in (
+        ("layout", {}, "a TGA file laid out L is not recorded"),
+        ("dithering", {"dithering": True}, "dithering in a TGA file is not recorded"),
+    ):
+        code, lines, out = published(
+            export_tests,
+            tmp_path / name,
+            PACKED,
+            None,
+            in_scope=True,
+            **({"fileFormat": "tga", "bitDepth": "8"} | parameters),
+        )
+        assert code != 0 or "error" in lines[-1], (name, code, lines)
+        assert lines and lines[-1].get("error") == "NotYetSupported", lines
+        assert fragment in lines[-1]["message"] and "decision 422" in lines[-1]["message"], lines
+        assert not (out / "generations").exists() or not any((out / "generations").iterdir())
+
+
+def test_shipped_preset_publishes_in_ao_mixed_scope(export_tests: Path, tmp_path: Path) -> None:
+    """2.6, 2.7: the shipped presets themselves (no test copy) publish on the authored set with
+    AO_Mixed in its scope and an L16 SpecularWeight: the default preset's five PNG 8 maps, its
+    `_SpecularWeight` a consumer gap; the DDS variant's PNG 16 maps with their BC7/BC5 DDS."""
+    files = publish(export_tests, tmp_path / "packed", PACKED, None, in_scope=True)
+    assert sorted(f.name for f in files.iterdir()) == sorted(f"grid2x2_s0_{s}.png" for s in STEMS)
+    receipt = json.loads((files.parent / "receipt.json").read_text(encoding="utf-8"))
+    entries = {f["path"]: f for f in receipt["files"]}
+    assert gaps(entries["grid2x2_s0_SpecularWeight.png"]) == {"SpecularWeight"}
+    dds = publish(export_tests, tmp_path / "dds", DDS, None, in_scope=True)
+    expected = [f"grid2x2_s0_{s}.png" for s in STEMS]
+    expected += [f"grid2x2_s0_{s}.dds" for s in STEMS[:-1]]
+    assert sorted(f.name for f in dds.iterdir()) == sorted(expected)
+    receipt = json.loads((dds.parent / "receipt.json").read_text(encoding="utf-8"))
+    for entry in receipt["files"]:
+        if entry["path"].endswith(".dds"):
+            stem = entry["path"].removeprefix("grid2x2_s0_").removesuffix(".dds")
+            assert entry["dds"]["format"] == DDS_TARGETS[f"{P}_{stem}{S}"][0], entry
+            assert gaps(entry) == {"cook"}
 
 
 def test_dds_targets_are_checked(export_tests: Path, tmp_path: Path) -> None:
@@ -311,11 +473,14 @@ def test_dds_targets_are_checked(export_tests: Path, tmp_path: Path) -> None:
     refused(b, "NotYetSupported", "implicit colour conversion", "item 2.6")
     preset = json.loads((presets / f"{DDS}.json").read_text(encoding="utf-8"))
     broken = [
-        ({"map": f"{P}_Normal", "format": "BC5", "mips": "linear"}, "BC5 goes with normal mips"),
-        ({"map": f"{P}_BaseColor", "format": "BC7_SRGB", "mips": "linear"}, "BC7_SRGB goes with"),
-        ({"map": f"{P}_Emissive", "format": "BC7", "mips": "colour"}, "BC7_SRGB goes with"),
+        ({"map": f"{P}_Normal{S}", "format": "BC5", "mips": "linear"}, "BC5 goes with normal mips"),
+        (
+            {"map": f"{P}_BaseColor{S}", "format": "BC7_SRGB", "mips": "linear"},
+            "BC7_SRGB goes with",
+        ),
+        ({"map": f"{P}_Emissive{S}", "format": "BC7", "mips": "colour"}, "BC7_SRGB goes with"),
         ({"map": "$textureSet_x", "format": "BC7", "mips": "linear"}, 'no map "$textureSet_x"'),
-        ({"map": f"{P}_Emissive", "format": "BC3", "mips": "linear"}, "is not BC5, BC7"),
+        ({"map": f"{P}_Emissive{S}", "format": "BC3", "mips": "linear"}, "is not BC5, BC7"),
     ]
     for n, (target, fragment) in enumerate(broken):
         directory = tmp_path / f"broken{n}"
@@ -384,7 +549,7 @@ def test_dds_variant_publishes_receipts_with_the_cook_gap(published_dds: dict[st
         png_entry = files[f"grid2x2_s0_{stem}.png"]
         assert png_entry["bit_depth"] == "16" and png_entry["colour_space"] == space, stem
         dds_entry = files[f"grid2x2_s0_{stem}.dds"]
-        fmt, _ = DDS_TARGETS[f"{P}_{stem}"]
+        fmt, _ = DDS_TARGETS[f"{P}_{stem}{S}"]
         dds = dds_entry["dds"]
         assert dds["source"] == png_entry["path"] and dds["format"] == fmt
         assert dds["srgb"] is (fmt == "BC7_SRGB") and dds["lossy"] is True

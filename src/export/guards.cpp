@@ -30,6 +30,9 @@ constexpr std::string_view kResizeNotFitted =
     "recording R-090 P4, decisions 103 and 349; owner phase3.2_unreal-ue56-packed-preset item 2.9";
 constexpr std::string_view kPaddingNotFitted =
     "recording R-090 P5 and P9, decision 103; owner phase3.2_unreal-ue56-packed-preset";
+constexpr std::string_view kTgaNotRecorded =
+    "recording R-322 records TGA 8 RGB and RGBA files without dithering, equal to PNG 8 in decoded values; "
+    "decision 422";
 
 /// The message of a refusal of `file`: `what`, then its owner.
 std::string Refused(const PlannedFile& file, const std::string& what, std::string_view owner) {
@@ -129,6 +132,13 @@ std::optional<std::string> ProcessingRefusal(const core::Project& project, const
     const auto width = static_cast<uint32_t>(set.resolution.width);
     const auto height = static_cast<uint32_t>(set.resolution.height);
     const Resize resize = ResizeOf(width, height, file);
+    if (p.fileFormat == FileFormat::tga) {
+        if (file.layout != FileLayout::RGB && file.layout != FileLayout::RGBA) {
+            return Refused(file, "a TGA file laid out " + std::string(FileLayoutName(file.layout)) + " is not recorded",
+                           kTgaNotRecorded);
+        }
+        if (p.dithering) return Refused(file, "dithering in a TGA file is not recorded", kTgaNotRecorded);
+    }
     if (p.dithering) {
         // Dithering changes nothing at PNG 16 (recording R-090 P3: on equals off on every map); at
         // PNG 8 it changes nothing on an RGB16 channel and an sRGB8 BaseColor (decision 349), and
@@ -211,7 +221,8 @@ std::optional<std::string> ProcessingRefusal(const core::Project& project, const
                            " (linear like a User channel, or sRGB-encoded like BaseColor) is not recorded",
                        kSrgb8NotRecorded);
     }
-    if (p.fileFormat != FileFormat::png) return std::nullopt;
+    // A TGA 8 holds the codes of the same PNG 8 (R-322, decision 422).
+    if (p.fileFormat != FileFormat::png && p.fileFormat != FileFormat::tga) return std::nullopt;
     for (const PlannedChannel& channel : file.channels) {
         // An L8 BaseColor, Specular or Emissive is written as the sRGB encode of its linear value
         // in srcChannel R, B and L and as the linear value in G (export-l8-material, decision 204),

@@ -1,0 +1,9 @@
+{
+  "id": 422,
+  "slug": "r-322-confirms-the-unreal-preset-tga-8-holds-the-png-8-codes-and-ocio-16-bit-bitmaps-are-admitted-where-r-322-records-them",
+  "title": "R-322 confirms the Unreal preset; TGA 8 holds the PNG 8 codes; OCIO 16-bit bitmaps are admitted where R-322 records them",
+  "status": "accepted",
+  "date": "2026-11-09",
+  "relatedTasks": ["phase3.2_unreal-ue56-packed-preset", "phase1.26_gate-g1"],
+  "supersededBy": null
+}

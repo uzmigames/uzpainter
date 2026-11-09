@@ -30,22 +30,19 @@ bool LegacyColour(const core::Project& project) {
     return mode.empty() || mode == "legacy" || PainterOcio(project);
 }
 
-/// Under OCIO with Painter's substance config, a bitmap whose use Session O does not record
-/// (sources.h): only sRGB and Raw on an sRGB8 channel, and a linear space as a mask source. The
-/// image's kind and its 1:1 sampling are checked at evaluation.
+/// Under OCIO with Painter's substance config, a bitmap whose use Session O and R-322 do not
+/// record (sources.h `OcioBitmapUseOf`): sRGB and Raw on an sRGB8 channel, Data, DataSigned and
+/// NormalXYZLeft on another channel, a linear space as a mask source. The image's kind and its
+/// 1:1 sampling are checked at evaluation.
 Gap OcioBitmapGap(const core::Project& project, const core::Stack* stack, const core::BitmapSource& bitmap,
                   std::optional<ChannelType> channel, core::Id node) {
     if (!PainterOcio(project)) return std::nullopt;
-    const BitmapColourSpace space = BitmapColourSpaceIn(project, bitmap.color_space);
     if (!channel) {
-        if (space == BitmapColourSpace::Linear) return std::nullopt;
+        if (OcioBitmapUseOf(project, bitmap.color_space, std::nullopt)) return std::nullopt;
     } else if (stack != nullptr) {
         const auto it = stack->channels.find(*channel);
         if (it == stack->channels.end()) return std::nullopt;
-        if (it->second.format == core::ChannelFormat::sRGB8 &&
-            (space == BitmapColourSpace::Srgb || bitmap.color_space == "Raw")) {
-            return std::nullopt;
-        }
+        if (OcioBitmapUseOf(project, bitmap.color_space, it->second.format)) return std::nullopt;
     } else {
         return std::nullopt;
     }
@@ -83,8 +80,13 @@ Gap OcioImageGap(const core::Project& project, const core::NodeVisit& visit, con
     const auto check = [&](const core::Source& source, std::optional<ChannelType> channel) -> Gap {
         if (source.kind() != SourceKind::bitmap) return std::nullopt;
         if (channel && !stack->channels.contains(*channel)) return std::nullopt;
-        const std::optional<BitmapShape> shape = shapes(std::get<core::BitmapSource>(source.value).resource.sha256);
-        if (!shape || OcioBitmapRecorded(!channel, *projection, width, height, *shape)) return std::nullopt;
+        const core::BitmapSource& bitmap = std::get<core::BitmapSource>(source.value);
+        const std::optional<OcioBitmapUse> use = OcioBitmapUseOf(
+            project, bitmap.color_space,
+            channel ? std::optional(stack->channels.at(*channel).format) : std::nullopt);
+        if (!use) return std::nullopt;  // OcioBitmapGap refuses it
+        const std::optional<BitmapShape> shape = shapes(bitmap.resource.sha256);
+        if (!shape || OcioBitmapRecorded(*use, *projection, width, height, *shape)) return std::nullopt;
         return Make(node,
                     "under OCIO, a " + std::to_string(shape->width) + "x" + std::to_string(shape->height) + " " +
                         (shape->encoding == render::TexelEncoding::Unorm16 ? "16" : "8") + "-bit " +

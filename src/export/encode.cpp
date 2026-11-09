@@ -8,6 +8,7 @@
 #include "export/exr_writer.h"
 #include "export/guards.h"
 #include "export/png_writer.h"
+#include "export/tga_writer.h"
 #include "uzp_core/types/errors.h"
 
 #include <algorithm>
@@ -234,6 +235,22 @@ EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster, const
                 }
             }
         }
+    }
+    if (p.fileFormat == FileFormat::tga) {
+        // TGA 8: the codes of the same PNG 8 (R-322: equal in decoded values on every map, Legacy and
+        // OCIO, r1 and r2; decision 422), written by stb. R-322 records RGB and RGBA files whose
+        // alpha varies; an alpha of 1 everywhere, which a PNG drops, is not recorded in a TGA.
+        if (drop) {
+            throw core::NotYetSupported("export: " + file.relativePath +
+                                        ": a TGA whose alpha is 1 everywhere is not recorded (recording R-322 "
+                                        "records RGB and RGBA files whose alpha varies; decision 422)");
+        }
+        TgaImage tga{raster.width, raster.height, written, {}};
+        tga.samples.reserve(image.samples.size());
+        for (const uint16_t sample : image.samples) tga.samples.push_back(static_cast<uint8_t>(sample));
+        EncodedImage encoded{EncodeTga(tga), layout, padded};
+        if (samples != nullptr) *samples = std::move(image.samples);
+        return encoded;
     }
     EncodedImage encoded{EncodePng(image), layout, padded};
     if (samples != nullptr) *samples = std::move(image.samples);

@@ -10,8 +10,11 @@
 // float32(c / 255) rounded toward zero to a binary16 (`OcioRawDecoded`, evaluate.cpp; c / 255
 // itself stores one code higher for c = 176, 245, 247 and 254). Under OCIO only what Session O
 // records evaluates: uniform colours (sRGB, unset and Raw), an 8-bit colour bitmap in sRGB or Raw
-// on an sRGB8 channel at 1:1, and a 16-bit grey bitmap in a linear space as a mask source at 1:1;
-// every other bitmap use, and any other OCIO configuration, fails with
+// on an sRGB8 channel at 1:1, and a 16-bit grey bitmap in a linear space as a mask source at 1:1.
+// Recording R-322 (`export-presets-unreal-packed-ocio`, decision 422) adds a 16-bit colour bitmap
+// in sRGB on an sRGB8 channel at 1:1 as the one fill of its stack (`OcioSrgb16Code`), and a 16-bit
+// bitmap in Data, DataSigned or NormalXYZLeft on a channel that is not sRGB8 at 1:1, read as under
+// legacy; every other bitmap use, and any other OCIO configuration, fails with
 // `evaluator:unsupported_source`, and the support check refuses such a bitmap use before mutation
 // from the PNG header (`OcioBitmapRecorded`, support.h; decision 240).
 //
@@ -197,13 +200,32 @@ struct BitmapShape {
 /// The shape of the PNG `bytes` (`BitmapShape`), or nullopt when its header does not decode.
 [[nodiscard]] std::optional<BitmapShape> BitmapShapeOf(std::string_view bytes);
 
-/// Whether a bitmap of `shape` sampled by `projection` on a `width` x `height` texture set is a use
-/// Session O records under OCIO with Painter's substance config (above; decision 190): a 16-bit
-/// grey image as a mask source (`mask`), an 8-bit colour image on an sRGB8 channel otherwise, each
-/// at 1:1 (the image is the set's size and the projection is the identity). The evaluation
-/// (evaluate.cpp `CheckOcioBitmap`) and the support check before mutation (support.h) share it.
-[[nodiscard]] bool OcioBitmapRecorded(bool mask, const UvProjection& projection, uint32_t width,
+/// The bitmap uses recorded under OCIO with Painter's substance config (above): `SrgbFill` and
+/// `RawFill` in sRGB or Raw on an sRGB8 channel, `Grey16Mask` a mask source, `DataFill` in Data,
+/// DataSigned or NormalXYZLeft on a channel that is not sRGB8 (decisions 190 and 422).
+enum class OcioBitmapUse : uint8_t { SrgbFill, RawFill, Grey16Mask, DataFill };
+
+/// The use of a bitmap tagged `tag` under OCIO on a channel stored as `format` (nullopt: a mask
+/// source), or nullopt when none is recorded.
+[[nodiscard]] std::optional<OcioBitmapUse> OcioBitmapUseOf(const core::Project& project, std::string_view tag,
+                                                           std::optional<core::ChannelFormat> format);
+
+/// Whether a bitmap of `shape` sampled by `projection` on a `width` x `height` texture set is
+/// recorded for `use` under OCIO with Painter's substance config (above), each at 1:1 (the image
+/// is the set's size and the projection is the identity): `SrgbFill` an 8-bit colour image
+/// (Session O, decision 190) or a 16-bit one (R-322, decision 422), `RawFill` an 8-bit colour
+/// image, `Grey16Mask` a 16-bit grey image, `DataFill` a 16-bit grey or colour image (R-322). The
+/// evaluation (evaluate.cpp `CheckOcioBitmap`) and the support check before mutation (support.h)
+/// share it.
+[[nodiscard]] bool OcioBitmapRecorded(OcioBitmapUse use, const UvProjection& projection, uint32_t width,
                                       uint32_t height, const BitmapShape& shape);
+
+/// The sRGB8 code Painter stores, under OCIO with Painter's substance config, for the 16-bit code
+/// `c` of a colour bitmap in sRGB filled alone on an sRGB8 channel at opacity 1 (recording R-322,
+/// decision 422): the number of the 255 measured breakpoints at or below `c`. Measured on every
+/// 16-bit code of `ocio16-bitmap-srgb-basecolor` (field-a, PNG 8 r1) and exact on its PNG 8, PNG 16
+/// and OpenEXR 32f in r1 and r2, its two cyclic permutations and R-322's BaseColor and Emissive.
+[[nodiscard]] uint32_t OcioSrgb16Code(uint32_t c);
 
 /// The samples of a PNG: 16-bit files as 16-bit codes, files of 8 bits or fewer as 8-bit codes;
 /// grey (with or without alpha) as one channel, RGB, RGBA and palette images as three; rows top

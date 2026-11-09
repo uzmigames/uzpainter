@@ -141,10 +141,8 @@ std::string Index(const std::string& path, size_t i) { return path + "[" + std::
 std::string FormatOwner(FileFormat format) {
     switch (format) {
         case FileFormat::png:
-        case FileFormat::exr: return {};
-        case FileFormat::tga:
-            return "phase3.2_unreal-ue56-packed-preset item 2.5 (native quantized TGA8 writer exists; "
-                   "Painter's TGA processing and files still require recording R-322, decision 322)";
+        case FileFormat::exr:
+        case FileFormat::tga: return {};
         case FileFormat::bmp:
         case FileFormat::jpeg: return "phase3.2_unreal-ue56-packed-preset (BMP and JPEG writers)";
         case FileFormat::dds:

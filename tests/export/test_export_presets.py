@@ -608,7 +608,7 @@ def test_blender_preset_plans_painters_files(export_tests: Path, tmp_path: Path)
     the absent Emission and Alpha omitted; seven under Legacy. With its own parameters and a
     padding rule each map keeps its PNG depth, without dithering; with its own parameters alone
     it is refused, as Painter refuses it (s34, s37: no padding). Under OCIO, `$colorSpace` of an
-    sRGB8 Emission (Painter lists `_Emission_sRGB`) is not admitted, so it is refused."""
+    sRGB8 Emission is `sRGB`, as Painter lists `_Emission_sRGB` (decision 422)."""
     assert hashlib.sha256(TUNIC_CONFIG.read_bytes()).hexdigest().startswith("7167a93e")
     tunic = json.loads(TUNIC_CONFIG.read_text(encoding="utf-8"))
     tunic["exportPath"] = "C:/export"
@@ -654,7 +654,9 @@ def test_blender_preset_plans_painters_files(export_tests: Path, tmp_path: Path)
     assert not any(f["parameters"]["dithering"] for f in r[3]["plan"]["files"])
     for result in r[4:6]:
         refused(result, "ValueError", "paddingAlgorithm is undefined")
-    refused(r[6], "NotYetSupported", "$colorSpace under OCIO", "is not recorded")
+    # Decision 422 (R-322's `Emissive_sRGB`): an sRGB8 EmissionColor's RGB is `sRGB` under OCIO,
+    # the `_Emission_sRGB` Painter lists.
+    assert f"{CUBE}_Emission_sRGB.png" in paths(r[6])
 
 
 def test_blender_layout_matches_private_r095_readback() -> None:

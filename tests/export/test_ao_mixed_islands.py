@@ -17,6 +17,7 @@ export's padding (EXC-013), not compared here.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,7 @@ import numpy as np
 import numpy.typing as npt
 import pytest
 
+from tests.evaluator.test_compositor_tile_dag import TEMPLATES_DIR
 from tests.export.encoders_tier0 import (
     OCIO_CONFIG_SHA256,
     _add_template_channels,
@@ -120,6 +122,46 @@ def test_ao_mixed_of_an_ocio_fill_on_islands(export_tests: Path, tmp_path: Path)
         theirs = golden.map(recording, orm).values[..., 0]
         differ = int(np.count_nonzero((ours != theirs) & covered))
         assert differ == 0, f"{recording}: {differ} covered texels differ"
+
+
+ALPHA_BLEND = "pbr-metallic-roughness-alpha-blend"
+
+
+@pytest.mark.parametrize(("stem", "bits"), [("predefined", 16), ("predefined-padding", 8)])
+def test_ao_mixed_of_a_legacy_fill_on_the_alpha_blend_template(
+    export_tests: Path, tmp_path: Path, stem: str, bits: int
+) -> None:
+    """Decision 422: R-314's Legacy cube (the Alpha-blend template, an L16 AO channel with one fill
+    of the transposed hue-grid grey at opacity 1, grey A as the AO mesh map), PNG 16 and PNG 8:
+    the production AO_Mixed equals Painter's ORM R on every covered texel, r1 and r2."""
+    golden = _golden(f"export-presets-gltf-{stem}-legacy")
+    covered = _covered(golden)
+    spec = _spec(golden, tmp_path / "spec", ocio=False)
+    template = json.loads((TEMPLATES_DIR / f"{ALPHA_BLEND}.json").read_text(encoding="utf-8"))
+    # The template's channels and the two the golden adds (AO L16, SpecularWeight L8).
+    channels = {c["type"]: c["format"] for c in template["channels"]}
+    channels |= {"AO": "L16", "SpecularWeight": "L8"}
+    spec["channels"] = [{"type": k, "format": v} for k, v in channels.items()]
+    spec["template"] = ALPHA_BLEND
+    for layer in spec["layers"]:  # the fill keeps its AO source and blending only
+        layer["blending"] = {k: v for k, v in layer.get("blending", {}).items() if k == "AO"}
+        if "active_channels" in layer:
+            layer["active_channels"] = [c for c in layer["active_channels"] if c == "AO"]
+    args = {
+        "maps": ["virtualMap/AO_Mixed:L"],
+        "file_format": "png",
+        "bit_depth": bits,
+        "padding": "infinite",
+        "dithering": False,
+    }
+    ours = _ao_mixed(export_tests, spec, args, tmp_path)
+    for recording in ("r1", "r2"):
+        orms = [k for k in golden.maps(recording) if k.endswith("occlusionRoughnessMetallic.png")]
+        assert orms, recording
+        for orm in orms:
+            theirs = golden.map(recording, orm).values[..., 0]
+            differ = int(np.count_nonzero((ours != theirs) & covered))
+            assert differ == 0, f"{recording} {orm}: {differ} covered texels differ"
 
 
 def test_ao_mixed_without_an_ao_mesh_map_or_channel_under_ocio(

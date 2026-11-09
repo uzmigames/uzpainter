@@ -145,6 +145,13 @@ def test_candidate_refusals_keep_the_model(export_tests: Path, tmp_path: Path) -
             "compile_plan",
             "bit depth 8",
         ),
+        # The plan writes TGA 8 itself now (decision 422); the candidate reads a PNG 8 only.
+        "tga": (
+            with_mesh,
+            configuration(tmp_path / "o6", [GREY], PNG8 | {"fileFormat": "tga"}),
+            "compile_plan",
+            "a PNG at bit depth 8",
+        ),
     }
     for label, (spec_path, cfg, stage, message) in cases.items():
         report = candidate(export_tests, tmp_path, spec_path, cfg, label)
@@ -157,11 +164,7 @@ def test_candidate_refusals_keep_the_model(export_tests: Path, tmp_path: Path) -
     # Every NotYetSupported of the plan compiler's call has one reason code; the release-gap
     # virtual maps the configuration names (Glossiness, decision 092) are context, not the cause.
     ao = {"fileName": "$textureSet_ao", "channels": [chan("L", "virtualMap", "Glossiness")]}
-    tga = PNG8 | {"fileFormat": "tga"}
-    for label, cfg, maps in (
-        ("ao", configuration(tmp_path / "o5", [ao], PNG8), ["Glossiness"]),
-        ("tga", configuration(tmp_path / "o6", [GREY], tga), None),
-    ):
+    for label, cfg, maps in (("ao", configuration(tmp_path / "o5", [ao], PNG8), ["Glossiness"]),):
         report = candidate(export_tests, tmp_path, with_mesh, cfg, label)
         assert {k: report[k] for k in MODEL} == MODEL, label
         assert (report["error"], report["stage"]) == ("NotYetSupported", "compile_plan"), label

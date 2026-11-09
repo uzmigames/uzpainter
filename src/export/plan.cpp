@@ -348,12 +348,17 @@ ResolvedParameters Require(const Parameters& p, const std::string& what) {
     if (!p.dithering) missing("dithering");
     if (!p.paddingAlgorithm) missing("paddingAlgorithm");
     if (NeedsDilation(*p.paddingAlgorithm) && !p.dilationDistance) missing("dilationDistance");
-    const bool fits = *p.fileFormat == FileFormat::png ? (*p.bitDepth == BitDepth::u8 || *p.bitDepth == BitDepth::u16)
-                                                       : (*p.bitDepth == BitDepth::f16 || *p.bitDepth == BitDepth::f32);
+    const bool png = *p.fileFormat == FileFormat::png;
+    const bool tga = *p.fileFormat == FileFormat::tga;
+    const bool fits = png   ? (*p.bitDepth == BitDepth::u8 || *p.bitDepth == BitDepth::u16)
+                      : tga ? *p.bitDepth == BitDepth::u8
+                            : (*p.bitDepth == BitDepth::f16 || *p.bitDepth == BitDepth::f32);
     if (!fits) {
+        // A TGA is written at 8 bits only (R-322, decision 422; Painter's other TGA depths are not
+        // recorded).
         Invalid(what, "the bit depth " + std::string(BitDepthName(*p.bitDepth)) + " is not supported by the format " +
                           std::string(FileFormatName(*p.fileFormat)) + "; valid: " +
-                          (*p.fileFormat == FileFormat::png ? "8, 16" : "16f, 32f"));
+                          (png ? "8, 16" : tga ? "8" : "16f, 32f"));
     }
     ResolvedParameters r;
     r.fileFormat = *p.fileFormat;
@@ -438,33 +443,81 @@ bool OcioNormalOpenGlPng16(const PlannedFile& file) {
 ///   in r1 and r2, and `tunic-v10` record 59ef801eaf67c74879e3f5ec51dc526da110ce80fc364c4e366f2ba2582701bf,
 ///   `DefaultMaterial_Normal_Raw` in r1, r1-repeat and r2. This is the name only: it says nothing
 ///   of the file's pixels.
+/// - recording R-322 (`export-presets-unreal-packed-ocio`, decision 422), at PNG 8, TGA 8 and PNG 16:
+///   "sRGB" for an RGB of an sRGB8 BaseColor whose A reads a document channel that is not sRGB8
+///   (`BaseColor_sRGB`) and for an RGB of an sRGB8 EmissionColor (`Emissive_sRGB`); "Raw" for an RGB
+///   of Normal_DirectX (`Normal_Raw`) and for a file whose R reads AO_Mixed and whose other channels
+///   read document channels that are not sRGB8 (`OcclusionRoughnessMetallic_Raw`).
 /// Any other file is refused: a Normal_OpenGL file at another depth, layout or mapping, every other
-/// virtual map and a file mixing sources. Normal_DirectX too: the same record's step 33 names its
-/// PNG 16 `Raw`, but that case is not admitted here.
+/// virtual map and every other mix of sources.
 std::string OcioColourSpace(const PlannedFile& file, const Root& root, const std::string& what) {
-    constexpr std::string_view owner = "Session O, export-ocio-encode; phase1.15_compositor-colour-fits, decision 190";
-    if (!file.parameters || file.parameters->fileFormat != FileFormat::png || file.channels.empty()) {
-        Gap(what, "$colorSpace under OCIO is recorded for PNG files only", owner);
+    constexpr std::string_view owner =
+        "Session O, export-ocio-encode, and R-322; phase1.15_compositor-colour-fits, decisions 190 and 422";
+    const bool png = file.parameters && file.parameters->fileFormat == FileFormat::png;
+    const bool tga = file.parameters && file.parameters->fileFormat == FileFormat::tga;
+    if (!(png || tga) || file.channels.empty()) {
+        Gap(what, "$colorSpace under OCIO is recorded for PNG and TGA files only", owner);
     }
-    if (OcioNormalOpenGlPng16(file)) return "Raw";
+    if (png && OcioNormalOpenGlPng16(file)) return "Raw";
+    // The stored format of a documentMap channel's source, nullopt for any other source.
+    const auto format = [&](const PlannedChannel& channel) -> std::optional<core::ChannelFormat> {
+        const PlannedSource& s = channel.source;
+        if (s.type != SourceType::documentMap || !s.channel) return std::nullopt;
+        const auto it = root.stack->channels.find(*s.channel);
+        if (it == root.stack->channels.end()) return std::nullopt;
+        return it->second.format;
+    };
+    const auto rgbOf = [&](auto&& each) {
+        if (file.channels.size() < 3) return false;
+        constexpr std::array<ChannelLetter, 3> rgb{ChannelLetter::R, ChannelLetter::G, ChannelLetter::B};
+        for (size_t i = 0; i < 3; ++i) {
+            const PlannedChannel& channel = file.channels[i];
+            if (channel.dest != rgb[i] || channel.src != rgb[i] || channel.luma || !each(channel)) return false;
+        }
+        return true;
+    };
+    const auto srgbChannel = [&](core::ChannelType type) {
+        return [&, type](const PlannedChannel& channel) {
+            return format(channel) == core::ChannelFormat::sRGB8 && channel.source.channel == type;
+        };
+    };
+    const bool tail = file.channels.size() == 3 ||
+                      (file.channels.size() == 4 && file.channels[3].dest == ChannelLetter::A &&
+                       format(file.channels[3]).has_value() && format(file.channels[3]) != core::ChannelFormat::sRGB8);
+    const bool decision421 = (png && file.parameters->bitDepth == BitDepth::u16) || file.parameters->bitDepth == BitDepth::u8;
+    if (decision421 && tail && rgbOf(srgbChannel(core::ChannelType::BaseColor))) return "sRGB";
+    if (decision421 && file.channels.size() == 3 && rgbOf(srgbChannel(core::ChannelType::EmissionColor))) return "sRGB";
+    if (decision421 && file.channels.size() == 3 && rgbOf([](const PlannedChannel& channel) {
+            return channel.source.type == SourceType::virtualMap &&
+                   channel.source.virtualMap == VirtualMap::Normal_DirectX;
+        })) {
+        return "Raw";
+    }
+    if (decision421 && file.channels.size() == 3 && file.channels[0].source.type == SourceType::virtualMap &&
+        file.channels[0].source.virtualMap == VirtualMap::AO_Mixed &&
+        std::all_of(file.channels.begin() + 1, file.channels.end(), [&](const PlannedChannel& channel) {
+            return format(channel).has_value() && format(channel) != core::ChannelFormat::sRGB8;
+        })) {
+        return "Raw";
+    }
+    if (!png) Gap(what, "$colorSpace under OCIO of this TGA file is not recorded", owner);
     bool srgb = true;
     bool raw = true;
     for (const PlannedChannel& channel : file.channels) {
-        const PlannedSource& s = channel.source;
-        const auto it = s.type == SourceType::documentMap && s.channel ? root.stack->channels.find(*s.channel)
-                                                                       : root.stack->channels.end();
-        if (it == root.stack->channels.end()) {
+        const std::optional<core::ChannelFormat> stored = format(channel);
+        if (!stored) {
             srgb = raw = false;
             break;
         }
-        const bool srgb8 = it->second.format == core::ChannelFormat::sRGB8;
-        srgb = srgb && srgb8 && *s.channel == core::ChannelType::BaseColor;
+        const bool srgb8 = *stored == core::ChannelFormat::sRGB8;
+        srgb = srgb && srgb8 && channel.source.channel == core::ChannelType::BaseColor;
         raw = raw && !srgb8;
     }
     if (srgb) return "sRGB";
     if (raw) return "Raw";
-    Gap(what, "$colorSpace under OCIO of a file that is not one sRGB8 BaseColor, only non-sRGB8 document channels or "
-              "a PNG 16 RGB of Normal_OpenGL is not recorded",
+    Gap(what, "$colorSpace under OCIO of a file that is not one sRGB8 BaseColor (with a non-sRGB8 alpha), one sRGB8 "
+              "EmissionColor, only non-sRGB8 document channels, AO_Mixed with them, Normal_DirectX or a PNG 16 RGB of "
+              "Normal_OpenGL is not recorded",
         owner);
 }
 
@@ -860,7 +913,10 @@ json::Value PlanBody(const ExportPlan& plan) {
 /// included (decisions 126 and 204); all false for any other format.
 std::vector<bool> EncodedChannels(const core::Project& project, const core::Stack& stack, const PlannedFile& file) {
     std::vector<bool> encoded(file.channels.size(), false);
-    if (!file.parameters || file.parameters->fileFormat != FileFormat::png) return encoded;
+    if (!file.parameters ||
+        (file.parameters->fileFormat != FileFormat::png && file.parameters->fileFormat != FileFormat::tga)) {
+        return encoded;
+    }
     for (size_t c = 0; c < file.channels.size(); ++c) {
         const PlannedChannel& channel = file.channels[c];
         const PlannedSource& s = channel.source;
@@ -1411,7 +1467,9 @@ bool SrgbEncodedRead(ChannelType type, core::ChannelFormat format, ChannelLetter
 bool SrgbEncodedSrgb8OnExport(const core::Project& project, ChannelType type) {
     if (SrgbEncodedOnExport(type)) return true;
     const std::string& mode = project.settings.color_management.mode;
-    return type == ChannelType::EmissionColor && (mode.empty() || mode == "legacy");
+    // Under OCIO with Painter's substance config: R-322's EmissionColor (field-b), equal to the
+    // BaseColor rule at PNG 8, TGA 8 and PNG 16 (decision 422).
+    return type == ChannelType::EmissionColor && (mode.empty() || mode == "legacy" || evaluator::PainterOcio(project));
 }
 
 bool SrgbEncodedRead(const core::Project& project, ChannelType type, core::ChannelFormat format, ChannelLetter src) {
@@ -1563,7 +1621,8 @@ render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int
         }
     }
     raster.ocio = evaluator::PainterOcio(project);
-    if (raster.ocio && file.parameters && file.parameters->fileFormat == FileFormat::png) {
+    if (raster.ocio && file.parameters &&
+        (file.parameters->fileFormat == FileFormat::png || file.parameters->fileFormat == FileFormat::tga)) {
         // Session O records the PNG encode of an sRGB-encoded channel for the stored sRGB8 codes and
         // the empty BaseColor only (encode.h, decision 190).
         for (uint32_t c = 0; c < raster.channels; ++c) {

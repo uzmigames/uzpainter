@@ -35,6 +35,8 @@ struct Context {
     /// The profile's `uniformGreyUnrounded` (UniformOperand).
     bool uniformGreyUnrounded = false;
     const IProceduralSourceProvider* procedurals = nullptr;
+    /// `OcioSoleFill` of the channel's root stack (DagSource::ocioSoleFill).
+    bool ocioSoleFill = false;
 };
 
 constexpr int kMaxInstanceDepth = 64;
@@ -168,14 +170,18 @@ render::Result<DagSource> ResolveSource(const Context& ctx, const core::FillCont
                     result.ocio = DagSource::Ocio::Srgb8Fill;
                 } else if (ctx.tileFormat.srgb && bitmap.color_space == "Raw") {
                     result.ocio = DagSource::Ocio::Raw8Fill;
+                } else if (OcioBitmapUseOf(ctx.project, bitmap.color_space, ctx.format) == OcioBitmapUse::DataFill) {
+                    result.ocio = DagSource::Ocio::DataFill;
                 } else {
                     return EvalFail(EvalErrorKind::UnsupportedSource,
                                     "under OCIO, a bitmap in the colour space '" + bitmap.color_space +
                                         "' on the channel " + std::string(core::ToString(ctx.channel)) +
-                                        " is not recorded (Session O records sRGB and Raw on an sRGB8 channel; "
-                                        "phase1.15_compositor-colour-fits, decision 190)",
+                                        " is not recorded (Session O records sRGB and Raw on an sRGB8 channel, "
+                                        "R-322 Data, DataSigned and NormalXYZLeft on another; "
+                                        "phase1.15_compositor-colour-fits, decisions 190 and 422)",
                                     uid);
                 }
+                result.ocioSoleFill = result.ocio == DagSource::Ocio::Srgb8Fill && ctx.ocioSoleFill;
             }
             // Bound by content hash (LAY-13: the alias plays no part); the linear colour spaces
             // give the same samples (sources.h).
@@ -187,6 +193,7 @@ render::Result<DagSource> ResolveSource(const Context& ctx, const core::FillCont
             // The OCIO use is checked when its content tile is made (evaluate.cpp CheckOcioBitmap):
             // a tile cached under legacy or under another use never serves it.
             if (result.ocio != DagSource::Ocio::None) writer.Str("ocio").U32(static_cast<uint32_t>(result.ocio));
+            if (result.ocioSoleFill) writer.Str("ocio-sole-fill");
             writer.U32(static_cast<uint32_t>(result.projection.filter));
             writer.U32(static_cast<uint32_t>(result.projection.wrap));
             for (const double value : {result.projection.cosR, result.projection.sinR,
@@ -487,6 +494,25 @@ render::Result<std::optional<DagMask>> MaskOf(const Context& ctx, const Layer& l
 render::Result<void> AppendLayers(Context& ctx, const std::vector<Layer>& layersTopFirst,
                                   DagList& list);
 
+/// True when `channel` of `stack` has one contributing root layer (empty paint layers, invisible
+/// layers and layers disabled on the channel contribute nothing) and it is a fill in Normal mode
+/// at opacity 1 without mask, geometry mask or effects: R-322's stack (decision 422).
+bool OcioSoleFill(const core::Stack& stack, ChannelType channel) {
+    const Layer* only = nullptr;
+    for (const Layer& layer : stack.root_layers) {
+        if (!layer.visible || core::IsEmptyPaintLayer(layer)) continue;
+        if (EffectiveBlending(layer, channel).mode == BlendingMode::Disable) continue;
+        if (only != nullptr) return false;
+        only = &layer;
+    }
+    if (only == nullptr || only->kind != LayerKind::fill || only->mask || !only->content_effects.empty() ||
+        !(only->geometry_mask == core::GeometryMask{})) {
+        return false;
+    }
+    const core::Blending blending = EffectiveBlending(*only, channel);
+    return blending.mode == BlendingMode::Normal && blending.opacity == 1.0;
+}
+
 /// Appends `layer` (visible, contributing) to `list`.
 render::Result<void> AppendLayer(Context& ctx, const Layer& layer, DagList& list) {
     if (!layer.visible) return {};
@@ -691,6 +717,7 @@ render::Result<ChannelDag> BuildDag(const core::Project& project, core::Id textu
     Context ctx{project,        dag.profile.id, *set,     *stackPtr, channel,
                 dag.tileFormat, dag.format,     dag.base, dag.grid};
     ctx.procedurals = procedurals;
+    ctx.ocioSoleFill = PainterOcio(project) && OcioSoleFill(*stackPtr, channel);
     ctx.float32UniformPlain = dag.profile.float32UniformPlain;
     ctx.uniformGreyUnrounded = dag.profile.uniformGreyUnrounded;
     {
