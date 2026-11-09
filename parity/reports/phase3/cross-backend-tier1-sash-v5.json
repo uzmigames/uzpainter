@@ -1,0 +1,216 @@
+{
+  "schema": "uzpainter/parity/cross-backend-report/1",
+  "record_class": "cross_backend_report",
+  "outcome": "pass",
+  "runs": [
+    {
+      "backend": "dx12",
+      "bundle_sha256": "e1322616eb58fc78e0f73af58116b9420696980901c069425a80f9725adca6bb",
+      "project_uuid": "c39681ae-2091-49b8-b0df-8a7d5bed5edf",
+      "revision": 223,
+      "project_sha256": "19750bade7fcda017805144aabd966e8ee4ffb0b9c5e8c4d1254e71a99ef96d9",
+      "evaluator_profile": "painter-12.1-isolated-coverage-weights",
+      "build_sha256": "9c22d451e3333a338a2cf66d3a82cc1b0dd774cec1cca893df0af7a71e025343",
+      "resource_hashes": [
+        "0536fb8fe4c97780658dbb2f0405bb4d0bcb0f2122410ad22626a11c85d44eea",
+        "171682eee23920d45dface8d9bc444d7a8b884fceaef0b05223199f6081967f9",
+        "24c8e0a0e553a7f2ebb6c5b1fae201167d2ab8e573310edcff9e372ee075c8aa",
+        "30dfdc76815bffd24f14e275d3fc9d05a5f37b0304db74f4528f47ac4b6ee2f4",
+        "34c6da71c08a848f06e47e1a434bf79d9bd257db100b69551635adebec53eee9",
+        "3df0e27eef4f9c5af844878d9be5845f28774074e14da1b919ca8b14b88a1bd1",
+        "4ceec2c2e89a55a3f79d899b1a09223241998e38106f0b273db7cb43274aa007",
+        "646bba8546ad9dcd6475eb366fced896f35f592b088e1286d1a30ec957249944",
+        "678e92d4f27b8c95903d0147479befc44ee5bc9d06c821e8a4a60e7ec14a3102",
+        "6eb0d92300cdf189f57ec5ccdefe32bcf485a3a5abb784361dcbe87ffd4df3c2",
+        "768c098fcd7ab9347c820ecd4157c9a90afa73e604d3d3be703d0ddbf4f63fb2",
+        "8267722cc7f13cd2bc644282aa58d90174be4c5cbd0ea2490533f3a8e2489d48",
+        "831fbf81fcd14f56469eed020de445fe64c125493eaa00f64b6de0c503e08c86",
+        "94f9b78cf2ebf47d2c12e0fe61848b66343fed235fdba8d29841908ff5d43437",
+        "a40246630088bc6274ed5bc662bed512223507a5a2019d10d9c2ef060c6279ce",
+        "b38bc043c09f48f885fefb3864d6fe6313d419b7601a9a236502bb57a47f5ad4",
+        "ba466d5b912025fc25113de369ba94020014cb7fb9020e08ef243e0d2df44c5c",
+        "bc6858a658d1ca1117bc9fe360930d9723e6469b36c17eb067b804a63a560153",
+        "c58e85785e29f69328098918eb7f16ed98ee51f03fb6a288b63e017f94a4d68c",
+        "c61c7917465fcbc029cc6562e725089477d9258f44be3e6c17c529ffc60e579d",
+        "dd717411247e2a2dcf297f4cf80eee0be843a90a4c47e3f5e620f3e9244183ea"
+      ],
+      "resource_identity_sha256": "f69c864ff50ff5e87f8642fbfaefe215781011a59b848d721a40cec36fc48afe",
+      "adapter_sha256": "e7d862260256f76774c412d3a8659310c8fc1373f5edc571f010c9a270054e65",
+      "driver_sha256": "0d4a994517527cf2e05c37cdea47f0d1e4835db1b5edb9bb2917f5189a719f87"
+    },
+    {
+      "backend": "vulkan",
+      "bundle_sha256": "39b5ce18f08061c9105e017f601f6e37bcf999ebd873beb529f96353fa387104",
+      "project_uuid": "c39681ae-2091-49b8-b0df-8a7d5bed5edf",
+      "revision": 223,
+      "project_sha256": "19750bade7fcda017805144aabd966e8ee4ffb0b9c5e8c4d1254e71a99ef96d9",
+      "evaluator_profile": "painter-12.1-isolated-coverage-weights",
+      "build_sha256": "9c22d451e3333a338a2cf66d3a82cc1b0dd774cec1cca893df0af7a71e025343",
+      "resource_hashes": [
+        "0536fb8fe4c97780658dbb2f0405bb4d0bcb0f2122410ad22626a11c85d44eea",
+        "171682eee23920d45dface8d9bc444d7a8b884fceaef0b05223199f6081967f9",
+        "24c8e0a0e553a7f2ebb6c5b1fae201167d2ab8e573310edcff9e372ee075c8aa",
+        "30dfdc76815bffd24f14e275d3fc9d05a5f37b0304db74f4528f47ac4b6ee2f4",
+        "34c6da71c08a848f06e47e1a434bf79d9bd257db100b69551635adebec53eee9",
+        "3df0e27eef4f9c5af844878d9be5845f28774074e14da1b919ca8b14b88a1bd1",
+        "4ceec2c2e89a55a3f79d899b1a09223241998e38106f0b273db7cb43274aa007",
+        "646bba8546ad9dcd6475eb366fced896f35f592b088e1286d1a30ec957249944",
+        "678e92d4f27b8c95903d0147479befc44ee5bc9d06c821e8a4a60e7ec14a3102",
+        "6eb0d92300cdf189f57ec5ccdefe32bcf485a3a5abb784361dcbe87ffd4df3c2",
+        "768c098fcd7ab9347c820ecd4157c9a90afa73e604d3d3be703d0ddbf4f63fb2",
+        "8267722cc7f13cd2bc644282aa58d90174be4c5cbd0ea2490533f3a8e2489d48",
+        "831fbf81fcd14f56469eed020de445fe64c125493eaa00f64b6de0c503e08c86",
+        "94f9b78cf2ebf47d2c12e0fe61848b66343fed235fdba8d29841908ff5d43437",
+        "a40246630088bc6274ed5bc662bed512223507a5a2019d10d9c2ef060c6279ce",
+        "b38bc043c09f48f885fefb3864d6fe6313d419b7601a9a236502bb57a47f5ad4",
+        "ba466d5b912025fc25113de369ba94020014cb7fb9020e08ef243e0d2df44c5c",
+        "bc6858a658d1ca1117bc9fe360930d9723e6469b36c17eb067b804a63a560153",
+        "c58e85785e29f69328098918eb7f16ed98ee51f03fb6a288b63e017f94a4d68c",
+        "c61c7917465fcbc029cc6562e725089477d9258f44be3e6c17c529ffc60e579d",
+        "dd717411247e2a2dcf297f4cf80eee0be843a90a4c47e3f5e620f3e9244183ea"
+      ],
+      "resource_identity_sha256": "f69c864ff50ff5e87f8642fbfaefe215781011a59b848d721a40cec36fc48afe",
+      "adapter_sha256": "e7d862260256f76774c412d3a8659310c8fc1373f5edc571f010c9a270054e65",
+      "driver_sha256": "6289d4f1bb5a1f80da50714a9c677e157be7eb867af934cfcbe1742f44275504"
+    }
+  ],
+  "maps": [
+    {
+      "output_id": "map-d50b8119437794ffc9418fd368d5c2d7b7c563ca52df5a4dfeb13fe9ef639cfd",
+      "storage_format": {
+        "container": "png",
+        "sample_type": "uint",
+        "bits_per_channel": 16,
+        "channels": 3,
+        "encoding": "undetermined"
+      },
+      "abs_diff": {
+        "max": 0,
+        "mean": 0,
+        "p99": 0
+      },
+      "differing": {
+        "count": 0,
+        "percent": 0.0,
+        "total": 12582912
+      },
+      "regions": [],
+      "flip_mean": 0.0,
+      "dx12_sha256": "03834889a67b4de4f865926495ebea3f86c2d0ebe28e4ee751ec34f7cb2752a1",
+      "vulkan_sha256": "03834889a67b4de4f865926495ebea3f86c2d0ebe28e4ee751ec34f7cb2752a1",
+      "bytes_equal": true
+    },
+    {
+      "output_id": "map-16ff5bfe8ff72a13f750b8608c7b80df750ed3364064ffbdf91f8b6d11cd1946",
+      "storage_format": {
+        "container": "png",
+        "sample_type": "uint",
+        "bits_per_channel": 16,
+        "channels": 1,
+        "encoding": "undetermined"
+      },
+      "abs_diff": {
+        "max": 0,
+        "mean": 0,
+        "p99": 0
+      },
+      "differing": {
+        "count": 0,
+        "percent": 0.0,
+        "total": 4194304
+      },
+      "regions": [],
+      "flip_mean": 0.0,
+      "dx12_sha256": "670d1ac462467eceff710e9047d916355b31948c89952836730e3f884b19363d",
+      "vulkan_sha256": "670d1ac462467eceff710e9047d916355b31948c89952836730e3f884b19363d",
+      "bytes_equal": true
+    },
+    {
+      "output_id": "map-7583edbf9d6b8b23e41bd61257b18ee90f82f6e964d586c3f8f4291eca5d4582",
+      "storage_format": {
+        "container": "png",
+        "sample_type": "uint",
+        "bits_per_channel": 16,
+        "channels": 1,
+        "encoding": "undetermined"
+      },
+      "abs_diff": {
+        "max": 0,
+        "mean": 0,
+        "p99": 0
+      },
+      "differing": {
+        "count": 0,
+        "percent": 0.0,
+        "total": 4194304
+      },
+      "regions": [],
+      "flip_mean": 0.0,
+      "dx12_sha256": "537c59bf6206c8a29d89a0f0433ae285254a2b7deac15ba730f547b6d678ca33",
+      "vulkan_sha256": "537c59bf6206c8a29d89a0f0433ae285254a2b7deac15ba730f547b6d678ca33",
+      "bytes_equal": true
+    },
+    {
+      "output_id": "map-7ecbbcc1f0573e5db361bf592e977c5441b2697f2e965e79b6d5c025a76c4aad",
+      "storage_format": {
+        "container": "png",
+        "sample_type": "uint",
+        "bits_per_channel": 16,
+        "channels": 3,
+        "encoding": "undetermined"
+      },
+      "abs_diff": {
+        "max": 0,
+        "mean": 0,
+        "p99": 0
+      },
+      "differing": {
+        "count": 0,
+        "percent": 0.0,
+        "total": 12582912
+      },
+      "regions": [],
+      "normal": {
+        "angular_max_deg": 0.0,
+        "angular_mean_deg": 0.0,
+        "non_finite_count": 0,
+        "unnormalised_count": 2,
+        "negative_z_count": 161
+      },
+      "flip_mean": 0.0,
+      "dx12_sha256": "4af4b2e069ea41a4317d234e681b834855b2218cf9e8d6faa56b1905c531635f",
+      "vulkan_sha256": "4af4b2e069ea41a4317d234e681b834855b2218cf9e8d6faa56b1905c531635f",
+      "bytes_equal": true
+    },
+    {
+      "output_id": "map-cfaf5ddd8a8d57b58631f15768f9a8bcfbeb245f95169a98bc2c52c769b9161c",
+      "storage_format": {
+        "container": "png",
+        "sample_type": "uint",
+        "bits_per_channel": 16,
+        "channels": 1,
+        "encoding": "undetermined"
+      },
+      "abs_diff": {
+        "max": 0,
+        "mean": 0,
+        "p99": 0
+      },
+      "differing": {
+        "count": 0,
+        "percent": 0.0,
+        "total": 4194304
+      },
+      "regions": [],
+      "flip_mean": 0.0,
+      "dx12_sha256": "b00dd390a7169409f770f2c8f3acf5c5a8e07c3fa9fd41c3536d5ad5f0fbc693",
+      "vulkan_sha256": "b00dd390a7169409f770f2c8f3acf5c5a8e07c3fa9fd41c3536d5ad5f0fbc693",
+      "bytes_equal": true
+    }
+  ],
+  "structural": [],
+  "flip_tool": {
+    "version": "1.7",
+    "sha256": "2081f715ea8190a5f58bc578b0cccd36a9a3f3cf78ad13fe6f86e5a75615bda7"
+  }
+}

@@ -1,0 +1,210 @@
+{
+  "schema": "uzpainter/parity/cross-backend-report/1",
+  "record_class": "cross_backend_report",
+  "outcome": "pass",
+  "runs": [
+    {
+      "backend": "dx12",
+      "bundle_sha256": "abf7e6651de0970dbcb7ab566c909841659388a69e93c03aa1b2a0a5208e1297",
+      "project_uuid": "f88e6aa0-25ea-4943-9882-28b7dc0f7b8e",
+      "revision": 241,
+      "project_sha256": "cc11b2ed87662705b85eaa053a30d9431d3c37022eaf0ffa2a9e5545b2d68060",
+      "evaluator_profile": "painter-12.1-isolated-coverage-weights",
+      "build_sha256": "9c22d451e3333a338a2cf66d3a82cc1b0dd774cec1cca893df0af7a71e025343",
+      "resource_hashes": [
+        "0772c83624e1a5b5b75141c1efc1774098be3d6b89462f9ce1b6634b1348a49e",
+        "3e04c6282e385bf3e8d637e6f03f5b27130c2bcbd7800ae95d72938ccbf896a1",
+        "3e3e553ae76639e6dee17a411bbe9fa7bdbed3a34970109f012244a38595af88",
+        "3f92a49c4f77751c337ed375786a450d4267b1184f26bc0b4b18c2699047ff49",
+        "5b6559335b6f9bc49c50ba37097a618f00ed5c5069f1522cb7fededc20a2ab74",
+        "61a1b281b87fd61c99825d3449dc6f8e5ee6fc006655673464d8a69440266f29",
+        "65131369a1d96b3d389c19280186b1ddc60bdfeedc05d4cb324b4b8d6a82b7d0",
+        "72a700679efa8b0ee214b5e01eecc140795f4e566d8e94712dba14a86afb30b5",
+        "750c2facd9aca492bd1ac21b8f8ac1610ebe75803594ee66c33be25d4d1d3fb6",
+        "822f926d65403df422df81cd5c9227cb2a1a2ef6c727c42f76d21b836f98a09c",
+        "8591ee1ec691467cc291ff7bc4e7e7a2e676f09d43c96d88e48e77cbe72e0a9f",
+        "9b2b306359a4ef6a1888c5eb33095a8f1fea1024130eae4d08d9c06a28aaf4d0",
+        "a931e4d5dc19d1147854076da8339095b7c279b7d5a9a27eba98f555bc9f7fd6",
+        "b43250e20dbabd4fef8aad979132658564b71d69d8d9f330db69287d23fa7908",
+        "b691bc3d979323d24a43caf399075ecb9802681dd02ae98f2e67146c38f8ebfb",
+        "bd0882cf9a356f3b695ce254786849f650a7014b7ea54f023bc1827a96cafc79",
+        "f12fd122cde2c56937c16564aa5b33bfef1d6ab49bbbe5038f56cd74945775ea",
+        "fb779c19fea266095633ce5de7e3f18cc28b7753aa388d709a0c2070bf5d0df6"
+      ],
+      "resource_identity_sha256": "738f32b230b3f72ae20b0d7a6a21efbd2d462ec3e302bbec264b89ddc5db82a2",
+      "adapter_sha256": "e7d862260256f76774c412d3a8659310c8fc1373f5edc571f010c9a270054e65",
+      "driver_sha256": "0d4a994517527cf2e05c37cdea47f0d1e4835db1b5edb9bb2917f5189a719f87"
+    },
+    {
+      "backend": "vulkan",
+      "bundle_sha256": "3bd1b6fcaa00828485fc235adedd198009abde0cc7059353ff6c7c6f91a65e4a",
+      "project_uuid": "f88e6aa0-25ea-4943-9882-28b7dc0f7b8e",
+      "revision": 241,
+      "project_sha256": "cc11b2ed87662705b85eaa053a30d9431d3c37022eaf0ffa2a9e5545b2d68060",
+      "evaluator_profile": "painter-12.1-isolated-coverage-weights",
+      "build_sha256": "9c22d451e3333a338a2cf66d3a82cc1b0dd774cec1cca893df0af7a71e025343",
+      "resource_hashes": [
+        "0772c83624e1a5b5b75141c1efc1774098be3d6b89462f9ce1b6634b1348a49e",
+        "3e04c6282e385bf3e8d637e6f03f5b27130c2bcbd7800ae95d72938ccbf896a1",
+        "3e3e553ae76639e6dee17a411bbe9fa7bdbed3a34970109f012244a38595af88",
+        "3f92a49c4f77751c337ed375786a450d4267b1184f26bc0b4b18c2699047ff49",
+        "5b6559335b6f9bc49c50ba37097a618f00ed5c5069f1522cb7fededc20a2ab74",
+        "61a1b281b87fd61c99825d3449dc6f8e5ee6fc006655673464d8a69440266f29",
+        "65131369a1d96b3d389c19280186b1ddc60bdfeedc05d4cb324b4b8d6a82b7d0",
+        "72a700679efa8b0ee214b5e01eecc140795f4e566d8e94712dba14a86afb30b5",
+        "750c2facd9aca492bd1ac21b8f8ac1610ebe75803594ee66c33be25d4d1d3fb6",
+        "822f926d65403df422df81cd5c9227cb2a1a2ef6c727c42f76d21b836f98a09c",
+        "8591ee1ec691467cc291ff7bc4e7e7a2e676f09d43c96d88e48e77cbe72e0a9f",
+        "9b2b306359a4ef6a1888c5eb33095a8f1fea1024130eae4d08d9c06a28aaf4d0",
+        "a931e4d5dc19d1147854076da8339095b7c279b7d5a9a27eba98f555bc9f7fd6",
+        "b43250e20dbabd4fef8aad979132658564b71d69d8d9f330db69287d23fa7908",
+        "b691bc3d979323d24a43caf399075ecb9802681dd02ae98f2e67146c38f8ebfb",
+        "bd0882cf9a356f3b695ce254786849f650a7014b7ea54f023bc1827a96cafc79",
+        "f12fd122cde2c56937c16564aa5b33bfef1d6ab49bbbe5038f56cd74945775ea",
+        "fb779c19fea266095633ce5de7e3f18cc28b7753aa388d709a0c2070bf5d0df6"
+      ],
+      "resource_identity_sha256": "738f32b230b3f72ae20b0d7a6a21efbd2d462ec3e302bbec264b89ddc5db82a2",
+      "adapter_sha256": "e7d862260256f76774c412d3a8659310c8fc1373f5edc571f010c9a270054e65",
+      "driver_sha256": "6289d4f1bb5a1f80da50714a9c677e157be7eb867af934cfcbe1742f44275504"
+    }
+  ],
+  "maps": [
+    {
+      "output_id": "map-8d2f2329897b22c27886900f5714f880a2b1f2457ccd9282ca4a5a12bcd6f7e8",
+      "storage_format": {
+        "container": "png",
+        "sample_type": "uint",
+        "bits_per_channel": 16,
+        "channels": 3,
+        "encoding": "undetermined"
+      },
+      "abs_diff": {
+        "max": 0,
+        "mean": 0,
+        "p99": 0
+      },
+      "differing": {
+        "count": 0,
+        "percent": 0.0,
+        "total": 50331648
+      },
+      "regions": [],
+      "flip_mean": 0.0,
+      "dx12_sha256": "53ee651b31d0aa6b9968874e353277625086165960a662091c864aeb41644327",
+      "vulkan_sha256": "53ee651b31d0aa6b9968874e353277625086165960a662091c864aeb41644327",
+      "bytes_equal": true
+    },
+    {
+      "output_id": "map-f130315a7159e9779ad90f86c764b9b82e65c504ed0b60c0108dce1a9bebc14e",
+      "storage_format": {
+        "container": "png",
+        "sample_type": "uint",
+        "bits_per_channel": 16,
+        "channels": 3,
+        "encoding": "undetermined"
+      },
+      "abs_diff": {
+        "max": 0,
+        "mean": 0,
+        "p99": 0
+      },
+      "differing": {
+        "count": 0,
+        "percent": 0.0,
+        "total": 50331648
+      },
+      "regions": [],
+      "flip_mean": 0.0,
+      "dx12_sha256": "a46f78f2d20a35f62bd67ec110c678f7073e743eb89f339e467cb7ade2b7bdf2",
+      "vulkan_sha256": "a46f78f2d20a35f62bd67ec110c678f7073e743eb89f339e467cb7ade2b7bdf2",
+      "bytes_equal": true
+    },
+    {
+      "output_id": "map-9352ec1330090cc748b5cc51d5b023afa2101d183b0b089ee1e70802568ef1eb",
+      "storage_format": {
+        "container": "png",
+        "sample_type": "uint",
+        "bits_per_channel": 16,
+        "channels": 3,
+        "encoding": "undetermined"
+      },
+      "abs_diff": {
+        "max": 0,
+        "mean": 0,
+        "p99": 0
+      },
+      "differing": {
+        "count": 0,
+        "percent": 0.0,
+        "total": 50331648
+      },
+      "regions": [],
+      "flip_mean": 0.0,
+      "dx12_sha256": "d915331ab8750d70eed2630ced1cd2f9b6ed2adc11b1fdc5da7d9a720e799853",
+      "vulkan_sha256": "d915331ab8750d70eed2630ced1cd2f9b6ed2adc11b1fdc5da7d9a720e799853",
+      "bytes_equal": true
+    },
+    {
+      "output_id": "map-9aa99132cbdc55db4b523caee27bfdce0e706a639fdbdd14a8701af2e7e45c14",
+      "storage_format": {
+        "container": "png",
+        "sample_type": "uint",
+        "bits_per_channel": 16,
+        "channels": 3,
+        "encoding": "undetermined"
+      },
+      "abs_diff": {
+        "max": 0,
+        "mean": 0,
+        "p99": 0
+      },
+      "differing": {
+        "count": 0,
+        "percent": 0.0,
+        "total": 50331648
+      },
+      "regions": [],
+      "normal": {
+        "angular_max_deg": 0.0,
+        "angular_mean_deg": 0.0,
+        "non_finite_count": 0,
+        "unnormalised_count": 9,
+        "negative_z_count": 52153
+      },
+      "flip_mean": 0.0,
+      "dx12_sha256": "3d4770188f60d5f42dc8f96bf0362116f08f08973fc32df66c2c4e21b8c9af6e",
+      "vulkan_sha256": "3d4770188f60d5f42dc8f96bf0362116f08f08973fc32df66c2c4e21b8c9af6e",
+      "bytes_equal": true
+    },
+    {
+      "output_id": "map-bd49c6e8c69762ef945f0b6b65b5dd8fcac9fc822d14c5ba192851b6db7122cd",
+      "storage_format": {
+        "container": "png",
+        "sample_type": "uint",
+        "bits_per_channel": 16,
+        "channels": 3,
+        "encoding": "undetermined"
+      },
+      "abs_diff": {
+        "max": 0,
+        "mean": 0,
+        "p99": 0
+      },
+      "differing": {
+        "count": 0,
+        "percent": 0.0,
+        "total": 50331648
+      },
+      "regions": [],
+      "flip_mean": 0.0,
+      "dx12_sha256": "ccd6ea32c5922bc62cac1ba5443df427a51f02ed92d4a285f94944287ec443d1",
+      "vulkan_sha256": "ccd6ea32c5922bc62cac1ba5443df427a51f02ed92d4a285f94944287ec443d1",
+      "bytes_equal": true
+    }
+  ],
+  "structural": [],
+  "flip_tool": {
+    "version": "1.7",
+    "sha256": "2081f715ea8190a5f58bc578b0cccd36a9a3f3cf78ad13fe6f86e5a75615bda7"
+  }
+}
