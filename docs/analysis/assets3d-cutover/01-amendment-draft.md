@@ -5,26 +5,34 @@
 > signature"; decisions 026 and 259 §6). Nothing in the Assets3D repository has been edited. Until
 > the owner signs, the Assets3D rule "painting is ALWAYS in Substance Painter" stays in force as
 > written, and the adapter's production checks (below) authorize nothing on their own.
+>
+> Updated 2026-11-09, still unsigned: the production export of UV-islanded sets is now released
+> under the owner's exceptions EXC-013 (decision 414: the padding outside the UV coverage) and
+> EXC-014 (decision 417: the combined virtual Normal's covered island-edge texels), and the
+> Tunic's exception is EXC-011 v3 (decision 410). The wording below follows them.
 
 ## 1. What G2 proved, and what it did not
 
 Facts, from `parity/reports/phase2/gate-g2.md` (G2 closed 2026-11-08 on gate commit `68c61b18`,
 archived as `.rulebook/archive/2026-11-08-phase2.11_gate-g2/`):
 
-| Pilot | Tier 1 result | Under | Production export |
+| Pilot | Tier 1 result | Under | Production export (since 2026-11-09) |
 |---|---|---|---|
-| Wand v1 | pass (through G1) | EXC-010 v1 (decision 395): the padding and the Normal's island-edge texels may differ; every other texel equal | refused (UV islands) |
-| Belt v5 (the Sash v5, decision 260) | pass, `structural` empty | EXC-012 v1 (decision 399): same terms | refused (UV islands); the Python-disabled MCP round completed in the diagnostic measure export |
-| Tunic v10 (the current round, decision 398) | pass, `structural` empty | EXC-011 v2 (decisions 398, 401): the island edge of every map and the padding may differ | refused (UV islands) |
+| Wand v1 | pass (through G1) | EXC-010 v1 (decision 395): the padding and the Normal's island-edge texels may differ; every other texel equal | written under EXC-013 and EXC-014 (decisions 414, 417) |
+| Belt v5 (the Sash v5, decision 260) | pass, `structural` empty | EXC-012 v1 (decision 399): same terms | written under EXC-013 and EXC-014; the Python-disabled MCP round completed in the diagnostic measure export |
+| Tunic v10 (the current round, decision 398) | pass, `structural` empty | EXC-011 v3 (decision 410, narrowing decision 401's v2): the Normal's island-edge texels and the padding may differ; every other texel equal | written under EXC-013 and EXC-014 |
 
 - **Never exact.** All three pilots pass only under owner-approved exceptions. No pilot is equal
   to Painter on every texel.
-- **Not a production delivery.** Every pilot map that G2 compared was written by the diagnostic
-  measure export (decision 286), whose receipt says `non_conformant`. UzPainter's production
-  export still refuses a UV-islanded texture set: `infinite` padding on islands (decision 259 §4)
-  and a virtual Normal on an islanded set (decision 245 §1). The owner of the fix is
-  `phase3.1_export-island-padding`. All three pilots are UV-islanded texture sets, so today none
-  of them can complete a production export in UzPainter.
+- **Production delivery only under exceptions.** Every pilot map that G2 compared was written by
+  the diagnostic measure export (decision 286), whose receipt says `non_conformant`. Since
+  2026-11-09 UzPainter's production export writes UV-islanded texture sets, conformant but never
+  exact, under two owner exceptions its receipt names per file: EXC-013 (decision 414: the
+  `infinite` padding outside the UV coverage may differ, every covered texel exact) and EXC-014
+  (decision 417: only the combined virtual Normal's covered island-edge texels may differ, its
+  interior and every other map exact). A virtual Normal whose Height has no layer, and every
+  other reading of the Normal on islands, stay refused. The exact rules are
+  `phase4.1_export-island-padding-exact`'s.
 - **No render parity.** G2 makes no render claim (gate-g2.md §9). Iray-equivalent rendering is
   `phase3.7_path-tracer` and gate G5.
 - **Open required gaps.** The scope manifest lists 265 `release-gap` symbols and 37 of 106
@@ -60,7 +68,7 @@ archived as `.rulebook/archive/2026-11-08-phase2.11_gate-g2/`):
   projection (`layerstack`: 153);
 - uniform colour and bitmap sources (`source`: 34), colour management (`colormanagement`: 21);
 - resource import and listing (`resource`: 34);
-- PNG and OpenEXR export (`export`: 11), except UV-islanded sets (see above);
+- PNG and OpenEXR export (`export`: 11); on UV-islanded sets only under EXC-013 and EXC-014 (see above);
 - the matching native `uzpainter` modules (`textureset` 131, `layerstack` 94, `project` 34).
 
 The operation matrix marks 69 of its 106 typed-tool rows `available`. "Available" is not the
@@ -138,12 +146,15 @@ Proposed text (`<DATE>` and `<DECISION>` are filled in at signature):
 >   - vector and font sources, material layering;
 >   - Iray renders and captures;
 >   - every capability UzPainter marks `pending-evidence` or `release-gap`.
-> - **UV-islanded texture sets.** UzPainter refuses their production export (`infinite` padding
->   on islands, and the Normal's island edge; UzPainter decisions 245 and 259). Export them in
->   Painter.
+> - **UV-islanded texture sets.** UzPainter exports them only under the owner's exceptions
+>   EXC-013 (the `infinite` padding outside the UV coverage) and EXC-014 (the combined virtual
+>   Normal's covered island-edge texels), which its export receipt names per file (UzPainter
+>   decisions 414 and 417). Every other covered texel is exact. Where those differences are not
+>   acceptable for a piece, export it in Painter.
 > - **What parity means here.** The pilots matched Painter only under the owner's exceptions
->   EXC-010 (Wand v1), EXC-011 v2 (Tunic v10) and EXC-012 (Belt/Sash v5): the padding and the
->   island-edge texels may differ, and every other covered texel is equal. No pilot is exact.
+>   EXC-010 (Wand v1), EXC-011 v3 (Tunic v10) and EXC-012 (Belt/Sash v5): the padding and the
+>   Normal's island-edge texels may differ, and every other covered texel is equal. No pilot is
+>   exact.
 > - **Not a full replacement.** UzPainter is not a full replacement of Substance Painter while
 >   any required gap is open.
 >
@@ -175,9 +186,9 @@ They are not edited. The text of new directives follows the skill.
 ## 4. What the owner must do
 
 1. **Read §1 and §2 and decide.** Is the amendment worth signing now? Today no pilot can complete
-   a production round in UzPainter: islanded export is refused, and HEAD's `sync` is out of
-   scope. Signing now authorizes only the proven scope, and practical use waits on
-   `phase3.1_export-island-padding` and on `Resource.retrieve`.
+   a production round in UzPainter: islanded export is now written under EXC-013 and EXC-014,
+   but HEAD's `sync` is out of scope. Signing now authorizes only the proven scope, and
+   practical use waits on `Resource.retrieve`.
 2. **Approve or change the text of §3**, then sign it in your own words. A model panel, an agent
    message or silence does not count (decision 259 §6).
 3. **Choose the scope manifest.** Either sign §3 as written, pinned to `9f4d2abc…` (the G2
