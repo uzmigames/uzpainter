@@ -256,15 +256,23 @@ def test_every_pending_symbol_of_the_group_is_requested_routed_or_already_reques
     assert not set(REQUESTED) & ROUTED
 
 
+def owner_tasks(task_id: str) -> Path:
+    """The `tasks.md` of rulebook task `task_id`: active under `.rulebook/tasks/`, or archived
+    under `.rulebook/archive/<date>-<task_id>/` once it closes (exactly one of them)."""
+    rulebook = REPO_ROOT / ".rulebook"
+    found = [rulebook / "tasks" / task_id / "tasks.md"]
+    found += sorted((rulebook / "archive").glob(f"????-??-??-{task_id}/tasks.md"))
+    [path] = [p for p in found if p.is_file()]
+    return path
+
+
 @pytest.mark.parametrize("symbol", EFFECT_SOURCE_ROUTES)
 def test_effect_source_routes_keep_their_pending_owner_and_exercise_the_getter(symbol: str) -> None:
     entries = json.loads(INVENTORY.read_text(encoding="utf-8"))["entries"]
     entry = next(e for e in entries if e["symbol"] == symbol)
     assert entry["status"] == "pending-evidence"
     assert EFFECT_SOURCE_OWNER in entry["notes"]
-    owner = (REPO_ROOT / ".rulebook/tasks" / EFFECT_SOURCE_OWNER / "tasks.md").read_text(
-        encoding="utf-8"
-    )
+    owner = owner_tasks(EFFECT_SOURCE_OWNER).read_text(encoding="utf-8")
     assert "2.6c Stored generator/filter effect sources" in owner
     assert symbol.removeprefix(LS) in owner
     assert not set(EFFECT_SOURCE_ROUTES) & (set(REQUESTED) | ROUTED | DECISION_188)
