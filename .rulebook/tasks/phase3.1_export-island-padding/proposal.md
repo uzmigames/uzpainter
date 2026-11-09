@@ -31,7 +31,9 @@ The item's progress notes stay in the Wand task, `.rulebook/archive/2026-11-03-p
 - Downstream, by item: `phase3.1_assets3d-cutover` 3.1 (a conformant Wand, Belt and Tunic delivery writes manifest blocks; a `non_conformant` export gets none, decision 286 §5), and the Belt and Tunic pilots' exports (`phase2.9_pilot-belt`, `phase2.10_pilot-tunic-recovery`), unless each relies on an owner-approved exception of its own.
 
 ## Acceptance
-`infinite` padding and the virtual Normal on islanded sets equal Painter on every texel of every recorded islanded golden, both recordings, on DX12; both refusals lifted for that scope; the Wand v1 Tier 1 run passes with no exception and EXC-010 is withdrawn.
+Narrowed by decision 414 (2026-11-09, scope split; the owner's EXC-013): the coverage rule equal to Painter's recorded coverage (decision 408), the float32 and half padding operands (decision 409), EXC-011 narrowed to version 3 (decision 410), and production writing `infinite` padding on islanded sets under EXC-013 (every covered texel exact, the padding outside the coverage free, each padded file listed in the receipt's `exceptions_relied_on`), with `CheckIslandNormal` kept and the refusals' owner renamed. The exact padding on every texel, the island-edge virtual Normal, the `CheckIslandNormal` lift and the withdrawal of EXC-010 to EXC-013 moved to `phase4.1_export-island-padding-exact`.
+
+Original acceptance, before the split: `infinite` padding and the virtual Normal on islanded sets equal Painter on every texel of every recorded islanded golden, both recordings, on DX12; both refusals lifted for that scope; the Wand v1 Tier 1 run passes with no exception and EXC-010 is withdrawn.
 
 ## Impact
 - Affected specs: export

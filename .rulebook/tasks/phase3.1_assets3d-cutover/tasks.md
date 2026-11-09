@@ -38,7 +38,7 @@
 ## 3. Tests
 - [ ] 3.1 Adapter checks on wand v1, belt v5 and tunic v10: accepted rounds pass and write both manifest blocks
   - Open, blocked. No pilot can complete an accepted production round today:
-    - all three are UV-islanded, so their production export is refused (decisions 245, 259; owner `phase3.1_export-island-padding`);
+    - all three are UV-islanded: since decision 414 (2026-11-09) their maps export in production under EXC-013 (covered texels exact, the padding free), but a combined virtual Normal on their islands stays refused, and with it their five-map export (decision 245; owner `phase4.1_export-island-padding-exact`, or the owner's separate decision on the Normal's edge);
     - Assets3D HEAD's `sync` is outside the amended scope (`Resource.retrieve`, item 2.6);
     - the real piece manifests mark their gates `not-verified` (item 2.5 findings).
 - [x] 3.2 Refusal test: a round whose upstream manifest gate failed is refused before any mutation (software fixture only)
@@ -52,7 +52,7 @@
     - `test_smart_in_a_production_round_is_outside_the_amended_scope`;
     - `test_the_entry_prints_the_scope_refusal_before_the_script_runs`.
 - [ ] 3.5 Manifest-block schema test for `exportacao` and the recipe block on the three pilots
-  - Synthetic part done: `test_an_export_gets_both_blocks_valid_under_the_assets3d_schema` validates the export block and every file it names under the pinned Assets3D v2 definitions (the receipt schema's `$defs`), plus 8 failure cases. Open on the pilots: no pilot has a conformant (non-measure) export to validate until `phase3.1_export-island-padding` lifts the islanded refusal.
+  - Synthetic part done: `test_an_export_gets_both_blocks_valid_under_the_assets3d_schema` validates the export block and every file it names under the pinned Assets3D v2 definitions (the receipt schema's `$defs`), plus 8 failure cases. Open on the pilots: no pilot has a conformant (non-measure) export to validate until `phase3.1_export-island-padding` lifts the islanded refusal. Decision 414 (2026-11-09) lifted the padding refusal: a pilot export without the combined virtual Normal is now conformant, relying on EXC-013 (receipt `exceptions_relied_on`); with the Normal it stays refused (owner `phase4.1_export-island-padding-exact`).
 - [ ] 3.6 Results written to `parity/reports/phase3/`
 
 ## 4. Acceptance

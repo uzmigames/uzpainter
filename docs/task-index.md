@@ -167,12 +167,13 @@ Every rulebook task with a sub-phase id, open under `.rulebook/tasks/` or archiv
 
 ## Phase 4
 
-19 tasks, levels 1–6.
+20 tasks, levels 1–6.
 
 | Id | DAG node | Parent | Depends on (same phase) | Goal |
 |---|---|---|---|---|
 | `phase4.1_coverage-body-v6b` | P4-BODY | — | — | OWN-03 (`docs/prd.md`) requires body v6b to be reproduced with equal maps; PRJ-02 (several texture sets per project) is accepted by body v6b's three sets; PRJ-03 (per-set 4096) by the VRAM admission test; NFR-03 … |
 | `phase4.1_dxr-gpu-baker-core` | (P4-DXR) | `phase4.3_dxr-baker` | — | The optional `GpuBaker` must run on the same `BakeRequest` and the same sample sequences as `embree` so that each backend can be compared texel for texel with the CPU reference (`docs/architecture/06-baking.md` §1 … |
+| `phase4.1_export-island-padding-exact` | (P1-EXPORT) | — | — | Decision 414 lifts `CheckPadding`'s `infinite` refusal in production under the owner's EXC-013 (every covered texel exact, the padding outside the UV coverage free) and moves the remaining exactness work of `phase3.1_export-island-padding` here: the exact padding on every texel, the island-edge virtual Normal (still refused, `CheckIslandNormal`) and the withdrawal of EXC-010 to EXC-013 … |
 | `phase4.1_hat8-sharpen-filter` | (P4-HAT8) | `phase4.2_coverage-hat-v8` | — | LAY-04 (`docs/prd.md`) lists sharpen among the layer-mask operations, accepted by Tier 0 mask goldens; the DAG names Sharpen as a P4-HAT8 output because hat v8 uses it (`docs/dag.md` … |
 | `phase4.1_hat8-specular-weight-export` | (P4-HAT8) | `phase4.2_coverage-hat-v8` | — | PRJ-06 (`docs/prd.md`) requires a SpecularWeight channel per set with its storage format recorded, accepted by hat v8 Tier 1; EXP-01 lists SpecularWeight and AO among the per-set exports; OWN-06 and EXP-08 require a … |
 | `phase4.1_nodes-instances-anchors` | (P4-NODES) | `phase4.2_remaining-nodes` | — | `docs/architecture/04-layer-stack-and-compositing.md` §1 defines instance layers (`kind = instance`, `instance_source`), anchor effects (`kind = anchor`) and reference sources (`reference {anchor uid, channel_mapping … |

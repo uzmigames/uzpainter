@@ -1,16 +1,16 @@
-# Export — exact padding and Normal on UV islands
+# Export — islanded padding under the owner's exception
 
 ## ADDED Requirements
 
-### Requirement: Exact Islanded Padding And Normal
-On a texture set whose UV islands do not cover the whole tile, `infinite` padding and the virtual Normal SHALL equal Painter's exported files on every texel of every recorded islanded golden, in both recordings, and MUST stay refused before writing wherever they are not yet exact.
+### Requirement: Islanded Infinite Padding Under An Owner Exception
+On a texture set whose UV islands do not cover the whole tile, the production export SHALL write `infinite` padding with every covered texel equal to the evaluation and SHALL report each file it pads as relying on EXC-013 (decision 414); a combined virtual Normal on such a set MUST stay refused before writing.
 
-#### Scenario: A recorded islanded golden
-Given an admitted `export-padding*` golden exported with `infinite` padding
-When UzPainter's production export writes the same configuration
-Then every exported file MUST be byte-identical to Painter's, r1 and r2
+#### Scenario: An islanded `infinite` export
+Given a texture set whose UV islands leave texels uncovered
+When the production export writes its maps with `infinite` padding
+Then every covered texel MUST keep its evaluated value, and the receipt MUST list EXC-013 version 1 with every padded file in `exceptions_relied_on`, with no `non_conformant` block
 
-#### Scenario: An unfitted case
-Given an islanded export that no recording fits
+#### Scenario: A virtual Normal on islands
+Given a combined virtual Normal on an islanded texture set
 When it is requested through the production export
-Then it MUST be refused before any file is written, naming this task as the owner
+Then it MUST be refused before any file is written, naming `phase4.1_export-island-padding-exact` as the owner
