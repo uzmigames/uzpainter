@@ -1628,6 +1628,24 @@ def output_mapping_value(mapping: Any) -> Any:
     }
 
 
+def output_mapping_access(source: Any, args: dict[str, Any]) -> Any:
+    """P413-E (decision 413): one access of the property, separated from the next. `class` reads
+    only the property's class; `iterate` the keys by iteration; `len` its length; `item` the
+    value of the ChannelType `key` (subscription), with the value's class."""
+    access = args["access"]
+    mapping = source.output_mapping
+    if access == "class":
+        return type_name(mapping)
+    if access == "iterate":
+        return [describe(key) for key in mapping]
+    if access == "len":
+        return len(mapping)
+    if access == "item":
+        value = mapping[channel_type(str(args["key"]))]
+        return {"value": describe(value), "class": type_name(value)}
+    raise ValueError("an output_mapping access is class, iterate, len or item")
+
+
 def mapping_keys(mapping: Any) -> list[Any]:
     return sorted(mapping, key=lambda key: str(describe(key)))
 
@@ -1671,6 +1689,8 @@ def substance_read(call: str, args: dict[str, Any]) -> Any:
         return source.active_output
     if call == "substance_painter.source.SourceSubstance.get_source":
         return input_source_value(source.get_source(image_input(source, args)))
+    if call == OUTPUT_MAPPING and "access" in args:
+        return output_mapping_access(source, args)
     if call == OUTPUT_MAPPING:
         return output_mapping_value(source.output_mapping)
     if call == MASK_OUTPUT:
@@ -1769,6 +1789,14 @@ def substance_edit(call: str, args: dict[str, Any]) -> Any:
             raise ValueError("an explicit set_parameters control needs a boolean or integer toggle")
         source = substance_source(args)
         return source.set_parameters({first_toggle(source): value})
+    if (
+        call == "substance_painter.source.SourceSubstance.active_output"
+        and args.get("roundtrip") == "output_index"
+    ):
+        # P413-D (decision 413): the `image_outputs` entry at `output_index`, chosen in Painter.
+        source = substance_source(args)
+        source.active_output = str(list(source.image_outputs)[int(args["output_index"])])
+        return None
     if args.get("roundtrip") is not True:
         raise ValueError("this control requires an explicit effective-value roundtrip")
     source = substance_source(args)

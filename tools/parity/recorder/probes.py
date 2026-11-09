@@ -93,6 +93,7 @@ from tools.parity.recorder.texture import (
     close_quietly,
     export_outputs,
     export_roots,
+    reopen_count,
     require_colour_management,
     save_and_reopen,
     utc_now,
@@ -1194,25 +1195,30 @@ def record_api_probe(
             now,
             staged,
         )
-        session.wait_ready()
-        locations = session.call("probe_locations")
-        save_and_reopen(session, directory / "project" / "probe.spp")
-        if any("resource_url" in step.args for step in job.state_steps):
-            session.wait_catalog_ready()
-        found = session.call("probe_rebind", locations=locations)
-        rebind = readback("identity/reopen", GET_NODE_BY_UID, {}, {"value": found})
-        second, second_blobs = record_probes(
-            session,
-            job,
-            identity,
-            directory / "r2",
-            "r2",
-            "after_save_reopen",
-            uids,
-            [rebind],
-            now,
-            staged,
-        )
+        recordings, blobs = [first], list(first_blobs)
+        # One reopen by default; `recorder.reopen_count` may select up to three (r2, r3, r4).
+        for index in range(2, reopen_count(job) + 2):
+            session.wait_ready()
+            locations = session.call("probe_locations")
+            save_and_reopen(session, directory / "project" / "probe.spp")
+            if any("resource_url" in step.args for step in job.state_steps):
+                session.wait_catalog_ready()
+            found = session.call("probe_rebind", locations=locations)
+            rebind = readback("identity/reopen", GET_NODE_BY_UID, {}, {"value": found})
+            recording, captured = record_probes(
+                session,
+                job,
+                identity,
+                directory / f"r{index}",
+                f"r{index}",
+                "after_save_reopen",
+                uids,
+                [rebind],
+                now,
+                staged,
+            )
+            recordings.append(recording)
+            blobs.extend(captured)
     except BaseException as error:
         # The recording error stays the one raised; a failed cleanup is added to it.
         failures = finish_probe(session)
@@ -1225,11 +1231,11 @@ def record_api_probe(
     if failures:
         raise CleanupFailed(cleanup_refusal(failures))
     key = golden_key(job, identity, defaults, defaults["colour_management"])
-    record = private_record(job, key, [first, second])
+    record = private_record(job, key, recordings)
     return write_run(
         inbox,
         record,
-        first_blobs + second_blobs,
+        blobs,
         job.manifest,
         identity.session_id,
         environment=identity.environment,

@@ -513,7 +513,7 @@ def probe_outputs(
     return outputs, present
 
 
-def reopen_count(job: Job) -> int:
+def reopen_count(job: Manifested) -> int:
     """Default to one reopen; requests may explicitly select up to three."""
     settings = [s for s in job.manifest["applied_settings"] if s["name"] == REOPEN_COUNT]
     if not settings:
