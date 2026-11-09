@@ -1977,6 +1977,49 @@ int RunSnapshot(const fs::path& work) {
               "unavailable, the seam refuses and evaluates nothing: " + m.name + " (3.2)", Describe(refusal));
     }
 
+    // 3.2, the fields later captures added: the imported mesh's identity (its resource hash and its
+    // import report, `EvaluationSettings(Project)`) and plugged image inputs (decision 413 §3). A
+    // signature holding them is served exactly; each changed in turn is unavailable.
+    ProceduralRequest pinned = grey;
+    pinned.settings["mesh.sha256"] = std::string(64, 'a');
+    pinned.settings["mesh.import_report_sha256"] = std::string(64, 'b');
+    pinned.sourceInputs = {{"Mask", InputSource{{}, {}, std::array<double, 3>{0.25, 0.5, 0.75}}},
+                           {"Detail", InputSource{std::string(64, 'c'), "Data", std::nullopt}}};
+    SnapshotBackend pinnedSnapshots;
+    pinnedSnapshots.Add(pinned, SnapshotRaster{pinned.output, greyBytes});
+    const auto pinnedStored = pinnedSnapshots.Stored(pinned);
+    Check(pinnedSnapshots.CanEvaluate(pinned) && pinnedStored && (*pinnedStored)->bytes == greyBytes,
+          "a signature with the mesh identity and plugged inputs is served, byte for byte (2.2)");
+    const std::vector<Mismatch> pinnedMismatches{
+        {"the imported mesh's resource hash", [](ProceduralRequest& r) { r.settings["mesh.sha256"] = std::string(64, 'd'); },
+         "settings.mesh.sha256"},
+        {"the imported mesh's import report", [](ProceduralRequest& r) { r.settings["mesh.import_report_sha256"] = std::string(64, 'e'); },
+         "settings.mesh.import_report_sha256"},
+        {"a signature without the import report", [](ProceduralRequest& r) { r.settings.erase("mesh.import_report_sha256"); },
+         "settings.mesh.import_report_sha256"},
+        {"a plugged colour's working value",
+         [](ProceduralRequest& r) { r.sourceInputs["Mask"].workingColour = std::array<double, 3>{0.25, 0.5, std::nextafter(0.75, 1.0)}; },
+         "inputs.Mask.working_colour"},
+        {"a plugged bitmap's hash", [](ProceduralRequest& r) { r.sourceInputs["Detail"].bitmapSha256 = std::string(64, 'f'); },
+         "inputs.Detail.bitmap_sha256"},
+        {"a plugged bitmap's colour space", [](ProceduralRequest& r) { r.sourceInputs["Detail"].colourSpace = "sRGB"; },
+         "inputs.Detail.colour_space"},
+        {"a plugged input left unplugged", [](ProceduralRequest& r) { r.sourceInputs.erase("Mask"); }, "inputs.Mask"},
+        {"another input plugged", [](ProceduralRequest& r) { r.sourceInputs["Extra"] = r.sourceInputs.at("Mask"); }, "inputs.Extra"},
+    };
+    const ProceduralSeam pinnedSeam(&pinnedSnapshots, nullptr);
+    for (const Mismatch& m : pinnedMismatches) {
+        ProceduralRequest changed = pinned;
+        m.change(changed);
+        const std::optional<UnsupportedProcedural> refusal = pinnedSnapshots.Refusal(changed);
+        const auto selected = pinnedSeam.Select(changed);
+        const auto evaluated = pinnedSeam.Evaluate(changed, {});
+        Check(SignatureHash(changed) != SignatureHash(pinned) && !pinnedSnapshots.CanEvaluate(changed) && refusal &&
+                  refusal->reason == kNoSnapshot && refusal->field == m.field && !pinnedSnapshots.Stored(changed) &&
+                  !selected && selected.error().reason == kNoBackend && !evaluated,
+              "unavailable, the seam refuses and evaluates nothing: " + m.name + " (3.2)", Describe(refusal));
+    }
+
     // Snapshots do not make assets editable: the exact signature is admitted, an edited parameter
     // is refused before the mutation commits (no certified family, an empty library).
     const AssetLibrary library;
@@ -2664,6 +2707,61 @@ int RunObservationSourceV2(const fs::path& work) {
     return Finish();
 }
 
+/// Acceptance 4.1 over a private capture project (`tests/procedural/test_proc_snapshot_served_capture.py`):
+/// opens `project`, loads its snapshots through `SnapshotBackend::Load` and, for each manifest entry,
+/// prints one `SERVED <json>` line: the stored signature and key, the served raster's spec and the
+/// SHA-256 of what `Stored` returns and of `Evaluate`'s float32 texels. Pixels are never printed.
+int RunSnapshotServed(const fs::path& project) {
+    namespace core = uzp::core;
+    namespace json = uzp::core::json;
+    namespace store = uzp::store;
+    auto opened = store::ProjectStore::Open(project);
+    if (!opened.report.ok()) {
+        std::printf("FAIL the project opens\n");
+        return 1;
+    }
+    core::Document document(std::move(opened.state));
+    opened.store->Attach(document);
+    const core::Project& state = *document.snapshot().project;
+    auto loaded = SnapshotBackend::Load(*opened.store, state);
+    if (!loaded) {
+        std::printf("FAIL the snapshots load: %s\n", loaded.error().c_str());
+        return 1;
+    }
+    int failures = 0;
+    for (const store::SnapshotEntry& entry : store::ProjectSnapshots(state)) {
+        const auto request = RequestFromSignature(entry.signature);
+        if (!entry.error.empty() || !request || SignatureHash(*request) != entry.key) {
+            std::printf("FAIL entry %s: %s\n", entry.key.c_str(), request ? entry.error.c_str() : request.error().c_str());
+            ++failures;
+            continue;
+        }
+        const auto stored = loaded->Stored(*request);
+        const render::Result<Raster> evaluated = loaded->Evaluate(*request, {}).get();
+        if (!loaded->CanEvaluate(*request) || !stored || !evaluated) {
+            std::printf("FAIL entry %s is not served\n", entry.key.c_str());
+            ++failures;
+            continue;
+        }
+        const std::string floats(reinterpret_cast<const char*>(evaluated->texels.data()),
+                                 evaluated->texels.size() * sizeof(float));
+        const json::Object row{{"signature_sha256", entry.key},
+                               {"signature", entry.signature},
+                               {"project_uuid", entry.project_uuid},
+                               {"format", std::string(FormatName((*stored)->spec.format))},
+                               {"resolution", int64_t{(*stored)->spec.resolution}},
+                               {"channels", int64_t{(*stored)->spec.channels}},
+                               {"stored_sha256", core::Sha256Hex((*stored)->bytes)},
+                               {"evaluated", json::Object{{"width", int64_t{evaluated->width}},
+                                                          {"height", int64_t{evaluated->height}},
+                                                          {"channels", int64_t{evaluated->channels}},
+                                                          {"sha256", core::Sha256Hex(floats)}}}};
+        std::printf("SERVED %s\n", json::WriteCanonical(json::Value(row)).c_str());
+    }
+    opened.store->Close();
+    return failures == 0 ? 0 : 1;
+}
+
 int main(int argc, char** argv) {
     if (argc < 3) {
         std::fprintf(stderr, "usage: uzp-procedural-tests seam | domain | primitives | kernels | gpu | library | library-load <work-dir> [...]\n");
@@ -2689,6 +2787,7 @@ int main(int argc, char** argv) {
     if (mode == "assets-cli" && argc == 5) return RunAssetsCli(dir, argv[3], argv[4]);
     if (mode == "admission" && argc == 4) return RunAdmission(dir, argv[3]);
     if (mode == "snapshot" && argc == 3) return RunSnapshot(dir);
+    if (mode == "snapshot-served" && argc == 3) return RunSnapshotServed(dir);
     std::fprintf(stderr, "unknown case %.*s\n", static_cast<int>(mode.size()), mode.data());
     return 2;
 }

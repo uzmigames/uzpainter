@@ -67,6 +67,13 @@ these observations as schema `/4` metadata (below). The command commits one tran
 per snapshot, saves, reopens, checks every stored raster and its observations, and prints
 the asset pin and the list of signature hashes.
 
+Acceptance evidence over a real capture: `tests/procedural/test_proc_snapshot_served_capture.py`
+opens a copy of the private decision-413 capture project (20 snapshots), loads it through
+`SnapshotBackend::Load` (`uzp-procedural-tests snapshot-served`) and requires `Stored` and
+`Evaluate` of every entry to equal, byte for byte, the float32 samples of the Painter EXR export
+its receipt pairs with that signature, decoded independently in Python (both exports of each
+capture equal). It skips as `oracle_unavailable` without the store record and the five receipts.
+
 ## Supported capture domain
 
 The destination must contain the exact authored mesh installed at

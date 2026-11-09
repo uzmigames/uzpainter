@@ -4,9 +4,9 @@
 The `snapshot` case of `uzp-procedural-tests.exe` (`tests/procedural/procedural_test.cpp`) runs on
 the CPU: it records synthetic snapshots (authored byte patterns, never Painter output) into a
 stored project and checks the signature (2.1), exact-signature serving (2.2), each field mismatch
-(3.2), the `.uzp` planes through save/reopen, `inspect --verify` and `export-bundle` (2.3, 3.3)
-and the refusal of a copy into another project (2.4, 3.4). The shipped-folder check reads the
-repository only.
+(3.2, the imported mesh's identity and plugged inputs included), the `.uzp` planes through
+save/reopen, `inspect --verify` and `export-bundle` (2.3, 3.3) and the refusal of a copy into
+another project (2.4, 3.4). The shipped-folder check reads the repository only.
 """
 
 from __future__ import annotations
@@ -37,10 +37,10 @@ def run_snapshot_case(exe: Path, work: Path) -> set[str]:
 def test_snapshot_backend(procedural_tests: Path, tmp_path: Path) -> None:
     """2.1-2.4 and 3.2-3.4 on stored projects, CPU only."""
     passed = run_snapshot_case(procedural_tests, tmp_path)
-    assert len(passed) == 54, sorted(passed)
+    assert len(passed) == 63, sorted(passed)
     # 3.2: every field of the signature changed in turn is unavailable.
     mismatches = [check for check in passed if check.endswith("(3.2)")]
-    assert len(mismatches) == 27, sorted(mismatches)
+    assert len(mismatches) == 35, sorted(mismatches)
     for field in (
         "a parameter value",
         "the seed",
@@ -48,6 +48,9 @@ def test_snapshot_backend(procedural_tests: Path, tmp_path: Path) -> None:
         "the colour space",
         "an image-input hash",
         "the project's normal map format",
+        "the imported mesh's import report",
+        "a plugged bitmap's hash",
+        "a plugged input left unplugged",
     ):
         assert f"unavailable, the seam refuses and evaluates nothing: {field} (3.2)" in passed
     for check in (
@@ -56,6 +59,7 @@ def test_snapshot_backend(procedural_tests: Path, tmp_path: Path) -> None:
         # 2.2
         "SnapshotBackend.status is unavailable: a snapshot certifies no asset (2.2, decision 222)",
         "the exact signature is served, byte for byte (2.2)",
+        "a signature with the mesh identity and plugged inputs is served, byte for byte (2.2)",
         "a parameter edit of the snapshot-served source raises UnsupportedProcedural before the "
         "mutation commits",
         # 2.3

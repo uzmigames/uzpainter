@@ -1,5 +1,6 @@
 ## 1. Prerequisites
-- [ ] 1.1 Prerequisites accepted: phase3.1_proc-backend-seam
+- [x] 1.1 Prerequisites accepted: phase3.1_proc-backend-seam
+  - Note (2026-11-09): archived 2026-11-08 (`.rulebook/archive/2026-11-08-phase3.1_proc-backend-seam`, acceptance §8). `phase3.2_source-substance-presets-inputs` (decisions 412, 413, 416) is archived as well (2026-11-09); its multi-output capture extends this task's signature and storage.
 
 ## 2. Implementation
 - [x] 2.1 Define the snapshot signature with every field of `05-procedural-content.md` §4 and its canonical hash
@@ -30,9 +31,14 @@
   - Note (2026-10-20, decision 327): the cross-project half is done: committing another project's entries, loading them and importing a bundle that carries them are refused, and a copied `ProceduralRef` raises `UnsupportedProcedural` in the other project (Evidence: `uzp-procedural-tests snapshot` through `tests/procedural/test_proc_snapshot_backend.py::test_snapshot_backend` (54 checks, CPU)).
 
 ## 4. Acceptance
-- [ ] 4.1 Acceptance: exact-signature serving byte-equal; mismatches unavailable; snapshots project-private
+- [x] 4.1 Acceptance: exact-signature serving byte-equal; mismatches unavailable; snapshots project-private
+  - Note (2026-11-09): holds on the current code, affected tests only (2 passed, none skipped, JUnit `tmp/scratch/proc-snapshot-accept.xml`, procedural-tests Debug build by the fixture):
+    - **Byte-equal to the Painter export, real capture.** New `tests/procedural/test_proc_snapshot_served_capture.py` with the native case `uzp-procedural-tests snapshot-served`: a copy of the private decision-413 capture project (store record `source-substance-presets-inputs-project`, SHA-256 `b34c843e68c1...`) is loaded through `SnapshotBackend::Load`; for all 20 entries `Stored` and the float32 texels of `Evaluate` equal, byte for byte, the float32 samples of the Painter EXR export the receipt pairs with that exact signature, decoded independently in Python (both exports of each capture equal). The five receipts are found by their `capture.json` SHA-256 under `%LOCALAPPDATA%/UzPainter/snapshot-recordings/`; without the record or the receipts the test skips as `oracle_unavailable`. This supersedes the 3.1 capture of 2026-10-23 as current evidence: that capture's signature predates the geometry identity and no longer serves imported projects (3.2 note). No new recording was needed.
+    - **Any single-field mismatch unavailable.** The 3.2 list predated the fields added later: the imported mesh's identity (`settings.mesh.sha256`, `settings.mesh.import_report_sha256`) and plugged image inputs (decision 413 §3). `uzp-procedural-tests snapshot` now also serves a signature holding them byte for byte and refuses each changed in turn (mesh hash, import report, report left out, plugged colour value by one ulp, bitmap hash, bitmap colour space, plugged input left unplugged, another input plugged), naming the field, with the seam refusing and evaluating nothing: 35 mismatch checks, 63 in total (`tests/procedural/test_proc_snapshot_backend.py::test_snapshot_backend`).
+    - **Project-private.** Unchanged evidence of 2.4/3.4 (cross-project commit, load and bundle import refused; copied reference raises `UnsupportedProcedural`; `test_no_snapshot_in_shipped_asset_folders`; guard rule `procedural-snapshot`).
+    - Native change: test harness only (`tests/procedural/procedural_test.cpp`); no product source changed. Ruff and mypy pass on the touched Python.
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
-- [x] 5.1 Update or create documentation covering the implementation (`docs/procedural-snapshots.md`, decision 327)
+- [x] 5.1 Update or create documentation covering the implementation (`docs/procedural-snapshots.md`, decision 327; acceptance evidence paragraph under "Multi-output captures", 2026-11-09)
 - [x] 5.2 Write tests covering the new behavior (native snapshot/ingestion tests, bridge controls and installed CLI preflight)
 - [x] 5.3 Run tests and confirm they pass (56 bridge/CLI/provenance tests, Ruff and mypy; licensed Painter capture and `inspect --verify`, 2026-10-23). Full-suite acceptance and prerequisite 1.1 remain open.
