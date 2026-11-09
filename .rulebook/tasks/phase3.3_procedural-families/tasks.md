@@ -3,7 +3,7 @@
 
 ## 2. Child tasks (mandatory)
 - [ ] 2.1 phase3.1_proc-backend-seam accepted
-- [ ] 2.2 phase3.2_proc-snapshot-backend accepted
+- [x] 2.2 phase3.2_proc-snapshot-backend accepted — archived 2026-11-09 (799a2bb2; acceptance evidence 327f87a9: 20 real-capture snapshots served byte-equal, 35 single-field mismatch checks unavailable)
 - [ ] 2.3 phase3.2_proc-generator-families accepted
 - [ ] 2.4 phase3.2_proc-grunge-families accepted
 - [ ] 2.5 phase3.2_proc-filter-families accepted
