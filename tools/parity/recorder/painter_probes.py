@@ -1547,23 +1547,89 @@ SUBSTANCE_GETTER_CALLS = (
     "substance_painter.source.SourceSubstance.resource_id",
     # The first Togglebutton's value through a held or a freshly fetched Property.
     "substance_painter.properties.Property.value",
+    # Decision 412 (phase3.2_source-substance-presets-inputs): the image input at `input_index`
+    # of `image_inputs`, chosen in Painter, so no input identifier is authored.
+    "substance_painter.source.SourceSubstance.get_source",
 )
-SUBSTANCE_EDIT_CALLS = ("substance_painter.source.SourceSubstance.set_parameters",)
+SUBSTANCE_EDIT_CALLS = (
+    "substance_painter.source.SourceSubstance.set_parameters",
+    # Decision 412: presets and image inputs, chosen in Painter by index (`preset_index`,
+    # `input_index`), or an authored `preset_name` for a name the asset does not have.
+    "substance_painter.source.SourceSubstance.apply_preset",
+    "substance_painter.source.SourceSubstance.set_source",
+    "substance_painter.source.SourceSubstance.reset_source",
+    "substance_painter.source.SourceSubstance.remove_source",
+    # A fill's material (multiple output) source, by exact versioned `resource_url`.
+    "substance_painter.layerstack.FillLayerNode.set_material_source",
+)
 # `get_properties` with `hold` keeps the first Togglebutton's Property here for later reads.
 HELD_PROPERTIES: dict[str, Any] = {}
 SUBSTANCE_VALUE_ARGS = {
     "substance_painter.source.SourceSubstance.active_output": "roundtrip",
     "substance_painter.source.SourceSubstance.resolution": "roundtrip",
+    # Decision 412: the multiple output context's properties. An edit's `roundtrip` is true
+    # (every value assigned back), "swap" (the values of the first two keys by name exchanged)
+    # or "output_index" (the `image_outputs` entry at `output_index`, chosen in Painter, assigned
+    # to `channel` of the mapping, or as the mask output).
+    "substance_painter.source.SourceSubstance.output_mapping": "roundtrip",
+    "substance_painter.source.SourceSubstance.mask_output": "roundtrip",
 }
+SET_MATERIAL_SOURCE = "substance_painter.layerstack.FillLayerNode.set_material_source"
+OUTPUT_MAPPING = "substance_painter.source.SourceSubstance.output_mapping"
+MASK_OUTPUT = "substance_painter.source.SourceSubstance.mask_output"
 
 
 def substance_source(args: dict[str, Any]) -> Any:
     node = fresh(args["node_step"])
-    # A generator or filter effect's get_source() takes no channel (python-doc).
-    source = node.get_source() if args.get("effect") is True else node.get_source(channel_arg(args))
+    if args.get("material") is True:
+        # A fill's material source, in the multiple output context (python-doc SourceMode).
+        source = node.get_material_source()
+    elif args.get("effect") is True:
+        # A generator or filter effect's get_source() takes no channel (python-doc).
+        source = node.get_source()
+    else:
+        source = node.get_source(channel_arg(args))
     if not isinstance(source, substance_painter.source.SourceSubstance):
         raise ValueError("the selected source is not SourceSubstance")
     return source
+
+
+def type_name(value: Any) -> str | None:
+    """A value's class name, from the repr of its type (`<class 'module.Name'>`)."""
+    if value is None:
+        return None
+    return repr(type(value)).split("'")[1].split(".")[-1]
+
+
+def image_input(source: Any, args: dict[str, Any]) -> str:
+    """The `image_inputs` identifier at `input_index`, as Painter lists it."""
+    return str(list(source.image_inputs)[int(args["input_index"])])
+
+
+def input_source_value(value: Any) -> Any:
+    """An image input's source: its class and `describe`, or a SourceReference's getters."""
+    if isinstance(value, substance_painter.source.SourceReference):
+        return {
+            "class": "SourceReference",
+            "reference": {
+                "anchor": attempt(lambda: value.anchor),
+                "alpha_matte": attempt(lambda: value.alpha_matte),
+                "referenced_channel": attempt(lambda: value.referenced_channel),
+            },
+        }
+    return {"class": type_name(value), "value": describe(value)}
+
+
+def output_mapping_value(mapping: Any) -> Any:
+    """The OutputMapping by documented iteration: each key, its value and the value's class."""
+    return {
+        str(describe(key)): {"value": describe(mapping[key]), "class": type_name(mapping[key])}
+        for key in mapping
+    }
+
+
+def mapping_keys(mapping: Any) -> list[Any]:
+    return sorted(mapping, key=lambda key: str(describe(key)))
 
 
 def first_toggle(source: Any) -> str:
@@ -1603,6 +1669,12 @@ def substance_read(call: str, args: dict[str, Any]) -> Any:
         return {"resource_id": describe(resource_id), "url": resource_id.url()}
     if call == "substance_painter.source.SourceSubstance.active_output":
         return source.active_output
+    if call == "substance_painter.source.SourceSubstance.get_source":
+        return input_source_value(source.get_source(image_input(source, args)))
+    if call == OUTPUT_MAPPING:
+        return output_mapping_value(source.output_mapping)
+    if call == MASK_OUTPUT:
+        return source.mask_output
     if call == "substance_painter.source.SourceSubstance.resolution":
         resolution = source.resolution
         return {
@@ -1618,7 +1690,58 @@ def substance_read(call: str, args: dict[str, Any]) -> Any:
     raise ValueError("unsupported SourceSubstance getter")
 
 
+def multi_output_edit(call: str, args: dict[str, Any]) -> Any:
+    """Decision 412: material source, presets, image inputs, output mapping and mask output."""
+    if call == SET_MATERIAL_SOURCE:
+        node = fresh(args["node_step"])
+        resource = substance_painter.resource.ResourceID.from_url(str(args["resource_url"]))
+        return node.set_material_source(resource)
+    source = substance_source(args)
+    if call == "substance_painter.source.SourceSubstance.apply_preset":
+        if "preset_name" in args:
+            return source.apply_preset(str(args["preset_name"]))
+        return source.apply_preset(str(list(source.get_preset_list())[int(args["preset_index"])]))
+    if call == "substance_painter.source.SourceSubstance.set_source":
+        name = image_input(source, args)
+        if "resource_step" in args:
+            value = PROBE_RESOURCES[int(args["resource_step"])]
+        elif "anchor_step" in args:
+            value = fresh(args["anchor_step"])
+        else:
+            value = color_of(args["color"], args.get("color_space"))
+        return input_source_value(source.set_source(name, value))
+    if call == "substance_painter.source.SourceSubstance.reset_source":
+        return source.reset_source(image_input(source, args))
+    if call == "substance_painter.source.SourceSubstance.remove_source":
+        return source.remove_source(image_input(source, args))
+    mode = args.get("roundtrip")
+    if call == OUTPUT_MAPPING:
+        mapping = source.output_mapping
+        if mode is True:
+            for key in mapping_keys(mapping):
+                mapping[key] = mapping[key]
+        elif mode == "swap":
+            first, second = mapping_keys(mapping)[:2]
+            mapping[first], mapping[second] = mapping[second], mapping[first]
+        elif mode == "output_index":
+            mapping[channel_arg(args)] = str(list(source.image_outputs)[int(args["output_index"])])
+        else:
+            raise ValueError("an output_mapping edit is roundtrip, swap or output_index")
+        return None
+    if call == MASK_OUTPUT:
+        if mode is True:
+            source.mask_output = source.mask_output
+        elif mode == "output_index":
+            source.mask_output = str(list(source.image_outputs)[int(args["output_index"])])
+        else:
+            raise ValueError("a mask_output edit is roundtrip or output_index")
+        return None
+    raise ValueError("unsupported SourceSubstance multiple output edit")
+
+
 def substance_edit(call: str, args: dict[str, Any]) -> Any:
+    if call in SUBSTANCE_EDIT_CALLS[1:] or call in (OUTPUT_MAPPING, MASK_OUTPUT):
+        return multi_output_edit(call, args)
     if (
         call == "substance_painter.source.SourceSubstance.resolution"
         and args.get("roundtrip") is False

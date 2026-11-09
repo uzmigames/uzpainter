@@ -787,6 +787,10 @@
       "documented_as": "substance_painter.layerstack.FillLayerNode.reset_source",
       "page": "substance_painter/layerstack/layereffect/fill.html"
     },
+    "substance_painter.layerstack.FillLayerNode.set_material_source": {
+      "documented_as": "substance_painter.layerstack.FillLayerNode.set_material_source",
+      "page": "substance_painter/layerstack/layereffect/fill.html"
+    },
     "substance_painter.layerstack.FillLayerNode.set_projection_mode": {
       "documented_as": "substance_painter.layerstack.FillLayerNode.set_projection_mode",
       "page": "substance_painter/layerstack/layereffect/fill.html"
@@ -1903,12 +1907,32 @@
       "documented_as": "substance_painter.source.SourceMode",
       "page": "substance_painter/source/index.html"
     },
+    "substance_painter.source.SourceReference": {
+      "documented_as": "substance_painter.source.SourceReference",
+      "page": "substance_painter/source/reference.html"
+    },
+    "substance_painter.source.SourceReference.alpha_matte": {
+      "documented_as": "substance_painter.source.SourceReference.alpha_matte",
+      "page": "substance_painter/source/reference.html"
+    },
+    "substance_painter.source.SourceReference.anchor": {
+      "documented_as": "substance_painter.source.SourceReference.anchor",
+      "page": "substance_painter/source/reference.html"
+    },
+    "substance_painter.source.SourceReference.referenced_channel": {
+      "documented_as": "substance_painter.source.SourceReference.referenced_channel",
+      "page": "substance_painter/source/reference.html"
+    },
     "substance_painter.source.SourceSubstance": {
       "documented_as": "substance_painter.source.SourceSubstance",
       "page": "substance_painter/source/substance.html"
     },
     "substance_painter.source.SourceSubstance.active_output": {
       "documented_as": "substance_painter.source.SourceSubstance.active_output",
+      "page": "substance_painter/source/substance.html"
+    },
+    "substance_painter.source.SourceSubstance.apply_preset": {
+      "documented_as": "substance_painter.source.SourceSubstance.apply_preset",
       "page": "substance_painter/source/substance.html"
     },
     "substance_painter.source.SourceSubstance.get_parameters": {
@@ -1935,6 +1959,22 @@
       "documented_as": "substance_painter.source.SourceSubstance.image_outputs",
       "page": "substance_painter/source/substance.html"
     },
+    "substance_painter.source.SourceSubstance.mask_output": {
+      "documented_as": "substance_painter.source.SourceSubstance.mask_output",
+      "page": "substance_painter/source/substance.html"
+    },
+    "substance_painter.source.SourceSubstance.output_mapping": {
+      "documented_as": "substance_painter.source.SourceSubstance.output_mapping",
+      "page": "substance_painter/source/substance.html"
+    },
+    "substance_painter.source.SourceSubstance.remove_source": {
+      "documented_as": "substance_painter.source.SourceSubstance.remove_source",
+      "page": "substance_painter/source/substance.html"
+    },
+    "substance_painter.source.SourceSubstance.reset_source": {
+      "documented_as": "substance_painter.source.SourceSubstance.reset_source",
+      "page": "substance_painter/source/substance.html"
+    },
     "substance_painter.source.SourceSubstance.resolution": {
       "documented_as": "substance_painter.source.SourceSubstance.resolution",
       "page": "substance_painter/source/substance.html"
@@ -1945,6 +1985,10 @@
     },
     "substance_painter.source.SourceSubstance.set_parameters": {
       "documented_as": "substance_painter.source.SourceSubstance.set_parameters",
+      "page": "substance_painter/source/substance.html"
+    },
+    "substance_painter.source.SourceSubstance.set_source": {
+      "documented_as": "substance_painter.source.SourceSubstance.set_source",
       "page": "substance_painter/source/substance.html"
     },
     "substance_painter.source.SourceUniformColor": {

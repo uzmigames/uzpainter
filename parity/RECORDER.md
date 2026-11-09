@@ -270,6 +270,13 @@ Other rules:
 - When the golden ends, `probe_finish` disconnects the strong callbacks and sets the throttling period back to the value read before the first set, and `probe_cleanup` closes and forgets the probe plugin modules and removes their root from `plugins.path` and their folders from `sys.path`. Every stage runs even if an earlier one failed, a transport failure included. A failed stage writes no run to the inbox (decision 297 §4).
 - Before any change, the recorder refuses the run if a shelf it adds exists already or a probe plugin module could be someone else's. A shelf is removed or reloaded only if this run added it, and a plugin module is used only if it imports from the run's plugin root (decision 297 §4).
 
+**SourceSubstance presets, image inputs and multiple outputs (decision 412; `tools/parity/tier0_semantics/source_substance_presets.py`).** Observed probes may also use:
+
+- Edits: `FillLayerNode.set_material_source` (`resource_url`, an exact versioned URL), `SourceSubstance.apply_preset` (`preset_index` into `get_preset_list()`, or an authored `preset_name`), `set_source` (`input_index` into `image_inputs`, and `color` with optional `color_space`, `resource_step` or `anchor_step`), `reset_source` and `remove_source` (`input_index`), `output_mapping` with `roundtrip` (true: every value assigned back; `swap`: the values of the first two keys by name exchanged; `output_index`: that `image_outputs` entry assigned to `channel`) and `mask_output` with `roundtrip` (true, or `output_index`).
+- Getters: `SourceSubstance.get_source` (`input_index`; the source by class, a `SourceReference` through `anchor`, `alpha_matte` and `referenced_channel`), `output_mapping` (each key, value and the value's class) and `mask_output`.
+- `material: true` selects a fill's material source (`get_material_source()`) instead of a channel's source.
+- The asset is found first by `python -m tools.parity.recorder.substance_survey` in the same Legacy session (its result stays in the private work root). `source-substance-presets-inputs` and `source-substance-input-anchor` were recorded and admitted on 2026-11-08 (Legacy, Painter lock seq 2336/2337).
+
 ## 9a. Pipeline-script goldens (Tier 1, decision 099)
 
 Code: `tools/parity/recorder/script_run.py` (host) and `painter_scripts.py` (inside Painter, loaded like `painter_probes.py`); tests: `tests/parity/recorder/test_script_run.py`.

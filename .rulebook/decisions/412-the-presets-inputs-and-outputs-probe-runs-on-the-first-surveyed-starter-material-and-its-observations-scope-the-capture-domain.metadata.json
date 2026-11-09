@@ -1,0 +1,13 @@
+{
+  "id": 412,
+  "slug": "412-the-presets-inputs-and-outputs-probe-runs-on-the-first-surveyed-starter-material-and-its-observations-scope-the-capture-domain",
+  "title": "The presets, inputs and outputs probe runs on the first surveyed starter material, and its observations scope the capture domain",
+  "status": "accepted",
+  "date": "2026-11-08",
+  "relatedTasks": [
+    "phase3.2_source-substance-presets-inputs",
+    "phase3.3_procedural-families",
+    "phase4.1_nodes-instances-anchors"
+  ],
+  "supersededBy": null
+}
