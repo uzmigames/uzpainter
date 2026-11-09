@@ -17,14 +17,23 @@
 //   ray-cast-fixtures    every ray-cast fixture on DX12 and Vulkan, twice each: repeatability, the
 //                        CPU reference by ray kind, the DX12/Vulkan comparison; writes
 //                        <dir>/ray-cast-raw.json for tools/parity/raycast.py
+//   vulkan-ray-query-hidden  item 3.2: a live Vulkan device created without VK_KHR_ray_query
+//                        (hidden from the vendored device): reported missing, every ray-query
+//                        request refused before any work, nothing submitted
+//   bindless-textures    item 2.4: 40 RGBA32F textures of two mips read by bindless name with a
+//                        per-thread index, on DX12 (descriptor heap) and Vulkan (set 1), bit for bit
+//                        against their texels, twice byte-identical, a released slot reused, and DX12
+//                        equal to Vulkan byte for byte
 //
 // Exit code 77 when the machine has no device of the backend.
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
+#include "render/bindless.h"
 #include "render/capabilities.h"
 #include "render/device.h"
 #include "render/ray_query.h"
+#include "render/texture_readback.h"
 #include "render/vulkan_backend.h"
 #include "render/vulkan_kernels.h"
 #include "render/vulkan_qualification.h"
@@ -680,6 +689,353 @@ int RunFixtures(const fs::path& dir) {
     return Finish();
 }
 
+
+// ── vulkan-ray-query-hidden (item 3.2) ───────────────────────────────────────
+
+/// A live Vulkan device created without VK_KHR_ray_query (the vendored device treats it as not
+/// exposed, `VulkanDeviceOptions::hiddenDeviceExtensions`): the capability query and report name
+/// it, every ray-query request is refused before any work, and nothing is submitted.
+int RunVulkanHidden() {
+    const VulkanSurvey survey = SurveyVulkan();
+    if (survey.devices.empty()) {
+        Info("no Vulkan physical device");
+        return kExitSkip;
+    }
+    const VulkanQualification q = QualifyVulkan(survey, 0);
+    Check(q.qualified, "this machine's Vulkan device qualifies", q.Summary(survey));
+    if (!q.qualified) return Finish();
+    const std::vector<std::string> recordMissing = VulkanRayQueryMissing(survey.devices[*q.device]);
+    Check(recordMissing.empty(), "the device's record exposes every ray-query item", Joined(recordMissing));
+    if (!recordMissing.empty()) return Finish();
+    VulkanDeviceOptions options;
+    options.hiddenDeviceExtensions = {"VK_KHR_ray_query"};
+    Result<std::unique_ptr<VulkanDevice>> created = CreateQualifiedVulkanDevice(survey, q, options);
+    Check(created.has_value(), "a Vulkan device is created without VK_KHR_ray_query", Describe(created));
+    if (!created) return Finish();
+    VulkanDevice& device = **created;
+    const RayQuerySupport support = QueryRayQuerySupport(device);
+    Check(!support.inlineRayQuery && support.accelerationStructures &&
+              support.missing == std::vector<std::string>{"VK_KHR_ray_query"},
+          "the device reports inline ray queries unavailable with exactly VK_KHR_ray_query missing",
+          Joined(support.missing));
+    Result<void> required = RequireInlineRayQuery(device);
+    Check(!required && required.error().code == ErrorCode::GpuBackendUnavailable &&
+              required.error().backend == Backend::Vulkan &&
+              required.error().reason.find("VK_KHR_ray_query") != std::string::npos,
+          "a ray-query request fails before any work, naming the backend and VK_KHR_ray_query", Describe(required));
+    Result<CapabilityReport> report = QueryCapabilities(device, AdmissionPolicy{});
+    Check(report && !report->rayQuery && report->rayQueryMissing == std::vector<std::string>{"VK_KHR_ray_query"},
+          "the capability report states ray queries unavailable with VK_KHR_ray_query missing", Describe(report));
+    const uint64_t before = device.Queue().LastSubmitted();
+    Result<RayScene> scene = BuildRayScene(device, RayQueryQualificationScene(), Soon());
+    Check(!scene && scene.error().code == ErrorCode::GpuBackendUnavailable,
+          "building a ray scene is refused as unavailable", Describe(scene));
+    const std::vector<CastRay> rays = RayQueryQualificationRays();
+    Result<std::vector<RayHit>> cast = CastRays(device, RayScene{}, ComputeKernel{}, rays, Soon());
+    Check(!cast && cast.error().code == ErrorCode::GpuBackendUnavailable, "casting rays is refused as unavailable",
+          Describe(cast));
+    Check(device.Queue().LastSubmitted() == before, "nothing was submitted: no dispatch and no fallback",
+          std::to_string(before) + " -> " + std::to_string(device.Queue().LastSubmitted()));
+    const VulkanTeardown teardown = device.Shutdown(Clock::now() + Ms(10000));
+    Check(teardown == VulkanTeardown::Destroyed, "after its work completed the Vulkan device is destroyed",
+          std::string(VulkanTeardownName(teardown)));
+    return Finish();
+}
+
+// ── bindless-textures (item 2.4) ─────────────────────────────────────────────
+
+constexpr uint32_t kBindlessTextureCount = 40;  // more than the 16 fixed slots of a dispatch
+constexpr uint16_t kBindlessMips = 2;
+
+/// Texel `channel` of (x, y) at `mip` of the texture tagged `tag`: exact in float32.
+float TexelValue(uint32_t tag, uint32_t mip, uint32_t x, uint32_t y, uint32_t channel) {
+    return static_cast<float>((tag << 12) | (mip << 10) | (y << 5) | x) + 0.125f * static_cast<float>(channel);
+}
+uint32_t BindlessWidth(uint32_t i) { return 3 + i % 6; }
+uint32_t BindlessHeight(uint32_t i) { return 2 + (i * 7) % 5; }
+uint32_t MipSize(uint32_t size, uint32_t mip) { return std::max<uint32_t>(1, size >> mip); }
+
+struct Tagged {
+    uz::RHITextureHandle texture = uz::RHITextureHandle::Invalid();
+    uint32_t tag = 0;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    uint32_t index = UINT32_MAX;
+};
+
+/// An RGBA32F texture of two mips holding `TexelValue(tag, ...)`, uploaded and left in the
+/// ShaderResource state.
+Result<uz::RHITextureHandle> CreateTagged(IDevice& device, uint32_t tag, uint32_t width, uint32_t height) {
+    uz::RHITextureDesc desc;
+    desc.width = width;
+    desc.height = height;
+    desc.mipLevels = kBindlessMips;
+    desc.format = uz::RHIFormat::RGBA32Float;
+    desc.usage = uz::RHITextureUsage::ShaderResource | uz::RHITextureUsage::CopyDst;
+    desc.debugName = "bindless_tagged";
+    Result<uz::RHITextureHandle> texture = device.CreateTexture(desc);
+    if (!texture) return texture;
+    std::vector<uz::RHIBufferHandle> staging;
+    std::vector<uint32_t> pitches;
+    const auto release = [&] {
+        for (const uz::RHIBufferHandle buffer : staging) device.DestroyBuffer(buffer);
+    };
+    for (uint32_t mip = 0; mip < kBindlessMips; ++mip) {
+        const uint32_t w = MipSize(width, mip);
+        const uint32_t h = MipSize(height, mip);
+        const auto pitch = static_cast<uint32_t>(ReadbackRowPitch(uint64_t{w} * 16));
+        uz::RHIBufferDesc bufferDesc;
+        bufferDesc.sizeBytes = uint64_t{pitch} * h;
+        bufferDesc.usage = uz::RHIBufferUsage::CopySrc;
+        bufferDesc.memory = uz::RHIMemoryType::Upload;
+        bufferDesc.debugName = "bindless_staging";
+        Result<uz::RHIBufferHandle> buffer = device.CreateBuffer(bufferDesc);
+        if (!buffer) {
+            release();
+            device.DestroyTexture(*texture);
+            return Unexpected(buffer.error());
+        }
+        staging.push_back(*buffer);
+        pitches.push_back(pitch);
+        auto* bytes = static_cast<uint8_t*>(device.Rhi().MapBuffer(*buffer));
+        if (!bytes) {
+            release();
+            device.DestroyTexture(*texture);
+            return Fail(ErrorCode::ResourceCreationFailed, device.GetBackend(), "bindless_staging is not mappable");
+        }
+        for (uint32_t y = 0; y < h; ++y) {
+            for (uint32_t x = 0; x < w; ++x) {
+                for (uint32_t c = 0; c < 4; ++c) {
+                    const float value = TexelValue(tag, mip, x, y, c);
+                    std::memcpy(bytes + uint64_t{y} * pitch + (uint64_t{x} * 4 + c) * 4, &value, 4);
+                }
+            }
+        }
+        device.Rhi().UnmapBuffer(*buffer);
+    }
+    Result<uint64_t> fence = device.Queue().Submit([&](uz::IRHICommandList& cmd) {
+        using State = uz::RHIResourceState;
+        const uz::RHIBarrierDesc toCopy{*texture, uz::RHIBufferHandle::Invalid(), State::Common, State::CopyDst};
+        cmd.ResourceBarrier(&toCopy, 1);
+        for (uint32_t mip = 0; mip < kBindlessMips; ++mip) {
+            cmd.CopyBufferToTexture(staging[mip], 0, pitches[mip], *texture, mip, 0);
+        }
+        const uz::RHIBarrierDesc toRead{*texture, uz::RHIBufferHandle::Invalid(), State::CopyDst,
+                                        State::ShaderResource};
+        cmd.ResourceBarrier(&toRead, 1);
+    });
+    if (!fence) {
+        release();
+        device.DestroyTexture(*texture);
+        return Unexpected(fence.error());
+    }
+    const WaitResult wait = device.Queue().Wait(*fence, Soon());
+    if (wait.status != WaitStatus::Signaled) return Unexpected(device.WaitFailure(wait));
+    release();
+    return texture;
+}
+
+/// The lookups of `textures` (each mip's corners and an inner texel), in an order that puts
+/// different textures in neighbouring threads, and the results they must give.
+void BindlessLookups(const std::vector<Tagged>& textures, std::vector<TexelLookup>& lookups,
+                     std::vector<GatheredTexel>& expected) {
+    for (const Tagged& t : textures) {
+        for (uint32_t mip = 0; mip < kBindlessMips; ++mip) {
+            const uint32_t w = MipSize(t.width, mip);
+            const uint32_t h = MipSize(t.height, mip);
+            const uint32_t points[5][2] = {{0, 0}, {w - 1, 0}, {0, h - 1}, {w - 1, h - 1}, {w / 2, h / 2}};
+            for (const auto& p : points) {
+                lookups.push_back({t.index, p[0], p[1], mip});
+                GatheredTexel g;
+                for (uint32_t c = 0; c < 4; ++c) g.value[c] = TexelValue(t.tag, mip, p[0], p[1], c);
+                g.width = w;
+                g.height = h;
+                g.levels = kBindlessMips;
+                expected.push_back(g);
+            }
+        }
+    }
+    uint32_t state = 0x2545F491u;  // a fixed shuffle (xorshift32)
+    for (size_t i = lookups.size(); i > 1; --i) {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        const size_t j = state % i;
+        std::swap(lookups[i - 1], lookups[j]);
+        std::swap(expected[i - 1], expected[j]);
+    }
+}
+
+bool SameBytes(const std::vector<GatheredTexel>& a, const std::vector<GatheredTexel>& b) {
+    return a.size() == b.size() && std::memcmp(a.data(), b.data(), a.size() * sizeof(GatheredTexel)) == 0;
+}
+
+size_t Differing(const std::vector<GatheredTexel>& a, const std::vector<GatheredTexel>& b) {
+    size_t n = a.size() == b.size() ? 0 : std::max(a.size(), b.size());
+    for (size_t i = 0; i < std::min(a.size(), b.size()); ++i) {
+        n += std::memcmp(&a[i], &b[i], sizeof(GatheredTexel)) != 0 ? 1 : 0;
+    }
+    return n;
+}
+
+/// The bindless checks on one device; the first gather's results (empty when they did not run).
+std::vector<GatheredTexel> RunBindlessOn(IDevice& device, const std::string& backend) {
+    const BindlessSupport support = QueryBindlessTextures(device);
+    Info(backend + ": bindless textures " + (support.available ? "on" : "off") + ", capacity " +
+         std::to_string(support.capacity) + ", missing " + Joined(support.missing));
+    Check(support.available && support.missing.empty(), backend + ": bindless textures are available",
+          Joined(support.missing));
+    if (!support.available) return {};
+    Result<std::vector<uint8_t>> bytecode = CompileBindlessGatherKernel(device.NativeKernelTarget(), DxcPath());
+    Check(bytecode.has_value(), backend + ": the bindless gather kernel compiles", Describe(bytecode));
+    if (!bytecode) return {};
+    if (device.NativeKernelTarget() == KernelTarget::Spirv) {
+        const SpirvFacts facts = InspectSpirv(*bytecode);
+        Check(facts.HasCapability(kSpirvCapabilityRuntimeDescriptorArray) &&
+                  facts.HasCapability(kSpirvCapabilityShaderNonUniform),
+              "vulkan: the SPIR-V declares RuntimeDescriptorArray and ShaderNonUniform");
+        Check(std::find(facts.descriptorSets.begin(), facts.descriptorSets.end(), 1u) != facts.descriptorSets.end(),
+              "vulkan: the texture array is in descriptor set 1");
+    }
+    Result<ComputeKernel> kernel = device.CreateComputeKernel(*bytecode, "bindless_gather");
+    Check(kernel.has_value(), backend + ": the bindless gather pipeline is created", Describe(kernel));
+    if (!kernel) return {};
+
+    std::vector<Tagged> textures;
+    const auto destroyAll = [&] {
+        for (const Tagged& t : textures) device.DestroyTexture(t.texture);
+        textures.clear();
+    };
+    bool created = true;
+    std::string why;
+    for (uint32_t i = 0; i < kBindlessTextureCount && created; ++i) {
+        Tagged t;
+        t.tag = i + 1;
+        t.width = BindlessWidth(i);
+        t.height = BindlessHeight(i);
+        Result<uz::RHITextureHandle> texture = CreateTagged(device, t.tag, t.width, t.height);
+        if (!texture) {
+            created = false;
+            why = Describe(texture);
+            break;
+        }
+        t.texture = *texture;
+        Result<uint32_t> index = BindlessTextureIndex(device, t.texture);
+        if (!index) {
+            created = false;
+            why = Describe(index);
+        } else {
+            t.index = *index;
+        }
+        textures.push_back(t);
+    }
+    Check(created, backend + ": 40 tagged textures are created and named", why);
+    std::vector<uint32_t> indices;
+    for (const Tagged& t : textures) indices.push_back(t.index);
+    std::sort(indices.begin(), indices.end());
+    Check(std::adjacent_find(indices.begin(), indices.end()) == indices.end(),
+          backend + ": the 40 textures have 40 distinct bindless names");
+    std::vector<GatheredTexel> first;
+    if (created) {
+        std::vector<TexelLookup> lookups;
+        std::vector<GatheredTexel> expected;
+        BindlessLookups(textures, lookups, expected);
+        Result<std::vector<GatheredTexel>> gathered = GatherTexels(device, *kernel, lookups, Soon());
+        Check(gathered.has_value(), backend + ": the gather runs", Describe(gathered));
+        if (gathered) {
+            Check(SameBytes(*gathered, expected),
+                  backend + ": every lookup reads its texel, mip size and level count, bit for bit",
+                  std::to_string(Differing(*gathered, expected)) + " of " + std::to_string(expected.size()) +
+                      " differ");
+            first = *gathered;
+            Result<std::vector<GatheredTexel>> again = GatherTexels(device, *kernel, lookups, Soon());
+            Check(again && SameBytes(*again, *gathered), backend + ": a second gather gives byte-identical results",
+                  Describe(again));
+        }
+
+        // A texture destroyed and a new one created: the new texture reads its own texels.
+        const uint32_t freed = textures[5].index;
+        device.DestroyTexture(textures[5].texture);
+        Result<uint32_t> stale = BindlessTextureIndex(device, textures[5].texture);
+        Check(!stale && stale.error().code == ErrorCode::RequestFailed,
+              backend + ": a destroyed texture has no bindless name", Describe(stale));
+        Tagged replacement;
+        replacement.tag = 100;
+        replacement.width = textures[5].width;
+        replacement.height = textures[5].height;
+        Result<uz::RHITextureHandle> texture = CreateTagged(device, replacement.tag, replacement.width, replacement.height);
+        textures.erase(textures.begin() + 5);
+        if (texture) {
+            replacement.texture = *texture;
+            Result<uint32_t> index = BindlessTextureIndex(device, *texture);
+            replacement.index = index ? *index : UINT32_MAX;
+            textures.push_back(replacement);
+            if (device.GetBackend() == Backend::Vulkan) {
+                Check(replacement.index == freed, "vulkan: the destroyed texture's slot is given to the next texture",
+                      std::to_string(replacement.index) + " vs " + std::to_string(freed));
+            }
+            std::vector<TexelLookup> lookups;
+            std::vector<GatheredTexel> expected;
+            BindlessLookups({replacement, textures[5]}, lookups, expected);
+            Result<std::vector<GatheredTexel>> gathered = GatherTexels(device, *kernel, lookups, Soon());
+            Check(gathered && SameBytes(*gathered, expected),
+                  backend + ": a texture created after one is destroyed reads its own texels", Describe(gathered));
+        } else {
+            Check(false, backend + ": a texture created after one is destroyed reads its own texels", Describe(texture));
+        }
+    }
+
+    // A texture without ShaderResource usage has no bindless name.
+    uz::RHITextureDesc storageDesc;
+    storageDesc.width = 4;
+    storageDesc.height = 4;
+    storageDesc.format = uz::RHIFormat::RGBA32Float;
+    storageDesc.usage = uz::RHITextureUsage::UnorderedAccess;
+    storageDesc.debugName = "bindless_storage_only";
+    Result<uz::RHITextureHandle> storage = device.CreateTexture(storageDesc);
+    if (storage) {
+        Result<uint32_t> index = BindlessTextureIndex(device, *storage);
+        Check(!index && index.error().code == ErrorCode::RequestFailed,
+              backend + ": a texture without ShaderResource usage has no bindless name", Describe(index));
+        device.DestroyTexture(*storage);
+    } else {
+        Check(false, backend + ": a texture without ShaderResource usage has no bindless name", Describe(storage));
+    }
+    destroyAll();
+    device.DestroyComputeKernel(*kernel);
+    return first;
+}
+
+/// Bindless sampled textures on this machine's DX12 and Vulkan devices; their results compared
+/// byte for byte.
+int RunBindless() {
+    std::vector<GatheredTexel> dx12;
+    {
+        DeviceOptions options;
+        options.backend = Backend::Dx12;
+        Result<std::unique_ptr<IDevice>> created = CreateDevice(options);
+        Check(created.has_value(), "the DX12 device is created", Describe(created));
+        if (created) dx12 = RunBindlessOn(**created, "dx12");
+    }
+    std::vector<GatheredTexel> vulkan;
+    const VulkanSurvey survey = SurveyVulkan();
+    const VulkanQualification q = QualifyVulkan(survey, 0);
+    Check(q.qualified, "this machine's Vulkan device qualifies", q.Summary(survey));
+    if (q.qualified) {
+        Result<std::unique_ptr<VulkanDevice>> created = CreateQualifiedVulkanDevice(survey, q);
+        Check(created.has_value(), "the qualified Vulkan device is created", Describe(created));
+        if (created) {
+            vulkan = RunBindlessOn(**created, "vulkan");
+            const VulkanTeardown teardown = (*created)->Shutdown(Clock::now() + Ms(10000));
+            Check(teardown == VulkanTeardown::Destroyed, "after its work completed the Vulkan device is destroyed",
+                  std::string(VulkanTeardownName(teardown)));
+        }
+    }
+    Check(!dx12.empty() && SameBytes(dx12, vulkan), "DX12 and Vulkan gather byte-identical results",
+          std::to_string(Differing(dx12, vulkan)) + " of " + std::to_string(dx12.size()) + " differ");
+    return Finish();
+}
+
 }  // namespace
 
 /// The ray-query cases (this file); -1 for any other mode.
@@ -689,5 +1045,7 @@ int RunRayQueryCase(std::string_view mode, const fs::path& dir) {
     if (mode == "ray-cast-fixtures") return RunFixtures(dir);
     if (mode == "vulkan-ray-query") return RunVulkan();
     if (mode == "dx12-ray-query") return RunDx12();
+    if (mode == "vulkan-ray-query-hidden") return RunVulkanHidden();
+    if (mode == "bindless-textures") return RunBindless();
     return -1;
 }

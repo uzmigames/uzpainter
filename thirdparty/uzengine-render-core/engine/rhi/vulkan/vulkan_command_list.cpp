@@ -237,6 +237,14 @@ void VulkanCommandList::Begin() {
     m_pendingBLASBuilds.clear();             // UZP-MOD-007
     m_pendingTLASBuilds.clear();             // UZP-MOD-007
     m_computePipelineBound = false;
+
+    // UZP-MOD-007: the bindless texture set is set 1 of every compute dispatch. Bound once here:
+    // every pipeline shares the device's pipeline layout, so rebinding set 0 per dispatch keeps it.
+    if (const VkDescriptorSet bindless = m_device->GetBindlessSet(); bindless != VK_NULL_HANDLE) {
+        vkCmdBindDescriptorSets(m_commandBuffers[m_frameIndex], VK_PIPELINE_BIND_POINT_COMPUTE,
+                                m_device->GetPipelineLayout(), VulkanDevice::kBindlessTextureSet, 1, &bindless, 0,
+                                nullptr);
+    }
 }
 
 void VulkanCommandList::End() {

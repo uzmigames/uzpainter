@@ -423,6 +423,21 @@ UPSTREAM_CITATIONS: tuple[Citation, ...] = (
         r"// Required device extensions[\s\S]*VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,\s*\};",
         "no acceleration-structure or ray-query extension is enabled",
     ),
+    _cite(
+        "engine/rhi/vulkan/vulkan_device.cpp",
+        532,
+        554,
+        r"Query and log descriptor indexing capabilities for future bindless support[\s\S]*"
+        r"m_bindlessSupported = supported12\.descriptorIndexing",
+        "descriptor indexing is queried and logged but no bindless set exists",
+    ),
+    _cite(
+        "engine/rhi/vulkan/vulkan_device.cpp",
+        846,
+        846,
+        r"layoutCI\.setLayoutCount = 1;",
+        "the pipeline layout has descriptor set 0 only",
+    ),
     # UZP-MOD-008
     _cite(
         "engine/shader/shader_compiler.h",

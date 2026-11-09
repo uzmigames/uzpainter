@@ -229,7 +229,8 @@ int Selftest::Run(SelftestContext& context) {
     }
     const char* slice = sliceFailed ? "failed" : sliceSkipped ? "skipped" : "passed";
     // Reported apart from the DX12 slice and the availability probe; its compute stages are mandatory
-    // since phase3.1's acceptance (decision 310 §9), so their failure also fails the run above.
+    // since phase3.1's acceptance (decision 310 §9) and its ray-query stage since phase3.2's (decision
+    // 421), so their failure also fails the run above.
     const char* vulkanSlice = vulkanFailed                   ? "failed"
                               : (vulkanSkipped || !vulkanRan) ? "skipped"
                                                               : "passed";

@@ -478,6 +478,30 @@ def test_vulkan_acceleration_structures_and_ray_queries() -> None:
     assert commands.count("++m_accelerationStructureFailures;") >= 8
 
 
+def test_vulkan_bindless_sampled_textures() -> None:
+    """UZP-MOD-007 (decision 421): the Vulkan device keeps one bindless set of sampled images
+    (set 1, binding 0; partially bound, update-after-bind, update-unused-while-pending) when the
+    descriptor-indexing features and limits are present, naming every missing item; the pipeline
+    layout gains it as set 1; a sampled 2D colour texture gets a slot for its life, released on
+    destroy; command lists bind the set for compute. The behaviour runs in `uzp-render-tests
+    bindless-textures` (tests/render/test_ray_query.py)."""
+    vulkan = VENDORED / "engine" / "rhi" / "vulkan"
+    device = (vulkan / "vulkan_device.cpp").read_text(encoding="utf-8")
+    device_h = (vulkan / "vulkan_device.h").read_text(encoding="utf-8")
+    resources = (vulkan / "vulkan_resources.cpp").read_text(encoding="utf-8")
+    commands = (vulkan / "vulkan_command_list.cpp").read_text(encoding="utf-8")
+    assert "static constexpr uint32_t kBindlessTextureSet = 1;" in device_h
+    assert "static constexpr uint32_t kBindlessTextureCapacity = 65536;" in device_h
+    assert "BindlessMissing() const" in device_h
+    assert "bool VulkanDevice::CreateBindlessTextureSet()" in device
+    assert "VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT" in device
+    assert "vk12Features.descriptorBindingUpdateUnusedWhilePending =" in device
+    assert "layoutCI.setLayoutCount = m_bindlessTextures ? 2u : 1u;" in device
+    assert "AssignBindlessSlot(*slot);  // UZP-MOD-007" in resources
+    assert "m_bindlessFree.push_back(tex->bindlessIndex);" in resources
+    assert "VulkanDevice::kBindlessTextureSet, 1, &bindless" in commands
+
+
 # ── UZP-MOD-004 (3.4) ─────────────────────────────────────────────────────────────────────
 
 

@@ -1,0 +1,13 @@
+{
+  "id": 421,
+  "slug": "vulkan-bindless-sampled-textures-are-a-descriptor-indexing-set-1-and-the-ray-query-selftest-stage-becomes-mandatory",
+  "title": "Vulkan bindless sampled textures are a descriptor-indexing set 1, a live device without VK_KHR_ray_query is made by hiding the extension, and the ray-query selftest stage becomes mandatory",
+  "status": "accepted",
+  "date": "2026-11-09",
+  "relatedTasks": [
+    "phase3.2_vulkan-ray-tracing",
+    "phase3.3_vulkan-backend-ray-tracing",
+    "phase3.7_path-tracer"
+  ],
+  "supersededBy": null
+}

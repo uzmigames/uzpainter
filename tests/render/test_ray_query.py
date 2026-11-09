@@ -157,3 +157,58 @@ def test_committed_ray_cast_report_is_valid() -> None:
     assert report["kernel_sha256"] == kernel_sha256()
     assert [f["id"] for f in report["fixtures"]] == list(FIXTURES)
     assert report["outcome"] == "pass"
+
+
+def test_vulkan_device_without_ray_query(render_tests: Path, tmp_path: Path) -> None:
+    """3.2: a live Vulkan device created without VK_KHR_ray_query (hidden from the vendored device
+    on hardware that has it) reports exactly that extension missing in the capability query and
+    report; building a scene and casting rays fail before any work as unavailable, naming the
+    backend and the extension, and nothing is submitted."""
+    passed = _gpu(render_tests, "vulkan-ray-query-hidden", tmp_path)
+    assert {
+        "this machine's Vulkan device qualifies",
+        "the device's record exposes every ray-query item",
+        "a Vulkan device is created without VK_KHR_ray_query",
+        "the device reports inline ray queries unavailable with exactly VK_KHR_ray_query missing",
+        "a ray-query request fails before any work, naming the backend and VK_KHR_ray_query",
+        "the capability report states ray queries unavailable with VK_KHR_ray_query missing",
+        "building a ray scene is refused as unavailable",
+        "casting rays is refused as unavailable",
+        "nothing was submitted: no dispatch and no fallback",
+        "after its work completed the Vulkan device is destroyed",
+    } <= passed
+
+
+def _bindless(backend: str) -> set[str]:
+    return {
+        f"{backend}: bindless textures are available",
+        f"{backend}: the bindless gather kernel compiles",
+        f"{backend}: the bindless gather pipeline is created",
+        f"{backend}: 40 tagged textures are created and named",
+        f"{backend}: the 40 textures have 40 distinct bindless names",
+        f"{backend}: the gather runs",
+        f"{backend}: every lookup reads its texel, mip size and level count, bit for bit",
+        f"{backend}: a second gather gives byte-identical results",
+        f"{backend}: a destroyed texture has no bindless name",
+        f"{backend}: a texture created after one is destroyed reads its own texels",
+        f"{backend}: a texture without ShaderResource usage has no bindless name",
+    }
+
+
+def test_bindless_textures_on_both_backends(render_tests: Path, tmp_path: Path) -> None:
+    """2.4: sampled textures read by bindless name with a per-thread (non-uniform) index from the
+    same HLSL: DX12 through the SM 6.6 descriptor heap, Vulkan through the descriptor-indexing set 1
+    (UZP-MOD-007). 40 textures (more than the 16 fixed slots) of two mips read back bit for bit with
+    their mip sizes and level counts, twice byte-identical; a released Vulkan slot goes to the next
+    texture, which reads its own texels; DX12 and Vulkan give byte-identical results."""
+    passed = _gpu(render_tests, "bindless-textures", tmp_path)
+    assert {
+        "the DX12 device is created",
+        "this machine's Vulkan device qualifies",
+        "the qualified Vulkan device is created",
+        "vulkan: the SPIR-V declares RuntimeDescriptorArray and ShaderNonUniform",
+        "vulkan: the texture array is in descriptor set 1",
+        "vulkan: the destroyed texture's slot is given to the next texture",
+        "after its work completed the Vulkan device is destroyed",
+        "DX12 and Vulkan gather byte-identical results",
+    } | _bindless("dx12") | _bindless("vulkan") <= passed

@@ -30,9 +30,9 @@ VULKAN_SLICE = (
     "vulkan-png16",
     "vulkan-ray-query-trace",
 )
-# The Vulkan compute stages a failure of which fails `selftest` since phase3.1's acceptance
-# (decision 310 §9); `vulkan-ray-query-trace` belongs to phase3.2 and stays not mandatory.
-VULKAN_MANDATORY = ("vulkan-device", "vulkan-compute-readback", "vulkan-png16")
+# The Vulkan stages a failure of which fails `selftest`: the compute stages since phase3.1's
+# acceptance (decision 310 §9), `vulkan-ray-query-trace` since phase3.2's (decision 421).
+VULKAN_MANDATORY = VULKAN_SLICE
 WIDTH, HEIGHT = 100, 64
 
 
@@ -153,8 +153,8 @@ def test_vulkan_hardware_slice_green(painter_bin: Path, tmp_path: Path) -> None:
     (every criterion passed), reads the three qualification kernels back bit for bit, the 16-bit
     pattern equal to the CPU pattern and to the DX12 readback, and round-trips it through a 16-bit
     PNG. It is reported as `vulkan_hardware_slice`, apart from the DX12 slice and the
-    `vulkan-availability` probe; since phase3.1's acceptance (decision 310 §9) its three compute
-    stages are mandatory, the ray-query stage (phase3.2) is not."""
+    `vulkan-availability` probe; its three compute stages are mandatory since phase3.1's acceptance
+    (decision 310 §9) and its ray-query stage since phase3.2's (decision 421)."""
     if os.environ.get("UZP_NO_GPU") == "1":
         pytest.skip(
             "UZP_NO_GPU=1: no GPU on this runner (decision 028); runs on the owner's machine"
@@ -198,7 +198,8 @@ def test_vulkan_ray_query_slice_green(painter_bin: Path, tmp_path: Path) -> None
     enabled (nothing missing on the owner's GPU), compiles the ray-cast kernel to SPIR-V with
     SPV_KHR_ray_query, builds a BLAS of two geometries and a TLAS of three instances, traces nine
     inline queries and finds every record equal to its hand-computed answer and to the CPU
-    reference; it is a line of its own, apart from the `vulkan-ray-query` probe."""
+    reference; it is a line of its own, apart from the `vulkan-ray-query` probe, and mandatory since
+    phase3.2's acceptance (decision 421)."""
     if os.environ.get("UZP_NO_GPU") == "1":
         pytest.skip(
             "UZP_NO_GPU=1: no GPU on this runner (decision 028); runs on the owner's machine"
@@ -208,7 +209,7 @@ def test_vulkan_ray_query_slice_green(painter_bin: Path, tmp_path: Path) -> None
     by_name = stages(report)
     stage = by_name["vulkan-ray-query-trace"]
     assert stage["status"] == "passed", stage
-    assert stage["vulkan_hardware_slice"] and not stage["mandatory"]
+    assert stage["vulkan_hardware_slice"] and stage["mandatory"]
     details = stage["details"]
     assert details["acceleration_structures"] == "enabled"
     assert details["inline_ray_query"] == "enabled"

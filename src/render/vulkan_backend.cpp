@@ -631,7 +631,9 @@ Result<std::unique_ptr<VulkanDevice>> CreateQualifiedVulkanDevice(const VulkanSu
     desc.backend = uz::RHIBackend::Vulkan;
     desc.adapterIndex = qualification.adapterIndex;
     desc.enableValidation = options.enableValidation;
+    uz::VulkanDevice::HideDeviceExtensionsForNextInit(options.hiddenDeviceExtensions);  // test only; consumed by Init
     std::unique_ptr<uz::IRHIDevice> rhi = uz::CreateRHIDevice(desc);
+    uz::VulkanDevice::HideDeviceExtensionsForNextInit({});
     if (!rhi) {
         return VulkanUnavailable("the vendored Vulkan device was not created on the qualified device '" +
                                  record.name + "' (the render core log has the cause)");

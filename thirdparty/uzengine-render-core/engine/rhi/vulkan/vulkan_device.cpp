@@ -45,6 +45,15 @@
 
 namespace uz {
 
+namespace {
+// UZP-MOD-007: extensions the next Init treats as not exposed (HideDeviceExtensionsForNextInit).
+std::vector<std::string> g_hiddenDeviceExtensionsForNextInit;
+}  // namespace
+
+void VulkanDevice::HideDeviceExtensionsForNextInit(std::vector<std::string> names) {
+    g_hiddenDeviceExtensionsForNextInit = std::move(names);
+}
+
 using namespace uz::vk; // Format/state conversion helpers from vulkan_format_helpers.h
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -119,6 +128,9 @@ VulkanDevice::~VulkanDevice() {
     if (m_staticSamplerBilinearClamp != VK_NULL_HANDLE) vkDestroySampler(m_device, m_staticSamplerBilinearClamp, nullptr);
     if (m_staticSamplerBilinearWrap != VK_NULL_HANDLE) vkDestroySampler(m_device, m_staticSamplerBilinearWrap, nullptr);
     if (m_descriptorPool != VK_NULL_HANDLE)      vkDestroyDescriptorPool(m_device, m_descriptorPool, nullptr);
+    // UZP-MOD-007: the bindless set goes with its pool.
+    if (m_bindlessPool != VK_NULL_HANDLE)        vkDestroyDescriptorPool(m_device, m_bindlessPool, nullptr);
+    if (m_bindlessSetLayout != VK_NULL_HANDLE)   vkDestroyDescriptorSetLayout(m_device, m_bindlessSetLayout, nullptr);
     if (m_tracyVkCtx) TracyVkDestroy(m_tracyVkCtx);
     if (m_allocator)                          vmaDestroyAllocator(m_allocator);
     if (m_device != VK_NULL_HANDLE)          vkDestroyDevice(m_device, nullptr);
@@ -134,6 +146,9 @@ VulkanDevice::~VulkanDevice() {
 bool VulkanDevice::Init(const RHIDeviceDesc& desc) {
     UZ_PROFILE_FUNCTION();
     m_validationEnabled = desc.enableValidation;
+    // UZP-MOD-007: the test hook's hidden extensions apply to this Init only.
+    m_hiddenDeviceExtensions = std::move(g_hiddenDeviceExtensionsForNextInit);
+    g_hiddenDeviceExtensionsForNextInit.clear();
 
     if (!CreateInstance(desc.enableValidation))        return false;
     if (desc.enableValidation) SetupDebugMessenger();
@@ -142,6 +157,7 @@ bool VulkanDevice::Init(const RHIDeviceDesc& desc) {
     if (!CreateAllocator())                             return false;
     if (!CreateDescriptorPool())                        return false;
     if (!CreateDescriptorSetLayout())                   return false;
+    if (!CreateBindlessTextureSet())                    return false;  // UZP-MOD-007
     if (!CreatePipelineLayout())                        return false;
 
     // Build root layout mapping rootParamIndex → HLSL register.
@@ -476,7 +492,9 @@ bool VulkanDevice::CreateLogicalDevice() {
         std::vector<VkExtensionProperties> availableExts(extCount);
         vkEnumerateDeviceExtensionProperties(m_physicalDevice, nullptr, &extCount, availableExts.data());
         for (const auto& ext : availableExts) {
-            if (std::strcmp(ext.extensionName, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME) == 0) {
+            if (std::strcmp(ext.extensionName, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME) == 0 &&
+                std::find(m_hiddenDeviceExtensions.begin(), m_hiddenDeviceExtensions.end(),
+                          VK_EXT_MEMORY_BUDGET_EXTENSION_NAME) == m_hiddenDeviceExtensions.end()) {  // UZP-MOD-007
                 deviceExtensions.push_back(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
                 m_memoryBudgetSupported = true;
                 UZ_LOG(RHI, Info, "VK_EXT_memory_budget available — enabling accurate VRAM budget queries");
@@ -502,6 +520,11 @@ bool VulkanDevice::CreateLogicalDevice() {
         std::vector<VkExtensionProperties> availableExts(extCount);
         vkEnumerateDeviceExtensionProperties(m_physicalDevice, nullptr, &extCount, availableExts.data());
         const auto exposed = [&](const char* name) {
+            // UZP-MOD-007 test hook: a hidden extension counts as not exposed.
+            if (std::find(m_hiddenDeviceExtensions.begin(), m_hiddenDeviceExtensions.end(), name) !=
+                m_hiddenDeviceExtensions.end()) {
+                return false;
+            }
             for (const auto& ext : availableExts) {
                 if (std::strcmp(ext.extensionName, name) == 0) return true;
             }
@@ -542,9 +565,24 @@ bool VulkanDevice::CreateLogicalDevice() {
         }
     }
 
+    // UZP-MOD-007: the bindless texture set writes new slots while other work is pending, which
+    // needs descriptorBindingUpdateUnusedWhilePending; enabled when supported (part of the
+    // descriptorIndexing feature set), its absence recorded below.
+    VkPhysicalDeviceVulkan12Features supportedBindless12 = {};
+    supportedBindless12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+    {
+        VkPhysicalDeviceFeatures2 query = {};
+        query.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        query.pNext = &supportedBindless12;
+        vkGetPhysicalDeviceFeatures2(m_physicalDevice, &query);
+        supportedBindless12.pNext = nullptr;
+    }
+
     // Enable Vulkan 1.2 features (timeline semaphores, descriptor indexing, bindless)
     VkPhysicalDeviceVulkan12Features vk12Features = {};
     vk12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+    vk12Features.descriptorBindingUpdateUnusedWhilePending =
+        supportedBindless12.descriptorBindingUpdateUnusedWhilePending;  // UZP-MOD-007
     vk12Features.timelineSemaphore = VK_TRUE;
     vk12Features.descriptorIndexing = VK_TRUE;
     vk12Features.bufferDeviceAddress = VK_TRUE;
@@ -690,6 +728,55 @@ bool VulkanDevice::CreateLogicalDevice() {
             UZ_LOG(RHI, Info, "Bindless descriptors: AVAILABLE (all required features supported)");
         } else {
             UZ_LOG(RHI, Warning, "Bindless descriptors: NOT AVAILABLE (missing required features)");
+        }
+
+        // UZP-MOD-007: what the bindless texture set (CreateBindlessTextureSet) needs, by name:
+        // the features the device enabled above, then the update-after-bind limits of set 0
+        // (the fixed layout's compute bindings) plus the set's capacity.
+        m_bindlessMissing.clear();
+        const std::pair<const char*, VkBool32> features[] = {
+            {"descriptorIndexing", supported12.descriptorIndexing},
+            {"runtimeDescriptorArray", supported12.runtimeDescriptorArray},
+            {"descriptorBindingPartiallyBound", supported12.descriptorBindingPartiallyBound},
+            {"shaderSampledImageArrayNonUniformIndexing", supported12.shaderSampledImageArrayNonUniformIndexing},
+            {"descriptorBindingSampledImageUpdateAfterBind", supported12.descriptorBindingSampledImageUpdateAfterBind},
+            {"descriptorBindingUpdateUnusedWhilePending", supported12.descriptorBindingUpdateUnusedWhilePending},
+        };
+        for (const auto& [name, on] : features) {
+            if (on != VK_TRUE) m_bindlessMissing.emplace_back(name);
+        }
+        VkPhysicalDeviceVulkan12Properties props12 = {};
+        props12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES;
+        VkPhysicalDeviceProperties2 props2 = {};
+        props2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        props2.pNext = &props12;
+        vkGetPhysicalDeviceProperties2(m_physicalDevice, &props2);
+        // Set 0 in the compute stage: 16 sampled images, 16 uniform buffers, 16 storage images,
+        // 16 storage buffers and, with inline ray queries, one acceleration structure.
+        constexpr uint64_t kSet0SampledImages = 16;
+        const uint64_t set0Resources = 64 + (m_supportsInlineRayQuery ? 1 : 0);
+        // The set-0 pool (CreateDescriptorPool): every descriptor of its sizes.
+        const uint64_t set0Pool = 16384 + 4096 + 4096 + 4096 + 2048 + 8192 + (m_supportsInlineRayQuery ? 4096 : 0);
+        const uint64_t capacity = kBindlessTextureCapacity;
+        const struct {
+            const char* name;
+            uint64_t found;
+            uint64_t required;
+        } limits[] = {
+            {"maxPerStageDescriptorUpdateAfterBindSampledImages",
+             props12.maxPerStageDescriptorUpdateAfterBindSampledImages, kSet0SampledImages + capacity},
+            {"maxDescriptorSetUpdateAfterBindSampledImages", props12.maxDescriptorSetUpdateAfterBindSampledImages,
+             kSet0SampledImages + capacity},
+            {"maxPerStageUpdateAfterBindResources", props12.maxPerStageUpdateAfterBindResources,
+             set0Resources + capacity},
+            {"maxUpdateAfterBindDescriptorsInAllPools", props12.maxUpdateAfterBindDescriptorsInAllPools,
+             set0Pool + capacity},
+        };
+        for (const auto& limit : limits) {
+            if (limit.found < limit.required) {
+                m_bindlessMissing.push_back(std::string(limit.name) + " >= " + std::to_string(limit.required) +
+                                            " (found " + std::to_string(limit.found) + ")");
+            }
         }
     }
 
@@ -1007,8 +1094,10 @@ bool VulkanDevice::CreatePipelineLayout() {
     layoutCI.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     layoutCI.pushConstantRangeCount = 1;
     layoutCI.pPushConstantRanges = &pushConstantRange;
-    layoutCI.setLayoutCount = 1;
-    layoutCI.pSetLayouts = &m_descriptorSetLayout;
+    // UZP-MOD-007: set 1, the bindless texture set, when it exists.
+    const VkDescriptorSetLayout setLayouts[2] = {m_descriptorSetLayout, m_bindlessSetLayout};
+    layoutCI.setLayoutCount = m_bindlessTextures ? 2u : 1u;
+    layoutCI.pSetLayouts = setLayouts;
 
     VkResult result = vkCreatePipelineLayout(m_device, &layoutCI, nullptr, &m_pipelineLayout);
     if (result != VK_SUCCESS) {
@@ -1016,8 +1105,105 @@ bool VulkanDevice::CreatePipelineLayout() {
         return false;
     }
 
-    UZ_LOG(RHI, Info, "Vulkan pipeline layout created (128 bytes push constants + descriptor set 0)");
+    UZ_LOG(RHI, Info, "Vulkan pipeline layout created (128 bytes push constants + descriptor set 0{})",
+           m_bindlessTextures ? " + bindless set 1" : "");
     return true;
+}
+
+// UZP-MOD-007: the bindless texture set. One set for the device's life: binding 0 holds
+// kBindlessTextureCapacity sampled images (compute), partially bound (unwritten and released
+// slots are never read), update-after-bind and update-unused-while-pending (a new texture's slot is
+// written while earlier work that reads other slots is pending). Without every feature and limit
+// it needs (m_bindlessMissing) the set is not created and the pipeline layout keeps set 0 only.
+bool VulkanDevice::CreateBindlessTextureSet() {
+    m_bindlessTextures = false;
+    if (!m_bindlessMissing.empty()) {
+        std::string names;
+        for (const std::string& name : m_bindlessMissing) names += (names.empty() ? "" : ", ") + name;
+        UZ_LOG(RHI, Warning, "Bindless texture set not created; missing: {}", names);
+        return true;
+    }
+    VkDescriptorSetLayoutBinding binding = {};
+    binding.binding = 0;
+    binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    binding.descriptorCount = kBindlessTextureCapacity;
+    binding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    const VkDescriptorBindingFlags flags = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
+                                           VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
+                                           VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT;
+    VkDescriptorSetLayoutBindingFlagsCreateInfo flagsCI = {};
+    flagsCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+    flagsCI.bindingCount = 1;
+    flagsCI.pBindingFlags = &flags;
+    VkDescriptorSetLayoutCreateInfo layoutCI = {};
+    layoutCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutCI.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+    layoutCI.pNext = &flagsCI;
+    layoutCI.bindingCount = 1;
+    layoutCI.pBindings = &binding;
+    VkResult result = vkCreateDescriptorSetLayout(m_device, &layoutCI, nullptr, &m_bindlessSetLayout);
+    if (result != VK_SUCCESS) {
+        UZ_LOG(RHI, Error, "bindless set layout: vkCreateDescriptorSetLayout failed, result={}", static_cast<int>(result));
+        return false;
+    }
+    const VkDescriptorPoolSize poolSize = {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, kBindlessTextureCapacity};
+    VkDescriptorPoolCreateInfo poolCI = {};
+    poolCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolCI.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
+    poolCI.maxSets = 1;
+    poolCI.poolSizeCount = 1;
+    poolCI.pPoolSizes = &poolSize;
+    result = vkCreateDescriptorPool(m_device, &poolCI, nullptr, &m_bindlessPool);
+    if (result != VK_SUCCESS) {
+        UZ_LOG(RHI, Error, "bindless set pool: vkCreateDescriptorPool failed, result={}", static_cast<int>(result));
+        return false;
+    }
+    VkDescriptorSetAllocateInfo allocInfo = {};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = m_bindlessPool;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = &m_bindlessSetLayout;
+    result = vkAllocateDescriptorSets(m_device, &allocInfo, &m_bindlessSet);
+    if (result != VK_SUCCESS) {
+        UZ_LOG(RHI, Error, "bindless set: vkAllocateDescriptorSets failed, result={}", static_cast<int>(result));
+        return false;
+    }
+    m_bindlessTextures = true;
+    UZ_LOG(RHI, Info, "Bindless texture set created ({} sampled images at set 1, binding 0)", kBindlessTextureCapacity);
+    return true;
+}
+
+void VulkanDevice::AssignBindlessSlot(VulkanTexture& texture) {
+    texture.bindlessIndex = UINT32_MAX;
+    const RHITextureDesc& desc = texture.desc;
+    if (!m_bindlessTextures || !HasFlag(desc.usage, RHITextureUsage::ShaderResource) || desc.is3D ||
+        desc.depthOrArraySize != 1 || IsDepthFormat(desc.format) || texture.imageView == VK_NULL_HANDLE) {
+        return;
+    }
+    uint32_t slot = UINT32_MAX;
+    if (!m_bindlessFree.empty()) {
+        slot = m_bindlessFree.front();
+        m_bindlessFree.pop_front();
+    } else if (m_bindlessNext < kBindlessTextureCapacity) {
+        slot = m_bindlessNext++;
+    } else {
+        UZ_LOG(RHI, Warning, "Bindless texture set is full ({} slots); the texture has no bindless slot",
+               kBindlessTextureCapacity);
+        return;
+    }
+    VkDescriptorImageInfo imageInfo = {};
+    imageInfo.imageView = texture.imageView;
+    imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    VkWriteDescriptorSet write = {};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = m_bindlessSet;
+    write.dstBinding = 0;
+    write.dstArrayElement = slot;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    write.pImageInfo = &imageInfo;
+    vkUpdateDescriptorSets(m_device, 1, &write, 0, nullptr);
+    texture.bindlessIndex = slot;
 }
 
 

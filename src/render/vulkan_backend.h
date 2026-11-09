@@ -47,6 +47,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace uz {
 class VulkanDevice;
@@ -65,6 +66,11 @@ struct VulkanDeviceOptions {
     bool enableValidation = false;
     /// How long the destructor's `Shutdown` waits for the last submission.
     std::chrono::milliseconds teardownDeadline{10000};
+    /// Test only (phase3.2_vulkan-ray-tracing item 3.2): optional device extensions the vendored
+    /// device treats as not exposed, so a device without, say, `VK_KHR_ray_query` is created on
+    /// hardware that has it (`uz::VulkanDevice::HideDeviceExtensionsForNextInit`). Product paths
+    /// never set it.
+    std::vector<std::string> hiddenDeviceExtensions;
 };
 
 /// How a device ended: still alive, destroyed after its work completed, or abandoned.

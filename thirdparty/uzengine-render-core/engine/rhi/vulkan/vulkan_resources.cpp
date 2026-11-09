@@ -353,6 +353,7 @@ RHITextureHandle VulkanDevice::CreateTexture(const RHITextureDesc& desc) {
     if (HasFlag(desc.usage, RHITextureUsage::DepthStencil)) {
         slot->dsvIndex = m_nextSrvIndex++;
     }
+    AssignBindlessSlot(*slot);  // UZP-MOD-007
 
     UZ_LOG(RHI, Debug, "CreateTexture: {}x{}, mips={} (name='{}')",
            desc.width, desc.height, desc.mipLevels,
@@ -378,7 +379,18 @@ void VulkanDevice::DestroyTexture(RHITextureHandle handle) {
         tex->image = VK_NULL_HANDLE;
         tex->allocation = nullptr;
     }
+    // UZP-MOD-007: the bindless slot is released; partially bound, it is not read until a later
+    // texture takes it and writes its own view there.
+    if (tex->bindlessIndex != UINT32_MAX) {
+        m_bindlessFree.push_back(tex->bindlessIndex);
+        tex->bindlessIndex = UINT32_MAX;
+    }
     m_texturePool.Free(handle.index);
+}
+
+uint32_t VulkanDevice::GetTextureBindlessIndex(RHITextureHandle handle) const {  // UZP-MOD-007
+    const VulkanTexture* tex = m_texturePool.Get(handle.index, handle.generation);
+    return tex ? tex->bindlessIndex : UINT32_MAX;
 }
 
 uint32_t VulkanDevice::GetTextureSRVIndex(RHITextureHandle handle) const {

@@ -33,6 +33,7 @@
 #endif
 #include <vulkan/vulkan.h>
 
+#include <deque>
 #include <string>
 #include <vector>
 
@@ -180,6 +181,27 @@ public:
     [[nodiscard]] const std::vector<std::string>& RayQueryMissing() const { return m_rayQueryMissing; }
     /// `minAccelerationStructureScratchOffsetAlignment` (0 without acceleration structures).
     [[nodiscard]] uint32_t ScratchAlignment() const { return m_asScratchAlignment; }
+
+    // ── UZP-MOD-007: bindless sampled textures (descriptor indexing) ─────
+    /// The bindless set: descriptor set 1 of the pipeline layout, binding 0, an array of this
+    /// many sampled images (compute stage; partially bound, update-after-bind,
+    /// update-unused-while-pending). Shaders declare `[[vk::binding(0, 1)]] Texture2D<...> t[]`.
+    static constexpr uint32_t kBindlessTextureSet = 1;
+    static constexpr uint32_t kBindlessTextureCapacity = 65536;
+    /// The bindless set exists: the descriptor-indexing features and the update-after-bind limits
+    /// it needs are present, and the pipeline layout has set 1.
+    [[nodiscard]] bool SupportsBindlessTextures() const { return m_bindlessTextures; }
+    /// The features and limits whose absence keeps the bindless set off, by name; empty when it is on.
+    [[nodiscard]] const std::vector<std::string>& BindlessMissing() const { return m_bindlessMissing; }
+    /// The bindless slot of a live texture; `UINT32_MAX` when it has none (no bindless set, no
+    /// `ShaderResource` usage, not a single 2D colour texture, or the set was full).
+    [[nodiscard]] uint32_t GetTextureBindlessIndex(RHITextureHandle handle) const;
+    /// The bindless set, bound by every command list for compute; `VK_NULL_HANDLE` without it.
+    [[nodiscard]] VkDescriptorSet GetBindlessSet() const { return m_bindlessSet; }
+    /// Test hook: device extensions the next `Init` in this process treats as not exposed (so a
+    /// device without, say, `VK_KHR_ray_query` can be created on hardware that has it). Consumed
+    /// and cleared by that `Init`; never set on product paths.
+    static void HideDeviceExtensionsForNextInit(std::vector<std::string> names);
 
     ResourcePool<VulkanBLAS>& GetBLASPool() { return m_blasPool; }
     ResourcePool<VulkanTLAS>& GetTLASPool() { return m_tlasPool; }
@@ -369,6 +391,9 @@ private:
     bool CreateDescriptorPool();
     bool CreateDescriptorSetLayout();
     bool CreatePipelineLayout();
+    bool CreateBindlessTextureSet();  ///< UZP-MOD-007
+    /// UZP-MOD-007: gives a new texture its bindless slot and writes the slot's descriptor.
+    void AssignBindlessSlot(VulkanTexture& texture);
 
     // ── State ────────────────────────────────────────────────────────────
 
@@ -404,6 +429,16 @@ private:
     uint32_t                       m_asMaxGeometryCount = 0;
     uint64_t                       m_asMaxPrimitiveCount = 0;
     uint64_t                       m_asMaxInstanceCount = 0;
+    std::vector<std::string>       m_hiddenDeviceExtensions;
+
+    // ── UZP-MOD-007: bindless sampled textures ────────────────────────────
+    bool                           m_bindlessTextures = false;
+    std::vector<std::string>       m_bindlessMissing;
+    VkDescriptorSetLayout          m_bindlessSetLayout = VK_NULL_HANDLE;
+    VkDescriptorPool               m_bindlessPool = VK_NULL_HANDLE;
+    VkDescriptorSet                m_bindlessSet = VK_NULL_HANDLE;
+    uint32_t                       m_bindlessNext = 0;      ///< Slots below it were handed out once.
+    std::deque<uint32_t>           m_bindlessFree;          ///< Released slots, reused oldest first.
 
     /// Monotonically increasing SRV index counter for logical descriptor binding.
     uint32_t                       m_nextSrvIndex = 0;

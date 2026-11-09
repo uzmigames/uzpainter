@@ -261,6 +261,7 @@ const supervisor_sources = [_][]const u8{
 /// compiled into `UzPainter.exe` and into `uzp-render-tests.exe`.
 const render_sources = [_][]const u8{
     "render/backend.cpp",
+    "render/bindless.cpp",
     "render/capabilities.cpp",
     "render/device.cpp",
     "render/dilation.cpp",

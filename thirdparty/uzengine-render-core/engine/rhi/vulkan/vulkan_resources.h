@@ -158,6 +158,9 @@ struct VulkanTexture {
     uint32_t             rtvIndex = UINT32_MAX;
     /// Logical DSV descriptor index for depth-stencil. `UINT32_MAX` if not a depth target.
     uint32_t             dsvIndex = UINT32_MAX;
+    /// UZP-MOD-007: the slot of the bindless sampled-image array (set 1, binding 0) holding this
+    /// texture's view, for its whole life; `UINT32_MAX` when it has none.
+    uint32_t             bindlessIndex = UINT32_MAX;
     /// Generation counter — must match `RHITextureHandle::generation`.
     uint32_t             generation = 0;
     /// Backend-agnostic creation parameters (dimensions, format, usage flags).

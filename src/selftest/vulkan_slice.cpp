@@ -50,11 +50,12 @@ std::string Join(const std::vector<std::string>& items) {
 
 void RegisterVulkanSlice(Selftest& selftest) {
     // name, mandatory, needsGpu, hardwareSlice, dependsOn, run, vulkanHardwareSlice. The three compute
-    // stages are mandatory since phase3.1's acceptance (decision 310 §9); the ray-query stage is not.
+    // stages are mandatory since phase3.1's acceptance (decision 310 §9), the ray-query stage since
+    // phase3.2's (decision 421).
     selftest.Add({"vulkan-device", true, true, false, {}, RunVulkanDevice, true});
     selftest.Add({"vulkan-compute-readback", true, true, false, {"vulkan-device"}, RunVulkanComputeReadback, true});
     selftest.Add({"vulkan-png16", true, true, false, {"vulkan-compute-readback"}, RunVulkanPng16, true});
-    selftest.Add({"vulkan-ray-query-trace", false, true, false, {"vulkan-device"}, RunVulkanRayQueryTrace,
+    selftest.Add({"vulkan-ray-query-trace", true, true, false, {"vulkan-device"}, RunVulkanRayQueryTrace,
                   true});
 }
 

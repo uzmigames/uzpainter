@@ -1869,7 +1869,7 @@ int main(int argc, char** argv) {
                      "device-removed | unavailable | capabilities | "
                      "readback-pitch | readback-exact | readback-drain | readback-failure | "
                      "readback-kernel | uv-raster-* | vulkan-qualify | vulkan-device | vulkan-faults | vulkan-readback | "
-                     "vulkan-uv-raster | vulkan-image-passes | ray-query-reference | ray-query-mesh | vulkan-ray-query | dx12-ray-query | ray-cast-fixtures | "
+                     "vulkan-uv-raster | vulkan-image-passes | ray-query-reference | ray-query-mesh | vulkan-ray-query | dx12-ray-query | ray-cast-fixtures | vulkan-ray-query-hidden | bindless-textures | "
                      "image-* "
                      "<work-dir>\n");
         return 2;

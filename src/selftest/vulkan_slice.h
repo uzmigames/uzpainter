@@ -25,8 +25,9 @@
 // The slice is reported apart from the DX12 hardware slice and from the `vulkan-availability`
 // and `vulkan-ray-query` probes (`vulkan_hardware_slice` in the report). Since phase3.1's acceptance
 // (decision 310 §9) `vulkan-device`, `vulkan-compute-readback` and `vulkan-png16` are mandatory: a
-// failure, an absent or unqualified device included, fails `selftest`. `vulkan-ray-query-trace`
-// (phase3.2) is not mandatory. All of them need a GPU and skip
+// failure, an absent or unqualified device included, fails `selftest`; so does
+// `vulkan-ray-query-trace` since phase3.2's acceptance (decision 421), a device without inline ray
+// queries included. All of them need a GPU and skip
 // under `--no-gpu` / `UZP_NO_GPU=1`. Passing it qualifies the Vulkan compute path on this
 // machine; it is no parity evidence for any Painter-visible output.
 
