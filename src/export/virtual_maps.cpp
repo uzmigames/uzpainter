@@ -233,11 +233,16 @@ std::variant<const core::Layer*, std::string> AoMixedFill(const core::Project& p
         return Fill(std::string("under legacy colour management or OCIO with Painter's substance config only"));
     }
     const auto mesh = set.mesh_maps.find(core::MeshMapUsage::AO);
+    const auto channel = stack.channels.find(kAo);
+    // Under OCIO, no AO mesh map and no AO channel: AO_Mixed is 1 on every texel, the operator with
+    // both operands 1 (the Tunic's glTF recording, decision 419).
+    if (ocio && mesh == set.mesh_maps.end() && channel == stack.channels.end()) {
+        return Fill(static_cast<const core::Layer*>(nullptr));
+    }
     if (mesh == set.mesh_maps.end() || mesh->second.invalid) {
         return Fill(std::string("with a valid AO mesh map bound only"));
     }
     // Without an AO channel the channel operand is 1, as with no AO layer (decision 418).
-    const auto channel = stack.channels.find(kAo);
     if (channel == stack.channels.end()) return Fill(static_cast<const core::Layer*>(nullptr));
     if (channel->second.format != core::ChannelFormat::L16 && channel->second.format != core::ChannelFormat::L32F) {
         return Fill("on an L16 or L32F AO channel only, not " + std::string(core::ToString(channel->second.format)));
@@ -351,9 +356,14 @@ render::Result<VirtualMapResult> AoMixedOn(const core::Project& project, const V
     const auto fetch = [&](const std::string& sha) -> std::shared_ptr<const evaluator::DecodedImage> {
         return request.resources ? request.resources->Fetch(sha) : nullptr;
     };
+    // No AO mesh map is in scope only under OCIO without an AO channel (AoMixedFill): its operand
+    // is 1 (decision 419).
+    const auto meshMap = set->mesh_maps.find(core::MeshMapUsage::AO);
     const std::shared_ptr<const evaluator::DecodedImage> meshImage =
-        fetch(set->mesh_maps.at(core::MeshMapUsage::AO).resource);
-    const std::optional<std::vector<float>> mesh = GreyOperands(meshImage.get(), width, height);
+        meshMap == set->mesh_maps.end() ? nullptr : fetch(meshMap->second.resource);
+    const std::optional<std::vector<float>> mesh =
+        meshMap == set->mesh_maps.end() ? std::optional<std::vector<float>>(std::vector<float>(texels, 1.0f))
+                                        : GreyOperands(meshImage.get(), width, height);
     if (!mesh) {
         return EvalFail(EvalErrorKind::UnsupportedSource,
                         scope + "with an 8- or 16-bit grey AO mesh map at the set's resolution only (decision 411)");

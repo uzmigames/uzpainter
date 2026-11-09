@@ -1260,11 +1260,11 @@ def test_write16_rule() -> None:
 def test_ao_mixed_plans_in_its_scope_and_refuses_outside_it(
     export_tests: Path, tmp_path: Path
 ) -> None:
-    """Decisions 411 and 418: AO_Mixed is planned on an L16 or L32F AO channel or without an AO
-    channel, with a bound AO mesh map and no AO layer (the skeleton's fills change no channel),
-    under legacy colour management or OCIO with Painter's substance config, and refused before
-    anything is planned otherwise, naming `phase3.2_unreal-ue56-packed-preset` item 2.10 and
-    decision 411."""
+    """Decisions 411, 418 and 419: AO_Mixed is planned on an L16 or L32F AO channel or without an
+    AO channel, with a bound AO mesh map and no AO layer (the skeleton's fills change no channel),
+    under legacy colour management or OCIO with Painter's substance config, and under that OCIO
+    with neither an AO mesh map nor an AO channel; refused before anything is planned otherwise,
+    naming `phase3.2_unreal-ue56-packed-preset` item 2.10 and decision 411."""
     ao = config([mapping("$textureSet_ao", grey("virtualMap", "AO_Mixed"))], ["s0"])
     # Painter 12.1.5 substance OCIO config (evaluator/sources.h kPainterOcioConfigSha256).
     PAINTER_OCIO = "15059d4b4e52893863f2063dfccb3902d182b522ad233564db32a5e30a43b7f4"
@@ -1289,6 +1289,8 @@ def test_ao_mixed_plans_in_its_scope_and_refuses_outside_it(
             (without_ao(), ao),
             (without_ao(color_management="ocio", config_hash=PAINTER_OCIO), ao),
             (without_ao(()), ao),
+            (without_ao((), color_management="ocio", config_hash=PAINTER_OCIO), ao),
+            (with_ao("L16", (), color_management="ocio", config_hash=PAINTER_OCIO), ao),
         ],
         tmp_path,
     )
@@ -1301,3 +1303,7 @@ def test_ao_mixed_plans_in_its_scope_and_refuses_outside_it(
     # Another OCIO configuration is refused by the plan before AO_Mixed is resolved.
     refused(r[4], "NotYetSupported", "OCIO with Painter's substance config", "decision 190")
     refused(r[8], "NotYetSupported", '"AO_Mixed"', "AO mesh map", owner)
+    # Decision 419: under OCIO, no AO mesh map and no AO channel (the Tunic) plans; an AO channel
+    # without a mesh map stays refused.
+    assert ok(r[9])["files"][0]["channels"][0]["source"]["virtualMap"] == "AO_Mixed"
+    refused(r[10], "NotYetSupported", '"AO_Mixed"', "AO mesh map", owner)

@@ -8,6 +8,8 @@ export's padding (EXC-013), not compared here.
 
 - `ao-mixed-islands-ocio`: OCIO, the default template's channels and no AO channel, grey A as the
   AO mesh map, PNG 16 and PNG 8 (steps 4 and 6).
+- `ao-mixed-islands-legacy`: its Legacy twin (decision 418 item 2, recorded 2026-11-09): the same
+  steps under legacy colour management.
 - `export-presets-gltf-predefined-ocio` (R-314): OCIO, an L16 AO channel with one fill of the
   transposed hue-grid grey (16-bit) at opacity 1; Painter's AO_Mixed is the R of its
   occlusionRoughnessMetallic file (PNG 16, probe step 49).
@@ -52,22 +54,25 @@ def _covered(golden: Golden) -> npt.NDArray[np.bool_]:
     return mask
 
 
-def _spec(golden: Golden, spec_dir: Path) -> dict[str, Any]:
-    """The cube's spec as an OCIO project with Painter's substance config and the default
-    template's channels (no template was named); the fill keeps its AO source only (the other
-    channels' sources are not exported here)."""
+def _spec(golden: Golden, spec_dir: Path, ocio: bool = True, drop: str = "") -> dict[str, Any]:
+    """The cube's spec as an OCIO project with Painter's substance config (else legacy colour
+    management) and the default template's channels (no template was named); the fill keeps its
+    AO source only (the other channels' sources are not exported here). `drop` names a call whose
+    steps are left out (`set_mesh_map_resource`: no AO mesh map bound)."""
     manifest = golden.manifest
     steps = [
         s
         for s in manifest["instruction_sequence"]["steps"]
         if not s["call"].endswith("set_source") or s["args"].get("channel") == "AO"
+        if not (drop and s["call"].endswith(drop))
     ]
     sequence = dict(manifest["instruction_sequence"], steps=steps)
     spec = export_spec(dict(manifest, instruction_sequence=sequence), SET, spec_dir)
     spec["mesh"] = str(_mesh_of(golden.manifest))
     _add_template_channels(spec)
-    spec["color_management"] = "ocio"
-    spec["config_hash"] = OCIO_CONFIG_SHA256
+    if ocio:
+        spec["color_management"] = "ocio"
+        spec["config_hash"] = OCIO_CONFIG_SHA256
     return spec
 
 
@@ -81,16 +86,18 @@ def _ao_mixed(exe: Path, spec: dict[str, Any], args: dict[str, Any], work: Path)
     return values.reshape(256, 256, -1)[..., 0]
 
 
+@pytest.mark.parametrize("colour", ["ocio", "legacy"])
 @pytest.mark.parametrize(("step", "bits"), [(4, 16), (6, 8)])
 def test_ao_mixed_without_an_ao_channel_on_islands(
-    export_tests: Path, tmp_path: Path, step: int, bits: int
+    export_tests: Path, tmp_path: Path, step: int, bits: int, colour: str
 ) -> None:
-    golden = _golden("ao-mixed-islands-ocio")
+    golden = _golden(f"ao-mixed-islands-{colour}")
     covered = _covered(golden)
     raw = next(s for s in golden.manifest["instruction_sequence"]["steps"] if s["step"] == step)
     args = dict(raw["args"], maps=["virtualMap/AO_Mixed:L"])
     assert args["padding"] == "infinite" and args["bit_depth"] == bits
-    ours = _ao_mixed(export_tests, _spec(golden, tmp_path / "spec"), args, tmp_path)
+    spec = _spec(golden, tmp_path / "spec", ocio=colour == "ocio")
+    ours = _ao_mixed(export_tests, spec, args, tmp_path)
     for recording in ("r1", "r2"):
         theirs = golden.map(recording, f"{SET}/AO_Mixed/step{step}").values[..., 0]
         differ = int(np.count_nonzero((ours != theirs) & covered))
@@ -113,3 +120,21 @@ def test_ao_mixed_of_an_ocio_fill_on_islands(export_tests: Path, tmp_path: Path)
         theirs = golden.map(recording, orm).values[..., 0]
         differ = int(np.count_nonzero((ours != theirs) & covered))
         assert differ == 0, f"{recording}: {differ} covered texels differ"
+
+
+def test_ao_mixed_without_an_ao_mesh_map_or_channel_under_ocio(
+    export_tests: Path, tmp_path: Path
+) -> None:
+    """Decision 419: Painter's glTF export of the Tunic (OCIO, no AO mesh map bound, no AO
+    channel) writes AO_Mixed, the ORM's R, at the maximum code on every texel; the production
+    export writes the same on the cube with its AO mesh map left unbound."""
+    tunic = load(locate(), manifest_root(current_envelope()) / "phase3/tier1/tunic-v10-gltf.json")
+    for recording in ("r1", "r2"):
+        orm = tunic.map(recording, "export/DefaultMaterial_occlusionRoughnessMetallic").values
+        assert int(np.count_nonzero(orm[..., 0] != 65535)) == 0, recording
+    golden = _golden("ao-mixed-islands-ocio")
+    raw = next(s for s in golden.manifest["instruction_sequence"]["steps"] if s["step"] == 4)
+    args = dict(raw["args"], maps=["virtualMap/AO_Mixed:L"])
+    spec = _spec(golden, tmp_path / "spec", drop="set_mesh_map_resource")
+    ours = _ao_mixed(export_tests, spec, args, tmp_path)
+    assert int(np.count_nonzero(ours != 65535)) == 0

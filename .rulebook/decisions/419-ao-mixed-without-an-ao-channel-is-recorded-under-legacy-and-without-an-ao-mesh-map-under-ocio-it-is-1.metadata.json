@@ -1,0 +1,9 @@
+{
+  "id": 419,
+  "slug": "ao-mixed-without-an-ao-channel-is-recorded-under-legacy-and-without-an-ao-mesh-map-under-ocio-it-is-1",
+  "title": "AO_Mixed without an AO channel is recorded under Legacy; without an AO mesh map under OCIO it is 1",
+  "status": "accepted",
+  "date": "2026-11-09",
+  "relatedTasks": ["phase3.1_unreal-gltf-pbr-preset", "phase3.2_unreal-ue56-packed-preset"],
+  "supersededBy": null
+}

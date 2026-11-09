@@ -45,7 +45,9 @@
 //   incomplete coverage the export pads the uncovered texels under `infinite`, EXC-013, the
 //   covered ones exact on R-314's islanded goldens); no AO channel (c = 1, recorded by
 //   ao-mixed-islands-ocio); OCIO with Painter's substance config, for no AO channel, no AO layer
-//   or R-314's fill only (a 16-bit grey bitmap on an L16 channel at opacity 1). Not the stored
+//   or R-314's fill only (a 16-bit grey bitmap on an L16 channel at opacity 1). Decision 419:
+//   under OCIO with no AO mesh map and no AO channel, AO_Mixed is 1 on every texel (a = 1, c = 1;
+//   recorded on the Tunic, phase3/tier1/tunic-v10-gltf). Not the stored
 //   channel: an L16 channel stores the mix
 //   quantized, an L32F one fma(S - 1, al, 1). After save and reopen Painter's AO_Mixed differs
 //   on blended sets (decision 411).

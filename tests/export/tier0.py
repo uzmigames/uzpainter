@@ -889,7 +889,9 @@ AO_MIXED_NOTES = (
     "any UV coverage (covered texels exact on R-314's islanded goldens, the uncovered ones padded "
     "under EXC-013), no AO channel (c = 1, ao-mixed-islands-ocio) and OCIO with Painter's "
     "substance config for no AO channel, no AO layer or one 16-bit grey bitmap fill on L16 at "
-    "opacity 1. After save and reopen (r2) "
+    "opacity 1. Decision 419 records no AO channel under Legacy too (ao-mixed-islands-legacy) "
+    "and admits, under that OCIO only, no AO mesh map with no AO channel: AO_Mixed is 1 on every "
+    "texel (Painter's glTF export of the Tunic). After save and reopen (r2) "
     "Painter's AO_Mixed differs from r1 on blended sets, deterministically (r2 = r3 = r4); r1 is "
     "the target (decision 032)."
 )
