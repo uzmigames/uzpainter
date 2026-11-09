@@ -415,12 +415,13 @@ def test_tunic_current_recipe_rebuild_exports_identical_bytes_in_the_measure_mod
 ) -> None:
     """Items 2.4 and 3.4 (decision 398): the real Tunic dump-and-rebuild of
     `test_tunic_current_recipe_rebuilds_the_typed_round_from_its_dump`, its two projects exported
-    by the diagnostic measure export (`tunic_recipe.measured_export`) instead of their sessions.
-    Every state check of the three typed sessions passes (bindings, Height blends and
-    `double_sided` read through freshly resolved handles, after the reopen and after the rebuilt
-    project's save and reopen); the outcome must be `pass`: equal recipe digests and
-    byte-identical exports. The aggregate is recorded as `tunic_current_recipe_measure`, with no
-    private value, as the production test's."""
+    by the diagnostic measure export (`tunic_recipe.measured_export`) instead of their sessions,
+    every typed session with the Tunic's GPU deadline (`tunic_recipe.GPU_DEADLINE_MS`; its state
+    round's export is a 4096 px production export). Every state check of the three typed
+    sessions passes (bindings, Height blends and `double_sided` read through freshly resolved
+    handles, after the reopen and after the rebuilt project's save and reopen); the outcome must
+    be `pass`: equal recipe digests and byte-identical exports. The aggregate is recorded as
+    `tunic_current_recipe_measure`, with no private value, as the production test's."""
     manifest = resolve_golden(TUNIC_CURRENT)
     assert manifest is not None
     aggregate: dict[str, Any] = {
@@ -429,7 +430,11 @@ def test_tunic_current_recipe_rebuild_exports_identical_bytes_in_the_measure_mod
     }
     result = private_recipe(
         lambda: run_tunic_recipe(
-            fast_painter, tmp_path / "recipe", manifest.manifest_path, diagnostic=True
+            fast_painter,
+            tmp_path / "recipe",
+            manifest.manifest_path,
+            diagnostic=True,
+            gpu_deadline_ms=GPU_DEADLINE_MS,
         ),
         tmp_path,
         aggregate,
