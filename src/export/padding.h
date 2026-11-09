@@ -147,7 +147,13 @@
 //   steps of tier0 export-padding) and stable across recordings, but they are not the stencil of
 //   the evaluated Height: 445 of 1452 edge texels differ on export-padding, 592 to 2296 on the
 //   height-normal sphere and bevelled cube, 1071 on the Wand v1, while every interior texel is
-//   exact. Such a file is refused (`CheckIslandNormal`), a Height without layers included: no
+//   exact. Such a file is refused (`CheckIslandNormal`), except under the owner's EXC-014
+//   (decision 417, `IslandNormalLifted`): a production file whose every channel reads
+//   `Normal_OpenGL` or `Normal_DirectX`, padded `infinite` over coverage with a covered texel and
+//   not resized, is written with its normal computed by decision 308's rule (the stencil reads
+//   the measured padding of the Height outside the islands, virtual_maps.h), so only its
+//   island-edge texels may differ, and its receipt relies on EXC-014. A Height without layers
+//   stays refused even then (decision 245 §2, guards.h `IslandNormalHeightRefusal`): no
 //   recording shows what Painter's empty Height reads outside the islands, and its other virtual
 //   maps read an empty channel as a constant that is not the channel's base (R-092).
 //   Outside the islands Painter's combined normal is neither the padding above of its stored
@@ -261,6 +267,13 @@ inline constexpr std::string_view kIslandPaddingException = "EXC-013";
 inline constexpr int kIslandPaddingExceptionVersion = 1;
 inline constexpr std::string_view kIslandPaddingDecision = "414";
 
+/// The owner's exception a combined virtual normal written on incomplete coverage relies on
+/// (above, `IslandNormalLifted`): its covered island-edge texels may differ, every other covered
+/// texel stays exact.
+inline constexpr std::string_view kIslandNormalException = "EXC-014";
+inline constexpr int kIslandNormalExceptionVersion = 1;
+inline constexpr std::string_view kIslandNormalDecision = "417";
+
 /// Throws `core::NotYetSupported` (see above) when `file`'s padding over `coverage` is not fitted,
 /// and std::invalid_argument when the coverage does not have the file's size. A statistics file
 /// has no padding and always passes; `infinite` passes under EXC-013.
@@ -281,8 +294,14 @@ void CheckPadding(const PlannedFile& file, const Coverage& coverage);
 /// islands do not cover the tile (see above), with its owner.
 [[nodiscard]] std::string IslandNormalRefusal(const PlannedSource& source);
 
+/// Whether production writes `file` over `coverage` under EXC-014 (above, decision 417): every
+/// channel reads the virtualMap `Normal_OpenGL` or `Normal_DirectX`, and the file pads
+/// `infinite` over incomplete coverage with a covered texel (`PadsIslands`).
+[[nodiscard]] bool IslandNormalLifted(const PlannedFile& file, const Coverage& coverage);
+
 /// Throws `core::NotYetSupported` (IslandNormalRefusal) when `file` reads a combined virtual
-/// normal over `coverage` with uncovered texels, whatever the padding, a statistics file included.
+/// normal over `coverage` with uncovered texels, whatever the padding, a statistics file included,
+/// unless `IslandNormalLifted`.
 void CheckIslandNormal(const PlannedFile& file, const Coverage& coverage);
 
 /// Applies `file`'s padding over `coverage` to `stored`, the values the file stores (above),

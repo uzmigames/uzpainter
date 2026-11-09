@@ -2,6 +2,7 @@
 
 #include "export/encode.h"
 #include "export/cook_dds.h"
+#include "export/guards.h"
 #include "export/padding.h"
 #include "export/resize.h"
 #include "export/uzmat_writer.h"
@@ -232,6 +233,8 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
     std::map<size_t, Coverage> resizedCoverages;
     std::vector<Resize> resizes(plan.files.size(), Resize::none);
     std::vector<std::vector<std::string>> bypassed(plan.files.size());
+    // The files whose combined virtual normal is written under EXC-014 (padding.h, decision 417).
+    std::vector<uint8_t> islandNormals(plan.files.size(), 0);
     for (size_t i = 0; i < plan.files.size(); ++i) {
         const PlannedFile& file = plan.files[i];
         const core::TextureSet* set = SetOf(project, file.textureSetId);
@@ -277,6 +280,17 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
                 bypassed[i].emplace_back(refusal.what());
             }
         }
+        // Decision 417: written under EXC-014, unless its Height has no layer (decision 245 §2),
+        // which the diagnostic measure export records as bypassed.
+        if (IslandNormalLifted(file, coverage)) {
+            if (std::optional<std::string> refusal =
+                    IslandNormalHeightRefusal(project, file, templates, inputs.templateId)) {
+                if (diagnostic == nullptr) throw core::NotYetSupported(*refusal);
+                bypassed[i].push_back(std::move(*refusal));
+            } else {
+                islandNormals[i] = 1;
+            }
+        }
         CheckPadding(file, coverage);
         if (PadsIslands(file, coverage) && coverage.triangles.empty()) {
             return ExportFail("the padding \"infinite\" of " + file.relativePath +
@@ -314,11 +328,11 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
         if (inputs.beforeFile && !inputs.beforeFile(i, plan.files.size())) {
             return ExportFail("stopped before " + file.relativePath);
         }
-        // The diagnostic measure export computes a combined virtual normal on the file's islands as
-        // Painter does (virtual_maps.h, decision 308).
+        // The diagnostic measure export, and production under EXC-014 (decision 417), compute a
+        // combined virtual normal on the file's islands as Painter does (virtual_maps.h, decision 308).
         SourceInputs measured;
         measured.procedurals = inputs.procedurals;
-        if (diagnostic != nullptr && file.layout != FileLayout::Statistics) {
+        if ((diagnostic != nullptr && file.layout != FileLayout::Statistics) || islandNormals[i] != 0) {
             measured = inputs;
             measured.islandNormal =
                 resizes[i] != Resize::none ? &resizedCoverages.at(i) : &coverages.at(file.textureSetId);
@@ -346,6 +360,7 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
             encoded.push_back({std::move(image.bytes), raster->normalTag, image.layout, diagnostic != nullptr,
                                std::move(bypassed[i]), raster->undecided, std::nullopt});
             encoded.back().islandPadding = image.padded;
+            encoded.back().islandNormal = islandNormals[i] != 0;
         } catch (const std::exception& e) {
             return ExportFail("encoding " + file.relativePath + " failed: " + e.what());
         }

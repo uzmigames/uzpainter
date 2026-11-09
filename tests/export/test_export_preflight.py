@@ -28,6 +28,7 @@ from tests.export.test_export_encoders import (
 )
 
 ISLAND_NORMAL = "reads the combined virtual normal on a texture set whose UV islands do not cover"
+EMPTY_HEIGHT = "its stack's Height has no layer"
 
 
 def preflight(exe: Path, spec_path: Path, cfg: dict[str, Any], tmp: Path) -> dict[str, Any]:
@@ -74,11 +75,13 @@ def test_infinite_padding_on_islands_is_admitted_under_exc013(
     assert sorted(result["export"]["written"]) == sorted(planned) == sorted(files_under(out))
 
 
-def test_an_island_normal_is_blocked_with_and_without_a_height(
+def test_an_island_normal_is_blocked_unless_written_under_exc014(
     export_tests: Path, tmp_path: Path
 ) -> None:
-    """Decision 245: a Normal_OpenGL file on the sphere is `blocked` under `passthrough` and
-    `infinite`, with a layer writing the Height and with none, with the export's own message."""
+    """Decisions 245 and 417: a Normal_OpenGL file on the sphere is `blocked` under `passthrough`,
+    with a layer writing the Height and with none, with the export's own message. Under `infinite`
+    it is `no_known_blocker` and written (EXC-014) when a layer writes the Height, and `blocked` by
+    the empty Height (decision 245 section 2) with the export's own message when none does."""
     for height in (True, False):
         sphere = spec(tmp_path / f"spec-{height}", SPHERE, "uzp_sphere", height=height)
         for padding in ("passthrough", "infinite"):
@@ -93,8 +96,15 @@ def test_an_island_normal_is_blocked_with_and_without_a_height(
             cfg["exportParameters"] = cfg["exportParameters"][:1]
             result = preflight(export_tests, sphere, cfg, tmp_path / f"run-{height}-{padding}")
             [file] = result["preflight"]["files"]
-            assert file["status"] == "blocked" and ISLAND_NORMAL in file["reason"], file
+            if padding == "infinite" and height:
+                assert file["status"] == "no_known_blocker", file
+                assert result["export"]["written"] == ["uzp_sphere_n.png"], result["export"]
+                continue
+            expected = ISLAND_NORMAL if padding == "passthrough" else EMPTY_HEIGHT
+            assert file["status"] == "blocked" and expected in file["reason"], file
             assert "decision 245" in file["references"], file
+            if padding == "infinite":
+                assert "decision 417" in file["references"], file
             assert result["export"] == {"error": "NotYetSupported", "message": file["reason"]}
             assert files_under(out) == {}
 

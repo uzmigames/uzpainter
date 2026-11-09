@@ -1697,6 +1697,14 @@ bool ReadsCombinedNormal(const PlannedFile& file) {
     return std::any_of(file.channels.begin(), file.channels.end(), ChannelReadsCombinedNormal);
 }
 
+bool IslandNormalLifted(const PlannedFile& file, const Coverage& coverage) {
+    return !file.channels.empty() && PadsIslands(file, coverage) &&
+           std::all_of(file.channels.begin(), file.channels.end(), [](const PlannedChannel& channel) {
+               return channel.source.type == SourceType::virtualMap &&
+                      channel.source.normalRole == core::MeshMapRole::combined;
+           });
+}
+
 std::string IslandNormalRefusal(const PlannedSource& source) {
     return "the " + std::string(SourceTypeName(source.type)) + " \"" + source.name +
            "\" reads the combined virtual normal on a texture set whose UV islands do not cover the whole tile: its "

@@ -103,7 +103,7 @@
       ]
     },
     "exceptions_relied_on": {
-      "description": "Only in a generation with a file whose `infinite` padding filled texels outside the UV islands (src/export/receipt.h, decision 414): the owner's exception it relies on (EXC-013: every covered texel exact, the padding free) and those files, in plan order. Conformant under the exception, never exact.",
+      "description": "Only in a generation with a file whose `infinite` padding filled texels outside the UV islands (src/export/receipt.h, decision 414): the owner's exceptions it relies on, each with its files in plan order: EXC-013 (every covered texel exact, the padding free) and, for the files whose combined virtual normal was written on incomplete coverage, EXC-014 (decision 417: their covered island-edge texels may differ too). Conformant under the exceptions, never exact.",
       "type": "array",
       "minItems": 1,
       "items": {

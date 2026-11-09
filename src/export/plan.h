@@ -325,9 +325,10 @@ struct SourceInputs {
     /// The material views already computed for one material of the exported revision, which its
     /// diagnosticMap sources read (`evaluator::DiagnosticRequest::materialViews`); may be null.
     std::shared_ptr<const evaluator::MaterialViews> materialViews;
-    /// The diagnostic measure export only (write.h, decision 308): the file's UV coverage, over
-    /// which its combined virtual normals are computed and padded as Painter computes them
-    /// (virtual_maps.h `VirtualMapRequest::islandNormal`). Null in production.
+    /// The diagnostic measure export (write.h, decision 308), and production for a file written
+    /// under EXC-014 (decision 417): the file's UV coverage, over which its combined virtual
+    /// normals are computed and padded as Painter computes them (virtual_maps.h
+    /// `VirtualMapRequest::islandNormal`). Null otherwise.
     const Coverage* islandNormal = nullptr;
     std::shared_ptr<const evaluator::IProceduralSourceProvider> procedurals{};
 };

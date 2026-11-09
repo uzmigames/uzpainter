@@ -11,8 +11,9 @@
 //
 // The preflight (`PreflightExport`) runs them over a compiled plan in the order of
 // `EncodeExport`'s step 1 (write.h): the processing, then, for a file that needs the coverage, a
-// combined virtual normal on UV islands (decision 245) and the padding (padding.h; `infinite` is
-// admitted under EXC-013, decision 414). Per file:
+// combined virtual normal on UV islands (decision 245; a file written under EXC-014, decision 417,
+// still refused when its Height has no layer) and the padding (padding.h; `infinite` is admitted
+// under EXC-013, decision 414). Per file:
 // - `blocked`: a guard refuses it, with the export's exact reason;
 // - `needs_evaluation`: the file needs its texture set's UV coverage and none is available, so the
 //   island and padding checks did not run;
@@ -43,8 +44,18 @@ inline constexpr std::string_view kIslandsOwner = "owner phase4.1_export-island-
 [[nodiscard]] std::optional<std::string> ProcessingRefusal(const core::Project& project, const PlannedFile& file);
 
 /// The refusal of a combined virtual normal in `file` over `coverage` with uncovered texels,
-/// whatever the padding, a statistics file included (padding.h, decision 245).
+/// whatever the padding, a statistics file included (padding.h, decision 245); none for a file
+/// production writes under EXC-014 (padding.h `IslandNormalLifted`, decision 417).
 [[nodiscard]] std::optional<std::string> IslandNormalFileRefusal(const PlannedFile& file, const Coverage& coverage);
+
+/// Decision 245 §2, kept by decision 417: the refusal of a file written under EXC-014
+/// (`IslandNormalLifted`) whose stack has no Height channel or no layer contributing to it (its
+/// Height DAG of `templateId` in `templates` has no root layer), with its owner. None when the
+/// Height has a layer, and none when its DAG does not build (the evaluation fails then).
+[[nodiscard]] std::optional<std::string> IslandNormalHeightRefusal(const core::Project& project,
+                                                                   const PlannedFile& file,
+                                                                   const evaluator::TemplateLibrary& templates,
+                                                                   std::string_view templateId);
 
 /// The refusal of `file`'s padding over `coverage` when it is not fitted (padding.h); none for a
 /// statistics file, nor for `infinite`, written under EXC-013 (decision 414). Throws
@@ -84,7 +95,8 @@ struct CoverageGap {
 
 /// The preflight's coverage source for a project.
 struct PreflightCoverage {
-    /// Only `geometry` is set: the masks of the revision's texturing mesh, or null.
+    /// Only `geometry` and `templateId` (the project's) are set: the masks of the revision's
+/// texturing mesh, or null.
     SourceInputs inputs;
     /// Why `inputs.geometry` is null, when it is.
     CoverageGap gap;
@@ -100,10 +112,12 @@ struct PreflightCoverage {
 /// The preflight of `plan`, compiled from `project` (above). The coverage is `inputs.geometry`'s
 /// (`CoverageOf`); without it a file that needs it is `needs_evaluation`, `gap.reason` saying why.
 /// A statistics file needs the coverage only when it reads a combined virtual normal, and then not
-/// when `gap.meshAbsent`. Reads nothing else of `inputs`: no image is decoded and no tile is
-/// evaluated.
+/// when `gap.meshAbsent`. Reads nothing else of `inputs` but `templateId`, whose base values
+/// `templates` holds for the Height DAG of `IslandNormalHeightRefusal`: no image is decoded and no
+/// tile is evaluated.
 [[nodiscard]] ExportPreflight PreflightExport(const core::Project& project, const ExportPlan& plan,
-                                              const SourceInputs& inputs, const CoverageGap& gap);
+                                              const SourceInputs& inputs, const CoverageGap& gap,
+                                              const evaluator::TemplateLibrary& templates);
 
 /// `{status, note, files: [{root_path, map, relative_path, status, type?, reason?, references?}]}`:
 /// a blocked file's `type` is `NotYetSupported` and its `references` the tasks, recordings and

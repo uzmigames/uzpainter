@@ -179,8 +179,8 @@ def test_covered_edge_texels_read_the_padded_height(sphere: dict[str, Any]) -> N
     """Decisions 263 and 288 (a): every covered texel is the stencil of the Height read-out on the
     covered texels and, outside them, of the measured ring without its 1 - (1 - m) step and the
     flood, bit for bit, with and without the mesh map; the whole-tile Height gives the same interior
-    but other island-edge texels. The production island Normal refusal (decision 245) is the only
-    one recorded as bypassed: decision 414 lifted the padding's."""
+    but other island-edge texels. Nothing is recorded as bypassed: decision 414 lifted the
+    padding's refusal and decision 417 the island Normal's (EXC-014, the Height having a layer)."""
     covered, edge = sphere["covered"], sphere["edge"]
     for label, mesh in (("free", None), ("mesh", sphere["mesh_operands"])):
         expected = combined(sphere["padded_height"], mesh)
@@ -191,7 +191,7 @@ def test_covered_edge_texels_read_the_padded_height(sphere: dict[str, Any]) -> N
         assert not np.any(differs & covered & ~edge), label
         assert np.any(differs & edge), label
         refusals = sphere[label]["written"]["uzp_sphere_n.exr"]["bypassed"]
-        assert len(refusals) == 1 and "decision 245" in refusals[0], refusals
+        assert refusals == [], refusals
 
 
 def test_ring_texels_copy_the_nearest_covered_mesh_free_normal(sphere: dict[str, Any]) -> None:

@@ -37,8 +37,11 @@
 // (`EncodedFile::islandPadding`) relies on the owner's exception EXC-013 (decision 414: every
 // covered texel exact, the padding free): it carries `exceptions_relied_on`: [{exception_id,
 // version, decision, paths}], and its manifest export block names it in `open_items`
-// (`IslandPaddingNote`). Such a generation is conformant, never exact; without such a file it has
-// no `exceptions_relied_on`.
+// (`IslandPaddingNote`). A file whose combined virtual normal was written on incomplete coverage
+// (`EncodedFile::islandNormal`) relies on EXC-014 too (decision 417: its covered island-edge texels
+// may differ, every other covered texel exact): a second entry lists those files, and the manifest
+// export block names it (`kIslandNormalNote`). Such a generation is conformant, never exact;
+// without such a file it has no `exceptions_relied_on`.
 //
 // resource_hashes is the set of resources the planned files read: the bitmaps of every channel DAG
 // they evaluate (fills, content effects, masks, groups), the masks of a diagnostic's material and
@@ -91,6 +94,11 @@ inline constexpr std::string_view kNonConformantNote =
 inline constexpr std::string_view kIslandPaddingNote =
     "RELIES ON EXC-013 v1 (decision 414): the `infinite` padding outside the UV islands of the listed files is "
     "not Painter's (the exact rule is phase4.1_export-island-padding-exact); every covered texel is exact";
+/// The manifest export block's open item of a generation relying on EXC-014 (above).
+inline constexpr std::string_view kIslandNormalNote =
+    "RELIES ON EXC-014 v1 (decision 417): the covered island-edge texels of the listed combined virtual normals "
+    "(covered, with an uncovered 8-neighbour) read the Height outside the UV islands and are not Painter's (the "
+    "exact Height is phase4.1_export-island-padding-exact); every other covered texel is exact";
 /// `non_conformant.undecided[].rule`: the uncovered texels of a combined virtual normal with a
 /// bound Normal mesh map (write.h, decision 308).
 inline constexpr std::string_view kUndecidedNormalRule =

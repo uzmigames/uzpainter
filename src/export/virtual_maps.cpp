@@ -25,7 +25,8 @@ using evaluator::EvalErrorKind;
 using evaluator::EvalFail;
 
 /// The combined virtual normal on UV islands as Painter computes it (virtual_maps.h, decision
-/// 308): the diagnostic measure export only. `normal` is the whole-tile request.
+/// 308): the diagnostic measure export, and production under EXC-014 (decision 417). `normal` is
+/// the whole-tile request.
 render::Result<VirtualMapResult> IslandNormalOn(const core::Project& project, std::int64_t revision,
                                                 const evaluator::VirtualNormalRequest& normal,
                                                 const Coverage& coverage,
@@ -49,7 +50,7 @@ render::Result<VirtualMapResult> IslandNormalOn(const core::Project& project, st
     // operands without the 1 - (1 - m) step (decisions 263, 288 (a)).
     // A measurement may ask for the float32 Height the stencil reads, before and after the padding
     // (raw float32, rows top first): `UZP_DIAGNOSTIC_NORMAL_DUMP` names a directory. Only this
-    // diagnostic path reads it.
+    // island path reads it.
     const char* dump = std::getenv("UZP_DIAGNOSTIC_NORMAL_DUMP");
     const auto write = [&](const std::string& name, const std::vector<float>& data) {
         if (dump == nullptr || *dump == '\0') return;

@@ -8,10 +8,14 @@
 // Order, so that a refusal or a failure leaves nothing written:
 // 1. every file's processing is checked (CheckProcessing: NotYetSupported for an unrecorded one),
 //    then a combined virtual normal on a UV-islanded set (CheckIslandNormal, statistics files
-//    included) and the padding (CheckPadding); an `infinite` file on UV islands, written under
-//    EXC-013 (decision 414), needs the triangles of `inputs.mesh` (padding.h `PadsIslands`);
+//    included; a file of combined virtual normals padded `infinite` is written under EXC-014,
+//    decision 417, unless its Height has no layer: guards.h `IslandNormalHeightRefusal`) and the
+//    padding (CheckPadding); an `infinite` file on UV islands, written under EXC-013 (decision
+//    414), needs the triangles of `inputs.mesh` (padding.h `PadsIslands`);
 // 2. every file is evaluated (EvaluateFileOn), padded over its texture set's coverage
-//    (ApplyPadding) and encoded (EncodeFile) in memory, and its `.uztexture` derivative, when the
+//    (ApplyPadding) and encoded (EncodeFile) in memory (a file written under EXC-014 computes its
+//    combined virtual normal by decision 308's rule, as the measure export below does), and its
+//    `.uztexture` derivative, when the
 //    plan requests one, cooked from the encoded samples (`EncodedUzTexture`, decision 316);
 // 3. only then are the files written, in plan order, each derivative right after its file,
 //    sub-folders created as needed.
@@ -154,6 +158,10 @@ struct EncodedFile {
     /// Its `infinite` padding filled texels outside the UV islands: written under EXC-013
     /// (`EncodedImage::padded`, decision 414), listed in the receipt's `exceptions_relied_on`.
     bool islandPadding = false;
+    /// Its combined virtual normal was written on incomplete coverage under EXC-014 (padding.h
+    /// `IslandNormalLifted`, decision 417): its covered island-edge texels may differ, listed in
+    /// the receipt's `exceptions_relied_on`.
+    bool islandNormal = false;
 };
 
 /// Steps 1 and 2 above: every file of `plan` (compiled from revision `revision` of `project`)

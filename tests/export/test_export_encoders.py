@@ -829,17 +829,21 @@ def test_padding_on_islands(export_tests: Path, tmp_path: Path) -> None:
 
 
 def test_virtual_normal_on_islands(export_tests: Path, tmp_path: Path) -> None:
-    """B18 (decision 245): on the sphere, whose UV islands leave texels uncovered, a combined
-    virtual normal reads the Height outside the islands at its island-edge texels, where Painter's
-    Height is not reproduced:
-    - Normal_OpenGL and Normal_DirectX are refused before anything is written under `infinite` and
-      `passthrough`, naming the cause, the evidence and the owner, with a layer writing the Height
-      and with none (no recording shows Painter's empty Height outside the islands), and so is the
-      pipeline's five-map export that holds one, as a whole, under both paddings (decision 414
-      lifts only the padding refusal);
-    - so is every diagnosticMap that isolates, compares or summarises one (`regionStats` a
-      statistics file);
+    """B18 (decision 245) and decision 417: on the sphere, whose UV islands leave texels uncovered,
+    a combined virtual normal reads the Height outside the islands at its island-edge texels:
+    - under `infinite`, a file of Normal_OpenGL or Normal_DirectX alone, its Height having a layer,
+      is written by the production export under the owner's EXC-014: its bytes are the diagnostic
+      measure export's (decision 308's rule), which bypasses nothing for it; its published receipt
+      is conformant, valid, relies on EXC-013 and on EXC-014 for that file, and its manifest export
+      block names both; so is the pipeline's five-map export holding one, EXC-014 naming only its
+      Normal;
+    - with no layer on the Height it stays refused under `infinite` (decision 245 section 2),
+      naming the empty Height, decision 245 and decision 417, nothing written;
+    - under `passthrough` it stays refused, with a Height layer and without, as does every
+      diagnosticMap that isolates, compares or summarises one (`regionStats` a statistics file),
+      and a file mixing a combined virtual normal with another source;
     - on the grid, whose coverage is complete, the same sources are written."""
+    from jsonschema import Draft202012Validator
 
     def variant(name: str, mesh: Path, set_name: str, height: bool) -> Path:
         path = spec(tmp_path / name, mesh, set_name, height=height)
@@ -857,6 +861,45 @@ def test_virtual_normal_on_islands(export_tests: Path, tmp_path: Path) -> None:
         cfg["exportParameters"] = cfg["exportParameters"][:1]
         return cfg
 
+    def refused(result: dict[str, Any], out: Path, case: str) -> str:
+        assert result.get("error") == "NotYetSupported", (case, result)
+        message = str(result["message"])
+        assert "whose UV islands do not cover the whole tile" in message, message
+        assert "phase4.1_export-island-padding-exact" in message, message
+        assert "decision 245" in message, message
+        assert files_under(out) == {}, case
+        return message
+
+    schema = REPO_ROOT / "src" / "export" / "schema" / "receipt.schema.json"
+    validator = Draft202012Validator(json.loads(schema.read_text(encoding="utf-8")))
+
+    def published(
+        project: Path, cfg: dict[str, Any], name: str
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        run_dir = tmp_path / f"run-publish-{name}"
+        run_dir.mkdir()
+        (run_dir / "config.json").write_text(json.dumps(cfg), encoding="utf-8")
+        args = ("publish", str(TEMPLATES), str(project), str(run_dir / "config.json"))
+        [result] = run(export_tests, *args)
+        assert "error" not in result, (name, result)
+        out = Path(cfg["exportPath"])
+        receipt_path = out / "generations" / result["generation"] / "receipt.json"
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        assert [e.message for e in validator.iter_errors(receipt)] == [], name
+        assert "non_conformant" not in receipt, name
+        return result, receipt
+
+    def relied(receipt: dict[str, Any]) -> dict[str, list[str]]:
+        found = {}
+        for entry in receipt["exceptions_relied_on"]:
+            identity = (entry["exception_id"], entry["version"], entry["decision"])
+            assert identity in (("EXC-013", 1, "414"), ("EXC-014", 1, "417")), entry
+            found[entry["exception_id"]] = sorted(entry["paths"])
+        items = receipt["manifest_export"]["open_items"]
+        assert any(i.startswith("RELIES ON EXC-013 v1 (decision 414)") for i in items), items
+        assert any(i.startswith("RELIES ON EXC-014 v1 (decision 417)") for i in items), items
+        return found
+
     sources = [
         ("virtualMap", "Normal_OpenGL"),
         ("virtualMap", "Normal_DirectX"),
@@ -873,26 +916,68 @@ def test_virtual_normal_on_islands(export_tests: Path, tmp_path: Path) -> None:
                 out = tmp_path / case
                 cfg = single(out, "uzp_sphere", kind, source, padding)
                 result = export(export_tests, project, cfg, tmp_path / f"run-{case}")
-                assert result.get("error") == "NotYetSupported", (case, result)
-                message = result["message"]
-                assert "whose UV islands do not cover the whole tile" in message, message
+                lifted = kind == "virtualMap" and padding == "infinite"
+                if lifted and label == "relief":
+                    assert "error" not in result, (case, result)
+                    assert sorted(files_under(out)) == ["uzp_sphere_n.png"], case
+                    measure = tmp_path / f"measure-{case}"
+                    measure_cfg = tmp_path / f"run-{case}" / "measure.json"
+                    measure_cfg.write_text(
+                        json.dumps(single(measure, "uzp_sphere", kind, source, padding)),
+                        encoding="utf-8",
+                    )
+                    [diagnostic] = run(
+                        export_tests,
+                        "export-diagnostic",
+                        str(TEMPLATES),
+                        str(project),
+                        str(measure_cfg),
+                    )
+                    assert "error" not in diagnostic, (case, diagnostic)
+                    [written] = diagnostic["written"]
+                    assert written["bypassed"] == [], written
+                    production = (out / "uzp_sphere_n.png").read_bytes()
+                    assert (measure / "uzp_sphere_n.png").read_bytes() == production, case
+                    pub = single(tmp_path / f"pub-{case}", "uzp_sphere", kind, source, padding)
+                    _, receipt = published(project, pub, case)
+                    both = {"EXC-013": ["uzp_sphere_n.png"], "EXC-014": ["uzp_sphere_n.png"]}
+                    assert relied(receipt) == both, receipt["exceptions_relied_on"]
+                    continue
+                message = refused(result, out, case)
+                if lifted:  # decision 245 section 2: the empty Height
+                    assert "its stack's Height has no layer" in message, message
+                    assert "decision 417" in message, message
+                    continue
                 assert f'the {kind} "{source}" reads the combined virtual normal' in message
                 assert "island-edge texels" in message and "recording R-090" in message, message
                 assert "no recording shows it for a Height without layers" in message, message
-                assert "phase4.1_export-island-padding-exact" in message, message
-                assert "decision 245" in message, message
-                assert files_under(out) == {}, case
 
-    # The five-map export, refused as a whole by its Normal under both paddings (decision 414).
-    for padding in ("infinite", "passthrough"):
-        refusal = "island-edge texels"
-        out = tmp_path / f"five-{padding}"
-        cfg = config(out, root="uzp_sphere", paddingAlgorithm=padding)
-        cfg["exportPresets"][0]["maps"] += normal_map()
-        result = export(export_tests, relief, cfg, tmp_path / f"run-five-{padding}")
-        assert result.get("error") == "NotYetSupported", (padding, result)
-        assert refusal in result["message"], (padding, result["message"])
-        assert files_under(out) == {}, padding
+    # A file mixing a combined virtual normal with another source stays refused (decision 417).
+    out = tmp_path / "mixed"
+    cfg = single(out, "uzp_sphere", "virtualMap", "Normal_OpenGL", "infinite")
+    cfg["exportPresets"][0]["maps"][0]["channels"][2] = {
+        "destChannel": "B",
+        "srcChannel": "L",
+        "srcMapType": "documentMap",
+        "srcMapName": "roughness",
+    }
+    message = refused(export(export_tests, relief, cfg, tmp_path / "run-mixed"), out, "mixed")
+    assert "island-edge texels" in message, message
+
+    # The five-map export: written under `infinite`, EXC-014 naming only its Normal; refused as a
+    # whole by its Normal under `passthrough`.
+    cfg = config(tmp_path / "five-infinite", root="uzp_sphere")
+    cfg["exportPresets"][0]["maps"] += normal_map()
+    result, receipt = published(relief, cfg, "five-infinite")
+    paths = sorted(f["relativePath"] for f in result["files"])
+    assert "uzp_sphere_n.png" in paths and len(paths) > 1, paths
+    found = relied(receipt)
+    assert found == {"EXC-013": paths, "EXC-014": ["uzp_sphere_n.png"]}, found
+    out = tmp_path / "five-passthrough"
+    cfg = config(out, root="uzp_sphere", paddingAlgorithm="passthrough")
+    cfg["exportPresets"][0]["maps"] += normal_map()
+    result = export(export_tests, relief, cfg, tmp_path / "run-five-passthrough")
+    assert "island-edge texels" in refused(result, out, "five-passthrough")
 
     grid = variant("grid", GRID, "s0", height=False)
     for kind, source in sources:

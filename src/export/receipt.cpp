@@ -584,19 +584,31 @@ json::Object BuildReceipt(const ReceiptInputs& in) {
         if (!undecided.empty()) marked["undecided"] = std::move(undecided);
         nonConformant = std::move(marked);
     }
-    // The owner's exception EXC-013 (padding.h, decision 414): the files whose padding it covers.
+    // The owner's exceptions (padding.h): EXC-013 (decision 414) for the files whose padding it
+    // covers, EXC-014 (decision 417) for the files whose combined virtual normal's island edge it does.
     json::Value reliedOn = nullptr;
+    json::Array relied;
     json::Array islandPadded;
+    json::Array islandNormals;
     for (size_t i = 0; i < plan.files.size(); ++i) {
         if (in.encoded[i].islandPadding) islandPadded.push_back(plan.files[i].relativePath);
+        if (in.encoded[i].islandNormal) islandNormals.push_back(plan.files[i].relativePath);
     }
     if (!islandPadded.empty()) {
         openItems.emplace_back(std::string(kIslandPaddingNote));
-        reliedOn = json::Array{json::Object{{"exception_id", std::string(kIslandPaddingException)},
-                                            {"version", static_cast<int64_t>(kIslandPaddingExceptionVersion)},
-                                            {"decision", std::string(kIslandPaddingDecision)},
-                                            {"paths", std::move(islandPadded)}}};
+        relied.push_back(json::Object{{"exception_id", std::string(kIslandPaddingException)},
+                                      {"version", static_cast<int64_t>(kIslandPaddingExceptionVersion)},
+                                      {"decision", std::string(kIslandPaddingDecision)},
+                                      {"paths", std::move(islandPadded)}});
     }
+    if (!islandNormals.empty()) {
+        openItems.emplace_back(std::string(kIslandNormalNote));
+        relied.push_back(json::Object{{"exception_id", std::string(kIslandNormalException)},
+                                      {"version", static_cast<int64_t>(kIslandNormalExceptionVersion)},
+                                      {"decision", std::string(kIslandNormalDecision)},
+                                      {"paths", std::move(islandNormals)}});
+    }
+    if (!relied.empty()) reliedOn = std::move(relied);
     json::Array skipped;
     for (const SkippedMap& s : plan.skipped) {
         skipped.push_back(json::Object{{"root_path", s.rootPath},

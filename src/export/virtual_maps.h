@@ -11,8 +11,9 @@
 //   The fits hold on every texel of a fully covered set and on the interior of UV islands; the
 //   island-edge texels read the Height outside the islands, so an export refuses them there
 //   (padding.h `CheckIslandNormal`, decision 245).
-// - The diagnostic measure export (write.h; `VirtualMapRequest::islandNormal`, decision 308)
-//   computes them on UV islands by Painter's recorded rule instead, not proven exact:
+// - The diagnostic measure export (write.h; `VirtualMapRequest::islandNormal`, decision 308), and
+//   production for a file written under EXC-014 (padding.h `IslandNormalLifted`, decision 417),
+//   compute them on UV islands by Painter's recorded rule instead, not proven exact:
 //   1. the stencil reads the Height read-out on the covered texels and, outside them, the
 //      measured ring over the Height's stored operands without its 1 - (1 - m) step, then the
 //      flood (padding.h `PadIslandHeight`; decisions 263, 288 (a));
@@ -115,7 +116,8 @@ struct VirtualMapRequest {
     /// The bytes of bitmap sources and mesh maps.
     std::shared_ptr<const evaluator::IResourceProvider> resources;
     std::shared_ptr<const evaluator::IGeometryMaskProvider> geometry;
-    /// The diagnostic measure export only (write.h, decision 308), never production: the UV
+    /// The diagnostic measure export (write.h, decision 308), and production under EXC-014 (decision
+    /// 417): the UV
     /// coverage (with its triangles) over which `Normal_OpenGL` and `Normal_DirectX` are computed
     /// and padded as Painter computes them (below). Null: the whole-tile evaluation.
     const Coverage* islandNormal = nullptr;

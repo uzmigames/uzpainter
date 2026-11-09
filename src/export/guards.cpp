@@ -1,5 +1,6 @@
 #include "export/guards.h"
 
+#include "evaluator/dag.h"
 #include "evaluator/geometry_mask.h"
 #include "evaluator/sources.h"
 #include "export/encode.h"
@@ -7,6 +8,7 @@
 #include "export/write.h"
 #include "mesh/reload.h"
 #include "mesh/texturing_mesh.h"
+#include "uzp_core/document/nodes.h"
 
 #include <algorithm>
 #include <map>
@@ -237,12 +239,31 @@ std::optional<std::string> ProcessingRefusal(const core::Project& project, const
 }
 
 std::optional<std::string> IslandNormalFileRefusal(const PlannedFile& file, const Coverage& coverage) {
-    if (coverage.Complete()) return std::nullopt;
+    // Written under the owner's EXC-014 (decision 417): only its covered island-edge texels may differ.
+    if (coverage.Complete() || IslandNormalLifted(file, coverage)) return std::nullopt;
     const auto normal = std::find_if(file.channels.begin(), file.channels.end(),
                                      [](const PlannedChannel& channel) { return ReadsCombinedNormal(channel.source); });
     if (normal == file.channels.end()) return std::nullopt;
     return "export: " + file.rootPath + " map \"" + file.fileName + "\" (" + file.relativePath +
            "): " + IslandNormalRefusal(normal->source);
+}
+
+std::optional<std::string> IslandNormalHeightRefusal(const core::Project& project, const PlannedFile& file,
+                                                     const evaluator::TemplateLibrary& templates,
+                                                     std::string_view templateId) {
+    const core::Stack* stack = core::FindStack(project, file.textureSetId, file.stackId);
+    if (stack == nullptr) return std::nullopt;
+    if (stack->channels.contains(core::ChannelType::Height)) {
+        const render::Result<evaluator::ChannelDag> dag = evaluator::BuildDag(
+            project, file.textureSetId, file.stackId, core::ChannelType::Height, templates, templateId);
+        if (!dag || !dag->root.layers.empty()) return std::nullopt;
+    }
+    return "export: " + file.rootPath + " map \"" + file.fileName + "\" (" + file.relativePath + "): the virtualMap \"" +
+           file.channels.front().source.name +
+           "\" reads the combined virtual normal on a texture set whose UV islands do not cover the whole tile, and "
+           "its stack's Height has no layer: no recording shows what Painter's empty Height reads outside the islands "
+           "(R-092), so EXC-014 does not cover it (" +
+           std::string(kIslandsOwner) + ": the Height outside the UV islands; decision 245, decision 417)";
 }
 
 std::optional<std::string> PaddingRefusal(const PlannedFile& file, const Coverage& coverage) {
@@ -294,6 +315,7 @@ std::string_view PreflightStatusName(PreflightStatus status) {
 PreflightCoverage CoverageForPreflight(const core::Project& project,
                                        const std::function<std::string(const std::string&)>& read) {
     PreflightCoverage coverage;
+    coverage.inputs.templateId = project.settings.template_id;
     if (!project.mesh) {
         coverage.gap = {true, "the project has no texturing mesh"};
         return coverage;
@@ -309,7 +331,7 @@ PreflightCoverage CoverageForPreflight(const core::Project& project,
 }
 
 ExportPreflight PreflightExport(const core::Project& project, const ExportPlan& plan, const SourceInputs& inputs,
-                                const CoverageGap& gap) {
+                                const CoverageGap& gap, const evaluator::TemplateLibrary& templates) {
     ExportPreflight preflight;
     std::map<core::Id, std::optional<Coverage>> coverages;
     for (const PlannedFile& file : plan.files) {
@@ -360,6 +382,10 @@ ExportPreflight PreflightExport(const core::Project& project, const ExportPlan& 
             checked = &*target;
         }
         if (blocked(IslandNormalFileRefusal(file, *checked))) continue;
+        if (IslandNormalLifted(file, *checked) &&
+            blocked(IslandNormalHeightRefusal(project, file, templates, inputs.templateId))) {
+            continue;
+        }
         blocked(PaddingRefusal(file, *checked));
     }
     for (const FilePreflight& file : preflight.files) {

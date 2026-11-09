@@ -1115,12 +1115,16 @@ python::JobBody Worker::Export(const json::Object& arguments) {
             store::ProjectStore* store = open->store.get();
             const exporter::PreflightCoverage coverage = exporter::CoverageForPreflight(
                 *project, [store](const std::string& sha256) { return store->ReadResource(sha256); });
+            // The base values of the Height DAG decision 417's empty-Height refusal reads, as the
+            // export's evaluation loads them (python/evaluation.cpp).
+            const evaluator::TemplateLibrary templates =
+                evaluator::TemplateLibrary::Load(evaluator::TemplateLibrary::DefaultDirectory());
             json::Object result{{"dry_run", true},
                                 {"revision", snapshot.revision},
                                 {"plan", exporter::PlanJson(plan)},
                                 {"textures", std::move(textures)},
                                 {"preflight", exporter::PreflightJson(exporter::PreflightExport(
-                                                  *project, plan, coverage.inputs, coverage.gap))}};
+                                                  *project, plan, coverage.inputs, coverage.gap, templates))}};
             job.NoOp();
             return result;
         };

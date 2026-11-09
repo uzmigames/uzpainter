@@ -2010,6 +2010,7 @@ int RunPreflight(const fs::path& templatesDir, const fs::path& specPath, const f
             return std::nullopt;
         });
     counted.geometry = spec.geometry;
+    counted.templateId = spec.templateId;
     exporter::CoverageGap gap{!spec.geometry, "the spec has no mesh"};
     const json::Value document = json::Parse(ReadText(specPath));
     const json::Object& o = Obj(document, "spec");
@@ -2033,7 +2034,9 @@ int RunPreflight(const fs::path& templatesDir, const fs::path& specPath, const f
         counted.geometry = coverage.inputs.geometry;
         gap = coverage.gap;
     }
-    result["preflight"] = exporter::PreflightJson(exporter::PreflightExport(spec.project, plan, counted, gap));
+    const evaluator::TemplateLibrary templates = evaluator::TemplateLibrary::Load(templatesDir);
+    result["preflight"] =
+        exporter::PreflightJson(exporter::PreflightExport(spec.project, plan, counted, gap, templates));
     result["resource_reads"] = static_cast<std::int64_t>(*reads);
     result["plan_after"] = exporter::PlanJson(plan);
     result["written_before_export"] = fs::exists(exporter::Utf8Path(plan.exportPath));
