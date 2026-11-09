@@ -4,10 +4,13 @@
 #include <xmmintrin.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
+#include <bit>
 #include <cmath>
 #include <exception>
 #include <limits>
+#include <map>
 #include <system_error>
 #include <thread>
 #include <type_traits>
@@ -380,7 +383,47 @@ struct JobInputs {
     std::vector<BakeMesh> low;
     std::vector<BakeMesh> high;
     std::vector<BakeMesh> cage;
+    /// `DetailSettings::average_normals` with a distance-based cage: per low part, per vertex, the
+    /// averaged normal its primary rays run along (`AveragedNormals`); empty otherwise.
+    std::vector<std::vector<Float3>> ray_normals;
 };
+
+/// `SmoothNormals` (phase3.2_baker-normal): per vertex of `low`, the normalised sum, in double and
+/// in first-appearance order, of the distinct authored normals of the part's vertices at the same
+/// position (bitwise). On the bevelled cube's hard-edged faces Painter's Normal bake hits the
+/// chamfers exactly where these directions reach them (Tier 2b golden
+/// `tier2b/bakes/normal-bevelled-cube`).
+std::vector<Float3> AveragedNormals(const BakeMesh& low) {
+    using Bits = std::array<std::uint32_t, 3>;
+    const auto bits = [](Float3 v) {
+        return Bits{std::bit_cast<std::uint32_t>(v.x), std::bit_cast<std::uint32_t>(v.y),
+                    std::bit_cast<std::uint32_t>(v.z)};
+    };
+    std::map<Bits, std::vector<Float3>> distinct;
+    for (std::size_t i = 0; i < low.positions.size(); ++i) {
+        std::vector<Float3>& normals = distinct[bits(low.positions[i])];
+        const Bits n = bits(low.normals[i]);
+        if (std::none_of(normals.begin(), normals.end(), [&](Float3 m) { return bits(m) == n; })) {
+            normals.push_back(low.normals[i]);
+        }
+    }
+    std::vector<Float3> out(low.positions.size());
+    for (std::size_t i = 0; i < low.positions.size(); ++i) {
+        double x = 0.0, y = 0.0, z = 0.0;
+        for (Float3 m : distinct.at(bits(low.positions[i]))) {
+            x += m.x;
+            y += m.y;
+            z += m.z;
+        }
+        const double length = std::sqrt(x * x + y * y + z * z);
+        if (!(length > 0.0)) {
+            throw ValueError("the normals of low part '" + low.name + "' at vertex " + std::to_string(i) +
+                             " cancel: no averaged ray direction (SmoothNormals)");
+        }
+        out[i] = {static_cast<float>(x / length), static_cast<float>(y / length), static_cast<float>(z / length)};
+    }
+    return out;
+}
 
 std::vector<BakeMesh> CopyMeshes(const std::vector<const BakeMesh*>& meshes) {
     std::vector<BakeMesh> copies;
@@ -416,6 +459,9 @@ std::shared_ptr<const JobInputs> CopyInputs(const BakeRequest& request, const Di
     inputs->request.low = Pointers(inputs->low);
     inputs->request.high = Pointers(inputs->high);
     inputs->request.cage = Pointers(inputs->cage);
+    if (request.detail.average_normals && request.detail.cage_mode != CageMode::CustomFile) {
+        for (const BakeMesh& low : inputs->low) inputs->ray_normals.push_back(AveragedNormals(low));
+    }
     return inputs;
 }
 
@@ -447,27 +493,60 @@ Vec3d FaceNormal(const BakeMesh& mesh, std::uint32_t tri) {
     return Cross(Sub(p1, p0), Sub(p2, p0));
 }
 
-double Edge(Float2 a, Float2 b, double px, double py) {
-    return (static_cast<double>(b.x) - a.x) * (py - a.y) - (static_cast<double>(b.y) - a.y) * (px - a.x);
-}
-
 struct UvWeights {
     double w0 = 0.0, w1 = 0.0, w2 = 0.0;
 };
 
-/// Barycentric weights of the UV point (px, py) in triangle `tri`; false when it lies outside
-/// (edges included) or the UV triangle is degenerate. Either UV winding is accepted.
-bool UvBarycentric(const BakeMesh& mesh, std::uint32_t tri, double px, double py, UvWeights& out) {
-    const Float2 a = mesh.uvs[mesh.indices[3 * tri]];
-    const Float2 b = mesh.uvs[mesh.indices[3 * tri + 1]];
-    const Float2 c = mesh.uvs[mesh.indices[3 * tri + 2]];
-    const double area = Edge(a, b, c.x, c.y);
+/// A low triangle's corners in texel space, rows top first, as decision 408 rasterises UV
+/// triangles: each UV coordinate t goes through float32 device coordinates,
+/// p = ((2 t - 1) + 1) N / 2 (every operation a float32 operation), is rounded to the nearest
+/// 1/256 texel (ties to even: the bake's round-to-nearest state, `FixedFpState`), and the rows are
+/// flipped, y = H - p_v (`evaluator::SnappedVertex`). Painter's Normal bakes interpolate their
+/// tangent frames with the barycentric weights of this triangle (phase3.2_baker-normal, the
+/// hemisphere goldens).
+using SnappedTriangle = std::array<double, 6>;  // x0, y0, x1, y1, x2, y2
+
+double SnappedCoordinate(float t, std::uint32_t size) {
+    const float device = 2.0f * t - 1.0f;
+    const float p = (device + 1.0f) * (static_cast<float>(size) / 2.0f);
+    return std::nearbyint(static_cast<double>(p) * 256.0) / 256.0;
+}
+
+SnappedTriangle Snapped(const BakeMesh& mesh, std::uint32_t tri, std::uint32_t width, std::uint32_t height) {
+    SnappedTriangle s{};
+    for (int k = 0; k < 3; ++k) {
+        const Float2 uv = mesh.uvs[mesh.indices[3 * tri + k]];
+        s[2 * k] = SnappedCoordinate(uv.x, width);
+        s[2 * k + 1] = static_cast<double>(height) - SnappedCoordinate(uv.y, height);
+    }
+    return s;
+}
+
+double Cross2(double ax, double ay, double bx, double by, double px, double py) {
+    return (bx - ax) * (py - ay) - (by - ay) * (px - ax);
+}
+
+/// Barycentric weights of the texel-space point (px, py) in the snapped triangle `s`; false when
+/// the triangle is degenerate or does not cover the point. Decision 408's edge rule: wound to a
+/// positive area, a point is covered when it lies strictly inside every edge, or on an edge with
+/// dy < 0, or with dy = 0 and dx < 0.
+bool SnappedBarycentric(const SnappedTriangle& s, double px, double py, UvWeights& out) {
+    const double area = Cross2(s[0], s[1], s[2], s[3], s[4], s[5]);
     if (area == 0.0) return false;
-    const double e0 = Edge(b, c, px, py) / area;
-    const double e1 = Edge(c, a, px, py) / area;
-    const double e2 = Edge(a, b, px, py) / area;
-    if (e0 < 0.0 || e1 < 0.0 || e2 < 0.0) return false;
-    out = {e0, e1, e2};
+    const double sign = area > 0.0 ? 1.0 : -1.0;
+    // The edge opposite each corner, in the triangle's own winding: b->c, c->a, a->b.
+    const double e[3] = {Cross2(s[2], s[3], s[4], s[5], px, py), Cross2(s[4], s[5], s[0], s[1], px, py),
+                         Cross2(s[0], s[1], s[2], s[3], px, py)};
+    const int from[3] = {1, 2, 0};
+    const int to[3] = {2, 0, 1};
+    for (int k = 0; k < 3; ++k) {
+        const double w = sign * e[k];
+        const double dx = sign * (s[2 * to[k]] - s[2 * from[k]]);
+        const double dy = sign * (s[2 * to[k] + 1] - s[2 * from[k] + 1]);
+        const bool top_left = dy < 0.0 || (dy == 0.0 && dx < 0.0);
+        if (!(w > 0.0 || (w == 0.0 && top_left))) return false;
+    }
+    out = {e[0] / area, e[1] / area, e[2] / area};
     return true;
 }
 
@@ -509,6 +588,7 @@ struct TexelCandidates {
     std::vector<std::uint32_t> part_first;  // global index of each part's first triangle
     std::vector<std::uint32_t> offsets;     // per texel, into `triangles`
     std::vector<std::uint32_t> triangles;   // global triangle indices
+    std::vector<SnappedTriangle> snapped;   // per global triangle (decision 408)
 };
 
 TexelCandidates BuildCandidates(const std::vector<const BakeMesh*>& low, std::uint32_t width,
@@ -523,6 +603,7 @@ TexelCandidates BuildCandidates(const std::vector<const BakeMesh*>& low, std::ui
         out.part_first.push_back(total);
         const auto triangles = static_cast<std::uint32_t>(part->indices.size() / 3);
         for (std::uint32_t tri = 0; tri < triangles; ++tri) {
+            out.snapped.push_back(Snapped(*part, tri, width, height));
             double u_min = 1e300, u_max = -1e300, v_min = 1e300, v_max = -1e300;
             for (int k = 0; k < 3; ++k) {
                 const Float2 uv = part->uvs[part->indices[3 * tri + k]];
@@ -746,6 +827,7 @@ struct Context {
     const TexelCandidates& candidates;
     const Matching& matching;
     BakeResult& result;
+    const std::vector<std::vector<Float3>>& ray_normals;  // empty: the authored normals
 };
 
 std::string TexelText(std::uint32_t x, std::uint32_t y) {
@@ -811,8 +893,9 @@ void BakeTexel(const Context& ctx, std::uint32_t x, std::uint32_t y, TileCounts&
     for (std::uint32_t j = 0; j < k; ++j) {
         for (std::uint32_t i = 0; i < k; ++i) {
             const std::uint32_t sub = j * k + i;
-            const double u = (x + (i + 0.5) / k) / out.width;
-            const double v = 1.0 - (y + (j + 0.5) / k) / out.height;
+            // The sub-sample in texel space, rows top first (decision 408's grid).
+            const double sx = x + (i + 0.5) / k;
+            const double sy = y + (j + 0.5) / k;
             // The lowest (part, triangle) that contains the sub-sample.
             std::uint32_t part = 0, tri = 0;
             UvWeights w;
@@ -823,7 +906,7 @@ void BakeTexel(const Context& ctx, std::uint32_t x, std::uint32_t y, TileCounts&
                     std::upper_bound(ctx.candidates.part_first.begin(), ctx.candidates.part_first.end(), global) -
                     ctx.candidates.part_first.begin() - 1);
                 tri = global - ctx.candidates.part_first[part];
-                found = UvBarycentric(*request.low[part], tri, u, v, w);
+                found = SnappedBarycentric(ctx.candidates.snapped[global], sx, sy, w);
             }
             if (!found) continue;
             if (covered == 0) out.texel_part[index] = part;
@@ -849,7 +932,11 @@ void BakeTexel(const Context& ctx, std::uint32_t x, std::uint32_t y, TileCounts&
                 }
                 tfar = static_cast<float>(length + detail.max_depth);
             } else {
-                Vec3d n = BlendNormals(low, tri, w);
+                Vec3d n = ctx.ray_normals.empty()
+                              ? BlendNormals(low, tri, w)
+                              : Blend(D(ctx.ray_normals[part][low.indices[3 * tri]]),
+                                      D(ctx.ray_normals[part][low.indices[3 * tri + 1]]),
+                                      D(ctx.ray_normals[part][low.indices[3 * tri + 2]]), w.w0, w.w1, w.w2);
                 if (!Normalize(n)) {
                     throw ValueError("the normals of low triangle " + std::to_string(tri) + " of '" + low.name +
                                      "' cancel at " + TexelText(x, y));
@@ -1120,7 +1207,7 @@ BakeResult RunBake(EmbreeBaker::Core& core, const BakerConfig& config, const Job
     control.set_total_tiles(tile_count);
     std::vector<TileCounts> tile_counts(tile_count);
     std::vector<std::exception_ptr> tile_errors(tile_count);
-    const Context ctx{api, scene.get(), request, high, candidates, matching, result};
+    const Context ctx{api, scene.get(), request, high, candidates, matching, result, inputs.ray_normals};
 
     std::uint32_t threads = request.threads;
     if (threads == 0) threads = std::max(1u, std::thread::hardware_concurrency());

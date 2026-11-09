@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <bit>
 #include <chrono>
 #include <cstdio>
 #include <cstring>
@@ -22,6 +23,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <iterator>
 #include <future>
 #include <limits>
 #include <map>
@@ -50,6 +52,7 @@
 #include "bake/job_inputs.h"
 #include "bake/baking_project.h"
 #include "bake/mesh_inputs.h"
+#include "mesh/mesh_import.h"
 #include "bake/position_baker.h"
 #include "bake/sampling.h"
 #include "bake/thickness_baker.h"
@@ -144,6 +147,10 @@ void CheckConservation(const BakeResult& r) {
     CHECK_EQ(s.hit + s.back_face_hit + s.centre_miss + s.hidden, s.covered);
     CHECK_EQ(r.rays.escaped + r.rays.front_hit + r.rays.back_face_hit + r.rays.self_hit,
              s.hit * r.rays_per_texel);
+    if (!r.normal_raw.empty()) {
+        CHECK_EQ(r.normal_raw.size(), texels * 3);
+        CHECK(r.normal == r.normal_raw);
+    }
     TexelClassCounts seen;
     std::uint64_t back = 0, self = 0, covered = 0, hits = 0;
     for (std::size_t i = 0; i < texels; ++i) {
@@ -170,8 +177,6 @@ void CheckConservation(const BakeResult& r) {
         // Dilation writes only outside the used surface.
         if (!r.ao.empty() && cls != TexelClass::Uncovered) CHECK_EQ(r.ao[i], r.ao_raw[i]);
         if (!r.normal_raw.empty()) {
-            CHECK_EQ(r.normal_raw.size(), texels * 3);
-            CHECK(r.normal == r.normal_raw);
             if (!IsHit(r.texel_class[i])) {
                 for (std::size_t c = 0; c < 3; ++c) CHECK_EQ(r.normal_raw[3 * i + c], 0);
             }
@@ -999,7 +1004,9 @@ void CaseSubsamplingCoverage() {
         for (std::uint32_t x = 0; x < 8; ++x) {
             std::uint32_t expected = 0;
             for (std::uint32_t j = 0; j < 4; ++j) {
-                for (std::uint32_t i = 0; i < 4; ++i) expected += 4 * x + i <= 4 * y + j ? 1 : 0;
+                // A sub-sample on the hypotenuse is not covered: it is not a top-left edge
+                // (decision 408's rule, phase3.2_baker-normal).
+                for (std::uint32_t i = 0; i < 4; ++i) expected += 4 * x + i < 4 * y + j ? 1 : 0;
             }
             CHECK_EQ(r.coverage[y * 8 + x], expected);
             CHECK_EQ(r.subsample_hits[y * 8 + x], expected);
@@ -1567,6 +1574,7 @@ void CaseParametersToRequest() {
     message = ExpectThrow<NotYetSupported>([&] { (void)RequestFromParameters(params, base); });
     CHECK(Contains(message, "Attenuation") && Contains(message, "phase3.4_baker-ao"));
     BakingParameters::set({{common.at("DilationWidth"), std::int64_t{0}},
+                           {common.at("SmoothNormals"), false},
                            {common.at("IgnoreBackface"), false},
                            {common.at("FilterMethod"), EnumLabel{"By mesh name"}},
                            {common.at("MaxHeight"), static_cast<double>(base.detail.max_height)},
@@ -1578,7 +1586,13 @@ void CaseParametersToRequest() {
                            {ao.at("MaxDistance"), static_cast<double>(base.ao.max_distance)},
                            {ao.at("MaxDistanceRelativeScale"), false}});
     const MappedRequest mapped = RequestFromParameters(params, base);
-    CHECK((mapped.keys_not_read == std::vector<std::string>{"SmoothNormals", "SkewFaceBehavior"}));
+    CHECK((mapped.keys_not_read == std::vector<std::string>{"SkewFaceBehavior"}));
+    CHECK(!mapped.request.detail.average_normals);
+    // Painter's default "Average normals" (on) maps to the averaged ray direction.
+    CHECK(std::get<bool>(*common.at("SmoothNormals").spec().default_value));
+    BakingParameters::set({{common.at("SmoothNormals"), true}});
+    CHECK(RequestFromParameters(params, base).request.detail.average_normals);
+    BakingParameters::set({{common.at("SmoothNormals"), false}});
     CHECK(mapped.request.ao.distribution == Distribution::Cosine);  // the default
     CHECK(SerializeResult(Bake(baker, mapped.request)) == SerializeResult(Bake(baker, base)));
     // The current catalog omits OffsetMap; an explicitly pinned older catalog keeps its
@@ -1948,11 +1962,204 @@ int BakeCommand(int argc, char** argv) {
     return 0;
 }
 
+std::filesystem::path Utf8Path(const std::string& text) {
+    return std::filesystem::path(std::u8string(text.begin(), text.end()));
+}
+
+std::string ReadBytes(const std::filesystem::path& path) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file) throw ValueError("cannot read " + path.generic_string());
+    return std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+}
+
+/// The low parts as the baker receives them (`--dump-low`), for the fitting tools: per part its
+/// name, vertex positions, normals and UVs (float32), indices (uint32) and per-corner MikkTSpace
+/// tangents (xyz, sign; float32), each array after its little-endian uint64 element count.
+void WriteLowParts(const std::vector<BakeMesh>& parts, const std::filesystem::path& path) {
+    std::string out = "UZPLOW1";
+    const auto u64 = [&](std::uint64_t v) {
+        for (int i = 0; i < 8; ++i) out.push_back(static_cast<char>((v >> (8 * i)) & 0xFFu));
+    };
+    const auto u32 = [&](std::uint32_t v) {
+        for (int i = 0; i < 4; ++i) out.push_back(static_cast<char>((v >> (8 * i)) & 0xFFu));
+    };
+    const auto f32 = [&](float v) { u32(std::bit_cast<std::uint32_t>(v)); };
+    u64(parts.size());
+    for (const BakeMesh& m : parts) {
+        u64(m.name.size());
+        out += m.name;
+        u64(m.positions.size());
+        for (const Float3& p : m.positions) f32(p.x), f32(p.y), f32(p.z);
+        u64(m.normals.size());
+        for (const Float3& n : m.normals) f32(n.x), f32(n.y), f32(n.z);
+        u64(m.uvs.size());
+        for (const Float2& uv : m.uvs) f32(uv.x), f32(uv.y);
+        u64(m.indices.size());
+        for (std::uint32_t i : m.indices) u32(i);
+        u64(m.corner_tangents.size());
+        for (const auto& t : m.corner_tangents) f32(t[0]), f32(t[1]), f32(t[2]), f32(t[3]);
+    }
+    std::ofstream file(path, std::ios::binary);
+    file.write(out.data(), static_cast<std::streamsize>(out.size()));
+    if (!file) throw std::runtime_error("cannot write " + path.generic_string());
+}
+
+/// `value`, a command-line text, as the type of the parameter `key` (`--set key=value`): `true` /
+/// `false`, a number, `a,b` for a pair, an enum label or a string.
+PropertyValue ParsedValue(const Property& property, const std::string& value) {
+    const auto pair = [&]() {
+        const std::size_t comma = value.find(',');
+        if (comma == std::string::npos) throw ValueError(property.short_name() + " needs a,b");
+        return std::make_pair(value.substr(0, comma), value.substr(comma + 1));
+    };
+    switch (property.type()) {
+        case PropertyType::Bool:
+            if (value != "true" && value != "false") throw ValueError(property.short_name() + " needs true or false");
+            return value == "true";
+        case PropertyType::Int: return static_cast<std::int64_t>(std::stoll(value));
+        case PropertyType::Float: return std::stod(value);
+        case PropertyType::IntPair: {
+            const auto [a, b] = pair();
+            return std::make_pair(static_cast<std::int64_t>(std::stoll(a)), static_cast<std::int64_t>(std::stoll(b)));
+        }
+        case PropertyType::FloatPair: {
+            const auto [a, b] = pair();
+            return std::make_pair(std::stod(a), std::stod(b));
+        }
+        case PropertyType::Enum: return EnumLabel{value};
+        case PropertyType::String: return value;
+    }
+    throw ValueError("unknown property type");
+}
+
+/// The `bake-files` command (phase3.2_baker-normal items 3.1-3.4): one texture set of a low mesh
+/// file baked as `bake_async` prepares it (`PrepareBakes`): the low mesh through the project
+/// importer (`ImportMeshFile`, its unit scale and bounds), each `HipolyMesh` file through the bake
+/// mesh reader, the request from the texture set's `BakingParameters` after the `--set key=value`
+/// steps of a Painter golden. Writes the result's canonical bytes (`--out`) and prints its summary.
+int BakeFilesCommand(int argc, char** argv) {
+    std::filesystem::path low_path, out, dump_low;
+    std::optional<BoxSizeMetric> box_size_metric;
+    std::vector<std::filesystem::path> highs;
+    std::vector<std::pair<std::string, std::string>> sets;
+    std::string texture_set, usage = "Normal";
+    std::uint32_t threads = 0;
+    auto tangent_space = uzp::core::TangentSpace::PerVertex;
+    auto format = uzp::core::NormalMapFormat::OpenGL;
+    for (int i = 2; i < argc; ++i) {
+        const std::string arg = argv[i];
+        const auto next = [&]() -> std::string {
+            if (i + 1 >= argc) throw ValueError(arg + " needs a value");
+            return argv[++i];
+        };
+        if (arg == "--low") {
+            low_path = Utf8Path(next());
+        } else if (arg == "--high") {
+            highs.push_back(Utf8Path(next()));
+        } else if (arg == "--set") {
+            const std::string kv = next();
+            const std::size_t eq = kv.find('=');
+            if (eq == std::string::npos) throw ValueError("--set needs key=value");
+            sets.emplace_back(kv.substr(0, eq), kv.substr(eq + 1));
+        } else if (arg == "--texture-set") {
+            texture_set = next();
+        } else if (arg == "--usage") {
+            usage = next();
+        } else if (arg == "--tangent-space") {
+            const std::string mode = next();
+            if (mode != "PerVertex" && mode != "PerFragment") throw ValueError("--tangent-space PerVertex|PerFragment");
+            tangent_space = mode == "PerVertex" ? uzp::core::TangentSpace::PerVertex : uzp::core::TangentSpace::PerFragment;
+        } else if (arg == "--format") {
+            const std::string name = next();
+            if (name != "OpenGL" && name != "DirectX") throw ValueError("--format OpenGL|DirectX");
+            format = name == "OpenGL" ? uzp::core::NormalMapFormat::OpenGL : uzp::core::NormalMapFormat::DirectX;
+        } else if (arg == "--threads") {
+            threads = static_cast<std::uint32_t>(std::stoul(next()));
+        } else if (arg == "--out") {
+            out = Utf8Path(next());
+        } else if (arg == "--dump-low") {
+            dump_low = Utf8Path(next());
+        } else if (arg == "--box-size-metric") {
+            const std::string metric = next();
+            if (metric != "Diagonal" && metric != "LargestExtent") {
+                throw ValueError("--box-size-metric Diagonal|LargestExtent");
+            }
+            box_size_metric = metric == "Diagonal" ? BoxSizeMetric::Diagonal : BoxSizeMetric::LargestExtent;
+        } else {
+            throw ValueError("unknown argument " + arg);
+        }
+    }
+    if (low_path.empty()) throw ValueError("bake-files needs --low");
+    const uzp::mesh::ImportResult low = uzp::mesh::ImportMeshFile(low_path, {});
+    const uzp::mesh::Material* material = nullptr;
+    for (const uzp::mesh::Material& m : low.mesh.materials) {
+        if (texture_set.empty() ? low.mesh.materials.size() == 1 : m.name == texture_set) material = &m;
+    }
+    if (material == nullptr) throw ValueError("name one texture set of the low mesh with --texture-set");
+    std::vector<BakeMesh> low_parts = LowParts(low.mesh, material->index);
+    if (!dump_low.empty()) {
+        std::vector<BakeMesh> framed = low_parts;
+        for (BakeMesh& part : framed) EnsureNormalTangents(part);
+        WriteLowParts(framed, dump_low);
+    }
+    std::vector<BakeMesh> high_meshes;
+    const uzp::mesh::ExternalFileReader none = [](const std::string& uri, const std::filesystem::path&) -> std::string {
+        throw ValueError("no external file " + uri);
+    };
+    for (const std::filesystem::path& path : highs) {
+        const std::u8string name = path.filename().u8string();
+        for (BakeMesh& m : HighMeshes(ReadBakeMeshFile(ReadBytes(path), std::string(name.begin(), name.end()), none))) {
+            high_meshes.push_back(std::move(m));
+        }
+    }
+    BakingSession session({material->name});
+    const BakingParameters parameters = session.parameters(material->name);
+    const std::map<std::string, Property> common = parameters.common();
+    std::vector<std::pair<Property, PropertyValue>> values;
+    for (const auto& [key, text] : sets) {
+        const auto found = common.find(key);
+        if (found == common.end()) throw ValueError("no common parameter " + key);
+        values.emplace_back(found->second, ParsedValue(found->second, text));
+    }
+    if (!values.empty()) BakingParameters::set(values);
+    BakeRequest base;
+    base.texture_set = material->name;
+    base.input_revision = "bake-files";
+    base.usages = {uzp::bake::UsageNamed(usage)};
+    base.scale_to_internal = low.mesh.units.scale_to_internal;
+    base.project_bounds = SceneBounds(low.mesh);
+    base.box_size_metric = box_size_metric;  // a hypothesis the caller names (decision 311)
+    base.normal.tangent_space = tangent_space;
+    base.normal.format = format;
+    BakeRequest request = RequestFromParameters(parameters, std::move(base)).request;
+    for (const BakeMesh& m : low_parts) request.low.push_back(&m);
+    if (!request.detail.low_as_high) {
+        if (high_meshes.empty()) throw ValueError("LowAsHigh is off and no --high is given");
+        for (const BakeMesh& m : high_meshes) request.high.push_back(&m);
+    }
+    request.threads = threads;
+    EmbreeBaker baker;
+    const BakeResult r = BakeAndWait(baker, request);
+    CheckConservation(r);
+    const std::string bytes = SerializeResult(r);
+    if (!out.empty()) {
+        std::ofstream file(out, std::ios::binary);
+        file.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+        if (!file) throw std::runtime_error("cannot write " + out.generic_string());
+    }
+    std::printf("%s\n", Json(r, baker.caps(), material->name, uzp::core::Sha256Hex(bytes), kQualifiedEmbreeBuildThreads).c_str());
+    return 0;
+}
+
 int Command(int argc, char** argv) {
     if (argc >= 2 && std::string(argv[1]) == "run") return Run(argc >= 3 ? argv[2] : nullptr);
     if (argc >= 2 && std::string(argv[1]) == "bake") return BakeCommand(argc, argv);
+    if (argc >= 2 && std::string(argv[1]) == "bake-files") return BakeFilesCommand(argc, argv);
     std::fprintf(stderr, "usage: uzp-bake-feasibility-tests run [case] | bake <fixture> <threads> "
-                         "[--embree-build-threads K] [--diagnostic] [--out FILE]\n");
+                         "[--embree-build-threads K] [--diagnostic] [--out FILE] | bake-files --low FILE "
+                         "[--high FILE]... [--set KEY=VALUE]... [--texture-set NAME] [--usage USAGE] "
+                         "[--tangent-space PerVertex|PerFragment] [--format OpenGL|DirectX] [--threads N] "
+                         "[--out FILE] [--dump-low FILE] [--box-size-metric Diagonal|LargestExtent]\n");
     return 2;
 }
 

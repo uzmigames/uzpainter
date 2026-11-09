@@ -20,7 +20,9 @@ Settings common to every golden:
 The swept values are the ones each baker task's Tier 2b item names (see `GOLDENS`). The Normal
 task also re-bakes the normal-convention hemisphere (`parity/fixtures/normal-convention/`) under
 each explicit tangent-space mode at absolute distances with no dilation, so its item 3.1 compares
-the whole map and its float export separates the vector from the 16-bit encoding. Height,
+the whole map and its float export separates the vector from the 16-bit encoding. It also
+re-bakes the sphere low as high at two absolute distances, which separates a residue that comes
+from the primary ray's hit from one that does not. Height,
 Opacity and BentNormals have no request: Painter's documentation names no export map for them
 (decision 110's P21-A), so no documented call reads their baked maps out.
 """
@@ -52,6 +54,8 @@ NORMAL_CONVENTION_DIR = "normal-convention"
 # prototype.py`), absolute because a relative distance is refused natively without a box size.
 HEMISPHERE_MAX_HEIGHT = HEMISPHERE_MAX_DEPTH = 0.02
 TANGENT_SPACE_MODES = (("PerVertex", "per-vertex"), ("PerFragment", "per-fragment"))
+# Absolute detail distances of the sphere's distance controls (within the slider's 0.05 maximum).
+SPHERE_DISTANCES = ((0.01, "absolute-0-01"), (0.05, "absolute-0-05"))
 RESOLUTION, OUTPUT_SIZE_LOG2 = 512, 9
 NORMAL_MAP_FORMAT = "OpenGL"
 UNCONTROLLED = ["preferences.bake_backend"]
@@ -134,6 +138,7 @@ class Golden:
     baker_parameters: tuple[tuple[str, str, Any], ...] = ()  # (usage, key, value)
     curvature_method: str | None = None
     tangent_space_mode: str | None = None  # None: the project default
+    common_parameters: tuple[tuple[str, Any], ...] = ()  # after the scene's own common values
 
     @property
     def name(self) -> str:
@@ -258,6 +263,18 @@ def goldens() -> tuple[Golden, ...]:
                 tangent_space_mode=mode,
             )
         )
+    for distance, variant in SPHERE_DISTANCES:
+        found.append(
+            Golden(
+                "normal",
+                "phase3.2_baker-normal",
+                "sphere",
+                ("Normal",),
+                (NORMAL_MAP,),
+                variant,
+                common_parameters=absolute(distance, distance),
+            )
+        )
     for scene in ("slab", "sphere", "bevelled-cube"):
         for normalization in THICKNESS_RANGES:
             found.append(
@@ -320,6 +337,7 @@ def parameters(golden: Golden) -> list[tuple[str | None, str, Any]]:
         (None, "DilationWidth", 0),
     ]
     common += [(None, key, value) for key, value in scene.common]
+    common += [(None, key, value) for key, value in golden.common_parameters]
     return common + [(usage, key, value) for usage, key, value in golden.baker_parameters]
 
 
@@ -393,7 +411,7 @@ def description(golden: Golden) -> str:
         f"Tier 2b bake golden of {golden.task} (decision 384) on the analytic fixture "
         f"{golden.scene}: {scene.role}. Painter bakes {' and '.join(golden.usages)} at "
         f"{RESOLUTION} px (OutputSize 9, DilationWidth 0, "
-        + ", ".join(f"{key} {value}" for key, value in scene.common)
+        + ", ".join(f"{key} {value}" for key, value in (*scene.common, *golden.common_parameters))
         + (f"; {swept}" if swept else "")
         + "; every other baking parameter at Painter's default; normal map format OpenGL, "
         + (

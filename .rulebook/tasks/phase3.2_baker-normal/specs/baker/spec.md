@@ -45,6 +45,19 @@ When their results are serialized
 Then the AO-only representation MUST remain `UZPBAKE3`, and the Normal result MUST use `UZPBAKE4` with usage and configuration metadata
 And both usages MUST remain `pending-evidence` with their individual owner tasks until Tier 2b acceptance
 
+### Requirement: Painter's Texel Samples And Ray Directions
+The native baker SHALL place each texel sample by decision 408's rasterisation of the low UV triangles (float32 device coordinates, 1/256-texel vertices, the top-left edge rule) and interpolate with the snapped triangle's barycentric weights. With `SmoothNormals` on, the distance-based primary ray SHALL run along the interpolated averaged normal: at each low vertex the normalised sum of the distinct normals of the part's vertices at that position.
+
+#### Scenario: Hard-edged low faces
+Given the bevelled cube's hard-edged low faces and its chamfered high, baked with Painter's default `SmoothNormals`
+When the Tier 2b comparison runs
+Then the native hit texels MUST equal Painter's and every hit texel's code MUST equal Painter's
+
+#### Scenario: Shared UV edges
+Given a texel centre on an edge shared by two low UV triangles
+When the baker samples it
+Then the sample MUST belong to the triangle for which that edge is a top-left edge
+
 ### Requirement: Low Z Is An Inspection Signal
 The normal baker MUST NOT replace any texel because of a low or negative normal Z; such texels SHALL be counted and reported.
 

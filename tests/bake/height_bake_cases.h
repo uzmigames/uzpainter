@@ -261,6 +261,7 @@ void CaseHeightParameters() {
     mapped.request.height.normalization = std::nullopt;
     BakeRequest expected = ParameterDistanceUnits(HeightRequest(fixture.Request(0.07f)));
     expected.height.divisor = 2.5f;
+    expected.detail.average_normals = true;  // SmoothNormals, Painter's default
     CHECK(SerializeResult(Bake(baker, mapped.request)) == SerializeResult(Bake(baker, expected)));
     // Saved and loaded with the texture set's other values; a wrong label refuses the whole load.
     const uzp::core::BakeSettings saved = ToBakeSettings(params);

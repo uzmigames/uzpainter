@@ -345,6 +345,7 @@ void CaseThicknessParameters() {
     mapped.request.thickness.normalization = std::nullopt;
     BakeRequest expected = ThicknessRequest(ParameterDistanceUnits(fixture.Request(0.07f)), 8, 1e-4f, 1.0f);
     expected.thickness.distribution = Distribution::Uniform;
+    expected.detail.average_normals = true;  // SmoothNormals, Painter's default
     CHECK(SerializeResult(Bake(baker, mapped.request)) == SerializeResult(Bake(baker, expected)));
     // AO's refusals hold for Thickness's own Spread and Self occlusion.
     BakingParameters::set({{thickness.at("Spread"), 90.0}});

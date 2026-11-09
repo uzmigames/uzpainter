@@ -100,6 +100,17 @@ including the neutral value `32768 -> 32767`. Negative Z remains negative;
 misses, hidden texels and back-face hits keep zero codes and their separate
 classification. No neutral fill or repair is implicit.
 
+Texel samples follow decision 408's rasterisation of the low UV triangles, as Painter's Normal
+bakes do (phase3.2_baker-normal, the hemisphere goldens): each UV vertex goes through float32
+device coordinates and is rounded to the nearest 1/256 texel, a sample on a shared edge belongs to
+the triangle whose edge is a top-left edge, and the sample's barycentric weights are those of the
+snapped texel-space triangle; overlapping islands keep the lowest (part, triangle). With
+`SmoothNormals` ("Average normals", Painter's default on), the distance-based primary ray starts
+and runs along the interpolated averaged normal: at each low vertex, the normalised sum of the
+distinct normals of the part's vertices at that position. The frame still uses the authored
+normals. On the bevelled cube's hard-edged faces this reaches the chamfers exactly where Painter's
+bake does; a custom cage's rays are unchanged.
+
 This native domain requires `SubSampling = 1`, `DilationWidth = 0` and identity
 transforms on imported low objects. Normal supersample reduction, padding and
 transformed frames require further evidence; requests outside this domain are

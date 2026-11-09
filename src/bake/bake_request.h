@@ -100,6 +100,13 @@ struct DetailSettings {
     std::string ignore_backface_suffix = "_ignorebf";
     /// `SubSampling`: k x k primary samples per texel, k in {1, 2, 4, 8} (1 = None).
     std::uint32_t subsampling = 1;
+    /// `SmoothNormals` ("Average normals", phase3.2_baker-normal): the distance-based primary ray
+    /// starts and runs along the interpolated averaged normal: at each low vertex the normalised
+    /// sum of the distinct normals of the part's vertices at that position, so a hard edge casts
+    /// no gap. Off, it runs along the interpolated authored normal. A custom cage's rays are not
+    /// changed. Painter's default is on (`assets/defaults/baking.json`); off here, as for the other
+    /// fields, unless the request sets it.
+    bool average_normals = false;
 };
 
 /// AO settings: `secondary_rays` per primary hit (`NbSecondary`), occluders searched from

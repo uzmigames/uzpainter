@@ -237,8 +237,9 @@ void LoadBakeSettings(const BakingParameters& parameters, const core::BakeSettin
 /// other than Always, `GroundPlane` on. Position's four labels map to `BakeRequest::position` and
 /// ID's two to `BakeRequest::id` (decision 337), Thickness's to `BakeRequest::thickness` (with AO's
 /// `Spread` and `FilterMethodSecondary` refusals) and Height's two to `BakeRequest::height` (decision
-/// 341); the baker refuses the values it does not establish. `SmoothNormals` and `SkewFaceBehavior` are not read: the
-/// baker's own ray-direction reading applies (decision 302), and they are listed in
+/// 341); the baker refuses the values it does not establish. `SmoothNormals` maps to
+/// `DetailSettings::average_normals` (phase3.2_baker-normal). `SkewFaceBehavior` is not read: the
+/// baker's own ray-direction reading applies (decision 302), and it is listed in
 /// `keys_not_read`. The mesh inputs (`HipolyMesh`, `CageMesh`) are the mesh-input step's: `base`
 /// carries the meshes.
 struct MappedRequest {

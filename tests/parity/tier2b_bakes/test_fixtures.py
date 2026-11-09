@@ -273,3 +273,8 @@ def test_the_requests_sweep_what_the_tasks_name() -> None:
         ("normal-hemisphere-per-vertex", "PerVertex"),
         ("normal-hemisphere-per-fragment", "PerFragment"),
     }
+    controls = [g for g in rq.GOLDENS if g.common_parameters]
+    assert {(g.name, g.common_parameters) for g in controls} == {
+        ("normal-sphere-absolute-0-01", rq.absolute(0.01, 0.01)),
+        ("normal-sphere-absolute-0-05", rq.absolute(0.05, 0.05)),
+    }

@@ -761,6 +761,7 @@ MappedRequest RequestFromParameters(const BakingParameters& parameters, BakeRequ
     r.detail.max_depth = real(common, "MaxDepth");
     r.detail.relative_to_bounding_box = boolean(common, "RelativeScale");
     r.detail.ignore_backface = boolean(common, "IgnoreBackface");
+    r.detail.average_normals = boolean(common, "SmoothNormals");
     r.detail.filter_method = label(common, "FilterMethod") == "Always" ? FilterMethod::Always : FilterMethod::ByMeshName;
     r.detail.low_suffix = text(common, "LowpolySuffix");
     r.detail.high_suffix = text(common, "HipolySuffix");
@@ -773,7 +774,7 @@ MappedRequest RequestFromParameters(const BakingParameters& parameters, BakeRequ
     if (common.contains("OffsetMap") && !text(common, "OffsetMap").empty()) {
         throw NotYetSupported("OffsetMap: the per-texel cage offset is not implemented (phase3.5_embree-bakers)");
     }
-    out.keys_not_read = {"SmoothNormals", "SkewFaceBehavior"};
+    out.keys_not_read = {"SkewFaceBehavior"};
     if (std::find(r.usages.begin(), r.usages.end(), MeshMapUsage::AO) != r.usages.end()) {
         const std::map<std::string, Property> ao = parameters.baker(MeshMapUsage::AO);
         const std::string owner = UsageOwnerTask(MeshMapUsage::AO);

@@ -67,6 +67,27 @@ void CasePositionPlane() {
     }
 }
 
+/// Decision 408's texel-space coordinate of a UV coordinate (the baker's sample grid).
+double SnappedTexelCoordinate(float t, std::uint32_t size) {
+    const float device = 2.0f * t - 1.0f;
+    const float p = (device + 1.0f) * (static_cast<float>(size) / 2.0f);
+    return std::nearbyint(static_cast<double>(p) * 256.0) / 256.0;
+}
+
+/// The ground's position along one axis at texel-space coordinate `p`: the fixture's cells are
+/// affine between their snapped corners (`SphereOnGround`, 8 cells over [-2, 2]).
+double GroundCoordinate(double p, std::uint32_t size, double start, double span, bool flipped) {
+    for (std::uint32_t k = 0; k < 8; ++k) {
+        const auto corner = [&](std::uint32_t c) {
+            const double s = SnappedTexelCoordinate(static_cast<float>(start + span * c / 8), size);
+            return flipped ? size - s : s;
+        };
+        const double a = corner(k), b = corner(k + 1);
+        if ((p - a) * (p - b) <= 0.0) return -2.0 + 4.0 * (k + (p - a) / (b - a)) / 8.0;
+    }
+    throw std::runtime_error("ground coordinate outside the fixture's cells");
+}
+
 void CasePositionSphere() {
     // The sphere on the ground low as high: ground hits at the fixture's UV-to-position mapping,
     // sphere hits on the tessellated sphere of radius 0.5 around (0, 0, 0.5).
@@ -83,9 +104,13 @@ void CasePositionSphere() {
     for (std::size_t i = 0; i < std::size_t(r.width) * r.height; ++i) {
         if (!IsHit(r.texel_class[i])) continue;
         const double u = (i % r.width + 0.5) / r.width;
-        const double v = 1.0 - (i / r.width + 0.5) / r.height;
         if (u < 0.5) {
-            CheckPositionAt(r, i, {-2.0 + 4.0 * (u - 0.01) / 0.48, -2.0 + 4.0 * (v - 0.01) / 0.98, 0.0}, 1.0);
+            // The baker samples on decision 408's snapped triangles (phase3.2_baker-normal).
+            const double px = i % r.width + 0.5, py = i / r.width + 0.5;
+            CheckPositionAt(r, i,
+                            {GroundCoordinate(px, r.width, 0.01, 0.48, false),
+                             GroundCoordinate(py, r.height, 0.01, 0.98, true), 0.0},
+                            1.0);
             ++ground;
             continue;
         }
@@ -232,6 +257,7 @@ void CasePositionParameters() {
     CHECK(mapped.request.position.scale == PositionNormalizationScale::PerMaterial);
     BakeRequest expected = ParameterDistanceUnits(PositionBevelRequest(fixture));
     expected.position = mapped.request.position;
+    expected.detail.average_normals = true;  // SmoothNormals, Painter's default
     CHECK(SerializeResult(Bake(baker, mapped.request)) == SerializeResult(Bake(baker, expected)));
     // Saved and loaded with the texture set's other values; a wrong label refuses the whole load.
     const uzp::core::BakeSettings saved = ToBakeSettings(params);
