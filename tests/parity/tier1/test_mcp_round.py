@@ -180,10 +180,14 @@ def test_a_measure_mode_round_sends_no_export_and_is_never_refused() -> None:
 
 @_needs_the_wand
 def test_wand_round_runs_through_typed_tools_with_python_disabled(
-    painter: Path, tmp_path: Path
+    fast_painter: Path, tmp_path: Path
 ) -> None:
-    """`run_python` is not listed; every call is a typed tool; the round's maps equal the Tier 1
-    run's byte for byte, or both refuse the same export before writing."""
+    """`run_python` is not listed; every call is a typed tool; the round completes and its maps
+    equal the Tier 1 run's byte for byte. The production export writes the Wand's islanded set
+    under EXC-013 and EXC-014 (decisions 414, 417), so neither run may refuse it. It runs on the
+    ReleaseFast build: a Debug export of the Wand's 2048 px maps outlasts the adapter's 600 s per
+    call (`fast_painter`)."""
+    painter = fast_painter
     manifest = resolve_golden(wand_runner.GOLDEN_ID)
     assert manifest is not None
     _, tier1 = wand_runner.rebuild(painter, tmp_path / "tier1", manifest.manifest_path)
@@ -195,11 +199,8 @@ def test_wand_round_runs_through_typed_tools_with_python_disabled(
     assert [call["tool"] for call in calls] == [*BEFORE_EXPORT, "export"], calls
     assert all(call["outcome"] != "error" for call in calls[:-1]), calls
     assert {c["tool"] for c in calls if c["outcome"] == "committed"} >= COMMITTING, calls
-    if report["outcome"] == "refused":
-        assert tier1.refused, "the round refused an export the Tier 1 run wrote"
-        assert report["equal_to_tier1"] == "not_measured"
-    else:
-        assert report["outcome"] == "completed" and report["equal_to_tier1"] == "equal", report
+    assert not tier1.refused, tier1.refusal
+    assert report["outcome"] == "completed" and report["equal_to_tier1"] == "equal", report
 
 
 TUNIC_CURRENT = "phase2/tier1/tunic-v10-current"
@@ -262,56 +263,54 @@ def test_tunic_current_round_checks_its_state_before_the_export(
     resolve_golden(TUNIC_CURRENT) is None, reason=f"{TUNIC_CURRENT} is not admitted"
 )
 def test_tunic_current_recipe_rebuilds_the_typed_round_from_its_dump(
-    painter: Path, tmp_path: Path, record_property: Callable[[str, object], None]
+    fast_painter: Path, tmp_path: Path, record_property: Callable[[str, object], None]
 ) -> None:
     """The real Tunic dump-and-rebuild (`tunic_recipe.run_tunic_recipe`, phase2.10 item 2.4) on the
     admitted golden: the typed state round, its saved project reopened afresh, the bundle, the
-    rebuild in a separate `run` process and the rebuilt project's checks, on this module's one
-    build. It proves the flow, not recipe acceptance. The rebuild is the separate public-facade
-    `run` process, never an MCP tool.
+    rebuild in a separate `run` process and the rebuilt project's checks, on the ReleaseFast build
+    with the Tunic's GPU deadline (`tunic_recipe.GPU_DEADLINE_MS`) in every typed session, as the
+    Tier 1 rebuilds and the current round run their 4096 px exports. It proves the flow, not recipe
+    acceptance. The rebuild is the separate public-facade `run` process, never an MCP tool.
 
     Each of the three MCP sessions (the state round's, the original's and the rebuilt project's)
-    lists its tools before any project call and is refused if `run_python` is among them; the
-    test asserts all three lists left it out. Every state check passes or raises. The outcome
-    must be `pass` (equal digests, identical files) or `export_refused` (equal digests, both
-    exports refused alike before writing, with the same generic `capability_gap` refusal; which
-    gap fired, decision 245 or 259 or another, is not claimed). `export_refused` counts only as
-    success of the state and rebuild flow, never as parity acceptance; a refused step or a `fail`
-    fails the test. The aggregate is recorded as the `tunic_current_recipe` property, even when a
-    check raises: hashes, each session's `run_python_listed`, how far each side's state checks
-    got, the dump digests, each export's status or refusal and the outcomes. When a check raises,
-    no stage proof comes back, so each side's state is recorded as `unverified` (an earlier stage
-    may have succeeded), and only the exception's class name is recorded, never its message. The
-    raw error is kept privately in `tmp_path` and the test fails with the class name alone, with
+    lists its tools before any project call and is refused if `run_python` is among them; the test
+    asserts all three lists left it out. Every state check passes or raises. The production export
+    writes the islanded set under EXC-013 and EXC-014 (decisions 414, 417), so the outcome must be
+    `pass`: equal digests and identical files. A refused export (`export_refused`), a refused step
+    or a `fail` fails the test. The aggregate is recorded as the `tunic_current_recipe` property,
+    even when a check raises: hashes, each session's `run_python_listed`, how far each side's state
+    checks got, the dump digests, each export's status or refusal and the outcomes. When a check
+    raises, no stage proof comes back, so each side's state is recorded as `unverified` (an earlier
+    stage may have succeeded), and only the exception's class name is recorded, never its message.
+    The raw error is kept privately in `tmp_path` and the test fails with the class name alone, with
     no traceback or exception context (`private_recipe`), so no private dump or API value reaches
     the pytest or JUnit output. An accepted outcome needs all three sessions' logs."""
     manifest = resolve_golden(TUNIC_CURRENT)
     assert manifest is not None
+    painter = fast_painter
     aggregate: dict[str, Any] = {
         "manifest_sha256": hashlib.sha256(manifest.manifest_path.read_bytes()).hexdigest(),
         "exe_sha256": hashlib.sha256(painter.read_bytes()).hexdigest(),
     }
     result = private_recipe(
-        lambda: run_tunic_recipe(painter, tmp_path / "recipe", manifest.manifest_path),
+        lambda: run_tunic_recipe(
+            painter,
+            tmp_path / "recipe",
+            manifest.manifest_path,
+            gpu_deadline_ms=GPU_DEADLINE_MS,
+        ),
         tmp_path,
         aggregate,
         lambda value: record_property("tunic_current_recipe", json.dumps(value, sort_keys=True)),
     )
     # Every message below is the aggregate: hashes and outcomes, no private value.
-    assert result.outcome in ("pass", "export_refused"), aggregate
+    assert result.outcome == "pass", aggregate
     assert set(result.logs) == {"state", "original", "rebuilt"}, aggregate
     assert not any(log.run_python_listed for log in result.logs.values()), aggregate
     assert result.report is not None, aggregate
     equality = result.report["equality"]
     assert equality["digests_equal"], aggregate
-    if result.outcome == "export_refused":  # the flow succeeded; never parity acceptance
-        exports = [result.report[name]["export"] for name in ("original", "rebuilt")]
-        assert equality["files"] == "not_exported", aggregate
-        assert [e["status"] for e in exports] == ["refused", "refused"], aggregate
-        assert exports[0]["refusal"] == exports[1]["refusal"], aggregate
-        assert str(exports[0]["refusal"]).startswith("capability_gap:"), aggregate
-    else:
-        assert equality["files"] == "identical", aggregate
+    assert equality["files"] == "identical", aggregate
 
 
 _NEEDS_THE_TUNIC = [

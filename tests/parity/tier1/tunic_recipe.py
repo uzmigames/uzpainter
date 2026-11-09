@@ -236,10 +236,12 @@ class Recorder(Driver):
         raise RecipeFailed(f"the state round has no successful {tool}")
 
 
-def session_of(painter: Path, work: Path, backend: str) -> Mcp:
-    """A typed MCP session without `--allow-python`."""
+def session_of(painter: Path, work: Path, backend: str, gpu_deadline_ms: int | None = None) -> Mcp:
+    """A typed MCP session without `--allow-python`; `gpu_deadline_ms` is the supervisor's
+    `--gpu-deadline-ms` (its workers' default otherwise)."""
     work.mkdir(parents=True, exist_ok=True)
-    return Mcp(painter, work, "--gpu-backend", backend)
+    deadline = [] if gpu_deadline_ms is None else ["--gpu-deadline-ms", str(gpu_deadline_ms)]
+    return Mcp(painter, work, "--gpu-backend", backend, *deadline)
 
 
 def run_process(arguments: list[str]) -> subprocess.CompletedProcess[str]:
@@ -263,7 +265,13 @@ def result_of(driver: Driver, tool: str, arguments: dict[str, Any]) -> dict[str,
     return result
 
 
-def state_round(painter: Path, work: Path, manifest: Path, backend: str = BACKEND) -> StateRound:
+def state_round(
+    painter: Path,
+    work: Path,
+    manifest: Path,
+    backend: str = BACKEND,
+    gpu_deadline_ms: int | None = None,
+) -> StateRound:
     """The Tunic current round with its state checks (`mcp_round.drive`, `TUNIC_CURRENT`), refused
     before UzPainter starts unless the job fits the scenario, as `mcp_round.run_round`."""
     scenario = tunic_state.TUNIC_CURRENT
@@ -272,7 +280,7 @@ def state_round(painter: Path, work: Path, manifest: Path, backend: str = BACKEN
         raise RecipeFailed(f"the Tunic rebuild takes a native job, not {job.golden_id}")
     staged = stage_inputs(job, work / "assets")
     expected = mcp_round.expected_of(scenario, job, staged, wand.native_ocio_sha256(job))
-    session = session_of(painter, work, backend)
+    session = session_of(painter, work, backend, gpu_deadline_ms)
     try:
         log = listed(session, "state")  # before the round's first call
         driver = Recorder(session, log)
@@ -363,12 +371,17 @@ def listed(session: Mcp, where: str) -> Round:
 
 
 def original_session(
-    painter: Path, work: Path, st: StateRound, backend: str = BACKEND, exporting: bool = True
+    painter: Path,
+    work: Path,
+    st: StateRound,
+    backend: str = BACKEND,
+    exporting: bool = True,
+    gpu_deadline_ms: int | None = None,
 ) -> tuple[dict[str, Any], Export | None, Round]:
     """The saved project reopened in a fresh session: its reads, its export (None without
     `exporting`) and the call log."""
     where = "original"
-    session = session_of(painter, work, backend)
+    session = session_of(painter, work, backend, gpu_deadline_ms)
     try:
         log = listed(session, where)
         driver = Driver(session, log)
@@ -582,12 +595,13 @@ def rebuilt_session(
     made: dict[str, Any],
     backend: str = BACKEND,
     exporting: bool = True,
+    gpu_deadline_ms: int | None = None,
 ) -> tuple[dict[str, Any], Export | None, Round]:
     """The rebuilt project in a fresh session, checked, saved, closed, reopened and checked
     again literally, then exported: its reads, its export (None without `exporting`) and the
     call log."""
     where = "rebuilt"
-    session = session_of(painter, work, backend)
+    session = session_of(painter, work, backend, gpu_deadline_ms)
     try:
         log = listed(session, where)
         driver = Driver(session, log)
@@ -731,16 +745,22 @@ def side(dump: dict[str, Any], exported: Export) -> Side:
 
 
 def run_tunic_recipe(
-    painter: Path, work: Path, manifest: Path, backend: str = BACKEND, diagnostic: bool = False
+    painter: Path,
+    work: Path,
+    manifest: Path,
+    backend: str = BACKEND,
+    diagnostic: bool = False,
+    gpu_deadline_ms: int | None = None,
 ) -> RecipeRound:
     """The dump-and-rebuild of the Tunic current round (the module's docstring) in `work`, a
     fresh directory; nothing is written elsewhere. `diagnostic`: both projects exported by the
-    measure mode (`measured_export`), not by their sessions."""
-    st = state_round(painter, work / "state", manifest, backend)
+    measure mode (`measured_export`), not by their sessions. `gpu_deadline_ms`: each typed
+    session's `--gpu-deadline-ms` (`session_of`), for their 4096 px production exports."""
+    st = state_round(painter, work / "state", manifest, backend, gpu_deadline_ms)
     logs = {"state": st.log}
     exporting = not diagnostic
     original, first, logs["original"] = original_session(
-        painter, work / "original", st, backend, exporting
+        painter, work / "original", st, backend, exporting, gpu_deadline_ms
     )
     dump = work / "original" / "recipe" / "dump.json"
     dump.parent.mkdir(parents=True)  # never left to a session or an export to create
@@ -752,7 +772,7 @@ def run_tunic_recipe(
     except RecipeRefused as refused:
         return RecipeRound("refused", None, refused.refusal, logs)
     rebuilt, second, logs["rebuilt"] = rebuilt_session(
-        painter, work / "rebuilt", target, st, made, backend, exporting
+        painter, work / "rebuilt", target, st, made, backend, exporting, gpu_deadline_ms
     )
     compare_projects(original, rebuilt)
     if diagnostic:
