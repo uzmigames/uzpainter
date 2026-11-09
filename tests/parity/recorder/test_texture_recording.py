@@ -625,6 +625,27 @@ def test_a_converted_virtual_map_exported_twice_is_one_file_per_step(
     assert "r2-uzp_plane-1_over_ior-step11" in record_ids
 
 
+def test_a_virtual_map_without_its_source_channel_claims_no_encoding(
+    fake: types.ModuleType, make_session: MakeSession, sample_job: Job, work: Path, inbox: Path
+) -> None:
+    """AO_Mixed on a stack with no AO channel (the default project's channels) is recorded with
+    no encoding claimed, basis `absent_source_channel`; a documentMap of a missing channel is
+    still refused."""
+    manifest = copy.deepcopy(sample_job.manifest)
+    export = copy.deepcopy(manifest["instruction_sequence"]["steps"].pop())
+    export["args"]["maps"] = ["virtualMap/AO_Mixed:L"]
+    record = record_of(
+        record_texture_golden(
+            make_session(fake.FakeWorld()), with_steps(manifest, [export]), work, inbox
+        )
+    )
+    for index in (0, 1):
+        maps = outputs(record, index, "exported_map")
+        assert {o["map"] for o in maps} == {"AO_Mixed"}
+        assert {o["storage_format"]["encoding"] for o in maps} == {"undetermined"}
+        assert {o["export_settings"]["encoding_basis"] for o in maps} == {"absent_source_channel"}
+
+
 def with_project_name(sample_job: Job, *names: Any) -> Job:
     manifest = copy.deepcopy(sample_job.manifest)
     manifest["applied_settings"] += [

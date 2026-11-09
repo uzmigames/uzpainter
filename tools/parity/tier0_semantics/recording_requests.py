@@ -1094,6 +1094,34 @@ def export_presets_gltf(
     )
 
 
+def ao_mixed_islands_ocio() -> Golden:
+    """AO_Mixed on a UV-islanded set under OCIO with no AO channel (the pilots' configuration:
+    the default project's channels, a bound 16-bit grey AO mesh map, no layer on AO)."""
+    s = start("bevelled-cube")
+    res = s.imports("grey-a")
+    s.add(ps.SET_MESH_MAP, usage="AO", resource_step=res["grey-a"])
+    maps = ["virtualMap/AO_Mixed:L", "meshMap/ambient_occlusion:L"]
+    export(s, maps, PNG16, "infinite")
+    export(s, maps, PNG8, "infinite")
+    return Golden(
+        "ao-mixed-islands-ocio",
+        "tier0/ao-mixed/operator",
+        "AO_Mixed on UV islands without an AO channel (phase3.1_unreal-gltf-pbr-preset, the "
+        "pilots' configuration): the authored bevelled cube (UV islands with a padding ring) at "
+        "256 px, OpenGL, no template (the default project's channels, none of them AO, and no AO "
+        "channel added), under OCIO with Painter's substance configuration; grey A (16-bit grey) "
+        "bound as the AO mesh map; no layer. AO_Mixed and the AO mesh map are exported as PNG 16 "
+        "and as PNG 8, infinite padding, no dithering, each twice in a row; the recorder repeats "
+        "every export after Full save/close/reopen (r2). Check that the mesh-map export equals "
+        "grey A on the covered texels before interpreting AO_Mixed. No operator result is "
+        "presumed.",
+        "bevelled-cube",
+        ["bevelled-cube", "grey-a"],
+        s,
+        [OCIO_SETTING],
+    )
+
+
 def export_ocio_encode(ocio: bool) -> Golden:
     s = start("grid4x2")
     res = s.imports("srgb8-ramp", "grey-a")
@@ -2372,6 +2400,7 @@ def later_goldens() -> list[Golden]:
         ao_mixed_precomposed_scalar_probe(),
         ao_control.request(),
         ao_probe.request(),
+        ao_mixed_islands_ocio(),
         *specularweight_base_probes(),
         height_normal_resolution(4096, "sharp"),
         padding_islands_kernel_probe(),
@@ -2385,6 +2414,7 @@ def later_goldens() -> list[Golden]:
 # live under the envelope's `manifests/`; retained sources are excluded from the pending queue.
 ADMITTED = frozenset(
     {
+        "ao-mixed-islands-ocio",
         "ao-mixed-mesh-float-product",
         "ao-mixed-operand-probe",
         "export-padding-plane-control",
@@ -2512,6 +2542,7 @@ def all_goldens() -> list[Golden]:
 
 PRESERVED_REQUESTS = frozenset(
     {
+        "ao-mixed-islands-ocio",
         "ao-mixed-mesh-float-product",
         "ao-mixed-operand-probe",
         "export-padding-plane-control",

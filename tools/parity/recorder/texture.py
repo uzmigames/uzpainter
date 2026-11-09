@@ -362,8 +362,15 @@ def export_outputs(
                 if channel_names is None:
                     reported = session.call("channel_names")
                     channel_names = {k.lower(): v for k, v in reported.items()}
-                encoding = channel_encoding(template, texture_set, stack, out, channel_names)
-                basis = "source_channel_format"
+                try:
+                    encoding = channel_encoding(template, texture_set, stack, out, channel_names)
+                    basis = "source_channel_format"
+                except RecorderError:
+                    if out.map_type != "virtualMap":
+                        raise
+                    # A virtual map whose source channel the stack lacks (AO_Mixed without an
+                    # AO channel): no channel format gives its encoding, so none is claimed.
+                    encoding, basis = UNDETERMINED, "absent_source_channel"
             parts = [output_safe(texture_set), *([output_safe(stack)] if stack else []), out.stem]
             if out.name in keyed_by_step:
                 parts.append(f"step{export.step}")

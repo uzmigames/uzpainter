@@ -53,6 +53,7 @@ def test_every_requested_golden_is_committed_once() -> None:
     assert request_catalog_problems(REPO_ROOT) == []
     assert sorted(p.stem for p in request_paths()) == sorted(g.name for g in requested_goldens())
     assert ocio_goldens() == {
+        "ao-mixed-islands-ocio",
         "export-ocio-encode",
         "export-presets-ocio",
         "export-presets-gltf-ocio",
