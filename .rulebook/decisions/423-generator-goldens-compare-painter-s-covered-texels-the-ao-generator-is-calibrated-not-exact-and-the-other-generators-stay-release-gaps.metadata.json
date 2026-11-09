@@ -1,0 +1,9 @@
+{
+  "id": 423,
+  "slug": "generator-goldens-compare-painter-s-covered-texels-the-ao-generator-is-calibrated-not-exact-and-the-other-generators-stay-release-gaps",
+  "title": "Generator goldens compare Painter's covered texels; the AO generator is calibrated, not exact; the other generators stay release gaps",
+  "status": "proposed",
+  "date": "2026-11-09",
+  "relatedTasks": ["phase3.2_proc-generator-families", "phase3.3_procedural-families"],
+  "supersededBy": null
+}

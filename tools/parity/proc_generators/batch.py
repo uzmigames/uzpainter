@@ -40,6 +40,7 @@ from tools.parity.envelope.registry import current_envelope, manifest_root
 from tools.parity.fit.decode import decode_exr
 from tools.parity.proc_cert.batch import BATCH_SCHEMA, CASES_SCHEMA, canonical
 from tools.parity.proc_generators import goldens as gold
+from tools.parity.proc_generators.coverage import covered_texels
 from tools.parity.proc_generators.requests import FAMILY, MESHES, Golden
 from tools.parity.schemas import REPO_ROOT
 from tools.parity.store.store import OracleStore, locate
@@ -182,21 +183,6 @@ def golden_cases(
             }
         )
     return cases
-
-
-def covered_texels(normals: Floats) -> npt.NDArray[np.bool_]:
-    """The compared texels: a texel the World Space Normals bake covers whose 3 x 3 neighbourhood
-    it also covers (texels on the image border excluded). The erosion drops the island-edge
-    texels, where Painter's bake and its layer stack rasterize the UVs differently: on the hat at
-    4096 one such texel differs between the two recordings of a golden."""
-    mask: npt.NDArray[np.bool_] = np.abs(normals).sum(axis=-1) > 0
-    padded = np.pad(mask, 1, constant_values=False)
-    eroded = np.ones_like(mask)
-    height, width = mask.shape
-    for dy in range(3):
-        for dx in range(3):
-            eroded &= padded[dy : dy + height, dx : dx + width]
-    return eroded
 
 
 def spec(resolution: int, channels: int, colour_space: str) -> dict[str, Any]:

@@ -1,0 +1,788 @@
+{
+  "asset": "generator/occlusion",
+  "asset_version": 2,
+  "batch_sha256": "2c3c891bd0426b5c9a62a6e059a6530cad21b96be85a9cc291d2e1d80e3cbd1f",
+  "candidate_sha256": "be93c9a951f5b843ddd6f6520871710023c3409e151aabfb126231a120450e8a",
+  "certified": false,
+  "domain_sha256": "47c702dac2e77a0163b5cb8ea022c726d2d2974585fb3d49b7739ed8a84b51d3",
+  "matrix": {
+    "cells": 36,
+    "meshes": 3,
+    "parameter_sets": {
+      "boundary": 2,
+      "defaults": 1,
+      "recipe": 1
+    },
+    "resolutions": [
+      1024,
+      2048,
+      4096
+    ],
+    "seeds": 1
+  },
+  "outcome": "fail",
+  "parity_status": {
+    "corpus_ids": [
+      "generator-occlusion-2-calibration-2026-11-09",
+      "generator-occlusion-2-held-out-2026-11-09"
+    ],
+    "kind": "calibrated",
+    "residuals": {
+      "ulp_f32": {
+        "max_abs_diff": 256,
+        "mean_abs_diff": 0.039022388742930854,
+        "p99_abs_diff": 0
+      }
+    }
+  },
+  "schema": "uzpainter/parity/proc-cert-report/1",
+  "sets": {
+    "calibration": {
+      "cases": [
+        {
+          "candidate_sha256": "407eddde8328a770295214ea35c399625bea537d434df7f1f84e6f5f03185000",
+          "case_id": "defaults--sphere--1024",
+          "oracle_sha256": "407eddde8328a770295214ea35c399625bea537d434df7f1f84e6f5f03185000",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 1048576,
+            "unit": "ulp_f32",
+            "values": 1048576
+          }
+        },
+        {
+          "candidate_sha256": "ae7b82263b07bff62b760def1f8a463b3d57fb7003c42e945bf8985cbbeded47",
+          "case_id": "recipe-tunic-v10--sphere--1024",
+          "oracle_sha256": "ae7b82263b07bff62b760def1f8a463b3d57fb7003c42e945bf8985cbbeded47",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 1048576,
+            "unit": "ulp_f32",
+            "values": 1048576
+          }
+        },
+        {
+          "candidate_sha256": "ae7b82263b07bff62b760def1f8a463b3d57fb7003c42e945bf8985cbbeded47",
+          "case_id": "boundary-ao-invert--sphere--1024",
+          "oracle_sha256": "ae7b82263b07bff62b760def1f8a463b3d57fb7003c42e945bf8985cbbeded47",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 1048576,
+            "unit": "ulp_f32",
+            "values": 1048576
+          }
+        },
+        {
+          "candidate_sha256": "407eddde8328a770295214ea35c399625bea537d434df7f1f84e6f5f03185000",
+          "case_id": "boundary-both-inverts--sphere--1024",
+          "oracle_sha256": "407eddde8328a770295214ea35c399625bea537d434df7f1f84e6f5f03185000",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 1048576,
+            "unit": "ulp_f32",
+            "values": 1048576
+          }
+        },
+        {
+          "candidate_sha256": "6d206feee0560f04bafc9fef6320f5d7e759d2c22b755a078ae7b4466be08e1a",
+          "case_id": "defaults--sphere--2048",
+          "oracle_sha256": "6d206feee0560f04bafc9fef6320f5d7e759d2c22b755a078ae7b4466be08e1a",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 4194304,
+            "unit": "ulp_f32",
+            "values": 4194304
+          }
+        },
+        {
+          "candidate_sha256": "a0a2531704141296d1a76fb88e0f01191348eb059b96a57d443f8558aa824458",
+          "case_id": "recipe-tunic-v10--sphere--2048",
+          "oracle_sha256": "a0a2531704141296d1a76fb88e0f01191348eb059b96a57d443f8558aa824458",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 4194304,
+            "unit": "ulp_f32",
+            "values": 4194304
+          }
+        },
+        {
+          "candidate_sha256": "a0a2531704141296d1a76fb88e0f01191348eb059b96a57d443f8558aa824458",
+          "case_id": "boundary-ao-invert--sphere--2048",
+          "oracle_sha256": "a0a2531704141296d1a76fb88e0f01191348eb059b96a57d443f8558aa824458",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 4194304,
+            "unit": "ulp_f32",
+            "values": 4194304
+          }
+        },
+        {
+          "candidate_sha256": "6d206feee0560f04bafc9fef6320f5d7e759d2c22b755a078ae7b4466be08e1a",
+          "case_id": "boundary-both-inverts--sphere--2048",
+          "oracle_sha256": "6d206feee0560f04bafc9fef6320f5d7e759d2c22b755a078ae7b4466be08e1a",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 4194304,
+            "unit": "ulp_f32",
+            "values": 4194304
+          }
+        },
+        {
+          "candidate_sha256": "9fa1544cf5faeb42f2ba54949ec8ca2c50d1d19aaaaa75c5ae23e242c1836303",
+          "case_id": "defaults--sphere--4096",
+          "oracle_sha256": "9fa1544cf5faeb42f2ba54949ec8ca2c50d1d19aaaaa75c5ae23e242c1836303",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 16777216,
+            "unit": "ulp_f32",
+            "values": 16777216
+          }
+        },
+        {
+          "candidate_sha256": "b03c58dac97055df62468d393d5fc8f17fee35909990ee6c87f8dfbaf274c1e5",
+          "case_id": "recipe-tunic-v10--sphere--4096",
+          "oracle_sha256": "b03c58dac97055df62468d393d5fc8f17fee35909990ee6c87f8dfbaf274c1e5",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 16777216,
+            "unit": "ulp_f32",
+            "values": 16777216
+          }
+        },
+        {
+          "candidate_sha256": "b03c58dac97055df62468d393d5fc8f17fee35909990ee6c87f8dfbaf274c1e5",
+          "case_id": "boundary-ao-invert--sphere--4096",
+          "oracle_sha256": "b03c58dac97055df62468d393d5fc8f17fee35909990ee6c87f8dfbaf274c1e5",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 16777216,
+            "unit": "ulp_f32",
+            "values": 16777216
+          }
+        },
+        {
+          "candidate_sha256": "9fa1544cf5faeb42f2ba54949ec8ca2c50d1d19aaaaa75c5ae23e242c1836303",
+          "case_id": "boundary-both-inverts--sphere--4096",
+          "oracle_sha256": "9fa1544cf5faeb42f2ba54949ec8ca2c50d1d19aaaaa75c5ae23e242c1836303",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 16777216,
+            "unit": "ulp_f32",
+            "values": 16777216
+          }
+        },
+        {
+          "candidate_sha256": "1e574a7bafcf6010e2013267c2264193010746405af5610ed57f6db6a053f583",
+          "case_id": "defaults--rounded-cube--1024",
+          "oracle_sha256": "1e574a7bafcf6010e2013267c2264193010746405af5610ed57f6db6a053f583",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 1048576,
+            "unit": "ulp_f32",
+            "values": 1048576
+          }
+        },
+        {
+          "candidate_sha256": "7ad0db852b4d842d575b8f58dd2dad7c74fa3a6f5a3377091d9a2c240e5e7206",
+          "case_id": "recipe-tunic-v10--rounded-cube--1024",
+          "oracle_sha256": "72a66b9b88e9420fb3808f9fb170442a90e11f07886ad13a747472bc6a6bf4f3",
+          "outcome": "residual",
+          "reason": "",
+          "residual": {
+            "affected_texels": 6,
+            "differing_values": 6,
+            "max_abs_diff": 128,
+            "mean_abs_diff": 0.00042724609375,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 448,
+            "texels": 1048576,
+            "unit": "ulp_f32",
+            "values": 1048576
+          }
+        },
+        {
+          "candidate_sha256": "7ad0db852b4d842d575b8f58dd2dad7c74fa3a6f5a3377091d9a2c240e5e7206",
+          "case_id": "boundary-ao-invert--rounded-cube--1024",
+          "oracle_sha256": "72a66b9b88e9420fb3808f9fb170442a90e11f07886ad13a747472bc6a6bf4f3",
+          "outcome": "residual",
+          "reason": "",
+          "residual": {
+            "affected_texels": 6,
+            "differing_values": 6,
+            "max_abs_diff": 128,
+            "mean_abs_diff": 0.00042724609375,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 448,
+            "texels": 1048576,
+            "unit": "ulp_f32",
+            "values": 1048576
+          }
+        },
+        {
+          "candidate_sha256": "1e574a7bafcf6010e2013267c2264193010746405af5610ed57f6db6a053f583",
+          "case_id": "boundary-both-inverts--rounded-cube--1024",
+          "oracle_sha256": "1e574a7bafcf6010e2013267c2264193010746405af5610ed57f6db6a053f583",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 1048576,
+            "unit": "ulp_f32",
+            "values": 1048576
+          }
+        },
+        {
+          "candidate_sha256": "5825a96a54662348530186cb5c886684e10801a54c058ce2d42a26115859f4de",
+          "case_id": "defaults--rounded-cube--2048",
+          "oracle_sha256": "5825a96a54662348530186cb5c886684e10801a54c058ce2d42a26115859f4de",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 4194304,
+            "unit": "ulp_f32",
+            "values": 4194304
+          }
+        },
+        {
+          "candidate_sha256": "4123d9ce0f2939f918e76e3306905a16952cd246ac227813d3273b57f4fd829f",
+          "case_id": "recipe-tunic-v10--rounded-cube--2048",
+          "oracle_sha256": "7ed877b328f247205f2476482d5f00d99590d6267218deaba9057682869e9afd",
+          "outcome": "residual",
+          "reason": "",
+          "residual": {
+            "affected_texels": 14,
+            "differing_values": 14,
+            "max_abs_diff": 128,
+            "mean_abs_diff": 0.000244140625,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 1024,
+            "texels": 4194304,
+            "unit": "ulp_f32",
+            "values": 4194304
+          }
+        },
+        {
+          "candidate_sha256": "4123d9ce0f2939f918e76e3306905a16952cd246ac227813d3273b57f4fd829f",
+          "case_id": "boundary-ao-invert--rounded-cube--2048",
+          "oracle_sha256": "7ed877b328f247205f2476482d5f00d99590d6267218deaba9057682869e9afd",
+          "outcome": "residual",
+          "reason": "",
+          "residual": {
+            "affected_texels": 14,
+            "differing_values": 14,
+            "max_abs_diff": 128,
+            "mean_abs_diff": 0.000244140625,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 1024,
+            "texels": 4194304,
+            "unit": "ulp_f32",
+            "values": 4194304
+          }
+        },
+        {
+          "candidate_sha256": "5825a96a54662348530186cb5c886684e10801a54c058ce2d42a26115859f4de",
+          "case_id": "boundary-both-inverts--rounded-cube--2048",
+          "oracle_sha256": "5825a96a54662348530186cb5c886684e10801a54c058ce2d42a26115859f4de",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 4194304,
+            "unit": "ulp_f32",
+            "values": 4194304
+          }
+        },
+        {
+          "candidate_sha256": "6b9a52f9a4c807a3b42efb2465681752aa4c7d9c7f34ab7a53347156cc3b19dd",
+          "case_id": "defaults--rounded-cube--4096",
+          "oracle_sha256": "6b9a52f9a4c807a3b42efb2465681752aa4c7d9c7f34ab7a53347156cc3b19dd",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 16777216,
+            "unit": "ulp_f32",
+            "values": 16777216
+          }
+        },
+        {
+          "candidate_sha256": "4f7aa4004cbbfbcd50a28f69c0b5c5a59fa63c27dde79586542ee105edc497db",
+          "case_id": "recipe-tunic-v10--rounded-cube--4096",
+          "oracle_sha256": "983a65a51926dda5e06548d3b436e0bb77af183e1d4ffa1911310a2cfdaccc54",
+          "outcome": "residual",
+          "reason": "",
+          "residual": {
+            "affected_texels": 58,
+            "differing_values": 58,
+            "max_abs_diff": 256,
+            "mean_abs_diff": 0.00028228759765625,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 4736,
+            "texels": 16777216,
+            "unit": "ulp_f32",
+            "values": 16777216
+          }
+        },
+        {
+          "candidate_sha256": "4f7aa4004cbbfbcd50a28f69c0b5c5a59fa63c27dde79586542ee105edc497db",
+          "case_id": "boundary-ao-invert--rounded-cube--4096",
+          "oracle_sha256": "983a65a51926dda5e06548d3b436e0bb77af183e1d4ffa1911310a2cfdaccc54",
+          "outcome": "residual",
+          "reason": "",
+          "residual": {
+            "affected_texels": 58,
+            "differing_values": 58,
+            "max_abs_diff": 256,
+            "mean_abs_diff": 0.00028228759765625,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 4736,
+            "texels": 16777216,
+            "unit": "ulp_f32",
+            "values": 16777216
+          }
+        },
+        {
+          "candidate_sha256": "6b9a52f9a4c807a3b42efb2465681752aa4c7d9c7f34ab7a53347156cc3b19dd",
+          "case_id": "boundary-both-inverts--rounded-cube--4096",
+          "oracle_sha256": "6b9a52f9a4c807a3b42efb2465681752aa4c7d9c7f34ab7a53347156cc3b19dd",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 16777216,
+            "unit": "ulp_f32",
+            "values": 16777216
+          }
+        },
+        {
+          "candidate_sha256": "a1fb438120c5c44ebdb05baa58edb85d189e2a79505bd43e8e406a77ace47e21",
+          "case_id": "defaults--hat-v8--1024",
+          "oracle_sha256": "a1fb438120c5c44ebdb05baa58edb85d189e2a79505bd43e8e406a77ace47e21",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 1048576,
+            "unit": "ulp_f32",
+            "values": 1048576
+          }
+        },
+        {
+          "candidate_sha256": "1388ad2f7c49536eca5f33dfb2219aef38cf566f996b325edc00245e11c3ebaa",
+          "case_id": "recipe-tunic-v10--hat-v8--1024",
+          "oracle_sha256": "21cb1f43704ea043b402fb317e82fa99abacbb3e6fe15203cd7b5c9f0ff05dcc",
+          "outcome": "residual",
+          "reason": "",
+          "residual": {
+            "affected_texels": 35674,
+            "differing_values": 35674,
+            "max_abs_diff": 256,
+            "mean_abs_diff": 0.23682117462158203,
+            "p99_abs_diff": 8,
+            "sum_abs_diff": 248325,
+            "texels": 1048576,
+            "unit": "ulp_f32",
+            "values": 1048576
+          }
+        },
+        {
+          "candidate_sha256": "1388ad2f7c49536eca5f33dfb2219aef38cf566f996b325edc00245e11c3ebaa",
+          "case_id": "boundary-ao-invert--hat-v8--1024",
+          "oracle_sha256": "21cb1f43704ea043b402fb317e82fa99abacbb3e6fe15203cd7b5c9f0ff05dcc",
+          "outcome": "residual",
+          "reason": "",
+          "residual": {
+            "affected_texels": 35674,
+            "differing_values": 35674,
+            "max_abs_diff": 256,
+            "mean_abs_diff": 0.23682117462158203,
+            "p99_abs_diff": 8,
+            "sum_abs_diff": 248325,
+            "texels": 1048576,
+            "unit": "ulp_f32",
+            "values": 1048576
+          }
+        },
+        {
+          "candidate_sha256": "a1fb438120c5c44ebdb05baa58edb85d189e2a79505bd43e8e406a77ace47e21",
+          "case_id": "boundary-both-inverts--hat-v8--1024",
+          "oracle_sha256": "a1fb438120c5c44ebdb05baa58edb85d189e2a79505bd43e8e406a77ace47e21",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 1048576,
+            "unit": "ulp_f32",
+            "values": 1048576
+          }
+        },
+        {
+          "candidate_sha256": "3ae5883b533a295014e49b75593e98747933a5eb86b30a2e512872ff4c223046",
+          "case_id": "defaults--hat-v8--2048",
+          "oracle_sha256": "3ae5883b533a295014e49b75593e98747933a5eb86b30a2e512872ff4c223046",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 4194304,
+            "unit": "ulp_f32",
+            "values": 4194304
+          }
+        },
+        {
+          "candidate_sha256": "05a413be0925d1e0583ec66daddf130266019bdc601eedd868cd4aafab40a050",
+          "case_id": "recipe-tunic-v10--hat-v8--2048",
+          "oracle_sha256": "90f9cef3751e765f7aeefcfcac7c5c8945eac2fb9a90babaca3c55f7c6b81ff3",
+          "outcome": "residual",
+          "reason": "",
+          "residual": {
+            "affected_texels": 144047,
+            "differing_values": 144047,
+            "max_abs_diff": 256,
+            "mean_abs_diff": 0.23659181594848633,
+            "p99_abs_diff": 8,
+            "sum_abs_diff": 992338,
+            "texels": 4194304,
+            "unit": "ulp_f32",
+            "values": 4194304
+          }
+        },
+        {
+          "candidate_sha256": "05a413be0925d1e0583ec66daddf130266019bdc601eedd868cd4aafab40a050",
+          "case_id": "boundary-ao-invert--hat-v8--2048",
+          "oracle_sha256": "90f9cef3751e765f7aeefcfcac7c5c8945eac2fb9a90babaca3c55f7c6b81ff3",
+          "outcome": "residual",
+          "reason": "",
+          "residual": {
+            "affected_texels": 144047,
+            "differing_values": 144047,
+            "max_abs_diff": 256,
+            "mean_abs_diff": 0.23659181594848633,
+            "p99_abs_diff": 8,
+            "sum_abs_diff": 992338,
+            "texels": 4194304,
+            "unit": "ulp_f32",
+            "values": 4194304
+          }
+        },
+        {
+          "candidate_sha256": "3ae5883b533a295014e49b75593e98747933a5eb86b30a2e512872ff4c223046",
+          "case_id": "boundary-both-inverts--hat-v8--2048",
+          "oracle_sha256": "3ae5883b533a295014e49b75593e98747933a5eb86b30a2e512872ff4c223046",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 4194304,
+            "unit": "ulp_f32",
+            "values": 4194304
+          }
+        },
+        {
+          "candidate_sha256": "cc4a6f503949b46cfdce28e97391d0150551e12e85207484e1513bf45ecea876",
+          "case_id": "defaults--hat-v8--4096",
+          "oracle_sha256": "cc4a6f503949b46cfdce28e97391d0150551e12e85207484e1513bf45ecea876",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 16777216,
+            "unit": "ulp_f32",
+            "values": 16777216
+          }
+        },
+        {
+          "candidate_sha256": "4dfe387e95962e587e732d438359dca8674b5c6e76c4a92ff0e2c60eba1b77c0",
+          "case_id": "recipe-tunic-v10--hat-v8--4096",
+          "oracle_sha256": "75437d2bd359a277790e2fb0075c417add790605bd949cb02c20fb2b13f239ff",
+          "outcome": "residual",
+          "reason": "",
+          "residual": {
+            "affected_texels": 581952,
+            "differing_values": 581952,
+            "max_abs_diff": 256,
+            "mean_abs_diff": 0.2393210530281067,
+            "p99_abs_diff": 8,
+            "sum_abs_diff": 4015141,
+            "texels": 16777216,
+            "unit": "ulp_f32",
+            "values": 16777216
+          }
+        },
+        {
+          "candidate_sha256": "4dfe387e95962e587e732d438359dca8674b5c6e76c4a92ff0e2c60eba1b77c0",
+          "case_id": "boundary-ao-invert--hat-v8--4096",
+          "oracle_sha256": "75437d2bd359a277790e2fb0075c417add790605bd949cb02c20fb2b13f239ff",
+          "outcome": "residual",
+          "reason": "",
+          "residual": {
+            "affected_texels": 581952,
+            "differing_values": 581952,
+            "max_abs_diff": 256,
+            "mean_abs_diff": 0.2393210530281067,
+            "p99_abs_diff": 8,
+            "sum_abs_diff": 4015141,
+            "texels": 16777216,
+            "unit": "ulp_f32",
+            "values": 16777216
+          }
+        },
+        {
+          "candidate_sha256": "cc4a6f503949b46cfdce28e97391d0150551e12e85207484e1513bf45ecea876",
+          "case_id": "boundary-both-inverts--hat-v8--4096",
+          "oracle_sha256": "cc4a6f503949b46cfdce28e97391d0150551e12e85207484e1513bf45ecea876",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 16777216,
+            "unit": "ulp_f32",
+            "values": 16777216
+          }
+        }
+      ],
+      "cases_sha256": "098845ccc67ad7948df6d1a796c18be520ba7a05d75f96c1ca3b3f4588d707aa",
+      "corpus_id": "generator-occlusion-2-calibration-2026-11-09",
+      "counts": {
+        "exact": 24,
+        "fail": 0,
+        "oracle_unavailable": 0,
+        "residual": 12
+      },
+      "outcome": "fail"
+    },
+    "held_out": {
+      "cases": [
+        {
+          "candidate_sha256": "2d0fe8f48c3752eb1407e3f19ba5f9b2152a895dc0ea37dbc34998f132559537",
+          "case_id": "defaults--knob-cube--2048",
+          "oracle_sha256": "2d0fe8f48c3752eb1407e3f19ba5f9b2152a895dc0ea37dbc34998f132559537",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 4194304,
+            "unit": "ulp_f32",
+            "values": 4194304
+          }
+        },
+        {
+          "candidate_sha256": "7dd4518063b50232f0e6f20e404961ca1537ec9f27265969c6d016cc79c04d30",
+          "case_id": "recipe-tunic-v10--knob-cube--2048",
+          "oracle_sha256": "5c2ce3f7e9d8e04cdcb7d4c30982478752e5b767f7032d50545951cf03a25fa7",
+          "outcome": "residual",
+          "reason": "",
+          "residual": {
+            "affected_texels": 7498,
+            "differing_values": 7498,
+            "max_abs_diff": 128,
+            "mean_abs_diff": 0.0526885986328125,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 220992,
+            "texels": 4194304,
+            "unit": "ulp_f32",
+            "values": 4194304
+          }
+        },
+        {
+          "candidate_sha256": "7dd4518063b50232f0e6f20e404961ca1537ec9f27265969c6d016cc79c04d30",
+          "case_id": "boundary-ao-invert--knob-cube--2048",
+          "oracle_sha256": "5c2ce3f7e9d8e04cdcb7d4c30982478752e5b767f7032d50545951cf03a25fa7",
+          "outcome": "residual",
+          "reason": "",
+          "residual": {
+            "affected_texels": 7498,
+            "differing_values": 7498,
+            "max_abs_diff": 128,
+            "mean_abs_diff": 0.0526885986328125,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 220992,
+            "texels": 4194304,
+            "unit": "ulp_f32",
+            "values": 4194304
+          }
+        },
+        {
+          "candidate_sha256": "2d0fe8f48c3752eb1407e3f19ba5f9b2152a895dc0ea37dbc34998f132559537",
+          "case_id": "boundary-both-inverts--knob-cube--2048",
+          "oracle_sha256": "2d0fe8f48c3752eb1407e3f19ba5f9b2152a895dc0ea37dbc34998f132559537",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 4194304,
+            "unit": "ulp_f32",
+            "values": 4194304
+          }
+        }
+      ],
+      "cases_sha256": "fe4ee8f2e713b52a608a0ac064fd1eac658e538a0bb9ea3b667e5c781754c65d",
+      "corpus_id": "generator-occlusion-2-held-out-2026-11-09",
+      "counts": {
+        "exact": 2,
+        "fail": 0,
+        "oracle_unavailable": 0,
+        "residual": 2
+      },
+      "outcome": "fail"
+    }
+  },
+  "statement": "exact results on these sampled cases are evidence for the declared domain, not a proof over every value in it (decision 222); this report certifies no Painter asset by itself"
+}

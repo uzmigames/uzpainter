@@ -61,3 +61,70 @@ def test_the_hat_is_an_assets3d_input_pinned_by_hash() -> None:
 def test_malformed_goldens_are_refused(bad: Golden) -> None:
     with pytest.raises(ValueError):
         manifest(bad)
+
+
+def test_compared_texels_are_the_bake_coverage_eroded_by_one() -> None:
+    import numpy as np
+
+    from tools.parity.proc_generators.coverage import covered_texels
+
+    normals = np.zeros((6, 6, 3), np.float32)
+    normals[1:5, 1:5] = 0.5  # a covered 4 x 4 island
+    expected = np.zeros((6, 6), bool)
+    expected[2:4, 2:4] = True
+    assert (covered_texels(normals) == expected).all()
+
+
+def test_occlusion_candidate_follows_its_fitted_model() -> None:
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from tools.parity.proc_generators.occlusion_candidate import fit
+
+    ao = np.full((5, 5, 1), np.float32(9347 / 65535), np.float32)
+    normals = np.full((5, 5, 3), np.float32(0.5), np.float32)
+    normals[0] = 0.0
+    candidate = fit(None)
+    one = np.float32(1.0)
+    inverted = one - ao[2, 2, 0]
+    for ao_invert, global_invert, value in (
+        (0, 0, one - inverted),
+        (1, 1, one - inverted),
+        (1, 0, inverted),
+        (0, 1, inverted),
+    ):
+        case = SimpleNamespace(params={"ao_invert": ao_invert, "global_invert": global_invert})
+        out = candidate.evaluate(case, {"AO": ao, "WorldSpaceNormal": normals})
+        assert out.dtype == np.dtype("<f4") and out.shape == (5, 5, 1)
+        assert out[2, 2, 0] == value
+        assert (out[:2] == 0).all()  # outside the compared texels
+
+
+def test_discovery_publishes_semantics_without_description_text() -> None:
+    import json
+
+    from tools.parity.proc_generators.discovery import markdown, publish
+
+    prop = {
+        "label": "Invert",
+        "widget_type": "Togglebutton",
+        "value": 0,
+        "properties": {"defaultValue": 0, "min": 0, "max": 1, "description": "SECRET PROSE"},
+    }
+    source = {
+        "resource_url": "resource://starter_assets/x/x?version=1.sbsar",
+        "properties": {"invert": prop},
+        "presets": [],
+        "image_inputs": ["a"],
+        "image_outputs": ["b"],
+    }
+    survey = {
+        "schema": "uzpainter/generator-survey/1",
+        "query": "q",
+        "painter_build": {"build_id": "12.2.0+js-api.1.1.20"},
+        "rows": [{"url": source["resource_url"], "gui_name": "X", "source": source}],
+    }
+    text = markdown(publish(json.dumps(survey).encode(), {"x": "X"}))
+    assert "| `invert` | Invert | Togglebutton | 0 | 0 | 1 |" in text
+    assert "SECRET PROSE" not in text

@@ -1,4 +1,6 @@
 {
   "schema": "uzpainter/parity/proc-cert-ledger/1",
-  "spent": {}
+  "spent": {
+    "fe4ee8f2e713b52a608a0ac064fd1eac658e538a0bb9ea3b667e5c781754c65d": "be93c9a951f5b843ddd6f6520871710023c3409e151aabfb126231a120450e8a"
+  }
 }
