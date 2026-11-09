@@ -25,7 +25,7 @@ Every covered interior texel stays exact on all five maps; the rebuild stays byt
 
 1. **EXC-011 version 3** (`parity/exceptions.json`) supersedes version 2, which stays in the register with version 1 as history. Its terms are version 1's (EXC-010's): bound 1, `max_abs_diff` 0 over `covered_interior` on every map; bound 2, `max_abs_diff` 0 over `covered` with `excepted_outputs` naming only `export/DefaultMaterial_Normal_Raw`; the padding stays free. Its defect test is `tests/parity/test_verdict.py::test_exc011_v3_catches_injected_defects`.
 2. **A narrowing only.** It applies the owner's own terms of decision 401 §3 (approved 2026-11-05); no bound is widened and no exception is created. The entry's `approved_on` is that approval's date.
-3. **Reporting.** The Tunic's Tier 1 node, rerun after decision 409's commit (db3a1498), passes under version 3, repeatable, with `exceptions_relied_on` naming EXC-011 version 3 only. A Tunic pass is "pass under EXC-011 v3, against the current reference", never exact. The Tier 1 test accepts only version 3 in `exceptions_relied_on`.
+3. **Reporting.** The Tunic's Tier 1 node, rerun after decision 409's commit (b1e0e600), passes under version 3, repeatable, with `exceptions_relied_on` naming EXC-011 version 3 only. A Tunic pass is "pass under EXC-011 v3, against the current reference", never exact. The Tier 1 test accepts only version 3 in `exceptions_relied_on`.
 4. **Next.** EXC-011 is withdrawn when the Tunic's Tier 1 passes with no exception (decision 398 §6), which waits on the Normal's island edge (item 2.2) and the padding (item 2.1).
 
 ## Consequences
