@@ -81,10 +81,8 @@ def fake_world(fake: types.ModuleType) -> Any:
     return world
 
 
-def test_multiple_output_edits_go_through_the_recorder(
-    fake: types.ModuleType, tmp_path: Path
-) -> None:
-    """An authored material fake: every new edit and readback is recorded in both recordings."""
+def material_session(fake: types.ModuleType) -> ProbeSession:
+    """A fake Painter whose fills take an authored material: no Painter behaviour is asserted."""
     world = fake_world(fake)
     source = world.modules["substance_painter.source"]
     layerstack = world.modules["substance_painter.layerstack"]
@@ -170,11 +168,18 @@ def test_multiple_output_edits_go_through_the_recorder(
     node_class.set_material_source = set_material_source
     node_class.get_material_source = get_material_source
     node_class.get_source, node_class.set_source = get_source, set_source
-    session = ProbeSession(
+    return ProbeSession(
         fake.LocalTransport(world),
         sleep=lambda _: world.modules["substance_painter.project"].is_busy(),
         allowed_builds=lambda: frozenset({"12.2.0+js-api.1.1.20"}),
     )
+
+
+def test_multiple_output_edits_go_through_the_recorder(
+    fake: types.ModuleType, tmp_path: Path
+) -> None:
+    """An authored material fake: every new edit and readback is recorded in both recordings."""
+    session = material_session(fake)
     job = probe_job_from_manifest(request(AUTHORED_URL))
     run = record_probe_golden(session, job, tmp_path / "work", tmp_path / "inbox")
     record = json.loads((run / "record.json").read_text())
