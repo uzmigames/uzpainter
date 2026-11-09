@@ -17,7 +17,10 @@ Settings common to every golden:
 - every other parameter at Painter's default (`assets/defaults/baking.json`, the admitted Tier 0
   baking-defaults captures); each parameter a golden sets is read back by the recorder.
 
-The swept values are the ones each baker task's Tier 2b item names (see `GOLDENS`). Height,
+The swept values are the ones each baker task's Tier 2b item names (see `GOLDENS`). The Normal
+task also re-bakes the normal-convention hemisphere (`parity/fixtures/normal-convention/`) under
+each explicit tangent-space mode at absolute distances with no dilation, so its item 3.1 compares
+the whole map and its float export separates the vector from the 16-bit encoding. Height,
 Opacity and BentNormals have no request: Painter's documentation names no export map for them
 (decision 110's P21-A), so no documented call reads their baked maps out.
 """
@@ -44,6 +47,11 @@ from tools.parity.tier2b_bakes.fixtures import (
 )
 
 FAMILY = "tier2b/bakes"
+NORMAL_CONVENTION_DIR = "normal-convention"
+# The normal-convention prototype's hemisphere distances (`tools/parity/normal_convention/
+# prototype.py`), absolute because a relative distance is refused natively without a box size.
+HEMISPHERE_MAX_HEIGHT = HEMISPHERE_MAX_DEPTH = 0.02
+TANGENT_SPACE_MODES = (("PerVertex", "per-vertex"), ("PerFragment", "per-fragment"))
 RESOLUTION, OUTPUT_SIZE_LOG2 = 512, 9
 NORMAL_MAP_FORMAT = "OpenGL"
 UNCONTROLLED = ["preferences.bake_backend"]
@@ -59,6 +67,7 @@ class Scene:
     high: str | None  # None: baked low as high
     common: tuple[tuple[str, Any], ...]  # common parameters the scene's C++ request fixes
     role: str
+    fixture_dir: str = FIXTURE_DIR_NAME  # under parity/fixtures/
 
     def inputs(self) -> list[str]:
         return [self.low] if self.high is None else [self.low, self.high]
@@ -98,6 +107,15 @@ SCENES = {
         "the bevelled cube with highs matched by name: chamfered cube, knob under an _ignorebf "
         "cover, unmatched decoy (CaseMatchByName)",
     ),
+    "hemisphere": Scene(
+        "hemisphere",
+        "hemisphere-low",
+        "hemisphere-high",
+        absolute(HEMISPHERE_MAX_HEIGHT, HEMISPHERE_MAX_DEPTH),
+        "the normal-convention hemisphere: a coarse smooth unit hemisphere under its faceted copy "
+        "scaled by 1.002 (parity/NORMAL-CONVENTION.md section 1)",
+        NORMAL_CONVENTION_DIR,
+    ),
 }
 ENUM_PARAMETERS = frozenset(
     {"FilterMethod", "ColorSource", "ColorGenerator", "Mode", "Axis", "Normalization"}
@@ -115,6 +133,7 @@ class Golden:
     variant: str = ""
     baker_parameters: tuple[tuple[str, str, Any], ...] = ()  # (usage, key, value)
     curvature_method: str | None = None
+    tangent_space_mode: str | None = None  # None: the project default
 
     @property
     def name(self) -> str:
@@ -227,6 +246,18 @@ def goldens() -> tuple[Golden, ...]:
                     (("ID", "ColorSource", ID_SOURCE), ("ID", "ColorGenerator", generator)),
                 )
             )
+    for mode, variant in TANGENT_SPACE_MODES:
+        found.append(
+            Golden(
+                "normal",
+                "phase3.2_baker-normal",
+                "hemisphere",
+                ("Normal",),
+                (NORMAL_MAP,),
+                variant,
+                tangent_space_mode=mode,
+            )
+        )
     for scene in ("slab", "sphere", "bevelled-cube"):
         for normalization in THICKNESS_RANGES:
             found.append(
@@ -246,18 +277,24 @@ def goldens() -> tuple[Golden, ...]:
 GOLDENS = goldens()
 
 
-def fixture_path(stem: str) -> str:
-    return f"parity/fixtures/{FIXTURE_DIR_NAME}/{stem}.obj"
+def fixture_path(stem: str, directory: str = FIXTURE_DIR_NAME) -> str:
+    return f"parity/fixtures/{directory}/{stem}.obj"
 
 
-def inputs(scene: Scene) -> list[dict[str, Any]]:
-    data = committed_fixtures()
+def fixture_bytes(scene: Scene, stem: str, root: Path = REPO_ROOT) -> bytes:
+    """The generated tier2b fixture, or the committed file of another fixture directory."""
+    if scene.fixture_dir == FIXTURE_DIR_NAME:
+        return committed_fixtures()[f"{stem}.obj"]
+    return (root / fixture_path(stem, scene.fixture_dir)).read_bytes()
+
+
+def inputs(scene: Scene, root: Path = REPO_ROOT) -> list[dict[str, Any]]:
     return [
         {
             "input_id": stem,
             "kind": "mesh",
-            "path": fixture_path(stem),
-            "sha256": sha256_bytes(data[f"{stem}.obj"]),
+            "path": fixture_path(stem, scene.fixture_dir),
+            "sha256": sha256_bytes(fixture_bytes(scene, stem, root)),
             "provenance": {"origin": "uzmigames_authored", "licence": "Apache-2.0"},
         }
         for stem in scene.inputs()
@@ -288,16 +325,14 @@ def parameters(golden: Golden) -> list[tuple[str | None, str, Any]]:
 
 def instruction_steps(golden: Golden) -> list[dict[str, Any]]:
     scene = SCENES[golden.scene]
-    calls: list[tuple[str, dict[str, Any]]] = [
-        (
-            ps.CREATE,
-            {
-                "mesh": scene.low,
-                "normal_map_format": NORMAL_MAP_FORMAT,
-                "default_texture_resolution": RESOLUTION,
-            },
-        )
-    ]
+    create: dict[str, Any] = {
+        "mesh": scene.low,
+        "normal_map_format": NORMAL_MAP_FORMAT,
+        "default_texture_resolution": RESOLUTION,
+    }
+    if golden.tangent_space_mode is not None:
+        create["tangent_space_mode"] = golden.tangent_space_mode
+    calls: list[tuple[str, dict[str, Any]]] = [(ps.CREATE, create)]
     settings = parameters(golden)
     calls += [(ps.BAKING_SET, set_args(k, v)) for usage, k, v in settings if usage is None]
     if scene.high is not None:
@@ -333,6 +368,8 @@ def applied_settings(golden: Golden) -> list[dict[str, Any]]:
         setting("project.normal_map_format", NORMAL_MAP_FORMAT),
         setting("texture_set.resolution", RESOLUTION, "px"),
     ]
+    if golden.tangent_space_mode is not None:
+        applied.append(setting("project.tangent_space_mode", golden.tangent_space_mode))
     for usage, key, value in parameters(golden):
         name = f"baking.{'common' if usage is None else usage}.{key}"
         if key == "OutputSize":
@@ -359,7 +396,12 @@ def description(golden: Golden) -> str:
         + ", ".join(f"{key} {value}" for key, value in scene.common)
         + (f"; {swept}" if swept else "")
         + "; every other baking parameter at Painter's default; normal map format OpenGL, "
-        "tangent space the project default). The baked maps are exported as PNG 16 and OpenEXR "
+        + (
+            "tangent space the project default"
+            if golden.tangent_space_mode is None
+            else f"tangent space {golden.tangent_space_mode}"
+        )
+        + "). The baked maps are exported as PNG 16 and OpenEXR "
         "32f, padding passthrough, no dithering; recorded twice (same session; after save and "
         "reopen). Bake backend uncontrolled."
     )
@@ -382,7 +424,7 @@ def manifest(golden: Golden, root: Path = REPO_ROOT) -> dict[str, Any]:
         "tier": "2b",
         "domain": f"bake_map/{golden.usages[-1].lower()}",
         "description": description(golden),
-        "inputs": inputs(SCENES[golden.scene]),
+        "inputs": inputs(SCENES[golden.scene], root),
         "instruction_sequence": {
             "author": "UzmiGames",
             "interface": "substance_painter_documented_python_api",

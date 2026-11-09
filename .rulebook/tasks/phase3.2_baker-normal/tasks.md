@@ -1,5 +1,5 @@
 ## 1. Prerequisites
-- [ ] 1.1 Prerequisites accepted: phase3.1_baker-request-model, phase0.9_normal-convention-fixture
+- [x] 1.1 Prerequisites accepted: phase3.1_baker-request-model, phase0.9_normal-convention-fixture - done 2026-11-08: archived as `.rulebook/archive/2026-11-08-phase3.1_baker-request-model/` and `.rulebook/archive/2026-10-10-phase0.9_normal-convention-fixture/`
 
 ## 2. Implementation
 - [ ] 2.1 Implement the `Normal` baker: high-poly normal at the hit, expressed in the texturing mesh's MikkTSpace frame under the project's `TangentSpace` mode
@@ -45,3 +45,9 @@
 
 ## 9. Recording requests (2026-11-02, decision 384)
 - Item 3.2's Painter recordings are requested: `parity/envelopes/painter-12.2.0_js-api.1.1.20-env-a981b586eae7/requests/tier2b/bakes/normal-{plane,sphere,bevelled-cube}.json` (fixtures `parity/fixtures/tier2b-bakes/`). Not yet recorded; item 3.3 (Wand/Hat) has no request.
+
+## 10. Recordings (2026-11-08)
+- Correction to section 9: the three analytic requests were recorded and admitted in b0f751e2 (2026-11-02, session 1, Legacy, Painter 12.2.0). A re-recording today in a fresh Painter process (under the Assets3D Painter lock, released after) gave PNG 16 and EXR 32f maps byte-identical to the admitted ones in r1 and r2 for all three; the duplicate runs could not be admitted under the same ids and were deleted from the inbox.
+- New requests and goldens for item 3.1: `tier2b/bakes/normal-hemisphere-per-vertex` and `normal-hemisphere-per-fragment` (generator `tools/parity/tier2b_bakes/requests.py`, scene `hemisphere` from `parity/fixtures/normal-convention/`): the hemisphere pair at 512 px, OutputSize 9, DilationWidth 0, absolute distances 0.02/0.02 (the prototype's), each tangent mode explicit, PNG 16 and EXR 32f. Recorded the same session and admitted (6 private records each); inbox runs deleted after admission.
+- Observations (statistics only; maps private): in every one of the five goldens r1 = r2 and the EXR 32f export equals code/65535 of the PNG 16 export on every hit texel, so Painter stores the baked normal as 16-bit codes and the float export adds no precision. Uncovered texels are code 0 in both. The plane has one code (32768, 32768, 65535); the sphere (low as high) mixes 32767 and 32768 in R and G, the sign of a rounding residue around zero; the cube has five codes per channel.
+

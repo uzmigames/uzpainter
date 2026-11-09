@@ -256,9 +256,9 @@ def test_the_requests_sweep_what_the_tasks_name() -> None:
     for golden in rq.GOLDENS:
         by_task.setdefault(golden.task, set()).add(golden.scene)
     analytic = set(rq.ANALYTIC)
-    for task in ("normal", "ao", "curvature", "position", "id", "world-space-normal"):
-        prefix = "phase3.2_baker-" if task == "normal" else "phase3.4_baker-"
-        assert by_task[prefix + task] == analytic
+    for task in ("ao", "curvature", "position", "id", "world-space-normal"):
+        assert by_task["phase3.4_baker-" + task] == analytic
+    assert by_task["phase3.2_baker-normal"] == analytic | {"hemisphere"}
     assert by_task["phase3.4_baker-thickness"] == {"slab", "sphere", "bevelled-cube"}
     names = {g.name for g in rq.GOLDENS}
     assert {f"ao-{s}-{v}" for s in analytic for v in ("ground-plane", "no-ground-plane")} <= names
@@ -268,3 +268,8 @@ def test_the_requests_sweep_what_the_tasks_name() -> None:
     assert len([n for n in names if n.startswith("position-")]) == 3 * (3 * 2 + 3)
     assert len([n for n in names if n.startswith("thickness-")]) == 3 * 3
     assert len([n for n in names if n.startswith("id-")]) == 3 * 3
+    hemisphere = [g for g in rq.GOLDENS if g.scene == "hemisphere"]
+    assert {(g.name, g.tangent_space_mode) for g in hemisphere} == {
+        ("normal-hemisphere-per-vertex", "PerVertex"),
+        ("normal-hemisphere-per-fragment", "PerFragment"),
+    }
