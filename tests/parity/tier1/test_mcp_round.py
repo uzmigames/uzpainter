@@ -334,7 +334,7 @@ def _needs_the_tunic[T: Callable[..., None]](test: T) -> T:
 
 REPORT_ENV = "UZP_TIER1_REPORT"  # repository-relative path of the report to write
 # The only exception the Tunic's equality may rely on (decision 398; version 2, decision 401).
-EXC011 = {"exception_id": "EXC-011", "version": 2}
+EXC011 = {"exception_id": "EXC-011", "version": 3}
 
 
 def painter_ocio() -> Path:
@@ -372,9 +372,10 @@ def tunic_tier1(fast_painter: Path, tmp_path_factory: pytest.TempPathFactory) ->
 @_needs_the_tunic
 def test_tunic_current_tier1_maps_equal_painter_under_exc011(tunic_tier1: TunicEvidence) -> None:
     """Items 2.5 and 3.1: every exported map of the Tunic current round equals its golden under
-    EXC-011 version 2 (decision 401, widening decision 398's EXC-010 terms: covered interior
-    texels exact on every map, the padding and every map's island-edge texels published per
-    band); the two rebuilds, each in its own processes and work directory, are byte-identical.
+    EXC-011 version 3 (decision 410, narrowing decision 401's version 2 back to decision 398's
+    EXC-010 terms: covered texels exact on every map but the Normal, covered interior texels
+    exact on the Normal too, the padding and the Normal's island-edge texels published per band);
+    the two rebuilds, each in its own processes and work directory, are byte-identical.
     The report is written to `UZP_TIER1_REPORT` when that is set."""
     report, runs, _ = tunic_tier1
     assert validation_errors(report, Schema.COMPARISON_REPORT) == []

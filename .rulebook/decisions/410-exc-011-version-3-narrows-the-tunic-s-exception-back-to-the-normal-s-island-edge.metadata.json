@@ -1,0 +1,9 @@
+{
+  "id": 410,
+  "slug": "exc-011-version-3-narrows-the-tunic-s-exception-back-to-the-normal-s-island-edge",
+  "title": "EXC-011 version 3 narrows the Tunic's exception back to the Normal's island edge",
+  "status": "accepted",
+  "date": "2026-11-08",
+  "relatedTasks": ["phase3.1_export-island-padding", "phase2.10_pilot-tunic-recovery"],
+  "supersededBy": null
+}
