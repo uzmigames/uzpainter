@@ -276,6 +276,7 @@ Other rules:
 - Getters: `SourceSubstance.get_source` (`input_index`; the source by class, a `SourceReference` through `anchor`, `alpha_matte` and `referenced_channel`), `output_mapping` (each key, value and the value's class) and `mask_output`.
 - `material: true` selects a fill's material source (`get_material_source()`) instead of a channel's source.
 - The asset is found first by `python -m tools.parity.recorder.substance_survey` in the same Legacy session (its result stays in the private work root). `source-substance-presets-inputs` and `source-substance-input-anchor` were recorded and admitted on 2026-11-08 (Legacy, Painter lock seq 2336/2337).
+- Decision 413's P413-A and P413-B (`tools/parity/tier0_semantics/source_substance_channels.py`) use the same operations as state steps: `source-substance-channels-<state>` applies the probe's effective material edits up to one configuration, reads it back and exports BaseColor, Height and Normal as OpenEXR 32f with passthrough padding (plus `-material-only` and `-split-only`); `source-substance-split-contexts` reads `output_mapping`, `mask_output` and `active_output` on nine split fills. Recorded and admitted on 2026-11-09 (Legacy, Painter lock seq 2342/2343); the diagnostic is `python -m tools.parity.fit.material_channels`.
 
 ## 9a. Pipeline-script goldens (Tier 1, decision 099)
 
