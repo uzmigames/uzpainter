@@ -274,6 +274,37 @@ uzpainter.project.close()
 
 
 REPLAYED_FUNCTIONS = ("substance_source", "substance_read", "substance_edit")
+# The test's own adaptations, never taken from the recorder.
+ADAPTED_NAMES = ("describe", "fresh", "channel_arg")
+
+
+def recorder_definitions(protocol: str, names: tuple[str, ...]) -> dict[str, str]:
+    """The recorder's top-level definitions `names` and the module-level definitions they
+    reference (functions and constants), verbatim and in module order, except the adaptations."""
+    table: dict[str, tuple[int, ast.stmt]] = {}
+    for position, node in enumerate(ast.parse(protocol).body):
+        if isinstance(node, ast.FunctionDef):
+            table[node.name] = (position, node)
+        elif (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+        ):
+            table[node.targets[0].id] = (position, node)
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            table[node.target.id] = (position, node)
+    wanted: set[str] = set()
+    queue = list(names)
+    while queue:
+        name = queue.pop()
+        if name in wanted or name in ADAPTED_NAMES or name not in table:
+            continue
+        wanted.add(name)
+        queue.extend(n.id for n in ast.walk(table[name][1]) if isinstance(n, ast.Name))
+    ordered = sorted(wanted, key=lambda n: table[n][0])
+    return {name: str(ast.get_source_segment(protocol, table[name][1])) for name in ordered}
+
+
 FILTER_STEPS = (19, 20, 21, 22, 23, 24)
 
 
@@ -302,15 +333,12 @@ def test_filter_restrictions_replay_the_recorded_probe_operations(
     ]
     assert len(expected) == 2 and expected[0] == expected[1]
     protocol = (REPO_ROOT / "tools/parity/recorder/painter_probes.py").read_text(encoding="utf-8")
-    functions = {
-        node.name: ast.get_source_segment(protocol, node)
-        for node in ast.parse(protocol).body
-        if isinstance(node, ast.FunctionDef) and node.name in REPLAYED_FUNCTIONS
-    }
-    assert set(functions) == set(REPLAYED_FUNCTIONS) and all(functions.values())
+    functions = recorder_definitions(protocol, REPLAYED_FUNCTIONS)
+    assert set(REPLAYED_FUNCTIONS) <= set(functions) and all(functions.values())
     script = (
         """
 import enum
+from collections.abc import Callable
 from typing import Any
 import substance_painter
 
@@ -333,7 +361,7 @@ def fresh(step):
 def channel_arg(args):
     raise AssertionError("an effect source takes no channel")
 """
-        + "\n\n".join(str(functions[name]) for name in REPLAYED_FUNCTIONS)
+        + "\n\n".join(functions.values())
         + f"\nFILTER_STEP = {filter_step}\nsteps = {steps!r}\n"
         + """
 def replay():

@@ -393,7 +393,7 @@ core::ProceduralRef BoundReference(const ProceduralRequest& request, const store
 
 /// `ref` is the bind of H's snapshot; only its resolution override is the binder's choice.
 bool IsBound(const core::ProceduralRef& ref, const core::ProceduralRef& expected) {
-    return ref.asset == expected.asset && SameTyped(ref.params, expected.params) && !ref.preset && ref.image_inputs.empty() &&
+    return ref.asset == expected.asset && SameTyped(ref.params, expected.params) && !ref.preset && ref.image_inputs.empty() && ref.input_sources.empty() &&
            ref.output_mapping == expected.output_mapping && !ref.mask_output && ref.extra.empty();
 }
 

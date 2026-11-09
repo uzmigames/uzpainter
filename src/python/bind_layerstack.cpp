@@ -66,6 +66,9 @@ struct SourceSubstance {
     /// Present only for a Filter bound to an observation when the handle was created; a reserved
     /// handle without it never gains access, even after a later binding.
     std::optional<ObservationLease> lease = {};
+    /// A fill's material source (`FillLayerNode.get_material_source`, decision 413): no channel,
+    /// read from the fill's `material_source` in `SourceMode.Material`.
+    bool material = false;
 };
 
 enum class SourceResolutionMode { Auto, Document, Manual, TextureSet, UVTile };
@@ -192,6 +195,13 @@ core::ProceduralRef ReadProcedural(const SourceSubstance& s, const BeforeReserve
         effect = &ProceduralEffectOf(info, s.node);
         if (!effect->procedural) throw core::ValueError("stale handle: the effect no longer has a procedural source");
         ref = *effect->procedural;
+    } else if (s.material) {
+        const core::FillContent& fill = FillOf(info, s.node);
+        if (fill.source_mode != core::SourceMode::Material || !fill.material_source ||
+            fill.material_source->kind() != core::SourceKind::procedural) {
+            throw core::ValueError("stale handle: the fill no longer has this material source");
+        }
+        ref = std::get<core::ProceduralSource>(fill.material_source->value).ref;
     } else {
         const core::Source* src = SourceOf(info, s.node, s.channel);
         if (src == nullptr || src->kind() != core::SourceKind::procedural) {
@@ -327,6 +337,14 @@ std::optional<ObservationLease> LeaseOf(const std::shared_ptr<OpenProject>& open
 }
 
 core::ProceduralRef& EditProcedural(core::Edit& edit, const SourceSubstance& s) {
+    if (s.material) {
+        core::FillContent& fill = EditFill(edit, s.node);
+        if (fill.source_mode != core::SourceMode::Material || !fill.material_source ||
+            fill.material_source->kind() != core::SourceKind::procedural) {
+            throw core::ValueError("stale handle: the fill no longer has this material source");
+        }
+        return std::get<core::ProceduralSource>(fill.material_source->value).ref;
+    }
     if (!s.effect) {
         return std::get<core::ProceduralSource>(EditSource(edit, s.node, s.channel, core::SourceKind::procedural).value).ref;
     }
@@ -349,8 +367,36 @@ void CheckResolutionAvailable(const SourceSubstance& s) {
     if (FilterSource(s)) throw core::ValueError("Resolution property is not available on a FilterEffectNode.");
 }
 
+/// The texture set of a source handle and the channel its snapshot provider is asked for, with
+/// that channel's format: the source's own channel, or Height for a material source (Painter's
+/// material fill activates Height only, decision 413).
+struct SourceTarget {
+    const core::TextureSet* set = nullptr;
+    core::ChannelType channel = core::ChannelType::Height;
+    core::ChannelFormat format = core::ChannelFormat::L32F;
+};
+
+SourceTarget TargetOf(const SourceSubstance& s, const core::Project& project, const NodeInfo& info,
+                      const std::string& what) {
+    SourceTarget target;
+    for (const core::TextureSet& candidate : project.texture_sets) {
+        if (candidate.id == info.texture_set) target.set = &candidate;
+    }
+    const core::Stack* stack = core::FindStack(project, info.texture_set, info.stack);
+    const ChannelArg wanted = s.material ? ChannelArg(core::ChannelType::Height) : s.channel;
+    const auto channel = stack && wanted ? stack->channels.find(*wanted) : decltype(stack->channels)::const_iterator{};
+    if (target.set == nullptr || stack == nullptr || !wanted || channel == stack->channels.end()) {
+        throw ApiError("UnsupportedProcedural", what + (s.material ? ": the material fill's stack has no Height channel"
+                                                                  : ": the source is not a channel source of a stack"));
+    }
+    target.channel = *wanted;
+    target.format = channel->second.format;
+    return target;
+}
+
 /// The `source_metadata` recorded with the snapshot that serves this fill source's current exact
-/// signature (store/snapshots.h); never inferred from the output mapping or another snapshot.
+/// signature (store/snapshots.h); never inferred from the output mapping or another snapshot. A
+/// material source's is the snapshot of its Height output's L32F view (`SnapshotMaterialRequest`).
 store::SourceMetadata RecordedMetadata(const SourceSubstance& s, const std::string& what) {
     const core::ProceduralRef ref = ReadProcedural(s);  // a stale handle keeps its error
     if (s.effect) {
@@ -359,17 +405,9 @@ store::SourceMetadata RecordedMetadata(const SourceSubstance& s, const std::stri
     const std::shared_ptr<OpenProject> open = Session::Get().Current();
     const auto project = Read();
     const NodeInfo info = Resolve(*project, s.node);
-    const core::TextureSet* set = nullptr;
-    for (const core::TextureSet& candidate : project->texture_sets) {
-        if (candidate.id == info.texture_set) set = &candidate;
-    }
-    const core::Stack* stack = core::FindStack(*project, info.texture_set, info.stack);
-    const auto channel = stack && s.channel ? stack->channels.find(*s.channel) : decltype(stack->channels)::const_iterator{};
-    if (set == nullptr || stack == nullptr || !s.channel || channel == stack->channels.end()) {
-        throw ApiError("UnsupportedProcedural", what + ": the source is not a channel source of a stack");
-    }
+    const SourceTarget target = TargetOf(s, *project, info, what);
     const procedural::SnapshotSourceProvider provider(*open->store, *project);
-    auto metadata = provider.Metadata(*project, *set, *s.channel, channel->second.format, FillOf(info, s.node), ref,
+    auto metadata = provider.Metadata(*project, *target.set, target.channel, target.format, FillOf(info, s.node), ref,
                                       s.node, info.in_mask());
     if (!metadata) throw ApiError("UnsupportedProcedural", what + ": " + metadata.error());
     return std::move(*metadata);
@@ -383,20 +421,135 @@ std::optional<store::SourceMetadata> RecordedObservations(const SourceSubstance&
     const std::shared_ptr<OpenProject> open = Session::Get().Current();
     const auto project = Read();
     const NodeInfo info = Resolve(*project, s.node);
-    const core::TextureSet* set = nullptr;
-    for (const core::TextureSet& candidate : project->texture_sets) {
-        if (candidate.id == info.texture_set) set = &candidate;
-    }
-    const core::Stack* stack = core::FindStack(*project, info.texture_set, info.stack);
-    const auto channel = stack && s.channel ? stack->channels.find(*s.channel) : decltype(stack->channels)::const_iterator{};
-    if (set == nullptr || stack == nullptr || !s.channel || channel == stack->channels.end()) {
-        throw ApiError("UnsupportedProcedural", what + ": the source is not a channel source of a stack");
-    }
+    const SourceTarget target = TargetOf(s, *project, info, what);
     const procedural::SnapshotSourceProvider provider(*open->store, *project);
-    auto observed = provider.Observations(*project, *set, *s.channel, channel->second.format, FillOf(info, s.node), ref,
-                                          s.node, info.in_mask());
+    auto observed = provider.Observations(*project, *target.set, target.channel, target.format, FillOf(info, s.node),
+                                          ref, s.node, info.in_mask());
     if (!observed) throw ApiError("UnsupportedProcedural", what + ": " + observed.error());
     return std::move(*observed);
+}
+
+/// Painter's refusal of the multiple output members on a single channel source (decision 412,
+/// P413-B/E): every split source, whatever its channels, raises it.
+constexpr const char* kMultiContext = "Only valid in multi channel context";
+
+/// Where an unrecorded multi-output edit is owned.
+constexpr const char* kPresetsOwner = "(phase3.2_source-substance-presets-inputs)";
+
+bool Listed(const std::vector<std::string>& names, const std::string& name) {
+    return std::find(names.begin(), names.end(), name) != names.end();
+}
+
+/// The `image_inputs` the current signature's snapshot recorded, which must list `name`.
+void RequireInput(const SourceSubstance& s, const std::string& name, const std::string& what) {
+    const auto inputs = RecordedMetadata(s, what).image_inputs;
+    if (!inputs) throw ApiError("UnsupportedProcedural", what + ": the snapshot's recording did not observe image_inputs");
+    if (!Listed(*inputs, name)) {
+        ThrowNotYetSupported(what + ": image input '" + name + "' is not one the recording lists " + kPresetsOwner);
+    }
+}
+
+/// The plugged source of an image input as Python: None when unplugged.
+py::object InputSourceObject(const core::ProceduralRef& ref, const std::string& name) {
+    const auto found = ref.input_sources.find(name);
+    if (found == ref.input_sources.end()) return py::none();
+    py::dict result;
+    if (found->second.working_colour) {
+        const auto& c = *found->second.working_colour;
+        py::list rgb;
+        for (const double v : c) rgb.append(v);
+        result["working_colour"] = rgb;
+    } else {
+        result["bitmap_sha256"] = found->second.bitmap_sha256;
+        result["colour_space"] = found->second.colour_space;
+    }
+    return result;
+}
+
+/// The recorded default state of a material resource in this project (decision 413).
+struct MaterialDefault {
+    std::string signature;  ///< The SHA-256 of the default snapshot of Height's output.
+    std::string asset;      ///< Its pin `uzasset://<family>/<id>@<version>`.
+    core::json::Object params;
+    std::map<std::string, std::string> output_mapping;
+    std::set<core::ChannelType> active_channels;
+};
+
+const core::json::Value* MemberOf(const core::json::Value& value, std::string_view name) {
+    const auto* object = std::get_if<core::json::Object>(&value.data);
+    if (object == nullptr) return nullptr;
+    const auto found = object->find(name);
+    return found == object->end() ? nullptr : &found->second;
+}
+
+/// Among the project's snapshots whose recording observed the ResourceID `url` (`/3`) and the
+/// material context (`/4`), the ones without a preset or plugged input, of a raw F32 scalar view:
+/// their parameters must be one set, and Height's output must have such a snapshot. Anything else
+/// raises NotYetSupported before any change.
+MaterialDefault MaterialDefaultOf(const core::Project& project, const std::string& url) {
+    const auto refuse = [&](const std::string& why) {
+        ThrowNotYetSupported("set_material_source " + url + ": " + why + " " + kPresetsOwner);
+    };
+    std::map<std::string, std::vector<const store::SnapshotEntry*>> byParams;
+    const std::vector<store::SnapshotEntry> entries = store::ProjectSnapshots(project);
+    for (const store::SnapshotEntry& entry : entries) {
+        if (!entry.error.empty() || !entry.source_metadata) continue;
+        const store::SourceMetadata& metadata = *entry.source_metadata;
+        if (!metadata.observed_resource_id || metadata.observed_resource_id->url != url || !metadata.contexts) continue;
+        const core::json::Value* preset = MemberOf(entry.signature, "preset");
+        const core::json::Value* inputs = MemberOf(entry.signature, "inputs");
+        const core::json::Value* output = MemberOf(entry.signature, "output");
+        const core::json::Value* channels = output ? MemberOf(*output, "channels") : nullptr;
+        const core::json::Value* format = output ? MemberOf(*output, "format") : nullptr;
+        const core::json::Value* params = MemberOf(entry.signature, "params");
+        const auto* inputObject = inputs ? std::get_if<core::json::Object>(&inputs->data) : nullptr;
+        if ((preset && !preset->IsNull()) || (inputs && (!inputObject || !inputObject->empty())) || !channels ||
+            !channels->IsInt() || std::get<std::int64_t>(channels->data) != 1 || !format || !format->IsString() ||
+            std::get<std::string>(format->data) != "f32" || !params) {
+            continue;
+        }
+        byParams[core::json::WriteCanonical(*params)].push_back(&entry);
+    }
+    if (byParams.empty()) refuse("the project holds no recorded default state of this resource");
+    if (byParams.size() != 1) refuse("the project holds " + std::to_string(byParams.size()) +
+                                     " recorded states without a preset or input; no unique default");
+    const std::vector<const store::SnapshotEntry*>& candidates = byParams.begin()->second;
+    const core::json::Value recordedContexts(*candidates.front()->source_metadata->contexts);
+    const core::json::Value* material = MemberOf(recordedContexts, "material");
+    const core::json::Value* mapping = material ? MemberOf(*material, "output_mapping") : nullptr;
+    const core::json::Value* active = material ? MemberOf(*material, "active_channels") : nullptr;
+    const auto* mappingObject = mapping ? std::get_if<core::json::Object>(&mapping->data) : nullptr;
+    const auto* activeArray = active ? std::get_if<core::json::Array>(&active->data) : nullptr;
+    if (mappingObject == nullptr || activeArray == nullptr) refuse("the recording observed no material context");
+    MaterialDefault result;
+    for (const auto& [channel, value] : *mappingObject) {
+        if (!value.IsString()) refuse("the recorded material mapping is malformed");
+        result.output_mapping[channel] = std::get<std::string>(value.data);
+    }
+    for (const core::json::Value& item : *activeArray) {
+        const auto channel = item.IsString() ? core::FromString<core::ChannelType>(std::get<std::string>(item.data))
+                                             : std::nullopt;
+        if (!channel) refuse("the recorded material active channels are malformed");
+        result.active_channels.insert(*channel);
+    }
+    const auto height = result.output_mapping.find("Height");
+    if (height == result.output_mapping.end()) refuse("the recorded material maps no output to Height");
+    const store::SnapshotEntry* chosen = nullptr;
+    for (const store::SnapshotEntry* entry : candidates) {
+        const core::json::Value* id = MemberOf(*MemberOf(entry->signature, "output"), "id");
+        if (id && id->IsString() && std::get<std::string>(id->data) == height->second) chosen = entry;
+    }
+    if (chosen == nullptr) refuse("no recorded default snapshot of the output mapped to Height");
+    const core::json::Value* asset = MemberOf(chosen->signature, "asset");
+    const core::json::Value* version = MemberOf(chosen->signature, "version");
+    if (!asset || !asset->IsString() || !version || !version->IsString()) refuse("the snapshot's signature names no asset");
+    result.signature = chosen->key;
+    result.asset = std::get<std::string>(asset->data) + "@" + std::get<std::string>(version->data);
+    const store::SourceMetadata& metadata = *chosen->source_metadata;
+    result.params = metadata.typed_effective_parameters
+                        ? *metadata.typed_effective_parameters
+                        : std::get<core::json::Object>(MemberOf(chosen->signature, "params")->data);
+    return result;
 }
 
 py::list Names(const std::vector<std::string>& names) {
@@ -406,8 +559,9 @@ py::list Names(const std::vector<std::string>& names) {
 }
 
 core::json::Object SourceArgs(const SourceSubstance& s) {
-    core::json::Object args = s.effect ? NodeArgs(s.node) : NodeArgs(s.node, s.channel);
+    core::json::Object args = s.effect || s.material ? NodeArgs(s.node) : NodeArgs(s.node, s.channel);
     if (s.effect) args["effect"] = true;
+    if (s.material) args["material"] = true;
     return args;
 }
 
@@ -645,14 +799,46 @@ void BindFillMethods(Class& cls) {
              })
         .def("get_material_source",
              [](const Handle& n) -> py::object {
-                 const core::FillContent& fill = FillOf(Resolve(*Read(), n.uid), n.uid);
+                 const NodeInfo info = Resolve(*Read(), n.uid);
+                 const core::FillContent& fill = FillOf(info, n.uid);
                  if (fill.source_mode != core::SourceMode::Material) {
                      throw ApiError("RuntimeError", "the fill is not in SourceMode.Material");
                  }
-                 throw ApiError("UnsupportedProcedural", "material sources are release gaps (phase3.2_proc-material-families)");
+                 if (!fill.material_source || fill.material_source->kind() != core::SourceKind::procedural) {
+                     ThrowNotYetSupported("a non-procedural material source is a release gap (phase3.2_proc-material-families)");
+                 }
+                 SourceSubstance handle{n.uid, std::nullopt};
+                 handle.material = true;
+                 return py::cast(handle);
              })
-        .def("set_material_source", [](const Handle&, const py::object&) -> py::object {
-            throw ApiError("UnsupportedProcedural", "material sources are release gaps (phase3.2_proc-material-families)");
+        .def("set_material_source", [](const Handle& n, const std::string& url) -> py::object {
+            // Decision 413: a material is served only by the project's own multi-output capture of
+            // the resource. Its default state is the one recorded state of that resource without a
+            // preset or plugged input; nothing else is chosen or inferred.
+            const auto project = Read();
+            const NodeInfo info = Resolve(*project, n.uid);
+            FillOf(info, n.uid);
+            if (info.layer == nullptr || info.in_mask()) {
+                ThrowNotYetSupported("set_material_source is recorded on a content-stack fill layer only " +
+                                     std::string(kPresetsOwner));
+            }
+            const MaterialDefault found = MaterialDefaultOf(*project, url);
+            core::ProceduralRef ref;
+            ref.asset = found.asset;
+            ref.params = found.params;
+            ref.output_mapping = found.output_mapping;
+            core::json::Object args = NodeArgs(n.uid);
+            args["url"] = url;
+            args["signature_sha256"] = found.signature;
+            Mutate("layerstack.FillLayerNode.set_material_source", args, [&](core::Edit& edit) {
+                core::FillContent& fill = EditFill(edit, n.uid);
+                fill.source_mode = core::SourceMode::Material;
+                fill.material_source = core::Source{core::ProceduralSource{ref}};
+                fill.active_channels = found.active_channels;
+            });
+            SourceSubstance handle{n.uid, std::nullopt};
+            handle.material = true;
+            return py::cast(handle);
         });
 }
 
@@ -809,7 +995,7 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
     const auto output_key = [](const SourceSubstance& s, const core::ProceduralRef& ref) {
         // Observed on a filter source (`source-substance-booleans-filter`); a generator source's
         // behaviour is unrecorded and stays refused below.
-        if (FilterSource(s)) ThrowEditionContext("Only valid in single channel context");
+        if (FilterSource(s) || s.material) ThrowEditionContext("Only valid in single channel context");
         if (!s.channel || ref.output_mapping.size() != 1) {
             ThrowNotYetSupported("active_output requires an explicit single-channel procedural source");
         }
@@ -851,6 +1037,9 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
                 CheckLeasedParameterTypes(s, project, effect, values);
             });
             CheckProceduralParameters(ref.params);
+            if (s.material) {
+                ThrowNotYetSupported("set_parameters on a material source is unrecorded " + std::string(kPresetsOwner));
+            }
             core::json::Object updates;
             for (const auto& item : values) {
                 if (!py::isinstance<py::str>(item.first)) throw py::type_error("parameter names must be strings");
@@ -900,7 +1089,7 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
             const auto asset = core::ParseAssetUrl(read_procedural(s).asset);
             const ResourceIdHandle pin{"uzasset", asset.family + "/" + asset.id, asset.version};
             // Effect and mono mask sources hold no recorded observations: their pin, as before.
-            if (s.effect || !s.channel) return py::cast(pin);
+            if (s.effect || (!s.channel && !s.material)) return py::cast(pin);
             // Decision 361: the ResourceID the recording of this exact signature observed, when it
             // did; the internal pin when legitimately absent. Errors propagate.
             const auto observed = RecordedObservations(s, "resource_id");
@@ -998,6 +1187,9 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
             });
             CheckResolutionAvailable(s);
             CheckSourceResolution(value);
+            if (s.material) {
+                ThrowNotYetSupported("the resolution of a material source is unrecorded " + std::string(kPresetsOwner));
+            }
             auto args = SourceArgs(s);
             args["mode"] = static_cast<int>(value.mode);
             args["value"] = core::json::Array{value.value[0], value.value[1]};
@@ -1027,6 +1219,147 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
                 stored.value = value.value;
                 stored.log2_offset = value.log2_offset;
                 ref.resolution_override = stored;
+            });
+        })
+        // Decision 412/413: the multiple output context. The facade builds Painter's OutputMapping
+        // and mask_output over these private members.
+        .def("_output_mapping", [](const SourceSubstance& s) {
+            const auto ref = ReadProcedural(s);
+            if (!s.material) ThrowEditionContext(kMultiContext);
+            py::dict result;
+            for (const auto& [channel, output] : ref.output_mapping) result[py::str(channel)] = output;
+            return result;
+        })
+        .def("_set_output_mapping", [](const SourceSubstance& s, const std::string& channel, const std::string& output) {
+            ReadProcedural(s);
+            if (!s.material) ThrowEditionContext(kMultiContext);
+            if (!core::FromString<core::ChannelType>(channel)) throw core::ValueError("unknown channel type: " + channel);
+            const auto outputs = RecordedMetadata(s, "output_mapping").image_outputs;
+            if (!Listed(outputs, output)) {
+                ThrowNotYetSupported("an output_mapping value outside image_outputs is unrecorded " +
+                                     std::string(kPresetsOwner));
+            }
+            auto args = SourceArgs(s);
+            args["mapped_channel"] = channel;
+            args["output"] = output;
+            Mutate("source.SourceSubstance.output_mapping", args,
+                   [&](core::Edit& edit) { EditProcedural(edit, s).output_mapping[channel] = output; });
+        })
+        .def("_mask_output", [](const SourceSubstance& s) -> py::object {
+            const auto ref = ReadProcedural(s);
+            if (!s.material) ThrowEditionContext(kMultiContext);
+            if (!ref.mask_output) return py::none();
+            return py::str(*ref.mask_output);
+        })
+        .def("_set_mask_output", [](const SourceSubstance& s, const std::string& output) {
+            ReadProcedural(s);
+            if (!s.material) ThrowEditionContext(kMultiContext);
+            const auto outputs = RecordedMetadata(s, "mask_output").image_outputs;
+            if (!Listed(outputs, output)) {
+                ThrowNotYetSupported("a mask_output outside image_outputs is unrecorded " + std::string(kPresetsOwner));
+            }
+            auto args = SourceArgs(s);
+            args["output"] = output;
+            Mutate("source.SourceSubstance.mask_output", args,
+                   [&](core::Edit& edit) { EditProcedural(edit, s).mask_output = output; });
+        })
+        .def("_material_context", [](const SourceSubstance& s) {
+            const auto contexts = RecordedMetadata(s, "contexts").contexts;
+            if (!contexts) throw ApiError("UnsupportedProcedural", "contexts: the snapshot's recording did not observe them");
+            return FromJson(*contexts);
+        })
+        .def("_input_sources", [](const SourceSubstance& s) {
+            const auto sources = RecordedMetadata(s, "input_sources").input_sources;
+            if (!sources) throw ApiError("UnsupportedProcedural", "input_sources: the snapshot's recording did not observe them");
+            return FromJson(*sources);
+        })
+        .def("_input_source", [](const SourceSubstance& s, const std::string& name) {
+            const auto ref = ReadProcedural(s);
+            RequireInput(s, name, "get_source");
+            return InputSourceObject(ref, name);
+        })
+        .def("_set_input_colour", [](const SourceSubstance& s, const std::string& name, std::array<double, 3> rgb) {
+            ReadProcedural(s);
+            for (const double v : rgb) {
+                if (!std::isfinite(v)) throw core::ValueError("a working colour must be finite");
+            }
+            RequireInput(s, name, "set_source");
+            auto args = SourceArgs(s);
+            args["input"] = name;
+            args["working_colour"] = core::json::Array{rgb[0], rgb[1], rgb[2]};
+            Mutate("source.SourceSubstance.set_source", args, [&](core::Edit& edit) {
+                core::ProceduralInputSource plugged;
+                plugged.working_colour = rgb;
+                EditProcedural(edit, s).input_sources[name] = plugged;
+            });
+        })
+        .def("_set_input_bitmap", [](const SourceSubstance& s, const std::string& name, const py::object& resource,
+                                     const std::string& colour_space) {
+            ReadProcedural(s);
+            if (colour_space.empty()) throw core::ValueError("a plugged bitmap needs its colour space");
+            RequireInput(s, name, "set_source");
+            std::string sha256;
+            {
+                const auto project = Read();
+                if (py::isinstance<py::str>(resource)) {
+                    sha256 = resource.cast<std::string>();
+                    if (!project->resources.contains(sha256)) ThrowResourceNotFound("no project resource " + sha256);
+                } else {
+                    sha256 = ResolveResource(*project, resource.cast<ResourceIdHandle>());
+                }
+            }
+            auto args = SourceArgs(s);
+            args["input"] = name;
+            args["bitmap_sha256"] = sha256;
+            args["colour_space"] = colour_space;
+            Mutate("source.SourceSubstance.set_source", args, [&](core::Edit& edit) {
+                core::ProceduralInputSource plugged;
+                plugged.bitmap_sha256 = sha256;
+                plugged.colour_space = colour_space;
+                EditProcedural(edit, s).input_sources[name] = plugged;
+            });
+        })
+        .def("_reset_input", [](const SourceSubstance& s, const std::string& name) {
+            ReadProcedural(s);
+            RequireInput(s, name, "reset_source");
+            auto args = SourceArgs(s);
+            args["input"] = name;
+            Mutate("source.SourceSubstance.reset_source", args,
+                   [&](core::Edit& edit) { EditProcedural(edit, s).input_sources.erase(name); });
+        })
+        .def("_remove_input", [](const SourceSubstance& s, const std::string& name) {
+            ReadProcedural(s);
+            RequireInput(s, name, "remove_source");
+            auto args = SourceArgs(s);
+            args["input"] = name;
+            // Painter's remove_source leaves a uniform black working colour (decision 412, s63).
+            Mutate("source.SourceSubstance.remove_source", args, [&](core::Edit& edit) {
+                core::ProceduralInputSource plugged;
+                plugged.working_colour = std::array<double, 3>{0.0, 0.0, 0.0};
+                EditProcedural(edit, s).input_sources[name] = plugged;
+            });
+        })
+        .def("apply_preset", [](const SourceSubstance& s, const std::string& name) {
+            ReadProcedural(s);
+            const store::SourceMetadata metadata = RecordedMetadata(s, "apply_preset");
+            if (!metadata.presets || !metadata.preset_parameters) {
+                throw ApiError("UnsupportedProcedural", "apply_preset: the snapshot's recording did not observe its presets");
+            }
+            // Painter's own refusal (decision 412, s34), although the documentation says nothing is done.
+            if (!Listed(*metadata.presets, name)) {
+                throw core::ValueError("Preset name '" + name + "' not found in preset list (case sensitive search).");
+            }
+            const auto found = metadata.preset_parameters->find(name);
+            if (found == metadata.preset_parameters->end() || !std::holds_alternative<core::json::Object>(found->second.data)) {
+                throw ApiError("UnsupportedProcedural", "apply_preset: the recording gave no parameters for '" + name + "'");
+            }
+            const core::json::Object parameters = std::get<core::json::Object>(found->second.data);
+            auto args = SourceArgs(s);
+            args["preset"] = name;
+            Mutate("source.SourceSubstance.apply_preset", args, [&](core::Edit& edit) {
+                auto& ref = EditProcedural(edit, s);
+                ref.preset = name;
+                ref.params = parameters;
             });
         });
     SealClass(substance);

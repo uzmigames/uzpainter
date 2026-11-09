@@ -8,6 +8,7 @@
 - [ ] 2.4 phase3.2_proc-grunge-families accepted
 - [ ] 2.5 phase3.2_proc-filter-families accepted
 - [ ] 2.6 phase3.2_proc-material-families accepted
+- [ ] 2.7 Moved from `phase3.2_source-substance-presets-inputs` (decision 416): a material `mask_output` other than the output mapped to Height (P413-C r2/r3 one binary16 ulp lower than the exact r1 model; needs a reopen model or an owner decision-032 exception), the split template-channel stores of a Substance resource (BaseColor and any split channel other than User L32F, P413-D), the `source-substance-presets-inputs` r2 (it starts masked) and the material source's default resolution (not in the capture's metadata); until then each refuses before mutation naming this item
 
 ## 3. Integration
 - [ ] 3.1 Run the full Tier 2a certification for every certified asset on the owner's machine (unit sphere, bevelled cube, hat v6 low with its mesh maps × {1024, 2048, 4096} × {defaults, recipe sets, two boundary sets} × {recorded seed, one other}) and on each asset's held-out set, whose hash list was committed before its calibration (decision 222)

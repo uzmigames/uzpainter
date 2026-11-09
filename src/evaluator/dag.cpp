@@ -212,6 +212,7 @@ render::Result<DagSource> ResolveSource(const Context& ctx, const core::FillCont
             result.procedural = *image;
             writer.Str("procedural-snapshot").Str((*image)->signature).Str((*image)->rasterDigest)
                 .Str(core::json::WriteCanonical((*image)->provenance));
+            if ((*image)->materialHeight) writer.Str("material-height");
             break;
         }
         case core::SourceKind::vector:
@@ -229,8 +230,21 @@ render::Result<DagSource> ResolveSource(const Context& ctx, const core::FillCont
 render::Result<std::optional<DagSource>> SourceOf(const Context& ctx, const Layer& layer) {
     const core::FillContent& fill = *layer.fill;
     if (fill.source_mode == core::SourceMode::Material) {
-        return EvalFail(EvalErrorKind::UnsupportedSource,
-                        "Material source mode is a release gap (P3-PROC)", layer.uid);
+        // Painter's material fill activates Height only (decision 413, P413-A): its Height is the
+        // procedural snapshot of the output mapped to Height, through the provider's material rule;
+        // every other channel is left as the layers below give it.
+        if (ctx.channel != ChannelType::Height || !fill.active_channels.contains(ChannelType::Height)) {
+            return std::optional<DagSource>{};
+        }
+        if (!fill.material_source || fill.material_source->kind() != core::SourceKind::procedural) {
+            return EvalFail(EvalErrorKind::UnsupportedSource,
+                            "a material fill without a procedural material source is outside this profile "
+                            "(phase3.2_proc-material-families)",
+                            layer.uid);
+        }
+        render::Result<DagSource> source = ResolveSource(ctx, fill, *fill.material_source, layer.uid, false);
+        if (!source) return render::Unexpected(source.error());
+        return std::optional<DagSource>{std::move(*source)};
     }
     if (!fill.active_channels.contains(ctx.channel)) return std::optional<DagSource>{};
     const auto sourceIt = fill.sources.find(ctx.channel);
@@ -276,7 +290,7 @@ std::optional<std::string> RecordedBlurRefusal(const Context& ctx, const core::E
         return "filter effects in content stacks are outside this profile (P3-PROC)";
     }
     const core::ProceduralRef& ref = *effect.procedural;
-    if (!ref.params.empty() || ref.preset || !ref.image_inputs.empty() || !ref.output_mapping.empty() ||
+    if (!ref.params.empty() || ref.preset || !ref.image_inputs.empty() || !ref.input_sources.empty() || !ref.output_mapping.empty() ||
         ref.mask_output || ref.resolution_override) {
         return "the Blur filter with parameters, a preset, inputs, an output mapping or a resolution "
                "override is not recorded" + owner;

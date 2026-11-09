@@ -9,12 +9,14 @@
 #include <initializer_list>
 #include <iostream>
 #include <iterator>
+#include <map>
 #include <memory>
 #include <optional>
 #include <set>
 #include <stdexcept>
 #include <string_view>
 
+#include "evaluator/arith.h"
 #include "evaluator/evaluator.h"
 #include "evaluator/profile.h"
 #include "evaluator/result_cache.h"
@@ -241,6 +243,341 @@ int RunSnapshotSource(const std::filesystem::path& path, std::optional<int64_t> 
     store::ExportBundle(path, bundle);
     store::ImportBundle(bundle, path.parent_path() / "snapshot-imported.uzp");
     std::cout << "snapshot source: exact CPU readout, warm cache refusals, atomic edits, save and bundle passed\n";
+    return 0;
+}
+
+// Material fills served from a project-private multi-output capture (decision 413, P413-A/C):
+// authored synthetic snapshots of one resource in five states, a material fill evaluated through
+// its Height channel only (`tz16(float32(2 x - 1))` of the output mapped to Height), the mask rule,
+// plugged input sources in the signature and the codec. The snapshots stay in the project for the
+// Python half of the fixture (tests/procedural/test_material_snapshot_source.py); the native
+// material layer is removed again. Authored values only, not Painter data.
+int RunSnapshotMaterial(const std::filesystem::path& path) {
+    using namespace uzp;
+    namespace json = core::json;
+    const std::string url = "resource://starter_assets/authored/material?version=1.sbsar";
+    auto opened = store::ProjectStore::Open(path);
+    Check(opened.report.ok(), "material: initial project integrity");
+    core::Document document(std::move(opened.state));
+    opened.store->Attach(document);
+    auto& store = *opened.store;
+    std::string bitmap;
+    for (const auto& [sha256, entries] : document.snapshot().project->resources) {
+        for (const core::ResourceMeta& meta : entries) {
+            if (meta.name == "grey-a") bitmap = sha256;
+        }
+    }
+    Check(!bitmap.empty(), "material: the fixture imported grey-a");
+    const json::Object refused{{"raised", json::Object{{"type", std::string("EditionContextException")},
+                                                        {"message", std::string("Only valid in multi channel context")}}}};
+    const json::Object single{{"raised", json::Object{{"type", std::string("EditionContextException")},
+                                                       {"message", std::string("Only valid in single channel context")}}}};
+    const json::Object contexts{
+        {"split", json::Object{{"output_mapping", json::Object{{"returned", std::string("OutputMapping")}}},
+                               {"mask_output", refused}}},
+        {"material", json::Object{{"output_mapping", json::Object{{"Height", std::string("height")},
+                                                                   {"Normal", std::string("normal")}}},
+                                  {"mask_output", std::string("channels_Alpha")},
+                                  {"active_channels", json::Array{std::string("Height")}},
+                                  {"active_output", single}}}};
+    const json::Object defaults{{"amount", 0.5}, {"$randomseed", int64_t{0}}};
+    const json::Object bumpy{{"amount", 0.75}, {"$randomseed", int64_t{0}}};
+    const json::Object flat{{"amount", 0.25}, {"$randomseed", int64_t{0}}};
+    const json::Object unplugged{
+        {"class", std::string("SourceBitmap")},
+        {"resource_id", json::Object{{"raised", json::Object{{"type", std::string("ValueError")},
+                                                            {"message", std::string("authored alias refusal")}}}}},
+        {"colour_space", std::string("Data")}};
+    struct State {
+        const char* name;
+        std::optional<std::string> preset;
+        json::Object params;
+        std::optional<procedural::InputSource> input;
+        json::Object inputSource;
+        std::vector<std::string> outputs;
+    };
+    const procedural::InputSource colour{{}, {}, std::array<double, 3>{0.25, 0.5, 0.75}};
+    const procedural::InputSource black{{}, {}, std::array<double, 3>{0.0, 0.0, 0.0}};
+    const procedural::InputSource grey{bitmap, "Data", std::nullopt};
+    const std::vector<State> states{
+        {"defaults", std::nullopt, defaults, std::nullopt, unplugged, {"height", "normal"}},
+        {"preset", "Bumpy", bumpy, std::nullopt, unplugged, {"height", "normal"}},
+        {"colour", "Bumpy", bumpy, colour,
+         json::Object{{"class", std::string("SourceUniformColor")}, {"working", json::Array{0.25, 0.5, 0.75}}}, {"height"}},
+        {"bitmap", "Bumpy", bumpy, grey,
+         json::Object{{"class", std::string("SourceBitmap")}, {"sha256", bitmap}, {"colour_space", std::string("Data")}},
+         {"height"}},
+        {"removed", "Bumpy", bumpy, black,
+         json::Object{{"class", std::string("SourceUniformColor")}, {"working", json::Array{0.0, 0.0, 0.0}}}, {"height"}},
+    };
+    const auto rasterOf = [](size_t state, const std::string& output) {
+        // Distinct values in [0, 1): a ramp per state and output, every texel exactly representable.
+        std::string bytes(128 * 128 * 4, '\0');
+        for (size_t i = 0; i < 128 * 128; ++i) {
+            const float v = static_cast<float>((i * 37 + state * 1009 + (output == "normal" ? 4099 : 0)) % 8192) / 8192.0f;
+            std::memcpy(bytes.data() + i * 4, &v, 4);
+        }
+        return bytes;
+    };
+    int key = 0;
+    const auto submit = [&](const std::function<void(core::Edit&)>& call) {
+        const auto id = "snapshot-material-" + std::to_string(++key);
+        return store.Submit(document, {"snapshot-material-test", json::Object{}, id, document.revision()}, call);
+    };
+    std::map<std::string, std::string> rasters;  // "<state>/<output>" -> bytes
+    for (size_t index = 0; index < states.size(); ++index) {
+        const State& state = states[index];
+        for (const std::string& output : state.outputs) {
+            procedural::ProceduralRequest request;
+            request.asset = core::ParseAssetUrl("uzasset://snapshot/" + core::Sha256Hex(url) + "@1");
+            for (const auto& [name, value] : state.params) {
+                request.params[name] = *procedural::ParamFromJson(value);
+            }
+            request.preset = state.preset;
+            if (state.input) request.sourceInputs["curvature"] = *state.input;
+            request.meshClass = "quad";
+            request.outputId = output;
+            request.output = {128, procedural::ChannelFormat::F32, "raw", 1};
+            request.settings = procedural::EvaluationSettings(*document.snapshot().project);
+            store::SourceMetadata metadata;
+            metadata.image_outputs = {"normal", "height"};
+            metadata.image_inputs = std::vector<std::string>{"curvature"};
+            metadata.presets = std::vector<std::string>{"Bumpy", "Flat"};
+            metadata.properties = json::Object{};
+            metadata.typed_effective_parameters = state.params;
+            metadata.observed_resource_id =
+                store::ObservedResourceId{url, "starter_assets", "authored/material", "1.sbsar"};
+            metadata.preset_parameters = json::Object{{"Bumpy", bumpy}, {"Flat", flat}};
+            metadata.input_sources = json::Object{{"curvature", state.inputSource}};
+            metadata.contexts = contexts;
+            std::string bytes = rasterOf(index, output);
+            rasters[std::string(state.name) + "/" + output] = bytes;
+            auto recorded = submit([&](core::Edit& edit) { procedural::RecordSnapshot(store, edit, request, bytes, metadata); });
+            Check(recorded.result && recorded.result->status == core::ResultStatus::committed,
+                  "material: record an authored state snapshot");
+        }
+    }
+
+    // The codec: plugged input sources travel only when present, both forms, and validate.
+    core::ProceduralRef plugged;
+    plugged.asset = "uzasset://snapshot/" + core::Sha256Hex(url) + "@1";
+    plugged.params = bumpy;
+    plugged.preset = "Bumpy";
+    plugged.input_sources["curvature"] = core::ProceduralInputSource{{}, {}, std::array<double, 3>{0.25, 0.5, 0.75}};
+    plugged.input_sources["detail"] = core::ProceduralInputSource{bitmap, "Data", std::nullopt};
+    plugged.output_mapping = {{"Height", "height"}};
+    const json::Value written = core::ProceduralRefToJson(plugged);
+    Check(json::WriteCanonical(std::get<json::Object>(written.data).at("input_sources")) ==
+              R"({"curvature":{"working_colour":[0.25,0.5,0.75]},"detail":{"bitmap_sha256":")" + bitmap +
+                  R"(","colour_space":"Data"}})",
+          "material: input sources are written by working colour and by bitmap hash and colour space");
+    Check(core::ProceduralRefFromJson(written, "ref") == plugged, "material: input sources read back exactly");
+    core::ProceduralRef bare = plugged;
+    bare.input_sources.clear();
+    Check(!std::get<json::Object>(core::ProceduralRefToJson(bare).data).contains("input_sources"),
+          "material: a reference without plugged inputs writes no input_sources (earlier bytes unchanged)");
+    const auto refusesRead = [&](json::Value sources) {
+        json::Value changed = written;
+        std::get<json::Object>(changed.data)["input_sources"] = std::move(sources);
+        try {
+            (void)core::ProceduralRefFromJson(changed, "ref");
+        } catch (const std::exception&) {
+            return true;
+        }
+        return false;
+    };
+    Check(refusesRead(json::Object{}), "material: an empty input_sources refuses");
+    Check(refusesRead(json::Object{{"x", json::Object{{"working_colour", json::Array{0.25, 0.5}}}}}),
+          "material: a two-component working colour refuses");
+    Check(refusesRead(json::Object{{"x", json::Object{{"bitmap_sha256", std::string("ABC")}, {"colour_space", std::string("Data")}}}}),
+          "material: a bitmap input without a lowercase SHA-256 refuses");
+    Check(refusesRead(json::Object{{"x", json::Object{{"working_colour", json::Array{0.0, 0.0, 0.0}}, {"extra", true}}}}),
+          "material: an input source with an unknown member refuses");
+
+    // A material fill evaluated through Height only.
+    const core::Project* before = document.snapshot().project.get();
+    const core::Stack& stack0 = before->texture_sets.front().stacks.front();
+    Check(stack0.channels.contains(core::ChannelType::Height) && stack0.channels.contains(core::ChannelType::BaseColor),
+          "material: the template stack has Height and BaseColor");
+    auto templates = std::make_shared<const evaluator::TemplateLibrary>(
+        evaluator::TemplateLibrary::Load(evaluator::TemplateLibrary::DefaultDirectory()));
+    const auto evaluate = [&](const core::Project& project, core::ChannelType channel) {
+        evaluator::CpuEvaluator cpu(templates, {1ull << 30, 1ull << 20});
+        evaluator::EvaluateRequest evaluation;
+        evaluation.textureSet = project.texture_sets.front().id;
+        evaluation.stack = project.texture_sets.front().stacks.front().id;
+        evaluation.channel = channel;
+        evaluation.templateId = project.settings.template_id;
+        evaluation.procedurals = std::make_shared<procedural::SnapshotSourceProvider>(store, project);
+        return cpu.Evaluate(project, evaluation);
+    };
+    const auto baseColourBefore = evaluate(*before, core::ChannelType::BaseColor);
+    const auto normalBefore = evaluate(*before, core::ChannelType::Normal);
+    Check(bool(baseColourBefore) && bool(normalBefore), "material: the stack evaluates without the material");
+    core::ProceduralRef ref;
+    ref.asset = plugged.asset;
+    ref.params = defaults;
+    ref.output_mapping = {{"Height", "height"}, {"Normal", "normal"}};
+    core::Id layer = 0;
+    const auto supported = [&](core::Edit& edit) {
+        procedural::SnapshotSourceProvider provider(store, edit.project());
+        evaluator::RequireSupported(edit.base(), edit.project(), {}, &provider);
+    };
+    auto bound = submit([&](core::Edit& edit) {
+        auto& stack = edit.project().texture_sets.front().stacks.front();
+        core::Layer fill;
+        fill.uid = layer = edit.AllocateId();
+        fill.name = "material";
+        fill.kind = core::LayerKind::fill;
+        fill.fill.emplace();
+        fill.fill->source_mode = core::SourceMode::Material;
+        fill.fill->material_source = core::Source{core::ProceduralSource{ref}};
+        fill.fill->active_channels = {core::ChannelType::Height};
+        fill.blending[core::ChannelType::Height] = core::Blending{core::BlendingMode::LinearDodge, 1.0, {}};
+        stack.root_layers.insert(stack.root_layers.begin(), std::move(fill));
+        supported(edit);
+    });
+    if (!bound.result || bound.result->status != core::ResultStatus::committed) {
+        throw std::runtime_error("material: the material fill was refused: " +
+                                 (bound.result ? json::WriteCanonical(bound.result->ToJson()) : std::string("no result")));
+    }
+    const auto expectHeight = [&](const core::Project& project, const std::string& raster, const char* message) {
+        const auto output = evaluate(project, core::ChannelType::Height);
+        if (!output) throw std::runtime_error(std::string(message) + ": " + output.error().reason);
+        Check(output->tiles.size() == 1 && output->tiles[0].texels.size() == 128 * 128 * 2, message);
+        for (size_t i = 0; i < 128 * 128; ++i) {
+            float x = 0.0f;
+            std::memcpy(&x, raster.data() + i * 4, 4);
+            const float twice = 2.0f * x;
+            const uint16_t want = evaluator::arith::HalfTowardZero(twice - 1.0f);
+            uint16_t got = 0;
+            std::memcpy(&got, output->tiles[0].texels.data() + i * 2, 2);
+            if (got != want) throw std::runtime_error(std::string(message) + ": texel " + std::to_string(i));
+        }
+    };
+    expectHeight(*document.snapshot().project, rasters.at("defaults/height"),
+                 "material: Height is tz16(float32(2 x - 1)) of the output mapped to Height");
+    const auto sameAs = [&](const auto& a, const auto& b) {
+        return a && b && a->tiles.size() == b->tiles.size() &&
+               std::equal(a->tiles.begin(), a->tiles.end(), b->tiles.begin(), [](const auto& x, const auto& y) {
+                   return x.constant == y.constant && x.texels == y.texels;
+               });
+    };
+    Check(sameAs(evaluate(*document.snapshot().project, core::ChannelType::BaseColor), baseColourBefore) &&
+              sameAs(evaluate(*document.snapshot().project, core::ChannelType::Normal), normalBefore),
+          "material: BaseColor and Normal are untouched by the material fill");
+
+    const auto editRef = [&](const std::function<void(core::ProceduralRef&, core::FillContent&)>& change) {
+        return submit([&](core::Edit& edit) {
+            auto& fill = *core::FindLayer(edit.project(), layer)->fill;
+            change(std::get<core::ProceduralSource>(fill.material_source->value).ref, fill);
+            supported(edit);
+        });
+    };
+    const auto refusedAtomically = [&](const std::function<void(core::ProceduralRef&, core::FillContent&)>& change,
+                                       const std::string& owner, const char* message) {
+        const auto revision = document.revision();
+        auto outcome = editRef(change);
+        const std::string text = outcome.result ? json::WriteCanonical(outcome.result->ToJson()) : std::string();
+        Check(outcome.result && outcome.result->status != core::ResultStatus::committed && document.revision() == revision &&
+                  text.find(owner) != std::string::npos,
+              message);
+    };
+    // P413-C: a mask output other than Height's output is refused before any change.
+    refusedAtomically([](core::ProceduralRef& r, core::FillContent&) { r.mask_output = "normal"; },
+                      "phase3.3_procedural-families item 2.7", "material: another mask output is refused, naming item 2.7");
+    refusedAtomically([](core::ProceduralRef& r, core::FillContent&) { r.params["amount"] = 0.625; },
+                      "phase3.2_proc-material-families", "material: an unrecorded state is refused");
+    refusedAtomically([](core::ProceduralRef& r, core::FillContent&) { r.output_mapping.erase("Height"); },
+                      "phase3.2_proc-material-families", "material: no output mapped to Height is refused");
+    refusedAtomically([](core::ProceduralRef&, core::FillContent& f) { f.projection.uv.filtering_mode = core::FilteringMode::Nearest; },
+                      "phase3.2_proc-material-families", "material: another filter is refused");
+    auto masked = editRef([](core::ProceduralRef& r, core::FillContent&) { r.mask_output = "height"; });
+    Check(masked.result && masked.result->status == core::ResultStatus::committed,
+          "material: the mask output of Height's own output is admitted");
+    expectHeight(*document.snapshot().project, rasters.at("defaults/height"),
+                 "material: the mask output of Height's own output leaves Height unchanged");
+    auto swapped = editRef([](core::ProceduralRef& r, core::FillContent&) {
+        r.mask_output.reset();
+        r.output_mapping = {{"Height", "normal"}, {"Normal", "height"}, {"BaseColor", "normal"}};
+    });
+    Check(swapped.result && swapped.result->status == core::ResultStatus::committed, "material: a swapped mapping is admitted");
+    expectHeight(*document.snapshot().project, rasters.at("defaults/normal"), "material: Height follows the mapping");
+    Check(sameAs(evaluate(*document.snapshot().project, core::ChannelType::BaseColor), baseColourBefore),
+          "material: a mapped BaseColor stays untouched (Height is the only active channel)");
+    // A preset and plugged inputs join the signature.
+    auto preset = editRef([&](core::ProceduralRef& r, core::FillContent&) {
+        r.output_mapping = {{"Height", "height"}, {"Normal", "normal"}};
+        r.preset = "Bumpy";
+        r.params = bumpy;
+    });
+    Check(preset.result && preset.result->status == core::ResultStatus::committed, "material: the preset state is admitted");
+    expectHeight(*document.snapshot().project, rasters.at("preset/height"), "material: the preset state serves its snapshot");
+    for (const auto& [state, input] : std::vector<std::pair<std::string, procedural::InputSource>>{
+             {"colour", colour}, {"bitmap", grey}, {"removed", black}}) {
+        auto plug = editRef([&, input = input](core::ProceduralRef& r, core::FillContent&) {
+            r.input_sources["curvature"] =
+                core::ProceduralInputSource{input.bitmapSha256, input.colourSpace, input.workingColour};
+        });
+        Check(plug.result && plug.result->status == core::ResultStatus::committed, "material: a plugged input state is admitted");
+        expectHeight(*document.snapshot().project, rasters.at(state + "/height"), "material: a plugged input selects its snapshot");
+    }
+    refusedAtomically([&](core::ProceduralRef& r, core::FillContent&) {
+        r.input_sources["curvature"] = core::ProceduralInputSource{{}, {}, std::array<double, 3>{0.5, 0.5, 0.5}};
+    }, "phase3.2_proc-material-families", "material: an unrecorded input colour is refused");
+    // A split User fill: a preset and plugged inputs join its signature too; a mask output does not.
+    {
+        const procedural::SnapshotSourceProvider provider(store, *document.snapshot().project);
+        const core::Project& project = *document.snapshot().project;
+        core::FillContent split;
+        split.active_channels = {core::ChannelType::User0};
+        core::ProceduralRef user = ref;
+        user.output_mapping = {{"User0", "height"}};
+        user.preset = "Bumpy";
+        user.params = bumpy;
+        // The material's current state: the preset with the input removed (uniform black).
+        user.input_sources["curvature"] = core::ProceduralInputSource{{}, {}, std::array<double, 3>{0.0, 0.0, 0.0}};
+        const auto admitted = procedural::SnapshotFillRequest(project, project.texture_sets.front(), core::ChannelType::User0,
+                                                              core::ChannelFormat::L32F, split, user, layer, false);
+        Check(bool(admitted) && procedural::SignatureHash(*admitted) ==
+                                    procedural::SignatureHash(*procedural::SnapshotMaterialRequest(
+                                        project, project.texture_sets.front(),
+                                        core::FindLayer(project, layer)->fill.value(),
+                                        std::get<core::ProceduralSource>(
+                                            core::FindLayer(project, layer)->fill->material_source->value).ref,
+                                        layer)),
+              "material: a split User source of the same state asks for the same signature");
+        user.mask_output = "height";
+        Check(!procedural::SnapshotFillRequest(project, project.texture_sets.front(), core::ChannelType::User0,
+                                               core::ChannelFormat::L32F, split, user, layer, false),
+              "material: a split source keeps refusing a mask output");
+    }
+    // Saved and reopened, the plugged reference reads back.
+    store.Save(document);
+    store.Close();
+    {
+        auto reopened = store::ProjectStore::Open(path);
+        Check(reopened.report.ok(), "material: integrity after save");
+        const core::Layer* found = core::FindLayer(reopened.state.project, layer);
+        Check(found && found->fill && found->fill->material_source &&
+                  std::get<core::ProceduralSource>(found->fill->material_source->value).ref.input_sources.at("curvature") ==
+                      core::ProceduralInputSource{{}, {}, std::array<double, 3>{0.0, 0.0, 0.0}},
+              "material: the plugged input source survives save and reopen");
+        core::Document again(std::move(reopened.state));
+        reopened.store->Attach(again);
+        auto removed = reopened.store->Submit(again, {"snapshot-material-test", json::Object{}, "snapshot-material-remove",
+                                                      again.revision()},
+                                              [&](core::Edit& edit) {
+                                                  auto& roots = edit.project().texture_sets.front().stacks.front().root_layers;
+                                                  roots.erase(std::remove_if(roots.begin(), roots.end(),
+                                                                             [&](const core::Layer& l) { return l.uid == layer; }),
+                                                              roots.end());
+                                              });
+        Check(removed.result && removed.result->status == core::ResultStatus::committed, "material: remove the native layer");
+        reopened.store->Save(again);
+        reopened.store->Close();
+    }
+    std::cout << "snapshot material: Height rule, untouched channels, mask rule, signature states and codec passed\n";
     return 0;
 }
 

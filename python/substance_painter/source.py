@@ -3,18 +3,22 @@ module (fill sources). Documented symbols only; the implementation is `uzpainter
 (`python/FACADE.md`)."""
 
 from uzpainter_facade.nodes import (
+    OutputMapping,
     SourceBitmap,
     SourceMode,
+    SourceReference,
     SourceSubstance,
     SourceUniformColor,
 )
 from uzpainter_facade.procedural import ResolutionMode, ResolutionOverride
 
 __all__ = [
+    "OutputMapping",
     "ResolutionMode",
     "ResolutionOverride",
     "SourceBitmap",
     "SourceMode",
+    "SourceReference",
     "SourceSubstance",
     "SourceUniformColor",
 ]

@@ -217,6 +217,20 @@ private:
     void Procedural(const ProceduralRef& ref, bool mask, const std::string& what) {
         CheckAsset(ref.asset, what + " asset");
         for (const auto& [input, binding] : ref.image_inputs) Binding(binding, what + " image input '" + input + "'");
+        for (const auto& [input, plugged] : ref.input_sources) {
+            const std::string where = what + " input source '" + input + "'";
+            if (input.empty()) Fail(what + ": an input source has no name");
+            if (ref.image_inputs.contains(input)) Fail(where + " is also a raster image input");
+            if (plugged.working_colour) {
+                if (!plugged.bitmap_sha256.empty() || !plugged.colour_space.empty()) {
+                    Fail(where + " is both a colour and a bitmap");
+                }
+                for (const double value : *plugged.working_colour) CheckFinite(value, where + " working colour");
+            } else {
+                Resource(plugged.bitmap_sha256, where);
+                if (plugged.colour_space.empty()) Fail(where + ": a plugged bitmap needs its colour space");
+            }
+        }
         for (const auto& [channel, output] : ref.output_mapping) {
             const auto type = FromString<ChannelType>(channel);
             if (!type) Fail(what + ": output_mapping key '" + channel + "' is not a ChannelType");

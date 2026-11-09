@@ -792,7 +792,7 @@ std::string FrozenHostDomainProblem(const core::Project& project, FrozenHostNode
         return "the host must hold one active Split source on User0 (L32F)";
     }
     const auto* source = std::get_if<core::ProceduralSource>(&fill.sources.at(ChannelType::User0).value);
-    if (source == nullptr || !SnapshotPin(source->ref.asset) || source->ref.preset || !source->ref.image_inputs.empty() ||
+    if (source == nullptr || !SnapshotPin(source->ref.asset) || source->ref.preset || !source->ref.image_inputs.empty() || !source->ref.input_sources.empty() ||
         source->ref.mask_output || source->ref.output_mapping.size() != 1 ||
         !source->ref.output_mapping.contains("User0") || source->ref.output_mapping.at("User0").empty()) {
         return "the host source must be a snapshot reference with one User0 output and no preset, input or mask output";
@@ -817,7 +817,7 @@ std::string FrozenHostDomainProblem(const core::Project& project, FrozenHostNode
     }
     // The observed Filter keeps V1's reference boundary: three getter observations authenticate no
     // preset and no image input, whatever resource it would name.
-    if (filter.procedural->preset || !filter.procedural->image_inputs.empty()) {
+    if (filter.procedural->preset || !filter.procedural->image_inputs.empty() || !filter.procedural->input_sources.empty()) {
         return "the Filter reference may hold no preset and no image input";
     }
     for (const auto& [name, parameter] : filter.procedural->params) {

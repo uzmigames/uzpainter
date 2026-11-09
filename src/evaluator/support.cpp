@@ -184,7 +184,33 @@ Gap SourceGap(const core::Project& project, const core::Stack* stack, const core
 
 Gap FillGap(const core::Project& project, const core::Stack* stack, const core::FillContent& fill, core::Id node, const IProceduralSourceProvider* procedurals, bool deferProcedural) {
     if (fill.source_mode == core::SourceMode::Material) {
-        return Make(node, "the Material source mode", "phase3.2_proc-material-families");
+        // A material fill is admitted only as a procedural snapshot the provider serves through its
+        // material rule (decision 413): Height of the output mapped to Height, the mask rule of
+        // P413-C. Projections, symmetry and colour management are the provider's domain checks.
+        if (deferProcedural && fill.material_source && fill.material_source->kind() == SourceKind::procedural) {
+            return std::nullopt;
+        }
+        if (!procedurals || !stack || !fill.material_source ||
+            fill.material_source->kind() != SourceKind::procedural) {
+            return Make(node, "the Material source mode", "phase3.2_proc-material-families");
+        }
+        const core::TextureSet* set = nullptr;
+        for (const auto& candidate : project.texture_sets)
+            for (const auto& candidateStack : candidate.stacks)
+                if (candidateStack.id == stack->id) set = &candidate;
+        const auto height = stack->channels.find(ChannelType::Height);
+        if (!set || height == stack->channels.end()) {
+            return Make(node, "a material fill whose stack has no Height channel", "phase3.2_proc-material-families");
+        }
+        const auto admitted = procedurals->Resolve(project, *set, ChannelType::Height, height->second.format, fill,
+                                                   std::get<core::ProceduralSource>(fill.material_source->value).ref,
+                                                   node, false);
+        if (!admitted) {
+            const std::string reason = admitted.error().reason;
+            const bool mask = reason.find("phase3.3_procedural-families item 2.7") != std::string::npos;
+            return Make(node, reason, mask ? "phase3.3_procedural-families item 2.7" : "phase3.2_proc-material-families");
+        }
+        return std::nullopt;
     }
     switch (fill.projection.mode) {
         case ProjectionMode::Fill:

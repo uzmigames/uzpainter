@@ -238,8 +238,8 @@ participates in native transactions. Unsupported final states roll back, while t
 unsupported values may be restored before commit. Source replacement or deletion makes
 existing handles fail. Reading recorded presets, properties, image inputs and outputs,
 typed parameters and the observed ResourceID is covered under "Recorded source metadata"
-below. Stored asset defaults, preset application, image-input editing and multioutput source
-binding still require their own metadata and implementation.
+below. Stored asset defaults still require their own metadata. Preset application,
+image-input editing and multi-output material binding are described under "Material sources".
 
 ## Recorded source metadata
 
@@ -342,6 +342,74 @@ replay, because effect sources hold no recorded observations. No other capture d
 parity is established. The legacy `/2` capture's replay
 (`tests/python/test_snapshot_capture_replay.py`) keeps its two reported differences (internal pin,
 integral float read as an integer).
+
+## Material sources (decision 416)
+
+`FillLayerNode.set_material_source(ResourceID)` binds the project's own multi-output capture
+(above) of that resource. The capture is found by its observed URL (schema `/3`). It must hold
+exactly one recorded default parameter set with no preset and no plugged input, and its `/4`
+material context. Otherwise the call raises `NotYetSupported` before any change. The fill
+switches to `SourceMode.Material`. Its active channels are the recorded ones, which for the
+decision-412 starter material is Height only. Its reference holds the recorded output mapping,
+no mask output (Painter's default) and no resolution override.
+
+The evaluator composes only Height. Height is `tz16(float32(2 x - 1))`, where `x` is the L32F
+view of the output that `output_mapping` gives Height, and `tz16` is binary16 rounding toward
+zero. This is the Height channel's own rule for float operands, applied through the fill's Height
+blending. Every other channel is untouched. A mask output equal to Height's output leaves Height
+unchanged. Any other mask output is refused by the support check before any change, naming
+`phase3.3_procedural-families item 2.7`. Its r1 is fitted, but Painter's value after save and
+reopen is one binary16 ulp lower (P413-C).
+
+The material's `SourceSubstance` covers these members:
+
+- **Snapshot reads.** `get_parameters`, `get_properties`, `get_preset_list`, `image_inputs`,
+  `image_outputs` and `resource_id` read the snapshot of Height's output at the current exact
+  signature.
+- **`active_output`.** Reading or setting it raises Painter's `EditionContextException` ("Only
+  valid in single channel context").
+- **`apply_preset(name)`.** It sets the preset and the parameters that Painter's own
+  `apply_preset` gave for that preset (`/4` `preset_parameters`). A name that is not recorded
+  raises Painter's `ValueError`.
+- **Image inputs.** `get_source(name)` returns the input's source. A plugged working colour is a
+  `SourceUniformColor`. A plugged bitmap is a `SourceBitmap` that reads back as `Data`. An
+  unplugged input is the `SourceBitmap` Painter returns, whose `resource_id` raises the recorded
+  `ValueError`. `set_source` takes a working-space `Color` or an imported bitmap's `ResourceID`.
+  `reset_source` unplugs the input, and `remove_source` plugs a working black colour. Plugged
+  inputs are stored as `ProceduralRef.input_sources`, which is written only when non-empty, and
+  they enter the signature.
+- **`output_mapping`.** It is an `OutputMapping`. Iteration gives the mapped channel types and
+  subscription gives the output. An unmapped channel raises `ValueError("output not found")`.
+  Assigning an item to a listed output edits the source.
+- **`mask_output`.** It reads the stored output or the recorded default. Assigning the default
+  back raises `ValueError("Invalid output name ...")`.
+
+On a split source, the `output_mapping` property returns an `OutputMapping` whose iteration,
+`len` and subscription raise `EditionContextException` ("Only valid in multi channel context").
+`mask_output` raises the same.
+
+Every edit that no recording observed refuses before any change. This covers:
+
+- `set_parameters` and the `resolution` setter on a material;
+- a whole mapping assigned at once, an unlisted output or input name, a mask on a split source;
+- a non-working colour, or an anchor reference (`phase4.1_nodes-instances-anchors`).
+
+The material's `resolution` getter raises `UnsupportedProcedural`, because the capture records no
+default resolution. Split sources of a Substance resource on a template or User RGB channel stay
+unbound. They are refused by the support check and `assets bind-snapshot`, and their stores are
+not derivable from the captured float views (P413-D).
+
+Evidence: `tests/python/test_material_source_replay.py` replays these goldens over the private
+decision-413 capture project and compares them exactly with the decision-112 trace:
+
+- `source-substance-channels-material-only` and the eight unmasked P413-A state goldens;
+- `source-substance-masked-by-height` and `-masked-by-normal-swap` (r1, r2 and r3);
+- `source-substance-presets-inputs` r1 up to s88;
+- the material steps of `source-substance-mapping-access`.
+
+The outputs it does not compare are listed in the test with their reasons. Authored native
+coverage is `tests/procedural/test_material_snapshot_source.py` (`uzp-export-tests
+snapshot-material`).
 
 ## Generator and filter effect sources
 

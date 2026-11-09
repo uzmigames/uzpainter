@@ -56,7 +56,7 @@ struct Domain {
 
 void ReferenceDomain(const core::ProceduralRef& ref) {
     Require(core::IsObservationPin(ref.asset), "the reference is not an observation descriptor pin");
-    Require(!ref.preset && ref.image_inputs.empty(), "presets and external procedural inputs are outside V1");
+    Require(!ref.preset && ref.image_inputs.empty() && ref.input_sources.empty(), "presets and external procedural inputs are outside V1");
     for (const auto& [name, value] : ref.params) {
         (void)name;
         Require(store::ParamByValue(value).has_value(), "unsupported core parameter type");

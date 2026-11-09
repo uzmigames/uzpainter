@@ -185,6 +185,31 @@
         "params": { "type": "object" },
         "preset": { "$ref": "#/$defs/optionalString" },
         "image_inputs": { "type": "object", "additionalProperties": { "$ref": "#/$defs/resourceBinding" } },
+        "input_sources": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": ["working_colour"],
+                "additionalProperties": false,
+                "properties": {
+                  "working_colour": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "number" } }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["bitmap_sha256", "colour_space"],
+                "additionalProperties": false,
+                "properties": {
+                  "bitmap_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                  "colour_space": { "$ref": "#/$defs/nonEmpty" }
+                }
+              }
+            ]
+          }
+        },
         "output_mapping": {
           "type": "object",
           "propertyNames": { "$ref": "#/$defs/channelType" },

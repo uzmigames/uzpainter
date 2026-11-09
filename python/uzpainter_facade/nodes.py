@@ -351,14 +351,27 @@ class SourceBitmap:
 
 
 class SourceSubstance:
-    """A stored procedural source; edits must match an admitted project snapshot."""
+    """A stored procedural source; edits must match an admitted project snapshot.
 
-    __slots__ = ("_channel", "_effect", "_node", "_origin")
+    A fill's material source (`material`, decision 413) is served from a multi-output capture:
+    its `output_mapping`, `mask_output`, presets and image inputs reproduce the recorded
+    `source-substance-presets-inputs` and P413 probes; every unrecorded case refuses before any
+    change (`NotYetSupported`)."""
 
-    def __init__(self, node: int, channel: Any, effect: bool = False, origin: Any = None) -> None:
+    __slots__ = ("_channel", "_effect", "_material", "_node", "_origin")
+
+    def __init__(
+        self,
+        node: int,
+        channel: Any,
+        effect: bool = False,
+        origin: Any = None,
+        material: bool = False,
+    ) -> None:
         self._node = node
         self._channel = channel
         self._effect = effect
+        self._material = material
         # The native handle of an observation-origin source (decision 362): it carries the lease
         # captured when it was created, so it is kept rather than resolved again by UID.
         self._origin = origin
@@ -367,11 +380,97 @@ class SourceSubstance:
         if self._origin is not None:
             return self._origin
         node = _ls.get_node_by_uid(self._node)
-        # A generator or filter effect's get_source() takes no channel.
-        source = node.get_source() if self._effect else node.get_source(self._channel)
+        if self._material:
+            if node.source_mode() != SourceMode.Material:
+                raise ValueError("stale source: the fill no longer has this material source")
+            source = node.get_material_source()
+        else:
+            # A generator or filter effect's get_source() takes no channel.
+            source = node.get_source() if self._effect else node.get_source(self._channel)
         if not isinstance(source, uzpainter.source.SourceSubstance):
             raise ValueError("stale source: the node no longer has this procedural source")
         return source
+
+    # Multiple outputs, presets and image inputs (decisions 412, 413).
+
+    @property
+    def output_mapping(self) -> OutputMapping:
+        # The property reads on every source; on a split source each use of the mapping raises
+        # (`source-substance-mapping-access` s16-s31, both recordings).
+        self._native()
+        return OutputMapping(self)
+
+    @output_mapping.setter
+    def output_mapping(self, mapping: Any) -> None:
+        raise unrecorded("assigning a whole output mapping is unrecorded; assign its items")
+
+    @property
+    def mask_output(self) -> str:
+        native = self._native()
+        stored = native._mask_output()  # a split source raises Painter's context error
+        return str(stored) if stored is not None else self._default_mask()
+
+    @mask_output.setter
+    @edits
+    def mask_output(self, output: str) -> None:
+        native = self._native()
+        if not self._material:
+            raise unrecorded("mask_output on a split source is unrecorded")
+        if output == self._default_mask():
+            # Assigning the default back (`source-substance-presets-inputs` s79, both recordings).
+            raise ValueError(f"Invalid output name {output}")
+        if output not in self.image_outputs:
+            raise unrecorded(f"mask_output {output!r} is not a listed output; unrecorded")
+        native._set_mask_output(output)
+
+    def _default_mask(self) -> str:
+        return str(self._native()._material_context()["material"]["mask_output"])
+
+    @edits
+    def apply_preset(self, preset: str) -> None:
+        self._native().apply_preset(preset)
+
+    def _input(self, name: str) -> str:
+        if not self._material:
+            raise unrecorded("image inputs of a split source are unrecorded")
+        if name not in self.image_inputs:
+            raise unrecorded(f"image input {name!r} is not listed; unrecorded")
+        return name
+
+    def get_source(self, name: str) -> Any:
+        name = self._input(name)
+        return input_source(self, name, self._native()._input_source(name))
+
+    @edits
+    def set_source(self, name: str, source: Any) -> Any:
+        name = self._input(name)
+        native = self._native()
+        if isinstance(source, colour.Color):
+            space = source.color_space
+            if space is None or colour.color_space_name(space) != "Working":
+                raise unrecorded("an image input colour outside the working space is unrecorded")
+            native._set_input_colour(name, [float(v) for v in source.value_raw])
+        elif isinstance(source, (resource.ResourceID, resource.Resource)):
+            identifier = source.identifier() if isinstance(source, resource.Resource) else source
+            bound = resource.to_native(identifier)
+            # Painter reads a plugged bitmap back as Data (`source-substance-presets-inputs` s44).
+            native._set_input_bitmap(name, bound, "Data")
+            SESSION.bound_context[("input", self._node, name)] = identifier.context
+        elif isinstance(source, AnchorPointEffectNode):
+            raise uzpainter.NotYetSupported(
+                "anchor reference sources are release gaps (phase4.1_nodes-instances-anchors)"
+            )
+        else:
+            raise unrecorded(f"{source!r} as an image input source is unrecorded")
+        return self.get_source(name)
+
+    @edits
+    def reset_source(self, name: str) -> None:
+        self._native()._reset_input(self._input(name))
+
+    @edits
+    def remove_source(self, name: str) -> None:
+        self._native()._remove_input(self._input(name))
 
     @property
     def resource_id(self) -> resource.ResourceID:
@@ -414,6 +513,12 @@ class SourceSubstance:
     @property
     def resolution(self) -> ResolutionOverride:
         value = self._native().resolution
+        if value is None and self._material:
+            # The capture records no default resolution of a material source (decision 416).
+            raise uzpainter.UnsupportedProcedural(
+                "a material source's default resolution is not recorded "
+                "(phase3.3_procedural-families item 2.7)"
+            )
         if value is None:
             raise uzpainter.UnsupportedProcedural(
                 "default source resolution requires recorded asset metadata "
@@ -435,11 +540,175 @@ class SourceSubstance:
         )
 
     def __repr__(self) -> str:
+        if self._material:
+            return f"SourceSubstance({self._node}, material)"
         return f"SourceSubstance({self._node}, {self._channel})"
 
 
-for _source in (SourceUniformColor, SourceBitmap, SourceSubstance):
+# The owner every unrecorded multiple-output case names.
+OWNER = "(phase3.2_source-substance-presets-inputs)"
+
+
+def unrecorded(what: str) -> Exception:
+    """The refusal of a multiple-output case no recording observed, raised before any change."""
+    return uzpainter.NotYetSupported(f"{what} {OWNER}")
+
+
+class OutputMapping:
+    """A source's `output_mapping` (decision 413): channel types to output identifiers.
+
+    On a material source it reads and assigns the stored mapping item by item; iteration gives
+    the mapped channels, an unmapped channel raises Painter's `ValueError("output not found")`
+    (`source-substance-mapping-access` s33-s37). On a split source every use raises Painter's
+    `EditionContextException` (s17-s31). Assigning an item edits the source in one transaction."""
+
+    __slots__ = ("_source",)
+
+    def __init__(self, source: SourceSubstance) -> None:
+        self._source = source
+
+    def _items(self) -> dict[Any, str]:
+        mapping = self._source._native()._output_mapping()
+        return {getattr(ChannelType, name): str(output) for name, output in mapping.items()}
+
+    def __iter__(self) -> Any:
+        return iter(list(self._items()))
+
+    def __len__(self) -> int:
+        return len(self._items())
+
+    def __getitem__(self, channel: Any) -> str:
+        items = self._items()
+        if channel not in items:
+            raise ValueError("output not found")
+        return items[channel]
+
+    @edits
+    def __setitem__(self, channel: Any, output: str) -> None:
+        source = self._source
+        native = source._native()
+        native._output_mapping()  # a split source raises Painter's context error first
+        if not isinstance(channel, ChannelType):
+            raise TypeError("an output mapping key is a ChannelType")
+        if output not in source.image_outputs:
+            raise unrecorded(f"output {output!r} is not a listed output; unrecorded")
+        native._set_output_mapping(channel.name, output)
+
+    def __repr__(self) -> str:
+        return f"OutputMapping({self._source!r})"
+
+
+class InputUniformColor(SourceUniformColor):
+    """A uniform colour plugged into an image input, in the working space (s39, s43)."""
+
+    __slots__ = ("_input_name", "_owner")
+
+    def __init__(self, owner: SourceSubstance, name: str) -> None:
+        super().__init__(owner._node, None)
+        self._owner = owner
+        self._input_name = name
+
+    def get_color(self) -> colour.Color:
+        state = self._owner._native()._input_source(self._input_name)
+        if state is None or "working_colour" not in state:
+            raise ValueError("stale source: the image input no longer holds this colour")
+        return colour.Color(*state["working_colour"], "Working")
+
+    def set_color(self, color: Any) -> None:
+        raise unrecorded("editing an image input's colour in place is unrecorded")
+
+    def __repr__(self) -> str:
+        return f"SourceUniformColor({self._owner!r}, {self._input_name!r})"
+
+
+class InputBitmap(SourceBitmap):
+    """A bitmap plugged into an image input (s44, s48), or the source Painter returns for an
+    unplugged one, whose `resource_id` raises the recorded error (decision 413)."""
+
+    __slots__ = ("_input_name", "_owner")
+
+    def __init__(self, owner: SourceSubstance, name: str) -> None:
+        super().__init__(owner._node, None)
+        self._owner = owner
+        self._input_name = name
+
+    def _state(self) -> Any:
+        return self._owner._native()._input_source(self._input_name)
+
+    def _recorded(self) -> dict[str, Any]:
+        return dict(self._owner._native()._input_sources()[self._input_name])
+
+    @property
+    def resource_id(self) -> resource.ResourceID:
+        state = self._state()
+        if state is None:
+            raised = self._recorded().get("resource_id", {}).get("raised")
+            if raised is None or raised.get("type") != "ValueError":
+                raise unrecorded("the unplugged input's resource_id is unrecorded")
+            raise ValueError(str(raised["message"]))
+        if "bitmap_sha256" not in state:
+            raise ValueError("stale source: the image input no longer holds a bitmap")
+        for native in uzpainter.resource.list_project_resources():
+            if native.version == state["bitmap_sha256"]:
+                context = SESSION.bound_context.get(("input", self._owner._node, self._input_name))
+                return resource.from_native(native, context)
+        raise ValueError("stale source: the plugged bitmap is not a project resource")
+
+    def get_color_space(self) -> Any:
+        state = self._state()
+        if state is None:
+            recorded = self._recorded()
+            if "colour_space" not in recorded:
+                raise unrecorded("the unplugged input's colour space is unrecorded")
+            return colour.bitmap_space_member(str(recorded["colour_space"]))
+        return colour.bitmap_space_member(str(state["colour_space"]))
+
+    def set_color_space(self, color_space: Any) -> None:
+        raise unrecorded("an image input's colour space edit is unrecorded")
+
+    def reset_color_space(self) -> None:
+        raise unrecorded("an image input's colour space edit is unrecorded")
+
+    def list_available_color_spaces(self) -> list[Any]:
+        raise unrecorded("an image input's available colour spaces are unrecorded")
+
+    def __repr__(self) -> str:
+        return f"SourceBitmap({self._owner!r}, {self._input_name!r})"
+
+
+class SourceReference:
+    """An anchor reference source: a release gap (phase4.1_nodes-instances-anchors). The class
+    exists so that `isinstance` checks of Painter scripts run; constructing one refuses."""
+
+    __slots__ = ()
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        raise uzpainter.NotYetSupported(
+            "anchor reference sources are release gaps (phase4.1_nodes-instances-anchors)"
+        )
+
+
+def input_source(owner: SourceSubstance, name: str, state: Any) -> Any:
+    """The facade source of an image input's native state (None: unplugged)."""
+    if state is not None and "working_colour" in state:
+        return InputUniformColor(owner, name)
+    return InputBitmap(owner, name)
+
+
+for _source in (
+    SourceUniformColor,
+    SourceBitmap,
+    SourceSubstance,
+    OutputMapping,
+    SourceReference,
+    InputUniformColor,
+    InputBitmap,
+):
     _source.__module__ = SOURCE
+# Painter's classes as the recorder reads them (`type(value)`; s39, s44 of
+# `source-substance-presets-inputs`).
+InputUniformColor.__name__ = InputUniformColor.__qualname__ = "SourceUniformColor"
+InputBitmap.__name__ = InputBitmap.__qualname__ = "SourceBitmap"
 SourceMode = uzpainter.source.SourceMode
 
 
@@ -752,11 +1021,20 @@ class _Fill(Node):
             raise uzpainter.EditionContextException(MULTI_CONTEXT)
         if native.source_mode() != SourceMode.Material:
             raise RuntimeError("Fill is not in material edition mode")
-        return native.get_material_source()
+        native.get_material_source()
+        return SourceSubstance(self.uid(), None, material=True)
 
     @edits
     def set_material_source(self, source: Any) -> Any:
-        return self._native().set_material_source(source)
+        # A material is served from the project's own multi-output capture of the resource
+        # (decision 413): the Painter identifier selects its recorded default state.
+        if isinstance(source, resource.Resource):
+            source = source.identifier()
+        if not isinstance(source, resource.ResourceID):
+            raise unrecorded(f"{source!r} as a material source is unrecorded")
+        resource.refuse_observed(source)
+        self._native().set_material_source(source.url())
+        return SourceSubstance(self.uid(), None, material=True)
 
 
 def reset_to_default(native: Any, channel: Any) -> None:

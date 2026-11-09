@@ -8,6 +8,7 @@
 #include <expected>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -25,12 +26,30 @@ std::expected<UseContext, std::string> SnapshotUseContext(const core::Project& p
 /// The request a snapshot fill source asks for, from `project` alone (no store read): the
 /// provider's domain (a User L32F fill on the recorded 128px full-UV plane under Legacy, the
 /// identity UV or Fill projection with BilinearHQ and Repeat, one explicit scalar output mapping,
-/// no preset, image input or mask output), `SnapshotUseContext` and `RequestFor`, at a source
-/// resolution of 128. `SnapshotSourceProvider` admits only such a request; this does not say that
+/// no raster image input or mask output; a preset and plugged input sources join the signature),
+/// `SnapshotUseContext` and `RequestFor`, at a source
+/// resolution of 128. A fill in Material mode is `SnapshotMaterialRequest` (channel Height only). `SnapshotSourceProvider` admits only such a request; this does not say that
 /// a snapshot holds it.
 std::expected<ProceduralRequest, std::string> SnapshotFillRequest(
     const core::Project& project, const core::TextureSet& set, core::ChannelType channel, core::ChannelFormat format,
     const core::FillContent& fill, const core::ProceduralRef& ref, core::Id node, bool mask);
+
+/// Why a material fill whose mask output is not the output mapped to Height is refused (P413-C:
+/// such a mask is exact in the same session only; its save/reopen value differs).
+inline constexpr std::string_view kMaterialMaskRefusal =
+    "a material mask output other than the output mapped to Height is not recorded exactly "
+    "(phase3.3_procedural-families item 2.7)";
+
+/// The request a material fill (`SourceMode::Material`, decision 413, P413-A/C) asks for: the
+/// shared capture domain of `SnapshotFillRequest`, Height active and mapped, no raster image input,
+/// a mask output absent or equal to Height's output (`kMaterialMaskRefusal` otherwise); its preset
+/// and plugged input sources join the signature. The request is the raw F32 scalar view of the
+/// output mapped to Height. Only Height is evaluated: Painter's material fill activates Height only,
+/// as `tz16(float32(2 x - 1))` of that view (the Height bitmap rule).
+std::expected<ProceduralRequest, std::string> SnapshotMaterialRequest(const core::Project& project,
+                                                                      const core::TextureSet& set,
+                                                                      const core::FillContent& fill,
+                                                                      const core::ProceduralRef& ref, core::Id node);
 
 /// Provider lifetime must not outlive the store. Each revision owns its provider.
 class SnapshotSourceProvider final : public evaluator::IProceduralSourceProvider {

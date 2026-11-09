@@ -1,7 +1,9 @@
 #include "procedural/snapshot_source.h"
 
+#include <bit>
 #include <cstring>
 
+#include "evaluator/arith.h"
 #include "evaluator/error.h"
 #include "procedural/admission.h"
 #include "procedural/snapshot_backend.h"
@@ -112,6 +114,25 @@ render::Result<std::shared_ptr<const evaluator::ProceduralImage>> SnapshotSource
     image->image.encoding = render::TexelEncoding::Float32;
     image->image.values.resize(128 * 128);
     std::memcpy(image->image.values.data(), (*stored)->bytes.data(), (*stored)->bytes.size());
+    if (fill.source_mode == core::SourceMode::Material) {
+        // A material fill's Height is the Height bitmap rule on the mapped output's L32F view
+        // (P413-A, P413-C): the signed value float32(2 x - 1) (projection_uv.cpp RangeValue), as the
+        // Height channel stores it (an L16F channel rounds toward zero to binary16, the tile store's
+        // rule). The digest stays the stored bytes'; the DAG hash names the rule.
+        const bool half = format == core::ChannelFormat::L16F;
+        if (!half && format != core::ChannelFormat::L32F) {
+            return fail("a material Height channel of format " + std::string(core::ToString(format)) +
+                        " is not recorded (phase3.2_proc-material-families)");
+        }
+        for (uint32_t& bits : image->image.values) {
+            const float twice = 2.0f * std::bit_cast<float>(bits);
+            const float value = twice - 1.0f;
+            bits = std::bit_cast<uint32_t>(half ? evaluator::arith::HalfToFloat(evaluator::arith::HalfTowardZero(value))
+                                                : value);
+        }
+        if (half) image->image.encoding = render::TexelEncoding::Float16;
+        image->materialHeight = true;
+    }
     for (const auto& entry : store::ProjectSnapshots(project)) {
         if (entry.key != image->signature || !entry.version) continue;
         image->provenance = {{"signature_sha256", entry.key}, {"project_uuid", entry.project_uuid},

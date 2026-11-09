@@ -80,6 +80,17 @@ struct LevelsParams {
     bool operator==(const LevelsParams&) const = default;
 };
 
+/// An image input a recorded Substance source plugs (decision 412 §3,
+/// `SourceSubstance.set_source`): a bitmap by the SHA-256 of its file bytes and the colour space
+/// Painter reads back, or a uniform colour by its working-space value; exactly one of the two.
+struct ProceduralInputSource {
+    std::string bitmap_sha256;
+    std::string colour_space;
+    std::optional<std::array<double, 3>> working_colour;
+
+    bool operator==(const ProceduralInputSource&) const = default;
+};
+
 /// A procedural asset use (`05-procedural-content.md`): `asset` is a pinned
 /// `uzasset://<family>/<id>@<version>` URL.
 struct ProceduralRef {
@@ -87,6 +98,8 @@ struct ProceduralRef {
     json::Object params;
     std::optional<std::string> preset;
     std::map<std::string, ResourceBinding> image_inputs;
+    /// Plugged image-input sources by input name (decision 412 §3); never also a raster input.
+    std::map<std::string, ProceduralInputSource> input_sources;
     std::map<std::string, std::string> output_mapping;  // channel name -> asset output
     std::optional<std::string> mask_output;
     std::optional<ProceduralResolution> resolution_override;

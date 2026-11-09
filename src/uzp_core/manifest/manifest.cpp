@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cmath>
 #include <cstdint>
 #include <limits>
 #include <set>
@@ -106,6 +107,22 @@ void WriteProcedural(json::Object& o, const ProceduralRef& ref) {
     json::Object inputs;
     for (const auto& [name, binding] : ref.image_inputs) inputs[name] = Write(binding);
     o["image_inputs"] = std::move(inputs);
+    // Written only when an input is plugged, so every earlier reference keeps its bytes.
+    if (!ref.input_sources.empty()) {
+        json::Object sources;
+        for (const auto& [name, plugged] : ref.input_sources) {
+            json::Object source;
+            if (plugged.working_colour) {
+                const auto& c = *plugged.working_colour;
+                source["working_colour"] = json::Array{c[0], c[1], c[2]};
+            } else {
+                source["bitmap_sha256"] = plugged.bitmap_sha256;
+                source["colour_space"] = plugged.colour_space;
+            }
+            sources[name] = std::move(source);
+        }
+        o["input_sources"] = std::move(sources);
+    }
     json::Object mapping;
     for (const auto& [channel, output] : ref.output_mapping) mapping[channel] = output;
     o["output_mapping"] = std::move(mapping);
@@ -486,6 +503,39 @@ ProceduralRef ReadProcedural(ObjectReader& r) {
     out.preset = r.OptionalString("preset");
     for (const auto& [name, binding] : r.Object("image_inputs")) {
         out.image_inputs[name] = ReadBinding(binding, r.Path("image_inputs") + "." + name);
+    }
+    if (const json::Value* sources = r.GetOptional("input_sources")) {
+        const std::string base = r.Path("input_sources");
+        const json::Object& object = AsObject(*sources, base);
+        if (object.empty()) Fail(base, "an empty input_sources is written as absent");
+        for (const auto& [name, value] : object) {
+            const std::string path = base + "." + name;
+            if (name.empty()) Fail(path, "an image input name is empty");
+            if (out.image_inputs.contains(name)) Fail(path, "an image input is both a raster and a plugged source");
+            ObjectReader s(value, path);
+            ProceduralInputSource plugged;
+            if (const json::Value* colour = s.Get("working_colour")) {
+                const json::Array& c = AsArray(*colour, s.Path("working_colour"));
+                if (c.size() != 3) Fail(s.Path("working_colour"), "expected three numbers");
+                std::array<double, 3> rgb{};
+                for (std::size_t i = 0; i < 3; ++i) {
+                    rgb[i] = AsNumber(c[i], s.Path("working_colour") + "[" + std::to_string(i) + "]");
+                    if (!std::isfinite(rgb[i])) Fail(s.Path("working_colour"), "a colour component is not finite");
+                }
+                plugged.working_colour = rgb;
+            } else {
+                plugged.bitmap_sha256 = s.String("bitmap_sha256");
+                plugged.colour_space = s.String("colour_space");
+                if (plugged.bitmap_sha256.size() != 64 ||
+                    plugged.bitmap_sha256.find_first_not_of("0123456789abcdef") != std::string::npos) {
+                    Fail(s.Path("bitmap_sha256"), "not a lower-case SHA-256");
+                }
+                if (plugged.colour_space.empty()) Fail(s.Path("colour_space"), "empty");
+            }
+            const json::Object rest = s.Rest();
+            if (!rest.empty()) Fail(path, "unknown member '" + rest.begin()->first + "'");
+            out.input_sources[name] = std::move(plugged);
+        }
     }
     for (const auto& [channel, output] : r.Object("output_mapping")) {
         out.output_mapping[channel] = AsString(output, r.Path("output_mapping") + "." + channel);

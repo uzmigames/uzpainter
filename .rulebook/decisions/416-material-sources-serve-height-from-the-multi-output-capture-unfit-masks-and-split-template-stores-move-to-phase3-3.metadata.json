@@ -1,0 +1,13 @@
+{
+  "id": 416,
+  "slug": "416-material-sources-serve-height-from-the-multi-output-capture-unfit-masks-and-split-template-stores-move-to-phase3-3",
+  "title": "Material sources serve Height from the multi-output capture; unfit masks and split template-channel stores move to phase3.3",
+  "status": "accepted",
+  "date": "2026-11-09",
+  "relatedTasks": [
+    "phase3.2_source-substance-presets-inputs",
+    "phase3.3_procedural-families",
+    "phase3.2_proc-material-families"
+  ],
+  "supersededBy": null
+}

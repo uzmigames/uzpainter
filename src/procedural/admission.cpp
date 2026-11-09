@@ -100,6 +100,18 @@ std::expected<ProceduralRequest, UnsupportedProcedural> RequestFor(const core::P
         }
         request.inputs[name] = ImageInput{spec->second, binding.sha256};
     }
+    for (const auto& [name, plugged] : ref.input_sources) {
+        if (ref.image_inputs.contains(name) || request.inputs.contains(name)) {
+            UnsupportedProcedural refusal = Refuse(ref.asset, "an image input is both a raster and a plugged source");
+            refusal.field = "inputs." + name;
+            return Refused(std::move(refusal));
+        }
+        InputSource source;
+        source.bitmapSha256 = plugged.bitmap_sha256;
+        source.colourSpace = plugged.colour_space;
+        source.workingColour = plugged.working_colour;
+        request.sourceInputs[name] = std::move(source);
+    }
     if (context.content) {
         const std::string content(kContentInput);
         if (const auto bound = ref.image_inputs.find(content); bound != ref.image_inputs.end()) {

@@ -250,6 +250,9 @@ bool NamesObservation(const json::Value& value) {
 
 void CollectProcedural(const ProceduralRef& ref, std::set<std::string>& out) {
     for (const auto& [name, binding] : ref.image_inputs) CollectBinding(binding, out);
+    for (const auto& [name, plugged] : ref.input_sources) {
+        if (!plugged.working_colour) out.insert(plugged.bitmap_sha256);
+    }
 }
 
 void CollectSource(const Source& source, std::set<std::string>& out) {
