@@ -24,7 +24,7 @@ When `list_project_textures` runs with the UzEngine preset
 Then the plan lists `<set>_albedo`, `<set>_normal`, `<set>_orm`, `<set>_emissive`, `<set>_height`, `<set>_specularweight` and `<set>.uzmat` with their formats and bindings
 
 ### Requirement: Canonical Maps Beside Derivatives
-Every cooked `.uztexture` derivative SHALL be accompanied by its canonical 16-bit or float map in the same generation.
+Every cooked `.uztexture` derivative SHALL be accompanied by its canonical 16-bit or float map in the same generation. The one exception is the black emissive derivative synthesized for a stack without an Emissive channel (decision 420): no channel is its source, so it has no canonical map, and the receipt marks it `synthesized`.
 
 #### Scenario: Canonical ORM next to its BC7 derivative
 Given an export with the UzEngine preset

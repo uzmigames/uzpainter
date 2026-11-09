@@ -3,7 +3,7 @@
 
 ## 2. Children (mandatory, in dependency order)
 - [x] 2.1 Child accepted: `phase3.1_uze-uztexture-writer`. Accepted and archived 2026-10-21 (decision 343). Its deterministic BC encoders and mips, layout-correct `.uztexture` (read back through the test reader), negative-Z normal guard and lossy-derivative report are evidenced by its items 3.1 to 3.7, and the green full suite at `1103f00c`. The equality items of this task, such as 4.2, stay open here.
-- [ ] 2.2 Child accepted: `phase3.2_uze-uzmat-preset`
+- [x] 2.2 Child accepted: `phase3.2_uze-uzmat-preset`. Accepted and archived 2026-11-09: the full shipped preset plans and publishes in AO_Mixed's scope (decisions 411, 418, 419) with every derivative beside its canonical map, the `.uzmat` binding the generation's derivatives, and a black emissive synthesized for stacks without an Emissive channel (decision 420). On wand v1 the dry run lists exactly the table's files, and the canonical maps equal the same rebuild's proven PNG route on every texel (its notes, section 10). Items 3.1 (belt v5, tunic v10), 3.2 and 4.2 stay open here.
 - [ ] 2.3 Child accepted: `phase3.3_uze-consumer-fixture`
 
 ## 3. Integration
