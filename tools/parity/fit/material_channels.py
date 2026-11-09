@@ -8,8 +8,15 @@ prints, per golden and recording, whether each channel export equals the candida
 - Height of the material fill: `binary16_toward_zero(float32(2 x - 1))`, `x` the L32F view of the
   output its `output_mapping` gives Height (the existing Height rule of float operands);
 - BaseColor and Normal of the material fill: untouched (Height is its only active channel);
-- the masked configurations and the split BaseColor fill are reported as values in binary16
-  ulps, since one constant per recording cannot separate candidate models.
+- the masked configurations of P413-A and the split BaseColor fill are reported as values in
+  binary16 ulps, since one constant per recording cannot separate candidate models;
+- P413-C (masked material fill on non-constant outputs, r1, r2, r3): a mask output equal to the
+  output mapped to Height leaves Height unchanged; another mask output gives, in r1,
+  `binary16_toward_zero(float32(H16 * binary16_toward_zero(R)))`, `H16` the unmasked Height and
+  `R` the red component of the mask output's RGB32F view; r2 and r3 are reported against it with
+  the interval of a common factor `k` (`r2 = tz(H16 * M16 * k)`);
+- P413-D (split source alone): Height is the material's Height rule on the active output's L32F
+  view; BaseColor is listed against the RGB32F view.
 
 Only derived numbers are printed; nothing is written. Owner machine only (private store and
 snapshot exports).
@@ -155,12 +162,75 @@ def report(store: OracleStore) -> Iterator[str]:
             yield f"{state} {recording}: height {'exact' if exact else 'differs'}; others {base}"
 
 
+def masked_model(x: F64, red: F64) -> F64:
+    """P413-C, r1: the unmasked Height times the mask output's red component, both binary16."""
+    height = height_model(x).astype(np.float32)
+    mask = binary16_toward_zero(red).astype(np.float32)
+    return binary16_toward_zero(height * mask)
+
+
+def ulp16(values: F64) -> F64:
+    return np.asarray(2.0 ** (np.floor(np.log2(np.abs(values))) - 10), dtype=np.float64)
+
+
+def separating_report(store: OracleStore) -> Iterator[str]:
+    """P413-C and P413-D (`tools/parity/tier0_semantics/source_substance_separation.py`)."""
+    from tools.parity.tier0_semantics.source_substance_separation import (
+        MASKED,
+        MASKED_PREFIX,
+        SPLIT,
+        SPLIT_PREFIX,
+    )
+
+    low, high = 0.0, 2.0
+    for name in MASKED:
+        maps = exports(store, MASKED_PREFIX + name)
+        mapped = "normal" if name.endswith("-swap") else "height"
+        mask = "normal" if name.startswith("by-normal") else "height"
+        x = snapshot("preset-bitmap", mapped, "user0")[..., 0]
+        red = snapshot("preset-bitmap", mask, "user1")[..., 0]
+        model = height_model(x) if mask == mapped else masked_model(x, red)
+        heights = {r: maps[(r, "height")][..., 0] for r in ("r1", "r2", "r3")}
+        verdicts = " ".join(
+            f"{r} {'exact' if np.array_equal(model, h) else 'differs'}" for r, h in heights.items()
+        )
+        stable = np.array_equal(heights["r2"], heights["r3"])
+        yield f"masked {name}: {verdicts}; r2 == r3 {stable}"
+        if mask != mapped:
+            product = np.abs(height_model(x) * binary16_toward_zero(red))
+            value = np.abs(heights["r2"])
+            low = max(low, float((value / product).max()))
+            high = min(high, float(((value + ulp16(value)) / product).min()))
+    yield f"masked r2: common factor k in [{low:.8f}, {high:.8f})"
+    for name, (channel, edits) in SPLIT.items():
+        maps = exports(store, SPLIT_PREFIX + name)
+        state = (
+            "preset-bitmap" if len(edits) > 2 and edits[2][0] == "set_source" else "preset-colour"
+        )
+        output = "height" if channel == "Height" or edits[-1][0] == "active_output" else "normal"
+        if channel == "Height":
+            x = snapshot(state, output, "user0")[..., 0]
+            exact = all(
+                np.array_equal(height_model(x), maps[(r, "height")][..., 0]) for r in ("r1", "r2")
+            )
+            yield f"split {name}: height {'exact' if exact else 'differs'}"
+            continue
+        view = snapshot(state, output, "user1").reshape(-1, 3)
+        exported = maps[("r1", "basecolor")].reshape(-1, 3)
+        rows = zip(view.tolist(), exported.tolist(), strict=True)
+        pairs = sorted({(tuple(a), tuple(b)) for a, b in rows})
+        same = np.array_equal(maps[("r1", "basecolor")], maps[("r2", "basecolor")])
+        yield f"split {name}: basecolor {pairs} (r1 == r2: {same})"
+
+
 def main() -> int:
     store = locate()
     if store is None:
         print("oracle_unavailable: no private store on this machine")
         return 2
     for line in report(store):
+        print(line)
+    for line in separating_report(store):
         print(line)
     return 0
 
