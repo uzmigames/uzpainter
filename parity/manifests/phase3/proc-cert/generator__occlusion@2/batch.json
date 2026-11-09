@@ -1,0 +1,145 @@
+{
+ "schema": "uzpainter/parity/proc-cert-batch/1",
+ "asset": "generator/occlusion",
+ "asset_version": 2,
+ "domain": {
+  "parameters": {
+   "ao_invert": {
+    "set": [
+     0,
+     1
+    ]
+   },
+   "global_invert": {
+    "set": [
+     0,
+     1
+    ]
+   }
+  },
+  "constraints": [],
+  "seeds": {
+   "policy": "listed",
+   "seeds": [
+    0
+   ]
+  },
+  "geometry": {
+   "mesh_classes": [
+    "sphere",
+    "bevelled-cube",
+    "garment"
+   ],
+   "uv_tiles": 1,
+   "inputs": {
+    "AO": {
+     "resolutions": [
+      1024,
+      2048,
+      4096
+     ],
+     "formats": [
+      "f32"
+     ],
+     "colour_spaces": [
+      "Raw"
+     ],
+     "channels": [
+      1
+     ]
+    },
+    "WorldSpaceNormal": {
+     "resolutions": [
+      1024,
+      2048,
+      4096
+     ],
+     "formats": [
+      "f32"
+     ],
+     "colour_spaces": [
+      "Raw"
+     ],
+     "channels": [
+      3
+     ]
+    }
+   }
+  },
+  "output": {
+   "resolutions": [
+    1024,
+    2048,
+    4096
+   ],
+   "formats": [
+    "f32"
+   ],
+   "colour_spaces": [
+    "linear"
+   ],
+   "channels": [
+    1
+   ]
+  }
+ },
+ "matrix": {
+  "meshes": [
+   "hat-v8",
+   "rounded-cube",
+   "sphere"
+  ],
+  "resolutions": [
+   1024,
+   2048,
+   4096
+  ],
+  "parameter_sets": [
+   {
+    "id": "defaults",
+    "role": "defaults",
+    "params": {
+     "ao_invert": 0,
+     "global_invert": 0
+    }
+   },
+   {
+    "id": "recipe-tunic-v10",
+    "role": "recipe",
+    "params": {
+     "ao_invert": 0,
+     "global_invert": 1
+    }
+   },
+   {
+    "id": "boundary-ao-invert",
+    "role": "boundary",
+    "params": {
+     "ao_invert": 1,
+     "global_invert": 0
+    }
+   },
+   {
+    "id": "boundary-both-inverts",
+    "role": "boundary",
+    "params": {
+     "ao_invert": 1,
+     "global_invert": 1
+    }
+   }
+  ],
+  "seeds": [
+   0
+  ]
+ },
+ "calibration": {
+  "corpus_id": "generator-occlusion-2-calibration-2026-11-09",
+  "path": "calibration/cases.json",
+  "sha256": "098845ccc67ad7948df6d1a796c18be520ba7a05d75f96c1ca3b3f4588d707aa"
+ },
+ "held_out": {
+  "corpus_id": "generator-occlusion-2-held-out-2026-11-09",
+  "path": "held-out/cases.json",
+  "sha256": "fe4ee8f2e713b52a608a0ac064fd1eac658e538a0bb9ea3b667e5c781754c65d"
+ }
+}

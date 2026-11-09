@@ -3,21 +3,24 @@
 One golden is one Painter project on one mesh at one resolution, holding up to eight cases of one
 generator:
 
-1. `project.create` on the mesh at the resolution; Painter bakes the mesh maps low as high
-   (`OutputSize` the resolution, `LowAsHigh` on, every other baking parameter at Painter's
-   default; bakers Normal, WorldSpaceNormal, AO, Curvature, Position, Thickness).
+1. `project.create` on the mesh at the resolution.
 2. Channels User0..User<n-1> are added as L32F. A base fill writes 0 (Raw) into each.
 3. Case k is a fill above it that writes 1 (Raw) into User<k> only, under a black mask that
    holds the generator with the case's parameters (`set_parameters`, the seed as `$randomseed`).
    User<k> therefore holds the generator's mask value: 0 (1 - m) + 1 m.
-4. Each User<k> map and the six baked mesh maps are exported as OpenEXR 32f, no padding
+4. Painter bakes the mesh maps low as high (`OutputSize` the resolution, `LowAsHigh` on, every
+   other baking parameter at Painter's default; bakers Normal, WorldSpaceNormal, AO, Curvature,
+   Position, Thickness). The bake is the last state step: it leaves Painter's UI in its Baking
+   mode, which has no active stack, and the generators recompute from the baked maps.
+5. Each User<k> map and the baked mesh maps the cases read (`Golden.mesh_maps`, by default all
+   six) are exported as OpenEXR 32f, no padding
    (`passthrough`), no dithering. The mesh maps are the case inputs: exactly the maps the
    generator read, as stored.
 
 Recorded twice by `python -m tools.parity.recorder record` (r1; r2 after save and reopen). The
 requests go under the current envelope's `requests/phase3/proc-generators/`. Parameter names are
-the ones the documented `Property` API reports (`parity/semantics/proc-generator-parameters.json`,
-item 2.1); the values are authored here.
+the ones the documented `Property` API reports (item 2.1,
+`docs/analysis/proc-generator-families/01-parameter-discovery.md`); the values are authored here.
 """
 
 from __future__ import annotations
@@ -54,6 +57,23 @@ MESH_MAPS: dict[str, str] = {
     "Thickness": "meshMap/thickness:L",
 }
 UNCONTROLLED = ["preferences.bake_backend"]
+_STARTER = "resource://starter_assets/"
+# The generator survey of 2026-11-09 (Painter 12.2.0, survey SHA-256 eb107adb634f...,
+# `docs/analysis/proc-generator-families/01-parameter-discovery.md`): GUI name -> versioned URL.
+_VERSIONS = {
+    "Mask Builder - Legacy": ("mg_mask_builder", "a27d00678599241b6171df8d3ff2264d78bd461e"),
+    "Mask Editor": ("mg_mask_editor", "96df175d008c0da43fa5d2b2223f9979dd76f91e"),
+    "Metal Edge Wear": ("mg_metal_edge_wear", "9bed7d8b169c204da16d6f8e2d7c8538b0556b7c"),
+    "Dirt": ("mg_dirt", "1fb4bd5305c46780bb78472c678528dd5b45c3d6"),
+    "Curvature": ("mg_curvature", "3c53d6cdb3e5b432c7433d8ff44b0ccede84533f"),
+    "Position": ("mg_position", "d77824f5a1140989f89a236513512d5fc4d2acb7"),
+    "World Space Normals": ("mg_world_space_normals", "1a46338897e6db600e35fdbd1fd7a62a7f09b5c1"),
+    "Ambient Occlusion": ("mg_ambient_occlusion", "56e2ae905ff4a185b3f76d1ea04d1cbde45db6eb"),
+}
+GENERATOR_URLS = {
+    name: f"{_STARTER}{stem}/{stem}?version={version}.sbsar"
+    for name, (stem, version) in _VERSIONS.items()
+}
 
 
 @dataclass(frozen=True)
@@ -77,6 +97,14 @@ MESHES = {
         "parity/fixtures/feasibility/rounded-cube.obj",
         "bevelled-cube",
         "the authored unit cube with edges and corners rounded at radius 0.1 (six UV islands)",
+    ),
+    # The held-out mesh (decision 222 §2: a mesh outside the calibration set): the Tier 2b
+    # bevelled cube with its knob, baked low as high like the others.
+    "knob-cube": Mesh(
+        "knob-cube",
+        "parity/fixtures/tier2b-bakes/bevelled-cube-low.obj",
+        "bevelled-cube",
+        "the authored Tier 2b bevelled cube low mesh with its knob",
     ),
     # Hat v6 low is lost (decision 260: only the v8 project survives); the delivered hat v8 low
     # mesh is the garment-class stand-in. Git-ignored in Assets3D, so it is kept in the private
@@ -107,6 +135,10 @@ class Golden:
     mesh: str
     resolution: int
     cases: tuple[GeneratorCase, ...] = field(default=())
+    mesh_maps: tuple[str, ...] = BAKERS  # the baked maps exported as case inputs, by usage
+    # `DilationWidth` of the bake; None keeps Painter's default. 0 leaves every texel outside the
+    # UV islands at 0, so the baked World Space Normals map marks Painter's own UV coverage.
+    dilation_width: int | None = None
 
     @property
     def name(self) -> str:
@@ -125,6 +157,8 @@ def check(golden: Golden) -> None:
     log2 = math.log2(golden.resolution)
     if log2 != int(log2) or not 7 <= log2 <= 12:
         raise ValueError(f"{golden.name}: resolution {golden.resolution} is not 128..4096")
+    if not golden.mesh_maps or not set(golden.mesh_maps) <= set(BAKERS):
+        raise ValueError(f"{golden.name}: exported mesh maps must be baked: {golden.mesh_maps}")
     ids = [case.case_id for case in golden.cases]
     if len(set(ids)) != len(ids):
         raise ValueError(f"{golden.name}: duplicate case ids")
@@ -152,7 +186,18 @@ def case_map(k: int) -> str:
     return f"documentMap/user{k}:L"
 
 
-def instruction_steps(golden: Golden) -> list[dict[str, Any]]:
+def generator_url(painter_name: str, root: Path = REPO_ROOT) -> str:
+    """The versioned starter-asset URL of the generator the survey (item 2.1) found under that GUI
+    name. A GUI name is not a search term (`resource.search("Mask Builder - Legacy")` finds
+    nothing), and the URL pins the resource version the golden records."""
+    del root  # the table is part of the code: the survey's URLs, Painter 12.2.0
+    try:
+        return GENERATOR_URLS[painter_name]
+    except KeyError:
+        raise ValueError(f"no surveyed generator named {painter_name!r}") from None
+
+
+def instruction_steps(golden: Golden, root: Path = REPO_ROOT) -> list[dict[str, Any]]:
     check(golden)
     log2 = int(math.log2(golden.resolution))
     steps = Steps()
@@ -162,10 +207,6 @@ def instruction_steps(golden: Golden) -> list[dict[str, Any]]:
         normal_map_format=NORMAL_MAP_FORMAT,
         default_texture_resolution=golden.resolution,
     )
-    steps.add(ps.BAKING_SET, parameter="OutputSize", value=[log2, log2])
-    steps.add(ps.BAKING_SET, parameter="LowAsHigh", value=True)
-    steps.add(ps.BAKING_SET_ENABLED_BAKERS, usages=list(BAKERS))
-    steps.add(ps.BAKE)
     channels = [user(k) for k in range(len(golden.cases))]
     for channel in channels:
         steps.add(ps.ADD_CHANNEL, channel=channel, format=CHANNEL_FORMAT)
@@ -196,8 +237,7 @@ def instruction_steps(golden: Golden) -> list[dict[str, Any]]:
             LS + "insert_generator_effect",
             inside_step=fill,
             stack="Mask",
-            resource_name=case.painter_name,
-            resource_usage="GENERATOR",
+            resource=generator_url(case.painter_name, root),
         )
         values = list(case.parameters)
         if case.seed is not None:
@@ -209,7 +249,16 @@ def instruction_steps(golden: Golden) -> list[dict[str, Any]]:
                 parameter=name,
                 value=value,
             )
-    maps = [case_map(k) for k in range(len(golden.cases))] + [MESH_MAPS[u] for u in BAKERS]
+    # The bake comes last: it leaves Painter in its Baking mode, which has no active stack.
+    steps.add(ps.BAKING_SET, parameter="OutputSize", value=[log2, log2])
+    steps.add(ps.BAKING_SET, parameter="LowAsHigh", value=True)
+    if golden.dilation_width is not None:
+        steps.add(ps.BAKING_SET, parameter="DilationWidth", value=golden.dilation_width)
+    steps.add(ps.BAKING_SET_ENABLED_BAKERS, usages=list(BAKERS))
+    steps.add(ps.BAKE)
+    maps = [case_map(k) for k in range(len(golden.cases))] + [
+        MESH_MAPS[u] for u in golden.mesh_maps
+    ]
     steps.add(
         EXPORT, maps=maps, file_format="exr", bit_depth="32f", padding=PADDING, dithering=False
     )
@@ -222,11 +271,17 @@ def setting(name: str, value: Any, unit: str | None = None) -> dict[str, Any]:
 
 
 def applied_settings(golden: Golden) -> list[dict[str, Any]]:
+    dilation = (
+        []
+        if golden.dilation_width is None
+        else [setting("baking.common.DilationWidth", golden.dilation_width)]
+    )
     return [
         setting("project.normal_map_format", NORMAL_MAP_FORMAT),
         setting("texture_set.resolution", golden.resolution, "px"),
         setting("baking.common.OutputSize", int(math.log2(golden.resolution)), "log2 px"),
         setting("baking.common.LowAsHigh", True),
+        *dilation,
         setting("baking.enabled_bakers", ",".join(BAKERS)),
         setting("export.exr.bit_depth", "32f"),
         setting("export.padding", PADDING),
@@ -249,10 +304,13 @@ def description(golden: Golden) -> str:
     return (
         f"Mesh-map generator golden of {TASK} ({golden.stage}): the {golden.generator} "
         f"generator cases on {mesh.role}, texture set {golden.resolution} px. Painter bakes "
-        f"the mesh maps low as high (OutputSize {log2}, LowAsHigh, bakers "
+        f"the mesh maps low as high (OutputSize {log2}, LowAsHigh, "
+        f"{'' if golden.dilation_width is None else f'DilationWidth {golden.dilation_width}, '}"
+        "bakers "
         f"{', '.join(BAKERS)}, every other baking parameter at Painter's default). Each case "
         "is a white Raw fill on its own L32F User channel, over a black base fill, under a black "
-        f"mask holding the generator: {cases}. The User maps and the six baked mesh maps are "
+        f"mask holding the generator: {cases}. The User maps and the baked "
+        f"{', '.join(golden.mesh_maps)} maps are "
         "exported as OpenEXR 32f, padding passthrough, no dithering; recorded twice (same "
         "session; after save and reopen). Bake backend uncontrolled."
     )
@@ -292,7 +350,7 @@ def manifest(golden: Golden, root: Path = REPO_ROOT) -> dict[str, Any]:
         "instruction_sequence": {
             "author": "UzmiGames",
             "interface": "substance_painter_documented_python_api",
-            "steps": instruction_steps(golden),
+            "steps": instruction_steps(golden, root),
         },
         "applied_settings": applied_settings(golden),
         "uncontrolled_settings": list(UNCONTROLLED),

@@ -267,6 +267,8 @@ def kind_of(request: Request) -> str:
         return IRAY
     if family == "tier2b/bakes":  # bake goldens (decision 384): the texture recorder bakes
         return TEXTURE
+    if family == "phase3/proc-generators":  # generator goldens: they bake, then export masks
+        return TEXTURE
     if family == "tier0/api-probes":
         if name.startswith("ocio16-raw-readout-"):
             return RAW_EXPORT if "-export" in name else RAW_CAPABILITY

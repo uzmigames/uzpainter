@@ -1,0 +1,767 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "phase3/proc-generators/diagnostic-mixed-rounded-cube-1024",
+  "tier": "2a",
+  "domain": "procedural_asset/generator/mixed",
+  "description": "Mesh-map generator golden of phase3.2_proc-generator-families (diagnostic): the mixed generator cases on the authored unit cube with edges and corners rounded at radius 0.1 (six UV islands), texture set 1024 px. Painter bakes the mesh maps low as high (OutputSize 10, LowAsHigh, bakers Normal, WorldSpaceNormal, AO, Curvature, Position, Thickness, every other baking parameter at Painter's default). Each case is a white Raw fill on its own L32F User channel, over a black base fill, under a black mask holding the generator: User0 curvature-defaults: Curvature (defaults); User1 mask-editor-defaults: Mask Editor (defaults); User2 dirt-defaults: Dirt (defaults); User3 dirt-seed-1: Dirt ($randomseed = 1); User4 edge-wear-defaults: Metal Edge Wear (defaults); User5 edge-wear-seed-1: Metal Edge Wear ($randomseed = 1); User6 mask-builder-defaults: Mask Builder - Legacy (defaults); User7 mask-builder-seed-1: Mask Builder - Legacy ($randomseed = 1). The User maps and the baked Normal, WorldSpaceNormal, AO, Curvature, Position, Thickness maps are exported as OpenEXR 32f, padding passthrough, no dithering; recorded twice (same session; after save and reopen). Bake backend uncontrolled.",
+  "inputs": [
+    {
+      "input_id": "rounded-cube",
+      "kind": "mesh",
+      "path": "parity/fixtures/feasibility/rounded-cube.obj",
+      "sha256": "1d645ef88912e18e12eb598e0f08f61287e274a7c2c2760d041d7a7a1a4ece8c",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "rounded-cube",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 1024
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User0",
+          "format": "L32F"
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User1",
+          "format": "L32F"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User2",
+          "format": "L32F"
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User3",
+          "format": "L32F"
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User4",
+          "format": "L32F"
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User5",
+          "format": "L32F"
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User6",
+          "format": "L32F"
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User7",
+          "format": "L32F"
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "position": "top"
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 10,
+          "channels": [
+            "User0",
+            "User1",
+            "User2",
+            "User3",
+            "User4",
+            "User5",
+            "User6",
+            "User7"
+          ]
+        }
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 10,
+          "channel": "User0",
+          "color": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 13,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 10,
+          "channel": "User1",
+          "color": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 14,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 10,
+          "channel": "User2",
+          "color": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 15,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 10,
+          "channel": "User3",
+          "color": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 16,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 10,
+          "channel": "User4",
+          "color": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 17,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 10,
+          "channel": "User5",
+          "color": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 18,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 10,
+          "channel": "User6",
+          "color": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 19,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 10,
+          "channel": "User7",
+          "color": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 20,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "above_step": 10
+        }
+      },
+      {
+        "step": 21,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 20,
+          "channels": [
+            "User0"
+          ]
+        }
+      },
+      {
+        "step": 22,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 20,
+          "channel": "User0",
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 23,
+        "call": "substance_painter.layerstack.LayerNode.add_mask",
+        "args": {
+          "node_step": 20,
+          "background": "Black"
+        }
+      },
+      {
+        "step": 24,
+        "call": "substance_painter.layerstack.insert_generator_effect",
+        "args": {
+          "inside_step": 20,
+          "stack": "Mask",
+          "resource": "resource://starter_assets/mg_curvature/mg_curvature?version=3c53d6cdb3e5b432c7433d8ff44b0ccede84533f.sbsar"
+        }
+      },
+      {
+        "step": 25,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "above_step": 20
+        }
+      },
+      {
+        "step": 26,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 25,
+          "channels": [
+            "User1"
+          ]
+        }
+      },
+      {
+        "step": 27,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 25,
+          "channel": "User1",
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 28,
+        "call": "substance_painter.layerstack.LayerNode.add_mask",
+        "args": {
+          "node_step": 25,
+          "background": "Black"
+        }
+      },
+      {
+        "step": 29,
+        "call": "substance_painter.layerstack.insert_generator_effect",
+        "args": {
+          "inside_step": 25,
+          "stack": "Mask",
+          "resource": "resource://starter_assets/mg_mask_editor/mg_mask_editor?version=96df175d008c0da43fa5d2b2223f9979dd76f91e.sbsar"
+        }
+      },
+      {
+        "step": 30,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "above_step": 25
+        }
+      },
+      {
+        "step": 31,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 30,
+          "channels": [
+            "User2"
+          ]
+        }
+      },
+      {
+        "step": 32,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 30,
+          "channel": "User2",
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 33,
+        "call": "substance_painter.layerstack.LayerNode.add_mask",
+        "args": {
+          "node_step": 30,
+          "background": "Black"
+        }
+      },
+      {
+        "step": 34,
+        "call": "substance_painter.layerstack.insert_generator_effect",
+        "args": {
+          "inside_step": 30,
+          "stack": "Mask",
+          "resource": "resource://starter_assets/mg_dirt/mg_dirt?version=1fb4bd5305c46780bb78472c678528dd5b45c3d6.sbsar"
+        }
+      },
+      {
+        "step": 35,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "above_step": 30
+        }
+      },
+      {
+        "step": 36,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 35,
+          "channels": [
+            "User3"
+          ]
+        }
+      },
+      {
+        "step": 37,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 35,
+          "channel": "User3",
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 38,
+        "call": "substance_painter.layerstack.LayerNode.add_mask",
+        "args": {
+          "node_step": 35,
+          "background": "Black"
+        }
+      },
+      {
+        "step": 39,
+        "call": "substance_painter.layerstack.insert_generator_effect",
+        "args": {
+          "inside_step": 35,
+          "stack": "Mask",
+          "resource": "resource://starter_assets/mg_dirt/mg_dirt?version=1fb4bd5305c46780bb78472c678528dd5b45c3d6.sbsar"
+        }
+      },
+      {
+        "step": 40,
+        "call": "substance_painter.source.SourceSubstance.set_parameters",
+        "args": {
+          "node_step": 39,
+          "parameter": "$randomseed",
+          "value": 1
+        }
+      },
+      {
+        "step": 41,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "above_step": 35
+        }
+      },
+      {
+        "step": 42,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 41,
+          "channels": [
+            "User4"
+          ]
+        }
+      },
+      {
+        "step": 43,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 41,
+          "channel": "User4",
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 44,
+        "call": "substance_painter.layerstack.LayerNode.add_mask",
+        "args": {
+          "node_step": 41,
+          "background": "Black"
+        }
+      },
+      {
+        "step": 45,
+        "call": "substance_painter.layerstack.insert_generator_effect",
+        "args": {
+          "inside_step": 41,
+          "stack": "Mask",
+          "resource": "resource://starter_assets/mg_metal_edge_wear/mg_metal_edge_wear?version=9bed7d8b169c204da16d6f8e2d7c8538b0556b7c.sbsar"
+        }
+      },
+      {
+        "step": 46,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "above_step": 41
+        }
+      },
+      {
+        "step": 47,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 46,
+          "channels": [
+            "User5"
+          ]
+        }
+      },
+      {
+        "step": 48,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 46,
+          "channel": "User5",
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 49,
+        "call": "substance_painter.layerstack.LayerNode.add_mask",
+        "args": {
+          "node_step": 46,
+          "background": "Black"
+        }
+      },
+      {
+        "step": 50,
+        "call": "substance_painter.layerstack.insert_generator_effect",
+        "args": {
+          "inside_step": 46,
+          "stack": "Mask",
+          "resource": "resource://starter_assets/mg_metal_edge_wear/mg_metal_edge_wear?version=9bed7d8b169c204da16d6f8e2d7c8538b0556b7c.sbsar"
+        }
+      },
+      {
+        "step": 51,
+        "call": "substance_painter.source.SourceSubstance.set_parameters",
+        "args": {
+          "node_step": 50,
+          "parameter": "$randomseed",
+          "value": 1
+        }
+      },
+      {
+        "step": 52,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "above_step": 46
+        }
+      },
+      {
+        "step": 53,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 52,
+          "channels": [
+            "User6"
+          ]
+        }
+      },
+      {
+        "step": 54,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 52,
+          "channel": "User6",
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 55,
+        "call": "substance_painter.layerstack.LayerNode.add_mask",
+        "args": {
+          "node_step": 52,
+          "background": "Black"
+        }
+      },
+      {
+        "step": 56,
+        "call": "substance_painter.layerstack.insert_generator_effect",
+        "args": {
+          "inside_step": 52,
+          "stack": "Mask",
+          "resource": "resource://starter_assets/mg_mask_builder/mg_mask_builder?version=a27d00678599241b6171df8d3ff2264d78bd461e.sbsar"
+        }
+      },
+      {
+        "step": 57,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "above_step": 52
+        }
+      },
+      {
+        "step": 58,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 57,
+          "channels": [
+            "User7"
+          ]
+        }
+      },
+      {
+        "step": 59,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 57,
+          "channel": "User7",
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 60,
+        "call": "substance_painter.layerstack.LayerNode.add_mask",
+        "args": {
+          "node_step": 57,
+          "background": "Black"
+        }
+      },
+      {
+        "step": 61,
+        "call": "substance_painter.layerstack.insert_generator_effect",
+        "args": {
+          "inside_step": 57,
+          "stack": "Mask",
+          "resource": "resource://starter_assets/mg_mask_builder/mg_mask_builder?version=a27d00678599241b6171df8d3ff2264d78bd461e.sbsar"
+        }
+      },
+      {
+        "step": 62,
+        "call": "substance_painter.source.SourceSubstance.set_parameters",
+        "args": {
+          "node_step": 61,
+          "parameter": "$randomseed",
+          "value": 1
+        }
+      },
+      {
+        "step": 63,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "OutputSize",
+          "value": [
+            10,
+            10
+          ]
+        }
+      },
+      {
+        "step": 64,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "LowAsHigh",
+          "value": true
+        }
+      },
+      {
+        "step": 65,
+        "call": "substance_painter.baking.BakingParameters.set_enabled_bakers",
+        "args": {
+          "usages": [
+            "Normal",
+            "WorldSpaceNormal",
+            "AO",
+            "Curvature",
+            "Position",
+            "Thickness"
+          ]
+        }
+      },
+      {
+        "step": 66,
+        "call": "substance_painter.baking.bake_async",
+        "args": {}
+      },
+      {
+        "step": 67,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/user0:L",
+            "documentMap/user1:L",
+            "documentMap/user2:L",
+            "documentMap/user3:L",
+            "documentMap/user4:L",
+            "documentMap/user5:L",
+            "documentMap/user6:L",
+            "documentMap/user7:L",
+            "meshMap/normal_base:RGB",
+            "meshMap/world_space_normals:RGB",
+            "meshMap/ambient_occlusion:L",
+            "meshMap/curvature:L",
+            "meshMap/position:RGB",
+            "meshMap/thickness:L"
+          ],
+          "file_format": "exr",
+          "bit_depth": "32f",
+          "padding": "passthrough",
+          "dithering": false
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 1024,
+      "applied_by": "recorder_api",
+      "unit": "px"
+    },
+    {
+      "name": "baking.common.OutputSize",
+      "value": 10,
+      "applied_by": "recorder_api",
+      "unit": "log2 px"
+    },
+    {
+      "name": "baking.common.LowAsHigh",
+      "value": true,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "baking.enabled_bakers",
+      "value": "Normal,WorldSpaceNormal,AO,Curvature,Position,Thickness",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.exr.bit_depth",
+      "value": "32f",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "passthrough",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "uncontrolled_settings": [
+    "preferences.bake_backend"
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": []
+}
