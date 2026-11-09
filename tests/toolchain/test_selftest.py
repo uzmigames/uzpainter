@@ -30,6 +30,9 @@ VULKAN_SLICE = (
     "vulkan-png16",
     "vulkan-ray-query-trace",
 )
+# The Vulkan compute stages a failure of which fails `selftest` since phase3.1's acceptance
+# (decision 310 §9); `vulkan-ray-query-trace` belongs to phase3.2 and stays not mandatory.
+VULKAN_MANDATORY = ("vulkan-device", "vulkan-compute-readback", "vulkan-png16")
 WIDTH, HEIGHT = 100, 64
 
 
@@ -150,7 +153,8 @@ def test_vulkan_hardware_slice_green(painter_bin: Path, tmp_path: Path) -> None:
     (every criterion passed), reads the three qualification kernels back bit for bit, the 16-bit
     pattern equal to the CPU pattern and to the DX12 readback, and round-trips it through a 16-bit
     PNG. It is reported as `vulkan_hardware_slice`, apart from the DX12 slice and the
-    `vulkan-availability` probe, and no stage of it is mandatory."""
+    `vulkan-availability` probe; since phase3.1's acceptance (decision 310 §9) its three compute
+    stages are mandatory, the ray-query stage (phase3.2) is not."""
     if os.environ.get("UZP_NO_GPU") == "1":
         pytest.skip(
             "UZP_NO_GPU=1: no GPU on this runner (decision 028); runs on the owner's machine"
@@ -164,7 +168,8 @@ def test_vulkan_hardware_slice_green(painter_bin: Path, tmp_path: Path) -> None:
     for name in VULKAN_SLICE:
         stage = by_name[name]
         assert stage["status"] == "passed", stage
-        assert not stage["mandatory"] and not stage["hardware_slice"] and stage["needs_gpu"]
+        assert stage["mandatory"] == (name in VULKAN_MANDATORY), stage
+        assert not stage["hardware_slice"] and stage["needs_gpu"]
     device = by_name["vulkan-device"]["details"]
     checks = [v for k, v in device.items() if k.startswith("check.")]
     assert checks and all(v.startswith("passed: ") for v in checks), checks
@@ -185,7 +190,7 @@ def test_vulkan_hardware_slice_green(painter_bin: Path, tmp_path: Path) -> None:
     )
     assert (width, height) == (WIDTH, HEIGHT)
     assert samples == [pattern_value(x, y) for y in range(HEIGHT) for x in range(WIDTH)]
-    assert "selftest: Vulkan hardware slice passed (not mandatory, decision 310)" in output
+    assert "selftest: Vulkan hardware slice passed\n" in output
 
 
 def test_vulkan_ray_query_slice_green(painter_bin: Path, tmp_path: Path) -> None:

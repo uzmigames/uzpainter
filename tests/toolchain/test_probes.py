@@ -82,13 +82,19 @@ def test_loader_hidden_reports_unavailable_and_slice_passes(
     painter_bin: Path, tmp_path: Path
 ) -> None:
     """3.1: with the Vulkan loader hidden from the process, `vulkan-availability` completes and
-    reports `unavailable` with the loader reason; `selftest` still passes the DX12 slice."""
+    reports `unavailable` with the loader reason; the DX12 slice still passes. Since phase3.1's
+    acceptance (decision 310 §9) the Vulkan compute stages are mandatory, so `vulkan-device` fails
+    before any work, naming the loader, and `selftest` fails with it."""
     folder = tmp_path / "bin"
     shutil.copytree(painter_bin, folder)
     hide_vulkan_loader(folder)
     code, output, report = run_selftest(folder / "UzPainter.exe", tmp_path / "out")
-    assert code == 0, output
-    assert report["result"] == "passed" and report["hardware_slice"] == "passed"
+    assert code == 1, output
+    assert report["result"] == "failed" and report["hardware_slice"] == "passed"
+    assert report["vulkan_hardware_slice"] == "failed"
+    device = stages(report)["vulkan-device"]
+    assert device["mandatory"] and device["status"] == "failed", device
+    assert device["reason"].startswith("refused before any work: "), device
     found = probes(report)
     vulkan = found["vulkan-availability"]
     assert vulkan["completed"] is True and vulkan["qualified"] is False

@@ -228,7 +228,8 @@ int Selftest::Run(SelftestContext& context) {
         }
     }
     const char* slice = sliceFailed ? "failed" : sliceSkipped ? "skipped" : "passed";
-    // Reported apart from the DX12 slice and the availability probe; never mandatory (decision 310).
+    // Reported apart from the DX12 slice and the availability probe; its compute stages are mandatory
+    // since phase3.1's acceptance (decision 310 §9), so their failure also fails the run above.
     const char* vulkanSlice = vulkanFailed                   ? "failed"
                               : (vulkanSkipped || !vulkanRan) ? "skipped"
                                                               : "passed";
@@ -280,7 +281,7 @@ int Selftest::Run(SelftestContext& context) {
                      Utf8(context.options.reportPath.wstring()).c_str());
         return kExitFailed;
     }
-    std::printf("selftest: Vulkan hardware slice %s (not mandatory, decision 310)\n", vulkanSlice);
+    std::printf("selftest: Vulkan hardware slice %s\n", vulkanSlice);
     std::printf("selftest: %s; DX12 hardware slice %s; report %s\n", failed ? "failed" : "passed",
                 slice, Utf8(context.options.reportPath.wstring()).c_str());
     std::fflush(stdout);

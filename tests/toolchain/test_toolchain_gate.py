@@ -18,7 +18,8 @@ import pytest
 
 HARDWARE_SLICE = ("dx12-device", "shader-compile", "compute-readback", "png16", "embree")
 PROBES = ("dx12-ray-query", "vulkan-availability", "vulkan-ray-query", "warp")
-# The non-mandatory Vulkan hardware slice of decision 310 (`tests/toolchain/test_selftest.py`).
+# The Vulkan hardware slice of decision 310 (`tests/toolchain/test_selftest.py`): its compute
+# stages mandatory since phase3.1's acceptance (decision 310 §9), the ray-query stage not.
 VULKAN_SLICE = (
     "vulkan-device",
     "vulkan-compute-readback",
@@ -54,9 +55,9 @@ def selftest(exe: Path, out_dir: Path, no_gpu: bool) -> tuple[int, str, dict[str
 
 def test_gate_on_the_owners_machine(painter_bin: Path, tmp_path: Path) -> None:
     """4.1: hardware slice green, every probe completed and reported (none mandatory, none part
-    of the slice, so a WARP or Vulkan failure cannot fail the gate), the Vulkan slice of decision
-    310 not mandatory either, CPython boundary qualified directly; all from one build and one
-    run."""
+    of the slice, so a WARP or Vulkan probe failure cannot fail the gate), the Vulkan slice of
+    decision 310 passed with its compute stages mandatory since phase3.1's acceptance (decision 310
+    §9), CPython boundary qualified directly; all from one build and one run."""
     if os.environ.get("UZP_NO_GPU") == "1":
         pytest.skip("UZP_NO_GPU=1: no GPU here (decision 028); runs on the owner's machine")
     code, output, report = selftest(painter_bin / "UzPainter.exe", tmp_path, no_gpu=False)
@@ -67,7 +68,10 @@ def test_gate_on_the_owners_machine(painter_bin: Path, tmp_path: Path) -> None:
     for name in HARDWARE_SLICE:
         assert stages[name]["status"] == "passed" and stages[name]["hardware_slice"], name
     for name in (*PROBES, *VULKAN_SLICE):
-        assert not stages[name]["mandatory"] and not stages[name]["hardware_slice"], name
+        assert not stages[name]["hardware_slice"], name
+        assert stages[name]["mandatory"] == (name in VULKAN_SLICE[:3]), name
+    for name in VULKAN_SLICE:
+        assert stages[name]["status"] == "passed", name
     for name in CPYTHON:
         assert stages[name]["status"] == "passed" and stages[name]["mandatory"], name
     probes = {p["probe"]: p for p in report["probes"]}
