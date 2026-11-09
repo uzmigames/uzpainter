@@ -1,5 +1,6 @@
 ## 1. Prerequisites
-- [ ] 1.1 Prerequisites accepted: phase3.1_vulkan-compute-parity
+- [x] 1.1 Prerequisites accepted: phase3.1_vulkan-compute-parity
+  - Archived (2026-11-09 check): `.rulebook/archive/2026-11-08-phase3.1_vulkan-compute-parity/`.
 
 ## 2. Implementation
 - [x] 2.1 Enable `VK_KHR_acceleration_structure`, `VK_KHR_deferred_host_operations` and `VK_KHR_ray_query` with the `accelerationStructure` and `rayQuery` features at device creation when present; record their absence otherwise
@@ -8,7 +9,9 @@
   - Done (UZP-MOD-007): build-size query, storage buffer at offset 0, scratch aligned to `minAccelerationStructureScratchOffsetAlignment` (128 here), build commands with a barrier before each build; invalid input refused and a refused build submits nothing; built state published only by a submitted list. Evidence 2026-11-02 (decision 372, RTX 4090, NVIDIA 617.14): `tests/render/test_ray_query.py` (3 passed), `tests/render/test_vulkan_qualification.py` and `test_vulkan_image_passes.py` unchanged and green with the new layout.
 - [x] 2.3 Add acceleration-structure descriptors to the Vulkan descriptor layout so a compute kernel can bind a TLAS
   - Done (UZP-MOD-007): binding 80 `ACCELERATION_STRUCTURE_KHR` (compute, partially bound, not update-after-bind) only with ray queries; `VulkanCommandList::SetComputeAccelerationStructure`. The ray-cast SPIR-V binds it at 80 and traces. No validation layer is installed on the machine.
-- [ ] 2.4 Add descriptor-indexing bindless on Vulkan for sampled textures, keeping Phase 1 kernels on the fixed-slot subset
+- [x] 2.4 Add descriptor-indexing bindless on Vulkan for sampled textures, keeping Phase 1 kernels on the fixed-slot subset
+  - Done 2026-11-09 (UZP-MOD-007 bindless part, decision 421): set 1 of the Vulkan pipeline layout holds 65,536 sampled images (compute; partially bound, update-after-bind, update-unused-while-pending), created only with every descriptor-indexing feature and update-after-bind limit it needs (`BindlessMissing()` names the rest); a sampled 2D colour texture gets a slot for its life, released on destroy; command lists bind it for compute. `render::BindlessTextureIndex` / `RequireBindlessTextures` (`src/render/bindless.h`) name textures by that slot on Vulkan and by the SRV heap index on DX12; `shaders/bindless_gather.hlsl` is the same HLSL on both. Set 0 and the fixed-slot kernels are unchanged (`test_vulkan_qualification.py`, `test_vulkan_image_passes.py` green on the new layout).
+  - Evidence (RTX 4090, NVIDIA 617.14): `uzp-render-tests bindless-textures` (`test_bindless_textures_on_both_backends`): 40 RGBA32F textures of two mips, 160 shuffled non-uniform lookups bit for bit against their texels, mip sizes and level counts on each backend, twice byte-identical, a released Vulkan slot reused by the next texture which reads its own texels; **DX12 and Vulkan results byte-identical**.
 - [x] 2.5 Make `SupportsRayTracing()` and the capability query report inline ray queries per backend with the list of missing extensions, features or tiers
   - Done: `render::QueryRayQuerySupport` / `RequireInlineRayQuery` (`src/render/ray_query.h`), `VulkanRayQueryMissing` on the record, `ray_query_missing` in the capability report (fabricated records in `ray-query-reference`; live in `vulkan-ray-query`, `dx12-ray-query`).
 - [x] 2.6 Emit SPIR-V with `SPV_KHR_ray_query` from DXC for kernels that request ray queries (UZP-MOD-006 option, `vulkan1.2` target)
@@ -25,13 +28,15 @@
   - Done: `src/render/shaders/ray_cast.hlsl` (one file, `__spirv__` picks the bindings; record adds geometry and instance index; decision 372); traced on DXR and Vulkan, `tests/render/test_ray_query.py` (6 passed, RTX 4090, 2026-11-02).
 - [x] 2.12 Write the cross-backend ray-cast comparison: per-fixture counts of differing records by field, max |Δ| of distance and barycentrics, list of every differing ray
   - Done: `uzp-render-tests ray-cast-fixtures` and `python -m tools.parity.raycast` (`parity/reports/phase3/ray-cast.json`, guard rule `ray-cast.json`; decision 373): per fixture and backend the CPU comparison, DX12 vs Vulkan exact per field with every differing ray. `test_ray_cast_fixtures_on_both_backends`, `test_committed_ray_cast_report_is_valid`, `tests/parity/test_guard.py` green.
-- [ ] 2.13 Add Vulkan ray-query entries to the capability manifest (`capabilities.json`) with their tier evidence
+- [x] 2.13 Add Vulkan ray-query entries to the capability manifest (`capabilities.json`) with their tier evidence
+  - Done 2026-11-09 (decision 421 §5): no public symbol depends on Vulkan ray queries before the path tracer, so the entry is `uzpainter.render.capture` @ `mode:painter_iray:backend:vulkan`, `release-gap` (`tools/capabilities/uzpainter-additions.json`), its notes citing the qualified prerequisite (selftest `vulkan-ray-query-trace`, `parity/reports/phase3/ray-cast.json`); Painter has no ray-query API, so no Tier 0 evidence exists for it. `tests/capabilities/test_capabilities.py` and the conformance refusal check (`test_release_gaps_raise_not_yet_supported_before_mutation`) green. `phase3.3` 3.6 regenerates the manifest.
 
 ## 3. Tests
 - [x] 3.1 Unit tests: BLAS/TLAS build on Vulkan for each ray-cast fixture mesh; rebuild after a vertex change; invalid input rejected
   - Done 2026-11-02: every ray-cast fixture mesh builds and traces on Vulkan (`ray-cast-fixtures`); rebuild after a vertex change and invalid input refused (`vulkan-ray-query`); `tests/render/test_ray_query.py` (6 passed, RTX 4090, 2026-11-02).
-- [ ] 3.2 Capability tests: a device without `VK_KHR_ray_query` reports unavailable with the missing list and no work is dispatched
-  - Progress 2026-11-02: a record without `VK_KHR_ray_query` reports it missing and the capability report says unavailable; `RequireInlineRayQuery` refuses before any work. Open: a live device without the extension (none on this machine) beyond the fabricated records.
+- [x] 3.2 Capability tests: a device without `VK_KHR_ray_query` reports unavailable with the missing list and no work is dispatched
+  - Progress 2026-11-02: a record without `VK_KHR_ray_query` reports it missing and the capability report says unavailable; `RequireInlineRayQuery` refuses before any work.
+  - Done 2026-11-09 (decision 421 §4): a live device created without `VK_KHR_ray_query` (`VulkanDeviceOptions::hiddenDeviceExtensions`, the vendored test hook; product paths never set it) reports exactly that extension missing in the query and capability report, acceleration structures still on; `RequireInlineRayQuery`, `BuildRayScene` and `CastRays` fail `gpu_backend_unavailable` naming Vulkan and the extension; the queue's last submission is unchanged (`test_vulkan_device_without_ray_query`).
 - [x] 3.3 Repeatability: the ray-cast kernel run twice on each backend gives byte-identical records
   - Done 2026-11-02: every fixture and the qualification scene, built and traced twice, give byte-identical records on DX12 and on Vulkan (`ray-cast-fixtures`, `vulkan-ray-query`, `dx12-ray-query`).
 - [x] 3.4 Cross-backend run of every ray-cast fixture on DXR and Vulkan on the owner's GPU; report every difference
@@ -40,9 +45,13 @@
   - Done 2026-11-02 on the owner's machine (RTX 4090): `test_vulkan_ray_query_slice_green` and `test_vulkan_hardware_slice_green` passed.
 
 ## 4. Acceptance
-- [ ] 4.1 Acceptance: ray-cast fixtures compared with DXR and every difference reported; any divergence covered by an owner-approved exception; Vulkan ray-query slice green
+- [x] 4.1 Acceptance: ray-cast fixtures compared with DXR and every difference reported; any divergence covered by an owner-approved exception; Vulkan ray-query slice green
+  - Holds 2026-11-09 (RTX 4090): every ray-cast fixture runs the same kernel on DXR and Vulkan with 0 differing rays on every field (`parity/reports/phase3/ray-cast.json`, outcome pass; `test_ray_cast_fixtures_on_both_backends` and `test_committed_ray_cast_report_is_valid` re-run green), so no exception is relied on and none was created; the bindless gather is byte-equal on DX12 and Vulkan as well. The Vulkan ray-query slice is green and, as decision 310 §9 did for the compute stages, mandatory from this acceptance (decision 421 §6): `test_vulkan_ray_query_slice_green`, `test_vulkan_hardware_slice_green`, `test_gate_on_the_owners_machine`, `test_loader_hidden_reports_unavailable_and_slice_passes` passed. A missing feature reports unavailable with the missing items and never falls back (3.2).
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
-- [ ] 5.1 Update or create documentation covering the implementation
-- [ ] 5.2 Write tests covering the new behavior
-- [ ] 5.3 Run tests and confirm they pass
+- [x] 5.1 Update or create documentation covering the implementation
+  - `docs/architecture/13-engine-integration.md` §2.3 (bindless row), §3.4 (UZP-MOD-007's bindless part), §4.2 (ray-query stage mandatory); `thirdparty/uzengine-render-core/MODIFICATIONS.md` UZP-MOD-007; decision 421; `src/render/bindless.h`.
+- [x] 5.2 Write tests covering the new behavior
+  - `tests/render/test_ray_query.py::test_bindless_textures_on_both_backends`, `::test_vulkan_device_without_ray_query` (cases in `tests/render/ray_query_test.cpp`); `tests/vendoring/test_modifications.py::test_vulkan_bindless_sampled_textures`; the mandatory stage in `tests/toolchain/test_selftest.py` and `test_toolchain_gate.py`; the conformance recipe in `tests/python/test_capability_conformance.py`.
+- [x] 5.3 Run tests and confirm they pass
+  - Affected tests only, native lock held, 2026-11-09: `tests/render/test_ray_query.py`, `test_vulkan_qualification.py`, `test_vulkan_image_passes.py`, `test_core_device_kernels.py::test_vulkan_product_factory` (17 passed); the five selftest/gate/probe node ids (5 passed); `tests/vendoring/test_modifications.py` (18 passed, `python -m tools.vendoring.modifications`: 0 problems); `tests/capabilities/test_capabilities.py` (27 passed, the zig-build case deselected); the two conformance node ids (2 passed); Ruff on every changed Python file.
