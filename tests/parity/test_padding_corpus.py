@@ -13,8 +13,9 @@ REF = load_module(REPO_ROOT / "tests/export/padding_reference.py", "test_padding
 
 def test_kernel_probes_are_the_padding_manifests_with_the_eight_kernel_maps() -> None:
     names = corpus.probes()
-    assert len(names) == 35
+    assert len(names) == 36
     assert {
+        "end-overhang",
         "fold-tie",
         "hinge-vary",
         "joint-bend",

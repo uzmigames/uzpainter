@@ -2482,6 +2482,7 @@ ADMITTED = frozenset(
         # phase3.1_export-island-padding item 2.1 (Painter session of 2026-11-08, Legacy).
         "export-padding-kernel-islands-256",
         "export-padding-fold-tie",
+        "export-padding-end-overhang",
     }
 )
 
@@ -2534,6 +2535,7 @@ PRESERVED_REQUESTS = frozenset(
         "srgb-bitmap-minification-random",
         "export-padding-kernel-islands-256",
         "export-padding-fold-tie",
+        "export-padding-end-overhang",
     }
 )
 
