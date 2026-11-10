@@ -49,6 +49,7 @@ from tools.parity.tier0_semantics import padding_plane_control as plane_control
 from tools.parity.tier0_semantics import padding_turn_exact as turn_exact
 from tools.parity.tier0_semantics import padding_world_offset as world_offset
 from tools.parity.tier0_semantics import request_fixtures as rf
+from tools.parity.tier0_semantics import snapshot_in_mask
 from tools.parity.tier0_semantics import unreal_preset_control as unreal_control
 from tools.parity.tier0_semantics.corpus import (
     BLEND_FAMILIES,
@@ -2457,6 +2458,7 @@ def later_goldens() -> list[Golden]:
         padding_islands_kernel_probe(),
         fold_tie.request(),
         end_overhang.request(),
+        *(snapshot_in_mask.request(name) for name in snapshot_in_mask.GOLDENS),
     ]
 
 
@@ -2566,6 +2568,9 @@ ADMITTED = frozenset(
         "export-padding-kernel-islands-256",
         "export-padding-fold-tie",
         "export-padding-end-overhang",
+        # phase3.3_procedural-families item 2.15 (Painter session of 2026-11-10, Legacy).
+        "snapshot-in-mask",
+        "snapshot-in-mask-sources",
     }
 )
 
@@ -2622,6 +2627,8 @@ PRESERVED_REQUESTS = frozenset(
         "export-padding-fold-tie",
         "export-padding-end-overhang",
         "ocio-added-channel-bases",
+        "snapshot-in-mask",
+        "snapshot-in-mask-sources",
     }
 )
 
