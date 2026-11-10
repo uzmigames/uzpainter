@@ -1,5 +1,6 @@
 ## 1. Prerequisites
 - [x] 1.1 Prerequisites accepted: phase3.1_baker-request-model, phase3.2_baker-normal - recorded scope split under decision 326's rule: neither prerequisite is accepted. phase3.1 stays open on its prerequisite (phase2.10), item 3.1 (Tier 0 goldens of the defaults and property metadata) and 4.1; phase3.2 on its prerequisites, item 2.1 (the Normal domains outside SubSampling 1 / DilationWidth 0 / identity transforms), 2.4 and its Tier 2b items. None of that is read by the evidence, the accounting, the receipt or the publication of section 6; nothing here claims either task accepted
+  - Update 2026-11-10. `phase3.1_baker-request-model` has since been accepted and archived (`.rulebook/archive/2026-11-08-phase3.1_baker-request-model/`, 4.1 met 2026-11-08). `phase3.2_baker-normal` is still open (items 2.1, 3.1-3.4, 4.1): plane and bevelled cube are exact, but the hemisphere's facet-edge ties and one-code residue and the sphere's sign pattern have no fit, and Wand and Hat have no request.
 
 ## 2. Implementation
 - [x] 2.1 Produce the evidence maps `raw`, `hit`, `coverage`, `miss`, `extension` per usage under `cache/`, regenerable, never altering the compatible map - section 6
@@ -17,14 +18,23 @@
 - [x] 3.4 Event-order test: `BakingProcessAboutToStart`, progress events, `BakingProcessEnded(status)` dispatched on the dispatcher thread; `is_busy()` true only while running
 - [x] 3.5 MCP native-bake cancellation fixture with Python disabled: `bake_start` then `job_cancel`; `cancelled` terminal state and receipt says before or after commit
 - [ ] 3.6 Unavailable GPU backend (bake version of the P2-SUPERVISOR check, `02-…` §7): worker started with an unavailable backend returns `gpu_backend_unavailable` for GPU operations while an Embree CPU bake still runs and publishes
+  - Still open (2026-11-10), blocked on `phase3.2_baker-normal`. "And publishes" needs a bindable usage whose receipt `parity_status` is `supported` (decision 001; section 7). Every usage is still `pending-evidence`, and Normal, the first candidate, is not accepted (see 1.1). Once it is, add the successful unavailable-GPU publication case beside `test_supervisor_bake.py::test_bake_start_refusals_and_a_bake_refused_at_publication`.
 
 ## 4. Acceptance
-- [ ] 4.1 Acceptance: accounting and conservation exact on the analytic fixtures; publication all-or-nothing; MCP cancellation during a native bake passes
+- [x] 4.1 Acceptance: accounting and conservation exact on the analytic fixtures; publication all-or-nothing; MCP cancellation during a native bake passes
+  - Holds on its three named criteria (2026-11-10 reconciliation, no new run):
+    - Exact per-class counts and the conservation identity on plane, sphere, bevelled cube and buried face (3.1; native `accounting_*`).
+    - All-or-nothing publication under cancellation before and after publication, a failing baker, a refused publication and a worker kill (2.4, 3.3; `publication_atomic`, `bake_job_*`, `test_worker_killed_during_a_bake`).
+    - MCP `bake_start` then `job_cancel` with Python disabled ends `cancelled`, and the report states `stopped` (3.5).
+  - The task is still not archived: item 3.6 is open.
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
-- [ ] 5.1 Update or create documentation covering the implementation
-- [ ] 5.2 Write tests covering the new behavior
+- [x] 5.1 Update or create documentation covering the implementation
+  - `docs/architecture/06-baking.md` §4.1 (evidence, receipt and publication, decision 347) and §6.1 (native bake jobs, decision 355); `docs/architecture/11-mcp-server.md` (`bake_start` on the job ledger); this task's baker spec.
+- [x] 5.2 Write tests covering the new behavior
+  - Native `accounting_*`, `receipt_content`, `publication_atomic`, `bake_job_*` and `bake_input_resources` (`tests/bake/test_bake_feasibility.py`); `tests/python/test_pyapi_baking.py::test_bake_async_events_busy_and_cancel`; `tests/supervisor/test_supervisor_bake.py` (sections 6-8).
 - [ ] 5.3 Run tests and confirm they pass
+  - Left open for 3.6's test. The tests of sections 6-8 passed when they landed; this reconciliation changed no baker code and ran none of them (CLAUDE.md test-time budget).
 
 ## 6. Evidence, accounting, receipt and publication (2026-10-21, decision 347)
 - 2.1: `src/bake/bake_accounting.*` `EvidenceFiles`/`WriteEvidence`: per usage `map`, `raw` (none for Thickness), `hit`, `coverage`, `miss`, `extension` under `cache/bake/<key>/<Usage>/`; PNG for integer maps and masks, the `UZPF32` container for float maps. A pure function of request and result: `evidence_regenerated` writes, deletes and regenerates them byte for byte with the compatible map unchanged.
