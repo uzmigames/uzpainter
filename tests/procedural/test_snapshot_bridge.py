@@ -263,6 +263,9 @@ def painter_module(monkeypatch: pytest.MonkeyPatch) -> tuple[dict[str, Any], dic
         "set_output",
         "preset_parameters",
         "contexts",
+        "mesh_maps",
+        "configure_generator",
+        "generator_readback",
     ],
 )
 def test_painter_dispatch_refuses_lost_ownership_before_operation(
@@ -642,3 +645,240 @@ def test_unplugged_input_reads_back_as_a_bitmap_without_resource(tmp_path: Path)
     assert bridge.signature_inputs(source, multi_request(tmp_path), readback, {}) == {}
     with pytest.raises(ValueError, match="requested bitmap"):
         bridge.signature_inputs(source, multi_request(tmp_path, mask="bitmap"), readback, {})
+
+
+# ── Captures on the destination's own mesh and resolution (decision 428) ────────────────────────
+
+GENERATOR = "resource://authored/generator?version=456"
+SET = "authored_set"
+MESH_MAP_URLS = {
+    "AO": "resource://project1/ao?version=1",
+    "Curvature": "resource://project1/c?version=1",
+}
+SIGNATURE_INPUTS = {
+    usage: {
+        "sha256": "ab" * 32,
+        "resolution": 256,
+        "format": "u16",
+        "colour_space": "",
+        "channels": 1,
+    }
+    for usage in MESH_MAP_URLS
+}
+
+
+def usage_context(tmp_path: Path, generator: bool) -> dict[str, Any]:
+    files = {u: str(tmp_path / f"{u}.png") for u in MESH_MAP_URLS} if generator else {}
+    return {
+        "mesh_path": str(tmp_path / "mesh.obj"),
+        "project_uuid": "authored",
+        "revision": 7,
+        "settings": {"workflow": "Default"},
+        "texture_set": SET,
+        "resolution": 256,
+        "mesh_maps": files,
+        "signature_inputs": SIGNATURE_INPUTS if generator else {},
+    }
+
+
+def generator_readback(context: dict[str, Any]) -> dict[str, Any]:
+    files = {path: MESH_MAP_URLS[usage] for usage, path in context["mesh_maps"].items()}
+    bound = {usage: MESH_MAP_URLS.get(usage) for usage in bridge.MESH_MAP_USAGES}
+
+    def layer(uid: int, value: int, masked: bool) -> dict[str, Any]:
+        channel = {"value": [value, value, value], "opacity": 1, "blending": "Normal"}
+        return {
+            "uid": uid,
+            "visible": True,
+            "mask": masked,
+            "content_effects": [],
+            "mask_effects": [30] if masked else [],
+            "source_mode": "Split",
+            "active_channels": ["User0", "User1"],
+            "channels": {"User0": dict(channel), "User1": dict(channel)},
+        }
+
+    return {
+        "channel_formats": {"User0": "L32F", "User1": "RGB32F"},
+        "roots": [20, 10],
+        "layers": {"fill": layer(20, 1, True), "base": layer(10, 0, False)},
+        "effect": {"uid": 30, "visible": True},
+        "generator": {
+            "resource": GENERATOR,
+            "resource_id": {"url": GENERATOR, "context": "authored", "name": "g", "version": "456"},
+            "parameters": {"amount": 0.5, "$randomseed": 3},
+            "inputs": [],
+            "outputs": ["mask"],
+            "active_output": {"value": "mask"},
+        },
+        "mesh_maps": {SET: bound},
+        "mesh_map_files": files,
+        "sets": [{"name": SET, "resolution": [256, 256], "has_uv_tiles": False}],
+    }
+
+
+class UsageRemote(FakeRemote):
+    """A Painter creating the destination texture set; it records the operations it ran."""
+
+    def __init__(self, context: dict[str, Any], generator: bool) -> None:
+        super().__init__(context["mesh_path"])
+        self.generator = generator
+        self.calls: list[tuple[str, Any]] = []
+        self.observed = generator_readback(context)
+
+    def call(self, operation: str, args: dict[str, Any] | None = None) -> Any:
+        self.calls.append((operation, deepcopy(args)))
+        if operation == "lookup":
+            return [
+                {
+                    "url": GENERATOR if self.generator else RESOURCE,
+                    "type": "SUBSTANCE",
+                    "procedural": not self.generator,
+                    "generator": self.generator,
+                }
+            ]
+        if operation == "readback":
+            observed = observed_readback()
+            observed["sets"] = [{"name": SET, "resolution": [256, 256], "has_uv_tiles": False}]
+            return observed
+        if operation == "generator_readback":
+            return deepcopy(self.observed)
+        return super().call(operation, args)
+
+
+def test_usage_request_shape_and_refusals() -> None:
+    request = bridge.capture_request({"resource": RESOURCE, "parameters": {}, "usage": "GENERATOR"})
+    assert request == {"resource": RESOURCE, "parameters": {}, "usage": "GENERATOR"}
+    with pytest.raises(ValueError, match="PROCEDURAL or GENERATOR"):
+        bridge.capture_request({"resource": RESOURCE, "parameters": {}, "usage": "TEXTURE"})
+    with pytest.raises(ValueError, match="exactly resource and parameters"):
+        bridge.capture_request(
+            {"resource": RESOURCE, "parameters": {}, "usage": "PROCEDURAL", "extra": 1}
+        )
+
+
+def test_procedural_usage_capture_records_the_destination_resolution(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    context = usage_context(tmp_path, generator=False)
+    remote = UsageRemote(context, generator=False)
+    monkeypatch.setattr(bridge, "Remote", lambda: remote)
+    request = bridge.capture_request(
+        {"resource": RESOURCE, "parameters": {}, "usage": "PROCEDURAL"}
+    )
+    report = bridge.record(context, request, tmp_path)
+    assert remote.created and remote.closed
+    assert report["schema"] == "uzpainter/procedural-capture/3"
+    assert report["usage"] == "PROCEDURAL"
+    signature = report["signature"]
+    assert signature["output"] == {
+        "id": "value",
+        "resolution": 256,
+        "format": "f32",
+        "colour_space": "raw",
+        "channels": 1,
+    }
+    assert signature["inputs"] == {} and signature["seed"] == 7
+    assert signature["settings"] == context["settings"]
+    created = [args for operation, args in remote.calls if operation == "create"]
+    assert created == [{"mesh_path": context["mesh_path"], "resolution": 256}]
+    exports = [args for operation, args in remote.calls if operation == "export"]
+    assert len(exports) == 2
+    assert all(e["exportList"] == [{"rootPath": SET}] for e in exports)
+    assert "mesh_maps" not in [operation for operation, _ in remote.calls]
+
+
+def test_procedural_usage_capture_refuses_another_texture_set(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    context = usage_context(tmp_path, generator=False)
+    context["resolution"] = 512
+    remote = UsageRemote(context, generator=False)
+    monkeypatch.setattr(bridge, "Remote", lambda: remote)
+    request = bridge.capture_request(
+        {"resource": RESOURCE, "parameters": {}, "usage": "PROCEDURAL"}
+    )
+    with pytest.raises(ValueError, match="texture set or resolution"):
+        bridge.record(context, request, tmp_path)
+    assert remote.closed
+
+
+def test_generator_usage_capture_binds_mesh_maps_and_names_them(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    context = usage_context(tmp_path, generator=True)
+    remote = UsageRemote(context, generator=True)
+    monkeypatch.setattr(bridge, "Remote", lambda: remote)
+    request = bridge.capture_request(
+        {"resource": GENERATOR, "parameters": {"amount": 0.5}, "usage": "GENERATOR"}
+    )
+    report = bridge.record(context, request, tmp_path)
+    assert remote.closed
+    operations = [operation for operation, _ in remote.calls]
+    assert operations.index("mesh_maps") < operations.index("configure_generator")
+    assert ("mesh_maps", {"paths": context["mesh_maps"]}) in remote.calls
+    signature = report["signature"]
+    assert signature["inputs"] == SIGNATURE_INPUTS
+    assert signature["output"]["id"] == "mask"
+    assert signature["output"]["resolution"] == 256
+    assert signature["seed"] == 3 and signature["params"]["amount"] == 0.5
+    assert report["usage"] == "GENERATOR"
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "unbound map",
+        "extra map",
+        "second output",
+        "override not applied",
+        "base not black",
+        "mask on base",
+        "foreign effect",
+        "low precision",
+    ],
+)
+def test_generator_usage_capture_refuses_another_state(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, change: str
+) -> None:
+    context = usage_context(tmp_path, generator=True)
+    remote = UsageRemote(context, generator=True)
+    observed = remote.observed
+    if change == "unbound map":
+        observed["mesh_maps"][SET]["AO"] = None
+    elif change == "extra map":
+        observed["mesh_maps"][SET]["Thickness"] = "resource://project1/t?version=1"
+    elif change == "second output":
+        observed["generator"]["outputs"] = ["mask", "other"]
+    elif change == "override not applied":
+        observed["generator"]["parameters"]["amount"] = 0.25
+    elif change == "base not black":
+        observed["layers"]["base"]["channels"]["User1"]["value"] = [0, 0, 1]
+    elif change == "mask on base":
+        observed["layers"]["base"]["mask"] = True
+    elif change == "foreign effect":
+        observed["layers"]["fill"]["mask_effects"] = [30, 31]
+    else:
+        observed["channel_formats"]["User0"] = "L16F"
+    monkeypatch.setattr(bridge, "Remote", lambda: remote)
+    request = bridge.capture_request(
+        {"resource": GENERATOR, "parameters": {"amount": 0.5}, "usage": "GENERATOR"}
+    )
+    with pytest.raises(ValueError):
+        bridge.record(context, request, tmp_path)
+    assert remote.closed
+    assert "export" not in [operation for operation, _ in remote.calls]
+
+
+def test_generator_lookup_requires_the_generator_usage(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    context = usage_context(tmp_path, generator=True)
+    remote = UsageRemote(context, generator=False)
+    monkeypatch.setattr(bridge, "Remote", lambda: remote)
+    request = bridge.capture_request(
+        {"resource": GENERATOR, "parameters": {}, "usage": "GENERATOR"}
+    )
+    with pytest.raises(ValueError, match="generator ResourceID"):
+        bridge.record(context, request, tmp_path)
+    assert not remote.created

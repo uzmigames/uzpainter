@@ -109,10 +109,14 @@ render::Result<std::shared_ptr<const evaluator::ProceduralImage>> SnapshotSource
     auto image = std::make_shared<evaluator::ProceduralImage>();
     image->signature = SignatureHash(*request);
     image->rasterDigest = core::Sha256Hex((*stored)->bytes);
-    image->image.width = image->image.height = 128;
+    const uint32_t size = request->output.resolution;
+    if ((*stored)->bytes.size() != size_t{size} * size * sizeof(float)) {
+        return fail("the stored raster is not the request's " + std::to_string(size) + "px float32 output");
+    }
+    image->image.width = image->image.height = size;
     image->image.channels = 1;
     image->image.encoding = render::TexelEncoding::Float32;
-    image->image.values.resize(128 * 128);
+    image->image.values.resize(size_t{size} * size);
     std::memcpy(image->image.values.data(), (*stored)->bytes.data(), (*stored)->bytes.size());
     if (fill.source_mode == core::SourceMode::Material) {
         // A material fill's Height is the Height bitmap rule on the mapped output's L32F view
@@ -153,8 +157,8 @@ bool SnapshotSourceProvider::Available(const evaluator::ProceduralImage& image) 
                                               {"chunk_root", entry.version->chunk_root}, {"raster_sha256", image.rasterDigest}};
             if (identity != image.provenance) return false;
             const auto plane = store_.ReadPlane(project_, entry.plane_id);
-            return plane.format == core::ChannelFormat::L32F && plane.width == 128 && plane.height == 128 &&
-                   core::Sha256Hex(plane.texels) == image.rasterDigest;
+            return plane.format == core::ChannelFormat::L32F && static_cast<uint32_t>(plane.width) == image.image.width &&
+                   static_cast<uint32_t>(plane.height) == image.image.height && core::Sha256Hex(plane.texels) == image.rasterDigest;
         }
     } catch (const std::exception&) {
         return false;

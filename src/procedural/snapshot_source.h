@@ -6,6 +6,7 @@
 #include "store/project_store.h"
 
 #include <expected>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -23,12 +24,32 @@ namespace uzp::procedural {
 std::expected<UseContext, std::string> SnapshotUseContext(const core::Project& project, const core::TextureSet& set,
                                                          const core::ProceduralRef& ref, const std::string& outputId);
 
+/// The request a source `ref` of output `outputId` asks for on texture set `set` (decision 428):
+/// `SnapshotUseContext` and `RequestFor`, at an effective source resolution equal to the set's.
+/// Refused outside the capture settings: one square texture set of one UV tile 1001 at a
+/// power-of-two resolution from 128 to 4096 on an imported mesh, under the default workflow,
+/// Legacy, OpenGL normals, PerVertex tangents and mesh scale 1. The mesh's identity is a signature
+/// field (`EvaluationSettings`), so another mesh is a signature mismatch, not a domain refusal.
+std::expected<ProceduralRequest, std::string> SnapshotSetRequest(const core::Project& project, const core::TextureSet& set,
+                                                                 const core::ProceduralRef& ref, const std::string& outputId);
+
+/// The image inputs a generator snapshot's signature holds: every mesh map bound to `set`, by
+/// usage name, with the binding's SHA-256 and its spec (the set's resolution and the binding's
+/// sample type, channels and colour space, as `MeshMapSpec` of generators.h gives them). Refused
+/// for an invalid binding. A generator capture plugs exactly these maps into Painter.
+std::expected<std::map<std::string, ImageInput>, std::string> SnapshotMeshMapInputs(const core::TextureSet& set);
+
+/// The request a generator `ref` asks for on `set` (decision 428): `SnapshotSetRequest` with the
+/// set's mesh maps (`SnapshotMeshMapInputs`) as its image inputs. Refused when the reference binds
+/// image inputs or plugged sources itself.
+std::expected<ProceduralRequest, std::string> SnapshotGeneratorRequest(const core::Project& project, const core::TextureSet& set,
+                                                                       const core::ProceduralRef& ref, const std::string& outputId);
+
 /// The request a snapshot fill source asks for, from `project` alone (no store read): the
-/// provider's domain (a User L32F fill on the recorded 128px full-UV plane under Legacy, the
+/// provider's domain (a User L32F fill in the capture settings of `SnapshotSetRequest`, the
 /// identity UV or Fill projection with BilinearHQ and Repeat, one explicit scalar output mapping,
 /// no raster image input or mask output; a preset and plugged input sources join the signature),
-/// `SnapshotUseContext` and `RequestFor`, at a source
-/// resolution of 128. A fill in Material mode is `SnapshotMaterialRequest` (channel Height only). `SnapshotSourceProvider` admits only such a request; this does not say that
+/// `SnapshotUseContext` and `RequestFor`, at the set's resolution. A fill in Material mode is `SnapshotMaterialRequest` (channel Height only). `SnapshotSourceProvider` admits only such a request; this does not say that
 /// a snapshot holds it.
 std::expected<ProceduralRequest, std::string> SnapshotFillRequest(
     const core::Project& project, const core::TextureSet& set, core::ChannelType channel, core::ChannelFormat format,

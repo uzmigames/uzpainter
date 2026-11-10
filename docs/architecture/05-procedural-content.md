@@ -63,7 +63,7 @@ The library ships beside the executable as `assets/procedural/`: one provenance 
 - Recorded against Painter 12.2.0 (decision 427, `docs/analysis/proc-grunge-families/03-diagnostic-evidence-2026-11-10.md`). No grunge has a clean-room route to exact:
   - Four are fixed textures: seeds change nothing, or there is no seed. Exact equality would reproduce Adobe content.
   - Thirteen follow the Substance engine's seed, which no public source describes.
-  - The seventeen grunges and the Dirt, Metal Edge Wear and Mask Builder - Legacy generators that read them stay release gaps (`phase3.3_procedural-families` items 2.13 and 2.14). Each awaits an owner route decision.
+  - The owner chose the route on 2026-11-10 (decision 429, "snapshot-only"). The seventeen grunges and the Dirt, Metal Edge Wear and Mask Builder - Legacy generators that read them are served only from project-private snapshots of the user's own Painter (§4). Their UzPainter kernels never serve them, and their `@1` records stay `unavailable` with no alias. Without a matching snapshot the source is refused.
 
 **As built, materials (`phase3.2_proc-material-families`, decision 334, `src/procedural/materials.h`).**
 - Four assets `uzasset://material/{felt, burlap, leather-grain, leather-pattern}@1`. Each has six outputs, listed in its record: `basecolor`, `normal`, `roughness`, `metallic`, `height` and `ambient_occlusion`.
@@ -78,6 +78,13 @@ Parity status per asset is `exact` (zero residual on every calibration and held-
 ## 4. Frozen snapshots (`SnapshotBackend`)
 
 A snapshot is a raster the user's own Painter produced for the user's own project, recorded through the documented export API with a full **signature**: `{asset id, asset version, effective parameters incl. defaults, preset, seed, output id, resolution, channel format, colour space, image inputs by hash, project settings that affect evaluation}`. It is served only for a request whose signature matches exactly — no resampling, no parameter extrapolation; otherwise `unavailable`. Snapshots preserve an existing approved state during migration (Tunic v10, locked bracers); they never make an asset editable, never count as calibration or held-out evidence and never widen a certified editable domain (§6), and they are **project-private data**: embedded in that project's `.uzp`, never shipped with UzPainter, never copied into another project. A `uzpainter assets snapshot` command records them locally on a machine with the owner's Painter licence. The signature's canonical form, the settings it names and the `.uzp` storage are decision 327 (`src/procedural/snapshot_backend.h`, `src/store/snapshots.h`).
+
+Since decision 429, snapshots are also the only route for Painter's grunges and the three generators that read them: Dirt, Metal Edge Wear and Mask Builder - Legacy. Their output is either a fixed Adobe texture or Adobe's seeded sequence (decision 427), which no clean-room kernel reproduces.
+- `assets snapshot` with a `usage` captures on the destination's own mesh and texture set resolution. A grunge is captured as a fill source. A generator is captured in a mask, reading the destination's mesh maps imported into Painter.
+- The signature names the seed, every effective parameter, the resolution, the mesh's identity and, for a generator, each mesh map by hash.
+- Any single change is `unavailable`, naming its field.
+- The compositor serves grunge snapshots as User fill sources. Generator effects and snapshot sources inside mask stacks are not evaluated yet (`phase3.3_procedural-families` item 2.15).
+- Details: `docs/procedural-snapshots.md`.
 
 ## 5. What remains unsupported
 

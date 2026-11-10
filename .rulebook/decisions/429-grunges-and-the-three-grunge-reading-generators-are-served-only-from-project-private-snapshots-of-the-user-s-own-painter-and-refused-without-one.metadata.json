@@ -1,0 +1,9 @@
+{
+  "id": 429,
+  "slug": "grunges-and-the-three-grunge-reading-generators-are-served-only-from-project-private-snapshots-of-the-user-s-own-painter-and-refused-without-one",
+  "title": "Grunges and the three grunge-reading generators are served only from project-private snapshots of the user's own Painter, and refused without one",
+  "status": "accepted",
+  "date": "2026-11-10",
+  "relatedTasks": ["phase3.3_procedural-families", "phase3.2_proc-grunge-families", "phase3.2_proc-snapshot-backend"],
+  "supersededBy": null
+}

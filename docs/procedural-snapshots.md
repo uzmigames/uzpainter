@@ -67,6 +67,76 @@ these observations as schema `/4` metadata (below). The command commits one tran
 per snapshot, saves, reopens, checks every stored raster and its observations, and prints
 the asset pin and the list of signature hashes.
 
+## Captures on the destination's own mesh (decision 429)
+
+Painter's grunges and the Dirt, Metal Edge Wear and Mask Builder - Legacy generators that read
+them are served **only** from these project-private snapshots (decision 429, the owner's
+"snapshot-only" route of 2026-11-10). UzPainter's own kernels for them (decisions 329, 331) are not
+exact and never serve them; their `@1` records stay `unavailable`, with no alias. Without a
+snapshot of the exact signature the source is refused as `unavailable`, naming the first
+differing signature field; nothing is substituted, resampled or interpolated. For a
+`uzasset://snapshot/` pin, the seam and admission return the snapshot backend's refusal
+(`UnsupportedProcedural{reason: "no snapshot with this signature", field: ...}`). A snapshot is never
+stored in the repository, never shipped and never transported by a recipe.
+
+A request with exactly three fields captures on the destination's own mesh and texture set
+resolution:
+
+```json
+{"resource": "resource://<shelf>/<resource>?version=<exact-version>", "parameters": {}, "usage": "PROCEDURAL" | "GENERATOR"}
+```
+
+Set the seed as the `$randomseed` parameter; an empty object keeps the source's defaults, its
+default seed included. The destination must hold exactly one texture set of one UV tile 1001,
+square, at a power-of-two resolution from 128 to 4096, on an imported self-contained OBJ mesh,
+with the project settings of the supported capture domain below. Painter creates its disposable
+project from that mesh at that resolution and must name its one texture set as the destination
+does.
+
+- **`PROCEDURAL`** (a grunge): the resource must carry Painter's `PROCEDURAL` usage. It is captured
+  as the paired User0 L32F and User1 RGB32F fill source of the two-field capture, with the same
+  readbacks and `source_metadata`.
+- **`GENERATOR`**: the resource must carry Painter's `GENERATOR` usage. Every mesh map bound to the
+  destination's texture set is written from its stored bytes, imported into Painter as a project
+  texture and bound to the same usage with the documented `set_mesh_map_resource`; every other
+  usage must read back unbound. The generator is the only effect in the black mask of a white Raw
+  fill above a black Raw base fill, both Normal at opacity 1 on User0 L32F and User1 RGB32F, so each
+  channel holds 0 (1 - m) + 1 m of the generator's value m (the layout of the generator goldens of
+  decision 423). The generator must list one output. No `source_metadata` is recorded: the readback
+  is the mask's source, not a paired fill source.
+
+Both exports of both channels must be equal at the float32 bit level, as in the two-field capture.
+The receipt is `uzpainter/procedural-capture/3`. Its signature holds:
+
+- the effective parameters, the seed and the output id;
+- the resolution, which is the destination texture set's;
+- the destination's settings, including the mesh SHA-256 and import report hash;
+- for a generator, every bound mesh map as an image input by usage, with its SHA-256 and spec;
+- `mesh.class` `quad`, a constant of this route (the mesh's identity is the settings' hash).
+
+Before the transaction, the command rebuilds the request the destination's own texture set asks
+for with those parameters. It uses `SnapshotSetRequest`, or `SnapshotGeneratorRequest` for a
+generator, whose inputs are `SnapshotMeshMapInputs`. That request must have exactly the receipt's
+signature. A different seed, parameter, resolution, mesh or mesh map therefore gives another
+signature and is refused.
+
+Serving: a grunge snapshot binds to a User L32F fill (`assets bind-snapshot`) and is evaluated by
+the fill provider at its texture set's resolution, on any mesh and resolution of the domain above.
+A generator snapshot is served by `SnapshotBackend` for `SnapshotGeneratorRequest`. The compositor
+does not yet evaluate a generator effect, or a snapshot source inside a mask stack, which is how the
+recipes use both. Those stay release gaps (`phase3.3_procedural-families` item 2.15).
+
+Evidence over a real private capture: `tests/procedural/test_proc_grunge_snapshot_served.py`, from
+the capture `tests/python/capture_grunge_snapshots.py` (owner's machine, under the Painter lock).
+It checks the fixed `rock` and `dirt-large`, `dirt-a` at seeds 1 and 2, and Dirt (default seed and
+seed 2), Metal Edge Wear and Mask Builder - Legacy on the authored plane at 256 px with four
+authored mesh maps:
+
+- every snapshot is `Stored` and `Evaluate`d byte-equal to its Painter export;
+- the project's own request gives each stored signature;
+- a changed seed, parameter, resolution, mesh or mesh map is `unavailable`, naming its field;
+- each grunge binds to a fill and is served after reopen.
+
 Acceptance evidence over a real capture: `tests/procedural/test_proc_snapshot_served_capture.py`
 opens a copy of the private decision-413 capture project (20 snapshots), loads it through
 `SnapshotBackend::Load` (`uzp-procedural-tests snapshot-served`) and requires `Stored` and
@@ -139,8 +209,10 @@ UzPainter; Painter alone computes the captured source.
 
 An explicit native `ProceduralRef` can bind the recorded asset pin, every effective
 parameter and a singleton output mapping to a User channel. The current evaluator
-admits only User L32F on the authored full-UV 128-square plane, tile 1001, with the
-recorded Legacy settings and identity UV projection. It never selects a snapshot
+admits only User L32F on one square texture set of tile 1001 at 128 to 4096 px, with the
+recorded Legacy settings and identity UV projection. The source resolution is the set's (the
+two-field capture records the authored plane at 128 px); the mesh's identity is a signature
+field, so a snapshot serves only the mesh it was captured on (decision 429). It never selects a snapshot
 implicitly, guesses an output, resizes its raster or invokes a procedural family.
 Both Python packages expose these stored fill sources through `get_source()` as
 `SourceSubstance` handles, resolved again on every call.

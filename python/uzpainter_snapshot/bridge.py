@@ -5,6 +5,9 @@ source on the authored full-UV plane; the native caller compares decoded L/RGB a
 exports before committing any project change. A request that also names `preset` and `inputs`
 (decision 412 §3) captures every listed output of that state, each through the same paired
 L32F and RGB32F channels, with the state's presets and its single and multiple output contexts.
+A request of `resource`, `parameters` and `usage` (decision 428) captures on the destination's
+own mesh and texture set resolution: a single-output procedural source (a grunge) as that paired
+fill source, or a generator in the mask of a white fill, reading the destination's mesh maps.
 """
 
 from __future__ import annotations
@@ -70,12 +73,25 @@ def capture_inputs(value: Any) -> dict[str, dict[str, Any]]:
     return result
 
 
+# The usages of a capture on the destination's own mesh (decision 428): a single-output procedural
+# source as a fill source, or a generator in a fill's mask reading the destination's mesh maps.
+CAPTURE_USAGES = ("PROCEDURAL", "GENERATOR")
+
+
 def capture_request(value: Any) -> dict[str, Any]:
     """Accept one explicitly versioned ResourceID and scalar parameter overrides, and for a
-    multi-output capture a preset name (or null) and image-input plugs (possibly none)."""
+    multi-output capture a preset name (or null) and image-input plugs (possibly none), or for a
+    capture on the destination's own mesh and resolution its `usage` (decision 428)."""
     multi = isinstance(value, dict) and set(value) == {"resource", "parameters", "preset", "inputs"}
-    if not isinstance(value, dict) or (set(value) != {"resource", "parameters"} and not multi):
-        raise ValueError("request requires exactly resource and parameters (and preset and inputs)")
+    usage = isinstance(value, dict) and set(value) == {"resource", "parameters", "usage"}
+    if not isinstance(value, dict) or (
+        set(value) != {"resource", "parameters"} and not multi and not usage
+    ):
+        raise ValueError(
+            "request requires exactly resource and parameters (and preset and inputs, or usage)"
+        )
+    if usage and value["usage"] not in CAPTURE_USAGES:
+        raise ValueError("usage must be PROCEDURAL or GENERATOR")
     resource = value["resource"]
     if not isinstance(resource, str):
         raise ValueError("resource must be a versioned resource:// URL")
@@ -104,6 +120,8 @@ def capture_request(value: Any) -> dict[str, Any]:
             raise ValueError("a preset capture takes no parameter overrides")
         result["preset"] = preset
         result["inputs"] = capture_inputs(value["inputs"])
+    if usage:
+        result["usage"] = value["usage"]
     return result
 
 
@@ -151,7 +169,25 @@ def canonical_state(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
-def validate_readback(readback: Any, request: dict[str, Any]) -> dict[str, Any]:
+PLANE_SETS = [{"name": "uzp_plane", "resolution": [128, 128], "has_uv_tiles": False}]
+
+
+def destination_sets(context: dict[str, Any]) -> list[dict[str, Any]]:
+    """The one texture set Painter must create from the destination's mesh: its name and square
+    resolution, without UV tiles (decision 428)."""
+    resolution = context["resolution"]
+    return [
+        {
+            "name": context["texture_set"],
+            "resolution": [resolution, resolution],
+            "has_uv_tiles": False,
+        }
+    ]
+
+
+def validate_readback(
+    readback: Any, request: dict[str, Any], sets: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
     """Every capture assumption is checked against the actual source and layer."""
     if readback["channel_formats"] != {"User0": "L32F", "User1": "RGB32F"}:
         raise ValueError("capture channels changed native precision")
@@ -180,7 +216,7 @@ def validate_readback(readback: Any, request: dict[str, Any]) -> dict[str, Any]:
         "mask_effects": [],
     }:
         raise ValueError("capture layer tree is not isolated")
-    if readback["sets"] != [{"name": "uzp_plane", "resolution": [128, 128], "has_uv_tiles": False}]:
+    if readback["sets"] != (PLANE_SETS if sets is None else sets):
         raise ValueError("capture texture set or resolution changed")
     sources = readback["sources"]
     if len(sources) != 2 or canonical_state(sources[0]) != canonical_state(sources[1]):
@@ -217,7 +253,83 @@ def validate_readback(readback: Any, request: dict[str, Any]) -> dict[str, Any]:
     return source
 
 
-def export_config(directory: Path) -> dict[str, Any]:
+def validate_generator(
+    readback: Any, request: dict[str, Any], context: dict[str, Any]
+) -> dict[str, Any]:
+    """The generator capture (decision 428): two root fills, the white one above the black one,
+    Normal at opacity 1 on User0 L32F and User1 RGB32F; only the white fill has a mask, holding
+    only the generator, which names the requested resource with one output and the requested
+    overrides; each destination mesh map bound to its usage, every other usage unbound."""
+    if readback["channel_formats"] != {"User0": "L32F", "User1": "RGB32F"}:
+        raise ValueError("capture channels changed native precision")
+    if readback["sets"] != destination_sets(context):
+        raise ValueError("capture texture set or resolution changed")
+    layers = readback["layers"]
+    effect = readback["effect"]
+    if readback["roots"] != [layers["fill"]["uid"], layers["base"]["uid"]] or not effect["visible"]:
+        raise ValueError("capture layer tree is not the white fill above the black base fill")
+    for name, value, masked in (("fill", 1, True), ("base", 0, False)):
+        layer = layers[name]
+        if (
+            not layer["visible"]
+            or layer["mask"] is not masked
+            or layer["content_effects"] != []
+            or layer["mask_effects"] != ([effect["uid"]] if masked else [])
+            or layer["source_mode"] != "Split"
+            or layer["active_channels"] != ["User0", "User1"]
+            or layer["channels"]
+            != {
+                c: {"value": [value, value, value], "opacity": 1, "blending": "Normal"}
+                for c in ("User0", "User1")
+            }
+        ):
+            raise ValueError(f"capture {name} layer lies outside the generator capture domain")
+    files = readback["mesh_map_files"]
+    expected = {
+        usage: files.get(path) for usage, path in sorted(context.get("mesh_maps", {}).items())
+    }
+    if set(files) != set(context.get("mesh_maps", {}).values()) or any(
+        not url for url in expected.values()
+    ):
+        raise ValueError("the destination mesh maps were not each imported once")
+    bound = {usage: expected.get(usage) for usage in MESH_MAP_USAGES}
+    if readback["mesh_maps"] != {context["texture_set"]: bound}:
+        raise ValueError("Painter's mesh maps are not exactly the destination's")
+    source: dict[str, Any] = readback["generator"]
+    identifier = source["resource_id"]
+    if (
+        source["resource"] != request["resource"]
+        or len(source["outputs"]) != 1
+        or not source["outputs"][0]
+        or set(identifier) != {"url", "context", "name", "version"}
+        or any(not isinstance(v, str) or not v for v in identifier.values())
+        or identifier["url"] != source["resource"]
+    ):
+        raise ValueError("generator source lies outside the generator capture domain")
+    effective = scalar_parameters(source["parameters"])
+    if canonical_state(effective) != canonical_state(source["parameters"]):
+        raise ValueError("effective parameters must retain observed scalar types")
+    if any(effective.get(key) != value for key, value in request["parameters"].items()):
+        raise ValueError("effective parameters differ from requested overrides")
+    return source
+
+
+# The documented `textureset.MeshMapUsage` members (painter_side.MESH_MAP_USAGES).
+MESH_MAP_USAGES = (
+    "AO",
+    "BentNormals",
+    "Curvature",
+    "Height",
+    "ID",
+    "Normal",
+    "Opacity",
+    "Position",
+    "Thickness",
+    "WorldSpaceNormal",
+)
+
+
+def export_config(directory: Path, texture_set: str = "uzp_plane") -> dict[str, Any]:
     """Two raw document maps with no padding, dithering or precision conversion."""
     maps = []
     for name, channels in (("user0", "L"), ("user1", "RGB")):
@@ -240,7 +352,7 @@ def export_config(directory: Path) -> dict[str, Any]:
         "exportShaderParams": False,
         "defaultExportPreset": "uzp_snapshot",
         "exportPresets": [{"name": "uzp_snapshot", "maps": maps}],
-        "exportList": [{"rootPath": "uzp_plane"}],
+        "exportList": [{"rootPath": texture_set}],
         "exportParameters": [
             {
                 "parameters": {
@@ -496,6 +608,92 @@ def record_outputs(
     }
 
 
+def export_twice(
+    root: Path, remote: Remote, texture_set: str, still_owned: Any
+) -> list[dict[str, Any]]:
+    """Two exports of both User maps into `export1/` and `export2/`, each exactly the two files."""
+    exports = []
+    for index in (1, 2):
+        if not still_owned():
+            raise RuntimeError("Painter capture project ownership changed")
+        directory = root / f"export{index}"
+        directory.mkdir()
+        config = export_config(directory, texture_set)
+        status = remote.call("export", config)
+        if status["status"] != "Success":
+            raise RuntimeError(f"Painter export failed: {status}")
+        expected = {directory / "user0.exr", directory / "user1.exr"}
+        reported = {Path(p) for p in status["files"]}
+        if reported != expected or set(directory.iterdir()) != expected:
+            raise RuntimeError("Painter reported unexpected export files")
+        if any(p.is_symlink() or not p.is_file() for p in expected):
+            raise RuntimeError("Painter export is not a regular private file")
+        exports.append({"config": config, "result": status})
+    return exports
+
+
+def record_usage(
+    context: dict[str, Any], request: dict[str, Any], root: Path, remote: Remote, still_owned: Any
+) -> dict[str, Any]:
+    """A capture on the destination's own mesh and resolution (decision 428), inside the owned
+    project: a PROCEDURAL source as the paired fill source of the legacy capture, or a GENERATOR
+    in the mask of a white fill, reading the destination's mesh maps. Its signature names the
+    effective parameters, the seed, the resolution, the mesh maps by hash (a generator) and the
+    destination's settings, mesh identity included."""
+    generator = request["usage"] == "GENERATOR"
+    resolution = context["resolution"]
+    if generator:
+        remote.call("mesh_maps", {"paths": context["mesh_maps"]})
+        remote.wait("ready")
+        remote.call("configure_generator", request)
+        remote.wait("ready")
+        readback = remote.call("generator_readback")
+        source = validate_generator(readback, request, context)
+        output = source["outputs"][0]
+        inputs = context["signature_inputs"]
+    else:
+        if context.get("mesh_maps") or context.get("signature_inputs"):
+            raise ValueError("a procedural fill capture reads no mesh maps")
+        remote.call("configure", request)
+        remote.wait("ready")
+        readback = remote.call("readback")
+        source = validate_readback(readback, request, destination_sets(context))
+        output = source["active_output"]
+        inputs = {}
+    exports = export_twice(root, remote, context["texture_set"], still_owned)
+    observed = remote.call("generator_readback" if generator else "readback")
+    if not still_owned() or canonical_state(observed) != canonical_state(readback):
+        raise RuntimeError("source state changed during capture")
+    seed = source["parameters"].get("$randomseed", 0)
+    if not isinstance(seed, int):
+        raise ValueError("effective random seed is not an integer")
+    pin = hashlib.sha256(source["resource"].encode("utf-8")).hexdigest()
+    return {
+        "schema": "uzpainter/procedural-capture/3",
+        "usage": request["usage"],
+        "resource": source["resource"],
+        "readback": readback,
+        "exports": exports,
+        "signature": {
+            "asset": "uzasset://snapshot/" + pin,
+            "version": "1",
+            "params": source["parameters"],
+            "preset": None,
+            "seed": seed,
+            "output": {
+                "id": output,
+                "resolution": resolution,
+                "format": "f32",
+                "colour_space": "raw",
+                "channels": 1,
+            },
+            "inputs": inputs,
+            "mesh": {"class": "quad", "uv_tiles": 1},
+            "settings": context["settings"],
+        },
+    }
+
+
 def record(context: dict[str, Any], request: dict[str, Any], root: Path) -> dict[str, Any]:
     """Own one disposable project; never close a project present on connection."""
     remote = Remote()
@@ -514,7 +712,14 @@ def record(context: dict[str, Any], request: dict[str, Any], root: Path) -> dict
             {"url": request["resource"], "type": "SUBSTANCE"}
         ]:
             raise ValueError("exact Substance ResourceID is absent or ambiguous")
-    elif matched != [{"url": request["resource"], "type": "SUBSTANCE", "procedural": True}]:
+    elif request.get("usage") == "GENERATOR":
+        if [{k: m[k] for k in ("url", "type", "generator")} for m in matched] != [
+            {"url": request["resource"], "type": "SUBSTANCE", "generator": True}
+        ]:
+            raise ValueError("exact generator ResourceID is absent or ambiguous")
+    elif [{k: m[k] for k in ("url", "type", "procedural")} for m in matched] != [
+        {"url": request["resource"], "type": "SUBSTANCE", "procedural": True}
+    ]:
         raise ValueError("exact procedural ResourceID is absent or ambiguous")
     owner = {key: identity[key] for key in ("pid", "version")}
     owned = False
@@ -529,10 +734,26 @@ def record(context: dict[str, Any], request: dict[str, Any], root: Path) -> dict
 
     try:
         owned = True
-        remote.call("create", {"mesh_path": context["mesh_path"]})
+        created = {"mesh_path": context["mesh_path"]}
+        if "usage" in request:
+            created["resolution"] = context["resolution"]
+        remote.call("create", created)
         remote.wait("ready")
         if not still_owned():
             raise RuntimeError("Painter capture project ownership changed")
+        if "usage" in request:
+            report = record_usage(context, request, root, remote, still_owned)
+            report.update(
+                {
+                    "recorder": {
+                        key: context.get(key) for key in ("bridge_sha256", "painter_side_sha256")
+                    },
+                    "identity": identity,
+                    "project_uuid": context["project_uuid"],
+                    "revision": context["revision"],
+                }
+            )
+            return report
         if "inputs" in request:
             report = record_outputs(context, request, root, remote)
             if not still_owned():
@@ -553,23 +774,7 @@ def record(context: dict[str, Any], request: dict[str, Any], root: Path) -> dict
         remote.wait("ready")
         readback = remote.call("readback")
         source = validate_readback(readback, request)
-        exports = []
-        for index in (1, 2):
-            if not still_owned():
-                raise RuntimeError("Painter capture project ownership changed")
-            directory = root / f"export{index}"
-            directory.mkdir()
-            config = export_config(directory)
-            status = remote.call("export", config)
-            if status["status"] != "Success":
-                raise RuntimeError(f"Painter export failed: {status}")
-            expected = {directory / "user0.exr", directory / "user1.exr"}
-            reported = {Path(p) for p in status["files"]}
-            if reported != expected or set(directory.iterdir()) != expected:
-                raise RuntimeError("Painter reported unexpected export files")
-            if any(p.is_symlink() or not p.is_file() for p in expected):
-                raise RuntimeError("Painter export is not a regular private file")
-            exports.append({"config": config, "result": status})
+        exports = export_twice(root, remote, "uzp_plane", still_owned)
         if not still_owned() or canonical_state(remote.call("readback")) != canonical_state(
             readback
         ):

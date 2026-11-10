@@ -1,6 +1,8 @@
 #include "procedural/snapshot_source.h"
 
 #include <array>
+#include <map>
+#include <utility>
 
 #include "procedural/admission.h"
 #include "procedural/asset_library.h"
@@ -40,26 +42,33 @@ namespace {
 /// The recorded capture domain shared by the split and material snapshot sources.
 enum class Domain { Admitted, Settings, Projection };
 
-/// Whether `fill` of `set` (node `node`) is inside the recorded capture domain: the recorded
-/// 128px full-UV plane, tile 1001 and Legacy settings (`Settings` otherwise), then the identity UV
-/// or Fill projection with BilinearHQ and Repeat (`Projection` otherwise).
-Domain DomainOf(const core::Project& project, const core::TextureSet& set, const core::FillContent& fill,
-                core::Id node) {
-    // This is the recorder's authored full-UV plane, not a geometry-class guess.
-    constexpr std::string_view plane = "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe";
+/// Whether the project and texture set lie inside the recorded capture domain (decision 428): one
+/// square texture set of one UV tile 1001 at a power-of-two resolution from 128 to 4096 on an
+/// imported mesh, under the default workflow, Legacy colour management, OpenGL normals, PerVertex
+/// tangents and mesh scale 1. The mesh itself is not checked here: its identity (the mesh and
+/// import report hashes of `EvaluationSettings`) is a signature field, so another mesh is refused
+/// by the signature, naming that field.
+bool SettingsAdmitted(const core::Project& project, const core::TextureSet& set) {
     const auto& settings = project.settings;
     const auto& colour = settings.color_management;
+    const int size = set.resolution.width;
+    return set.uv_tiles.size() == 1 && set.uv_tiles.front().udim == 1001 && size == set.resolution.height &&
+           size >= 128 && size <= 4096 && (size & (size - 1)) == 0 && project.mesh &&
+           settings.workflow == core::ProjectWorkflow::Default &&
+           settings.normal_map_format == core::NormalMapFormat::OpenGL &&
+           settings.tangent_space == core::TangentSpace::PerVertex && settings.mesh_unit_scale == 1.0 &&
+           (colour.mode.empty() || colour.mode == "legacy") && colour.config_hash.empty() &&
+           colour.working_space.empty() && colour.io_rules.empty();
+}
+
+/// Whether `fill` of `set` (node `node`) is inside the recorded capture domain: `SettingsAdmitted`
+/// and an existing node (`Settings` otherwise), then the identity UV or Fill projection with
+/// BilinearHQ and Repeat (`Projection` otherwise).
+Domain DomainOf(const core::Project& project, const core::TextureSet& set, const core::FillContent& fill,
+                core::Id node) {
     const auto& uv = fill.projection.uv;
     const auto& transform = uv.uv_transformation;
-    if (set.uv_tiles.size() != 1 || set.uv_tiles.front().udim != 1001 || set.resolution.width != 128 ||
-        set.resolution.height != 128 || !project.mesh || project.mesh->resource != plane ||
-        core::FindLayer(project, node) == nullptr || settings.workflow != core::ProjectWorkflow::Default ||
-        settings.normal_map_format != core::NormalMapFormat::OpenGL ||
-        settings.tangent_space != core::TangentSpace::PerVertex || settings.mesh_unit_scale != 1.0 ||
-        (!colour.mode.empty() && colour.mode != "legacy") || !colour.config_hash.empty() ||
-        !colour.working_space.empty() || !colour.io_rules.empty()) {
-        return Domain::Settings;
-    }
+    if (!SettingsAdmitted(project, set) || core::FindLayer(project, node) == nullptr) return Domain::Settings;
     if ((fill.projection.mode != core::ProjectionMode::UV && fill.projection.mode != core::ProjectionMode::Fill) ||
         transform.scale_mode != core::ScaleMode::Factors || transform.scale != std::array<double, 2>{1, 1} ||
         transform.rotation != 0 || transform.offset != std::array<double, 2>{0, 0} || fill.symmetry.enabled ||
@@ -70,6 +79,9 @@ Domain DomainOf(const core::Project& project, const core::TextureSet& set, const
 }
 
 constexpr std::string_view kProjectionRefusal = "only the recorded identity projection, filter and wrap are admitted";
+constexpr std::string_view kSettingsRefusal =
+    "only one texture set of one UV tile 1001, square at 128 to 4096 px, on an imported mesh under Legacy, "
+    "OpenGL, PerVertex, the default workflow and mesh scale 1 is admitted";
 
 std::expected<ProceduralRequest, std::string> RequestOf(const core::Project& project, const core::TextureSet& set,
                                                         const core::ProceduralRef& ref, const std::string& output) {
@@ -79,8 +91,8 @@ std::expected<ProceduralRequest, std::string> RequestOf(const core::Project& pro
     const AssetLibrary library;
     auto request = RequestFor(ref, *context, library);
     if (!request) return Result(std::unexpect, request.error().Describe());
-    if (request->output.resolution != 128) {
-        return Result(std::unexpect, std::string("effective source resolution must equal the 128px target"));
+    if (request->output.resolution != static_cast<uint32_t>(set.resolution.width)) {
+        return Result(std::unexpect, std::string("effective source resolution must equal the texture set's resolution"));
     }
     return std::move(*request);
 }
@@ -95,7 +107,7 @@ std::expected<ProceduralRequest, std::string> SnapshotMaterialRequest(const core
     const auto fail = [](std::string_view reason) { return Result(std::unexpect, std::string(reason)); };
     if (fill.source_mode != core::SourceMode::Material) return fail("the fill is not in Material source mode");
     switch (DomainOf(project, set, fill, node)) {
-        case Domain::Settings: return fail("only material fills on the recorded 128px full-UV plane under Legacy are admitted");
+        case Domain::Settings: return fail(kSettingsRefusal);
         case Domain::Projection: return fail(kProjectionRefusal);
         case Domain::Admitted: break;
     }
@@ -127,7 +139,7 @@ std::expected<ProceduralRequest, std::string> SnapshotFillRequest(
     const Domain domain = DomainOf(project, set, fill, node);
     if (mask || !core::ToString(channel).starts_with("User") || format != core::ChannelFormat::L32F ||
         domain == Domain::Settings) {
-        return fail("only User L32F fills on the recorded 128px full-UV plane under Legacy are admitted");
+        return fail(std::string("only User L32F fills; ") + std::string(kSettingsRefusal));
     }
     if (domain == Domain::Projection) return fail(kProjectionRefusal);
     const auto output = ref.output_mapping.find(std::string(core::ToString(channel)));
@@ -139,6 +151,61 @@ std::expected<ProceduralRequest, std::string> SnapshotFillRequest(
         return fail("an explicit scalar output mapping and effective parameters are required; no implicit output selection");
     }
     return RequestOf(project, set, ref, output->second);
+}
+
+std::expected<ProceduralRequest, std::string> SnapshotSetRequest(const core::Project& project, const core::TextureSet& set,
+                                                                 const core::ProceduralRef& ref, const std::string& outputId) {
+    if (!SettingsAdmitted(project, set)) return std::expected<ProceduralRequest, std::string>(std::unexpect, std::string(kSettingsRefusal));
+    return RequestOf(project, set, ref, outputId);
+}
+
+namespace {
+
+/// The sample type and channel count of a mesh-map binding's stored format, as `MeshMapSpec`
+/// (generators.h) gives them: `L8`, `RGB8` and `sRGB8` as u8, `L16` and `RGB16` as u16, `L16F` and
+/// `RGB16F` as f16, `L32F` and `RGB32F` as f32.
+std::pair<ChannelFormat, uint32_t> MeshMapFormat(core::ChannelFormat format) {
+    switch (format) {
+        case core::ChannelFormat::L8: return {ChannelFormat::U8, 1};
+        case core::ChannelFormat::sRGB8:
+        case core::ChannelFormat::RGB8: return {ChannelFormat::U8, 3};
+        case core::ChannelFormat::L16: return {ChannelFormat::U16, 1};
+        case core::ChannelFormat::RGB16: return {ChannelFormat::U16, 3};
+        case core::ChannelFormat::L16F: return {ChannelFormat::F16, 1};
+        case core::ChannelFormat::RGB16F: return {ChannelFormat::F16, 3};
+        case core::ChannelFormat::L32F: return {ChannelFormat::F32, 1};
+        case core::ChannelFormat::RGB32F: return {ChannelFormat::F32, 3};
+    }
+    return {ChannelFormat::F32, 0};
+}
+
+}  // namespace
+
+std::expected<std::map<std::string, ImageInput>, std::string> SnapshotMeshMapInputs(const core::TextureSet& set) {
+    using Result = std::expected<std::map<std::string, ImageInput>, std::string>;
+    std::map<std::string, ImageInput> inputs;
+    for (const auto& [usage, binding] : set.mesh_maps) {
+        const std::string name(core::ToString(usage));
+        if (binding.invalid) return Result(std::unexpect, "the " + name + " mesh map of texture set " + set.name + " is invalid");
+        const auto [format, channels] = MeshMapFormat(binding.format);
+        inputs[name] = ImageInput{RasterSpec{static_cast<uint32_t>(set.resolution.width), format, binding.color_space, channels},
+                                  binding.resource};
+    }
+    return inputs;
+}
+
+std::expected<ProceduralRequest, std::string> SnapshotGeneratorRequest(const core::Project& project, const core::TextureSet& set,
+                                                                       const core::ProceduralRef& ref, const std::string& outputId) {
+    using Result = std::expected<ProceduralRequest, std::string>;
+    if (!ref.image_inputs.empty() || !ref.input_sources.empty()) {
+        return Result(std::unexpect, std::string("a generator reads its mesh maps from the texture set, not from image inputs"));
+    }
+    auto request = SnapshotSetRequest(project, set, ref, outputId);
+    if (!request) return request;
+    auto inputs = SnapshotMeshMapInputs(set);
+    if (!inputs) return Result(std::unexpect, inputs.error());
+    request->inputs = std::move(*inputs);
+    return request;
 }
 
 }  // namespace uzp::procedural

@@ -169,6 +169,9 @@ std::expected<IProceduralBackend*, UnsupportedProcedural> Admit(const Procedural
     if (std::optional<UnsupportedProcedural> reserved = ObservationRefusal(request.asset)) return Refused(*reserved);
     std::expected<IProceduralBackend*, UnsupportedProcedural> selected = seam.Select(request);
     if (selected) return selected;
+    // A project-private snapshot pin is never in the library: its refusal is the snapshot backend's
+    // (decision 429), `unavailable` naming the first differing signature field.
+    if (request.asset.family == "snapshot") return selected;
     if (library.Find(request.asset) == nullptr) return Refused(library.Resolve(request.asset).error());
     return selected;
 }

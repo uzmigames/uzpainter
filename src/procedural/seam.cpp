@@ -493,6 +493,11 @@ std::expected<IProceduralBackend*, UnsupportedProcedural> ProceduralSeam::Select
     if (std::optional<UnsupportedProcedural> reserved = ObservationRefusal(request.asset)) return Refused(*reserved);
     if (m_snapshot != nullptr && m_snapshot->CanEvaluate(request)) return m_snapshot;
     if (m_hlsl != nullptr && m_hlsl->CanEvaluate(request)) return m_hlsl;
+    // A project-private snapshot pin (decision 429) is served by snapshots only: its refusal names
+    // the first signature field where the closest stored snapshot differs.
+    if (m_snapshot != nullptr && request.asset.family == "snapshot") {
+        if (std::optional<UnsupportedProcedural> refusal = m_snapshot->Refusal(request)) return Refused(*refusal);
+    }
     if (m_hlsl != nullptr) {
         std::optional<UnsupportedProcedural> refusal = m_hlsl->Refusal(request);
         if (refusal && refusal->reason != kNoFamily) return Refused(*refusal);

@@ -77,6 +77,7 @@
 #include <limits>
 #include <memory>
 #include <random>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -2771,6 +2772,113 @@ int RunSnapshotServed(const fs::path& project) {
     return failures == 0 ? 0 : 1;
 }
 
+/// `snapshot-own-request <project.uzp>` (decision 428): for every snapshot entry of a capture
+/// project on its own mesh, the request the project's only texture set asks for with the entry's
+/// parameters (`SnapshotSetRequest`, or `SnapshotGeneratorRequest` for an entry with mesh-map
+/// inputs) must have the entry's exact signature and be served (`Stored`). Then each single-field
+/// change, in turn, must be refused as `unavailable` naming a field, without being served: the
+/// seed (a value no entry holds), the first other numeric parameter, the texture set resolution
+/// (the first power of two from 128 to 4096 no entry holds), the mesh's SHA-256 and, for a
+/// generator, each mesh map's SHA-256. One `OWN` line per entry and one `MISMATCH` line per change.
+int RunSnapshotOwnRequest(const fs::path& project) {
+    namespace core = uzp::core;
+    namespace json = uzp::core::json;
+    namespace store = uzp::store;
+    auto opened = store::ProjectStore::Open(project);
+    if (!opened.report.ok()) {
+        std::printf("FAIL the project opens\n");
+        return 1;
+    }
+    const core::Project state = opened.state.project;
+    auto loaded = SnapshotBackend::Load(*opened.store, state);
+    if (!loaded || state.texture_sets.size() != 1) {
+        std::printf("FAIL the snapshots load on one texture set: %s\n", loaded ? "" : loaded.error().c_str());
+        return 1;
+    }
+    std::set<std::string> stored;
+    for (const store::SnapshotEntry& entry : store::ProjectSnapshots(state)) stored.insert(entry.key);
+    int failures = 0;
+    const auto own = [](const core::Project& p, const core::ProceduralRef& ref, const ProceduralRequest& recorded) {
+        return recorded.inputs.empty() ? SnapshotSetRequest(p, p.texture_sets.front(), ref, recorded.outputId)
+                                       : SnapshotGeneratorRequest(p, p.texture_sets.front(), ref, recorded.outputId);
+    };
+    for (const store::SnapshotEntry& entry : store::ProjectSnapshots(state)) {
+        const auto recorded = RequestFromSignature(entry.signature);
+        if (!recorded) {
+            std::printf("FAIL entry %s: %s\n", entry.key.c_str(), recorded.error().c_str());
+            ++failures;
+            continue;
+        }
+        core::ProceduralRef ref;
+        ref.asset = core::FormatAssetUrl(recorded->asset);
+        ref.params = std::get<json::Object>(std::get<json::Object>(entry.signature.data).at("params").data);
+        const auto request = own(state, ref, *recorded);
+        const bool served = request && SignatureHash(*request) == entry.key && loaded->Stored(*request).has_value();
+        const json::Object row{{"signature_sha256", entry.key}, {"generator", !recorded->inputs.empty()},
+                               {"served", served}, {"error", request ? std::string() : request.error()}};
+        std::printf("OWN %s\n", json::WriteCanonical(json::Value(row)).c_str());
+        if (!served) {
+            ++failures;
+            continue;
+        }
+        const auto mismatch = [&](std::string_view change, const core::Project& p, const core::ProceduralRef& r) {
+            const auto changed = own(p, r, *recorded);
+            json::Object out{{"signature_sha256", entry.key}, {"change", std::string(change)}};
+            if (!changed) {
+                out["refused_before_request"] = changed.error();
+            } else {
+                const auto refusal = loaded->Refusal(*changed);
+                out["stored"] = stored.contains(SignatureHash(*changed));
+                out["served"] = loaded->CanEvaluate(*changed) || loaded->Stored(*changed).has_value();
+                out["reason"] = refusal ? refusal->reason : std::string();
+                out["field"] = refusal ? refusal->field : std::string();
+            }
+            std::printf("MISMATCH %s\n", json::WriteCanonical(json::Value(out)).c_str());
+        };
+        {
+            core::ProceduralRef r = ref;
+            int64_t seed = 1000003;
+            while (true) {
+                r.params["$randomseed"] = seed;
+                const auto changed = own(state, r, *recorded);
+                if (!changed || !stored.contains(SignatureHash(*changed))) break;
+                ++seed;
+            }
+            mismatch("seed", state, r);
+        }
+        for (const auto& [name, value] : ref.params) {
+            if (name == "$randomseed" || (!value.IsInt() && !value.IsDouble())) continue;
+            core::ProceduralRef r = ref;
+            r.params[name] = value.IsInt() ? json::Value(std::get<int64_t>(value.data) + 1)
+                                           : json::Value(std::get<double>(value.data) + 0.125);
+            mismatch("parameter " + name, state, r);
+            break;
+        }
+        for (int size = 128; size <= 4096; size *= 2) {
+            core::Project p = state;
+            p.texture_sets.front().resolution.width = size;
+            p.texture_sets.front().resolution.height = size;
+            const auto changed = own(p, ref, *recorded);
+            if (!changed || stored.contains(SignatureHash(*changed))) continue;
+            mismatch("resolution " + std::to_string(size), p, ref);
+            break;
+        }
+        {
+            core::Project p = state;
+            p.mesh->resource = core::Sha256Hex(p.mesh->resource);
+            mismatch("mesh", p, ref);
+        }
+        for (const auto& [usage, binding] : state.texture_sets.front().mesh_maps) {
+            if (recorded->inputs.empty()) break;
+            core::Project p = state;
+            p.texture_sets.front().mesh_maps.at(usage).resource = core::Sha256Hex(binding.resource);
+            mismatch("mesh map " + std::string(core::ToString(usage)), p, ref);
+        }
+    }
+    opened.store->Close();
+    return failures == 0 ? 0 : 1;
+}
+
 int main(int argc, char** argv) {
     if (argc < 3) {
         std::fprintf(stderr, "usage: uzp-procedural-tests seam | domain | primitives | kernels | gpu | library | library-load <work-dir> [...]\n");
@@ -2797,6 +2905,7 @@ int main(int argc, char** argv) {
     if (mode == "admission" && argc == 4) return RunAdmission(dir, argv[3]);
     if (mode == "snapshot" && argc == 3) return RunSnapshot(dir);
     if (mode == "snapshot-served" && argc == 3) return RunSnapshotServed(dir);
+    if (mode == "snapshot-own-request" && argc == 3) return RunSnapshotOwnRequest(dir);
     std::fprintf(stderr, "unknown case %.*s\n", static_cast<int>(mode.size()), mode.data());
     return 2;
 }

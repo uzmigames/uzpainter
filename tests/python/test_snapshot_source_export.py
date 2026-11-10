@@ -52,7 +52,9 @@ result = [error, project.revision() == revision, material.get_resolution().width
 project.close()
 """)
     )
-    assert "128" in transactions[0]
+    # Decision 429: the set resolution is a signature field, so 256 px is refused by signature.
+    assert "no snapshot with this signature" in transactions[0]
+    assert "field: output.resolution" in transactions[0]
     assert transactions[1:] == [True, 128]
     config = json.loads(EXPORT_CONFIG)
     output = config["exportPresets"][0]["maps"][0]

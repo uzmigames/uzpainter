@@ -80,6 +80,154 @@ def configure(request: dict[str, Any]) -> None:
     STATE["channels"] = channels
 
 
+def mesh_map_usages() -> dict[str, Any]:
+    """The documented `textureset.MeshMapUsage` members by name, each read back for a capture."""
+    return {
+        "AO": sp.textureset.MeshMapUsage.AO,
+        "BentNormals": sp.textureset.MeshMapUsage.BentNormals,
+        "Curvature": sp.textureset.MeshMapUsage.Curvature,
+        "Height": sp.textureset.MeshMapUsage.Height,
+        "ID": sp.textureset.MeshMapUsage.ID,
+        "Normal": sp.textureset.MeshMapUsage.Normal,
+        "Opacity": sp.textureset.MeshMapUsage.Opacity,
+        "Position": sp.textureset.MeshMapUsage.Position,
+        "Thickness": sp.textureset.MeshMapUsage.Thickness,
+        "WorldSpaceNormal": sp.textureset.MeshMapUsage.WorldSpaceNormal,
+    }
+
+
+def bind_mesh_maps(paths: dict[str, str]) -> None:
+    """Each destination mesh map file imported once as a project texture and bound to its usage
+    on every texture set (`TextureSet.set_mesh_map_resource`)."""
+    usages = mesh_map_usages()
+    imported: dict[str, str] = {}
+    for usage, path in sorted(paths.items()):
+        resource = sp.resource.import_project_resource(path, sp.resource.Usage.TEXTURE)
+        identifier = resource.identifier()
+        for texture_set in sp.textureset.all_texture_sets():
+            texture_set.set_mesh_map_resource(usages[usage], identifier)
+        imported[path] = identifier.url()
+    STATE["mesh_map_files"] = imported
+
+
+def configure_generator(request: dict[str, Any]) -> None:
+    """A generator as the mask of a white Raw fill over a black Raw base fill on User0 L32F and
+    User1 RGB32F, so each channel holds 0 (1 - m) + 1 m of the generator's mask value m."""
+    stack = sp.textureset.get_active_stack()
+    for node in sp.layerstack.get_root_layer_nodes(stack):
+        sp.layerstack.delete_node(node)
+    channels = [sp.textureset.ChannelType.User0, sp.textureset.ChannelType.User1]
+    stack.add_channel(channels[0], sp.textureset.ChannelFormat.L32F)
+    stack.add_channel(channels[1], sp.textureset.ChannelFormat.RGB32F)
+    raw = sp.colormanagement.GenericColorSpace.Raw
+    base = sp.layerstack.insert_fill(sp.layerstack.InsertPosition.from_textureset_stack(stack))
+    fill = sp.layerstack.insert_fill(sp.layerstack.InsertPosition.above_node(base))
+    for node, value in ((base, 0.0), (fill, 1.0)):
+        node.active_channels = set(channels)
+        for channel in channels:
+            node.set_source(channel, sp.colormanagement.Color(value, value, value, raw))
+            node.set_opacity(1.0, channel)
+            node.set_blending_mode(sp.layerstack.BlendingMode.Normal, channel)
+    fill.add_mask(sp.layerstack.MaskBackground.Black)
+    effect = sp.layerstack.insert_generator_effect(
+        sp.layerstack.InsertPosition.inside_node(fill, sp.layerstack.NodeStack.Mask),
+        sp.resource.ResourceID.from_url(request["resource"]),
+    )
+    source = effect.get_source()
+    if not isinstance(source, sp.source.SourceSubstance):
+        raise RuntimeError("generator effect source is not SourceSubstance")
+    source.set_parameters(request["parameters"])
+    STATE["fill"] = fill
+    STATE["base"] = base
+    STATE["effect"] = effect
+    STATE["stack"] = stack
+    STATE["channels"] = channels
+
+
+def uniform(node: Any, channel: Any) -> Any:
+    """A fill channel's uniform colour as its working value, or its source's class name."""
+    source = node.get_source(channel)
+    if isinstance(source, sp.source.SourceUniformColor):
+        return list(source.get_color().working)
+    return class_name(source)
+
+
+def generator_readback() -> dict[str, Any]:
+    """The generator capture's layer tree, fills, generator source, mesh maps and texture sets."""
+    fill, base, effect = STATE["fill"], STATE["base"], STATE["effect"]
+    stack = STATE["stack"]
+    source = effect.get_source()
+    identifier = source.resource_id
+    generator: dict[str, Any] = {
+        "resource": identifier.url(),
+        "resource_id": {
+            "url": identifier.url(),
+            "context": identifier.context,
+            "name": identifier.name,
+            "version": identifier.version,
+        },
+        "parameters": source.get_parameters(),
+        "inputs": list(source.image_inputs),
+        "outputs": list(source.image_outputs),
+    }
+    try:
+        generator["active_output"] = {"value": source.active_output}
+    except Exception as error:
+        generator["active_output"] = raised(error)
+    layers = {}
+    for name, node in (("fill", fill), ("base", base)):
+        layers[name] = {
+            "uid": node.uid(),
+            "visible": node.is_visible(),
+            "mask": node.has_mask(),
+            "content_effects": [e.uid() for e in node.content_effects()],
+            "mask_effects": [e.uid() for e in node.mask_effects()],
+            "source_mode": node.source_mode.name,
+            "active_channels": sorted(c.name for c in node.active_channels),
+            "channels": {
+                c.name: {
+                    "value": uniform(node, c),
+                    "opacity": node.get_opacity(c),
+                    "blending": node.get_blending_mode(c).name,
+                }
+                for c in STATE["channels"]
+            },
+        }
+    return {
+        "channel_formats": {c.name: stack.get_channel(c).format().name for c in STATE["channels"]},
+        "roots": [node.uid() for node in sp.layerstack.get_root_layer_nodes(stack)],
+        "layers": layers,
+        "effect": {"uid": effect.uid(), "visible": effect.is_visible()},
+        "generator": generator,
+        "mesh_maps": mesh_maps(),
+        "mesh_map_files": dict(STATE.get("mesh_map_files", {})),
+        "sets": texture_sets(),
+    }
+
+
+def mesh_maps() -> dict[str, Any]:
+    """Every texture set's mesh map of every documented usage: its URL, or None."""
+    result: dict[str, Any] = {}
+    for texture_set in sp.textureset.all_texture_sets():
+        bound = {}
+        for name, usage in mesh_map_usages().items():
+            identifier = texture_set.get_mesh_map_resource(usage)
+            bound[name] = None if identifier is None else identifier.url()
+        result[texture_set.name()] = bound
+    return result
+
+
+def texture_sets() -> list[dict[str, Any]]:
+    return [
+        {
+            "name": t.name(),
+            "resolution": [t.get_resolution().width, t.get_resolution().height],
+            "has_uv_tiles": t.has_uv_tiles(),
+        }
+        for t in sp.textureset.all_texture_sets()
+    ]
+
+
 def apply_state(source: Any, request: dict[str, Any]) -> None:
     """The preset, then the image-input sources, of a multi-output capture (decision 412 §3).
 
@@ -301,14 +449,7 @@ def readback() -> dict[str, Any]:
             "rotation": transform.rotation,
             "offset": list(transform.offset),
         },
-        "sets": [
-            {
-                "name": t.name(),
-                "resolution": [t.get_resolution().width, t.get_resolution().height],
-                "has_uv_tiles": t.has_uv_tiles(),
-            }
-            for t in sp.textureset.all_texture_sets()
-        ],
+        "sets": texture_sets(),
     }
 
 
@@ -324,6 +465,9 @@ def dispatch(operation: str, args: dict[str, Any]) -> Any:
         "set_output",
         "preset_parameters",
         "contexts",
+        "mesh_maps",
+        "configure_generator",
+        "generator_readback",
     }:
         check_owned()
     if operation == "identity":
@@ -339,6 +483,7 @@ def dispatch(operation: str, args: dict[str, Any]) -> Any:
                 "url": r.identifier().url(),
                 "type": r.type().name,
                 "procedural": sp.resource.Usage.PROCEDURAL in r.usages(),
+                "generator": sp.resource.Usage.GENERATOR in r.usages(),
             }
             for r in sp.resource.search("")
             if r.identifier().url() == args["resource"]
@@ -350,7 +495,7 @@ def dispatch(operation: str, args: dict[str, Any]) -> Any:
         sp.project.create(
             mesh_file_path=args["mesh_path"],
             settings=sp.project.Settings(
-                default_texture_resolution=128,
+                default_texture_resolution=int(args.get("resolution", 128)),
                 normal_map_format=sp.project.NormalMapFormat.OpenGL,
                 tangent_space_mode=sp.project.TangentSpace.PerVertex,
                 mesh_unit_scale=1.0,
@@ -373,6 +518,14 @@ def dispatch(operation: str, args: dict[str, Any]) -> Any:
         return preset_parameters()
     if operation == "contexts":
         return contexts(args)
+    if operation == "mesh_maps":
+        bind_mesh_maps(args["paths"])
+        return None
+    if operation == "configure_generator":
+        configure_generator(args)
+        return None
+    if operation == "generator_readback":
+        return generator_readback()
     if operation == "export":
         result = sp.export.export_project_textures(args)
         return {

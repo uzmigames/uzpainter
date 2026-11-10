@@ -11,6 +11,7 @@
 #include "uzp_core/manifest/sha256.h"
 
 #include <Python.h>
+#include <cctype>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -94,18 +95,86 @@ fs::path BinaryDirectory() {
     return fs::path(value).parent_path();
 }
 
-void CheckCaptureDomain(const core::Project& project, std::string_view mesh, std::string_view plane) {
+void CheckCaptureSettings(const core::Project& project) {
     const auto& settings = project.settings;
     const auto& colour = settings.color_management;
-    if (!project.mesh || mesh != plane || project.mesh->resource != core::Sha256Hex(mesh)) {
-        throw std::runtime_error("snapshot recording requires the exact shipped full-UV plane mesh");
-    }
     if (settings.normal_map_format != core::NormalMapFormat::OpenGL ||
         settings.tangent_space != core::TangentSpace::PerVertex || settings.mesh_unit_scale != 1.0 ||
         settings.workflow != core::ProjectWorkflow::Default || (!colour.mode.empty() && colour.mode != "legacy") ||
         !colour.config_hash.empty() || !colour.working_space.empty() || !colour.io_rules.empty()) {
         throw std::runtime_error("snapshot recording requires Legacy, OpenGL, PerVertex, default workflow and mesh scale 1");
     }
+}
+
+void CheckCaptureDomain(const core::Project& project, std::string_view mesh, std::string_view plane) {
+    if (!project.mesh || mesh != plane || project.mesh->resource != core::Sha256Hex(mesh)) {
+        throw std::runtime_error("snapshot recording requires the exact shipped full-UV plane mesh");
+    }
+    CheckCaptureSettings(project);
+}
+
+bool EndsWithLower(std::string text, std::string_view suffix) {
+    for (char& c : text) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return text.ends_with(suffix);
+}
+
+/// The file name extension (lower case, with its dot) Painter imports a project resource by: from
+/// the MIME type of its catalog entries (the image and OBJ types the import records), else from
+/// their names; refused when the project lists none or two different ones.
+std::string ResourceExtension(const core::Project& project, const std::string& sha256, std::string_view what) {
+    static const std::map<std::string, std::string, std::less<>> byMime = {
+        {"image/png", ".png"},   {"image/x-exr", ".exr"}, {"image/exr", ".exr"}, {"image/jpeg", ".jpg"},
+        {"image/tiff", ".tif"},  {"image/x-tga", ".tga"}, {"image/bmp", ".bmp"}, {"model/obj", ".obj"},
+    };
+    std::set<std::string> extensions;
+    const auto entries = project.resources.find(sha256);
+    if (entries != project.resources.end()) {
+        for (const core::ResourceMeta& meta : entries->second) {
+            if (const auto known = byMime.find(meta.mime); known != byMime.end()) {
+                extensions.insert(known->second);
+                continue;
+            }
+            std::string extension = fs::path(Path(meta.name)).extension().string();
+            for (char& c : extension) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            if (!extension.empty()) extensions.insert(extension);
+        }
+    }
+    if (extensions.size() != 1) throw std::runtime_error(std::string(what) + " has no single catalogued file name extension");
+    return *extensions.begin();
+}
+
+/// The texture set of a capture on the destination's own mesh (decision 428): the project's only
+/// set, square, one UV tile 1001, at a power-of-two resolution from 128 to 4096, on an imported
+/// self-contained OBJ mesh, with the capture settings. The mesh's identity joins the signature
+/// through `EvaluationSettings`.
+const core::TextureSet& CheckUsageDomain(const core::Project& project) {
+    if (!project.mesh) throw std::runtime_error("snapshot recording requires an imported mesh");
+    const bool obj = EndsWithLower(project.mesh->source, ".obj") ||
+                     ResourceExtension(project, project.mesh->resource, "the imported mesh") == ".obj";
+    if (!obj) throw std::runtime_error("snapshot recording on the destination's mesh requires an OBJ mesh");
+    if (project.texture_sets.size() != 1) throw std::runtime_error("snapshot recording requires exactly one texture set");
+    const core::TextureSet& set = project.texture_sets.front();
+    const int size = set.resolution.width;
+    if (size != set.resolution.height || size < 128 || size > 4096 || (size & (size - 1)) != 0 ||
+        set.uv_tiles.size() != 1 || set.uv_tiles.front().udim != 1001) {
+        throw std::runtime_error("snapshot recording requires a square texture set of one UV tile at 128 to 4096 px");
+    }
+    CheckCaptureSettings(project);
+    return set;
+}
+
+/// The signature `inputs` of a generator capture: every mesh map of `set`
+/// (`SnapshotMeshMapInputs`) as `SignatureJson` writes an image input.
+json::Object SignatureInputs(const std::map<std::string, ImageInput>& inputs) {
+    json::Object result;
+    for (const auto& [name, input] : inputs) {
+        result[name] = json::Object{{"sha256", input.sha256},
+                                    {"resolution", int64_t{input.spec.resolution}},
+                                    {"format", std::string(FormatName(input.spec.format))},
+                                    {"colour_space", input.spec.colourSpace},
+                                    {"channels", int64_t{input.spec.channels}}};
+    }
+    return result;
 }
 
 void Print(std::FILE* out, const json::Object& report) {
@@ -353,10 +422,22 @@ int RunSnapshotCommand(const std::vector<std::string>& args, std::FILE* out, std
         const auto& requestObject = Object(requested);
         // Decision 412 §3: `preset` and `inputs` beside them ask for every listed output of that state.
         const bool multi = requestObject.size() == 4 && requestObject.contains("preset") && requestObject.contains("inputs");
-        if ((requestObject.size() != 2 && !multi) || !requestObject.contains("parameters")) {
-            throw std::runtime_error("request requires exactly resource and parameters (and preset and inputs)");
+        // Decision 428: `usage` beside them asks for a capture on the destination's own mesh and
+        // resolution, of a procedural fill source or of a generator reading its mesh maps.
+        const bool usage = requestObject.size() == 3 && requestObject.contains("usage");
+        if ((requestObject.size() != 2 && !multi && !usage) || !requestObject.contains("parameters") ||
+            !requestObject.contains("resource")) {
+            throw std::runtime_error("request requires exactly resource and parameters (and preset and inputs, or usage)");
         }
         const std::string resource = String(requestObject, "resource");
+        std::string usageName;
+        if (usage) {
+            usageName = String(requestObject, "usage");
+            if (usageName != "PROCEDURAL" && usageName != "GENERATOR") {
+                throw std::runtime_error("usage must be PROCEDURAL or GENERATOR");
+            }
+        }
+        const bool generator = usageName == "GENERATOR";
         auto opened = store::ProjectStore::Open(Path(args[2]));
         core::Document document(std::move(opened.state));
         opened.store->Attach(document);
@@ -364,7 +445,18 @@ int RunSnapshotCommand(const std::vector<std::string>& args, std::FILE* out, std
         const auto& project = *state.project;
         if (!project.mesh) throw std::runtime_error("snapshot recording requires an imported plane mesh");
         const std::string mesh = opened.store->ReadResource(project.mesh->resource);
-        CheckCaptureDomain(project, mesh, Read(bin / "assets" / "snapshot" / "plane.obj"));
+        const core::TextureSet* usageSet = nullptr;
+        std::map<std::string, ImageInput> meshMaps;
+        if (usage) {
+            usageSet = &CheckUsageDomain(project);
+            if (generator) {
+                auto inputs = SnapshotMeshMapInputs(*usageSet);
+                if (!inputs) throw std::runtime_error(inputs.error());
+                meshMaps = std::move(*inputs);
+            }
+        } else {
+            CheckCaptureDomain(project, mesh, Read(bin / "assets" / "snapshot" / "plane.obj"));
+        }
         const wchar_t* local = _wgetenv(L"LOCALAPPDATA");
         if (local == nullptr || *local == L'\0') throw std::runtime_error("LOCALAPPDATA is not set");
         const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
@@ -375,10 +467,29 @@ int RunSnapshotCommand(const std::vector<std::string>& args, std::FILE* out, std
         Write(work / "request.json", json::WriteCanonical(requested));
         json::Object settings;
         for (const auto& [name, value] : EvaluationSettings(project)) settings[name] = ParamJson(value);
-        const json::Object context{{"project_uuid", opened.store->project_uuid()},
-                                   {"revision", document.revision()}, {"settings", settings},
-                                   {"mesh_path", Utf8(work / "mesh.obj")}, {"bridge_sha256", bridgeHash},
-                                   {"painter_side_sha256", painterSideHash}};
+        json::Object context{{"project_uuid", opened.store->project_uuid()},
+                             {"revision", document.revision()}, {"settings", settings},
+                             {"mesh_path", Utf8(work / "mesh.obj")}, {"bridge_sha256", bridgeHash},
+                             {"painter_side_sha256", painterSideHash}};
+        if (usage) {
+            context["texture_set"] = usageSet->name;
+            context["resolution"] = int64_t{usageSet->resolution.width};
+            json::Object files;
+            // Each bound mesh map of a generator capture, as the bytes the destination stores.
+            if (generator) fs::create_directories(work / "mesh-maps");
+            for (const auto& [name, input] : meshMaps) {
+                const std::string bytes = opened.store->ReadResource(input.sha256);
+                if (core::Sha256Hex(bytes) != input.sha256) {
+                    throw std::runtime_error("the " + name + " mesh map's bytes differ from its hash");
+                }
+                const std::string extension = ResourceExtension(project, input.sha256, "the " + name + " mesh map");
+                const fs::path file = work / "mesh-maps" / Path(name + extension);
+                Write(file, bytes);
+                files[name] = Utf8(file);
+            }
+            context["mesh_maps"] = std::move(files);
+            context["signature_inputs"] = SignatureInputs(meshMaps);
+        }
         Write(work / "context.json", json::WriteCanonical(context));
         RunBridge(work);
         if (core::Sha256Hex(Read(bridge)) != bridgeHash || core::Sha256Hex(Read(painterSide)) != painterSideHash) {
@@ -423,21 +534,43 @@ int RunSnapshotCommand(const std::vector<std::string>& args, std::FILE* out, std
                         {"verified_after_reopen", true}, {"receipt", Utf8(work / "capture.json")}});
             return 0;
         }
-        if (String(receipt, "schema") != "uzpainter/procedural-capture/1" ||
-            String(receipt, "project_uuid") != opened.store->project_uuid() ||
+        const std::string schema = usage ? "uzpainter/procedural-capture/3" : "uzpainter/procedural-capture/1";
+        if (String(receipt, "schema") != schema || String(receipt, "project_uuid") != opened.store->project_uuid() ||
             std::get<int64_t>(receipt.at("revision").data) != document.revision() ||
-            String(receipt, "resource") != resource) throw std::runtime_error("capture identity differs from request");
+            String(receipt, "resource") != resource || (usage && String(receipt, "usage") != usageName)) {
+            throw std::runtime_error("capture identity differs from request");
+        }
         const auto parsed = RequestFromSignature(receipt.at("signature"));
         if (!parsed) throw std::runtime_error(parsed.error());
         const ProceduralRequest& request = *parsed;
+        const uint32_t size = usage ? static_cast<uint32_t>(usageSet->resolution.width) : 128;
         if (core::FormatAssetUrl(request.asset) != "uzasset://snapshot/" + core::Sha256Hex(resource) + "@1" ||
-            request.output != RasterSpec{128, ChannelFormat::F32, "raw", 1} || request.preset ||
-            !request.inputs.empty() || !request.sourceInputs.empty() || request.meshClass != "quad" || request.uvTiles != 1 || request.outputId.empty()) {
+            request.output != RasterSpec{size, ChannelFormat::F32, "raw", 1} || request.preset ||
+            request.inputs != meshMaps || !request.sourceInputs.empty() || request.meshClass != "quad" ||
+            request.uvTiles != 1 || request.outputId.empty()) {
             throw std::runtime_error("capture signature lies outside the supported domain");
         }
+        if (usage) {
+            // The stored signature must be exactly what the destination's own texture set asks for
+            // with these parameters: its settings and mesh identity, resolution, seed and mesh maps.
+            core::ProceduralRef ref;
+            ref.asset = core::FormatAssetUrl(request.asset);
+            ref.params = Object(Object(receipt.at("signature")).at("params"));
+            const auto own = generator ? SnapshotGeneratorRequest(project, *usageSet, ref, request.outputId)
+                                       : SnapshotSetRequest(project, *usageSet, ref, request.outputId);
+            if (!own) throw std::runtime_error("the destination's own request is refused: " + own.error());
+            if (SignatureHash(*own) != SignatureHash(request)) {
+                throw std::runtime_error("the capture signature is not the destination's own request");
+            }
+        }
         // Only the receipt's explicit, paired readback gives the observations; nothing is inferred.
-        const auto observed = ReceiptSourceMetadata(capture, resource, request);
-        if (!observed) throw std::runtime_error("capture observations: " + observed.error());
+        // A generator's readback is its mask's source, not a paired fill source: it records none.
+        std::optional<store::SourceMetadata> observed;
+        if (!generator) {
+            auto metadata = ReceiptSourceMetadata(capture, resource, request);
+            if (!metadata) throw std::runtime_error("capture observations: " + metadata.error());
+            observed = std::move(*metadata);
+        }
         std::string scalarExport;
         std::string scalarTexels;
         const auto& hashes = Object(receipt.at("files"));
@@ -451,7 +584,7 @@ int RunSnapshotCommand(const std::vector<std::string>& args, std::FILE* out, std
                 const auto texels = SnapshotExportTexels(bytes, spec);
                 if (!texels) throw std::runtime_error(texels.error());
                 if (repeat == 1 && channel == 0) { scalarExport = bytes; scalarTexels = *texels; }
-                for (size_t pixel = 0; pixel < size_t{128 * 128}; ++pixel) {
+                for (size_t pixel = 0; pixel < size_t{size} * size; ++pixel) {
                     for (uint32_t component = 0; component < spec.channels; ++component) {
                         if (texels->compare((pixel * spec.channels + component) * 4, 4, scalarTexels, pixel * 4, 4) != 0) {
                             throw std::runtime_error("paired scalar/RGB or repeated capture differs at native float32 precision");
@@ -461,7 +594,7 @@ int RunSnapshotCommand(const std::vector<std::string>& args, std::FILE* out, std
             }
         }
         const auto outcome = RecordSnapshotExport(*opened.store, document, request, scalarExport,
-                                                  opened.store->project_uuid(), document.revision(), *observed);
+                                                  opened.store->project_uuid(), document.revision(), observed);
         if (!outcome) throw std::runtime_error(outcome.error());
         if (!outcome->result || outcome->result->status != core::ResultStatus::committed) {
             throw std::runtime_error("snapshot transaction did not commit");
@@ -476,14 +609,17 @@ int RunSnapshotCommand(const std::vector<std::string>& args, std::FILE* out, std
         if (!stored || (*stored)->bytes != scalarTexels) {
             throw std::runtime_error("saved snapshot did not serve the captured texels exactly after reopen");
         }
-        const auto storedObservations = backend->Metadata(request);
-        if (!storedObservations || *storedObservations != *observed) {
-            throw std::runtime_error("saved snapshot did not keep the captured observations after reopen");
+        if (observed) {
+            const auto storedObservations = backend->Metadata(request);
+            if (!storedObservations || *storedObservations != *observed) {
+                throw std::runtime_error("saved snapshot did not keep the captured observations after reopen");
+            }
         }
-        Print(out, {{"status", "ok"}, {"asset", core::FormatAssetUrl(request.asset)},
-                    {"signature_sha256", SignatureHash(request)}, {"revision", recordedRevision},
-                    {"verified_after_reopen", true},
-                    {"receipt", Utf8(work / "capture.json")}});
+        json::Object report{{"status", "ok"}, {"asset", core::FormatAssetUrl(request.asset)},
+                            {"signature_sha256", SignatureHash(request)}, {"revision", recordedRevision},
+                            {"verified_after_reopen", true}, {"receipt", Utf8(work / "capture.json")}};
+        if (usage) report["usage"] = usageName;
+        Print(out, report);
         return 0;
     } catch (const std::exception& error) {
         Print(out, {{"status", "host_error"}, {"error", error.what()}, {"work", Utf8(work)}});

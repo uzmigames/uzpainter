@@ -25,5 +25,5 @@
     "output": {"resolutions": [1024, 2048, 4096], "formats": ["f32"], "colour_spaces": ["linear"], "channels": [1]}
   },
   "corpus": {},
-  "parity": {"status": "unavailable", "reason": "not certified: the parameter discovery (2.2), the calibration against private Painter oracles (2.4), the held-out reservation (2.6) and Tier 2a (3.1) of phase3.2_proc-grunge-families wait on Painter recordings"}
+  "parity": {"status": "unavailable", "reason": "snapshot-only (decision 429): Painter's grunge is served only from a project-private snapshot of the user's own Painter (`UzPainter.exe assets snapshot`, usage PROCEDURAL), at its exact signature, and refused without one; this UzPainter kernel is not exact and never serves it (decision 427; phase3.3_procedural-families item 2.13)"}
 }
