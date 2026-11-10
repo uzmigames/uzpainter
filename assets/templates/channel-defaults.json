@@ -75,6 +75,24 @@
       }
     },
     {
+      "type": "EmissionColor",
+      "format": "sRGB8",
+      "project_templates": ["default"],
+      "colour_management": "ocio",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/ocio-added-channel-bases",
+        "record_sha256": "1862eb70911dfb89616d0be288c434413be0fc30740c12ace1bb1c7d0e77242f",
+        "map": "uzp_plane/emissive",
+        "note": "EmissionColor added as sRGB8 to the default project's channels under OCIO with Painter's substance configuration and left empty exports 1.0 to OpenEXR 32f and 65535 to PNG 16, twice before and twice after save and reopen (decision 422, phase3.2_unreal-ue56-packed-preset item 2.5); restricted to template default, Painter's OCIO configuration and sRGB8"
+      }
+    },
+    {
       "type": "Normal",
       "base": [
         0.49803921580314636,
@@ -86,6 +104,24 @@
         "semantics": "parity/semantics/height-to-normal.json",
         "entry": "height-normal-default-normal-channel-base",
         "note": "float32(127/255), float32(127/255), 1.0 (height-to-normal.json, height-normal-default-normal-channel-base, exact): the 8-bit flat normal read as UNORM8"
+      }
+    },
+    {
+      "type": "Opacity",
+      "format": "L8",
+      "project_templates": ["default"],
+      "colour_management": "ocio",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/ocio-added-channel-bases",
+        "record_sha256": "1862eb70911dfb89616d0be288c434413be0fc30740c12ace1bb1c7d0e77242f",
+        "map": "uzp_plane/opacity",
+        "note": "Opacity added as L8 to the default project's channels under OCIO with Painter's substance configuration and left empty exports 1.0 to OpenEXR 32f and 65535 to PNG 16, twice before and twice after save and reopen (decision 422, phase3.2_unreal-ue56-packed-preset item 2.5); restricted to template default, Painter's OCIO configuration and L8 (legacy colour management, other formats and templates are not recorded and fail with missing_base_value)"
       }
     },
     {

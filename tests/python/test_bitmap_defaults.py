@@ -229,21 +229,6 @@ def test_facade_defaults_equal_the_recorded_painter_defaults(
     report = private_facade(replay_script(name))
     if report["status"] != "ok":
         error = report.get("error") or {}
-        if (
-            name.endswith("ocio")
-            and error.get("type") == "RuntimeError"
-            and error.get("message") == "texture notification worker failed"
-            and "incomplete native texture snapshot: unsupported texture DAG: "
-            in str(error.get("traceback"))
-            and "/Opacity" in str(error.get("traceback"))
-        ):
-            # A real, separate blocker, not a pass: decision 422 admits the setup's 16-bit
-            # bitmaps under OCIO, but the empty base of Opacity added as L8 to the default
-            # project's channels under OCIO is not recorded (request `ocio-added-channel-bases`).
-            pytest.xfail(
-                "blocked: the empty base of an added Opacity L8 under OCIO is not recorded "
-                "(decision 422)"
-            )
         pytest.fail(f"replay script failed: {error.get('type')} (details kept privately)", False)
     observed = report["result"]
     steps = {s["step"]: s for s in manifest(name)["instruction_sequence"]["steps"]}

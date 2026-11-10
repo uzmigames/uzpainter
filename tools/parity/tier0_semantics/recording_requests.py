@@ -2486,6 +2486,7 @@ ADMITTED = frozenset(
         "ao-mixed-precomposed-half-l32f",
         "ao-mixed-precomposed-half-y-l32f",
         "export-padding-tau-prism",
+        "ocio-added-channel-bases",
         "specularweight-empty-base-default-l8",
         "specularweight-empty-base-default-l16",
         "specularweight-empty-base-default-l32f",
@@ -2620,6 +2621,7 @@ PRESERVED_REQUESTS = frozenset(
         "export-padding-kernel-islands-256",
         "export-padding-fold-tie",
         "export-padding-end-overhang",
+        "ocio-added-channel-bases",
     }
 )
 

@@ -63,10 +63,9 @@ class Ocio16BitmapUnsupported(SetupFailure):
 
 
 class OcioAddedBaseUnrecorded(SetupFailure):
-    """What remains of decision 407's gap after decision 422 admits the setup's 16-bit bitmaps
-    under OCIO: the evaluator's missing_base_value for Opacity, which the OCIO session adds as L8
-    to the default project's channels and whose empty base no recording shows yet (request
-    `ocio-added-channel-bases`)."""
+    """The evaluator's missing_base_value for the Opacity the OCIO session adds as L8 to the
+    default project's channels: the last of decision 407's gap, closed by the recorded
+    `ocio-added-channel-bases` (decision 422); it coming back is a failure."""
 
 
 # The exact native refusal of decision 190 (src/evaluator/evaluate.cpp), nothing broader.
@@ -536,18 +535,10 @@ def replay_targets(
     return report
 
 
-# Decision 407's strict xfail on the decision-190 refusal narrows (decision 422): the R-322 setup's
-# RGB16 colour bitmaps under OCIO are admitted, so that refusal coming back is a failure; what
-# remains is the added Opacity's unrecorded base under OCIO, and only that refusal is expected.
-@pytest.mark.xfail(
-    strict=True,
-    raises=OcioAddedBaseUnrecorded,
-    reason=(
-        "decision 422: the empty base of Opacity added as L8 under OCIO is not recorded (request "
-        "ocio-added-channel-bases); phase3.2_unreal-ue56-packed-preset item 2.5 removes this mark "
-        "once it is admitted"
-    ),
-)
+# Decision 407's strict xfail is gone (decision 422): the R-322 setup's RGB16 colour bitmaps under
+# OCIO are admitted, and the empty bases of the Opacity and EmissionColor its OCIO session adds are
+# recorded (ocio-added-channel-bases, assets/templates/channel-defaults.json); either refusal
+# coming back is a failure.
 def test_r322_tga_capture_diagnostic(export_tests: Path, tmp_path: Path) -> None:
     diagnostics: list[Any] = []
     report = new_replay_report()

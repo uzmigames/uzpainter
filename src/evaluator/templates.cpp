@@ -5,6 +5,8 @@
 #include <iterator>
 #include <set>
 #include <sstream>
+#include <utility>
+#include <vector>
 
 #include "evaluator/error.h"
 #include "evaluator/sources.h"
@@ -77,10 +79,10 @@ TemplateChannel ParseChannel(const Value& value, std::string_view path, bool def
     if (const auto it = object.find("colour_management"); it != object.end()) {
         const std::string scopePath = std::string(path) + ".colour_management";
         if (!defaults) Fail(scopePath, "only channel defaults may restrict colour management");
-        if (!it->second.IsString() || std::get<std::string>(it->second.data) != "legacy") {
-            Fail(scopePath, "expected \"legacy\"");
-        }
-        channel.colourManagement = ColourDomain::Legacy;
+        // "ocio" names Painter's pinned substance configuration only (ColourDomainOf).
+        const std::string mode = it->second.IsString() ? std::get<std::string>(it->second.data) : "";
+        if (mode != "legacy" && mode != "ocio") Fail(scopePath, "expected \"legacy\" or \"ocio\"");
+        channel.colourManagement = mode == "legacy" ? ColourDomain::Legacy : ColourDomain::PainterOcio;
     }
     const Value& base = Need(object, "base", path);
     const std::string basePath = std::string(path) + ".base";
@@ -158,19 +160,24 @@ ProjectTemplate ParseTemplate(const Value& document, std::string_view path) {
     const Value& channels = Need(object, "channels", path);
     const std::string channelsPath = std::string(path) + ".channels";
     if (!channels.IsArray()) Fail(channelsPath, "expected an array");
-    // A channel-defaults type may repeat with distinct formats, each entry recorded on its own; an
-    // entry for any format stands alone.
-    std::map<core::ChannelType, std::set<std::optional<core::ChannelFormat>>> seen;
+    // A channel-defaults type may repeat with distinct formats, or with one format under distinct
+    // colour managements, each entry recorded on its own; an entry for any format, or for its format
+    // under any colour management, stands alone.
+    using Scope = std::pair<std::optional<core::ChannelFormat>, std::optional<ColourDomain>>;
+    std::map<core::ChannelType, std::vector<Scope>> seen;
     size_t index = 0;
     for (const Value& entry : std::get<core::json::Array>(channels.data)) {
         const std::string entryPath = channelsPath + "[" + std::to_string(index++) + "]";
         TemplateChannel channel = ParseChannel(entry, entryPath, result.channelDefaults);
-        std::set<std::optional<core::ChannelFormat>>& formats = seen[channel.type];
-        const bool repeated = !result.channelDefaults || !channel.format || formats.contains(std::nullopt)
-                                  ? !formats.empty()
-                                  : formats.contains(channel.format);
+        std::vector<Scope>& scopes = seen[channel.type];
+        const bool repeated =
+            std::any_of(scopes.begin(), scopes.end(), [&](const Scope& scope) {
+                if (!result.channelDefaults || !channel.format || !scope.first) return true;
+                if (scope.first != channel.format) return false;
+                return !scope.second || !channel.colourManagement || scope.second == channel.colourManagement;
+            });
         if (repeated) Fail(entryPath, "channel '" + std::string(core::ToString(channel.type)) + "' repeats");
-        formats.insert(channel.format);
+        scopes.emplace_back(channel.format, channel.colourManagement);
         result.channels.push_back(std::move(channel));
     }
     return result;
@@ -266,7 +273,7 @@ render::Result<const TemplateChannel*> TemplateLibrary::BaseChannel(std::string_
             if (!colour) {
                 return EvalFail(EvalErrorKind::MissingBaseValue,
                                 "the channel default of " + std::string(core::ToString(type)) +
-                                    " is restricted to legacy colour management and no colour management was given");
+                                    " is restricted to one colour management and no colour management was given");
             }
             if (*colour != *fallback.colourManagement) continue;
         }

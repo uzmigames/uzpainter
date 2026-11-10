@@ -259,14 +259,15 @@ def test_an_added_channel_takes_its_format_restricted_default_in_the_dump_and_re
     assert refusal in second["refused"] and second["open"] is False
 
 
-def test_an_added_emissioncolor_takes_its_legacy_default_in_the_dump_and_rebuild(
+def test_an_added_emissioncolor_takes_its_scoped_default_in_the_dump_and_rebuild(
     run: Run, tmp_path: Path
 ) -> None:
-    """The application's recipe host with the EmissionColor channel default restricted to template
-    "default", legacy colour management and sRGB8 (channel-defaults.json, decision 295): a legacy
-    project dumps it and rebuilds to the same digest; an OCIO project's dump is refused, and so is
-    the rebuild of the legacy dump restated as OCIO (the rebuilt document's own colour management,
-    never the session's)."""
+    """The application's recipe host with the EmissionColor channel defaults restricted to template
+    "default" and sRGB8, one under legacy colour management (decision 295), one under Painter's
+    OCIO configuration (decision 422): a legacy project dumps the legacy one and rebuilds to the
+    same digest, an OCIO project dumps the OCIO one; the rebuild of the legacy dump restated under
+    another OCIO configuration is refused (the rebuilt document's own colour management, never the
+    session's)."""
     from tests.python.test_pyapi_facade import PAINTER_OCIO_SHA256 as PAINTER_OCIO
 
     body = """
@@ -283,31 +284,31 @@ def test_an_added_emissioncolor_takes_its_legacy_default_in_the_dump_and_rebuild
         project.close()
         project.create(PLANE, settings=project.Settings(ocio_config_hash=OCIO_HASH))
         ts.get_active_stack().add_channel(CT.EmissionColor, ts.ChannelFormat.sRGB8)
-        ocio_refused = raises(project.dump_recipe)
+        ocio_dump = project.dump_recipe()
         project.close()
-        result = {"dump": dump, "rebuilt": rebuilt, "ocio_refused": ocio_refused}
+        result = {"dump": dump, "rebuilt": rebuilt, "ocio_dump": ocio_dump}
         """
     first = ok(run(body.replace("OCIO_HASH", repr(PAINTER_OCIO))))
     defaults = json.loads(
         (REPO_ROOT / "assets" / "templates" / "channel-defaults.json").read_text(encoding="utf-8")
     )
-    (entry,) = [c for c in defaults["channels"] if c["type"] == "EmissionColor"]
-    assert (entry["format"], entry["project_templates"], entry["colour_management"]) == (
-        "sRGB8",
-        ["default"],
-        "legacy",
-    )
+    entries = {
+        c["colour_management"]: c for c in defaults["channels"] if c["type"] == "EmissionColor"
+    }
+    assert sorted(entries) == ["legacy", "ocio"]
+    for entry in entries.values():
+        assert (entry["format"], entry["project_templates"]) == ("sRGB8", ["default"])
+    for name, mode in (("dump", "legacy"), ("ocio_dump", "ocio")):
+        recipe = first[name]["recipe"]
+        channel = recipe["texture_sets"][0]["stacks"][0]["channels"]["EmissionColor"]
+        assert channel["format"] == "sRGB8" and channel["base"] == entries[mode]["base"], name
     dump: dict[str, Any] = first["dump"]
-    channel = dump["recipe"]["texture_sets"][0]["stacks"][0]["channels"]["EmissionColor"]
-    assert channel["format"] == "sRGB8" and channel["base"] == entry["base"]
     assert first["rebuilt"]["digest"] == dump["digest"]
     assert first["rebuilt"]["recipe"] == dump["recipe"]
-    refusal = "channel EmissionColor is neither in template 'default' nor in the channel defaults"
-    assert first["ocio_refused"].startswith("ValueError") and refusal in first["ocio_refused"]
 
     restated = json.loads(json.dumps(dump))
     colour = restated["recipe"]["settings"]["color_management"]
-    colour["mode"], colour["config_hash"] = "ocio", PAINTER_OCIO
+    colour["mode"], colour["config_hash"] = "ocio", "0" * 64
     restated["digest"] = hashlib.sha256(canonical_json(restated["recipe"])).hexdigest()
     (tmp_path / "ocio.json").write_text(json.dumps(restated), encoding="utf-8")
     second = ok(
@@ -316,6 +317,7 @@ def test_an_added_emissioncolor_takes_its_legacy_default_in_the_dump_and_rebuild
         result = {"refused": refused, "open": project.is_open()}
         """)
     )
+    refusal = "channel EmissionColor is neither in template 'default' nor in the channel defaults"
     assert refusal in second["refused"] and second["open"] is False
 
 

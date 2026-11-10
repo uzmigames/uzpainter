@@ -50,8 +50,9 @@ struct TemplateChannel {
     /// Empty means all projects; a non-empty list restricts an added-channel default to the
     /// templates whose empty-channel exports establish it.
     std::vector<std::string> projectTemplates;
-    /// Present on a channel default restricted to projects of that colour management (only
-    /// legacy is recorded: `colour_management`); absent means any.
+    /// Present on a channel default restricted to projects of that colour management
+    /// (`colour_management`: "legacy", or "ocio" for Painter's pinned substance configuration);
+    /// absent means any.
     std::optional<ColourDomain> colourManagement;
     std::array<float, 3> base{0.0f, 0.0f, 0.0f};
     /// "observed", "fitted", "inferred" or "unobserved" (EVALUATOR.md §3).
