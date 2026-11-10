@@ -22,6 +22,8 @@ The knob cube's set was spent on 2026-11-09 (candidate `be93c9a9...`, held-out l
 on the single-invert sets. The candidate was refitted on the calibration set alone (2026-11-10)
 and fixed in its commit before a new held-out set was recorded: the Tunic v10 low mesh, the mesh
 of the recipe set and outside the calibration set, at 1024 and 4096 with the same four sets.
+The spent knob cube set joins the calibration set as regression cases (decision 222 §2; the root
+review of decision 424, 2026-11-10); it never enters a held-out set again.
 """
 
 from __future__ import annotations
@@ -83,6 +85,12 @@ def occlusion_goldens() -> tuple[Golden, ...]:
         for mesh, resolution in (*SPENT_HELD_OUT, *HELD_OUT)
     )
     return (*calibration, *held_out)
+
+
+def spent_held_out(goldens: tuple[Golden, ...]) -> tuple[Golden, ...]:
+    """The spent held-out goldens: calibration regression cases of the current batch."""
+    spent = set(SPENT_HELD_OUT)
+    return tuple(g for g in goldens if g.stage == "held-out" and (g.mesh, g.resolution) in spent)
 
 
 def current_held_out(goldens: tuple[Golden, ...]) -> tuple[Golden, ...]:

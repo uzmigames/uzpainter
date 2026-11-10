@@ -2,7 +2,7 @@
   "id": 424,
   "slug": "the-recording-gpu-s-16-bit-unorm-fetch-is-correctly-rounded-the-ao-single-invert-inverts-the-16-bit-code-and-generator-occlusion-2-is-exact",
   "title": "The recording GPU's 16-bit UNORM fetch is correctly rounded; the AO single invert inverts the 16-bit code; generator/occlusion@2 is exact and aliased",
-  "status": "proposed",
+  "status": "accepted",
   "date": "2026-11-10",
   "relatedTasks": ["phase3.2_proc-generator-families"],
   "supersededBy": null

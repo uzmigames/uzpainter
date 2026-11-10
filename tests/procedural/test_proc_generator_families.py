@@ -341,8 +341,9 @@ def test_occlusion_v2_follows_the_certified_model(generator_tests: Path, tmp_pat
 
 def test_occlusion_v2_equals_painter_on_its_batch(generator_tests: Path, tmp_path: Path) -> None:
     """3.1 (CPU, private store): the native CPU lane of `generator/occlusion@2` equals Painter on
-    every compared texel (decision 423 §1) of the 36 calibration and 8 held-out cases of its
-    batch. The goldens stay in the store and pytest's own temporary folder; only counts print."""
+    every compared texel (decision 423 §1) of the 40 calibration cases (the §6 matrix's 36 and
+    the spent knob cube set's 4 regression cases) and 8 held-out cases of its batch. The goldens
+    stay in the store and pytest's own temporary folder; only counts print."""
     import numpy as np
 
     from tools.parity.proc_cert.raster import decode
@@ -354,7 +355,7 @@ def test_occlusion_v2_equals_painter_on_its_batch(generator_tests: Path, tmp_pat
         pytest.skip("no private store on this machine: the goldens are unavailable")
     batch = load_batch(OCCLUSION2_BATCH)
     cases = [*batch.cases(batch.calibration), *batch.cases(batch.held_out)]
-    assert len(cases) == 44
+    assert len(cases) == 48
     differing: dict[str, int] = {}
     for case in cases:
         rasters = {}

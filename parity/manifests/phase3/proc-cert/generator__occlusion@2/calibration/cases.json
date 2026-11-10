@@ -1693,6 +1693,194 @@
     "size_bytes": 67108864,
     "encoding": "raw"
    }
+  },
+  {
+   "case_id": "defaults--knob-cube--2048",
+   "mesh": {
+    "id": "knob-cube",
+    "class": "bevelled-cube",
+    "uv_tiles": 1
+   },
+   "params": {
+    "ao_invert": 0,
+    "global_invert": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 2048,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "AO": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 1,
+     "record_id": "r1-uzp_bevelled_cube-ambient_occlusion",
+     "sha256": "ec60ce0e4d0019347b65c606d808a6c6e5ac0cbc86827ce393e9518cdde1b957",
+     "size_bytes": 1163837,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_bevelled_cube-world_space_normals",
+     "sha256": "e9f42ac08cc5150f5faac12565cee03274945172e30040034de6c5dc80e55e8f",
+     "size_bytes": 564665,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-held-out-occlusion-knob-cube-2048-user0",
+    "sha256": "2d0fe8f48c3752eb1407e3f19ba5f9b2152a895dc0ea37dbc34998f132559537",
+    "size_bytes": 16777216,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "recipe-tunic-v10--knob-cube--2048",
+   "mesh": {
+    "id": "knob-cube",
+    "class": "bevelled-cube",
+    "uv_tiles": 1
+   },
+   "params": {
+    "ao_invert": 0,
+    "global_invert": 1
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 2048,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "AO": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 1,
+     "record_id": "r1-uzp_bevelled_cube-ambient_occlusion",
+     "sha256": "ec60ce0e4d0019347b65c606d808a6c6e5ac0cbc86827ce393e9518cdde1b957",
+     "size_bytes": 1163837,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_bevelled_cube-world_space_normals",
+     "sha256": "e9f42ac08cc5150f5faac12565cee03274945172e30040034de6c5dc80e55e8f",
+     "size_bytes": 564665,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-held-out-occlusion-knob-cube-2048-user1",
+    "sha256": "5c2ce3f7e9d8e04cdcb7d4c30982478752e5b767f7032d50545951cf03a25fa7",
+    "size_bytes": 16777216,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "boundary-ao-invert--knob-cube--2048",
+   "mesh": {
+    "id": "knob-cube",
+    "class": "bevelled-cube",
+    "uv_tiles": 1
+   },
+   "params": {
+    "ao_invert": 1,
+    "global_invert": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 2048,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "AO": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 1,
+     "record_id": "r1-uzp_bevelled_cube-ambient_occlusion",
+     "sha256": "ec60ce0e4d0019347b65c606d808a6c6e5ac0cbc86827ce393e9518cdde1b957",
+     "size_bytes": 1163837,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_bevelled_cube-world_space_normals",
+     "sha256": "e9f42ac08cc5150f5faac12565cee03274945172e30040034de6c5dc80e55e8f",
+     "size_bytes": 564665,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-held-out-occlusion-knob-cube-2048-user2",
+    "sha256": "5c2ce3f7e9d8e04cdcb7d4c30982478752e5b767f7032d50545951cf03a25fa7",
+    "size_bytes": 16777216,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "boundary-both-inverts--knob-cube--2048",
+   "mesh": {
+    "id": "knob-cube",
+    "class": "bevelled-cube",
+    "uv_tiles": 1
+   },
+   "params": {
+    "ao_invert": 1,
+    "global_invert": 1
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 2048,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "AO": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 1,
+     "record_id": "r1-uzp_bevelled_cube-ambient_occlusion",
+     "sha256": "ec60ce0e4d0019347b65c606d808a6c6e5ac0cbc86827ce393e9518cdde1b957",
+     "size_bytes": 1163837,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_bevelled_cube-world_space_normals",
+     "sha256": "e9f42ac08cc5150f5faac12565cee03274945172e30040034de6c5dc80e55e8f",
+     "size_bytes": 564665,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-held-out-occlusion-knob-cube-2048-user3",
+    "sha256": "2d0fe8f48c3752eb1407e3f19ba5f9b2152a895dc0ea37dbc34998f132559537",
+    "size_bytes": 16777216,
+    "encoding": "raw"
+   }
   }
  ]
 }

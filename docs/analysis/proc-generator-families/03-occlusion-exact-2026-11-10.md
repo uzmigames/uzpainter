@@ -45,5 +45,13 @@ Certification (`python -m tools.parity.proc_cert certify parity/manifests/phase3
 
 - AO inputs off the 16-bit code grid: Painter's AO bake is 16-bit, so none was recorded. The candidate and the native family refuse them.
 - The AO generator's other parameters stay at Painter's defaults. They are not editable in the certified domain.
-- The compared-texel rule is decision 423 §1, which is still with the root reviewer.
+- The compared-texel rule is decision 423 §1, accepted in the root review of 2026-11-10.
 - Every other generator stays a release gap (02 §3).
+
+## 5. The spent set as regression cases (root review, 2026-11-10)
+
+The model panel found one flaw in decision 424: the spent knob cube set had left the batch. Decision 222 §2 moves it to the calibration set as regression cases instead.
+
+- `python -m tools.parity.proc_generators.batch occlusion` now appends its 4 cases to `calibration/cases.json` (`goldens.spent_held_out`), outside the unchanged 36-cell matrix. The held-out list keeps its pin `2d91b5b1…`.
+- The candidate is unchanged (fingerprint `3f9ca11f…`, no fitted constants). Re-certified with the same command: outcome **exact**, calibration 40 of 40, held-out 8 of 8. The ledger is unchanged, and the report is rewritten in place.
+- The native CPU lane equals Painter on all 48 cases (`tests/procedural/test_proc_generator_families.py::test_occlusion_v2_equals_painter_on_its_batch`, 2 passed with the record test).

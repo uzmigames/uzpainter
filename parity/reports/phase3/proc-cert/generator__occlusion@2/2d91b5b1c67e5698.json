@@ -1,7 +1,7 @@
 {
   "asset": "generator/occlusion",
   "asset_version": 2,
-  "batch_sha256": "c3018b99d51989c70e20fa355e74f367143ec8b927a63448fa05953730feeec1",
+  "batch_sha256": "09dd04b7ca00ac27d90e4d4e1b57ecb8969f4e394c6b98194832a61566d82699",
   "candidate_sha256": "3f9ca11fe84a618a51dd5fad64a386232f80be505d58211fbf33d0f53d781340",
   "certified": true,
   "domain_sha256": "47c702dac2e77a0163b5cb8ea022c726d2d2974585fb3d49b7739ed8a84b51d3",
@@ -675,12 +675,84 @@
             "unit": "ulp_f32",
             "values": 16777216
           }
+        },
+        {
+          "candidate_sha256": "2d0fe8f48c3752eb1407e3f19ba5f9b2152a895dc0ea37dbc34998f132559537",
+          "case_id": "defaults--knob-cube--2048",
+          "oracle_sha256": "2d0fe8f48c3752eb1407e3f19ba5f9b2152a895dc0ea37dbc34998f132559537",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 4194304,
+            "unit": "ulp_f32",
+            "values": 4194304
+          }
+        },
+        {
+          "candidate_sha256": "5c2ce3f7e9d8e04cdcb7d4c30982478752e5b767f7032d50545951cf03a25fa7",
+          "case_id": "recipe-tunic-v10--knob-cube--2048",
+          "oracle_sha256": "5c2ce3f7e9d8e04cdcb7d4c30982478752e5b767f7032d50545951cf03a25fa7",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 4194304,
+            "unit": "ulp_f32",
+            "values": 4194304
+          }
+        },
+        {
+          "candidate_sha256": "5c2ce3f7e9d8e04cdcb7d4c30982478752e5b767f7032d50545951cf03a25fa7",
+          "case_id": "boundary-ao-invert--knob-cube--2048",
+          "oracle_sha256": "5c2ce3f7e9d8e04cdcb7d4c30982478752e5b767f7032d50545951cf03a25fa7",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 4194304,
+            "unit": "ulp_f32",
+            "values": 4194304
+          }
+        },
+        {
+          "candidate_sha256": "2d0fe8f48c3752eb1407e3f19ba5f9b2152a895dc0ea37dbc34998f132559537",
+          "case_id": "boundary-both-inverts--knob-cube--2048",
+          "oracle_sha256": "2d0fe8f48c3752eb1407e3f19ba5f9b2152a895dc0ea37dbc34998f132559537",
+          "outcome": "exact",
+          "reason": "",
+          "residual": {
+            "affected_texels": 0,
+            "differing_values": 0,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0.0,
+            "p99_abs_diff": 0,
+            "sum_abs_diff": 0,
+            "texels": 4194304,
+            "unit": "ulp_f32",
+            "values": 4194304
+          }
         }
       ],
-      "cases_sha256": "098845ccc67ad7948df6d1a796c18be520ba7a05d75f96c1ca3b3f4588d707aa",
+      "cases_sha256": "3ae5a2c1304538e3e6d3c73f2c9a9d56519378683a2506d4262b0b7953598bae",
       "corpus_id": "generator-occlusion-2-calibration-2026-11-09",
       "counts": {
-        "exact": 36,
+        "exact": 40,
         "fail": 0,
         "oracle_unavailable": 0,
         "residual": 0

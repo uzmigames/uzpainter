@@ -135,7 +135,7 @@
  "calibration": {
   "corpus_id": "generator-occlusion-2-calibration-2026-11-09",
   "path": "calibration/cases.json",
-  "sha256": "098845ccc67ad7948df6d1a796c18be520ba7a05d75f96c1ca3b3f4588d707aa"
+  "sha256": "3ae5a2c1304538e3e6d3c73f2c9a9d56519378683a2506d4262b0b7953598bae"
  },
  "held_out": {
   "corpus_id": "generator-occlusion-2-held-out-2026-11-10",

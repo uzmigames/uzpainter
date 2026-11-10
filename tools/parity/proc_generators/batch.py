@@ -4,7 +4,9 @@
 `parity/manifests/phase3/proc-cert/generator__occlusion@<version>/` from the admitted goldens of
 `goldens.py`: `batch.json` (the asset, its certified domain, the §6 matrix and both case lists
 pinned by SHA-256), `calibration/cases.json` and `held-out/cases.json`. Nothing here fits or
-reads a case to change a candidate: the oracles are only re-hashed, masked and stored.
+reads a case to change a candidate: the oracles are only re-hashed, masked and stored. A spent
+held-out set joins the calibration list as regression cases (decision 222 §2), outside the §6
+matrix the batch declares.
 
 Each case is one User channel of one golden:
 
@@ -202,11 +204,12 @@ def write_batch(
     held_out: Sequence[Golden],
     store: OracleStore,
     root: Path = REPO_ROOT,
+    regression: Sequence[Golden] = (),
 ) -> Path:
     directory = BATCHES / f"{asset.asset.replace('/', '__')}@{asset.version}"
     pins: dict[str, Any] = {}
     for set_name, folder, chosen in (
-        ("calibration", "calibration", calibration),
+        ("calibration", "calibration", (*calibration, *regression)),
         ("held_out", "held-out", held_out),
     ):
         cases = [c for g in chosen for c in golden_cases(g, asset, set_name, store, root)]
@@ -255,7 +258,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     goldens = gold.occlusion_goldens()
     calibration = [g for g in goldens if g.stage == "calibration"]
     held_out = list(gold.current_held_out(goldens))
-    print(write_batch(occlusion_asset(), calibration, held_out, store))
+    regression = list(gold.spent_held_out(goldens))
+    print(write_batch(occlusion_asset(), calibration, held_out, store, regression=regression))
     _ = args
     return 0
 
