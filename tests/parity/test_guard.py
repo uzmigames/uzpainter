@@ -1054,6 +1054,46 @@ def test_gltf_consumer_rule_is_limited_to_selected_manifest(repo: Path) -> None:
     assert blocked(repo, None) == {path: {"public-schema"}}
 
 
+UNREAL_CONSUMER_PATH = "parity/manifests/consumers/unreal/wand-v1.json"
+
+
+@pytest.mark.parametrize(
+    ("change", "allowed"),
+    [
+        (lambda m: m, True),
+        (lambda m: {**m, "status": "pass"}, False),
+        (lambda m: {**m, "readback": "private observation"}, False),
+        (lambda m: {**m, "consumer": {**m["consumer"], "version": "5.7.0"}}, False),
+        (lambda m: {**m, "observations": {"BaseColor": [0.25, 0.5]}}, False),
+        (lambda m: {**m, "report": "parity/reports/phase3/private.md"}, False),
+        (lambda m: {**m, "status": "real-fixture-passed", "blocked_by": []}, True),
+        (lambda m: {**m, "status": "partial", "blocked_by": []}, False),
+        (lambda m: {k: v for k, v in m.items() if k != "observations"}, False),
+        (lambda m: {**m, "status": "pending", "blocked_by": []}, True),
+        (
+            lambda m: {
+                **m,
+                "status": "real-fixture-passed",
+                "blocked_by": ["x"],
+                "observations": {},
+            },
+            False,
+        ),
+        (
+            lambda m: {k: v for k, v in m.items() if k != "observations"}
+            | {"status": "real-fixture-passed"},
+            False,
+        ),
+    ],
+)
+def test_unreal_consumer_selection_admits_no_private_output(
+    repo: Path, change: Any, allowed: bool
+) -> None:
+    manifest = load_json(REPO_ROOT / UNREAL_CONSUMER_PATH)
+    put(repo, UNREAL_CONSUMER_PATH, json.dumps(change(manifest)).encode())
+    assert blocked(repo, None) == ({} if allowed else {UNREAL_CONSUMER_PATH: {"public-schema"}})
+
+
 def _rebuild_report() -> dict[str, Any]:
     side = {
         "recipe_digest": "a" * 64,

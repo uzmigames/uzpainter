@@ -33,7 +33,16 @@ glTF export lists the emissive map as skipped:
 | Consumer | Fixture | Status |
 | --- | --- | --- |
 | fastgltf 0.9.1 (`fastgltf::validate`) | Wand v1 production glTF export | passed (`parity/manifests/consumers/gltf/wand-v1.json` `real-fixture-passed`, `parity/reports/phase3/gltf-consumer-wand-v1.md`): four core bindings, emissive unbound as above, ORM packing confirmed on all 4,194,304 texels |
-| Unreal Engine 5.6 | Wand v1, PNG/TGA and DDS variants (consumer-matrix row 8) | **not run.** It needs a UE 5.6 project folder on the owner's machine (decision 028), and none has been named (`phase3.2_unreal-ue56-packed-preset` items 2.8, 3.2, 3.3, 3.5). The bindings UE 5.6 gives each map, and whether it re-encodes the DDS on cook (the `cook` gap), are unobserved. |
+| Unreal Engine 5.6.1 (`UnrealEditor-Cmd -run=pythonscript`, `AssetImportTask`) | Wand v1, Sash v5, Tunic v10 production PNG 16; Wand v1 TGA 8 and DDS (consumer-matrix row 8) | **PNG/TGA passed, DDS refused** (`parity/manifests/consumers/unreal/wand-v1.json` `partial`, `parity/reports/phase3/unreal-consumer-wand-v1.md`): through the generation-pinning adapter every PNG 16 and TGA 8 file imports with BaseColor sRGB, ORM linear (`TC_Masks`; UE's importer marks it sRGB by default, the consumer clears it), Normal `TC_Normalmap` with green not flipped (DirectX), UE's stored source equal to each file in decoded values; the material binds ORM R/G/B to AO/Roughness/Metallic and compiles in the Windows cook (BaseColor and ORM `PF_DXT1`, Normal `PF_BC5`). UE 5.6 imports no block-compressed DDS (`DDS DXGIFormat not supported` for BC5, BC7 and BC7_SRGB, and for BC1/BC3) |
 
-This report is complete for the glTF preset. The Unreal half lists the gaps the receipts report.
-Its UE 5.6 observations are added when that fixture runs.
+## The `cook` gap, answered
+
+UE 5.6 imports only uncompressed sources and encodes the platform format itself on cook, so no
+BC data of the DDS variant reaches UE, let alone passes through its cook. The DDS files are valid
+(Pillow decodes them) and stay compact interchange for other consumers; for UE 5.6 the DDS variant
+is not consumable. Item 3.3 of `phase3.2_unreal-ue56-packed-preset` and its acceptance 4.1 ("loads
+both variants") therefore do not hold as written; the choice that follows (another DDS encoding,
+or the variant's UE requirement) is left to a decision, and nothing is relaxed here.
+
+This report is complete for both presets: the gaps the receipts report, and the observations of
+both consumer fixtures.

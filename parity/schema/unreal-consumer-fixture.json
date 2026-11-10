@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:uzpainter:parity:schema:unreal-consumer-fixture:1",
+  "title": "Public Unreal Engine 5.6 consumer selection",
+  "description": "The pinned UE 5.6 build, the owner's fixture project folder, the runner and its status (phase3.2_unreal-ue56-packed-preset item 2.8). No Painter output, private image or readback is admitted: observations are UE's settings on UzPainter's own published files, and a pass or a partial run (a variant UE refuses, named in blocked_by) names only the public report of those runs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "fixture", "consumer", "engine_root", "project_folder", "project_note",
+    "fixture_runner", "ue_script", "import_method", "delivery_adapter", "presets",
+    "expected_bindings", "status", "blocked_by", "report"
+  ],
+  "properties": {
+    "schema": {"const": "uzpainter/unreal-consumer-fixture/1"},
+    "fixture": {"const": "wand-v1"},
+    "consumer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["engine", "version", "changelist", "branch", "build_version_sha256", "editor_cmd_sha256"],
+      "properties": {
+        "engine": {"const": "Unreal Engine"},
+        "version": {"type": "string", "pattern": "^5\\.6\\.[0-9]+$"},
+        "changelist": {"type": "integer"},
+        "branch": {"type": "string"},
+        "build_version_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "editor_cmd_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "engine_root": {"type": "string"},
+    "project_folder": {"type": "string"},
+    "project_note": {"type": "string"},
+    "fixture_runner": {"const": "tools/consumers/unreal.py"},
+    "ue_script": {"const": "tools/consumers/unreal_ue.py"},
+    "import_method": {"type": "string"},
+    "delivery_adapter": {"type": "string"},
+    "presets": {"const": ["unreal-engine-packed", "unreal-engine-packed-dds"]},
+    "expected_bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["BaseColor", "OcclusionRoughnessMetallic", "Normal", "Emissive", "SpecularWeight"],
+      "properties": {
+        "BaseColor": {"type": "string"},
+        "OcclusionRoughnessMetallic": {"type": "string"},
+        "Normal": {"type": "string"},
+        "Emissive": {"type": "string"},
+        "SpecularWeight": {"type": "string"}
+      }
+    },
+    "status": {"enum": ["pending", "partial", "real-fixture-passed"]},
+    "blocked_by": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "observations": {
+      "type": "object",
+      "additionalProperties": {"type": "string"}
+    },
+    "report": {"const": "parity/reports/phase3/unreal-consumer-wand-v1.md"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "real-fixture-passed"}}},
+      "then": {"required": ["observations"], "properties": {"blocked_by": {"maxItems": 0}}}
+    },
+    {
+      "if": {"properties": {"status": {"const": "partial"}}},
+      "then": {"required": ["observations"], "properties": {"blocked_by": {"minItems": 1}}}
+    }
+  ]
+}

@@ -477,6 +477,10 @@ def _gltf_consumer_fixture(path: str, document: Any, data: bytes, ctx: _Context)
     return validation_errors(document, Schema.GLTF_CONSUMER_FIXTURE)
 
 
+def _unreal_consumer_fixture(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
+    return validation_errors(document, Schema.UNREAL_CONSUMER_FIXTURE)
+
+
 def _snapshot_producer_policy(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
     from tools.parity.store.snapshot_contract import parse_policy
 
@@ -684,6 +688,11 @@ PATH_RULES: tuple[tuple[re.Pattern[str], str, _Rule], ...] = (
         re.compile(r"^parity/manifests/consumers/gltf/wand-v1\.json$"),
         "gltf-consumer-fixture.json (public consumer selection, no private outputs)",
         _gltf_consumer_fixture,
+    ),
+    (
+        re.compile(r"^parity/manifests/consumers/unreal/wand-v1\.json$"),
+        "unreal-consumer-fixture.json (UE 5.6 consumer selection, no private outputs)",
+        _unreal_consumer_fixture,
     ),
     (
         re.compile(r"^parity/manifests/phase3/proc-cert/.+\.json$"),

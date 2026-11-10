@@ -74,8 +74,9 @@ def _parser() -> argparse.ArgumentParser:
 
 def _manifests(paths: Sequence[Path]) -> list[Path]:
     """The manifests named, a directory standing for every JSON file under it. A directory's glTF
-    consumer fixture (`parity/manifests/consumers/gltf/`) names no store blob and is validated by
-    the guard under its own schema, so it is left out; any other file is verified as a manifest."""
+    and Unreal consumer fixtures (`parity/manifests/consumers/`) name no store blob and are
+    validated by the guard under their own schemas, so they are left out; any other file is
+    verified as a manifest."""
     found: list[Path] = []
     for path in paths:
         if path.is_dir():
@@ -83,6 +84,7 @@ def _manifests(paths: Sequence[Path]) -> list[Path]:
                 p
                 for p in sorted(path.rglob("*.json"))
                 if not is_valid(load_json(p), Schema.GLTF_CONSUMER_FIXTURE)
+                and not is_valid(load_json(p), Schema.UNREAL_CONSUMER_FIXTURE)
             )
         elif path.is_file():
             found.append(path)

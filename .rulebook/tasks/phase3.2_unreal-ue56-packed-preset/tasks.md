@@ -15,7 +15,8 @@
   - Done (2026-11-09, decision 422): the shipped variant (layout confirmed) publishes on an authored set in AO_Mixed's scope, each PNG 16 with its BC7/BC7_SRGB/BC5 DDS and the cook gap (`test_unreal_preset.py::test_shipped_preset_publishes_in_ao_mixed_scope`); UE import/cook stays item 3.3.
 - [x] 2.7 `_SpecularWeight` written as a separate map when the channel exists and listed as a consumer gap in the receipt
   - Done (2026-11-09, decision 422): the shipped preset writes it on a stack with the channel, the receipt naming the SpecularWeight gap (`test_shipped_preset_publishes_in_ao_mixed_scope`); Painter's preset writes no such file (R-322), so it stays UzPainter's own extension (`defined`).
-- [ ] 2.8 UE 5.6 import fixture manifest `parity/manifests/consumers/unreal/wand-v1.json` and runner, run locally on the owner's machine (decision 028), consuming through the delivery adapter or publication lock
+- [x] 2.8 UE 5.6 import fixture manifest `parity/manifests/consumers/unreal/wand-v1.json` and runner, run locally on the owner's machine (decision 028), consuming through the delivery adapter or publication lock
+  - Done (2026-11-10): see section "UE 5.6 consumer fixture" below.
 
 - [ ] 2.9 (decision 103, from phase1.18_export-engine item 6.1) Fit and implement exactly, against the admitted recordings `export-dither`, `export-resize` and `export-padding*` (R-090 P3, P4, P5): dithering at PNG 8 (deterministic, not a threshold matrix) and in OpenEXR; resize (partial fit: upscale is the evaluation at the target size, downscale a 2x2 box stored in the channel format; sRGB8, virtual normals after downscale and BilinearHQ normal magnification open); the `color`, `transparent` and `diffusion` paddings with `dilationDistance`. Until then each is refused before writing
 - [x] 2.10 (decision 131, from phase1.15_export-plan-compiler items 3.6, 4.1) Fit and implement the `AO_Mixed` virtual map (the ORM's R) exactly in the plan (`src/export/virtual_maps.cpp`) against recordings R-086a (`ao-mixed`, `ao-mixed-opacity` and its OpenEXR 32f twin) and the R-092 isolation goldens (`ao-mixed-isolation`, `-float`, `-8bit`), every texel of r1 at PNG 8, PNG 16 and OpenEXR 32f; the best model of decision 092 misses r1 at 31 values. If the isolation goldens do not identify the operator, record R-131 (decision 131 §2: the 256x256 grid of mesh-map and channel codes at the missed opacities and at opacity 1). Until then the plan refuses AO_Mixed before writing (also `phase3.2_uze-uzmat-preset`'s `<set>_orm`)
@@ -26,15 +27,19 @@
 ## 3. Tests
 - [x] 3.1 Output parity on wand v1, belt v5 and tunic v10: every preset file equals Painter's export of the same preset in decoded values
   - Done (2026-11-10): `UZP_TIER1_PRODUCTION=1 pytest tests/parity/tier1/test_unreal_pilots.py`, 3 passed, under EXC-013 (padding) and EXC-014 (the Normal's island edge) only, as the receipts name them.
-- [ ] 3.2 Consumer-matrix row 8 on wand v1, PNG/TGA variant: BaseColor sRGB, ORM linear, Normal as DirectX normal map, Emissive sRGB
+- [x] 3.2 Consumer-matrix row 8 on wand v1, PNG/TGA variant: BaseColor sRGB, ORM linear, Normal as DirectX normal map, Emissive sRGB
+  - Done (2026-11-10): Wand v1 PNG 16 and TGA 8, plus Sash v5 and Tunic v10 PNG 16. Emissive is checked on the authored set, since no pilot has one. See section "UE 5.6 consumer fixture".
 - [ ] 3.3 Consumer-matrix row 8 on wand v1, DDS BC7/BC5 variant: same bindings; whether UE re-encodes on cook is recorded
+  - Open (2026-11-10): UE 5.6 imports no BC DDS (`DDS DXGIFormat not supported` for BC5, BC7 and BC7_SRGB, and for BC1/BC3), so the bindings cannot hold. The cook question is answered: no BC data enters UE. The outcome needs a decision; see section "UE 5.6 consumer fixture".
 - [x] 3.4 Defect detection: an ORM map with swapped G/B channels fails the packing check
   - Done (2026-11-10): `test_unreal_r322_production.py` swaps G and B of the shipped preset's ORM and the comparison with Painter's r1 and r2 fails on R-322's covered texels (PNG 8 and TGA 8; 2 passed).
-- [ ] 3.5 Fixed-name interruption test: interrupting each fixed-name copy and immediately running the UE import through its adapter yields one complete generation or fails before consumption (EXP-06)
+- [x] 3.5 Fixed-name interruption test: interrupting each fixed-name copy and immediately running the UE import through its adapter yields one complete generation or fails before consumption (EXP-06)
+  - Done (2026-11-10): `tests/export/test_unreal_consumer.py::test_interrupted_fixed_name_copy_then_ue_import` (6 passed) and `::test_a_damaged_generation_fails_before_ue_starts` (1 passed).
 - [x] 3.6 Provenance record validates against its schema on the local CPU lane (decision 200)
 
 ## 4. Acceptance
 - [ ] 4.1 Child acceptance met and reported to `phase3.3_unreal-gltf-presets`: UE 5.6 fixture loads both variants; ORM packing confirmed; SpecularWeight gap reported
+  - Not met (2026-11-10). The PNG/TGA variant loads, its ORM packing is bound and compiles, and the SpecularWeight gap is reported. UE 5.6 refuses the DDS variant (item 3.3). Not archived.
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [ ] 5.1 Update or create documentation covering the implementation
@@ -785,3 +790,63 @@ Private report SHA-256:
 - **Pilot Tier 1 (item 3.1).** Wand v1, Sash v5 and Tunic v10: every covered texel of BaseColor and ORM equals Painter's r1; the Normal differs only on covered island-edge texels (EXC-014: 43, 872 and 25,382); uncovered texels are the padding (EXC-013); both rebuilds repeatable. 3 passed in 908 s (GPU, ReleaseFast `UzPainter.exe` built by the fixture).
 - **Tests run (affected only):** `test_compositor_tile_dag.py::test_template_library`, `test_tga_capture_replay.py`, `tests/python/test_bitmap_defaults.py`, `test_pyapi_recipe.py::test_an_added_emissioncolor_takes_its_scoped_default_in_the_dump_and_rebuild`, `test_specularweight_base.py`, `test_unreal_r322_production.py`, `test_ocio16_srgb_fill.py` (85 passed); `tests/parity/recorder/test_shelf_readiness.py` and `test_gltf_sidecars.py` (35 passed); `tests/parity/test_recording_requests.py` (49 passed, 1 skipped); `test_unreal_r322_production.py` again after item 3.4's check (2 passed); `test_unreal_pilots.py` (3 passed). Ruff, format and mypy pass on the touched Python files.
 - **Still open.** 2.8, 3.2, 3.3 and 3.5 need a UE 5.6 project folder on the owner's machine (decision 028), which has not been named; nothing about UE import or cook is claimed. 2.9 (PNG 8 dithering of float channels and virtual normals, OpenEXR dithering, sRGB8 and virtual-normal downscales, the `color`, `transparent` and `diffusion` paddings) is an open fit: decisions 103 and 349 time-boxed it without a model; not attempted this round. 4.1 waits on the UE 5.6 fixture, so the task is not archived.
+
+## UE 5.6 consumer fixture (2026-11-10)
+
+- **Project.** The owner's folder `W:\UE_Projects\UzPainterFixture` (UE 5.6.1 at `W:\UE_5.6`) is created once by `ensure_project` in `tools/consumers/unreal.py` and reused.
+  - It is a content-only project with the Python Editor Script Plugin and Editor Scripting Utilities.
+  - Its own DDC graph, `UzFixtureDDC`, keeps the derived-data cache in the project folder; Zen is not launched.
+  - `/Game/UzFixture` is always cooked.
+  - UE rewrites `DefaultEngine.ini` (CRLF line endings, blank lines, its own appended sections). The create-once check therefore compares the fixture's non-blank lines only.
+  - The folder is recorded in `parity/manifests/consumers/unreal/wand-v1.json`, with status `partial` (blocked by the DDS refusal). That file has a new schema, `parity/schema/unreal-consumer-fixture.json`, plus a guard rule and a store-verify exclusion.
+- **Import method.** UE's documented Python commandlet, run at below-normal priority: `UnrealEditor-Cmd.exe <project> -run=pythonscript -script=tools/consumers/unreal_ue.py -nullrhi -unattended`.
+  - Each file goes through `unreal.AssetImportTask` and `AssetTools.import_asset_tasks`, so UE's default importer (Interchange) handles it.
+  - The fixture records UE's settings as imported, then binds each map:
+    - BaseColor and Emissive: sRGB, TC_Default (TC_BC7 for DDS);
+    - ORM: linear, TC_Masks (TC_BC7 for DDS);
+    - Normal: TC_Normalmap, green not flipped.
+  - It exports each texture's source through UE's own exporter and compares it with the published file in decoded values.
+  - It builds a material and reads its links back. `-run=cook -targetplatform=Windows` compiles that material.
+- **Delivery adapter.** The generation-pinning route:
+  - the pointer is read once;
+  - the receipt and every file are verified;
+  - only the verified bytes are staged into `Import/<fixture>/<variant>/<generation>/` and verified again;
+  - no fixed-name directory is ever read.
+- **Observations per pilot** (`parity/reports/phase3/unreal-consumer-wand-v1.md`).
+  - **PNG 16.** The production exports of Wand v1, Sash v5 and Tunic v10 (under EXC-013 and EXC-014; parity re-confirmed in the same run) import with every binding. UE's stored source equals each file at 16 bits.
+  - **UE's defaults.** UE marks BaseColor and the ORM sRGB with TC_Default and auto-detects the Normal as TC_Normalmap. The consumer must clear the ORM's sRGB flag, which the fixture does.
+  - **TGA 8.** The Wand v1 TGA 8 export (same project, dithering off) imports the same way.
+  - **Cook.** 0 errors and 0 warnings; BaseColor and ORM cook to `PF_DXT1`, the Normal to `PF_BC5`.
+  - **DDS.** The Wand v1 `unreal-engine-packed-dds` export's canonical PNG 16 files are byte-identical to the compared ones, but UE 5.6 imports none of its three DDS files. Interchange gives no message; the legacy TextureFactory logs `DDS DXGIFormat not supported` for formats 99, 98 and 83.
+  - **DDS probe.** BC1 and BC3 are refused too, both as DX10 and as DX9 FourCC (`DXT1`, `DXT5`, `ATI2`, `BC5U`). Uncompressed R8G8B8A8 and R16G16B16A16 DDS import.
+- **Item 3.3 and acceptance 4.1.**
+  - UE 5.6 cannot consume the DDS variant as specified (BC7_SRGB, BC7, BC5). Item 3.3's "same bindings" and acceptance 4.1's "loads both variants" therefore do not hold.
+  - The `cook` gap is answered: no BC data enters UE, which encodes from uncompressed sources when it cooks.
+  - Possible routes:
+    - an uncompressed DDS;
+    - dropping the UE requirement for the DDS variant;
+    - keeping the variant as compact interchange for other consumers.
+  - Any of these changes the acceptance, so the choice goes to the root decision. Nothing is relaxed here.
+- **Authored set.**
+  - PNG 8 and TGA 8 of the shipped preset (AO_Mixed scope) import with every binding, Emissive included.
+  - UE stores the grey-valued BaseColor and Emissive as a G8 source, and each of R, G and B equals it.
+  - The PNG 8 SpecularWeight file has no slot and stays the receipt's consumer gap.
+  - The authored DDS files are refused the same way, though Pillow decodes each of them.
+- **Item 2.9** (about 25 minutes of the 2 h time box; CPU only, counts only, nothing sent outside).
+  - The fit tests PNG 8 dithering of float channels on `export-dither` (R-090 P3) as additive per-texel noise before rounding, with v from the undithered PNG 16.
+  - Under that model the noise intervals of a single map across sets s0 to s2 already conflict: user1 at 643 texels, height at 1,516, user2 R at 693. The noise is therefore not a function of position alone.
+  - Interleaved gradient noise is uncorrelated with the interval midpoints.
+  - Dithering at PNG 16 changes nothing.
+  - No exact model was found, so the fit stopped as instructed and item 2.9 stays open.
+- **Tests.** Affected tests only; each command ran once unless noted.
+  - `tests/export/test_unreal_consumer.py`:
+    - 7 CPU cases pass (the project and round-trip cases were re-run after their fixes);
+    - with `UZP_UE_FIXTURE=1`: PNG 8 and TGA 8 (2 passed), the DDS refusal (1), the interruptions (6) and the damaged generation (1).
+  - `tests/parity/tier1/test_unreal_consumer_pilots.py` with `UZP_TIER1_PRODUCTION=1 UZP_UE_FIXTURE=1`: 3 passed in 2158.8 s, with the native lock held for the whole run.
+  - Earlier failed attempts, each fixed in code:
+    - UE appending to `DefaultEngine.ini`;
+    - UE's grey source storage;
+    - the DDS refusal, which now has its own test of the observed behaviour;
+    - the Wand script's `_Normal` file matching the Unreal export root.
+  - `tests/parity/test_guard.py -k "unreal_consumer or gltf_consumer"`: 28 passed.
+  - Ruff, format and mypy pass on the touched Python files.

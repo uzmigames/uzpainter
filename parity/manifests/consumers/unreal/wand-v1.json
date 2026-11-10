@@ -1,0 +1,47 @@
+{
+  "schema": "uzpainter/unreal-consumer-fixture/1",
+  "fixture": "wand-v1",
+  "consumer": {
+    "engine": "Unreal Engine",
+    "version": "5.6.1",
+    "changelist": 44394996,
+    "branch": "++UE5+Release-5.6",
+    "build_version_sha256": "b6a16a262d0136d1812f134ebd83e81138546dcc705f5f088a96702c970d24a0",
+    "editor_cmd_sha256": "d74d195246b64ea169353c4d3e49cfbdc9a5178a8550ba93c0999cdf06209a16"
+  },
+  "engine_root": "W:/UE_5.6",
+  "project_folder": "W:/UE_Projects/UzPainterFixture",
+  "project_note": "The owner's UE 5.6 fixture project (2026-11-10): created once by tools/consumers/unreal.py ensure_project and reused; its Saved, Intermediate and DerivedDataCache (project graph UzFixtureDDC, Zen not launched) live there.",
+  "fixture_runner": "tools/consumers/unreal.py",
+  "ue_script": "tools/consumers/unreal_ue.py",
+  "import_method": "UnrealEditor-Cmd.exe <project> -run=pythonscript -script=tools/consumers/unreal_ue.py -nullrhi -unattended (Python Editor Script Plugin commandlet); each file through unreal.AssetImportTask (automated) and AssetTools.import_asset_tasks",
+  "delivery_adapter": "generation-pinning (08-export.md section 5): current.json read once, receipt and every file verified by size and SHA-256, only the verified bytes staged into <project>/Import/<fixture>/<variant>/<generation>/ and verified again; no fixed-name directory is read",
+  "presets": [
+    "unreal-engine-packed",
+    "unreal-engine-packed-dds"
+  ],
+  "expected_bindings": {
+    "BaseColor": "sRGB (PNG/TGA TC_Default, DDS TC_BC7), sampler Color, RGB to Base Color",
+    "OcclusionRoughnessMetallic": "linear (PNG/TGA TC_Masks, DDS TC_BC7), sampler Masks or Linear Color, R to Ambient Occlusion, G to Roughness, B to Metallic",
+    "Normal": "TC_Normalmap (linear), green not flipped (DirectX), sampler Normal, RGB to Normal",
+    "Emissive": "sRGB, sampler Color, RGB to Emissive Color; absent when the receipt lists it skipped",
+    "SpecularWeight": "no binding: the receipt's consumer gap"
+  },
+  "status": "partial",
+  "blocked_by": [
+    "UE 5.6 imports no BC5 or BC7 DDS: the DDS variant (item 3.3) is refused at import"
+  ],
+  "report": "parity/reports/phase3/unreal-consumer-wand-v1.md",
+  "observations": {
+    "run": "2026-11-10, tests/parity/tier1/test_unreal_consumer_pilots.py (3 passed, 2158.8 s) and tests/export/test_unreal_consumer.py (17 passed); UE 5.6.1 changelist 44394996",
+    "png16_pilots": "Wand v1, Sash v5 and Tunic v10 production PNG 16 exports (the item 3.1 rebuilds, equal to Painter under EXC-013 and EXC-014 in the same run) import through the pinning adapter; every binding holds and UE's exported source equals each published file in decoded values at 16 bits",
+    "tga8_wand": "Wand v1 TGA 8 (same project, dithering off) imports with the same bindings; UE's source equals each file at 8 bits",
+    "as_imported_defaults": "UE's default importer (Interchange) sets BaseColor, ORM and Emissive sRGB with TC_Default and detects the Normal as TC_Normalmap (linear, TEXTUREGROUP_WorldNormalMap, green not flipped); the consumer must clear sRGB on the ORM and set TC_Masks, which the fixture does",
+    "material": "One material binds BaseColor RGB (sampler Color), ORM R/G/B to Ambient Occlusion/Roughness/Metallic (sampler Masks) and Normal RGB (sampler Normal); the Windows cook compiles it with 0 errors and 0 warnings",
+    "cooked_formats": "Windows cook of the Wand v1 PNG 16 and TGA 8 textures: BaseColor PF_DXT1, ORM PF_DXT1, Normal PF_BC5",
+    "dds": "UE 5.6 imports none of the DDS variant's files: Interchange imports nothing without a message and the legacy TextureFactory reports 'DDS DXGIFormat not supported' for BC5_UNORM (83), BC7_UNORM (98) and BC7_UNORM_SRGB (99); a probe also shows BC1 and BC3 (DX10 and DX9 FourCC DXT1, DXT5, ATI2, BC5U) refused and uncompressed R8G8B8A8 and R16G16B16A16 DDS imported",
+    "cook_gap": "No BC data passes into UE 5.6: it imports only uncompressed sources and encodes the platform format itself on cook, so the DDS cannot pass through the cook",
+    "specularweight": "No pilot has a SpecularWeight channel; on the authored set the PNG 8 export's SpecularWeight file has no slot and stays the receipt's consumer gap",
+    "fixed_names": "Item 3.5: after each of the six interruptions of a fixed-name copy (before and after the rename of each of three files), UE imports at once through the pinning adapter exactly the selected complete generation; a damaged selected generation fails before anything is staged"
+  }
+}

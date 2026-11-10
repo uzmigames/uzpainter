@@ -237,6 +237,32 @@ return nonzero with a JSON error. `tests/export/test_gltf_consumer.py` exercises
 authored publication and corrupt inputs. The manifest stays `pending-real-fixture`:
 this tooling does not satisfy Wand acceptance, R-314, or Painter export parity.
 
+### Unreal Engine 5.6 consumer fixture
+
+`tools/consumers/unreal.py` (host) and `tools/consumers/unreal_ue.py` (inside UE) import one
+published generation of `Unreal Engine (Packed)` into UE 5.6, headlessly, on the owner's machine
+(decision 028). Manifest: `parity/manifests/consumers/unreal/wand-v1.json` (the pinned UE 5.6.1
+build, the owner's project folder `W:\UE_Projects\UzPainterFixture`, created once by
+`ensure_project` and reused; its derived-data cache stays in that folder). Report:
+`parity/reports/phase3/unreal-consumer-wand-v1.md`.
+
+- **Delivery.** The generation-pinning adapter: `current.json` read once, receipt and files
+  verified, the verified bytes staged into the project and verified again. No fixed-name
+  directory is read; a generation that does not verify fails before UE starts.
+- **Import.** `UnrealEditor-Cmd.exe <project> -run=pythonscript -script=...` with
+  `unreal.AssetImportTask` (UE's default importer, Interchange). The fixture records UE's
+  settings as imported, binds each map (BaseColor and Emissive sRGB, ORM linear `TC_Masks`,
+  Normal `TC_Normalmap` with green not flipped), exports each source through UE's exporter and
+  builds a material with the matching sampler types; `-run=cook -targetplatform=Windows` then
+  compiles it.
+- **DDS.** UE 5.6 imports no block-compressed DDS: BC1, BC3, BC5 and BC7 are refused
+  (`DDS DXGIFormat not supported`), only uncompressed DDS import. The DDS variant's files are
+  valid (Pillow decodes them) but UE 5.6 cannot consume them; its `cook` gap is answered by
+  that refusal.
+- **Tests.** `tests/export/test_unreal_consumer.py` (CPU cases on every lane; UE cases with
+  `UZP_UE_FIXTURE=1`), `tests/parity/tier1/test_unreal_consumer_pilots.py` (GPU pilots, also
+  `UZP_TIER1_PRODUCTION=1`).
+
 ### UzEngine material writer
 
 `WriteUzMaterial` (`uzmat_writer.{h,cpp}`) emits a version-1 `.uzmat` graph and the
