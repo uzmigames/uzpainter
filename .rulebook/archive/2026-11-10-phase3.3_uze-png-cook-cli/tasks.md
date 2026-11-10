@@ -17,7 +17,7 @@
 - [x] 4.2 External review of the frozen diff (decision 367 item 6): `cx/gpt-6-astra` found the blend decided from alpha values instead of the file's alpha channel (native rule: layout), `cx/gpt-6.1-sol` found trailing chunks unread; both fixed in `bc71ae9c` with a test each. `xai/grok-4.6` and `kimi/kimi-k3` streamed past the 180 s deadline twice without a verdict
 
 ## 5. Acceptance
-- [ ] 5.1 Child acceptance reported to `phase3.4_uzengine-preset`; that UzEngine loads the files stays with `phase3.3_uze-consumer-fixture`
+- [x] 5.1 Child acceptance reported to `phase3.4_uzengine-preset`; that UzEngine loads the files stays with `phase3.3_uze-consumer-fixture` — 2026-11-10: reported as the parent's item 2.4. The decision 380 criteria (spec scenarios: native canonical maps cook to the native bytes, equal decoded inputs give equal bytes, refusals write nothing, missing alpha is opacity 1) hold on `0f0ce487`, after the later `src/export` changes of `4cbf9ae7` (decision 420) and `924f2305` (decision 422): `python -m pytest tests/export/test_uze_png_cook.py`: 29 passed. Prerequisite 1.1 is now archived (2026-11-09) and its decision 420 synthesized emissive equals this verb's black emissive (its own tests). Still open outside this task: UzEngine loading the files (`phase3.3_uze-consumer-fixture`) and a Painter 8-bit export cooked on a pilot (decision 380, Consequences)
 
 ## 6. Tail (docs + tests — check or waive with tailWaiver)
 - [x] 6.1 Update or create documentation covering the implementation
