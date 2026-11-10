@@ -1223,6 +1223,14 @@ def run_export(
     return outputs, files
 
 
+def names_shelf_preset(config: dict[str, Any]) -> bool:
+    """True when the configuration names a `resource://` preset (a shelf resource), by its
+    `defaultExportPreset` or an `exportList` item's `exportPreset`."""
+    presets = [config.get("defaultExportPreset")]
+    presets += [item.get("exportPreset") for item in config.get("exportList") or []]
+    return any(isinstance(p, str) and p.startswith("resource://") for p in presets)
+
+
 def run_config_export(
     session: PainterSession, export: ConfigExport, base: Path, basis: str, prefix: str = "export"
 ) -> tuple[list[dict[str, Any]], list[Path]]:
@@ -1236,6 +1244,10 @@ def run_config_export(
     out = base / "export"
     out.mkdir(parents=True)
     session.wait_ready()
+    if names_shelf_preset(export.config):
+        # A shelf preset (R-322's starter-assets Unreal preset) is undefined until the shelf
+        # crawl of a freshly started Painter ends: the same gate as a texture golden's presets.
+        session.wait_catalog_ready()
     fence_ns = write_fence(base / "fence")
     reply = session.call("export_textures", config={**export.config, "exportPath": out.as_posix()})
     session.wait_ready()

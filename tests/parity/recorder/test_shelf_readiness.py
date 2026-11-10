@@ -14,6 +14,7 @@ import pytest
 
 from tools.parity.recorder import texture
 from tools.parity.recorder.job import Job, Step, job_from_manifest
+from tools.parity.recorder.script_run import ConfigExport, run_config_export
 from tools.parity.recorder.session import PainterIdentity, PainterSession, RecorderError
 
 
@@ -144,3 +145,31 @@ def test_preset_capture_runs_only_after_catalog_ready(
     else:
         run()
         assert events == ["project", "catalog", "template_capture", "preset"]
+
+
+@pytest.mark.parametrize(
+    ("config", "waits"),
+    [
+        ({"defaultExportPreset": "resource://starter_assets/Unreal Engine (Packed)"}, True),
+        ({"exportList": [{"exportPreset": "resource://starter_assets/Preset"}]}, True),
+        ({"defaultExportPreset": "export-preset-generator://gltf"}, False),
+        ({"exportList": [{"exportPreset": "inline"}]}, False),
+    ],
+)
+def test_a_config_export_of_a_shelf_preset_waits_for_the_catalog(
+    config: dict[str, Any], waits: bool, tmp_path: Path
+) -> None:
+    """A fresh Painter resolves a starter-assets preset only once the shelf crawl ends."""
+    events: list[str] = []
+    session = Mock(spec=PainterSession)
+    session.wait_ready.side_effect = lambda: events.append("project")
+    session.wait_catalog_ready.side_effect = lambda: events.append("catalog")
+
+    def call(operation: str, **args: Any) -> dict[str, Any]:
+        events.append(operation)
+        return {"status": "Error", "message": "synthetic", "textures": []}
+
+    session.call.side_effect = call
+    with pytest.raises(RecorderError, match="synthetic"):
+        run_config_export(session, ConfigExport(4, "config", config), tmp_path, "c")
+    assert events == ["project", *(["catalog"] if waits else []), "export_textures", "project"]
