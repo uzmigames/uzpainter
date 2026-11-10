@@ -50,6 +50,8 @@ SCRATCH = REPO_ROOT / "tmp" / "scratch"
 EXPORT_NAMES = {"AO": "ambient_occlusion", "WorldSpaceNormal": "world_space_normals"}
 CHANNELS = {"AO": 1, "WorldSpaceNormal": 3}
 COVERAGE = "WorldSpaceNormal"
+# The day each set was recorded: the knob cube's held-out set (2026-11-09) is spent.
+CORPUS_DATES = {"calibration": "2026-11-09", "held-out": "2026-11-10"}
 Floats = npt.NDArray[np.float32]
 
 
@@ -214,7 +216,7 @@ def write_batch(
         path = directory / folder / "cases.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
-        corpus = f"{asset.asset.replace('/', '-')}-{asset.version}-{folder}-2026-11-09"
+        corpus = f"{asset.asset.replace('/', '-')}-{asset.version}-{folder}-{CORPUS_DATES[folder]}"
         pins[set_name] = {
             "corpus_id": corpus,
             "path": f"{folder}/cases.json",
@@ -252,7 +254,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise SystemExit("no private store on this machine")
     goldens = gold.occlusion_goldens()
     calibration = [g for g in goldens if g.stage == "calibration"]
-    held_out = [g for g in goldens if g.stage == "held-out"]
+    held_out = list(gold.current_held_out(goldens))
     print(write_batch(occlusion_asset(), calibration, held_out, store))
     _ = args
     return 0

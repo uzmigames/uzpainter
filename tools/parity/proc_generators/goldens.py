@@ -17,6 +17,11 @@ authored rounded cube and the hat v8 low mesh (hat v6 low is lost, decision 260)
 {1024, 2048, 4096} x {defaults, the Tunic v10 recipe set (`global_invert` 1,
 `Assets3D .../18-Tunica/report.json`, the "Cavidades - AO high" mask), two boundary sets}. The
 held-out set: the knob cube (a mesh outside the calibration set) at 2048 with the same four sets.
+
+The knob cube's set was spent on 2026-11-09 (candidate `be93c9a9...`, held-out ledger) and failed
+on the single-invert sets. The candidate was refitted on the calibration set alone (2026-11-10)
+and fixed in its commit before a new held-out set was recorded: the Tunic v10 low mesh, the mesh
+of the recipe set and outside the calibration set, at 1024 and 4096 with the same four sets.
 """
 
 from __future__ import annotations
@@ -50,7 +55,8 @@ OCCLUSION_SETS = (
 )
 CALIBRATION_MESHES = ("sphere", "rounded-cube", "hat-v8")
 RESOLUTIONS = (1024, 2048, 4096)
-HELD_OUT_MESH, HELD_OUT_RESOLUTION = "knob-cube", 2048
+SPENT_HELD_OUT = (("knob-cube", 2048),)  # spent 2026-11-09 (decision 423)
+HELD_OUT = (("tunic-v10", 1024), ("tunic-v10", 4096))
 # The AO map is the input; the World Space Normals map, baked with no dilation, marks Painter's
 # UV coverage: outside it an export with `passthrough` padding holds no defined generator output
 # (the diagnostic golden's two recordings differ only there), so Tier 2a compares the covered
@@ -72,10 +78,19 @@ def occlusion_goldens() -> tuple[Golden, ...]:
         for mesh in CALIBRATION_MESHES
         for resolution in RESOLUTIONS
     )
-    held_out = Golden(
-        "held-out", "occlusion", HELD_OUT_MESH, HELD_OUT_RESOLUTION, occlusion_cases(), MAPS, 0
+    held_out = tuple(
+        Golden("held-out", "occlusion", mesh, resolution, occlusion_cases(), MAPS, 0)
+        for mesh, resolution in (*SPENT_HELD_OUT, *HELD_OUT)
     )
-    return (*calibration, held_out)
+    return (*calibration, *held_out)
+
+
+def current_held_out(goldens: tuple[Golden, ...]) -> tuple[Golden, ...]:
+    """The held-out goldens of the current batch: the spent set's are left out."""
+    spent = set(SPENT_HELD_OUT)
+    return tuple(
+        g for g in goldens if g.stage == "held-out" and (g.mesh, g.resolution) not in spent
+    )
 
 
 def goldens() -> tuple[Golden, ...]:

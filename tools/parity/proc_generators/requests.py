@@ -116,6 +116,16 @@ MESHES = {
         "the delivered Skeletal Mage hat v8 low mesh (one UV tile)",
         "4b860d91dc999aa96abf61326fda090ab9ee386299318ee4b6f1734c872a4a2b",
     ),
+    # The second held-out mesh (2026-11-10, after the knob cube was spent): the delivered Tunic
+    # v10 low mesh, the mesh of the Tunic recipe set. Git-ignored in Assets3D like the hat, so it
+    # is kept in the private store as an input.
+    "tunic-v10": Mesh(
+        "tunic-v10",
+        "Creatures/Undead/Skeletal Mage/Models3D/18-Tunica/Export/18-Tunica-v10.fbx",
+        "garment",
+        "the delivered Skeletal Mage tunic v10 low mesh (one UV tile)",
+        "ad7ef061e244a52f51a5f99af7df028ac4e7f7f80d5f0b68fee06dc374230e0a",
+    ),
 }
 ASSETS3D_LICENCE = "LicenseRef-UzmiGames-Assets3D"
 
