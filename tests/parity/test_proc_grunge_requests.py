@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from tools.parity.proc_generators.requests import MAX_CASES, SEED_PARAMETER
-from tools.parity.proc_grunges.goldens import goldens
+from tools.parity.proc_grunges.goldens import ASSETS, REFUSED, SEEDED_FIRST, goldens, recorded
 from tools.parity.proc_grunges.requests import GRUNGE_URLS, Golden, GrungeCase, manifest
 from tools.parity.recorder import vocabulary as ps
 from tools.parity.recorder.job import job_from_manifest
@@ -28,11 +28,18 @@ def test_a_request_is_a_recorder_job_with_one_mask_source_per_case() -> None:
     assert export["maps"] == ["documentMap/user0:L", "documentMap/user1:L"]
 
 
-def test_the_diagnostic_goldens_cover_every_inventoried_grunge() -> None:
-    cases = [(g.resolution, c.asset, c.seed) for g in goldens() for c in g.cases]
+def test_the_recorded_diagnostic_goldens_cover_every_inventoried_grunge() -> None:
+    cases = [(g.resolution, c.asset, c.seed) for g in recorded() for c in g.cases]
+    unseeded = set(ASSETS[:4]) - set(SEEDED_FIRST)
+    assert unseeded == {"dirt-large"}
     for asset in GRUNGE_URLS:
-        assert {(r, s) for r, a, s in cases if a == asset} == {(1024, 1), (1024, 2), (2048, 1)}
+        found = {(r, s) for r, a, s in cases if a == asset}
+        if asset in unseeded:
+            assert found == {(1024, None), (2048, None)}
+        else:
+            assert {(1024, 1), (1024, 2), (2048, 1)} <= found
     assert len(GRUNGE_URLS) == 17
+    assert {g.name for g in goldens()} >= REFUSED
     for golden in goldens():
         job_from_manifest(manifest(golden))
 

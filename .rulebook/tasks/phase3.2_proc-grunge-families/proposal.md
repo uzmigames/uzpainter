@@ -17,6 +17,8 @@ MAT-03 requires exact evaluation of the procedural sources used by recorded reci
 ## Acceptance
 Tier 2a for each inventoried asset over the certification matrix (unit sphere, bevelled cube, hat v6 low × {1024, 2048, 4096} × {defaults, recipe sets, two boundary sets} × {recorded seed, one other}): exact, or an owner-approved exception per asset; an asset that is neither stays a release gap in the capability manifest.
 
+Narrowed by decision 427 (2026-11-10): no grunge is exact, and none has an exception or a candidate. Four are fixed textures, where exact equality would reproduce Adobe content. Thirteen follow the Substance engine's seed, which no public source describes. The three seeded generators read them. All twenty are listed as release gaps with their evidence (`docs/analysis/proc-grunge-families/03-diagnostic-evidence-2026-11-10.md`) and moved to `phase3.3_procedural-families` items 2.13 and 2.14. Met here: the inventory, the implementation, the parameter discovery, the declared domains and the tiling and domain-refusal tests.
+
 ## Impact
 - Affected specs: procedural
 - Affected code: grunge and noise kernels in `HlslBackend`, provenance records, Tier 2a manifests

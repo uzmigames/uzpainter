@@ -60,6 +60,10 @@ The library ships beside the executable as `assets/procedural/`: one provenance 
 - A recipe's projection scale belongs to the fill, not to the asset.
 - A grunge is set as a fill's source, on a content channel or a mask fill, only after the seam admits it (`SetGrungeSource`). A request outside the domain is refused before any transaction.
 - The domains are declared before calibration. None is certified, and no alias names them.
+- Recorded against Painter 12.2.0 (decision 427, `docs/analysis/proc-grunge-families/03-diagnostic-evidence-2026-11-10.md`). No grunge has a clean-room route to exact:
+  - Four are fixed textures: seeds change nothing, or there is no seed. Exact equality would reproduce Adobe content.
+  - Thirteen follow the Substance engine's seed, which no public source describes.
+  - The seventeen grunges and the Dirt, Metal Edge Wear and Mask Builder - Legacy generators that read them stay release gaps (`phase3.3_procedural-families` items 2.13 and 2.14). Each awaits an owner route decision.
 
 **As built, materials (`phase3.2_proc-material-families`, decision 334, `src/procedural/materials.h`).**
 - Four assets `uzasset://material/{felt, burlap, leather-grain, leather-pattern}@1`. Each has six outputs, listed in its record: `basecolor`, `normal`, `roughness`, `metallic`, `height` and `ambient_occlusion`.

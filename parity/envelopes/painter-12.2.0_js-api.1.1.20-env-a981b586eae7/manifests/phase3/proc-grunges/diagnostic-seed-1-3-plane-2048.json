@@ -1,0 +1,217 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "phase3/proc-grunges/diagnostic-seed-1-3-plane-2048",
+  "tier": "2a",
+  "domain": "procedural_asset/grunge/seed-1-3",
+  "description": "Grunge golden of phase3.2_proc-grunge-families (diagnostic): grunge cases on the authored 20 cm plane (UVs 0..1, one tile), texture set 2048 px, no bake. Each case is a white Raw fill on its own L32F User channel, over a black base fill, under a black mask holding a fill effect whose source is the grunge, at the fill's default UV projection: User0 linen-seed-1: resource://starter_assets/fabric_linen/fabric_linen?version=7fa9d3720c64d4a797642fc3933c271befe7c247.sbsar ($randomseed = 1). The User maps are exported as OpenEXR 32f, padding passthrough, no dithering; recorded twice (same session; after save and reopen).",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 2048
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User0",
+          "format": "L32F"
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "position": "top"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 3,
+          "channels": [
+            "User0"
+          ]
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "User0",
+          "color": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "above_step": 3
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 6,
+          "channels": [
+            "User0"
+          ]
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 6,
+          "channel": "User0",
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.layerstack.LayerNode.add_mask",
+        "args": {
+          "node_step": 6,
+          "background": "Black"
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "inside_step": 6,
+          "stack": "Mask"
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.layerstack.FillEffectNode.set_source",
+        "args": {
+          "node_step": 10,
+          "channel": null,
+          "resource": "resource://starter_assets/fabric_linen/fabric_linen?version=7fa9d3720c64d4a797642fc3933c271befe7c247.sbsar"
+        }
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.source.SourceSubstance.set_parameters",
+        "args": {
+          "node_step": 10,
+          "channel": null,
+          "parameter": "$randomseed",
+          "value": 1
+        }
+      },
+      {
+        "step": 13,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/user0:L"
+          ],
+          "file_format": "exr",
+          "bit_depth": "32f",
+          "padding": "passthrough",
+          "dithering": false
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 2048,
+      "applied_by": "recorder_api",
+      "unit": "px"
+    },
+    {
+      "name": "export.exr.bit_depth",
+      "value": "32f",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "passthrough",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "uncontrolled_settings": [],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "76f31126bc1f7152eb8ed62fbbe4127b355e396bb00862fc4b964854d4223fce",
+      "size_bytes": 32785
+    },
+    {
+      "record_id": "r1-uzp_plane-user0",
+      "kind": "exported_map",
+      "sha256": "acf6b317ad17dc9f51a0fa884df1652afad406def5bdbd027fd9e44ed1e8af2a",
+      "size_bytes": 9082095
+    },
+    {
+      "record_id": "r2-uzp_plane-user0",
+      "kind": "exported_map",
+      "sha256": "acf6b317ad17dc9f51a0fa884df1652afad406def5bdbd027fd9e44ed1e8af2a",
+      "size_bytes": 9082095
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "7481bedfefa13f1c83910d1f8988d9b6acf5facd87939cce241bdb9cebb12f70",
+      "size_bytes": 403
+    }
+  ]
+}

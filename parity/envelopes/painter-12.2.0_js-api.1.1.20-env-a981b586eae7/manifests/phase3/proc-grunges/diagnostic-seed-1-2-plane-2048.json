@@ -1,0 +1,931 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "phase3/proc-grunges/diagnostic-seed-1-2-plane-2048",
+  "tier": "2a",
+  "domain": "procedural_asset/grunge/seed-1-2",
+  "description": "Grunge golden of phase3.2_proc-grunge-families (diagnostic): grunge cases on the authored 20 cm plane (UVs 0..1, one tile), texture set 2048 px, no bake. Each case is a white Raw fill on its own L32F User channel, over a black base fill, under a black mask holding a fill effect whose source is the grunge, at the fill's default UV projection: User0 scratches-seed-1: resource://starter_assets/grunge_scratches/grunge_scratches?version=225c3fa989054e5800eb05b317855ecf5d9c1911.sbsar ($randomseed = 1); User1 scratches-dirty-seed-1: resource://starter_assets/grunge_scratches_dirty/grunge_scratches_dirty?version=c4fd78c8acc37f9fb7453778d17158f09ccd10b3.sbsar ($randomseed = 1); User2 rust-fine-seed-1: resource://starter_assets/grunge_rust_fine/grunge_rust_fine?version=732ff219a6c1bce1dd587cbf33f9222f0d98d4b1.sbsar ($randomseed = 1); User3 humidity-seed-1: resource://starter_assets/grunge_humidity/grunge_humidity?version=3aa3318473d0178d2b76070086bd77322b126ff8.sbsar ($randomseed = 1); User4 map-a-seed-1: resource://starter_assets/noise_grunge_map_009/grunge_map_009?version=bc0ba172edae0258392468d44e91458dbb455011.sbsar ($randomseed = 1); User5 map-b-seed-1: resource://starter_assets/noise_grunge_map_012/grunge_map_012?version=facd9911228b5e1f7f6342f0a35222005be71bf5.sbsar ($randomseed = 1); User6 spots-soft-seed-1: resource://starter_assets/noise_gaussian_spots_2/gaussian_spots_2?version=33829a8fe873a56d2e79b00c7f9f6428feff6306.sbsar ($randomseed = 1); User7 cracks-leather-seed-1: resource://starter_assets/cracks_leather/cracks_leather?version=a3a6e3487860644d83789421dc644a294e481c33.sbsar ($randomseed = 1). The User maps are exported as OpenEXR 32f, padding passthrough, no dithering; recorded twice (same session; after save and reopen).",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 2048
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User0",
+          "format": "L32F"
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User1",
+          "format": "L32F"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User2",
+          "format": "L32F"
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User3",
+          "format": "L32F"
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User4",
+          "format": "L32F"
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User5",
+          "format": "L32F"
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User6",
+          "format": "L32F"
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User7",
+          "format": "L32F"
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "position": "top"
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 10,
+          "channels": [
+            "User0",
+            "User1",
+            "User2",
+            "User3",
+            "User4",
+            "User5",
+            "User6",
+            "User7"
+          ]
+        }
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 10,
+          "channel": "User0",
+          "color": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 13,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 10,
+          "channel": "User1",
+          "color": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 14,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 10,
+          "channel": "User2",
+          "color": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 15,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 10,
+          "channel": "User3",
+          "color": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 16,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 10,
+          "channel": "User4",
+          "color": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 17,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 10,
+          "channel": "User5",
+          "color": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 18,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 10,
+          "channel": "User6",
+          "color": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 19,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 10,
+          "channel": "User7",
+          "color": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 20,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "above_step": 10
+        }
+      },
+      {
+        "step": 21,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 20,
+          "channels": [
+            "User0"
+          ]
+        }
+      },
+      {
+        "step": 22,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 20,
+          "channel": "User0",
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 23,
+        "call": "substance_painter.layerstack.LayerNode.add_mask",
+        "args": {
+          "node_step": 20,
+          "background": "Black"
+        }
+      },
+      {
+        "step": 24,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "inside_step": 20,
+          "stack": "Mask"
+        }
+      },
+      {
+        "step": 25,
+        "call": "substance_painter.layerstack.FillEffectNode.set_source",
+        "args": {
+          "node_step": 24,
+          "channel": null,
+          "resource": "resource://starter_assets/grunge_scratches/grunge_scratches?version=225c3fa989054e5800eb05b317855ecf5d9c1911.sbsar"
+        }
+      },
+      {
+        "step": 26,
+        "call": "substance_painter.source.SourceSubstance.set_parameters",
+        "args": {
+          "node_step": 24,
+          "channel": null,
+          "parameter": "$randomseed",
+          "value": 1
+        }
+      },
+      {
+        "step": 27,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "above_step": 20
+        }
+      },
+      {
+        "step": 28,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 27,
+          "channels": [
+            "User1"
+          ]
+        }
+      },
+      {
+        "step": 29,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 27,
+          "channel": "User1",
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 30,
+        "call": "substance_painter.layerstack.LayerNode.add_mask",
+        "args": {
+          "node_step": 27,
+          "background": "Black"
+        }
+      },
+      {
+        "step": 31,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "inside_step": 27,
+          "stack": "Mask"
+        }
+      },
+      {
+        "step": 32,
+        "call": "substance_painter.layerstack.FillEffectNode.set_source",
+        "args": {
+          "node_step": 31,
+          "channel": null,
+          "resource": "resource://starter_assets/grunge_scratches_dirty/grunge_scratches_dirty?version=c4fd78c8acc37f9fb7453778d17158f09ccd10b3.sbsar"
+        }
+      },
+      {
+        "step": 33,
+        "call": "substance_painter.source.SourceSubstance.set_parameters",
+        "args": {
+          "node_step": 31,
+          "channel": null,
+          "parameter": "$randomseed",
+          "value": 1
+        }
+      },
+      {
+        "step": 34,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "above_step": 27
+        }
+      },
+      {
+        "step": 35,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 34,
+          "channels": [
+            "User2"
+          ]
+        }
+      },
+      {
+        "step": 36,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 34,
+          "channel": "User2",
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 37,
+        "call": "substance_painter.layerstack.LayerNode.add_mask",
+        "args": {
+          "node_step": 34,
+          "background": "Black"
+        }
+      },
+      {
+        "step": 38,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "inside_step": 34,
+          "stack": "Mask"
+        }
+      },
+      {
+        "step": 39,
+        "call": "substance_painter.layerstack.FillEffectNode.set_source",
+        "args": {
+          "node_step": 38,
+          "channel": null,
+          "resource": "resource://starter_assets/grunge_rust_fine/grunge_rust_fine?version=732ff219a6c1bce1dd587cbf33f9222f0d98d4b1.sbsar"
+        }
+      },
+      {
+        "step": 40,
+        "call": "substance_painter.source.SourceSubstance.set_parameters",
+        "args": {
+          "node_step": 38,
+          "channel": null,
+          "parameter": "$randomseed",
+          "value": 1
+        }
+      },
+      {
+        "step": 41,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "above_step": 34
+        }
+      },
+      {
+        "step": 42,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 41,
+          "channels": [
+            "User3"
+          ]
+        }
+      },
+      {
+        "step": 43,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 41,
+          "channel": "User3",
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 44,
+        "call": "substance_painter.layerstack.LayerNode.add_mask",
+        "args": {
+          "node_step": 41,
+          "background": "Black"
+        }
+      },
+      {
+        "step": 45,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "inside_step": 41,
+          "stack": "Mask"
+        }
+      },
+      {
+        "step": 46,
+        "call": "substance_painter.layerstack.FillEffectNode.set_source",
+        "args": {
+          "node_step": 45,
+          "channel": null,
+          "resource": "resource://starter_assets/grunge_humidity/grunge_humidity?version=3aa3318473d0178d2b76070086bd77322b126ff8.sbsar"
+        }
+      },
+      {
+        "step": 47,
+        "call": "substance_painter.source.SourceSubstance.set_parameters",
+        "args": {
+          "node_step": 45,
+          "channel": null,
+          "parameter": "$randomseed",
+          "value": 1
+        }
+      },
+      {
+        "step": 48,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "above_step": 41
+        }
+      },
+      {
+        "step": 49,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 48,
+          "channels": [
+            "User4"
+          ]
+        }
+      },
+      {
+        "step": 50,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 48,
+          "channel": "User4",
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 51,
+        "call": "substance_painter.layerstack.LayerNode.add_mask",
+        "args": {
+          "node_step": 48,
+          "background": "Black"
+        }
+      },
+      {
+        "step": 52,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "inside_step": 48,
+          "stack": "Mask"
+        }
+      },
+      {
+        "step": 53,
+        "call": "substance_painter.layerstack.FillEffectNode.set_source",
+        "args": {
+          "node_step": 52,
+          "channel": null,
+          "resource": "resource://starter_assets/noise_grunge_map_009/grunge_map_009?version=bc0ba172edae0258392468d44e91458dbb455011.sbsar"
+        }
+      },
+      {
+        "step": 54,
+        "call": "substance_painter.source.SourceSubstance.set_parameters",
+        "args": {
+          "node_step": 52,
+          "channel": null,
+          "parameter": "$randomseed",
+          "value": 1
+        }
+      },
+      {
+        "step": 55,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "above_step": 48
+        }
+      },
+      {
+        "step": 56,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 55,
+          "channels": [
+            "User5"
+          ]
+        }
+      },
+      {
+        "step": 57,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 55,
+          "channel": "User5",
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 58,
+        "call": "substance_painter.layerstack.LayerNode.add_mask",
+        "args": {
+          "node_step": 55,
+          "background": "Black"
+        }
+      },
+      {
+        "step": 59,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "inside_step": 55,
+          "stack": "Mask"
+        }
+      },
+      {
+        "step": 60,
+        "call": "substance_painter.layerstack.FillEffectNode.set_source",
+        "args": {
+          "node_step": 59,
+          "channel": null,
+          "resource": "resource://starter_assets/noise_grunge_map_012/grunge_map_012?version=facd9911228b5e1f7f6342f0a35222005be71bf5.sbsar"
+        }
+      },
+      {
+        "step": 61,
+        "call": "substance_painter.source.SourceSubstance.set_parameters",
+        "args": {
+          "node_step": 59,
+          "channel": null,
+          "parameter": "$randomseed",
+          "value": 1
+        }
+      },
+      {
+        "step": 62,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "above_step": 55
+        }
+      },
+      {
+        "step": 63,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 62,
+          "channels": [
+            "User6"
+          ]
+        }
+      },
+      {
+        "step": 64,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 62,
+          "channel": "User6",
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 65,
+        "call": "substance_painter.layerstack.LayerNode.add_mask",
+        "args": {
+          "node_step": 62,
+          "background": "Black"
+        }
+      },
+      {
+        "step": 66,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "inside_step": 62,
+          "stack": "Mask"
+        }
+      },
+      {
+        "step": 67,
+        "call": "substance_painter.layerstack.FillEffectNode.set_source",
+        "args": {
+          "node_step": 66,
+          "channel": null,
+          "resource": "resource://starter_assets/noise_gaussian_spots_2/gaussian_spots_2?version=33829a8fe873a56d2e79b00c7f9f6428feff6306.sbsar"
+        }
+      },
+      {
+        "step": 68,
+        "call": "substance_painter.source.SourceSubstance.set_parameters",
+        "args": {
+          "node_step": 66,
+          "channel": null,
+          "parameter": "$randomseed",
+          "value": 1
+        }
+      },
+      {
+        "step": 69,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "above_step": 62
+        }
+      },
+      {
+        "step": 70,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 69,
+          "channels": [
+            "User7"
+          ]
+        }
+      },
+      {
+        "step": 71,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 69,
+          "channel": "User7",
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 72,
+        "call": "substance_painter.layerstack.LayerNode.add_mask",
+        "args": {
+          "node_step": 69,
+          "background": "Black"
+        }
+      },
+      {
+        "step": 73,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "inside_step": 69,
+          "stack": "Mask"
+        }
+      },
+      {
+        "step": 74,
+        "call": "substance_painter.layerstack.FillEffectNode.set_source",
+        "args": {
+          "node_step": 73,
+          "channel": null,
+          "resource": "resource://starter_assets/cracks_leather/cracks_leather?version=a3a6e3487860644d83789421dc644a294e481c33.sbsar"
+        }
+      },
+      {
+        "step": 75,
+        "call": "substance_painter.source.SourceSubstance.set_parameters",
+        "args": {
+          "node_step": 73,
+          "channel": null,
+          "parameter": "$randomseed",
+          "value": 1
+        }
+      },
+      {
+        "step": 76,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/user0:L",
+            "documentMap/user1:L",
+            "documentMap/user2:L",
+            "documentMap/user3:L",
+            "documentMap/user4:L",
+            "documentMap/user5:L",
+            "documentMap/user6:L",
+            "documentMap/user7:L"
+          ],
+          "file_format": "exr",
+          "bit_depth": "32f",
+          "padding": "passthrough",
+          "dithering": false
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 2048,
+      "applied_by": "recorder_api",
+      "unit": "px"
+    },
+    {
+      "name": "export.exr.bit_depth",
+      "value": "32f",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "passthrough",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "uncontrolled_settings": [],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "4cc656304acd50d60459acc18342b1ae499b517fec38b0ea17ac9a5b2a541cce",
+      "size_bytes": 78663
+    },
+    {
+      "record_id": "r1-uzp_plane-user0",
+      "kind": "exported_map",
+      "sha256": "84aea7d331d14a6e81ac42afa72a5faa36196f28274dc3337cb70afac6bfa60a",
+      "size_bytes": 15392606
+    },
+    {
+      "record_id": "r1-uzp_plane-user1",
+      "kind": "exported_map",
+      "sha256": "7861eab1b809539ef1ac908258e06f64c9dfb044e167a4686fca37a48a0b94a4",
+      "size_bytes": 12798070
+    },
+    {
+      "record_id": "r1-uzp_plane-user2",
+      "kind": "exported_map",
+      "sha256": "eb6f7ddb2752136a37ff50cd40a6fbe3e9b6fc221a1d214c02e9e44998aafd10",
+      "size_bytes": 15411614
+    },
+    {
+      "record_id": "r1-uzp_plane-user3",
+      "kind": "exported_map",
+      "sha256": "908d9987a542b46a994d260b6d0087a0595248765ee84f800aead74af96d8f32",
+      "size_bytes": 6027696
+    },
+    {
+      "record_id": "r1-uzp_plane-user4",
+      "kind": "exported_map",
+      "sha256": "d67ea2176463a1a2176c1d0b419526f1ff0f3e7637d3837dfe9ae25d7e7698c7",
+      "size_bytes": 12963653
+    },
+    {
+      "record_id": "r1-uzp_plane-user5",
+      "kind": "exported_map",
+      "sha256": "fcdcb6a93db818827eeec32ca55515d716e4c42e49669a051bfd15bfcc04d86d",
+      "size_bytes": 9473207
+    },
+    {
+      "record_id": "r1-uzp_plane-user6",
+      "kind": "exported_map",
+      "sha256": "4909e52d77694a082cd86ff8367243c53d5f719418436d0c3440e30ac5d4a024",
+      "size_bytes": 12005570
+    },
+    {
+      "record_id": "r1-uzp_plane-user7",
+      "kind": "exported_map",
+      "sha256": "4b680eada3f40a49ee5de1f53b2fa949bd14ec181d947749958ebc8502c3c5b1",
+      "size_bytes": 6910183
+    },
+    {
+      "record_id": "r2-uzp_plane-user0",
+      "kind": "exported_map",
+      "sha256": "84aea7d331d14a6e81ac42afa72a5faa36196f28274dc3337cb70afac6bfa60a",
+      "size_bytes": 15392606
+    },
+    {
+      "record_id": "r2-uzp_plane-user1",
+      "kind": "exported_map",
+      "sha256": "7861eab1b809539ef1ac908258e06f64c9dfb044e167a4686fca37a48a0b94a4",
+      "size_bytes": 12798070
+    },
+    {
+      "record_id": "r2-uzp_plane-user2",
+      "kind": "exported_map",
+      "sha256": "eb6f7ddb2752136a37ff50cd40a6fbe3e9b6fc221a1d214c02e9e44998aafd10",
+      "size_bytes": 15411614
+    },
+    {
+      "record_id": "r2-uzp_plane-user3",
+      "kind": "exported_map",
+      "sha256": "908d9987a542b46a994d260b6d0087a0595248765ee84f800aead74af96d8f32",
+      "size_bytes": 6027696
+    },
+    {
+      "record_id": "r2-uzp_plane-user4",
+      "kind": "exported_map",
+      "sha256": "d67ea2176463a1a2176c1d0b419526f1ff0f3e7637d3837dfe9ae25d7e7698c7",
+      "size_bytes": 12963653
+    },
+    {
+      "record_id": "r2-uzp_plane-user5",
+      "kind": "exported_map",
+      "sha256": "fcdcb6a93db818827eeec32ca55515d716e4c42e49669a051bfd15bfcc04d86d",
+      "size_bytes": 9473207
+    },
+    {
+      "record_id": "r2-uzp_plane-user6",
+      "kind": "exported_map",
+      "sha256": "4909e52d77694a082cd86ff8367243c53d5f719418436d0c3440e30ac5d4a024",
+      "size_bytes": 12005570
+    },
+    {
+      "record_id": "r2-uzp_plane-user7",
+      "kind": "exported_map",
+      "sha256": "4b680eada3f40a49ee5de1f53b2fa949bd14ec181d947749958ebc8502c3c5b1",
+      "size_bytes": 6910183
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "7481bedfefa13f1c83910d1f8988d9b6acf5facd87939cce241bdb9cebb12f70",
+      "size_bytes": 403
+    }
+  ]
+}
