@@ -14,7 +14,7 @@ MAT-02 requires mesh-map generators (edge wear, cavity dirt, ground dirt/dust) w
 - Parent: `phase3.3_procedural-families`.
 
 ## Acceptance
-Tier 2a for each generator over the certification matrix (unit sphere, bevelled cube, hat v6 low with its mesh maps × {1024, 2048, 4096} × {defaults, recipe sets, two boundary sets} × {recorded seed, one other}): exact, or an owner-approved exception per asset; an asset that is neither stays a release gap in the capability manifest.
+Narrowed by decision 425 (2026-11-10): Ambient Occlusion (`generator/occlusion@2`) exact on its calibration and held-out sets inside its declared domain, with record, alias and native kernel. The other seven generators stay release gaps and move to `phase3.2_proc-grunge-families` item 2.7 (Dirt, Metal Edge Wear, Mask Builder - Legacy) and `phase3.3_procedural-families` items 2.8 (Curvature, Mask Editor) and 2.9 (Position, World Space Normals). Original acceptance: Tier 2a for each generator over the certification matrix (unit sphere, bevelled cube, hat v6 low with its mesh maps × {1024, 2048, 4096} × {defaults, recipe sets, two boundary sets} × {recorded seed, one other}): exact, or an owner-approved exception per asset; an asset that is neither stays a release gap in the capability manifest.
 
 ## Impact
 - Affected specs: procedural

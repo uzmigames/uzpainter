@@ -8,6 +8,7 @@ MAT-03 requires exact evaluation of the procedural sources used by recorded reci
 - Clean-room `HlslBackend` implementations built on the shared primitive library (Perlin, simplex, Worley, fBm), with tiling, seed and parameters as Painter documents them, calibrated black-box against private Painter oracles.
 - One provenance record per family (public sources, author, calibration corpus id, residuals) and parity status per asset.
 - Tier 2a manifests under `parity/manifests/` for each asset.
+- Moved from `phase3.2_proc-generator-families` (decision 425): the Dirt, Metal Edge Wear and Mask Builder - Legacy mesh-map generators, which read Painter's seeded grunge (item 2.7).
 
 ## Dependencies
 - Prerequisites: `phase3.1_proc-backend-seam`.

@@ -1,0 +1,9 @@
+{
+  "id": 425,
+  "slug": "the-seven-uncertified-mesh-map-generators-move-to-follow-up-items-and-phase3-2-proc-generator-families-closes-on-ambient-occlusion",
+  "title": "The seven uncertified mesh-map generators move to follow-up items; phase3.2_proc-generator-families closes on Ambient Occlusion",
+  "status": "accepted",
+  "date": "2026-11-10",
+  "relatedTasks": ["phase3.2_proc-generator-families", "phase3.2_proc-grunge-families", "phase3.3_procedural-families"],
+  "supersededBy": null
+}
