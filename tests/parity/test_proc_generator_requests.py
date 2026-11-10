@@ -82,23 +82,53 @@ def test_occlusion_candidate_follows_its_fitted_model() -> None:
 
     from tools.parity.proc_generators.occlusion_candidate import fit
 
-    ao = np.full((5, 5, 1), np.float32(9347 / 65535), np.float32)
+    code = 32896  # one invert: I(I(F(65535 - k))) and I(F(k)) round apart on this code
+    ao = np.full((5, 5, 1), np.float32(code / 65535), np.float32)
     normals = np.full((5, 5, 3), np.float32(0.5), np.float32)
     normals[0] = 0.0
     candidate = fit(None)
     one = np.float32(1.0)
-    inverted = one - ao[2, 2, 0]
+    inverted = one - np.float32((65535 - code) / 65535)
+    single = one - inverted
+    assert single != one - ao[2, 2, 0]
     for ao_invert, global_invert, value in (
-        (0, 0, one - inverted),
-        (1, 1, one - inverted),
-        (1, 0, inverted),
-        (0, 1, inverted),
+        (0, 0, one - (one - ao[2, 2, 0])),
+        (1, 1, one - (one - ao[2, 2, 0])),
+        (1, 0, single),
+        (0, 1, single),
     ):
         case = SimpleNamespace(params={"ao_invert": ao_invert, "global_invert": global_invert})
         out = candidate.evaluate(case, {"AO": ao, "WorldSpaceNormal": normals})
         assert out.dtype == np.dtype("<f4") and out.shape == (5, 5, 1)
         assert out[2, 2, 0] == value
         assert (out[:2] == 0).all()  # outside the compared texels
+
+
+def test_occlusion_candidate_refuses_an_ao_texel_off_the_16_bit_codes() -> None:
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from tools.parity.proc_generators.occlusion_candidate import AoInputError, fit
+
+    ao = np.full((5, 5, 1), np.float32(0.3), np.float32)  # not float32(k / 65535) for any k
+    normals = np.full((5, 5, 3), np.float32(0.5), np.float32)
+    case = SimpleNamespace(params={"ao_invert": 0, "global_invert": 0})
+    with pytest.raises(AoInputError):
+        fit(None).evaluate(case, {"AO": ao, "WorldSpaceNormal": normals})
+
+
+def test_measured_unorm16_fetch_table_is_stored_and_read_back() -> None:
+    import numpy as np
+
+    from tools.parity.vk_sampler_probe import unorm16
+
+    codes = np.arange(1 << 16)
+    deltas = np.random.default_rng(7).integers(-2, 2, 1 << 16)
+    assert (unorm16.unpack(unorm16.pack(deltas)) == deltas).all()
+    # The 2026-11-10 measurement (RTX 4090, driver 617.14, Vulkan): every code correctly rounded.
+    assert (unorm16.fetch(codes).view(np.uint32) == unorm16.correct(codes).view(np.uint32)).all()
+    assert unorm16.fetch(65535) == 1.0 and unorm16.fetch(0) == 0.0
 
 
 def test_discovery_publishes_semantics_without_description_text() -> None:
