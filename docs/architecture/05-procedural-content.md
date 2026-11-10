@@ -41,6 +41,11 @@ The library ships beside the executable as `assets/procedural/`: one provenance 
 - The Levels filter maps onto the native levels effect, with its Tier 0 semantics.
 - A filter effect's source carries no resolution override (§7).
 - The three domains are declared in `assets/procedural/` before calibration. None is certified, and no alias names them.
+- Calibrated against Painter 12.2.0 (decision 426, `docs/analysis/proc-filter-families/02-calibration-2026-11-10.md`). On a 16-bit bitmap content, the channel stores I(I(F(k))), the store `generator/occlusion@2` ends with.
+  - Sharpen is the four-neighbour Laplacian on the content's 16-bit codes, written as a 16-bit code. It is exact except at exact midpoints between two codes.
+  - The Levels filter is the native levels effect on F(k). It is exact on its calibration set, and differs by up to 32 ULP on one held-out gamma point.
+  - Both are `calibrated`, and each residual is a candidate exception for the owner. Grayscale Conversion and Blur are not batched, because no recipe uses them.
+  - All four filters stay release gaps (`phase3.3_procedural-families` items 2.10 to 2.12).
 
 **As built, mesh-map generators (`phase3.2_proc-generator-families`, decision 329, `src/procedural/generators.h`).**
 - A generator reads the texture set's mesh maps by usage (`AO`, `Curvature`, `Position`, `WorldSpaceNormal`, `Thickness`), never from its reference. A missing binding, a binding marked invalid, or an image that is absent or not the binding's size, channels or sample type fails evaluation loudly and names the map (§7). Every map has the output's resolution: nothing is resampled.

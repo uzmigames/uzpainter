@@ -182,3 +182,61 @@ def acos(x: npt.ArrayLike) -> npt.NDArray[np.float32]:
     low = (HALF_PI - _asin_polynomial(t)).astype(F32)
     out: npt.NDArray[np.float32] = np.where(upper, high, low)
     return out
+
+
+def log2(x: npt.ArrayLike) -> npt.NDArray[np.float32]:
+    """The recording GPU's base-2 logarithm (hw::Log2) from `hw-lg2-hi.zlib` and `hw-lg2-lo.zlib`:
+    log2(2^e (1 + m 2^-23)) is e + hi[m] (e >= 1), hi[m] (e = 0), lo[m] (e = -1) or
+    (e + 1) + lo[m] (e <= -2), the sum exact in double and rounded toward zero to float32; zeros
+    and subnormals give -inf, negative numbers and NaN the quiet NaN, +inf gives +inf."""
+    xf = np.asarray(x, F32)
+    bits = xf.view(np.uint32).astype(np.int64)
+    biased = (bits >> 23) & 0xFF
+    e = biased - 127
+    m = bits & 0x7FFFFF
+    hi = _values("lg2-hi").view(F32)[m].astype(np.float64)
+    lo = _values("lg2-lo").view(F32)[m].astype(np.float64)
+    exact = np.where(e >= 1, e + hi, np.where(e == 0, hi, np.where(e == -1, lo, (e + 1) + lo)))
+    f = exact.astype(F32)
+    toward = np.abs(f.astype(np.float64)) > np.abs(exact)
+    f = np.where(toward, np.nextafter(f, F32(0)), f)
+    negative = (bits >> 31) == 1
+    out: npt.NDArray[np.float32] = np.where(
+        np.isnan(xf) | (negative & ((bits & 0x7FFFFFFF) != 0)),
+        F32(np.nan),
+        np.where(
+            (bits & 0x7FFFFFFF) < 0x00800000,
+            F32(-np.inf),
+            np.where(np.isposinf(xf), F32(np.inf), f),
+        ),
+    ).astype(F32)
+    return out
+
+
+def exp2(y: npt.ArrayLike) -> npt.NDArray[np.float32]:
+    """The recording GPU's base-2 exponential (hw::Exp2) from `hw-ex2-pos.zlib` and
+    `hw-ex2-neg.zlib`: |y| = k + f (integer k, f in [0, 1)), j = floor(f 2^23), ex2-pos[j] 2^k
+    for y >= 0 and ex2-neg[j] 2^-k for y < 0; results below 2^-126 flush to +0, results at or
+    above 2^128 are +inf, NaN gives the quiet NaN."""
+    yf = np.asarray(y, F32)
+    v = yf.astype(np.float64)
+    finite = np.isfinite(v)
+    a = np.where(finite, np.abs(v), 0.0)
+    k = np.floor(a)
+    j = np.clip(np.floor((a - k) * 2.0**23).astype(np.int64), 0, (1 << 23) - 1)
+    pos = _values("ex2-pos").view(F32)[j].astype(np.float64)
+    neg = _values("ex2-neg").view(F32)[j].astype(np.float64)
+    with np.errstate(over="ignore"):
+        r = np.where(v >= 0, pos * np.exp2(k), neg * np.exp2(-k))
+    r = np.where(r < 2.0**-126, 0.0, r)
+    r = np.where(r >= 2.0**128, np.inf, r)
+    r = np.where(np.isposinf(v), np.inf, np.where(np.isneginf(v), 0.0, r))
+    out: npt.NDArray[np.float32] = np.where(np.isnan(v), np.nan, r).astype(F32)
+    return out
+
+
+def pow(x: npt.ArrayLike, g: npt.ArrayLike) -> npt.NDArray[np.float32]:
+    """The recording GPU's pow (hw::Pow): exp2(g log2 x), the product one float32 multiply."""
+    with np.errstate(invalid="ignore"):
+        product = (np.asarray(g, F32) * log2(x)).astype(F32)
+    return exp2(product)

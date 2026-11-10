@@ -1,0 +1,9 @@
+{
+  "id": 426,
+  "slug": "sharpen-and-levels-filters-are-calibrated-not-exact-grayscale-conversion-and-blur-stay-release-gaps-and-the-four-filters-move-to-follow-up-items",
+  "title": "Sharpen and Levels filters are calibrated, not exact; Grayscale Conversion and Blur stay release gaps; the four filters move to follow-up items",
+  "status": "accepted",
+  "date": "2026-11-10",
+  "relatedTasks": ["phase3.2_proc-filter-families", "phase3.3_procedural-families"],
+  "supersededBy": null
+}
