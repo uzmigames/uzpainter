@@ -10,7 +10,8 @@ restricted to Painter's four maps (the `_SpecularWeight` file
 is UzPainter's own extension, which Painter does not write; as an L file it has no recorded TGA).
 Every covered texel of every file equals Painter's r1 and r2, except the Normal's covered
 island-edge texels (EXC-014, decision 417); the uncovered texels are the padding (EXC-013). The
-receipt names exactly those exceptions.
+receipt names exactly those exceptions. The ORM with its G and B swapped fails the comparison
+(item 3.4).
 """
 
 from __future__ import annotations
@@ -87,3 +88,8 @@ def test_unreal_preset_on_r322_legacy_equals_painter(
             assert ours.shape == theirs.shape, (m, recording)
             differ = int(np.count_nonzero(np.any(ours != theirs, axis=-1) & compared))
             assert differ == 0, f"{name} {recording}: {differ} compared texels differ"
+            if m == "OcclusionRoughnessMetallic":
+                # Item 3.4, defect detection: the same file with G and B swapped (metallic where
+                # roughness belongs) fails this packing check on R-322's distinct channels.
+                swapped = ours[..., [0, 2, 1]]
+                assert np.count_nonzero(np.any(swapped != theirs, axis=-1) & compared) > 0
