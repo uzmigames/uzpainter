@@ -103,13 +103,27 @@ CASES: tuple[Case, ...] = (
         (Effect("generator", "Dirt", ((SEED, 2),), "Normal", 0.5),),
     ),
 )
+# The separating golden (2026-11-10): each source of `CASES` alone, Normal at opacity 1 in a
+# black mask, recorded in a fresh Painter session, so the mask holds the source itself.
+SOURCES_NAME = "snapshot-in-mask-sources"
+SOURCE_CASES: tuple[Case, ...] = (
+    Case("dirt-a-seed-1", "Black", (dirt_a(1),)),
+    Case("dirt-a-seed-2", "Black", (dirt_a(2),)),
+    Case("dirt-large", "Black", (Effect("grunge", "dirt-large"),)),
+    Case("rock", "Black", (rock(),)),
+    Case("dirt", "Black", (Effect("generator", "Dirt"),)),
+    Case("dirt-seed-2", "Black", (Effect("generator", "Dirt", ((SEED, 2),)),)),
+    Case("metal-edge-wear", "Black", (Effect("generator", "Metal Edge Wear"),)),
+    Case("mask-builder-legacy", "Black", (Effect("generator", "Mask Builder - Legacy"),)),
+)
+GOLDENS: dict[str, tuple[Case, ...]] = {NAME: CASES, SOURCES_NAME: SOURCE_CASES}
 
 
 def user(k: int) -> str:
     return f"User{k}"
 
 
-def instruction_steps() -> list[dict[str, Any]]:
+def instruction_steps(cases: tuple[Case, ...] = CASES) -> list[dict[str, Any]]:
     steps = Steps()
     steps.add(
         ps.CREATE, mesh="plane", normal_map_format="OpenGL", default_texture_resolution=RESOLUTION
@@ -118,7 +132,7 @@ def instruction_steps() -> list[dict[str, Any]]:
     for usage, input_id in MESH_MAPS.items():
         imported[input_id] = steps.add(ps.IMPORT_RESOURCE, input=input_id, usage="TEXTURE")
         steps.add(ps.SET_MESH_MAP, usage=usage, resource_step=imported[input_id])
-    channels = [user(k) for k in range(len(CASES))]
+    channels = [user(k) for k in range(len(cases))]
     for channel in channels:
         steps.add(ps.ADD_CHANNEL, channel=channel, format="L32F")
     base = steps.add(LS + "insert_fill", position="top")
@@ -132,7 +146,7 @@ def instruction_steps() -> list[dict[str, Any]]:
             color_space="Raw",
         )
     below = base
-    for k, case in enumerate(CASES):
+    for k, case in enumerate(cases):
         fill = steps.add(LS + "insert_fill", above_step=below)
         below = fill
         steps.add(LS + "FillLayerNode.active_channels", node_step=fill, channels=[user(k)])
@@ -186,7 +200,7 @@ def instruction_steps() -> list[dict[str, Any]]:
             if effect.opacity != 1.0:
                 steps.add(ps.SET_OPACITY, node_step=node, channel=None, opacity=effect.opacity)
             under = node
-    maps = [f"documentMap/user{k}:L" for k in range(len(CASES))]
+    maps = [f"documentMap/user{k}:L" for k in range(len(cases))]
     steps.add(
         EXPORT,
         maps=maps,
@@ -203,10 +217,10 @@ def effect_text(effect: Effect) -> str:
     return f"{effect.asset}{'(' + values + ')' if values else ''} {effect.mode} {effect.opacity:g}"
 
 
-def description() -> str:
-    cases = "; ".join(
+def description(cases: tuple[Case, ...] = CASES) -> str:
+    listed = "; ".join(
         f"User{k} {c.background}: " + ", ".join(map(effect_text, c.effects))
-        for k, c in enumerate(CASES)
+        for k, c in enumerate(cases)
     )
     return (
         "Mask-stack arithmetic over snapshot-served procedurals "
@@ -214,7 +228,7 @@ def description() -> str:
         f"{RESOLUTION} px, OpenGL, Legacy, fixtures grey-a, half-steps-grey, field-a, "
         "field-b as AO, Curvature, Position, World Space Normal mesh maps. Each case: a "
         "white Raw fill on its own L32F User channel over a black Raw base, under a mask, "
-        f"effects bottom-up (mono mode, opacity): {cases}. Grunges at the fill effect's "
+        f"effects bottom-up (mono mode, opacity): {listed}. Grunges at the fill effect's "
         "default projection; grey-a in Painter's default colour space. EXR 32f, "
         "passthrough, no dithering; r1, r2 after reopen."
     )
@@ -235,7 +249,8 @@ def image_input(input_id: str, root: Path) -> dict[str, Any]:
     }
 
 
-def manifest(root: Path = REPO_ROOT) -> dict[str, Any]:
+def manifest(name: str = NAME, root: Path = REPO_ROOT) -> dict[str, Any]:
+    cases = GOLDENS[name]
     envelope = current_envelope(root)
     inputs = [
         {
@@ -250,15 +265,15 @@ def manifest(root: Path = REPO_ROOT) -> dict[str, Any]:
     return {
         "schema": "uzpainter/parity/golden-public/1",
         "record_class": "public_manifest",
-        "golden_id": GOLDEN_ID,
+        "golden_id": f"tier0/semantics/{name}",
         "tier": "0",
         "domain": DOMAIN,
-        "description": description(),
+        "description": description(cases),
         "inputs": inputs,
         "instruction_sequence": {
             "author": "UzmiGames",
             "interface": "substance_painter_documented_python_api",
-            "steps": instruction_steps(),
+            "steps": instruction_steps(cases),
         },
         "applied_settings": [
             {"name": "project.normal_map_format", "value": "OpenGL", "applied_by": "recorder_api"},
@@ -286,7 +301,7 @@ def manifest(root: Path = REPO_ROOT) -> dict[str, Any]:
     }
 
 
-def request_path(root: Path = REPO_ROOT) -> Path:
+def request_path(name: str = NAME, root: Path = REPO_ROOT) -> Path:
     directory = envelope_directory(current_envelope(root)["envelope_id"])
     return (
         root
@@ -296,14 +311,14 @@ def request_path(root: Path = REPO_ROOT) -> Path:
         / "requests"
         / "tier0"
         / "semantics"
-        / f"{NAME}.json"
+        / f"{name}.json"
     )
 
 
-def write(root: Path = REPO_ROOT) -> Path:
+def write(name: str = NAME, root: Path = REPO_ROOT) -> Path:
     """Write the request; an existing one must be byte-equal (requests are authored once)."""
-    path = request_path(root)
-    text = json.dumps(manifest(root), indent=2) + "\n"
+    path = request_path(name, root)
+    text = json.dumps(manifest(name, root), indent=2) + "\n"
     if path.exists() and path.read_text(encoding="utf-8") != text:
         raise ValueError(f"{path}: an authored request changed; name a new golden")
     path.write_text(text, encoding="utf-8", newline="\n")
@@ -311,4 +326,5 @@ def write(root: Path = REPO_ROOT) -> Path:
 
 
 if __name__ == "__main__":
-    print(write())
+    for golden in GOLDENS:
+        print(write(golden))
