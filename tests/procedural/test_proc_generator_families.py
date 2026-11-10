@@ -10,8 +10,10 @@ The native cases run `uzp-proc-generator-tests.exe` (`tests/procedural/generator
 `UZP_NO_GPU=1` or when the executable reports none (exit code 77). Only one GPU run may be on the
 machine at a time.
 
-None of these assets is certified: each record's parity status is `unavailable`, no alias of the
-library names it (decision 324), and no case here compares against a Painter output.
+Only `generator/occlusion@2` is certified (decision 424): its record is `exact`, it is the only
+generator an alias names (decision 324), and `test_occlusion_v2_equals_painter_on_its_batch`
+compares its native CPU lane with the private goldens of its batch (skipped without the store).
+Every `@1` record stays `unavailable`.
 """
 
 from __future__ import annotations
@@ -25,7 +27,7 @@ from typing import Any
 
 import pytest
 
-from tools.parity.proc_cert.batch import Domain
+from tools.parity.proc_cert.batch import Domain, load_batch
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SHIPPED = REPO_ROOT / "assets/procedural"
@@ -67,9 +69,12 @@ FAMILIES = (
     "uzasset://generator/edge-wear@1",
     "uzasset://generator/mask-builder@1",
     "uzasset://generator/mask-editor@1",
+    "uzasset://generator/occlusion@2",
 )
-KERNEL_PASSES = 15
-GPU_CASES = 16
+KERNEL_PASSES = 16
+GPU_CASES = 18
+OCCLUSION2 = "uzasset://generator/occlusion@2"
+OCCLUSION2_BATCH = REPO_ROOT / "parity/manifests/phase3/proc-cert/generator__occlusion@2/batch.json"
 # One channel for the scalar maps, three for the vector ones.
 CHANNELS = {"AO": 1, "Curvature": 1, "Thickness": 1, "Position": 3, "WorldSpaceNormal": 3}
 
@@ -115,13 +120,37 @@ def test_generator_domain_is_declared_before_calibration(asset: str) -> None:
     assert "report" not in document["parity"]
 
 
-def test_no_alias_names_a_generator_family() -> None:
-    """Decision 324: only an `exact` asset gets an alias; the generators are not certified."""
+def test_only_the_certified_occlusion_generator_has_an_alias() -> None:
+    """Decision 324: only an `exact` asset gets an alias. `generator/occlusion@2` is exact
+    (decision 424); its record declares the batch's domain and names its corpus and report."""
     library = json.loads((SHIPPED / "library.json").read_text(encoding="utf-8"))
     assert {path for path, _ in GENERATORS.values()} <= set(library["records"])
+    assert "records/generator.occlusion@2.json" in library["records"]
     aliases = json.loads((SHIPPED / library["aliases"]).read_text(encoding="utf-8"))
-    generator_urls = set(GENERATORS)
-    assert not [a for a in aliases["aliases"] if a.get("asset") in generator_urls]
+    generator_urls = set(GENERATORS) | {OCCLUSION2}
+    named = [a for a in aliases["aliases"] if a.get("asset") in generator_urls]
+    assert named == [
+        {
+            "shelf": "starterassets",
+            "usage": "GENERATOR",
+            "painter_name": "Ambient Occlusion",
+            "asset": OCCLUSION2,
+        }
+    ]
+    document = record("records/generator.occlusion@2.json")
+    batch = json.loads(OCCLUSION2_BATCH.read_text(encoding="utf-8"))
+    assert document["asset"] == OCCLUSION2 and document["usage"] == "GENERATOR"
+    assert document["domain"] == batch["domain"]
+    assert document["defaults"] == {"ao_invert": 0, "global_invert": 0}
+    assert document["corpus"] == {
+        "calibration": batch["calibration"]["corpus_id"],
+        "held_out": batch["held_out"]["corpus_id"],
+    }
+    pin = batch["held_out"]["sha256"]
+    report_path = f"parity/reports/phase3/proc-cert/generator__occlusion@2/{pin[:16]}.json"
+    assert document["parity"] == {"status": "exact", "report": report_path}
+    report = json.loads((REPO_ROOT / report_path).read_text(encoding="utf-8"))
+    assert report["outcome"] == "exact" and report["certified"] is True
 
 
 @pytest.fixture(scope="session")
@@ -290,3 +319,69 @@ def test_generators_on_dx12_equal_the_cpu_reference_and_repeat(
     assert len(equal) == len(repeat) == GPU_CASES, sorted(passed)
     for asset in FAMILIES:
         assert any(c.endswith(f"{asset} defaults") for c in repeat), asset
+
+
+def test_occlusion_v2_follows_the_certified_model(generator_tests: Path, tmp_path: Path) -> None:
+    """2.5/2.6 (CPU): `generator/occlusion@2` is I(I(F(c))), c the AO's 16-bit code, inverted
+    (65535 - c) when exactly one invert is set; F, the measured UNORM16 fetch
+    (`hw-unorm16.zlib`), is the correctly rounded quotient, which the kernel builds from integers
+    on all 65 536 codes. An AO texel off the 16-bit codes fails evaluation loudly."""
+    passed = run_case(generator_tests, "occlusion", tmp_path)
+    assert len(passed) == 13, sorted(passed)
+    for check in (
+        "the kernel's integer quotient is float32(c / 65535) correctly rounded on all 65536 codes",
+        "occlusion@2 ao_invert 1, global_invert 0 is I(I(F(65535 - k)))",
+        "occlusion@2 at its defaults is I(I(F(k)))",
+        "an AO texel off the 16-bit codes fails evaluation loudly (CPU lane)",
+        "an AO texel off the 16-bit codes fails before any GPU work (candidate lane)",
+        "the seam serves the certified occlusion@2 inside its domain",
+    ):
+        assert check in passed
+
+
+def test_occlusion_v2_equals_painter_on_its_batch(generator_tests: Path, tmp_path: Path) -> None:
+    """3.1 (CPU, private store): the native CPU lane of `generator/occlusion@2` equals Painter on
+    every compared texel (decision 423 §1) of the 36 calibration and 8 held-out cases of its
+    batch. The goldens stay in the store and pytest's own temporary folder; only counts print."""
+    import numpy as np
+
+    from tools.parity.proc_cert.raster import decode
+    from tools.parity.proc_generators.coverage import covered_texels
+    from tools.parity.store.store import locate
+
+    store = locate()
+    if store is None:
+        pytest.skip("no private store on this machine: the goldens are unavailable")
+    batch = load_batch(OCCLUSION2_BATCH)
+    cases = [*batch.cases(batch.calibration), *batch.cases(batch.held_out)]
+    assert len(cases) == 44
+    differing: dict[str, int] = {}
+    for case in cases:
+        rasters = {}
+        for usage, (spec, ref) in [*case.inputs.items(), ("oracle", (case.output, case.oracle))]:
+            data = store.load(ref.sha256, ref.size_bytes)
+            assert data is not None, f"{case.case_id} {usage}: oracle_unavailable"
+            rasters[usage] = np.asarray(decode(spec, ref.encoding, data), np.float32)
+        resolution = case.output.resolution
+        ao_path, wsn_path, out_path = (tmp_path / n for n in ("ao.f32", "wsn.f32", "out.f32"))
+        ao_path.write_bytes(np.ascontiguousarray(rasters["AO"], "<f4").tobytes())
+        wsn_path.write_bytes(np.ascontiguousarray(rasters["WorldSpaceNormal"], "<f4").tobytes())
+        proc = subprocess.run(
+            [
+                *(str(generator_tests), "evaluate-occlusion", str(tmp_path), str(SHIPPED)),
+                *(str(ao_path), str(wsn_path), str(out_path), str(resolution)),
+                *(str(int(case.params["ao_invert"])), str(int(case.params["global_invert"]))),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=600,
+            check=False,
+        )
+        assert proc.returncode == 0, case.case_id + ": " + proc.stdout + proc.stderr
+        out = np.fromfile(out_path, "<f4").reshape(resolution, resolution)
+        covered = covered_texels(rasters["WorldSpaceNormal"])
+        oracle = rasters["oracle"][..., 0]
+        differing[case.case_id] = int(
+            (out[covered].view(np.uint32) != oracle[covered].view(np.uint32)).sum()
+        )
+    assert not {k: v for k, v in differing.items() if v}, differing

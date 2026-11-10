@@ -27,6 +27,14 @@
 // - World Space Normals (`kWorldNormalAsset`): Shape(2 n[axis / 2] - 1), negated (1 - 2 n) for
 //   an odd `axis` (+X, -X, +Y, -Y, +Z, -Z).
 // - Ambient Occlusion (`kOcclusionAsset`): Shape(1 - ao).
+// - Ambient Occlusion, Painter-compatible (`kOcclusion2Asset`, certified exact, decision 424):
+//   parameters `ao_invert` and `global_invert` in {0, 1}. With k the AO texel's 16-bit code (the
+//   texel must be float32(k / 65535), else evaluation fails loudly), c = k when the two inverts
+//   are equal and 65535 - k otherwise, F(c) the recording GPU's UNORM16 fetch (measured:
+//   float32(c / 65535) correctly rounded, `src/evaluator/tables/hw-unorm16.zlib`), built from
+//   integers (`UnormQuotient16`), and I(v) = 1 - v in float32: the texel is I(I(F(c))). It reads
+//   the World Space Normals map only because its certified domain declares it (the harness's
+//   compared texels, decision 423 §1); the value does not depend on it.
 // - Dirt (`kDirtAsset`; after Miller 1994 and Hsu and Wong 1995: dirt gathers where a surface is
 //   least accessible): pass 0 the weighted cavity and occlusion
 //   Clamp01(cavity_weight x Clamp01(1 - 2c) + occlusion_weight x (1 - ao)); pass 1 its disk
@@ -50,8 +58,8 @@
 //
 // Each family's record, domain and status are those of its provenance record in the asset
 // library (`RegisterGeneratorFamilies`), so the seam and the certification harness read one
-// declaration. None is certified: the records say `unavailable`, the seam refuses them, and no
-// alias of the library names them (decision 324).
+// declaration. Only `kOcclusion2Asset` is certified (`exact`, aliased as Painter's Ambient
+// Occlusion); every `@1` record says `unavailable` and the seam refuses it (decision 324).
 
 #include "procedural/admission.h"
 #include "procedural/asset_library.h"
@@ -77,6 +85,7 @@ inline constexpr std::string_view kCurvatureAsset = "uzasset://generator/curvatu
 inline constexpr std::string_view kPositionAsset = "uzasset://generator/position@1";
 inline constexpr std::string_view kWorldNormalAsset = "uzasset://generator/world-normal@1";
 inline constexpr std::string_view kOcclusionAsset = "uzasset://generator/occlusion@1";
+inline constexpr std::string_view kOcclusion2Asset = "uzasset://generator/occlusion@2";
 inline constexpr std::string_view kDirtAsset = "uzasset://generator/dirt@1";
 inline constexpr std::string_view kEdgeWearAsset = "uzasset://generator/edge-wear@1";
 inline constexpr std::string_view kMaskBuilderAsset = "uzasset://generator/mask-builder@1";
@@ -85,9 +94,15 @@ inline constexpr std::string_view kMaskEditorAsset = "uzasset://generator/mask-e
 /// The generator assets of this file, in registration order.
 [[nodiscard]] std::span<const std::string_view> GeneratorAssets();
 
-/// The mesh maps generator `asset` reads, by usage (any version of the asset id); empty for an
-/// asset that is not one of these generators.
+/// The mesh maps generator `asset` reads, by usage: those of its exact version, else of the
+/// first registered version of its id; empty for an asset that is not one of these generators.
 [[nodiscard]] std::vector<core::MeshMapUsage> GeneratorUsages(const core::AssetUrl& asset);
+
+/// float32(c / 65535) correctly rounded for a 16-bit code `c`, from integer operations only (the
+/// kernels have no division): the binary expansion of c / 65535 repeats c's 16 bits, so the 24
+/// significant bits and the round bit are a window of three copies, and the rest is never zero
+/// for 0 < c, so no tie occurs.
+[[nodiscard]] float UnormQuotient16(uint32_t c);
 
 /// The joint rule of every generator, which the domain's JSON cannot state: each mesh-map input
 /// has the output's resolution. The refusal (`outside certified domain`) names the input's field,

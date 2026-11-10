@@ -236,6 +236,68 @@ private:
     Signal m_signal;
 };
 
+// ── Ambient Occlusion, Painter-compatible (generator/occlusion@2, decision 424) ──
+
+constexpr std::string_view kOcclusion2Body = R"(
+float GenUnormQuotient16(uint d) {
+    if (d == 0u) return 0.0f;
+    const uint p = 15u - firstbithigh(d);
+    const uint hi = (d << 16) | d;
+    const uint y = p == 0u ? hi : ((hi << p) | (d >> (16u - p)));
+    const uint w = y >> 7;
+    return asfloat(((126u - p) << 23) + ((w >> 1) - 0x800000u) + (w & 1u));
+}
+
+float4 ProcTexel(int2 texel) {
+    const float ao = Texel(0u, texel.x, texel.y, BORDER_CLAMP).x;
+    uint c = (uint)Add(Mul(ao, 65535.0f), 0.5f);
+    if (ProcParam(0u) != 0u) c = 65535u - c;
+    const float occlusion = Sub(1.0f, GenUnormQuotient16(c));
+    return float4(Sub(1.0f, occlusion), 0.0f, 0.0f, 0.0f);
+}
+)";
+
+/// The 16-bit code of an AO texel: round(v x 65535) as the kernel computes it.
+uint32_t AoCode(float v) { return static_cast<uint32_t>(prim::Add(prim::Mul(v, 65535.0f), 0.5f)); }
+
+class Occlusion2Family final : public GeneratorFamily {
+public:
+    explicit Occlusion2Family(const AssetRecord& record) : GeneratorFamily(record) {}
+
+    std::optional<std::string> InputRefusal(const ProceduralRequest&, const InputImages& inputs) const override {
+        const Raster& ao = inputs.at(Name(MeshMapUsage::AO));
+        for (size_t i = 0; i < ao.texels.size(); ++i) {
+            const float v = ao.texels[i];
+            if (!(v >= 0.0f && v <= 1.0f) || Bits(UnormQuotient16(AoCode(v))) != Bits(v)) {
+                return "AO texel " + std::to_string(i) + " is not float32(k / 65535) of a 16-bit code: the "
+                       "certified model reads 16-bit AO codes";
+            }
+        }
+        return std::nullopt;
+    }
+
+    std::vector<KernelPass> Plan(const ProceduralRequest& request) const override {
+        return {KernelPass{"generator_" + Record().asset.id + "_v2", std::string(kOcclusion2Body),
+                           {OneInvert(request.params)}, {PassInput{Name(MeshMapUsage::AO), -1}}}};
+    }
+
+    Raster Reference(const ProceduralRequest& request, const InputImages& inputs) const override {
+        const Raster& ao = inputs.at(Name(MeshMapUsage::AO));
+        const uint32_t invert = OneInvert(request.params);
+        return OverTile(request, [&](int64_t x, int64_t y) {
+            uint32_t c = AoCode(prim::Texel(ao, x, y, 0, kClamp));
+            if (invert != 0) c = 65535 - c;
+            const float occlusion = prim::Sub(1.0f, UnormQuotient16(c));
+            return prim::Sub(1.0f, occlusion);
+        });
+    }
+
+private:
+    static uint32_t OneInvert(const Params& params) {
+        return static_cast<uint32_t>((IntParam(params, "ao_invert") != 0) != (IntParam(params, "global_invert") != 0));
+    }
+};
+
 // ── Shared passes: morphology and noise (items 2.3, 2.4) ─────────────────────
 
 /// A disk dilation (word 1 set) or erosion of radius word 0 of input 0, clamped at the border.
@@ -597,6 +659,10 @@ const std::vector<Entry>& Registry() {
             {kPositionAsset, {MeshMapUsage::Position}, signal(Signal::Position)},
             {kWorldNormalAsset, {MeshMapUsage::WorldSpaceNormal}, signal(Signal::WorldNormal)},
             {kOcclusionAsset, {MeshMapUsage::AO}, signal(Signal::Occlusion)},
+            {kOcclusion2Asset, {MeshMapUsage::AO, MeshMapUsage::WorldSpaceNormal},
+             [](const AssetRecord& r) -> std::shared_ptr<const IHlslFamily> {
+                 return std::make_shared<Occlusion2Family>(r);
+             }},
             {kDirtAsset, {MeshMapUsage::AO, MeshMapUsage::Curvature, MeshMapUsage::Position}, wear(Wear::Dirt)},
             {kEdgeWearAsset, {MeshMapUsage::AO, MeshMapUsage::Curvature, MeshMapUsage::Position},
              wear(Wear::EdgeWear)},
@@ -666,11 +732,24 @@ bool ExactHalfBits(uint32_t bits) {
 std::span<const std::string_view> GeneratorAssets() { return AssetNames(); }
 
 std::vector<core::MeshMapUsage> GeneratorUsages(const core::AssetUrl& asset) {
+    const Entry* first = nullptr;
     for (const Entry& entry : Registry()) {
         const core::AssetUrl url = core::ParseAssetUrl(entry.asset);
-        if (url.family == asset.family && url.id == asset.id) return entry.usages;
+        if (url.family != asset.family || url.id != asset.id) continue;
+        if (url.version == asset.version) return entry.usages;
+        if (first == nullptr) first = &entry;
     }
-    return {};
+    return first != nullptr ? first->usages : std::vector<core::MeshMapUsage>{};
+}
+
+float UnormQuotient16(uint32_t c) {
+    const uint32_t d = c & 0xFFFFu;
+    if (d == 0) return 0.0f;
+    const uint32_t p = 15u - static_cast<uint32_t>(std::bit_width(d) - 1);
+    const uint32_t hi = (d << 16) | d;
+    const uint32_t y = p == 0 ? hi : ((hi << p) | (d >> (16u - p)));
+    const uint32_t w = y >> 7;
+    return std::bit_cast<float>(((126u - p) << 23) + ((w >> 1) - 0x800000u) + (w & 1u));
 }
 
 std::optional<UnsupportedProcedural> GeneratorJointRefusal(const ProceduralRequest& request) {

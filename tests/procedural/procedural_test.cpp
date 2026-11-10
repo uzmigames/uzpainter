@@ -1202,10 +1202,16 @@ uzp::core::Project PinningProject(const std::string& source, const std::string& 
 
 int RunLibrary(const fs::path& fixture, const fs::path& shipped) {
     const auto shippedLibrary = AssetLibrary::Load(shipped);
-    Check(shippedLibrary && shippedLibrary->aliases().empty() &&
+    Check(shippedLibrary && shippedLibrary->aliases().size() == 1 &&
+              uzp::core::FormatAssetUrl(shippedLibrary->aliases().front().asset) == "uzasset://generator/occlusion@2" &&
               std::all_of(shippedLibrary->records().begin(), shippedLibrary->records().end(),
-                          [](const AssetRecord& r) { return r.status.kind == ParityStatus::Kind::Unavailable; }),
-          "the shipped library loads and holds no certified asset and no alias (no family is certified yet)",
+                          [](const AssetRecord& r) {
+                              return r.status.kind == (uzp::core::FormatAssetUrl(r.asset) == "uzasset://generator/occlusion@2"
+                                                           ? ParityStatus::Kind::Exact
+                                                           : ParityStatus::Kind::Unavailable);
+                          }),
+          "the shipped library loads; its only certified asset is generator/occlusion@2, which the only alias names "
+          "(decision 424)",
           shippedLibrary ? std::to_string(shippedLibrary->records().size()) : shippedLibrary.error());
     const auto loaded = AssetLibrary::Load(fixture);
     Check(loaded.has_value(), "the fixture library loads", loaded ? "" : loaded.error());
@@ -1397,19 +1403,22 @@ int RunAssetsCli(const fs::path& work, const fs::path& fixture, const fs::path& 
     Check(domain != nullptr && Field(*domain, "parameters") != nullptr && Field(*domain, "output") != nullptr,
           "assets list --parity gives each asset's certified editable domain", parity.out);
 
-    // The shipped records declare their domains before calibration (phase3.2 filter 2.6); none
-    // is certified.
+    // The shipped records declare their domains before calibration (phase3.2 filter 2.6); only
+    // generator/occlusion@2 is certified (decision 424).
     const CliRun shippedRun = Cli({"assets", "list", "--parity", "--library", shipped.generic_string()});
     const json::Array* shippedRows = Assets(shippedRun);
     Check(shippedRun.status == 0 && shippedRows != nullptr &&
               std::all_of(shippedRows->begin(), shippedRows->end(),
                           [](const json::Value& row) {
                               const json::Value* p = Field(row, "parity");
+                              const json::Value* asset = Field(row, "asset");
+                              const bool v2 = asset != nullptr && *asset == json::Value("uzasset://generator/occlusion@2");
                               return p != nullptr && Field(*p, "status") != nullptr &&
-                                     *Field(*p, "status") == json::Value("unavailable") &&
+                                     *Field(*p, "status") == json::Value(v2 ? "exact" : "unavailable") &&
                                      Field(row, "domain") != nullptr;
                           }),
-          "the shipped library lists no certified asset, each with its declared domain", shippedRun.out);
+          "the shipped library lists every asset with its declared domain; only generator/occlusion@2 is exact",
+          shippedRun.out);
 
     const fs::path broken = work / "broken-library";
     fs::create_directories(broken);

@@ -1,8 +1,9 @@
 """`resource.search` over the asset library and the `.sbsar` import refusal
 (phase3.1_proc-backend-seam items 2.4 and 2.5, decision 324).
 
-`search` answers only from UzPainter's asset library: the shipped library holds no certified asset
-and no alias yet, so every Painter name is refused; with the synthetic fixture library
+`search` answers only from UzPainter's asset library: the shipped library's one alias names its one
+certified asset (Ambient Occlusion, `generator/occlusion@2`, decision 424), so every other Painter
+name is refused; with the synthetic fixture library
 (`UZP_ASSET_LIBRARY`) a Painter name resolves through the alias table to the UzPainter asset, with
 its UzPainter name and its provenance. Importing a `.sbsar` file raises `UnsupportedProcedural`
 (reason "no runtime") before the file is read and before any mutation. CPU only.

@@ -1,0 +1,47 @@
+{
+  "schema": "uzpainter/asset-provenance/1",
+  "asset": "uzasset://generator/occlusion@2",
+  "name": "UzPainter Occlusion Mask (inverts)",
+  "usage": "GENERATOR",
+  "author": "UzmiGames (UzPainter procedural families, phase3.2_proc-generator-families)",
+  "license": "Apache-2.0",
+  "sources": [
+    {
+      "kind": "approved-source",
+      "id": "A-HELP-BAKING",
+      "citation": "the documented mesh-map encodings, consulted, never copied: the ambient occlusion map is white where unoccluded; the world space normal map holds n x 0.5 + 0.5"
+    },
+    {
+      "kind": "approved-source",
+      "id": "A-PYDOC",
+      "citation": "SourceSubstance parameter semantics (booleans passed as int), generators binding mesh maps by usage, and the Property API that names the two Invert parameters ao_invert and global_invert"
+    },
+    {
+      "kind": "standard",
+      "citation": "IEEE 754-2019, Standard for Floating-Point Arithmetic: binary32 subtraction and round to nearest, ties to even"
+    }
+  ],
+  "defaults": {"ao_invert": 0, "global_invert": 0},
+  "domain": {
+    "parameters": {"ao_invert": {"set": [0, 1]}, "global_invert": {"set": [0, 1]}},
+    "constraints": [],
+    "seeds": {"policy": "listed", "seeds": [0]},
+    "geometry": {
+      "mesh_classes": ["sphere", "bevelled-cube", "garment"],
+      "uv_tiles": 1,
+      "inputs": {
+        "AO": {"resolutions": [1024, 2048, 4096], "formats": ["f32"], "colour_spaces": ["Raw"], "channels": [1]},
+        "WorldSpaceNormal": {"resolutions": [1024, 2048, 4096], "formats": ["f32"], "colour_spaces": ["Raw"], "channels": [3]}
+      }
+    },
+    "output": {"resolutions": [1024, 2048, 4096], "formats": ["f32"], "colour_spaces": ["linear"], "channels": [1]}
+  },
+  "corpus": {
+    "calibration": "generator-occlusion-2-calibration-2026-11-09",
+    "held_out": "generator-occlusion-2-held-out-2026-11-10"
+  },
+  "parity": {
+    "status": "exact",
+    "report": "parity/reports/phase3/proc-cert/generator__occlusion@2/2d91b5b1c67e5698.json"
+  }
+}

@@ -4,7 +4,8 @@ the asset library's exact pins, its provenance records, the internal alias table
 
 Every case runs `uzp-procedural-tests.exe` on the CPU. The fixture library
 (`tests/procedural/fixtures/library/`) holds synthetic test probes with authored names, never a
-Painter asset; the shipped library (`assets/procedural/`) holds no certified asset yet.
+Painter asset; the shipped library (`assets/procedural/`) holds one certified asset,
+`generator/occlusion@2` (decision 424).
 """
 
 from __future__ import annotations
@@ -45,8 +46,8 @@ def test_pins_aliases_and_search(procedural_tests: Path, tmp_path: Path) -> None
     passed = {line[5:] for line in proc.stdout.splitlines() if line.startswith("PASS ")}
     assert len(passed) == 28, sorted(passed)
     for check in (
-        "the shipped library loads and holds no certified asset and no alias (no family is "
-        "certified yet)",
+        "the shipped library loads; its only certified asset is generator/occlusion@2, which "
+        "the only alias names (decision 424)",
         "a pin of a version the library does not hold is refused, naming the versions it holds",
         "a Painter name resolves through the alias table to the UzPainter asset, with its "
         "UzPainter name",
@@ -228,4 +229,7 @@ def test_assets_list_and_parity(procedural_tests: Path, tmp_path: Path) -> None:
     passed = {line[5:] for line in proc.stdout.splitlines() if line.startswith("PASS ")}
     assert len(passed) == 9, sorted(passed)
     assert "assets list shows no Painter name of the internal alias table" in passed
-    assert "the shipped library lists no certified asset, each with its declared domain" in passed
+    assert (
+        "the shipped library lists every asset with its declared domain; only "
+        "generator/occlusion@2 is exact" in passed
+    )

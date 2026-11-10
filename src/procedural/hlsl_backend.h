@@ -75,6 +75,13 @@ public:
     [[nodiscard]] virtual std::optional<UnsupportedProcedural> JointRefusal(const ProceduralRequest&) const {
         return std::nullopt;
     }
+    /// Why the input texels cannot feed this family, checked after `CheckInputs` on both lanes
+    /// before any work (a value its certified model does not cover): evaluation then fails
+    /// loudly. None by default.
+    [[nodiscard]] virtual std::optional<std::string> InputRefusal(const ProceduralRequest&,
+                                                                  const InputImages&) const {
+        return std::nullopt;
+    }
     /// The kernel passes of a request inside the domain.
     [[nodiscard]] virtual std::vector<KernelPass> Plan(const ProceduralRequest& request) const = 0;
     /// The CPU reference of the same request: the kernels' texels bit for bit.

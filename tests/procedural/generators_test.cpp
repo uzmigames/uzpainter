@@ -15,13 +15,21 @@
 //   domain      a parameter, a seed, a mesh class, a mesh-map input and a resolution just outside
 //               the declared domain are refused before mutation, nothing clamped or substituted
 //               (CPU; test 3.4)
+//   occlusion   generator/occlusion@2 (certified exact, decision 424): the kernel's integer
+//               quotient on all 65 536 codes, the four invert sets against I(I(F(c))), the loud
+//               failure of an AO texel off the 16-bit codes on both lanes, the seam serving it
+//               (CPU)
+//   evaluate-occlusion <work> <shipped> <ao.f32> <wsn.f32> <out.f32> <resolution> <ao_invert>
+//               <global_invert>: writes occlusion@2's CPU lane over raw float32 mesh maps (rows
+//               top first), for the Tier 2a comparison of test_proc_generator_families.py
 //   kernels     every family's kernels compiled to DXIL and SPIR-V (CPU, needs dxcompiler.dll)
 //   gpu         every family on DX12 equal to its CPU reference bit for bit, whole and by tile,
 //               and identical bytes across two runs (GPU; items 2.2-2.4, test 3.3)
 //
 // The shipped library is the repository's `assets/procedural/`. The mesh maps are authored
-// (seeded uniform codes). No case compares against a Painter output: the families are not
-// certified.
+// (seeded uniform codes; float32 codes c / 65535 for occlusion@2, whose certified domain reads
+// float32 maps). No case here compares against a Painter output: `evaluate-occlusion` serves the
+// Python Tier 2a test, which holds the private goldens.
 //
 // Output: `PASS <check>` / `FAIL <check>: <detail>` / `INFO` lines.
 // Exit code 0 when every check passed, 1 when one failed, 2 on a usage error, 77 when the case
@@ -42,11 +50,13 @@
 #include "uzp_core/transaction/transaction.h"
 #include "uzp_core/types/project.h"
 
+#include <array>
 #include <bit>
 #include <cmath>
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <future>
 #include <map>
@@ -170,6 +180,23 @@ std::unique_ptr<MeshMaps> AuthoredMaps(uint32_t size, uint32_t seed) {
     return maps;
 }
 
+/// The same authored codes as float32 bindings (`L32F`, `RGB32F`, texels float32(c / 65535)):
+/// the inputs of occlusion@2's certified domain.
+std::unique_ptr<MeshMaps> AuthoredFloatMaps(uint32_t size, uint32_t seed) {
+    std::unique_ptr<MeshMaps> maps = AuthoredMaps(size, seed);
+    for (auto& [usage, binding] : maps->set.mesh_maps) {
+        const bool vector = usage == MeshMapUsage::Position || usage == MeshMapUsage::WorldSpaceNormal;
+        const std::shared_ptr<const evaluator::DecodedImage> codes = maps->resources.Fetch(binding.resource);
+        auto image = std::make_shared<evaluator::DecodedImage>(*codes);
+        image->encoding = render::TexelEncoding::Float32;
+        for (uint32_t& v : image->values) v = std::bit_cast<uint32_t>(static_cast<float>(v) / 65535.0f);
+        binding.resource += "-f32";
+        binding.format = vector ? core::ChannelFormat::RGB32F : core::ChannelFormat::L32F;
+        maps->resources.Add(binding.resource, image);
+    }
+    return maps;
+}
+
 /// A request of `record` inside its declared domain: the record's defaults, the `sphere` class,
 /// one float32 `linear` channel at `bound`'s resolution, its mesh maps by usage.
 ProceduralRequest GeneratorRequestOf(const AssetRecord& record, const BoundMeshMaps& bound, uint32_t size,
@@ -253,11 +280,13 @@ int RunSignals(const fs::path& shipped) {
     Check(registered.has_value(), "every generator registers from its library record",
           registered ? "" : registered.error());
     if (!registered) return Finish();
-    bool unavailable = true;
+    bool statuses = true;
     for (const auto& [asset, record] : fixture->records) {
-        unavailable = unavailable && hlsl.Status(record->asset).kind == ParityStatus::Kind::Unavailable;
+        const ParityStatus::Kind want =
+            asset == kOcclusion2Asset ? ParityStatus::Kind::Exact : ParityStatus::Kind::Unavailable;
+        statuses = statuses && hlsl.Status(record->asset).kind == want;
     }
-    Check(unavailable, "every generator carries its record's status: not certified");
+    Check(statuses, "every generator carries its record's status: only occlusion@2 is certified");
 
     const std::unique_ptr<MeshMaps> maps = AuthoredMaps(kSize, 3);
     const std::optional<BoundMeshMaps> bound = Bind(*maps);
@@ -973,9 +1002,12 @@ int RunKernels(const fs::path& dir, const fs::path& shipped) {
     if (!RegisterGeneratorFamilies(hlsl, fixture->library)) return Finish();
     const std::unique_ptr<MeshMaps> maps = AuthoredMaps(kSize, 1);
     const std::optional<BoundMeshMaps> bound = Bind(*maps);
-    if (!bound) return Finish();
+    const std::unique_ptr<MeshMaps> floatMaps = AuthoredFloatMaps(kSize, 1);
+    const std::optional<BoundMeshMaps> floatBound = Bind(*floatMaps);
+    if (!bound || !floatBound) return Finish();
     for (const std::string_view asset : GeneratorAssets()) {
-        const ProceduralRequest request = GeneratorRequestOf(*fixture->records.at(std::string(asset)), *bound, kSize);
+        const BoundMeshMaps& maps = asset == kOcclusion2Asset ? *floatBound : *bound;
+        const ProceduralRequest request = GeneratorRequestOf(*fixture->records.at(std::string(asset)), maps, kSize);
         auto kernels = hlsl.Kernels(request);
         Check(kernels && !kernels->empty(), "kernel passes planned for " + std::string(asset),
               kernels ? "" : kernels.error().Describe());
@@ -1024,6 +1056,8 @@ std::vector<std::pair<std::string, Params>> GpuCases(std::string_view asset) {
         cases.push_back({"six weights inverted", {{"edges_weight", 0.5}, {"cavity_weight", -0.25}, {"occlusion_weight", 0.75},
                                                   {"height_weight", 1.0}, {"up_weight", -1.0}, {"thickness_weight", 0.375},
                                                   {"low", -0.5}, {"high", 1.5}, {"invert", int64_t{1}}}});
+    } else if (asset == kOcclusion2Asset) {
+        cases.push_back({"ao_invert 1", {{"ao_invert", int64_t{1}}}});
     } else if (asset == kEdgeWearAsset) {
         cases.push_back({"protect 1, spread 2", {{"occlusion_protect", 1.0}, {"spread", int64_t{2}},
                                                  {"noise_amount", 0.75}, {"noise_scale", 3.5}}});
@@ -1044,12 +1078,17 @@ int RunGpu(const fs::path& dir, const fs::path& shipped) {
     HlslBackend hlsl(&engine);
     if (!RegisterGeneratorFamilies(hlsl, fixture->library)) return Finish();
     const std::unique_ptr<MeshMaps> maps = AuthoredMaps(kSize, 7);
-    const std::optional<BoundMeshMaps> bound = Bind(*maps);
-    if (!bound) return Finish();
+    const std::optional<BoundMeshMaps> intBound = Bind(*maps);
+    const std::unique_ptr<MeshMaps> floatMaps = AuthoredFloatMaps(kSize, 7);
+    const std::optional<BoundMeshMaps> floatBound = Bind(*floatMaps);
+    if (!intBound || !floatBound) return Finish();
     for (const std::string_view asset : GeneratorAssets()) {
+        // occlusion@2 has a listed seed (0); the others take any 32-bit seed.
+        const bool v2 = asset == kOcclusion2Asset;
+        const std::optional<BoundMeshMaps>& bound = v2 ? floatBound : intBound;
         for (const auto& [what, changes] : GpuCases(asset)) {
             ProceduralRequest request =
-                GeneratorRequestOf(*fixture->records.at(std::string(asset)), *bound, kSize, 0x9E3779B9u);
+                GeneratorRequestOf(*fixture->records.at(std::string(asset)), *bound, kSize, v2 ? 0 : 0x9E3779B9u);
             for (const auto& [name, value] : changes) request.params[name] = value;
             const std::string label = std::string(asset) + " " + what;
             const render::Result<Raster> reference = hlsl.EvaluateReference(request, bound->images);
@@ -1075,11 +1114,120 @@ int RunGpu(const fs::path& dir, const fs::path& shipped) {
     return Finish();
 }
 
+// ── occlusion (generator/occlusion@2, decision 424, CPU) ─────────────────────
+
+int RunOcclusion2(const fs::path& shipped) {
+    std::optional<Fixture> fixture = LoadFixture(shipped);
+    if (!fixture) return Finish();
+    uint32_t wrong = 0;
+    for (uint32_t c = 0; c < 65536; ++c) {
+        wrong += Bits(UnormQuotient16(c)) != Bits(static_cast<float>(c) / 65535.0f) ? 1 : 0;
+    }
+    Check(wrong == 0, "the kernel's integer quotient is float32(c / 65535) correctly rounded on all 65536 codes",
+          std::to_string(wrong) + " codes differ");
+    HlslBackend hlsl(nullptr);
+    if (!RegisterGeneratorFamilies(hlsl, fixture->library)) return Finish();
+    const AssetRecord& record = *fixture->records.at(std::string(kOcclusion2Asset));
+    Check(hlsl.Status(record.asset).kind == ParityStatus::Kind::Exact, "occlusion@2 carries its record's status: exact");
+    const std::unique_ptr<MeshMaps> maps = AuthoredFloatMaps(kSize, 5);
+    const std::optional<BoundMeshMaps> bound = Bind(*maps);
+    if (!bound) return Finish();
+    const Raster& ao = bound->images.at(Name(MeshMapUsage::AO));
+    const auto expected = [&](bool one, uint32_t x, uint32_t y) {
+        const float v = ao.texels[size_t{y} * kSize + x];
+        uint32_t k = static_cast<uint32_t>(std::lround(static_cast<double>(v) * 65535.0));
+        if (one) k = 65535 - k;
+        const float z = static_cast<float>(k) / 65535.0f;
+        const float occlusion = 1.0f - z;
+        return 1.0f - occlusion;
+    };
+    for (const auto& [aoInvert, globalInvert] :
+         std::array<std::pair<int64_t, int64_t>, 4>{{{0, 0}, {1, 0}, {0, 1}, {1, 1}}}) {
+        ProceduralRequest request = GeneratorRequestOf(record, *bound, kSize);
+        request.params["ao_invert"] = aoInvert;
+        request.params["global_invert"] = globalInvert;
+        const bool one = aoInvert != globalInvert;
+        const std::string diff = Compare(hlsl.EvaluateReference(request, bound->images), kSize,
+                                         [&](uint32_t x, uint32_t y) { return expected(one, x, y); });
+        const std::string set = aoInvert == 0 && globalInvert == 0
+                                    ? "at its defaults is I(I(F(k)))"
+                                    : "ao_invert " + std::to_string(aoInvert) + ", global_invert " +
+                                          std::to_string(globalInvert) + " is " +
+                                          (one ? "I(I(F(65535 - k)))" : "I(I(F(k)))");
+        Check(diff.empty(), "occlusion@2 " + set, diff);
+    }
+    {
+        InputImages off = bound->images;
+        off.at(Name(MeshMapUsage::AO)).texels[777] = 0.3f;  // not float32(k / 65535) for any k
+        const ProceduralRequest request = GeneratorRequestOf(record, *bound, kSize);
+        const render::Result<Raster> cpu = hlsl.EvaluateReference(request, off);
+        Check(!cpu && cpu.error().Describe().find("AO texel 777") != std::string::npos,
+              "an AO texel off the 16-bit codes fails evaluation loudly (CPU lane)", cpu ? "evaluated" : "");
+        RasterFuture future = hlsl.EvaluateCandidate(request, off);
+        const render::Result<Raster> gpu = future.get();
+        Check(!gpu && gpu.error().Describe().find("AO texel 777") != std::string::npos,
+              "an AO texel off the 16-bit codes fails before any GPU work (candidate lane)",
+              gpu ? "evaluated" : gpu.error().Describe());
+    }
+    {
+        ProceduralSeam seam(nullptr, &hlsl);
+        const ProceduralRequest request = GeneratorRequestOf(record, *bound, kSize);
+        const auto selected = seam.Select(request);
+        Check(selected.has_value(), "the seam serves the certified occlusion@2 inside its domain",
+              selected ? "" : selected.error().Describe());
+        ProceduralRequest u16 = GeneratorRequestOf(record, *bound, kSize);
+        u16.inputs["AO"].spec.format = ChannelFormat::U16;
+        const std::optional<UnsupportedProcedural> refusal = hlsl.Refusal(u16);
+        Check(refusal && refusal->reason == kOutsideDomain && refusal->field.find("AO") != std::string::npos,
+              "a 16-bit AO binding is outside occlusion@2's certified domain (f32 only)",
+              refusal ? refusal->Describe() : "admitted");
+    }
+    return Finish();
+}
+
+/// `evaluate-occlusion`: occlusion@2's CPU lane over raw float32 maps (Tier 2a, Python side).
+int EvaluateOcclusion2(const fs::path& shipped, char** argv) {
+    std::optional<Fixture> fixture = LoadFixture(shipped);
+    if (!fixture) return Finish();
+    const uint32_t size = static_cast<uint32_t>(std::stoul(argv[7]));
+    const auto read = [&](const char* path, uint32_t channels) {
+        Raster r{size, size, channels, std::vector<float>(size_t{size} * size * channels)};
+        std::ifstream in(path, std::ios::binary);
+        in.read(reinterpret_cast<char*>(r.texels.data()), static_cast<std::streamsize>(r.texels.size() * 4));
+        Check(in.gcount() == static_cast<std::streamsize>(r.texels.size() * 4), std::string("reads ") + path);
+        return r;
+    };
+    InputImages images;
+    images[Name(MeshMapUsage::AO)] = read(argv[4], 1);
+    images[Name(MeshMapUsage::WorldSpaceNormal)] = read(argv[5], 3);
+    HlslBackend hlsl(nullptr);
+    if (!RegisterGeneratorFamilies(hlsl, fixture->library)) return Finish();
+    const AssetRecord& record = *fixture->records.at(std::string(kOcclusion2Asset));
+    ProceduralRequest request;
+    request.asset = record.asset;
+    request.params = record.defaults;
+    request.params["ao_invert"] = int64_t{std::stoi(argv[8])};
+    request.params["global_invert"] = int64_t{std::stoi(argv[9])};
+    request.meshClass = "garment";
+    request.output = RasterSpec{size, ChannelFormat::F32, "linear", 1};
+    request.seed = 0;
+    request.inputs[Name(MeshMapUsage::AO)] = ImageInput{RasterSpec{size, ChannelFormat::F32, "Raw", 1}, "ao"};
+    request.inputs[Name(MeshMapUsage::WorldSpaceNormal)] =
+        ImageInput{RasterSpec{size, ChannelFormat::F32, "Raw", 3}, "wsn"};
+    const render::Result<Raster> out = hlsl.EvaluateReference(request, images);
+    Check(out.has_value(), "occlusion@2 evaluates", out ? "" : out.error().Describe());
+    if (!out) return Finish();
+    std::ofstream file(argv[6], std::ios::binary);
+    file.write(reinterpret_cast<const char*>(out->texels.data()), static_cast<std::streamsize>(out->texels.size() * 4));
+    return Finish();
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
     if (argc < 4) {
-        std::fprintf(stderr, "usage: uzp-proc-generator-tests signals | wear | masks | bind | domain | kernels | gpu <work-dir> <shipped-library>\n");
+        std::fprintf(stderr, "usage: uzp-proc-generator-tests signals | wear | masks | bind | domain | occlusion | "
+                             "evaluate-occlusion | kernels | gpu <work-dir> <shipped-library> [...]\n");
         return 2;
     }
     const std::string_view mode = argv[1];
@@ -1090,6 +1238,11 @@ int main(int argc, char** argv) {
     if (mode == "masks") return RunMasks(shipped);
     if (mode == "bind") return RunBind(shipped);
     if (mode == "domain") return RunDomain(shipped);
+    if (mode == "occlusion") return RunOcclusion2(shipped);
+    if (mode == "evaluate-occlusion") {
+        if (argc < 10) return 2;
+        return EvaluateOcclusion2(shipped, argv);
+    }
     if (mode == "kernels") return RunKernels(dir, shipped);
     if (mode == "gpu") return RunGpu(dir, shipped);
     std::fprintf(stderr, "unknown case %.*s\n", static_cast<int>(mode.size()), mode.data());

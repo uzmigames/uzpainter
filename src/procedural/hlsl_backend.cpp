@@ -402,6 +402,9 @@ std::expected<std::vector<render::KernelSource>, UnsupportedProcedural> HlslBack
 
 RasterFuture HlslBackend::Run(const ProceduralRequest& request, const InputImages& inputs) {
     if (std::optional<std::string> invalid = CheckInputs(request, inputs)) return Ready(Failed(*invalid));
+    if (std::optional<std::string> refused = Find(request.asset)->InputRefusal(request, inputs)) {
+        return Ready(Failed(AssetName(request) + ": " + *refused));
+    }
     if (m_engine == nullptr) {
         return Ready(render::Fail(render::ErrorCode::GpuBackendUnavailable, std::nullopt,
                                   "the HLSL backend has no GPU engine"));
@@ -453,7 +456,11 @@ render::Result<Raster> HlslBackend::EvaluateReference(const ProceduralRequest& r
         return Failed(refusal->Describe());
     }
     if (std::optional<std::string> invalid = CheckInputs(request, inputs)) return Failed(*invalid);
-    return Find(request.asset)->Reference(request, inputs);
+    const IHlslFamily* family = Find(request.asset);
+    if (std::optional<std::string> refused = family->InputRefusal(request, inputs)) {
+        return Failed(AssetName(request) + ": " + *refused);
+    }
+    return family->Reference(request, inputs);
 }
 
 }  // namespace uzp::procedural

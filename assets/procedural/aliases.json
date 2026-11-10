@@ -1,4 +1,6 @@
 {
   "schema": "uzpainter/asset-aliases/1",
-  "aliases": []
+  "aliases": [
+    {"shelf": "starterassets", "usage": "GENERATOR", "painter_name": "Ambient Occlusion", "asset": "uzasset://generator/occlusion@2"}
+  ]
 }
