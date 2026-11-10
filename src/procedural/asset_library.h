@@ -92,6 +92,9 @@ struct AssetRecord {
     std::optional<std::array<double, 2>> physicalSizeCm;
     ParityStatus status;     ///< `corpusIds` = {calibration, held-out}.
     std::string report;      ///< The certification report that gives the status (path or "").
+    /// `parity.exception`: the owner-approved exception a `calibrated` status is served under
+    /// (decision 430, `EXC-NNN` of `parity/exceptions.json`), or "" when it names none.
+    std::string exception;
     core::json::Value json;  ///< The record as stored.
     std::filesystem::path file;
 };

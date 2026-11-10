@@ -254,7 +254,7 @@ CertifiedDomain DomainOf(const json::Value& document) {
 
 ParityStatus StatusOf(const json::Value& value, const fs::path& file) {
     const json::Object& parity = ObjectOf(value, file, "parity");
-    OnlyKeys(parity, {"status", "residuals", "reason", "report"}, file, "parity");
+    OnlyKeys(parity, {"status", "residuals", "reason", "report", "exception"}, file, "parity");
     const std::string& kind = StringOf(Required(parity, "status", file, "parity"), file, "parity.status");
     ParityStatus status;
     const json::Value* residuals = Member(parity, "residuals");
@@ -421,6 +421,17 @@ AssetRecord RecordOf(const fs::path& file) {
         const json::Value* report = Member(std::get<json::Object>(object.at("parity").data), "report");
         if (report == nullptr) Fail(file, "an exact or calibrated status names the report that gives it");
         record.report = StringOf(*report, file, "parity.report");
+    }
+    // Decision 430: a calibrated status may name the owner's exception it is served under.
+    if (const json::Value* exception = Member(std::get<json::Object>(object.at("parity").data), "exception")) {
+        if (record.status.kind != ParityStatus::Kind::Calibrated) {
+            Fail(file, "only a calibrated status names an exception");
+        }
+        record.exception = StringOf(*exception, file, "parity.exception");
+        static const std::regex kException("^EXC-[0-9]{3,}$");
+        if (!std::regex_match(record.exception, kException)) {
+            Fail(file, "parity.exception " + record.exception + " is not an EXC- id of parity/exceptions.json");
+        }
     }
     return record;
 }

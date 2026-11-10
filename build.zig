@@ -516,9 +516,11 @@ const procedural_sources = [_][]const u8{
 };
 /// The filter families (`src/procedural/filters.h`, decision 328), relative to `src/`: compiled
 /// into `uzp-proc-filter-tests.exe` with `procedural_sources`, with the evaluator's arithmetic
-/// (the Levels filter is the native levels effect; filter effects blend through its effect mix).
+/// (the Levels filter is the native levels effect; filter effects blend through its effect mix),
+/// and the generators' integer UNORM16 quotient that `filter/sharpen@2` fetches its codes with.
 const procedural_filter_sources = [_][]const u8{
     "procedural/filters.cpp",
+    "procedural/generators.cpp",
     "evaluator/arith.cpp",
     "evaluator/hwmath.cpp",
 };

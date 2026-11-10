@@ -9,6 +9,17 @@
 //   Image Processing, 4th ed., §3.6), g = f - amount x L(f) with the four-neighbour Laplacian
 //   L(f) = (((f(x-1, y) + f(x+1, y)) + f(x, y-1)) + f(x, y+1)) - 4 f, the content wrapping at
 //   the texture border. Every channel alike.
+// - Sharpen on 16-bit codes (`uzasset://filter/sharpen@2`, `calibrated`, served only under the
+//   owner's exception EXC-015, decision 430): Painter's starter-asset Sharpen as certified
+//   (decision 426 §2). The content is an L32F 16-bit bitmap fill: each texel must be the channel
+//   value I(I(F(k))) of a code k (I(v) = 1 - v, F the measured UNORM16 fetch, `UnormQuotient16`),
+//   else evaluation fails loudly. With x = F(k) and its four neighbours wrapping at the border,
+//   y = x + intensity (4 x - ((n + s) + (e + w))) in float32; the written code is
+//   rint(clamp(y, 0, 1) 65535), ties to even; the texel is I(I(F(code))). One channel. The
+//   domain is the part of EXC-015's whose batch evidence passes its bounds: `intensity` in
+//   {0, 0.2, 0.25, 0.4, 1, 4} (0.63 and 2.71 have residuals off the exact midpoints, decision
+//   430 amendment) and the batch's geometry and resolutions. Sharpen in a mask stack is not in
+//   it: the evaluator refuses every filter effect node.
 // - Grayscale conversion (`uzasset://filter/grayscale@1`): Y = (red R + green G) + blue B,
 //   written to the three channels; the defaults are ITU-R BT.709's luma coefficients rounded to
 //   float32.
@@ -24,8 +35,9 @@
 // family's record, domain and status are those of its provenance record in the asset library
 // (`RegisterFilterFamilies`), so the seam and the certification harness read one declaration.
 //
-// None of the three is certified: the records say `unavailable`, the seam refuses them, and no
-// alias of the library names them (decision 324). `FilterEffectReference` is the CPU candidate
+// The three `@1` families are not certified: the records say `unavailable` and the seam refuses
+// them. `filter/sharpen@2` is `calibrated` under EXC-015 and the seam serves it inside its domain
+// only. No alias names a filter: an alias names an `exact` asset only (decision 324). `FilterEffectReference` is the CPU candidate
 // lane of a filter effect, for certification and tests; the evaluator refuses filter effects
 // until a family is certified (phase3.3_procedural-families).
 
@@ -45,6 +57,7 @@
 namespace uzp::procedural {
 
 inline constexpr std::string_view kSharpenAsset = "uzasset://filter/sharpen@1";
+inline constexpr std::string_view kSharpen2Asset = "uzasset://filter/sharpen@2";
 inline constexpr std::string_view kGrayscaleAsset = "uzasset://filter/grayscale@1";
 inline constexpr std::string_view kLevelsAsset = "uzasset://filter/levels@1";
 
@@ -55,7 +68,7 @@ inline constexpr std::string_view kLevelsAsset = "uzasset://filter/levels@1";
 /// check refuses that first).
 [[nodiscard]] std::optional<UnsupportedProcedural> FilterJointRefusal(const ProceduralRequest& request);
 
-/// Registers Sharpen and grayscale conversion with `hlsl`, each with the record `library` holds
+/// Registers Sharpen (`@1` and `@2`) and grayscale conversion with `hlsl`, each with the record `library` holds
 /// for it (its domain, its status, its provenance). Refused when the library lacks a record or
 /// the host refuses the registration.
 std::expected<void, std::string> RegisterFilterFamilies(HlslBackend& hlsl, const AssetLibrary& library);

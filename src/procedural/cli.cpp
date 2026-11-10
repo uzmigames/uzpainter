@@ -42,6 +42,7 @@ json::Value Parity(const AssetRecord& record) {
                                              {"p99", static_cast<std::int64_t>(r.p99)}});
         }
         parity["residuals"] = std::move(residuals);
+        if (!record.exception.empty()) parity["exception"] = record.exception;
     }
     if (record.status.kind == ParityStatus::Kind::Unavailable) parity["reason"] = record.status.reason;
     if (!record.status.corpusIds.empty()) {

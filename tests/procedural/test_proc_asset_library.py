@@ -47,7 +47,8 @@ def test_pins_aliases_and_search(procedural_tests: Path, tmp_path: Path) -> None
     assert len(passed) == 28, sorted(passed)
     for check in (
         "the shipped library loads; its only certified asset is generator/occlusion@2, which "
-        "the only alias names (decision 424)",
+        "the only alias names (decision 424); filter/sharpen@2 is calibrated under EXC-015 "
+        "(decision 430)",
         "a pin of a version the library does not hold is refused, naming the versions it holds",
         "a Painter name resolves through the alias table to the UzPainter asset, with its "
         "UzPainter name",

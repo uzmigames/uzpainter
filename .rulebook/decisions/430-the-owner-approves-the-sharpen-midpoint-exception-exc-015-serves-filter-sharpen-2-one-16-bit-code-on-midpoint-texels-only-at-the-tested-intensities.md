@@ -54,3 +54,18 @@ This is his own yes to the terms of decision 428 §2 (decision 259 §6). It is n
 
 - Reports that rely on EXC-015 say "pass under EXC-015", never exact.
 - `phase3.3_procedural-families` item 2.10 notes the exception and its expiry. The item stays open: the mask stack, the float-to-UNORM16 measurement and a new held-out set remain.
+
+## Amendment (2026-11-10, same day): 0.63 and 2.71 are not served
+
+The native CPU lane was judged by the verdict on all 62 batch cases. It is exact on the 47 cases the harness found exact, and "pass under EXC-015" on the 11 cases at intensity 0.25: every residual texel there is an exact midpoint. The 4 interior held-out cases (0.63 and 2.71, knob cube 2048 and Tunic v10 1024) fail EXC-015's bounds.
+
+A counts-only diagnosis of those four cases, run locally (nothing left the machine), found the following.
+- At 0.63, 226 of 1 019 residual texels (Tunic) and 2 877 of 11 368 (knob cube) are exact midpoints. The others lie where k + intensity x L is 0.01 to 0.05 code above a half, and Painter writes the code below.
+- At 2.71, the off-midpoint residuals lie 0.01 to 0.07 code from a half on either side, mostly rounded down.
+- No quantised intensity explains them. Float16, 1/256, 1/255, 1/1024 and 1/4096 intensities all give more differences than the decimal intensity.
+
+Decision 426 §2 and decision 428's premise ("every residual texel is ... at an exact midpoint") therefore hold at 0.25 only. EXC-015's terms are not widened: a near-midpoint band is a different exception that only the owner can approve.
+
+- **EXC-015 version 2** keeps version 1's domain and bounds, the approved terms, unchanged, and corrects the evidence summary. Comparisons at 0.63 and 2.71 stay uncovered.
+- **`filter/sharpen@2` serves intensity 0, 0.2, 0.25, 0.4, 1 and 4 only.** Its record's domain omits 0.63 and 2.71, so the seam refuses them before any work (`outside certified domain`). This narrows what decision 430 §3 serves. It widens nothing.
+- **Item 2.10** keeps the interior residual: the float-to-UNORM16 write measurement and a new held-out set must explain both the 0.25 tie-break and the near-midpoint rounding at 0.63 and 2.71.

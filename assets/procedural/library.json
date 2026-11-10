@@ -4,6 +4,7 @@
     "records/filter.grayscale@1.json",
     "records/filter.levels@1.json",
     "records/filter.sharpen@1.json",
+    "records/filter.sharpen@2.json",
     "records/generator.curvature@1.json",
     "records/generator.dirt@1.json",
     "records/generator.edge-wear@1.json",

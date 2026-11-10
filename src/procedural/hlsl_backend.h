@@ -21,8 +21,9 @@
 // whose domain certifies another output format is refused at registration (quantisation rules
 // belong to the families that are fitted to them).
 //
-// The seam (seam.h) selects this backend only for an asset whose parity status is `exact`, and
-// only inside its certified domain. `EvaluateCandidate` evaluates a registered family inside its
+// The seam (seam.h) selects this backend only for an asset whose parity status is `exact`, or
+// `calibrated` under the owner's exception its record names (decision 430), and only inside its
+// certified domain. `EvaluateCandidate` evaluates a registered family inside its
 // domain whatever its status: a diagnostic lane for certification and tests, which the seam
 // never selects. `EvaluateReference` is the CPU reference lane of the same families (each
 // family's `Reference`, bit for bit the kernel's texels).
@@ -63,6 +64,8 @@ struct FamilyRecord {
     ParityStatus status;
     /// The provenance record (public sources, author, corpus ids; 05 §3).
     std::string provenance;
+    /// The owner's exception a `calibrated` status is served under (decision 430), or "".
+    std::string exception;
 };
 
 class IHlslFamily {

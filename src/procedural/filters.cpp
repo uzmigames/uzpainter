@@ -1,5 +1,6 @@
 #include "procedural/filters.h"
 
+#include "procedural/generators.h"
 #include "procedural/primitives.h"
 
 #include "evaluator/arith.h"
@@ -84,6 +85,7 @@ public:
         m_record.domain = record.domain;
         m_record.status = record.status;
         m_record.provenance = core::json::WriteCanonical(record.json);
+        m_record.exception = record.exception;
     }
 
     const FamilyRecord& Record() const override { return m_record; }
@@ -127,6 +129,119 @@ public:
                         prim::Add(prim::Add(prim::Add(left, right), up), down), prim::Mul(4.0f, centre));
                     out.texels.push_back(prim::Sub(centre, prim::Mul(amount, laplacian)));
                 }
+            }
+        }
+        return out;
+    }
+};
+
+// ── Sharpen on 16-bit codes (filter/sharpen@2, decision 430) ─────────────────
+
+// The certified candidate (filters.h): the content's codes, the wrapped four-neighbour Laplacian
+// of their UNORM16 fetches in float32, the written code rint(clamp(y, 0, 1) 65535) with ties to
+// even, then the channel's twice-inverted store I(I(F(code))).
+constexpr std::string_view kSharpen2Body = R"(
+float FilUnormQuotient16(uint d) {
+    if (d == 0u) return 0.0f;
+    const uint p = 15u - firstbithigh(d);
+    const uint hi = (d << 16) | d;
+    const uint y = p == 0u ? hi : ((hi << p) | (d >> (16u - p)));
+    const uint w = y >> 7;
+    return asfloat(((126u - p) << 23) + ((w >> 1) - 0x800000u) + (w & 1u));
+}
+
+float FilFetch(int x, int y) {
+    const float v = Texel(0u, x, y, BORDER_WRAP).x;
+    return FilUnormQuotient16((uint)Add(Mul(v, 65535.0f), 0.5f));
+}
+
+uint FilRoundEven(float s) {
+    const uint c = (uint)s;
+    const float d = Sub(s, (float)c);
+    return (d > 0.5f || (d == 0.5f && (c & 1u) != 0u)) ? c + 1u : c;
+}
+
+float4 ProcTexel(int2 texel) {
+    const float intensity = asfloat(ProcParam(0u));
+    const float x = FilFetch(texel.x, texel.y);
+    const float n = FilFetch(texel.x, texel.y - 1);
+    const float s = FilFetch(texel.x, texel.y + 1);
+    const float e = FilFetch(texel.x + 1, texel.y);
+    const float w = FilFetch(texel.x - 1, texel.y);
+    const float laplacian = Sub(Mul(4.0f, x), Add(Add(n, s), Add(e, w)));
+    const float y = Add(x, Mul(intensity, laplacian));
+    const float clamped = y > 0.0f ? (y < 1.0f ? y : 1.0f) : 0.0f;
+    const uint code = FilRoundEven(Mul(clamped, 65535.0f));
+    return float4(Sub(1.0f, Sub(1.0f, FilUnormQuotient16(code))), 0.0f, 0.0f, 0.0f);
+}
+)";
+
+/// The 16-bit code of a content texel: round(v x 65535) as the kernel computes it.
+uint32_t ContentCode(float v) { return static_cast<uint32_t>(prim::Add(prim::Mul(v, 65535.0f), 0.5f)); }
+
+/// The channel's twice-inverted store I(I(v)), I(v) = 1 - v.
+float TwiceInverted(float v) { return prim::Sub(1.0f, prim::Sub(1.0f, v)); }
+
+/// The nearest integer of `s` in [0, 65535], ties to even, as the kernel computes it.
+uint32_t RoundEven(float s) {
+    const auto c = static_cast<uint32_t>(s);
+    const float d = prim::Sub(s, static_cast<float>(c));
+    return (d > 0.5f || (d == 0.5f && (c & 1u) != 0u)) ? c + 1u : c;
+}
+
+class Sharpen2Family final : public FilterFamily {
+public:
+    using FilterFamily::FilterFamily;
+
+    std::optional<UnsupportedProcedural> JointRefusal(const ProceduralRequest& request) const override {
+        if (std::optional<UnsupportedProcedural> refusal = FilterJointRefusal(request)) return refusal;
+        for (const auto& [name, input] : request.inputs) {
+            if (input.spec.resolution == request.output.resolution) continue;
+            return UnsupportedProcedural{AssetName(request), std::string(kOutsideDomain), "inputs." + name + ".resolution",
+                                         std::to_string(input.spec.resolution),
+                                         "the output's resolution (" + std::to_string(request.output.resolution) + ")"};
+        }
+        return std::nullopt;
+    }
+
+    std::optional<std::string> InputRefusal(const ProceduralRequest&, const InputImages& inputs) const override {
+        const Raster& content = inputs.at(kContent);
+        for (size_t i = 0; i < content.texels.size(); ++i) {
+            const float v = content.texels[i];
+            if (!(v >= 0.0f && v <= 1.0f) || Bits(TwiceInverted(UnormQuotient16(ContentCode(v)))) != Bits(v)) {
+                return "content texel " + std::to_string(i) + " is not the channel value I(I(F(k))) of a 16-bit code "
+                       "k: the certified model reads 16-bit content codes (decision 426 §1)";
+            }
+        }
+        return std::nullopt;
+    }
+
+    std::vector<KernelPass> Plan(const ProceduralRequest& request) const override {
+        return {KernelPass{"filter_sharpen_v2", std::string(kSharpen2Body),
+                           {Bits(FloatParam(request.params, "intensity"))},
+                           {PassInput{kContent, -1}}}};
+    }
+
+    Raster Reference(const ProceduralRequest& request, const InputImages& inputs) const override {
+        const Raster& f = inputs.at(kContent);
+        const float intensity = FloatParam(request.params, "intensity");
+        const TileRect tile = TileOf(request);
+        Raster out{tile.width, tile.height, 1, {}};
+        out.texels.reserve(size_t{tile.width} * tile.height);
+        const auto fetch = [&](int64_t x, int64_t y) {
+            return UnormQuotient16(ContentCode(prim::Texel(f, x, y, 0, prim::Border::Wrap)));
+        };
+        for (uint32_t y = 0; y < tile.height; ++y) {
+            for (uint32_t x = 0; x < tile.width; ++x) {
+                const int64_t px = int64_t{tile.x} + x;
+                const int64_t py = int64_t{tile.y} + y;
+                const float centre = fetch(px, py);
+                const float vertical = prim::Add(fetch(px, py - 1), fetch(px, py + 1));
+                const float horizontal = prim::Add(fetch(px + 1, py), fetch(px - 1, py));
+                const float laplacian = prim::Sub(prim::Mul(4.0f, centre), prim::Add(vertical, horizontal));
+                const float value = prim::Add(centre, prim::Mul(intensity, laplacian));
+                const float clamped = value > 0.0f ? (value < 1.0f ? value : 1.0f) : 0.0f;
+                out.texels.push_back(TwiceInverted(UnormQuotient16(RoundEven(prim::Mul(clamped, 65535.0f)))));
             }
         }
         return out;
@@ -192,12 +307,14 @@ std::optional<UnsupportedProcedural> FilterJointRefusal(const ProceduralRequest&
 }
 
 std::expected<void, std::string> RegisterFilterFamilies(HlslBackend& hlsl, const AssetLibrary& library) {
-    for (const std::string_view url : {kSharpenAsset, kGrayscaleAsset}) {
+    for (const std::string_view url : {kSharpenAsset, kSharpen2Asset, kGrayscaleAsset}) {
         const AssetRecord* record = library.Find(core::ParseAssetUrl(url));
         if (record == nullptr) return NotRegistered("the asset library holds no record of " + std::string(url));
         std::shared_ptr<const IHlslFamily> family;
         if (url == kSharpenAsset) {
             family = std::make_shared<SharpenFamily>(*record);
+        } else if (url == kSharpen2Asset) {
+            family = std::make_shared<Sharpen2Family>(*record);
         } else {
             family = std::make_shared<GrayscaleFamily>(*record);
         }

@@ -1,0 +1,38 @@
+{
+  "schema": "uzpainter/asset-provenance/1",
+  "asset": "uzasset://filter/sharpen@2",
+  "name": "UzPainter Sharpen (16-bit codes)",
+  "usage": "FILTER",
+  "author": "UzmiGames (UzPainter procedural families, phase3.3_procedural-families)",
+  "license": "Apache-2.0",
+  "sources": [
+    {"kind": "book", "citation": "R. C. Gonzalez, R. E. Woods, Digital Image Processing, 4th ed., Pearson, 2018, section 3.6 (sharpening spatial filters: image sharpening with the Laplacian, g = f - c * Laplacian(f) for the four-neighbour kernel with a negative centre)"},
+    {"kind": "approved-source", "id": "A-PYDOC", "citation": "the Property API that names the starter-asset Sharpen filter's parameter intensity and its documented range [0, 4]"},
+    {"kind": "standard", "citation": "IEEE 754-2019, Standard for Floating-Point Arithmetic: binary32 addition, subtraction and multiplication, round to nearest, ties to even, and the integral rounding roundTiesToEven"}
+  ],
+  "defaults": {"intensity": 1},
+  "domain": {
+    "parameters": {"intensity": {"set": [0, 0.2, 0.25, 0.4, 1, 4]}},
+    "constraints": [],
+    "seeds": {"policy": "listed", "seeds": [0]},
+    "geometry": {
+      "mesh_classes": ["sphere", "bevelled-cube", "garment"],
+      "uv_tiles": 1,
+      "inputs": {
+        "content": {"resolutions": [1024, 2048, 4096], "formats": ["f32"], "colour_spaces": ["linear"], "channels": [1]},
+        "WorldSpaceNormal": {"resolutions": [1024, 2048, 4096], "formats": ["f32"], "colour_spaces": ["Raw"], "channels": [3]}
+      }
+    },
+    "output": {"resolutions": [1024, 2048, 4096], "formats": ["f32"], "colour_spaces": ["linear"], "channels": [1]}
+  },
+  "corpus": {
+    "calibration": "filter-sharpen-2-calibration-2026-11-10",
+    "held_out": "filter-sharpen-2-held-out-2026-11-10"
+  },
+  "parity": {
+    "status": "calibrated",
+    "residuals": [{"unit": "ulp_f32", "max": 262144, "sum": 2881307733, "count": 417333248, "p99": 0}],
+    "exception": "EXC-015",
+    "report": "parity/reports/phase3/proc-cert/filter__sharpen@2/727f63f70a79abab.json"
+  }
+}

@@ -87,11 +87,16 @@ def first(mask: np.ndarray[Any, Any]) -> tuple[int, int]:
 
 
 def test_the_register_holds_exc015_on_its_approved_terms() -> None:
-    """Decision 430: EXC-015 version 1 is in force on decision 428 §2's terms and nothing wider."""
+    """Decision 430: EXC-015 is in force on decision 428 §2's terms and nothing wider. Version 2
+    corrects version 1's evidence and keeps its domain and bounds."""
     register = load_json(REGISTER_PATH)
     assert is_valid(register, Schema.EXCEPTIONS) and register_problems(register) == []
     entry = exc015()
-    assert entry["version"] == 1 and entry["tier"] == "2a"
+    assert entry["version"] == 2 and entry["tier"] == "2a"
+    (first,) = [
+        e for e in register["entries"] if e["exception_id"] == "EXC-015" and e["version"] == 1
+    ]
+    assert (first["domain"], first["bounds"]) == (entry["domain"], entry["bounds"])
     assert (entry["approved_by"], entry["approved_on"], entry["decision_id"]) == (
         "owner",
         "2026-11-10",
@@ -169,7 +174,7 @@ def test_the_certified_model_passes_under_exc015_with_painter_s_tie_breaks() -> 
         for entries in ([entry], register):
             verdict = evaluate(comparison(content, oracle, stored(model), intensity), entries)
             assert verdict.outcome is Outcome.PASS, (intensity, verdict.reason)
-            assert verdict.exceptions_relied_on == (("EXC-015", 1),)
+            assert verdict.exceptions_relied_on == (("EXC-015", 2),)
         exact = evaluate(comparison(content, model, stored(model), intensity), [entry])
         assert exact.outcome is Outcome.PASS and exact.exceptions_relied_on == ()
 

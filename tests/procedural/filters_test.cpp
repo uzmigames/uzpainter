@@ -16,12 +16,19 @@
 //   domain      a parameter, a seed, a mesh-map input, a content input and a resolution just
 //               outside each declared domain are refused before mutation, nothing clamped or
 //               substituted (CPU; test 3.5)
-//   kernels     both families' kernels compiled to DXIL and SPIR-V (CPU, needs dxcompiler.dll)
-//   gpu         both families on DX12 equal to their CPU reference bit for bit, whole and by
+//   sharpen2    filter/sharpen@2 (calibrated under EXC-015, decision 430): the certified model
+//               bit for bit, content off the 16-bit codes failing loudly, the seam serving it
+//               inside its served domain only (0.63 and 2.71 refused), and a calibrated record
+//               naming no exception refused (CPU)
+//   evaluate-sharpen <work> <shipped> <content.f32> <wsn.f32> <out.f32> <resolution> <intensity>
+//               writes sharpen@2's CPU lane over raw float32 inputs (rows top first), for the
+//               Tier 2a comparison the Python side makes through the verdict
+//   kernels     the families' kernels compiled to DXIL and SPIR-V (CPU, needs dxcompiler.dll)
+//   gpu         the families on DX12 equal to their CPU reference bit for bit, whole and by
 //               tile (GPU; item 2.2)
 //
 // The shipped library is the repository's `assets/procedural/`. No case compares against a
-// Painter output: the families are not certified.
+// Painter output: `evaluate-sharpen` only writes the lane the Python side compares.
 //
 // Output: `PASS <check>` / `FAIL <check>: <detail>` / `INFO` lines.
 // Exit code 0 when every check passed, 1 when one failed, 2 on a usage error, 77 when the case
@@ -49,8 +56,10 @@
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <future>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <random>
@@ -824,6 +833,237 @@ int RunDomain(const fs::path& shipped) {
     return Finish();
 }
 
+// ── sharpen2 (filter/sharpen@2 under EXC-015, decision 430, CPU) ─────────────
+
+/// F(k): float32(k / 65535), correctly rounded (the measured UNORM16 fetch, decision 424 §1).
+float Fetch16(uint32_t k) { return static_cast<float>(k) / 65535.0f; }
+
+/// The channel value of a 16-bit code (decision 426 §1): I(I(F(k))), I(v) = 1 - v.
+float Stored16(uint32_t k) { return 1.0f - (1.0f - Fetch16(k)); }
+
+/// Seeded uniform 16-bit content codes, their channel values, and the World Space Normals input
+/// the domain declares (never read by the value).
+struct Sharpen2Inputs {
+    std::vector<uint32_t> codes;
+    InputImages images;
+};
+
+Sharpen2Inputs Sharpen2Content(uint32_t size, uint32_t seed) {
+    std::mt19937 random(seed);
+    Sharpen2Inputs in;
+    Raster content{size, size, 1, {}};
+    for (size_t i = 0; i < size_t{size} * size; ++i) {
+        const uint32_t k = random() % 65536;
+        in.codes.push_back(k);
+        content.texels.push_back(Stored16(k));
+    }
+    in.images[std::string(kContentInput)] = std::move(content);
+    in.images["WorldSpaceNormal"] = Raster{size, size, 3, std::vector<float>(size_t{size} * size * 3, 0.5f)};
+    return in;
+}
+
+/// The certified model at one texel in plain float32 (the test compiles without contraction):
+/// the wrapped Laplacian of the fetches, rint(clamp(y, 0, 1) 65535) with ties to even, stored.
+float Sharpen2At(const Sharpen2Inputs& in, uint32_t size, int64_t x, int64_t y, float intensity) {
+    const auto at = [&](int64_t px, int64_t py) {
+        return Fetch16(in.codes[size_t(Wrap(py, size)) * size + size_t(Wrap(px, size))]);
+    };
+    const float c = at(x, y);
+    const float laplacian = 4.0f * c - ((at(x, y - 1) + at(x, y + 1)) + (at(x + 1, y) + at(x - 1, y)));
+    const float value = c + intensity * laplacian;
+    const float clamped = value > 0.0f ? (value < 1.0f ? value : 1.0f) : 0.0f;
+    return Stored16(static_cast<uint32_t>(std::nearbyint(clamped * 65535.0f)));
+}
+
+/// A sharpen@2 request inside EXC-015's domain.
+ProceduralRequest Sharpen2Request(const AssetRecord& record, uint32_t size, double intensity) {
+    ProceduralRequest request;
+    request.asset = record.asset;
+    request.params = record.defaults;
+    request.params["intensity"] = intensity;
+    request.meshClass = "sphere";
+    request.output = RasterSpec{size, ChannelFormat::F32, "linear", 1};
+    request.inputs[std::string(kContentInput)] = ImageInput{RasterSpec{size, ChannelFormat::F32, "linear", 1}, "content"};
+    request.inputs["WorldSpaceNormal"] = ImageInput{RasterSpec{size, ChannelFormat::F32, "Raw", 3}, "wsn"};
+    request.seed = 0;
+    return request;
+}
+
+/// The shortest decimal of a parameter (0.25, 2.71, 1).
+std::string Decimal(double value) {
+    char buf[32];
+    const auto [end, ec] = std::to_chars(buf, buf + sizeof(buf), value);
+    return ec == std::errc() ? std::string(buf, end) : std::string("?");
+}
+
+int RunSharpen2(const fs::path& dir, const fs::path& shipped) {
+    std::optional<Fixture> fixture = LoadFixture(shipped);
+    if (!fixture) return Finish();
+    HlslBackend hlsl(nullptr);
+    const std::expected<void, std::string> registered = RegisterFilterFamilies(hlsl, fixture->library);
+    Check(registered.has_value(), "the filter families register from their library records, sharpen@2 included",
+          registered ? "" : registered.error());
+    if (!registered) return Finish();
+    const AssetRecord* record = fixture->library.Find(Url(kSharpen2Asset));
+    if (record == nullptr) return Finish();
+    Check(hlsl.Status(record->asset).kind == ParityStatus::Kind::Calibrated && record->exception == "EXC-015",
+          "sharpen@2 carries its record's status: calibrated under EXC-015");
+
+    constexpr uint32_t kSize = 1024;
+    const Sharpen2Inputs in = Sharpen2Content(kSize, 47);
+    for (const double intensity : {0.0, 0.2, 0.25, 0.4, 1.0, 4.0}) {
+        const ProceduralRequest request = Sharpen2Request(*record, kSize, intensity);
+        const render::Result<Raster> out = hlsl.EvaluateReference(request, in.images);
+        std::string first;
+        bool equal = out && out->width == kSize && out->channels == 1;
+        const float f = static_cast<float>(intensity);
+        for (int64_t y = 0; equal && y < kSize; ++y) {
+            for (int64_t x = 0; equal && x < kSize; ++x) {
+                const float expected = Sharpen2At(in, kSize, x, y, f);
+                const float got = out->texels[size_t(y) * kSize + size_t(x)];
+                if (Bits(expected) != Bits(got)) {
+                    equal = false;
+                    first = "(" + std::to_string(x) + ", " + std::to_string(y) + "): " + Hex(Bits(got)) +
+                            " against " + Hex(Bits(expected));
+                }
+            }
+        }
+        Check(equal,
+              "sharpen@2 at intensity " + Decimal(intensity) +
+                  " is I(I(F(rint(clamp(y) 65535)))) of the wrapped Laplacian",
+              out ? first : out.error().Describe());
+    }
+    {
+        ProceduralRequest request = Sharpen2Request(*record, kSize, 0.25);
+        const render::Result<Raster> whole = hlsl.EvaluateReference(request, in.images);
+        request.tile = TileRect{1017, 0, 7, 33};
+        const render::Result<Raster> tile = hlsl.EvaluateReference(request, in.images);
+        Check(whole && tile && FirstDifference(*tile, Crop(*whole, request.tile)).empty(),
+              "a sharpen@2 tile at the border equals the whole evaluation's texels");
+    }
+    {
+        InputImages off = in.images;
+        off.at(std::string(kContentInput)).texels[777] = 0.3f;  // not I(I(F(k))) for any code k
+        const ProceduralRequest request = Sharpen2Request(*record, kSize, 0.25);
+        const render::Result<Raster> cpu = hlsl.EvaluateReference(request, off);
+        Check(!cpu && cpu.error().Describe().find("content texel 777") != std::string::npos,
+              "a content texel off the 16-bit codes fails evaluation loudly (CPU lane)", cpu ? "evaluated" : "");
+        RasterFuture future = hlsl.EvaluateCandidate(request, off);
+        const render::Result<Raster> gpu = future.get();
+        Check(!gpu && gpu.error().Describe().find("content texel 777") != std::string::npos,
+              "a content texel off the 16-bit codes fails before any GPU work (candidate lane)",
+              gpu ? "evaluated" : gpu.error().Describe());
+    }
+    ProceduralSeam seam(nullptr, &hlsl);
+    {
+        const auto selected = seam.Select(Sharpen2Request(*record, kSize, 0.25));
+        Check(selected.has_value() && *selected == &hlsl, "the seam serves sharpen@2 inside its served domain",
+              selected ? "" : selected.error().Describe());
+    }
+    struct Outside {
+        std::string what;
+        ProceduralRequest request;
+        std::string field;
+    };
+    std::vector<Outside> outside;
+    // 0.63 and 2.71 are in EXC-015's domain, but their batch residuals are off the exact
+    // midpoints, so the record does not serve them (decision 430 amendment).
+    outside.push_back({"intensity 0.63", Sharpen2Request(*record, kSize, 0.63), "params.intensity"});
+    outside.push_back({"intensity 2.71", Sharpen2Request(*record, kSize, 2.71), "params.intensity"});
+    outside.push_back({"intensity 0.3", Sharpen2Request(*record, kSize, 0.3), "params.intensity"});
+    outside.push_back({"intensity 0.5", Sharpen2Request(*record, kSize, 0.5), "params.intensity"});
+    {
+        ProceduralRequest r = Sharpen2Request(*record, kSize, 0.25);
+        r.inputs[std::string(kContentInput)].spec.format = ChannelFormat::U16;
+        outside.push_back({"a 16-bit content input", r, "inputs.content.format"});
+    }
+    {
+        ProceduralRequest r = Sharpen2Request(*record, kSize, 0.25);
+        r.inputs[std::string(kContentInput)].spec.channels = 3;
+        r.output.channels = 3;
+        outside.push_back({"an RGB content (three channels)", r, "output.channels"});
+    }
+    {
+        ProceduralRequest r = Sharpen2Request(*record, 512, 0.25);
+        outside.push_back({"an output resolution of 512", r, "output.resolution"});
+    }
+    {
+        ProceduralRequest r = Sharpen2Request(*record, kSize, 0.25);
+        r.meshClass = "plane";
+        outside.push_back({"a mesh class outside the batch's", r, "mesh.class"});
+    }
+    for (const Outside& c : outside) {
+        const auto selected = seam.Select(c.request);
+        const render::Result<Raster> evaluated = hlsl.EvaluateReference(c.request, in.images);
+        Check(!selected && selected.error().reason == kOutsideDomain && selected.error().field == c.field &&
+                  !evaluated,
+              "outside the served domain, refused before evaluation: " + c.what,
+              selected ? "served" : selected.error().Describe());
+    }
+    {
+        // The same record without its exception: a calibrated status alone is never served.
+        const fs::path copy = dir / "library-without-exception";
+        fs::remove_all(copy);
+        fs::copy(shipped, copy, fs::copy_options::recursive);
+        const fs::path file = copy / "records" / "filter.sharpen@2.json";
+        std::ifstream read(file, std::ios::binary);
+        std::string text((std::istreambuf_iterator<char>(read)), std::istreambuf_iterator<char>());
+        read.close();
+        const std::string line = "    \"exception\": \"EXC-015\",\n";
+        const size_t at = text.find(line);
+        if (at != std::string::npos) text.erase(at, line.size());
+        std::ofstream(file, std::ios::binary) << text;
+        auto stripped = AssetLibrary::Load(copy);
+        HlslBackend bare(nullptr);
+        const bool loaded = at != std::string::npos && stripped && RegisterFilterFamilies(bare, *stripped);
+        const auto refusal = loaded ? bare.Refusal(Sharpen2Request(*record, kSize, 0.25)) : std::nullopt;
+        Check(loaded && refusal && refusal->reason == kNotCertified && refusal->value == "calibrated",
+              "a calibrated record that names no exception is refused (family not certified)",
+              !loaded ? (stripped ? "not registered" : stripped.error()) : (refusal ? refusal->Describe() : "served"));
+        fs::remove_all(copy);
+    }
+    {
+        const ProceduralRequest request = FilterRequest(*fixture->sharpen, Content(kSize, 1, 65535, 3),
+                                                        ChannelFormat::U16, "linear");
+        const auto selected = seam.Select(request);
+        Check(!selected && selected.error().reason == kNotCertified, "sharpen@1 stays refused (family not certified)",
+              selected ? "served" : selected.error().Describe());
+    }
+    return Finish();
+}
+
+/// `evaluate-sharpen`: sharpen@2's CPU lane over raw float32 inputs (Tier 2a, Python side).
+int EvaluateSharpen2(const fs::path& shipped, char** argv) {
+    std::optional<Fixture> fixture = LoadFixture(shipped);
+    if (!fixture) return Finish();
+    const uint32_t size = static_cast<uint32_t>(std::stoul(argv[7]));
+    const auto read = [&](const char* path, uint32_t channels) {
+        Raster r{size, size, channels, std::vector<float>(size_t{size} * size * channels)};
+        std::ifstream in(path, std::ios::binary);
+        in.read(reinterpret_cast<char*>(r.texels.data()), static_cast<std::streamsize>(r.texels.size() * 4));
+        Check(in.gcount() == static_cast<std::streamsize>(r.texels.size() * 4), std::string("reads ") + path);
+        return r;
+    };
+    InputImages images;
+    images[std::string(kContentInput)] = read(argv[4], 1);
+    images["WorldSpaceNormal"] = read(argv[5], 3);
+    HlslBackend hlsl(nullptr);
+    if (!RegisterFilterFamilies(hlsl, fixture->library)) return Finish();
+    const AssetRecord* record = fixture->library.Find(Url(kSharpen2Asset));
+    if (record == nullptr) return Finish();
+    ProceduralRequest request = Sharpen2Request(*record, size, std::stod(argv[8]));
+    request.meshClass = "garment";
+    ProceduralSeam seam(nullptr, &hlsl);
+    const auto selected = seam.Select(request);
+    Check(selected.has_value(), "the seam serves the request", selected ? "" : selected.error().Describe());
+    const render::Result<Raster> out = hlsl.EvaluateReference(request, images);
+    Check(out.has_value(), "sharpen@2 evaluates", out ? "" : out.error().Describe());
+    if (!out || !selected) return Finish();
+    std::ofstream file(argv[6], std::ios::binary);
+    file.write(reinterpret_cast<const char*>(out->texels.data()), static_cast<std::streamsize>(out->texels.size() * 4));
+    return Finish();
+}
+
 // ── kernels (item 2.2, CPU with dxcompiler) ──────────────────────────────────
 
 int RunKernels(const fs::path& dir, const fs::path& shipped) {
@@ -838,8 +1078,11 @@ int RunKernels(const fs::path& dir, const fs::path& shipped) {
     if (!RegisterFilterFamilies(hlsl, fixture->library)) return Finish();
     const Raster mask = Content(1024, 1, 65535, 1);
     const Raster colour = Content(1024, 3, 255, 2);
+    const AssetRecord* sharpen2 = fixture->library.Find(Url(kSharpen2Asset));
+    if (sharpen2 == nullptr) return Finish();
     for (const ProceduralRequest& request :
          {FilterRequest(*fixture->sharpen, mask, ChannelFormat::U16, "linear"),
+          Sharpen2Request(*sharpen2, 1024, 0.25),
           FilterRequest(*fixture->grayscale, colour, ChannelFormat::U8, "srgb")}) {
         auto kernels = hlsl.Kernels(request);
         Check(kernels && kernels->size() == 1, "one kernel pass planned for " + AssetName(request),
@@ -891,6 +1134,13 @@ int RunGpu(const fs::path& dir, const fs::path& shipped) {
         r.params["amount"] = amount;
         cases.push_back({"Sharpen amount " + std::to_string(amount), r, &mask});
     }
+    const AssetRecord* sharpen2 = fixture->library.Find(Url(kSharpen2Asset));
+    if (sharpen2 == nullptr) return Finish();
+    const Sharpen2Inputs codes = Sharpen2Content(1024, 41);
+    for (const double intensity : {0.25, 1.0, 4.0}) {
+        cases.push_back({"sharpen@2 intensity " + Decimal(intensity), Sharpen2Request(*sharpen2, 1024, intensity),
+                         nullptr});
+    }
     {
         ProceduralRequest r = FilterRequest(*fixture->grayscale, colour, ChannelFormat::U8, "srgb");
         cases.push_back({"grayscale conversion at the defaults", r, &colour});
@@ -898,7 +1148,8 @@ int RunGpu(const fs::path& dir, const fs::path& shipped) {
         cases.push_back({"grayscale conversion at weights (0.5, 0.25, 1)", r, &colour});
     }
     for (Case& c : cases) {
-        const InputImages inputs = {{std::string(kContentInput), *c.content}};
+        const InputImages inputs =
+            c.content != nullptr ? InputImages{{std::string(kContentInput), *c.content}} : codes.images;
         render::Result<Raster> reference = hlsl.EvaluateReference(c.request, inputs);
         RasterFuture future = hlsl.EvaluateCandidate(c.request, inputs);
         render::Result<Raster> gpu = Get(future);
@@ -922,7 +1173,7 @@ int main(int argc, char** argv) {
     if (argc < 4) {
         std::fprintf(stderr,
                      "usage: uzp-proc-filter-tests families | levels | effect-order | resolution-override | "
-                     "domain | kernels | gpu <work-dir> <shipped-library>\n");
+                     "domain | sharpen2 | evaluate-sharpen | kernels | gpu <work-dir> <shipped-library> [...]\n");
         return 2;
     }
     const std::string_view mode = argv[1];
@@ -933,6 +1184,11 @@ int main(int argc, char** argv) {
     if (mode == "effect-order") return RunEffectOrder(shipped);
     if (mode == "resolution-override") return RunResolutionOverride(shipped);
     if (mode == "domain") return RunDomain(shipped);
+    if (mode == "sharpen2") return RunSharpen2(dir, shipped);
+    if (mode == "evaluate-sharpen") {
+        if (argc < 9) return 2;
+        return EvaluateSharpen2(shipped, argv);
+    }
     if (mode == "kernels") return RunKernels(dir, shipped);
     if (mode == "gpu") return RunGpu(dir, shipped);
     std::fprintf(stderr, "unknown case %.*s\n", static_cast<int>(mode.size()), mode.data());

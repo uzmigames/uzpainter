@@ -11,8 +11,11 @@ needs `dxcompiler.dll` (installed beside the executable), and `gpu` needs a DX12
 it skips under `UZP_NO_GPU=1` or when the executable reports none (exit code 77). Only one GPU
 run may be on the machine at a time.
 
-None of these assets is certified: each record's parity status is `unavailable`, no alias of the
-library names it (decision 324), and no case here compares against a Painter output.
+The `@1` records stay `unavailable`. `filter/sharpen@2` is `calibrated` and served only inside the
+owner's exception EXC-015 (decision 430). Its record names the exception, and no alias names it
+(an alias names an `exact` asset only). The `sharpen2` case checks the certified model and its
+refusals. `test_sharpen_v2_passes_under_exc015_on_its_batch` compares its native CPU lane with the
+private goldens of its batch through the verdict (skipped without the store).
 """
 
 from __future__ import annotations
@@ -26,7 +29,7 @@ from typing import Any
 
 import pytest
 
-from tools.parity.proc_cert.batch import Domain
+from tools.parity.proc_cert.batch import Domain, load_batch
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SHIPPED = REPO_ROOT / "assets/procedural"
@@ -35,6 +38,10 @@ FILTERS = {
     "uzasset://filter/grayscale@1": "records/filter.grayscale@1.json",
     "uzasset://filter/levels@1": "records/filter.levels@1.json",
 }
+SHARPEN2 = "uzasset://filter/sharpen@2"
+SHARPEN2_RECORD = "records/filter.sharpen@2.json"
+SHARPEN2_BATCH = REPO_ROOT / "parity/manifests/phase3/proc-cert/filter__sharpen@2/batch.json"
+SHARPEN2_REPORT = "parity/reports/phase3/proc-cert/filter__sharpen@2/727f63f70a79abab.json"
 
 
 EXIT_SKIP = 77
@@ -112,11 +119,61 @@ def test_filter_domain_is_declared_before_calibration(asset: str) -> None:
 
 
 def test_no_alias_names_a_filter_family() -> None:
-    """Decision 324: only an `exact` asset gets an alias; the filters are not certified."""
+    """Decision 324: only an `exact` asset gets an alias, and no filter is exact. Decision 430
+    keeps the calibrated `filter/sharpen@2` without one."""
     library = json.loads((SHIPPED / "library.json").read_text(encoding="utf-8"))
-    assert set(FILTERS.values()) <= set(library["records"])
+    assert {*FILTERS.values(), SHARPEN2_RECORD} <= set(library["records"])
     aliases = json.loads((SHIPPED / library["aliases"]).read_text(encoding="utf-8"))
-    assert aliases["aliases"] == []
+    assert not [a for a in aliases["aliases"] if a["asset"].startswith("uzasset://filter/")]
+    assert not [a for a in aliases["aliases"] if a["usage"] == "FILTER"]
+
+
+def test_sharpen_v2_record_is_calibrated_under_exc015() -> None:
+    """Decision 430: the record is the batch's domain with `intensity` narrowed to EXC-015's
+    tested set without 0.63 and 2.71, whose residuals are off the exact midpoints (decision 430
+    amendment). It is `calibrated` with the report's pooled residual and names EXC-015, whose
+    filter domain names this asset."""
+    from tools.parity.schemas import REGISTER_PATH, load_json
+    from tools.parity.verdict import in_force
+
+    document = record(SHARPEN2_RECORD)
+    assert (document["asset"], document["usage"]) == (SHARPEN2, "FILTER")
+    batch = json.loads(SHARPEN2_BATCH.read_text(encoding="utf-8"))
+    register = load_json(REGISTER_PATH)["entries"]
+    (entry,) = [e for e in in_force(register) if e["exception_id"] == "EXC-015"]
+    spec = entry["domain"]["procedural_filter"]
+    assert spec["asset"] == SHARPEN2
+    expected = json.loads(json.dumps(batch["domain"]))
+    served = [v for v in spec["values"] if v not in (0.63, 2.71)]
+    assert len(served) == 6
+    expected["parameters"] = {"intensity": {"set": served}}
+    assert document["domain"] == expected
+    domain = Domain(document["domain"])
+    assert domain.params_refusal(document["defaults"]) is None
+    for value in served:
+        assert domain.params_refusal({"intensity": value}) is None
+    for value in (0.63, 2.71, 0.3, 0.5, 4.5):
+        assert domain.params_refusal({"intensity": value}) is not None
+    assert document["corpus"] == {
+        "calibration": batch["calibration"]["corpus_id"],
+        "held_out": batch["held_out"]["corpus_id"],
+    }
+    report = json.loads((REPO_ROOT / SHARPEN2_REPORT).read_text(encoding="utf-8"))
+    cases = [c for s in ("calibration", "held_out") for c in report["sets"][s]["cases"]]
+    pooled = {
+        "unit": "ulp_f32",
+        "max": max(c["residual"]["max_abs_diff"] for c in cases),
+        "sum": sum(c["residual"]["sum_abs_diff"] for c in cases),
+        "count": sum(c["residual"]["values"] for c in cases),
+        "p99": report["parity_status"]["residuals"]["ulp_f32"]["p99_abs_diff"],
+    }
+    assert report["parity_status"]["kind"] == "calibrated"
+    assert document["parity"] == {
+        "status": "calibrated",
+        "residuals": [pooled],
+        "exception": "EXC-015",
+        "report": SHARPEN2_REPORT,
+    }
 
 
 def test_shipped_library_loads_natively(procedural_tests: Path, tmp_path: Path) -> None:
@@ -132,7 +189,8 @@ def test_shipped_library_loads_natively(procedural_tests: Path, tmp_path: Path) 
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
     library = json.loads((SHIPPED / "library.json").read_text(encoding="utf-8"))
-    assert proc.stdout.strip() == f"LOADED {len(library['records'])} 0", proc.stdout
+    aliases = json.loads((SHIPPED / library["aliases"]).read_text(encoding="utf-8"))["aliases"]
+    assert proc.stdout.strip() == f"LOADED {len(library['records'])} {len(aliases)}", proc.stdout
 
 
 def test_sharpen_and_grayscale_follow_their_published_formulas(
@@ -154,13 +212,13 @@ def test_sharpen_and_grayscale_follow_their_published_formulas(
 def test_filter_kernels_compile(filter_tests: Path, tmp_path: Path) -> None:
     """2.2: each family's kernel compiles to DXIL and SPIR-V through the render core."""
     passed = run_case(filter_tests, "kernels", tmp_path)
-    assert sum(check.startswith("compiles: ") for check in passed) == 4
+    assert sum(check.startswith("compiles: ") for check in passed) == 6
 
 
 def test_filter_kernels_equal_the_cpu_reference_on_dx12(filter_tests: Path, tmp_path: Path) -> None:
     """2.2 (DX12): each kernel equals its CPU reference bit for bit, whole and by tile."""
     passed = run_case(filter_tests, "gpu", tmp_path)
-    assert sum(check.startswith("DX12 equals the CPU reference") for check in passed) == 5
+    assert sum(check.startswith("DX12 equals the CPU reference") for check in passed) == 8
 
 
 def test_levels_filter_maps_onto_the_native_levels_effect(
@@ -235,3 +293,109 @@ def test_requests_just_outside_the_domain_are_refused_before_mutation(
         "certified)",
     ):
         assert check in passed
+
+
+def test_sharpen_v2_follows_the_certified_model(filter_tests: Path, tmp_path: Path) -> None:
+    """Decision 430 (CPU): `filter/sharpen@2` is the certified candidate bit for bit. The seam
+    serves it inside its served domain only (EXC-015's without 0.63 and 2.71); outside it, or
+    with content off the 16-bit codes, nothing is evaluated."""
+    passed = run_case(filter_tests, "sharpen2", tmp_path)
+    assert len(passed) == 24, sorted(passed)
+    for check in (
+        "sharpen@2 carries its record's status: calibrated under EXC-015",
+        "sharpen@2 at intensity 0.25 is I(I(F(rint(clamp(y) 65535)))) of the wrapped Laplacian",
+        "sharpen@2 at intensity 4 is I(I(F(rint(clamp(y) 65535)))) of the wrapped Laplacian",
+        "a content texel off the 16-bit codes fails evaluation loudly (CPU lane)",
+        "a content texel off the 16-bit codes fails before any GPU work (candidate lane)",
+        "the seam serves sharpen@2 inside its served domain",
+        "outside the served domain, refused before evaluation: intensity 0.63",
+        "outside the served domain, refused before evaluation: intensity 2.71",
+        "outside the served domain, refused before evaluation: intensity 0.3",
+        "a calibrated record that names no exception is refused (family not certified)",
+        "sharpen@1 stays refused (family not certified)",
+    ):
+        assert check in passed
+
+
+def test_sharpen_v2_passes_under_exc015_on_its_batch(filter_tests: Path, tmp_path: Path) -> None:
+    """Decision 430 (CPU, private store): the native CPU lane of `filter/sharpen@2`, judged by the
+    verdict on every compared texel (decision 423 §1) of the 54 calibration and 8 held-out cases
+    of its batch. It is exact on the 47 cases the harness found exact and "pass under EXC-015" on
+    the 11 cases at intensity 0.25. The 4 interior cases (0.63, 2.71) fail: their residuals are
+    off the exact midpoints, so the record does not serve those intensities (decision 430
+    amendment). The goldens stay in the store and pytest's own temporary folder; only counts
+    print."""
+    import numpy as np
+
+    from tools.parity.proc_cert.raster import decode
+    from tools.parity.proc_filters.sharpen_candidate import SharpenCandidate
+    from tools.parity.proc_generators.coverage import covered_texels
+    from tools.parity.schemas import REGISTER_PATH, load_json
+    from tools.parity.store.store import locate
+    from tools.parity.verdict import Comparison, FilterInputs, Outcome, evaluate
+
+    store = locate()
+    if store is None:
+        pytest.skip("no private store on this machine: the goldens are unavailable")
+    register = load_json(REGISTER_PATH)["entries"]
+    batch = load_batch(SHARPEN2_BATCH)
+    sets = (("calibration", batch.calibration), ("held-out", batch.held_out))
+    cases = [(name, case) for name, corpus in sets for case in batch.cases(corpus)]
+    assert len(cases) == 62
+    outcomes: dict[str, tuple[str, tuple[tuple[str, int], ...]]] = {}
+    for set_name, case in cases:
+        rasters = {}
+        for usage, (spec, ref) in [*case.inputs.items(), ("oracle", (case.output, case.oracle))]:
+            data = store.load(ref.sha256, ref.size_bytes)
+            assert data is not None, f"{case.case_id} {usage}: oracle_unavailable"
+            rasters[usage] = np.asarray(decode(spec, ref.encoding, data), np.float32)
+        resolution = case.output.resolution
+        content_path, wsn_path, out_path = (tmp_path / n for n in ("c.f32", "wsn.f32", "out.f32"))
+        content_path.write_bytes(np.ascontiguousarray(rasters["content"], "<f4").tobytes())
+        wsn_path.write_bytes(np.ascontiguousarray(rasters["WorldSpaceNormal"], "<f4").tobytes())
+        intensity = float(case.params["intensity"])
+        served = intensity not in (0.63, 2.71)
+        proc = subprocess.run(
+            [
+                *(str(filter_tests), "evaluate-sharpen", str(tmp_path), str(SHIPPED)),
+                *(str(content_path), str(wsn_path), str(out_path), str(resolution)),
+                repr(intensity),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=600,
+            check=False,
+        )
+        covered = covered_texels(rasters["WorldSpaceNormal"])
+        if served:
+            assert proc.returncode == 0, case.case_id + ": " + proc.stdout + proc.stderr
+            out = np.fromfile(out_path, "<f4").reshape(resolution, resolution)
+            candidate = np.where(covered, out, np.float32(0)).astype(np.float32)
+        else:
+            # Not served: the native lane refuses it before any work, and the certified
+            # candidate (bit for bit the kernel on the served intensities) is what is judged.
+            assert proc.returncode != 0 and "outside certified domain" in proc.stdout, proc.stdout
+            candidate = SharpenCandidate().evaluate(case, rasters)[..., 0]
+        golden = f"phase3/proc-filters/{set_name}-sharpen-{case.mesh_id}-{resolution}"
+        content = rasters["content"][..., 0]
+        inputs = FilterInputs(
+            SHARPEN2, {"intensity": intensity}, content, "L32F_code_u16", "content"
+        )
+        comparison = Comparison(
+            "2a",
+            "procedural_asset/filter/sharpen",
+            rasters["oracle"][..., 0],
+            candidate,
+            golden_id=golden,
+            filter_inputs=inputs,
+        )
+        verdict = evaluate(comparison, register)
+        outcomes[case.case_id] = (verdict.outcome.value, verdict.exceptions_relied_on)
+    failed = sorted(k for k, v in outcomes.items() if v[0] != Outcome.PASS.value)
+    assert failed == sorted(k for k in outcomes if k.startswith("interior-")), failed
+    assert all(outcomes[k] == (Outcome.FAIL.value, ()) for k in failed)
+    under = sorted(k for k, v in outcomes.items() if v[1] == (("EXC-015", 2),))
+    print(f"exact {len(outcomes) - len(under) - len(failed)}, pass under EXC-015 {len(under)}, ")
+    print(f"not covered {len(failed)} (0.63, 2.71: not served)")
+    assert len(failed) == 4 and len(under) == 11, under
+    assert all(k.startswith("recipe-hat-v8-mask-a--") for k in under)

@@ -376,8 +376,11 @@ std::optional<UnsupportedProcedural> HlslBackend::CandidateRefusal(
 
 std::optional<UnsupportedProcedural> HlslBackend::Refusal(const ProceduralRequest& request) const {
     if (std::optional<UnsupportedProcedural> refusal = CandidateRefusal(request)) return refusal;
-    const ParityStatus& status = Find(request.asset)->Record().status;
-    if (status.kind != ParityStatus::Kind::Exact) {
+    const FamilyRecord& record = Find(request.asset)->Record();
+    const ParityStatus& status = record.status;
+    // Decision 430: a calibrated family is served only under the owner's exception it names.
+    const bool excepted = status.kind == ParityStatus::Kind::Calibrated && !record.exception.empty();
+    if (status.kind != ParityStatus::Kind::Exact && !excepted) {
         return UnsupportedProcedural{AssetName(request), std::string(kNotCertified), "status",
                                      std::string(KindName(status.kind)), "\"exact\""};
     }

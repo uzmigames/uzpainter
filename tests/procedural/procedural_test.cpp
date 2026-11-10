@@ -1207,12 +1207,15 @@ int RunLibrary(const fs::path& fixture, const fs::path& shipped) {
               uzp::core::FormatAssetUrl(shippedLibrary->aliases().front().asset) == "uzasset://generator/occlusion@2" &&
               std::all_of(shippedLibrary->records().begin(), shippedLibrary->records().end(),
                           [](const AssetRecord& r) {
-                              return r.status.kind == (uzp::core::FormatAssetUrl(r.asset) == "uzasset://generator/occlusion@2"
-                                                           ? ParityStatus::Kind::Exact
-                                                           : ParityStatus::Kind::Unavailable);
+                              const std::string url = uzp::core::FormatAssetUrl(r.asset);
+                              if (url == "uzasset://generator/occlusion@2") return r.status.kind == ParityStatus::Kind::Exact;
+                              if (url == "uzasset://filter/sharpen@2") {
+                                  return r.status.kind == ParityStatus::Kind::Calibrated && r.exception == "EXC-015";
+                              }
+                              return r.status.kind == ParityStatus::Kind::Unavailable && r.exception.empty();
                           }),
           "the shipped library loads; its only certified asset is generator/occlusion@2, which the only alias names "
-          "(decision 424)",
+          "(decision 424); filter/sharpen@2 is calibrated under EXC-015 (decision 430)",
           shippedLibrary ? std::to_string(shippedLibrary->records().size()) : shippedLibrary.error());
     const auto loaded = AssetLibrary::Load(fixture);
     Check(loaded.has_value(), "the fixture library loads", loaded ? "" : loaded.error());
@@ -1405,7 +1408,8 @@ int RunAssetsCli(const fs::path& work, const fs::path& fixture, const fs::path& 
           "assets list --parity gives each asset's certified editable domain", parity.out);
 
     // The shipped records declare their domains before calibration (phase3.2 filter 2.6); only
-    // generator/occlusion@2 is certified (decision 424).
+    // generator/occlusion@2 is certified (decision 424); filter/sharpen@2 is calibrated under
+    // EXC-015 (decision 430).
     const CliRun shippedRun = Cli({"assets", "list", "--parity", "--library", shipped.generic_string()});
     const json::Array* shippedRows = Assets(shippedRun);
     Check(shippedRun.status == 0 && shippedRows != nullptr &&
@@ -1414,8 +1418,13 @@ int RunAssetsCli(const fs::path& work, const fs::path& fixture, const fs::path& 
                               const json::Value* p = Field(row, "parity");
                               const json::Value* asset = Field(row, "asset");
                               const bool v2 = asset != nullptr && *asset == json::Value("uzasset://generator/occlusion@2");
+                              const bool sharpen2 = asset != nullptr && *asset == json::Value("uzasset://filter/sharpen@2");
+                              const char* expected = v2 ? "exact" : (sharpen2 ? "calibrated" : "unavailable");
+                              const json::Value* exception = p == nullptr ? nullptr : Field(*p, "exception");
                               return p != nullptr && Field(*p, "status") != nullptr &&
-                                     *Field(*p, "status") == json::Value(v2 ? "exact" : "unavailable") &&
+                                     *Field(*p, "status") == json::Value(expected) &&
+                                     (sharpen2 ? exception != nullptr && *exception == json::Value("EXC-015")
+                                               : exception == nullptr) &&
                                      Field(row, "domain") != nullptr;
                           }),
           "the shipped library lists every asset with its declared domain; only generator/occlusion@2 is exact",
