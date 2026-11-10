@@ -138,8 +138,8 @@
   "sha256": "098845ccc67ad7948df6d1a796c18be520ba7a05d75f96c1ca3b3f4588d707aa"
  },
  "held_out": {
-  "corpus_id": "generator-occlusion-2-held-out-2026-11-09",
+  "corpus_id": "generator-occlusion-2-held-out-2026-11-10",
   "path": "held-out/cases.json",
-  "sha256": "fe4ee8f2e713b52a608a0ac064fd1eac658e538a0bb9ea3b667e5c781754c65d"
+  "sha256": "2d91b5b1c67e569893441198f7a9914d9fc939bed16f73301d1e1eb45e016110"
  }
 }
