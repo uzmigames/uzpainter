@@ -1,0 +1,374 @@
+{
+ "schema": "uzpainter/parity/proc-cert-cases/1",
+ "set": "held_out",
+ "cases": [
+  {
+   "case_id": "defaults--knob-cube--2048",
+   "mesh": {
+    "id": "knob-cube",
+    "class": "bevelled-cube",
+    "uv_tiles": 1
+   },
+   "params": {
+    "intensity": 1.0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 2048,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-uzp_bevelled_cube-user0",
+     "sha256": "69f1e0e488cd7719256c0ccd7c7562d7cab3eb044b6d4f9ff5480c3fa0f7faeb",
+     "size_bytes": 3950629,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_bevelled_cube-world_space_normals",
+     "sha256": "76e8f0952adfb65f8b07929935976ee76562fadde352d03398f1e336010a295f",
+     "size_bytes": 260129,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-held-out-sharpen-knob-cube-2048-user1",
+    "sha256": "edfcf9b297bf1ff5c0ad4e710f59330885cb6b50a003559be0fa1e0c40d152b8",
+    "size_bytes": 16777216,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "recipe-hat-v8-mask-a--knob-cube--2048",
+   "mesh": {
+    "id": "knob-cube",
+    "class": "bevelled-cube",
+    "uv_tiles": 1
+   },
+   "params": {
+    "intensity": 0.25
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 2048,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-uzp_bevelled_cube-user0",
+     "sha256": "69f1e0e488cd7719256c0ccd7c7562d7cab3eb044b6d4f9ff5480c3fa0f7faeb",
+     "size_bytes": 3950629,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_bevelled_cube-world_space_normals",
+     "sha256": "76e8f0952adfb65f8b07929935976ee76562fadde352d03398f1e336010a295f",
+     "size_bytes": 260129,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-held-out-sharpen-knob-cube-2048-user2",
+    "sha256": "63ddcb1efcfa74726eb11891e772eb0940b7cb4f1f833f04a21dd17a1a21f5a9",
+    "size_bytes": 16777216,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "interior-a--knob-cube--2048",
+   "mesh": {
+    "id": "knob-cube",
+    "class": "bevelled-cube",
+    "uv_tiles": 1
+   },
+   "params": {
+    "intensity": 0.63
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 2048,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-uzp_bevelled_cube-user0",
+     "sha256": "69f1e0e488cd7719256c0ccd7c7562d7cab3eb044b6d4f9ff5480c3fa0f7faeb",
+     "size_bytes": 3950629,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_bevelled_cube-world_space_normals",
+     "sha256": "76e8f0952adfb65f8b07929935976ee76562fadde352d03398f1e336010a295f",
+     "size_bytes": 260129,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-held-out-sharpen-knob-cube-2048-user3",
+    "sha256": "d73540d358c2b8fd46a9d6038c97b3a29fc2cc8e94384abaa6578162f9f66328",
+    "size_bytes": 16777216,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "interior-b--knob-cube--2048",
+   "mesh": {
+    "id": "knob-cube",
+    "class": "bevelled-cube",
+    "uv_tiles": 1
+   },
+   "params": {
+    "intensity": 2.71
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 2048,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-uzp_bevelled_cube-user0",
+     "sha256": "69f1e0e488cd7719256c0ccd7c7562d7cab3eb044b6d4f9ff5480c3fa0f7faeb",
+     "size_bytes": 3950629,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_bevelled_cube-world_space_normals",
+     "sha256": "76e8f0952adfb65f8b07929935976ee76562fadde352d03398f1e336010a295f",
+     "size_bytes": 260129,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-held-out-sharpen-knob-cube-2048-user4",
+    "sha256": "4667b456287d8d7589bc817fa7c6d6ca457e1051d72b35f948de84dcadba940f",
+    "size_bytes": 16777216,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "defaults--tunic-v10--1024",
+   "mesh": {
+    "id": "tunic-v10",
+    "class": "garment",
+    "uv_tiles": 1
+   },
+   "params": {
+    "intensity": 1.0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 1024,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-defaultmaterial.001-user0",
+     "sha256": "cd562f7df320dd1fb7da6365efced5d43d38cf6f539584db9914df4780e0a618",
+     "size_bytes": 1139681,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-defaultmaterial.001-world_space_normals",
+     "sha256": "18c2e118af9fdc2798cb0b7c8d7daab2d3f0d4d9f5d1b8d325a92c7d945a0aa7",
+     "size_bytes": 4484046,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-held-out-sharpen-tunic-v10-1024-user1",
+    "sha256": "976776f13e2c2973123b52fccde9ecf0eca63809375b7f2c39d8e4ee328e8bcb",
+    "size_bytes": 4194304,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "recipe-hat-v8-mask-a--tunic-v10--1024",
+   "mesh": {
+    "id": "tunic-v10",
+    "class": "garment",
+    "uv_tiles": 1
+   },
+   "params": {
+    "intensity": 0.25
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 1024,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-defaultmaterial.001-user0",
+     "sha256": "cd562f7df320dd1fb7da6365efced5d43d38cf6f539584db9914df4780e0a618",
+     "size_bytes": 1139681,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-defaultmaterial.001-world_space_normals",
+     "sha256": "18c2e118af9fdc2798cb0b7c8d7daab2d3f0d4d9f5d1b8d325a92c7d945a0aa7",
+     "size_bytes": 4484046,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-held-out-sharpen-tunic-v10-1024-user2",
+    "sha256": "56b34fa40fbe44b97c4e19bf46a3bcba358a7444287630f253f14e95bf4ecb57",
+    "size_bytes": 4194304,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "interior-a--tunic-v10--1024",
+   "mesh": {
+    "id": "tunic-v10",
+    "class": "garment",
+    "uv_tiles": 1
+   },
+   "params": {
+    "intensity": 0.63
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 1024,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-defaultmaterial.001-user0",
+     "sha256": "cd562f7df320dd1fb7da6365efced5d43d38cf6f539584db9914df4780e0a618",
+     "size_bytes": 1139681,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-defaultmaterial.001-world_space_normals",
+     "sha256": "18c2e118af9fdc2798cb0b7c8d7daab2d3f0d4d9f5d1b8d325a92c7d945a0aa7",
+     "size_bytes": 4484046,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-held-out-sharpen-tunic-v10-1024-user3",
+    "sha256": "107b4c44b3e2d15009bbc633468e9289ae1c067d4776957e41e45f5809bb40a4",
+    "size_bytes": 4194304,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "interior-b--tunic-v10--1024",
+   "mesh": {
+    "id": "tunic-v10",
+    "class": "garment",
+    "uv_tiles": 1
+   },
+   "params": {
+    "intensity": 2.71
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 1024,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-defaultmaterial.001-user0",
+     "sha256": "cd562f7df320dd1fb7da6365efced5d43d38cf6f539584db9914df4780e0a618",
+     "size_bytes": 1139681,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-defaultmaterial.001-world_space_normals",
+     "sha256": "18c2e118af9fdc2798cb0b7c8d7daab2d3f0d4d9f5d1b8d325a92c7d945a0aa7",
+     "size_bytes": 4484046,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-held-out-sharpen-tunic-v10-1024-user4",
+    "sha256": "151ed9980f38d062653e4aa7e1cfa4988ee2ea8cbfd073b5eaf349b1df12c4ac",
+    "size_bytes": 4194304,
+    "encoding": "raw"
+   }
+  }
+ ]
+}

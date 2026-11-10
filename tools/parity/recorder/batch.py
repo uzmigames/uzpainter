@@ -269,6 +269,8 @@ def kind_of(request: Request) -> str:
         return TEXTURE
     if family == "phase3/proc-generators":  # generator goldens: they bake, then export masks
         return TEXTURE
+    if family == "phase3/proc-filters":  # filter goldens: content effects, a coverage bake
+        return TEXTURE
     if family == "tier0/api-probes":
         if name.startswith("ocio16-raw-readout-"):
             return RAW_EXPORT if "-export" in name else RAW_CAPABILITY

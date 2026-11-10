@@ -1,0 +1,193 @@
+{
+ "schema": "uzpainter/parity/proc-cert-batch/1",
+ "asset": "filter/levels",
+ "asset_version": 2,
+ "domain": {
+  "parameters": {
+   "input_min": {
+    "range": [
+     0,
+     1
+    ]
+   },
+   "input_max": {
+    "range": [
+     0,
+     1
+    ]
+   },
+   "gamma": {
+    "range": [
+     0.125,
+     8
+    ]
+   },
+   "output_min": {
+    "range": [
+     0,
+     1
+    ]
+   },
+   "output_max": {
+    "range": [
+     0,
+     1
+    ]
+   },
+   "clamp": {
+    "set": [
+     0,
+     1
+    ]
+   }
+  },
+  "constraints": [
+   {
+    "coefficients": {
+     "input_min": 1,
+     "input_max": -1
+    },
+    "max": -0.00390625
+   }
+  ],
+  "seeds": {
+   "policy": "listed",
+   "seeds": [
+    0
+   ]
+  },
+  "geometry": {
+   "mesh_classes": [
+    "sphere",
+    "bevelled-cube",
+    "garment"
+   ],
+   "uv_tiles": 1,
+   "inputs": {
+    "content": {
+     "resolutions": [
+      1024,
+      2048,
+      4096
+     ],
+     "formats": [
+      "f32"
+     ],
+     "colour_spaces": [
+      "linear"
+     ],
+     "channels": [
+      1
+     ]
+    },
+    "WorldSpaceNormal": {
+     "resolutions": [
+      1024,
+      2048,
+      4096
+     ],
+     "formats": [
+      "f32"
+     ],
+     "colour_spaces": [
+      "Raw"
+     ],
+     "channels": [
+      3
+     ]
+    }
+   }
+  },
+  "output": {
+   "resolutions": [
+    1024,
+    2048,
+    4096
+   ],
+   "formats": [
+    "f32"
+   ],
+   "colour_spaces": [
+    "linear"
+   ],
+   "channels": [
+    1
+   ]
+  }
+ },
+ "matrix": {
+  "meshes": [
+   "hat-v8",
+   "rounded-cube",
+   "sphere"
+  ],
+  "resolutions": [
+   1024,
+   2048,
+   4096
+  ],
+  "parameter_sets": [
+   {
+    "id": "defaults",
+    "role": "defaults",
+    "params": {
+     "input_min": 0.0,
+     "input_max": 1.0,
+     "gamma": 1.0,
+     "output_min": 0.0,
+     "output_max": 1.0,
+     "clamp": 0
+    }
+   },
+   {
+    "id": "recipe-bracer-r",
+    "role": "recipe",
+    "params": {
+     "input_min": 0.42,
+     "input_max": 0.6,
+     "gamma": 1.0,
+     "output_min": 0.0,
+     "output_max": 1.0,
+     "clamp": 0
+    }
+   },
+   {
+    "id": "boundary-a",
+    "role": "boundary",
+    "params": {
+     "input_min": 0.0,
+     "input_max": 1.0,
+     "gamma": 0.125,
+     "output_min": 0.0,
+     "output_max": 1.0,
+     "clamp": 0
+    }
+   },
+   {
+    "id": "boundary-b",
+    "role": "boundary",
+    "params": {
+     "input_min": 0.25,
+     "input_max": 0.75,
+     "gamma": 8.0,
+     "output_min": 1.0,
+     "output_max": 0.0,
+     "clamp": 1
+    }
+   }
+  ],
+  "seeds": [
+   0
+  ]
+ },
+ "calibration": {
+  "corpus_id": "filter-levels-2-calibration-2026-11-10",
+  "path": "calibration/cases.json",
+  "sha256": "bc379ceeea702bf4f5ab5d0443e0a8d460833780d08743b20e08feed63855429"
+ },
+ "held_out": {
+  "corpus_id": "filter-levels-2-held-out-2026-11-10",
+  "path": "held-out/cases.json",
+  "sha256": "a278c3bef66e745bb695d1fa68e16a79370144b591c4d3fe423dba59bdb9acf8"
+ }
+}

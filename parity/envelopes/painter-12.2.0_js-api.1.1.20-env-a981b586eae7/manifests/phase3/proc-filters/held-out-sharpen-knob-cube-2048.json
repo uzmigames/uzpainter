@@ -1,0 +1,636 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "phase3/proc-filters/held-out-sharpen-knob-cube-2048",
+  "tier": "2a",
+  "domain": "procedural_asset/filter/sharpen",
+  "description": "Filter golden of phase3.2_proc-filter-families (held-out): sharpen cases on the authored Tier 2b bevelled cube low mesh with its knob, texture set 2048 px, L32F User channels. Every User channel is a fill of the authored content-grey bitmap (UV projection, tiled 8 x 8, Nearest, so one bitmap texel per texel); User0 is that content alone, and each case adds one content effect on its own channel, the starter-asset filter found by the documented search s:starterassets u:filter n:<name>= with the case's parameters, or the native levels effect: User1 defaults: Sharpen (intensity = 1.0); User2 recipe-hat-v8-mask-a: Sharpen (intensity = 0.25); User3 interior-a: Sharpen (intensity = 0.63); User4 interior-b: Sharpen (intensity = 2.71). Painter then bakes World Space Normals low as high (OutputSize 11, LowAsHigh, DilationWidth 0, every other baking parameter at Painter's default) to mark its UV coverage. The User maps and the World Space Normals map are exported as OpenEXR 32f, padding passthrough, no dithering; recorded twice (same session; after save and reopen). Bake backend uncontrolled.",
+  "inputs": [
+    {
+      "input_id": "knob-cube",
+      "kind": "mesh",
+      "path": "parity/fixtures/tier2b-bakes/bevelled-cube-low.obj",
+      "sha256": "21525e38d3312ce49f4b4d3a4549851bf85fd57f4c1cb4a7a1019b6e3f9dd103",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    },
+    {
+      "input_id": "content-grey",
+      "kind": "image",
+      "path": "parity/fixtures/proc-filters/content-grey.png",
+      "sha256": "f2a00c6a561058b6446b573cc8919feac7841484740ec1ecc9d1db9ffe5ea087",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "knob-cube",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 2048
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User0",
+          "format": "L32F"
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User1",
+          "format": "L32F"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User2",
+          "format": "L32F"
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User3",
+          "format": "L32F"
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.textureset.Stack.add_channel",
+        "args": {
+          "channel": "User4",
+          "format": "L32F"
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": {
+          "input": "content-grey",
+          "usage": "TEXTURE"
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "position": "top"
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 8,
+          "channels": [
+            "User0"
+          ]
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 8,
+          "channel": "User0",
+          "resource_step": 7
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.layerstack.FillLayerNode.set_projection_parameters",
+        "args": {
+          "node_step": 8,
+          "filtering_mode": "Nearest",
+          "uv_wrapping_mode": "Repeat",
+          "scale_mode": "Factors",
+          "scale": [
+            8.0,
+            8.0
+          ],
+          "rotation": 0.0,
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "above_step": 8
+        }
+      },
+      {
+        "step": 13,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 12,
+          "channels": [
+            "User1"
+          ]
+        }
+      },
+      {
+        "step": 14,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 12,
+          "channel": "User1",
+          "resource_step": 7
+        }
+      },
+      {
+        "step": 15,
+        "call": "substance_painter.layerstack.FillLayerNode.set_projection_parameters",
+        "args": {
+          "node_step": 12,
+          "filtering_mode": "Nearest",
+          "uv_wrapping_mode": "Repeat",
+          "scale_mode": "Factors",
+          "scale": [
+            8.0,
+            8.0
+          ],
+          "rotation": 0.0,
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "step": 16,
+        "call": "substance_painter.layerstack.insert_filter_effect",
+        "args": {
+          "filter_search": "s:starterassets u:filter n:Sharpen=",
+          "inside_step": 12,
+          "stack": "Content"
+        }
+      },
+      {
+        "step": 17,
+        "call": "substance_painter.layerstack.FilterEffectNode.active_channels",
+        "args": {
+          "node_step": 16,
+          "channels": [
+            "User1"
+          ]
+        }
+      },
+      {
+        "step": 18,
+        "call": "substance_painter.source.SourceSubstance.set_parameters",
+        "args": {
+          "node_step": 16,
+          "parameter": "intensity",
+          "value": 1.0
+        }
+      },
+      {
+        "step": 19,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "above_step": 12
+        }
+      },
+      {
+        "step": 20,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 19,
+          "channels": [
+            "User2"
+          ]
+        }
+      },
+      {
+        "step": 21,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 19,
+          "channel": "User2",
+          "resource_step": 7
+        }
+      },
+      {
+        "step": 22,
+        "call": "substance_painter.layerstack.FillLayerNode.set_projection_parameters",
+        "args": {
+          "node_step": 19,
+          "filtering_mode": "Nearest",
+          "uv_wrapping_mode": "Repeat",
+          "scale_mode": "Factors",
+          "scale": [
+            8.0,
+            8.0
+          ],
+          "rotation": 0.0,
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "step": 23,
+        "call": "substance_painter.layerstack.insert_filter_effect",
+        "args": {
+          "filter_search": "s:starterassets u:filter n:Sharpen=",
+          "inside_step": 19,
+          "stack": "Content"
+        }
+      },
+      {
+        "step": 24,
+        "call": "substance_painter.layerstack.FilterEffectNode.active_channels",
+        "args": {
+          "node_step": 23,
+          "channels": [
+            "User2"
+          ]
+        }
+      },
+      {
+        "step": 25,
+        "call": "substance_painter.source.SourceSubstance.set_parameters",
+        "args": {
+          "node_step": 23,
+          "parameter": "intensity",
+          "value": 0.25
+        }
+      },
+      {
+        "step": 26,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "above_step": 19
+        }
+      },
+      {
+        "step": 27,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 26,
+          "channels": [
+            "User3"
+          ]
+        }
+      },
+      {
+        "step": 28,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 26,
+          "channel": "User3",
+          "resource_step": 7
+        }
+      },
+      {
+        "step": 29,
+        "call": "substance_painter.layerstack.FillLayerNode.set_projection_parameters",
+        "args": {
+          "node_step": 26,
+          "filtering_mode": "Nearest",
+          "uv_wrapping_mode": "Repeat",
+          "scale_mode": "Factors",
+          "scale": [
+            8.0,
+            8.0
+          ],
+          "rotation": 0.0,
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "step": 30,
+        "call": "substance_painter.layerstack.insert_filter_effect",
+        "args": {
+          "filter_search": "s:starterassets u:filter n:Sharpen=",
+          "inside_step": 26,
+          "stack": "Content"
+        }
+      },
+      {
+        "step": 31,
+        "call": "substance_painter.layerstack.FilterEffectNode.active_channels",
+        "args": {
+          "node_step": 30,
+          "channels": [
+            "User3"
+          ]
+        }
+      },
+      {
+        "step": 32,
+        "call": "substance_painter.source.SourceSubstance.set_parameters",
+        "args": {
+          "node_step": 30,
+          "parameter": "intensity",
+          "value": 0.63
+        }
+      },
+      {
+        "step": 33,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "above_step": 26
+        }
+      },
+      {
+        "step": 34,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 33,
+          "channels": [
+            "User4"
+          ]
+        }
+      },
+      {
+        "step": 35,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 33,
+          "channel": "User4",
+          "resource_step": 7
+        }
+      },
+      {
+        "step": 36,
+        "call": "substance_painter.layerstack.FillLayerNode.set_projection_parameters",
+        "args": {
+          "node_step": 33,
+          "filtering_mode": "Nearest",
+          "uv_wrapping_mode": "Repeat",
+          "scale_mode": "Factors",
+          "scale": [
+            8.0,
+            8.0
+          ],
+          "rotation": 0.0,
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "step": 37,
+        "call": "substance_painter.layerstack.insert_filter_effect",
+        "args": {
+          "filter_search": "s:starterassets u:filter n:Sharpen=",
+          "inside_step": 33,
+          "stack": "Content"
+        }
+      },
+      {
+        "step": 38,
+        "call": "substance_painter.layerstack.FilterEffectNode.active_channels",
+        "args": {
+          "node_step": 37,
+          "channels": [
+            "User4"
+          ]
+        }
+      },
+      {
+        "step": 39,
+        "call": "substance_painter.source.SourceSubstance.set_parameters",
+        "args": {
+          "node_step": 37,
+          "parameter": "intensity",
+          "value": 2.71
+        }
+      },
+      {
+        "step": 40,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "OutputSize",
+          "value": [
+            11,
+            11
+          ]
+        }
+      },
+      {
+        "step": 41,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "LowAsHigh",
+          "value": true
+        }
+      },
+      {
+        "step": 42,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "DilationWidth",
+          "value": 0
+        }
+      },
+      {
+        "step": 43,
+        "call": "substance_painter.baking.BakingParameters.set_enabled_bakers",
+        "args": {
+          "usages": [
+            "WorldSpaceNormal"
+          ]
+        }
+      },
+      {
+        "step": 44,
+        "call": "substance_painter.baking.bake_async",
+        "args": {}
+      },
+      {
+        "step": 45,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/user0:L",
+            "documentMap/user1:L",
+            "documentMap/user2:L",
+            "documentMap/user3:L",
+            "documentMap/user4:L",
+            "meshMap/world_space_normals:RGB"
+          ],
+          "file_format": "exr",
+          "bit_depth": "32f",
+          "padding": "passthrough",
+          "dithering": false
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 2048,
+      "applied_by": "recorder_api",
+      "unit": "px"
+    },
+    {
+      "name": "baking.common.OutputSize",
+      "value": 11,
+      "applied_by": "recorder_api",
+      "unit": "log2 px"
+    },
+    {
+      "name": "baking.common.LowAsHigh",
+      "value": true,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "baking.common.DilationWidth",
+      "value": 0,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "baking.enabled_bakers",
+      "value": "WorldSpaceNormal",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.exr.bit_depth",
+      "value": "32f",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "passthrough",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "uncontrolled_settings": [
+    "preferences.bake_backend"
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "aa84b418adf7118f6736e50f935ae8897a40dd7733a5c895b890e7c27f279f7b",
+      "size_bytes": 31209
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user0",
+      "kind": "exported_map",
+      "sha256": "69f1e0e488cd7719256c0ccd7c7562d7cab3eb044b6d4f9ff5480c3fa0f7faeb",
+      "size_bytes": 3950629
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user1",
+      "kind": "exported_map",
+      "sha256": "bec7440731f38b9f7635933a181fd844222fadad49175cab504553f05611cd52",
+      "size_bytes": 3180245
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user2",
+      "kind": "exported_map",
+      "sha256": "0d997b9e5ef38e324d701b71fa28032516e401a927099cb85e3abc73b2088458",
+      "size_bytes": 3447906
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user3",
+      "kind": "exported_map",
+      "sha256": "8fbc2c0973f57bc45e4cd6fe6296461751168c1d870967b22735c0ac7e3cbfb3",
+      "size_bytes": 3317769
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user4",
+      "kind": "exported_map",
+      "sha256": "29f5502635c2e37c77e8898c22b9de3b12e8b1fbb2bcf007157cb0d3c2563ce2",
+      "size_bytes": 3004471
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-world_space_normals",
+      "kind": "exported_map",
+      "sha256": "76e8f0952adfb65f8b07929935976ee76562fadde352d03398f1e336010a295f",
+      "size_bytes": 260129
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user0",
+      "kind": "exported_map",
+      "sha256": "f68a5758c12a3b360763ac0eed58076cc36fadbc0aa1c8f8c2d828dac8c7ba84",
+      "size_bytes": 2639430
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user1",
+      "kind": "exported_map",
+      "sha256": "1390769cd5c193e4c88fe38f5a6c0e968b406186bf41dff8062075f63f109230",
+      "size_bytes": 3096700
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user2",
+      "kind": "exported_map",
+      "sha256": "43765a43f22077f926b9aa011d3ca27a3094d6e6bf2dac86a0b16eeba4c63543",
+      "size_bytes": 3444373
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user3",
+      "kind": "exported_map",
+      "sha256": "e4fcc3f5d8438c9ca7c12bad040eede1b20a8782c240996fe1c8106fabad858a",
+      "size_bytes": 3254270
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user4",
+      "kind": "exported_map",
+      "sha256": "d4127a32a473da37db286a91fe8d3d52c13b039836e0cedaeb99c027f66edb14",
+      "size_bytes": 2900674
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-world_space_normals",
+      "kind": "exported_map",
+      "sha256": "76e8f0952adfb65f8b07929935976ee76562fadde352d03398f1e336010a295f",
+      "size_bytes": 260129
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "7481bedfefa13f1c83910d1f8988d9b6acf5facd87939cce241bdb9cebb12f70",
+      "size_bytes": 403
+    }
+  ]
+}

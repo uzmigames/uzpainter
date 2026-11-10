@@ -1,0 +1,1842 @@
+{
+ "schema": "uzpainter/parity/proc-cert-cases/1",
+ "set": "calibration",
+ "cases": [
+  {
+   "case_id": "defaults--sphere--1024",
+   "mesh": {
+    "id": "sphere",
+    "class": "sphere",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.0,
+    "input_max": 1.0,
+    "gamma": 1.0,
+    "output_min": 0.0,
+    "output_max": 1.0,
+    "clamp": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 1024,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-uzp_sphere-user0",
+     "sha256": "cd562f7df320dd1fb7da6365efced5d43d38cf6f539584db9914df4780e0a618",
+     "size_bytes": 1139681,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_sphere-world_space_normals",
+     "sha256": "048d3a8416d3517cbfbb395cfded390f31b09b90f95c61a33ba7251721273c26",
+     "size_bytes": 6914448,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-sphere-1024-user1",
+    "sha256": "ce974b525dca5d8fea0f6d6146742da99b2c1b8721808409e35cc4fda47ab663",
+    "size_bytes": 4194304,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "recipe-bracer-r--sphere--1024",
+   "mesh": {
+    "id": "sphere",
+    "class": "sphere",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.42,
+    "input_max": 0.6,
+    "gamma": 1.0,
+    "output_min": 0.0,
+    "output_max": 1.0,
+    "clamp": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 1024,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-uzp_sphere-user0",
+     "sha256": "cd562f7df320dd1fb7da6365efced5d43d38cf6f539584db9914df4780e0a618",
+     "size_bytes": 1139681,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_sphere-world_space_normals",
+     "sha256": "048d3a8416d3517cbfbb395cfded390f31b09b90f95c61a33ba7251721273c26",
+     "size_bytes": 6914448,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-sphere-1024-user2",
+    "sha256": "e6b464a9a3caa319113f42c8c3918d805681506ae7a4b72de91348de80efe97e",
+    "size_bytes": 4194304,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "boundary-a--sphere--1024",
+   "mesh": {
+    "id": "sphere",
+    "class": "sphere",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.0,
+    "input_max": 1.0,
+    "gamma": 0.125,
+    "output_min": 0.0,
+    "output_max": 1.0,
+    "clamp": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 1024,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-uzp_sphere-user0",
+     "sha256": "cd562f7df320dd1fb7da6365efced5d43d38cf6f539584db9914df4780e0a618",
+     "size_bytes": 1139681,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_sphere-world_space_normals",
+     "sha256": "048d3a8416d3517cbfbb395cfded390f31b09b90f95c61a33ba7251721273c26",
+     "size_bytes": 6914448,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-sphere-1024-user3",
+    "sha256": "c05694a2cff6b57726dcc4c9e96112f06f44b444ce7a7fda7206143e4fc9b4e5",
+    "size_bytes": 4194304,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "boundary-b--sphere--1024",
+   "mesh": {
+    "id": "sphere",
+    "class": "sphere",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.25,
+    "input_max": 0.75,
+    "gamma": 8.0,
+    "output_min": 1.0,
+    "output_max": 0.0,
+    "clamp": 1
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 1024,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-uzp_sphere-user0",
+     "sha256": "cd562f7df320dd1fb7da6365efced5d43d38cf6f539584db9914df4780e0a618",
+     "size_bytes": 1139681,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_sphere-world_space_normals",
+     "sha256": "048d3a8416d3517cbfbb395cfded390f31b09b90f95c61a33ba7251721273c26",
+     "size_bytes": 6914448,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-sphere-1024-user4",
+    "sha256": "1da790d804218dbf74686b8c7009f6de8f8e16bfa775e96aedf81f3b809a92f5",
+    "size_bytes": 4194304,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "defaults--sphere--2048",
+   "mesh": {
+    "id": "sphere",
+    "class": "sphere",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.0,
+    "input_max": 1.0,
+    "gamma": 1.0,
+    "output_min": 0.0,
+    "output_max": 1.0,
+    "clamp": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 2048,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-uzp_sphere-user0",
+     "sha256": "69f1e0e488cd7719256c0ccd7c7562d7cab3eb044b6d4f9ff5480c3fa0f7faeb",
+     "size_bytes": 3950629,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_sphere-world_space_normals",
+     "sha256": "877ec489e347c825ca64fd1fbc125d82720a714ca2d064d80595e2459d6db98c",
+     "size_bytes": 25296131,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-sphere-2048-user1",
+    "sha256": "188cfd3674f6f1a866256556a4b56250a144df8c8ea10ddbcfbfb08f126e6d89",
+    "size_bytes": 16777216,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "recipe-bracer-r--sphere--2048",
+   "mesh": {
+    "id": "sphere",
+    "class": "sphere",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.42,
+    "input_max": 0.6,
+    "gamma": 1.0,
+    "output_min": 0.0,
+    "output_max": 1.0,
+    "clamp": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 2048,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-uzp_sphere-user0",
+     "sha256": "69f1e0e488cd7719256c0ccd7c7562d7cab3eb044b6d4f9ff5480c3fa0f7faeb",
+     "size_bytes": 3950629,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_sphere-world_space_normals",
+     "sha256": "877ec489e347c825ca64fd1fbc125d82720a714ca2d064d80595e2459d6db98c",
+     "size_bytes": 25296131,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-sphere-2048-user2",
+    "sha256": "26ece20a8817a641ccce45df52df5627aba5b70f4201b00181f0693c7ca27670",
+    "size_bytes": 16777216,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "boundary-a--sphere--2048",
+   "mesh": {
+    "id": "sphere",
+    "class": "sphere",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.0,
+    "input_max": 1.0,
+    "gamma": 0.125,
+    "output_min": 0.0,
+    "output_max": 1.0,
+    "clamp": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 2048,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-uzp_sphere-user0",
+     "sha256": "69f1e0e488cd7719256c0ccd7c7562d7cab3eb044b6d4f9ff5480c3fa0f7faeb",
+     "size_bytes": 3950629,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_sphere-world_space_normals",
+     "sha256": "877ec489e347c825ca64fd1fbc125d82720a714ca2d064d80595e2459d6db98c",
+     "size_bytes": 25296131,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-sphere-2048-user3",
+    "sha256": "ddce26f635001dce871c23abc6e354b205c029da60f9a8a57a63e62b85c0cbc9",
+    "size_bytes": 16777216,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "boundary-b--sphere--2048",
+   "mesh": {
+    "id": "sphere",
+    "class": "sphere",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.25,
+    "input_max": 0.75,
+    "gamma": 8.0,
+    "output_min": 1.0,
+    "output_max": 0.0,
+    "clamp": 1
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 2048,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-uzp_sphere-user0",
+     "sha256": "69f1e0e488cd7719256c0ccd7c7562d7cab3eb044b6d4f9ff5480c3fa0f7faeb",
+     "size_bytes": 3950629,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_sphere-world_space_normals",
+     "sha256": "877ec489e347c825ca64fd1fbc125d82720a714ca2d064d80595e2459d6db98c",
+     "size_bytes": 25296131,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-sphere-2048-user4",
+    "sha256": "2c3af5a0a0cb1a1b656f02ad4dce4029deb7ec75694affb88336c76d947688e3",
+    "size_bytes": 16777216,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "defaults--sphere--4096",
+   "mesh": {
+    "id": "sphere",
+    "class": "sphere",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.0,
+    "input_max": 1.0,
+    "gamma": 1.0,
+    "output_min": 0.0,
+    "output_max": 1.0,
+    "clamp": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 4096,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 4096,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-uzp_sphere-user0",
+     "sha256": "34aefcfcba15cb6d446c7bf60694170a87b4f91096d7fdef0e70d3c0825407a4",
+     "size_bytes": 14587173,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 4096,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_sphere-world_space_normals",
+     "sha256": "08872abf53f680fd5ba9554094206eb724d442810af81cd3a135cb63cae2f928",
+     "size_bytes": 89265381,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-sphere-4096-user1",
+    "sha256": "b23e624a1a42f8bd063e935cd43c4992fe991e41c244b4df64737a3f59bcb0e2",
+    "size_bytes": 67108864,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "recipe-bracer-r--sphere--4096",
+   "mesh": {
+    "id": "sphere",
+    "class": "sphere",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.42,
+    "input_max": 0.6,
+    "gamma": 1.0,
+    "output_min": 0.0,
+    "output_max": 1.0,
+    "clamp": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 4096,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 4096,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-uzp_sphere-user0",
+     "sha256": "34aefcfcba15cb6d446c7bf60694170a87b4f91096d7fdef0e70d3c0825407a4",
+     "size_bytes": 14587173,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 4096,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_sphere-world_space_normals",
+     "sha256": "08872abf53f680fd5ba9554094206eb724d442810af81cd3a135cb63cae2f928",
+     "size_bytes": 89265381,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-sphere-4096-user2",
+    "sha256": "b87a16c19f417045fbe81bc9d6937d97a09f28a86003c3f13ed9e561e82246e2",
+    "size_bytes": 67108864,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "boundary-a--sphere--4096",
+   "mesh": {
+    "id": "sphere",
+    "class": "sphere",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.0,
+    "input_max": 1.0,
+    "gamma": 0.125,
+    "output_min": 0.0,
+    "output_max": 1.0,
+    "clamp": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 4096,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 4096,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-uzp_sphere-user0",
+     "sha256": "34aefcfcba15cb6d446c7bf60694170a87b4f91096d7fdef0e70d3c0825407a4",
+     "size_bytes": 14587173,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 4096,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_sphere-world_space_normals",
+     "sha256": "08872abf53f680fd5ba9554094206eb724d442810af81cd3a135cb63cae2f928",
+     "size_bytes": 89265381,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-sphere-4096-user3",
+    "sha256": "d9b65522ea80bc799024092cc636012443add4e472dc8911b182e15411a209aa",
+    "size_bytes": 67108864,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "boundary-b--sphere--4096",
+   "mesh": {
+    "id": "sphere",
+    "class": "sphere",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.25,
+    "input_max": 0.75,
+    "gamma": 8.0,
+    "output_min": 1.0,
+    "output_max": 0.0,
+    "clamp": 1
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 4096,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 4096,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-uzp_sphere-user0",
+     "sha256": "34aefcfcba15cb6d446c7bf60694170a87b4f91096d7fdef0e70d3c0825407a4",
+     "size_bytes": 14587173,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 4096,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_sphere-world_space_normals",
+     "sha256": "08872abf53f680fd5ba9554094206eb724d442810af81cd3a135cb63cae2f928",
+     "size_bytes": 89265381,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-sphere-4096-user4",
+    "sha256": "eabe8d872291288222b84000228b9786349aef01798e1f671cd51308a291433d",
+    "size_bytes": 67108864,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "defaults--rounded-cube--1024",
+   "mesh": {
+    "id": "rounded-cube",
+    "class": "bevelled-cube",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.0,
+    "input_max": 1.0,
+    "gamma": 1.0,
+    "output_min": 0.0,
+    "output_max": 1.0,
+    "clamp": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 1024,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-uzp_rounded_cube-user0",
+     "sha256": "cd562f7df320dd1fb7da6365efced5d43d38cf6f539584db9914df4780e0a618",
+     "size_bytes": 1139681,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_rounded_cube-world_space_normals",
+     "sha256": "c7ae7bf4e6d169002f08ef6b09ba6b4b254d2c1e572409665a90ae371e7dee97",
+     "size_bytes": 810191,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-rounded-cube-1024-user1",
+    "sha256": "536923004b3240966c2827867e5cd2548564b7ee0b99039302f7f50ed3d8a004",
+    "size_bytes": 4194304,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "recipe-bracer-r--rounded-cube--1024",
+   "mesh": {
+    "id": "rounded-cube",
+    "class": "bevelled-cube",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.42,
+    "input_max": 0.6,
+    "gamma": 1.0,
+    "output_min": 0.0,
+    "output_max": 1.0,
+    "clamp": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 1024,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-uzp_rounded_cube-user0",
+     "sha256": "cd562f7df320dd1fb7da6365efced5d43d38cf6f539584db9914df4780e0a618",
+     "size_bytes": 1139681,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_rounded_cube-world_space_normals",
+     "sha256": "c7ae7bf4e6d169002f08ef6b09ba6b4b254d2c1e572409665a90ae371e7dee97",
+     "size_bytes": 810191,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-rounded-cube-1024-user2",
+    "sha256": "4518c744d22b46e2c068ff88a2db8be52808aec9660d59375e85f3698331fe84",
+    "size_bytes": 4194304,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "boundary-a--rounded-cube--1024",
+   "mesh": {
+    "id": "rounded-cube",
+    "class": "bevelled-cube",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.0,
+    "input_max": 1.0,
+    "gamma": 0.125,
+    "output_min": 0.0,
+    "output_max": 1.0,
+    "clamp": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 1024,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-uzp_rounded_cube-user0",
+     "sha256": "cd562f7df320dd1fb7da6365efced5d43d38cf6f539584db9914df4780e0a618",
+     "size_bytes": 1139681,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_rounded_cube-world_space_normals",
+     "sha256": "c7ae7bf4e6d169002f08ef6b09ba6b4b254d2c1e572409665a90ae371e7dee97",
+     "size_bytes": 810191,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-rounded-cube-1024-user3",
+    "sha256": "54fe38d6e705f976776a6ba6e781343c5296e1930b36f851456e522dcc860ef2",
+    "size_bytes": 4194304,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "boundary-b--rounded-cube--1024",
+   "mesh": {
+    "id": "rounded-cube",
+    "class": "bevelled-cube",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.25,
+    "input_max": 0.75,
+    "gamma": 8.0,
+    "output_min": 1.0,
+    "output_max": 0.0,
+    "clamp": 1
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 1024,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-uzp_rounded_cube-user0",
+     "sha256": "cd562f7df320dd1fb7da6365efced5d43d38cf6f539584db9914df4780e0a618",
+     "size_bytes": 1139681,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_rounded_cube-world_space_normals",
+     "sha256": "c7ae7bf4e6d169002f08ef6b09ba6b4b254d2c1e572409665a90ae371e7dee97",
+     "size_bytes": 810191,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-rounded-cube-1024-user4",
+    "sha256": "9935e67280be3eb9b3edc317746bc616f2e25e9449596568f30d62145c333dc1",
+    "size_bytes": 4194304,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "defaults--rounded-cube--2048",
+   "mesh": {
+    "id": "rounded-cube",
+    "class": "bevelled-cube",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.0,
+    "input_max": 1.0,
+    "gamma": 1.0,
+    "output_min": 0.0,
+    "output_max": 1.0,
+    "clamp": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 2048,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-uzp_rounded_cube-user0",
+     "sha256": "69f1e0e488cd7719256c0ccd7c7562d7cab3eb044b6d4f9ff5480c3fa0f7faeb",
+     "size_bytes": 3950629,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_rounded_cube-world_space_normals",
+     "sha256": "6c51c766ebf076b01cabe7c352bfa4f82e77824fc30f1cb1c284f585be438ab7",
+     "size_bytes": 2988345,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-rounded-cube-2048-user1",
+    "sha256": "1643200031764a57d5bff19b5a2d5860ac122962cf4b88fa9d01f79d27ac2d4a",
+    "size_bytes": 16777216,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "recipe-bracer-r--rounded-cube--2048",
+   "mesh": {
+    "id": "rounded-cube",
+    "class": "bevelled-cube",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.42,
+    "input_max": 0.6,
+    "gamma": 1.0,
+    "output_min": 0.0,
+    "output_max": 1.0,
+    "clamp": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 2048,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-uzp_rounded_cube-user0",
+     "sha256": "69f1e0e488cd7719256c0ccd7c7562d7cab3eb044b6d4f9ff5480c3fa0f7faeb",
+     "size_bytes": 3950629,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_rounded_cube-world_space_normals",
+     "sha256": "6c51c766ebf076b01cabe7c352bfa4f82e77824fc30f1cb1c284f585be438ab7",
+     "size_bytes": 2988345,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-rounded-cube-2048-user2",
+    "sha256": "f69eb1515658fa25f4c0cf2d6fa657ed00cdd13a1d1df081a6c45904339671dd",
+    "size_bytes": 16777216,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "boundary-a--rounded-cube--2048",
+   "mesh": {
+    "id": "rounded-cube",
+    "class": "bevelled-cube",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.0,
+    "input_max": 1.0,
+    "gamma": 0.125,
+    "output_min": 0.0,
+    "output_max": 1.0,
+    "clamp": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 2048,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-uzp_rounded_cube-user0",
+     "sha256": "69f1e0e488cd7719256c0ccd7c7562d7cab3eb044b6d4f9ff5480c3fa0f7faeb",
+     "size_bytes": 3950629,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_rounded_cube-world_space_normals",
+     "sha256": "6c51c766ebf076b01cabe7c352bfa4f82e77824fc30f1cb1c284f585be438ab7",
+     "size_bytes": 2988345,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-rounded-cube-2048-user3",
+    "sha256": "f8dd2c9bcfd09408fc5887ac2735d6c6a0ef47cc7e7edd15a023898370fecbcc",
+    "size_bytes": 16777216,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "boundary-b--rounded-cube--2048",
+   "mesh": {
+    "id": "rounded-cube",
+    "class": "bevelled-cube",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.25,
+    "input_max": 0.75,
+    "gamma": 8.0,
+    "output_min": 1.0,
+    "output_max": 0.0,
+    "clamp": 1
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 2048,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-uzp_rounded_cube-user0",
+     "sha256": "69f1e0e488cd7719256c0ccd7c7562d7cab3eb044b6d4f9ff5480c3fa0f7faeb",
+     "size_bytes": 3950629,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_rounded_cube-world_space_normals",
+     "sha256": "6c51c766ebf076b01cabe7c352bfa4f82e77824fc30f1cb1c284f585be438ab7",
+     "size_bytes": 2988345,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-rounded-cube-2048-user4",
+    "sha256": "9fc978b794fab8e38b7d9d370a9f2824b5bb05e31114dcc27e399cb4a8af354f",
+    "size_bytes": 16777216,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "defaults--rounded-cube--4096",
+   "mesh": {
+    "id": "rounded-cube",
+    "class": "bevelled-cube",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.0,
+    "input_max": 1.0,
+    "gamma": 1.0,
+    "output_min": 0.0,
+    "output_max": 1.0,
+    "clamp": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 4096,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 4096,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-uzp_rounded_cube-user0",
+     "sha256": "34aefcfcba15cb6d446c7bf60694170a87b4f91096d7fdef0e70d3c0825407a4",
+     "size_bytes": 14587173,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 4096,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_rounded_cube-world_space_normals",
+     "sha256": "b892fb604c66b9e48c553714968c8ca21fdcc0e7083c3de85ed40e0c000266bc",
+     "size_bytes": 10854508,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-rounded-cube-4096-user1",
+    "sha256": "48f86eb9b00ace166dbb012aca2818a2711f9b6d8c8f920aba320e2630b12e53",
+    "size_bytes": 67108864,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "recipe-bracer-r--rounded-cube--4096",
+   "mesh": {
+    "id": "rounded-cube",
+    "class": "bevelled-cube",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.42,
+    "input_max": 0.6,
+    "gamma": 1.0,
+    "output_min": 0.0,
+    "output_max": 1.0,
+    "clamp": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 4096,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 4096,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-uzp_rounded_cube-user0",
+     "sha256": "34aefcfcba15cb6d446c7bf60694170a87b4f91096d7fdef0e70d3c0825407a4",
+     "size_bytes": 14587173,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 4096,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_rounded_cube-world_space_normals",
+     "sha256": "b892fb604c66b9e48c553714968c8ca21fdcc0e7083c3de85ed40e0c000266bc",
+     "size_bytes": 10854508,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-rounded-cube-4096-user2",
+    "sha256": "6c47459433e883f2bccdf0620319d4704426f7977733de3f92c52b2b6c1f5f64",
+    "size_bytes": 67108864,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "boundary-a--rounded-cube--4096",
+   "mesh": {
+    "id": "rounded-cube",
+    "class": "bevelled-cube",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.0,
+    "input_max": 1.0,
+    "gamma": 0.125,
+    "output_min": 0.0,
+    "output_max": 1.0,
+    "clamp": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 4096,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 4096,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-uzp_rounded_cube-user0",
+     "sha256": "34aefcfcba15cb6d446c7bf60694170a87b4f91096d7fdef0e70d3c0825407a4",
+     "size_bytes": 14587173,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 4096,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_rounded_cube-world_space_normals",
+     "sha256": "b892fb604c66b9e48c553714968c8ca21fdcc0e7083c3de85ed40e0c000266bc",
+     "size_bytes": 10854508,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-rounded-cube-4096-user3",
+    "sha256": "1ce94289b1b6de32c043e32b9928fb56e7a6c1389a4282191c6d2d913d961e48",
+    "size_bytes": 67108864,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "boundary-b--rounded-cube--4096",
+   "mesh": {
+    "id": "rounded-cube",
+    "class": "bevelled-cube",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.25,
+    "input_max": 0.75,
+    "gamma": 8.0,
+    "output_min": 1.0,
+    "output_max": 0.0,
+    "clamp": 1
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 4096,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 4096,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-uzp_rounded_cube-user0",
+     "sha256": "34aefcfcba15cb6d446c7bf60694170a87b4f91096d7fdef0e70d3c0825407a4",
+     "size_bytes": 14587173,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 4096,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-uzp_rounded_cube-world_space_normals",
+     "sha256": "b892fb604c66b9e48c553714968c8ca21fdcc0e7083c3de85ed40e0c000266bc",
+     "size_bytes": 10854508,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-rounded-cube-4096-user4",
+    "sha256": "69f5fe0cdb16d31493f2f30bd4853f2e71050dab4415926c4535d341c21c3029",
+    "size_bytes": 67108864,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "defaults--hat-v8--1024",
+   "mesh": {
+    "id": "hat-v8",
+    "class": "garment",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.0,
+    "input_max": 1.0,
+    "gamma": 1.0,
+    "output_min": 0.0,
+    "output_max": 1.0,
+    "clamp": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 1024,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-10-chapeu-v8-user0",
+     "sha256": "cd562f7df320dd1fb7da6365efced5d43d38cf6f539584db9914df4780e0a618",
+     "size_bytes": 1139681,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-10-chapeu-v8-world_space_normals",
+     "sha256": "b34ac24ddfa706d18817adfe23daffbae6d214150845294ee7d9d648ad258533",
+     "size_bytes": 6204255,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-hat-v8-1024-user1",
+    "sha256": "3a65756a3aea2260d3d2018b1f8960591b108d992395ce33a5429b0ba87ce6ba",
+    "size_bytes": 4194304,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "recipe-bracer-r--hat-v8--1024",
+   "mesh": {
+    "id": "hat-v8",
+    "class": "garment",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.42,
+    "input_max": 0.6,
+    "gamma": 1.0,
+    "output_min": 0.0,
+    "output_max": 1.0,
+    "clamp": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 1024,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-10-chapeu-v8-user0",
+     "sha256": "cd562f7df320dd1fb7da6365efced5d43d38cf6f539584db9914df4780e0a618",
+     "size_bytes": 1139681,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-10-chapeu-v8-world_space_normals",
+     "sha256": "b34ac24ddfa706d18817adfe23daffbae6d214150845294ee7d9d648ad258533",
+     "size_bytes": 6204255,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-hat-v8-1024-user2",
+    "sha256": "db48f3b3472dce2325fdc03b5a5086cc6e9d5bb5ef7401384978fd06d52c404d",
+    "size_bytes": 4194304,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "boundary-a--hat-v8--1024",
+   "mesh": {
+    "id": "hat-v8",
+    "class": "garment",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.0,
+    "input_max": 1.0,
+    "gamma": 0.125,
+    "output_min": 0.0,
+    "output_max": 1.0,
+    "clamp": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 1024,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-10-chapeu-v8-user0",
+     "sha256": "cd562f7df320dd1fb7da6365efced5d43d38cf6f539584db9914df4780e0a618",
+     "size_bytes": 1139681,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-10-chapeu-v8-world_space_normals",
+     "sha256": "b34ac24ddfa706d18817adfe23daffbae6d214150845294ee7d9d648ad258533",
+     "size_bytes": 6204255,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-hat-v8-1024-user3",
+    "sha256": "27c6976e290439af42619b0632b79d3ad31442c4385ee1d6b023dd0f7f615947",
+    "size_bytes": 4194304,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "boundary-b--hat-v8--1024",
+   "mesh": {
+    "id": "hat-v8",
+    "class": "garment",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.25,
+    "input_max": 0.75,
+    "gamma": 8.0,
+    "output_min": 1.0,
+    "output_max": 0.0,
+    "clamp": 1
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 1024,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-10-chapeu-v8-user0",
+     "sha256": "cd562f7df320dd1fb7da6365efced5d43d38cf6f539584db9914df4780e0a618",
+     "size_bytes": 1139681,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 1024,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-10-chapeu-v8-world_space_normals",
+     "sha256": "b34ac24ddfa706d18817adfe23daffbae6d214150845294ee7d9d648ad258533",
+     "size_bytes": 6204255,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-hat-v8-1024-user4",
+    "sha256": "9b8d330389e4c7f39e291381e0e8f2dedf67972d395280b181691d0b87d3e3fc",
+    "size_bytes": 4194304,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "defaults--hat-v8--2048",
+   "mesh": {
+    "id": "hat-v8",
+    "class": "garment",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.0,
+    "input_max": 1.0,
+    "gamma": 1.0,
+    "output_min": 0.0,
+    "output_max": 1.0,
+    "clamp": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 2048,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-10-chapeu-v8-user0",
+     "sha256": "69f1e0e488cd7719256c0ccd7c7562d7cab3eb044b6d4f9ff5480c3fa0f7faeb",
+     "size_bytes": 3950629,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-10-chapeu-v8-world_space_normals",
+     "sha256": "02f4d041a94cb571bbf73cb89620e91764ff17f6b590be464b51ab8a08b3b7bb",
+     "size_bytes": 21767692,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-hat-v8-2048-user1",
+    "sha256": "e57add270bea12f958864f63c4864d83a90335d7c137f81eef44f587e8a6b19f",
+    "size_bytes": 16777216,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "recipe-bracer-r--hat-v8--2048",
+   "mesh": {
+    "id": "hat-v8",
+    "class": "garment",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.42,
+    "input_max": 0.6,
+    "gamma": 1.0,
+    "output_min": 0.0,
+    "output_max": 1.0,
+    "clamp": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 2048,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-10-chapeu-v8-user0",
+     "sha256": "69f1e0e488cd7719256c0ccd7c7562d7cab3eb044b6d4f9ff5480c3fa0f7faeb",
+     "size_bytes": 3950629,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-10-chapeu-v8-world_space_normals",
+     "sha256": "02f4d041a94cb571bbf73cb89620e91764ff17f6b590be464b51ab8a08b3b7bb",
+     "size_bytes": 21767692,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-hat-v8-2048-user2",
+    "sha256": "7f3cdd9f90587323bcc2365eca4d030fa152cc121f3b85cebc86378f4ec49ede",
+    "size_bytes": 16777216,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "boundary-a--hat-v8--2048",
+   "mesh": {
+    "id": "hat-v8",
+    "class": "garment",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.0,
+    "input_max": 1.0,
+    "gamma": 0.125,
+    "output_min": 0.0,
+    "output_max": 1.0,
+    "clamp": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 2048,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-10-chapeu-v8-user0",
+     "sha256": "69f1e0e488cd7719256c0ccd7c7562d7cab3eb044b6d4f9ff5480c3fa0f7faeb",
+     "size_bytes": 3950629,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-10-chapeu-v8-world_space_normals",
+     "sha256": "02f4d041a94cb571bbf73cb89620e91764ff17f6b590be464b51ab8a08b3b7bb",
+     "size_bytes": 21767692,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-hat-v8-2048-user3",
+    "sha256": "fce9d337f83923657ef829f0d1ab54658883636abe37a35d40b19c1de3430c90",
+    "size_bytes": 16777216,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "boundary-b--hat-v8--2048",
+   "mesh": {
+    "id": "hat-v8",
+    "class": "garment",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.25,
+    "input_max": 0.75,
+    "gamma": 8.0,
+    "output_min": 1.0,
+    "output_max": 0.0,
+    "clamp": 1
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 2048,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-10-chapeu-v8-user0",
+     "sha256": "69f1e0e488cd7719256c0ccd7c7562d7cab3eb044b6d4f9ff5480c3fa0f7faeb",
+     "size_bytes": 3950629,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 2048,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-10-chapeu-v8-world_space_normals",
+     "sha256": "02f4d041a94cb571bbf73cb89620e91764ff17f6b590be464b51ab8a08b3b7bb",
+     "size_bytes": 21767692,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-hat-v8-2048-user4",
+    "sha256": "219215ae2296645a6efd661a6d1252145582c0105a53416f53d933203e8cf309",
+    "size_bytes": 16777216,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "defaults--hat-v8--4096",
+   "mesh": {
+    "id": "hat-v8",
+    "class": "garment",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.0,
+    "input_max": 1.0,
+    "gamma": 1.0,
+    "output_min": 0.0,
+    "output_max": 1.0,
+    "clamp": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 4096,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 4096,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-10-chapeu-v8-user0",
+     "sha256": "34aefcfcba15cb6d446c7bf60694170a87b4f91096d7fdef0e70d3c0825407a4",
+     "size_bytes": 14587173,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 4096,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-10-chapeu-v8-world_space_normals",
+     "sha256": "a7642a18a9b60cbbd6e3712433f7e53620855f9bf543bfc1bd1722fc44e6a61f",
+     "size_bytes": 77458047,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-hat-v8-4096-user1",
+    "sha256": "1804958b6fb911b737077cd203b1d9d9d4451955db161e7e846d8d19732c5f56",
+    "size_bytes": 67108864,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "recipe-bracer-r--hat-v8--4096",
+   "mesh": {
+    "id": "hat-v8",
+    "class": "garment",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.42,
+    "input_max": 0.6,
+    "gamma": 1.0,
+    "output_min": 0.0,
+    "output_max": 1.0,
+    "clamp": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 4096,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 4096,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-10-chapeu-v8-user0",
+     "sha256": "34aefcfcba15cb6d446c7bf60694170a87b4f91096d7fdef0e70d3c0825407a4",
+     "size_bytes": 14587173,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 4096,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-10-chapeu-v8-world_space_normals",
+     "sha256": "a7642a18a9b60cbbd6e3712433f7e53620855f9bf543bfc1bd1722fc44e6a61f",
+     "size_bytes": 77458047,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-hat-v8-4096-user2",
+    "sha256": "0a333d96592644d1a60f859f2c67d802653e68287baf81638bce26e00c02e200",
+    "size_bytes": 67108864,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "boundary-a--hat-v8--4096",
+   "mesh": {
+    "id": "hat-v8",
+    "class": "garment",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.0,
+    "input_max": 1.0,
+    "gamma": 0.125,
+    "output_min": 0.0,
+    "output_max": 1.0,
+    "clamp": 0
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 4096,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 4096,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-10-chapeu-v8-user0",
+     "sha256": "34aefcfcba15cb6d446c7bf60694170a87b4f91096d7fdef0e70d3c0825407a4",
+     "size_bytes": 14587173,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 4096,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-10-chapeu-v8-world_space_normals",
+     "sha256": "a7642a18a9b60cbbd6e3712433f7e53620855f9bf543bfc1bd1722fc44e6a61f",
+     "size_bytes": 77458047,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-hat-v8-4096-user3",
+    "sha256": "24b92c763ec8729e95eb4e5e5714546b4adf7cbb2f4508c2125c0169ce012c08",
+    "size_bytes": 67108864,
+    "encoding": "raw"
+   }
+  },
+  {
+   "case_id": "boundary-b--hat-v8--4096",
+   "mesh": {
+    "id": "hat-v8",
+    "class": "garment",
+    "uv_tiles": 1
+   },
+   "params": {
+    "input_min": 0.25,
+    "input_max": 0.75,
+    "gamma": 8.0,
+    "output_min": 1.0,
+    "output_max": 0.0,
+    "clamp": 1
+   },
+   "seed": 0,
+   "output": {
+    "resolution": 4096,
+    "format": "f32",
+    "colour_space": "linear",
+    "channels": 1
+   },
+   "inputs": {
+    "content": {
+     "resolution": 4096,
+     "format": "f32",
+     "colour_space": "linear",
+     "channels": 1,
+     "record_id": "r1-10-chapeu-v8-user0",
+     "sha256": "34aefcfcba15cb6d446c7bf60694170a87b4f91096d7fdef0e70d3c0825407a4",
+     "size_bytes": 14587173,
+     "encoding": "exr"
+    },
+    "WorldSpaceNormal": {
+     "resolution": 4096,
+     "format": "f32",
+     "colour_space": "Raw",
+     "channels": 3,
+     "record_id": "r1-10-chapeu-v8-world_space_normals",
+     "sha256": "a7642a18a9b60cbbd6e3712433f7e53620855f9bf543bfc1bd1722fc44e6a61f",
+     "size_bytes": 77458047,
+     "encoding": "exr"
+    }
+   },
+   "oracle": {
+    "record_id": "covered-calibration-levels-hat-v8-4096-user4",
+    "sha256": "209c35a7f9e663c2d891e3e3d3d318a3b7f4097f8b2447b0c6ad8fc4d018e12c",
+    "size_bytes": 67108864,
+    "encoding": "raw"
+   }
+  }
+ ]
+}
