@@ -17,6 +17,8 @@ MAT-03 and MAT-04 require the procedurals used by recorded and locked recipes to
 ## Acceptance
 Tier 2a for Sharpen, grayscale conversion and the Levels filter over the certification matrix (unit sphere, bevelled cube, hat v6 low × {1024, 2048, 4096} × {defaults, recipe sets, two boundary sets}; filters take content instead of seeds): exact, or an owner-approved exception per asset; otherwise a release gap.
 
+Narrowed by decision 426 (2026-11-10): no filter is exact. Sharpen and the Levels filter are `calibrated` (candidate exceptions for the owner; none approved), Grayscale Conversion and Blur are not batched; all four are listed as release gaps with their evidence (`docs/analysis/proc-filter-families/02-calibration-2026-11-10.md`) and moved to `phase3.3_procedural-families` items 2.10 to 2.12. The discovery, the declared domains and the pinned Sharpen and Levels batches are met here.
+
 ## Impact
 - Affected specs: procedural
 - Affected code: filter kernels in `HlslBackend`, filter-effect evaluation, Tier 2a manifests
