@@ -16,7 +16,7 @@
   "$defs": {
     "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "metric": {
-      "description": "A diagnostic of the comparison tool (CONTRACT.md §8.2). _downN is the same statistic after N x N box downsampling.",
+      "description": "A diagnostic of the comparison tool (CONTRACT.md §8.2). _downN is the same statistic after N x N box downsampling. max_abs_diff_code_u16 (decision 430) is the largest absolute difference of the 16-bit codes both values read back to (a value off the code grid fails the bound); `midpoint` scope only.",
       "anyOf": [
         {
           "type": "string",
@@ -28,6 +28,7 @@
             "normal_angular_mean_deg",
             "normal_non_finite_count",
             "normal_unnormalised_count",
+            "max_abs_diff_code_u16",
             "id_label_differing_count",
             "alpha_differing_count",
             "edge_coverage_differing_count",
@@ -44,8 +45,8 @@
       "properties": {
         "metric": { "$ref": "#/$defs/metric" },
         "scope": {
-          "description": "whole: the statistic over the compared data; each_region: the statistic of every material region; covered: the statistic over the texels the comparison's UV coverage mask marks covered (decision 223); covered_interior: the statistic over the covered texels whose eight neighbours are all covered (x wrapping, tools/parity/coverage.py `distance_bands`), so without the island-edge texels (decision 395). The entry covers no comparison without such a mask, nor one whose mask has no texel in the scope.",
-          "enum": ["whole", "each_region", "covered", "covered_interior"]
+          "description": "whole: the statistic over the compared data; each_region: the statistic of every material region; covered: the statistic over the texels the comparison's UV coverage mask marks covered (decision 223); covered_interior: the statistic over the covered texels whose eight neighbours are all covered (x wrapping, tools/parity/coverage.py `distance_bands`), so without the island-edge texels (decision 395). The entry covers no comparison without such a mask, nor one whose mask has no texel in the scope. midpoint / off_midpoint (decision 430): the texels of a procedural filter comparison whose value lies exactly halfway between two 16-bit codes, computed from the comparison's filter inputs (`domain.procedural_filter`, `tools/parity/midpoint.py`), never from the difference, and the other texels. The entry covers no comparison without those inputs, nor one with no texel in the scope.",
+          "enum": ["whole", "each_region", "covered", "covered_interior", "midpoint", "off_midpoint"]
         },
         "max": {
           "description": "Inclusive upper bound: the metric passes when its value is <= max.",
@@ -118,6 +119,31 @@
               "minItems": 1,
               "uniqueItems": true,
               "items": { "type": "string", "minLength": 1 }
+            },
+            "procedural_filter": {
+              "description": "Decision 430: the procedural filter a midpoint-scoped entry covers. A comparison is in the domain only when its `filter_inputs` name this asset, only the listed parameter with one of its values, this content format and this stack.",
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["asset", "kernel", "parameter", "values", "content_format", "stack"],
+              "properties": {
+                "asset": { "type": "string", "pattern": "^uzasset://[a-z0-9][a-z0-9-]*/[a-z0-9][a-z0-9-]*@[0-9]+$" },
+                "kernel": {
+                  "description": "laplacian4_wrap: L = 4k - (n + s + e + w) on the content's 16-bit codes, wrapping at the texture border; a texel is a midpoint when parameter x L (exactly, from the decimal value) is a half-integer and k + parameter x L lies strictly between 0 and 65535.",
+                  "const": "laplacian4_wrap"
+                },
+                "parameter": { "type": "string", "minLength": 1 },
+                "values": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": { "type": "number", "minimum": 0 }
+                },
+                "content_format": {
+                  "description": "L32F_code_u16: a one-channel float32 content whose every texel is the channel value I(I(F(k))) of a 16-bit code k (decision 426 §1).",
+                  "const": "L32F_code_u16"
+                },
+                "stack": { "enum": ["content", "mask"] }
+              }
             }
           },
           "dependentRequired": { "outputs": ["goldens"] }
@@ -133,7 +159,7 @@
           "required": ["basis", "summary", "private_evidence", "uncontrolled_settings"],
           "properties": {
             "basis": {
-              "description": "owner_scope_split (decisions 223, 395): Painter is stable and the difference is UzPainter's unfitted rule, excepted by the owner's own scope decision outside the covered texels, and on the island-edge covered texels of the outputs a bound names in `excepted_outputs`.",
+              "description": "owner_scope_split (decisions 223, 395, 430): Painter is stable and the difference is UzPainter's unfitted rule, excepted by the owner's own scope decision outside the covered texels, on the island-edge covered texels of the outputs a bound names in `excepted_outputs`, or on the midpoint texels of a procedural filter (decision 430).",
               "enum": ["oracle_instability", "irreducible_difference", "noise_floor", "owner_scope_split"]
             },
             "summary": { "type": "string", "minLength": 1 },
@@ -258,14 +284,16 @@
           }
         },
         {
-          "description": "An owner scope split (decisions 223, 395) bounds only the covered texels, and holds them exactly equal: the texels outside the coverage are the ones it excepts. One of its bounds is max |delta| 0 on every comparison (no `excepted_outputs`); a bound that excepts outputs names the entry's goldens' outputs.",
+          "description": "An owner scope split (decisions 223, 395) bounds only the covered texels, and holds them exactly equal: the texels outside the coverage are the ones it excepts. Decision 430's holds the off-midpoint texels exactly equal and bounds the midpoint texels. One of its bounds is max |delta| 0 on every comparison (no `excepted_outputs`); a bound that excepts outputs names the entry's goldens' outputs.",
           "if": {
             "properties": { "evidence": { "properties": { "basis": { "const": "owner_scope_split" } } } }
           },
           "then": {
             "properties": {
               "bounds": {
-                "items": { "properties": { "scope": { "enum": ["covered", "covered_interior"] } } },
+                "items": {
+                  "properties": { "scope": { "enum": ["covered", "covered_interior", "midpoint", "off_midpoint"] } }
+                },
                 "contains": {
                   "properties": { "metric": { "const": "max_abs_diff" }, "max": { "const": 0 } },
                   "not": { "required": ["excepted_outputs"] }
@@ -293,6 +321,35 @@
             "properties": {
               "domain": { "not": { "anyOf": [{ "required": ["goldens"] }, { "required": ["outputs"] }] } },
               "evidence": { "properties": { "basis": { "const": "owner_scope_split" } } }
+            }
+          }
+        },
+        {
+          "description": "Decision 430: a midpoint-scoped bound, or the code metric, belongs to a procedural asset domain that declares its filter; the code metric is bounded over `midpoint` only.",
+          "if": {
+            "properties": {
+              "bounds": {
+                "contains": {
+                  "anyOf": [
+                    { "properties": { "scope": { "enum": ["midpoint", "off_midpoint"] } } },
+                    { "properties": { "metric": { "const": "max_abs_diff_code_u16" } } }
+                  ]
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "domain": {
+                "required": ["procedural_filter"],
+                "properties": { "kind": { "const": "procedural_asset" } }
+              },
+              "bounds": {
+                "items": {
+                  "if": { "properties": { "metric": { "const": "max_abs_diff_code_u16" } } },
+                  "then": { "properties": { "scope": { "const": "midpoint" } } }
+                }
+              }
             }
           }
         },

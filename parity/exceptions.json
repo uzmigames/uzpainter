@@ -1092,6 +1092,136 @@
       "approved_by": "owner",
       "approved_on": "2026-11-09",
       "notes": "The owner's own yes to these terms (decision 259 §6), recorded in decision 417, which supersedes in part decision 245 §1 (production lifts CheckIslandNormal for the files above only) and decision 414 §3. A new id rather than EXC-013 version 2: only the highest version of an id is in force, and EXC-013 v1 must keep holding every covered texel of every other padded file exact. Decision 245 §2 stays (a Height with no layer is refused), as do the diagnosticMap, statistics, passthrough, dilation and resize refusals. EXC-010, EXC-011 v3, EXC-012 and EXC-013 are unchanged. Narrowed by a new version as phase4.1_export-island-padding-exact makes the Height outside the islands exact (item 2.2), and withdrawn when the Normal's island edge is exact."
+    },
+    {
+      "exception_id": "EXC-015",
+      "version": 1,
+      "tier": "2a",
+      "domain": {
+        "kind": "procedural_asset",
+        "selector": "procedural_asset/filter/sharpen",
+        "goldens": [
+          "phase3/proc-filters/calibration-sharpen-hat-v8-1024",
+          "phase3/proc-filters/calibration-sharpen-hat-v8-2048",
+          "phase3/proc-filters/calibration-sharpen-hat-v8-4096",
+          "phase3/proc-filters/calibration-sharpen-rounded-cube-1024",
+          "phase3/proc-filters/calibration-sharpen-rounded-cube-2048",
+          "phase3/proc-filters/calibration-sharpen-rounded-cube-4096",
+          "phase3/proc-filters/calibration-sharpen-sphere-1024",
+          "phase3/proc-filters/calibration-sharpen-sphere-2048",
+          "phase3/proc-filters/calibration-sharpen-sphere-4096",
+          "phase3/proc-filters/held-out-sharpen-knob-cube-2048",
+          "phase3/proc-filters/held-out-sharpen-tunic-v10-1024"
+        ],
+        "procedural_filter": {
+          "asset": "uzasset://filter/sharpen@2",
+          "kernel": "laplacian4_wrap",
+          "parameter": "intensity",
+          "values": [
+            0,
+            0.2,
+            0.25,
+            0.4,
+            0.63,
+            1,
+            2.71,
+            4
+          ],
+          "content_format": "L32F_code_u16",
+          "stack": "content"
+        }
+      },
+      "bounds": [
+        {
+          "metric": "max_abs_diff",
+          "scope": "off_midpoint",
+          "max": 0
+        },
+        {
+          "metric": "max_abs_diff_code_u16",
+          "scope": "midpoint",
+          "max": 1
+        }
+      ],
+      "evidence": {
+        "basis": "owner_scope_split",
+        "summary": "The owner approved these terms himself on 2026-11-10 (decision 430): asked decision 428 §3's question (pt-BR, verbatim in decision 430), he answered \"Sim, aprovo\". Domain: filter/sharpen@2, Painter's starter-asset Sharpen as the four-neighbour Laplacian on the content's 16-bit codes with texture wrap (decision 426 §2), in a content stack, on decision 426 §1's L32F 16-bit bitmap content (every texel the channel value I(I(F(k))) of a code k), at intensity 0, 0.2, 0.25, 0.4, 0.63, 1, 2.71 or 4 only, on the eleven goldens of the batch parity/manifests/phase3/proc-cert/filter__sharpen@2/ (its geometry and resolutions). Sharpen in a mask stack, on another channel or format, at another intensity, or on content off the code grid is not covered. Midpoint texels are computed from the inputs, never from the difference (tools/parity/midpoint.py): with L = 4k - (n + s + e + w) on the content codes, wrapping, a texel is a midpoint when intensity x L, exactly from the decimal intensity, is a half-integer and k + intensity x L lies strictly between 0 and 65535. Terms: every off-midpoint texel exactly equal (max |delta| 0 over off_midpoint); on midpoint texels the 16-bit codes both values read back to differ by at most one (a value off the code grid fails); a comparison with no midpoint texel is not covered, so at the exact intensities 0, 0.2, 0.4, 1 and 4 any difference fails. Evidence (report parity/reports/phase3/proc-cert/filter__sharpen@2/727f63f70a79abab.json, docs/analysis/proc-filter-families/02-calibration-2026-11-10.md §3): Painter is stable (r1 = r2 on every compared texel); calibration 45 of 54 cases exact, held-out 2 of 8 (spent); every residual texel is one code off at an exact midpoint (intensities 0.25, 0.63, 2.71); no tried arithmetic order or float-to-UNORM16 conversion reproduces Painter's tie-break. A pass under it is reported as \"pass under EXC-015\", never as exact.",
+        "private_evidence": [
+          {
+            "sha256": "120a8c2403cb8f2025818a12e7430c3be97c0c87893374d8d63be427fc46f7a9",
+            "description": "private golden record of phase3/proc-filters/calibration-sharpen-hat-v8-1024 under the current envelope painter-12.2.0+js-api.1.1.20-env-a981b586eae7: r1 and r2 (after save and reopen), equal on every compared texel, the content channel User0 and the Sharpen channels"
+          },
+          {
+            "sha256": "f8bd2537292cc5e85997b11f61616c455f004bfea2427cefb0edbff827bd98ed",
+            "description": "private golden record of phase3/proc-filters/calibration-sharpen-hat-v8-2048 under the current envelope painter-12.2.0+js-api.1.1.20-env-a981b586eae7: r1 and r2 (after save and reopen), equal on every compared texel, the content channel User0 and the Sharpen channels"
+          },
+          {
+            "sha256": "b10cdcaeab6dd4be7b688639ce5313db75de8fff8944be5ff4c8cc6f14d73088",
+            "description": "private golden record of phase3/proc-filters/calibration-sharpen-hat-v8-4096 under the current envelope painter-12.2.0+js-api.1.1.20-env-a981b586eae7: r1 and r2 (after save and reopen), equal on every compared texel, the content channel User0 and the Sharpen channels"
+          },
+          {
+            "sha256": "fb3e7f196796750743cc780fc321c2b8e2143d6b84eed70c7b32c46fa021ce09",
+            "description": "private golden record of phase3/proc-filters/calibration-sharpen-rounded-cube-1024 under the current envelope painter-12.2.0+js-api.1.1.20-env-a981b586eae7: r1 and r2 (after save and reopen), equal on every compared texel, the content channel User0 and the Sharpen channels"
+          },
+          {
+            "sha256": "1f0ed603093b86810aa6c4dc2c97654e44e5aa21259f4b201a8472e281bfb1db",
+            "description": "private golden record of phase3/proc-filters/calibration-sharpen-rounded-cube-2048 under the current envelope painter-12.2.0+js-api.1.1.20-env-a981b586eae7: r1 and r2 (after save and reopen), equal on every compared texel, the content channel User0 and the Sharpen channels"
+          },
+          {
+            "sha256": "60377d17a1fab5130d0e57fae89ba9e3e761c0db5e831f5166e5a73824f8ec84",
+            "description": "private golden record of phase3/proc-filters/calibration-sharpen-rounded-cube-4096 under the current envelope painter-12.2.0+js-api.1.1.20-env-a981b586eae7: r1 and r2 (after save and reopen), equal on every compared texel, the content channel User0 and the Sharpen channels"
+          },
+          {
+            "sha256": "5ab1721ebb03335970736e10d3bacc07359fc523ad82ab0de5b7e8ea7d4cfde4",
+            "description": "private golden record of phase3/proc-filters/calibration-sharpen-sphere-1024 under the current envelope painter-12.2.0+js-api.1.1.20-env-a981b586eae7: r1 and r2 (after save and reopen), equal on every compared texel, the content channel User0 and the Sharpen channels"
+          },
+          {
+            "sha256": "64b7441a4569a5e8060bd2da067306b69f2ab3f9d220ad56f346617ac8a3f2cb",
+            "description": "private golden record of phase3/proc-filters/calibration-sharpen-sphere-2048 under the current envelope painter-12.2.0+js-api.1.1.20-env-a981b586eae7: r1 and r2 (after save and reopen), equal on every compared texel, the content channel User0 and the Sharpen channels"
+          },
+          {
+            "sha256": "e8b3144c84d1886ad0845a9a971633d0681babb09c96bfaec5e8e299594d09b2",
+            "description": "private golden record of phase3/proc-filters/calibration-sharpen-sphere-4096 under the current envelope painter-12.2.0+js-api.1.1.20-env-a981b586eae7: r1 and r2 (after save and reopen), equal on every compared texel, the content channel User0 and the Sharpen channels"
+          },
+          {
+            "sha256": "aa84b418adf7118f6736e50f935ae8897a40dd7733a5c895b890e7c27f279f7b",
+            "description": "private golden record of phase3/proc-filters/held-out-sharpen-knob-cube-2048 under the current envelope painter-12.2.0+js-api.1.1.20-env-a981b586eae7: r1 and r2 (after save and reopen), equal on every compared texel, the content channel User0 and the Sharpen channels"
+          },
+          {
+            "sha256": "6e4eda3a5a6cf46e497f889eff14e71bea6987d32b2eadbf4a8c136dd3970f82",
+            "description": "private golden record of phase3/proc-filters/held-out-sharpen-tunic-v10-1024 under the current envelope painter-12.2.0+js-api.1.1.20-env-a981b586eae7: r1 and r2 (after save and reopen), equal on every compared texel, the content channel User0 and the Sharpen channels"
+          }
+        ],
+        "uncontrolled_settings": [
+          "preferences.bake_backend"
+        ]
+      },
+      "defect_detection_test": {
+        "test_id": "tests/parity/test_exc015_sharpen_midpoint.py::test_exc015_catches_injected_defects",
+        "injected_defects": [
+          "two_code_error_at_a_midpoint",
+          "one_code_error_off_a_midpoint",
+          "wrong_midpoint_detection",
+          "wrong_wrap",
+          "wrong_clamp",
+          "one_code_error_on_a_half_integer_the_clamp_decides",
+          "one_code_change_at_exact_intensity_0",
+          "one_code_change_at_exact_intensity_0.2",
+          "one_code_change_at_exact_intensity_0.4",
+          "one_code_change_at_exact_intensity_1",
+          "one_code_change_at_exact_intensity_4",
+          "intensity_outside_the_set",
+          "filter_in_a_mask_stack",
+          "content_off_the_16_bit_code_grid",
+          "candidate_value_off_the_code_grid",
+          "golden_outside_the_batch"
+        ],
+        "outcome": "every_injected_defect_fails"
+      },
+      "decision_id": "430",
+      "approved_by": "owner",
+      "approved_on": "2026-11-10",
+      "notes": "The owner's own yes to decision 428 §2's terms (decision 259 §6), recorded in decision 430. filter/sharpen@2 is served as calibrated only inside this domain (assets/procedural/records/filter.sharpen@2.json, parity.exception EXC-015); no alias names it, since an alias names an exact asset only. Expiry: the entry lapses when the recording GPU's float-to-UNORM16 write is measured (phase3.3_procedural-families item 2.10); the candidate that follows needs a new held-out set, which narrows, confirms or revokes it by a new version."
     }
   ]
 }

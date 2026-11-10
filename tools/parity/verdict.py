@@ -43,6 +43,12 @@
   every channel is a combined virtual normal; it bounds their `covered_interior`, so their
   island-edge texels may differ too. `candidate_exceptions` is per compared file: the ids the
   receipt names for that file's path.
+- Decision 430: an entry whose domain declares a `procedural_filter` (EXC-015, Sharpen) covers only
+  comparisons whose `filter_inputs` name that asset, only its parameter with a listed value, its
+  content format and its stack. Its bound scopes `midpoint` and `off_midpoint` split the texels by
+  the midpoint predicate, computed from the filter's inputs (`tools/parity/midpoint.py`), never from
+  the difference. `max_abs_diff_code_u16` compares the 16-bit codes both values read back to; a
+  value off the code grid fails the bound. With no midpoint texel, the entry covers nothing.
 - Diagnostics are computed and reported; they never grant a pass on their own.
 
 Envelope (decisions 034, 037; CONTRACT.md §6.5):
@@ -77,6 +83,12 @@ from tools.parity.envelope.registry import (
     current_envelope,
     envelope,
     load_registry,
+)
+from tools.parity.midpoint import (
+    ContentInputError,
+    content_codes,
+    exact_decimal,
+    laplacian4_midpoints,
 )
 from tools.parity.recorder.environment import MATCH, envelope_match
 from tools.parity.schemas import REPO_ROOT, load_json
@@ -127,6 +139,21 @@ class Verdict:
 
 
 @dataclass(frozen=True)
+class FilterInputs:
+    """The inputs of a procedural filter comparison, for an entry whose domain declares a
+    `procedural_filter` (decision 430): the asset evaluated (`uzasset://...@N`), its parameters,
+    the content it filtered (rows by columns, or rows by columns by one channel), the content's
+    format (`L32F_code_u16`: float32 values that read back to 16-bit codes) and the stack the
+    filter sits in (`content` or `mask`)."""
+
+    asset: str
+    params: Mapping[str, float]
+    content: Values
+    content_format: str
+    stack: str
+
+
+@dataclass(frozen=True)
 class Comparison:
     """One compared quantity: oracle values (None when the blob is unavailable) and candidate.
 
@@ -147,6 +174,8 @@ class Comparison:
     revision it captured (`uzpainter.render.display.state()`, decision 196).
     `candidate_exceptions` are the exception ids the candidate's export receipt says it relies on
     (`exceptions_relied_on`, decision 414): the domain of a `production_export` entry.
+    `filter_inputs` are the inputs of a procedural filter comparison (decision 430); None when
+    the comparison has none.
     """
 
     tier: str
@@ -166,6 +195,7 @@ class Comparison:
     output_id: str | None = None
     candidate_display_state: Mapping[str, Any] | None = None
     candidate_exceptions: frozenset[str] = frozenset()
+    filter_inputs: FilterInputs | None = None
 
 
 def _flat(values: Values) -> npt.NDArray[Any]:
@@ -227,8 +257,74 @@ def diagnose(oracle: Values, candidate: Values) -> Diagnostics:
     )
 
 
+def _plane(values: Values) -> npt.NDArray[Any] | None:
+    """`values` as rows by columns (one channel of rows x columns x 1 dropped), or None."""
+    array = np.asarray(values)
+    if array.ndim == 3 and array.shape[2] == 1:
+        array = array[..., 0]
+    return array if array.ndim == 2 else None
+
+
+def _filter_in_domain(spec: Mapping[str, Any], inputs: FilterInputs | None) -> bool:
+    """Decision 430: the comparison's filter inputs name the entry's asset, only its parameter
+    with a listed value, its content format (one float32 channel) and its stack."""
+    if inputs is None or inputs.asset != spec["asset"] or inputs.stack != spec["stack"]:
+        return False
+    if inputs.content_format != spec["content_format"] or set(inputs.params) != {spec["parameter"]}:
+        return False
+    if float(inputs.params[spec["parameter"]]) not in {float(v) for v in spec["values"]}:
+        return False
+    content = _plane(inputs.content)
+    return content is not None and content.dtype == np.float32
+
+
+def _midpoints(entry: Mapping[str, Any], comparison: Comparison) -> npt.NDArray[np.bool_] | None:
+    """The midpoint texels of a filter comparison, from its inputs alone (decision 430), or None
+    when they cannot be computed: no inputs, a content of another shape than the oracle's, or a
+    content off the 16-bit code grid."""
+    spec = entry["domain"].get("procedural_filter")
+    inputs = comparison.filter_inputs
+    if spec is None or inputs is None or comparison.oracle is None:
+        return None
+    content, oracle = _plane(inputs.content), _plane(comparison.oracle)
+    if content is None or oracle is None or content.shape != oracle.shape:
+        return None
+    try:
+        codes = content_codes(content)
+    except ContentInputError:
+        return None
+    return laplacian4_midpoints(codes, exact_decimal(inputs.params[spec["parameter"]]))
+
+
+def _midpoint_bound_holds(
+    bound: Mapping[str, Any], entry: Mapping[str, Any], comparison: Comparison
+) -> bool:
+    midpoints = _midpoints(entry, comparison)
+    if midpoints is None or comparison.oracle is None:
+        return False
+    oracle, candidate = _plane(comparison.oracle), _plane(comparison.candidate)
+    if oracle is None or candidate is None or candidate.shape != oracle.shape:
+        return False
+    scope = midpoints if bound["scope"] == "midpoint" else ~midpoints
+    if not scope.any():
+        return False
+    metric: str = bound["metric"]
+    limit = float(bound["max"])
+    if metric == "max_abs_diff_code_u16":
+        try:
+            left, right = content_codes(oracle[scope]), content_codes(candidate[scope])
+        except ContentInputError:
+            return False
+        return bool(np.abs(left - right).max() <= limit)
+    inside = diagnose(oracle[scope], candidate[scope]).metrics()
+    return metric in inside and inside[metric] <= limit
+
+
 def _bound_holds(
-    bound: Mapping[str, Any], comparison: Comparison, metrics: Mapping[str, float]
+    bound: Mapping[str, Any],
+    entry: Mapping[str, Any],
+    comparison: Comparison,
+    metrics: Mapping[str, float],
 ) -> bool:
     metric: str = bound["metric"]
     limit = float(bound["max"])
@@ -236,6 +332,8 @@ def _bound_holds(
         "excepted_outputs", ()
     ):
         return True  # decision 395: this output is not held to this bound
+    if bound["scope"] in ("midpoint", "off_midpoint"):
+        return _midpoint_bound_holds(bound, entry, comparison)
     if bound["scope"] == "whole":
         return metric in metrics and metrics[metric] <= limit
     if bound["scope"] in ("covered", "covered_interior"):
@@ -270,11 +368,15 @@ def _scope_holds(entry: Mapping[str, Any], comparison: Comparison) -> bool:
     """The entry's domain names the comparison: its selector, and its `goldens` and `outputs`
     when it lists them (decision 307; a comparison that names none is outside a scoped entry). A
     production export entry names the comparisons whose candidate's receipt relies on it
-    (decision 414)."""
+    (decision 414). A procedural filter entry names only comparisons whose filter inputs are in
+    its domain (decision 430)."""
     domain = entry["domain"]
     if domain.get("kind") == "production_export":
         return entry["exception_id"] in comparison.candidate_exceptions
     if domain["selector"] != comparison.domain:
+        return False
+    spec = domain.get("procedural_filter")
+    if spec is not None and not _filter_in_domain(spec, comparison.filter_inputs):
         return False
     goldens = domain.get("goldens")
     if goldens is not None and comparison.golden_id not in goldens:
@@ -370,7 +472,7 @@ def _evaluate(
         if entry["tier"] == comparison.tier
         and _scope_holds(entry, comparison)
         and _basis_eligible(entry, comparison)
-        and all(_bound_holds(bound, comparison, metrics) for bound in entry["bounds"])
+        and all(_bound_holds(bound, entry, comparison, metrics) for bound in entry["bounds"])
     ]
     if covering:
         relied = tuple(sorted((e["exception_id"], e["version"]) for e in covering))

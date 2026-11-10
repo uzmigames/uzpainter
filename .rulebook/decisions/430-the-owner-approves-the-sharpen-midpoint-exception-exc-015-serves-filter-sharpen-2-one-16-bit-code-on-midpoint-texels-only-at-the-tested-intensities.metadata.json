@@ -1,0 +1,9 @@
+{
+  "id": 430,
+  "slug": "the-owner-approves-the-sharpen-midpoint-exception-exc-015-serves-filter-sharpen-2-one-16-bit-code-on-midpoint-texels-only-at-the-tested-intensities",
+  "title": "The owner approves the Sharpen midpoint exception: EXC-015 serves filter/sharpen@2, one 16-bit code on midpoint texels only, at the tested intensities",
+  "status": "accepted",
+  "date": "2026-11-10",
+  "relatedTasks": ["phase3.3_procedural-families"],
+  "supersededBy": null
+}
