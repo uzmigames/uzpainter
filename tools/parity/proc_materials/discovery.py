@@ -1,0 +1,188 @@
+"""Public parameter semantics of the task's four materials (`phase3.2_proc-material-families` 2.1).
+
+Reads the private material survey (`tools.parity.recorder.material_survey`) and publishes only what
+`05-procedural-content.md` §3 names as public parameter semantics, with the generator discovery's
+rules (`tools.parity.proc_generators.discovery`): per parameter its name, label, widget type,
+default, range, enum labels and values and visibility; per material its resource URL, the counts
+of presets, image inputs and outputs, and the output names. The default material fill's source
+mode, active channels and output mapping are Painter's documented API readbacks of the source.
+
+Smart-material structures stay private (publication rule of §3): for burlap and leather pattern
+the document names only the Substance source the survey found behind the recipe's pattern layer
+of the starter smart material, never the smart material's layers, effects or values.
+
+    python -m tools.parity.proc_materials.discovery [--survey <private survey.json>]
+
+Writes `docs/analysis/proc-material-families/01-parameter-discovery.md`.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import re
+import sys
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+from typing import Any
+
+from tools.parity.proc_generators.discovery import cell, count, parameter
+from tools.parity.recorder.material_survey import SMART_MATERIALS, latest
+from tools.parity.schemas import REPO_ROOT
+
+OUTPUT = REPO_ROOT / "docs" / "analysis" / "proc-material-families" / "01-parameter-discovery.md"
+# A smart-material layer whose name holds this word is the recipe's pattern layer
+# (Assets3D `25-Faixa-Cintura` "Pattern", `22-Bracal-Direito` "Leather Pattern").
+PATTERN = re.compile("pattern", re.IGNORECASE)
+
+
+def layer_sources(node: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """The described Substance sources of one walked node (material, channel or effect source)."""
+    found: list[Mapping[str, Any]] = []
+    for key in ("material", "source"):
+        single = node.get(key)
+        if isinstance(single, Mapping) and isinstance(single.get("resource_url"), str):
+            found.append(single)
+    for source in (node.get("sources") or {}).values():
+        if isinstance(source, Mapping) and isinstance(source.get("resource_url"), str):
+            found.append(source)
+    return found
+
+
+def pattern_sources(structure: Any) -> list[Mapping[str, Any]]:
+    """Every described source of a layer under `structure` whose name names a pattern, or of the
+    effects below it, once per resource URL, in URL order."""
+    by_url: dict[str, Mapping[str, Any]] = {}
+    stack: list[tuple[Any, bool]] = [(structure, False)]
+    while stack:
+        node, inside = stack.pop()
+        if not isinstance(node, Mapping):
+            continue
+        inside = inside or bool(PATTERN.search(str(node.get("name", ""))))
+        if inside:
+            for source in layer_sources(node):
+                by_url.setdefault(str(source["resource_url"]), source)
+        for field in ("sub_layers", "content_effects", "mask_effects"):
+            children = node.get(field)
+            if isinstance(children, list):
+                stack += [(child, inside) for child in children]
+    return [by_url[url] for url in sorted(by_url)]
+
+
+def families(survey: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    """family -> {"source": described source or None, "context": ..., "via": ...}."""
+    result: dict[str, dict[str, Any]] = {}
+    for family, row in survey["materials"].items():
+        material = row.get("material")
+        result[family] = {
+            "via": "material",
+            "source": material if isinstance(material, Mapping) else None,
+            "fill": {k: row.get(k) for k in ("source_mode", "active_channels")},
+            "raised": row.get("raised"),
+        }
+    for family, entry in survey["smart_materials"].items():
+        described = entry.get("described") or {}
+        sources = pattern_sources(described.get("structure"))
+        result[family] = {
+            "via": "smart material " + str(entry["gui_name"]),
+            "smart_matches": len(entry["matches"]),
+            "source": sources[0] if len(sources) == 1 else None,
+            "pattern_sources": len(sources),
+            "raised": described.get("raised"),
+        }
+    return result
+
+
+def markdown(found: Mapping[str, Mapping[str, Any]], survey_sha256: str, build: Any) -> str:
+    lines = [
+        "# Material parameters (phase3.2_proc-material-families item 2.1)",
+        "",
+        "Discovered through the documented `properties.Property` getters (approved source "
+        "A-PYDOC) by `python -m tools.parity.recorder.material_survey` (Painter "
+        f"`{build}`, Legacy colour management). The survey is private (owner's oracle work root; "
+        f"SHA-256 `{survey_sha256}`). Generated by "
+        "`python -m tools.parity.proc_materials.discovery`; do not edit by hand.",
+        "",
+        "Published here, as `05-procedural-content.md` §3 allows: parameter names, labels, widget "
+        "types, default values, ranges (`min`/`max`), enum labels and values, visibility, the "
+        "resource URL, the counts of presets, image inputs and outputs, and the output names. No "
+        "description text, no preset content, no pixel. Burlap and leather pattern are reached "
+        "through starter smart materials; their structure stays private, and only the Substance "
+        "source of the recipe's pattern layer is named.",
+        "",
+        "| Family | Reached through | Resource | Presets | Image inputs | Outputs |",
+        "|---|---|---|---|---|---|",
+    ]
+    for family, entry in found.items():
+        source = entry.get("source") or {}
+        lines.append(
+            f"| {family} | {cell(entry['via'])} | `{cell(source.get('resource_url'))}` | "
+            f"{cell(count(source.get('presets')))} | {cell(count(source.get('image_inputs')))} | "
+            f"{cell(count(source.get('image_outputs')))} |"
+        )
+    for family, entry in found.items():
+        lines += ["", f"## {family}", ""]
+        if entry.get("raised"):
+            lines += [f"The survey raised: {cell(entry['raised'])}.", ""]
+        source = entry.get("source")
+        if not source:
+            lines.append(
+                "No single Substance source was found "
+                f"({cell(entry.get('pattern_sources'))} pattern-layer sources, "
+                f"{cell(entry.get('smart_matches'))} smart-material matches)."
+            )
+            continue
+        fill = entry.get("fill")
+        if fill:
+            lines += [
+                f"Default material fill: source mode {cell(fill.get('source_mode'))}, active "
+                f"channels {cell(fill.get('active_channels'))}.",
+                "",
+            ]
+        if "output_mapping" in source:
+            lines += [f"Output mapping: {cell(source.get('output_mapping'))}.", ""]
+        outputs = source.get("image_outputs")
+        if isinstance(outputs, list):
+            lines += [f"Outputs: {', '.join(f'`{o}`' for o in outputs)}.", ""]
+        lines += [
+            "| Parameter | Label | Widget | Default | Min | Max | Enum | Visible |",
+            "|---|---|---|---|---|---|---|---|",
+        ]
+        for name, described in sorted(source.get("properties", {}).items()):
+            row = parameter(described)
+            lines.append(
+                f"| `{name}` | {cell(row.get('label'))} | {cell(row.get('widget_type'))} | "
+                f"{cell(row.get('default'))} | {cell(row.get('min'))} | {cell(row.get('max'))} | "
+                f"{cell(row.get('enum'))} | {cell(row.get('visible'))} |"
+            )
+    return "\n".join(lines) + "\n"
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="python -m tools.parity.proc_materials.discovery")
+    parser.add_argument("--survey", type=Path, default=None)
+    args = parser.parse_args(sys.argv[1:] if argv is None else argv)
+    try:
+        path = args.survey or latest()
+    except FileNotFoundError as error:
+        print(error, file=sys.stderr)
+        return 2
+    data = path.read_bytes()
+    survey = json.loads(data)
+    if set(survey["smart_materials"]) != set(SMART_MATERIALS):
+        print("the survey does not list the task's smart materials", file=sys.stderr)
+        return 2
+    found = families(survey)
+    build = survey.get("painter_build")
+    if isinstance(build, Mapping):
+        build = build.get("build_id")
+    text = markdown(found, hashlib.sha256(data).hexdigest(), build)
+    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+    OUTPUT.write_text(text, encoding="utf-8", newline="\n")
+    print(OUTPUT)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

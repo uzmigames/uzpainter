@@ -189,8 +189,21 @@ Gap FillGap(const core::Project& project, const core::Stack* stack, const core::
         // A material fill is admitted only as a procedural snapshot the provider serves through its
         // material rule (decision 413): Height of the output mapped to Height, the mask rule of
         // P413-C. Projections, symmetry and colour management are the provider's domain checks.
-        if (deferProcedural && fill.material_source && fill.material_source->kind() == SourceKind::procedural) {
+        // Only Height's composition is recorded (P413-A, a material fill activating Height alone).
+        // Painter writes a material's output into every other active channel too (the task's two
+        // starter materials activate BaseColor, BaseMetalness and SpecularRoughness by default,
+        // decision 432), so such a fill is refused rather than left as the layers below give it.
+        const auto otherChannel = [&]() -> Gap {
+            for (const ChannelType channel : fill.active_channels) {
+                if (channel != ChannelType::Height) {
+                    return Make(node, "a material fill's active " + std::string(core::ToString(channel)) + " channel",
+                                "phase3.3_procedural-families item 2.16");
+                }
+            }
             return std::nullopt;
+        };
+        if (deferProcedural && fill.material_source && fill.material_source->kind() == SourceKind::procedural) {
+            return otherChannel();
         }
         if (!procedurals || !stack || !fill.material_source ||
             fill.material_source->kind() != SourceKind::procedural) {
@@ -204,6 +217,7 @@ Gap FillGap(const core::Project& project, const core::Stack* stack, const core::
         if (!set || height == stack->channels.end()) {
             return Make(node, "a material fill whose stack has no Height channel", "phase3.2_proc-material-families");
         }
+        if (Gap other = otherChannel()) return other;
         const auto admitted = procedurals->Resolve(project, *set, ChannelType::Height, height->second.format, fill,
                                                    std::get<core::ProceduralSource>(fill.material_source->value).ref,
                                                    node, false);

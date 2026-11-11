@@ -440,7 +440,10 @@ switches to `SourceMode.Material`. Its active channels are the recorded ones, wh
 decision-412 starter material is Height only. Its reference holds the recorded output mapping,
 no mask output (Painter's default) and no resolution override.
 
-The evaluator composes only Height. Height is `tz16(float32(2 x - 1))`, where `x` is the L32F
+The evaluator composes only Height. A material fill with any other active channel is refused by
+the support check before any change, naming `phase3.3_procedural-families item 2.16` (decision
+432): Painter writes a material's output into every active channel, and only Height's
+composition is recorded. Height is `tz16(float32(2 x - 1))`, where `x` is the L32F
 view of the output that `output_mapping` gives Height, and `tz16` is binary16 rounding toward
 zero. This is the Height channel's own rule for float operands, applied through the fill's Height
 blending. Every other channel is untouched. A mask output equal to Height's output leaves Height

@@ -496,6 +496,9 @@ int RunSnapshotMaterial(const std::filesystem::path& path) {
                       "phase3.2_proc-material-families", "material: no output mapped to Height is refused");
     refusedAtomically([](core::ProceduralRef&, core::FillContent& f) { f.projection.uv.filtering_mode = core::FilteringMode::Nearest; },
                       "phase3.2_proc-material-families", "material: another filter is refused");
+    // Only Height's composition is recorded: any other active channel is refused (decision 432).
+    refusedAtomically([](core::ProceduralRef&, core::FillContent& f) { f.active_channels.insert(core::ChannelType::BaseColor); },
+                      "phase3.3_procedural-families item 2.16", "material: another active channel is refused, naming item 2.16");
     auto masked = editRef([](core::ProceduralRef& r, core::FillContent&) { r.mask_output = "height"; });
     Check(masked.result && masked.result->status == core::ResultStatus::committed,
           "material: the mask output of Height's own output is admitted");

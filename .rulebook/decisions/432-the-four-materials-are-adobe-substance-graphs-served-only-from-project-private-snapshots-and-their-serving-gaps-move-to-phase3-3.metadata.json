@@ -1,0 +1,9 @@
+{
+  "id": 432,
+  "slug": "the-four-materials-are-adobe-substance-graphs-served-only-from-project-private-snapshots-and-their-serving-gaps-move-to-phase3-3",
+  "title": "The four materials are Adobe Substance graphs, served only from project-private snapshots; their serving gaps move to phase3.3",
+  "status": "accepted",
+  "date": "2026-11-11",
+  "relatedTasks": ["phase3.2_proc-material-families", "phase3.3_procedural-families"],
+  "supersededBy": null
+}

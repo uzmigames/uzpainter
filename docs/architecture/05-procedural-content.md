@@ -72,6 +72,10 @@ The library ships beside the executable as `assets/procedural/`: one provenance 
 - The kernel functions are written once (`shaders/proc_materials.hlsli`), in a subset of HLSL that is also C++. DX12 equals the CPU reference bit for bit.
 - Physical size: a record's `physical_size_cm` (`MaterialPhysicalSize`) or the custom size in centimetres (`CustomPhysicalSize`) sets how often the texture repeats. It follows the mesh's effective units (`12-mesh-import.md` §3) and the certificate's texel density, and the receipt records the units. Painter's own rule is not discovered yet.
 - The domains are declared before calibration. None is certified, and no alias names them.
+- Surveyed against Painter 12.2.0 (decision 432, `docs/analysis/proc-material-families/01-parameter-discovery.md`). No material has a clean-room route to exact:
+  - Felt and leather grain are the starter Substance materials `fabric_felt` and `leather_grain`. Burlap and leather pattern are the procedurals `weave_2` and `grunge_leather_damaged`, which the recipes reach through the Fabric Burlap and Leather Damaged smart materials. All four are seeded Adobe graphs.
+  - Decision 429's snapshot-only route applies to them. They are served only from project-private snapshots and refused without one. Their kernels never serve them, and their `@1` records stay `unavailable` with no alias.
+  - The route cannot serve them yet. The capture holds no colour parameter, and only a material fill's Height composition is recorded. A material fill with any other active channel is refused. Captures run on the 128 px plane only, and Painter's physical-size rule is not recorded. These gaps are `phase3.3_procedural-families` item 2.16.
 
 Parity status per asset is `exact` (zero residual on every calibration and held-out case of §6) or `calibrated{max |Δ|, mean |Δ|, p99 |Δ|, corpus id}`, published by `uzpainter assets list --parity`. Under Q1 there is no preset tolerance: a calibrated asset passes only through an owner-approved, versioned exception in the register (`14-parity-testing.md` §5); without one it is a failure.
 
