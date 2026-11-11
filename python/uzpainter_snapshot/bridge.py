@@ -24,11 +24,40 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 
-def scalar_parameters(value: Any) -> dict[str, int | float | str]:
-    """Refuse parameter shapes outside the observed scalar capture domain."""
+def colour_parameter(key: str, item: Any) -> dict[str, Any]:
+    """A colour parameter as the seam tags it (procedural/seam.h `ParamJson`): exactly `type`
+    "color", the nonempty name of the `GenericColorSpace` Painter reads it in, three finite
+    components (`Color.value_raw`) and a null `alpha`."""
+    components = item.get("components")
+    if (
+        set(item) != {"type", "working_space", "components", "alpha"}
+        or item["type"] != "color"
+        or not isinstance(item["working_space"], str)
+        or not item["working_space"]
+        or item["alpha"] is not None
+        or not isinstance(components, list)
+        or len(components) != 3
+        or any(isinstance(c, bool) or not isinstance(c, (int, float)) for c in components)
+        or not all(math.isfinite(c) for c in components)
+    ):
+        raise ValueError(
+            f"parameter {key}: only finite scalar values and tagged colours "
+            "(type, working_space, three components, null alpha) are supported"
+        )
+    return {
+        "type": "color",
+        "working_space": item["working_space"],
+        "components": [float(c) for c in components],
+        "alpha": None,
+    }
+
+
+def scalar_parameters(value: Any) -> dict[str, Any]:
+    """Refuse parameter shapes outside the observed typed capture domain: finite scalars and
+    tagged colours (item 2.16 of `phase3.3_procedural-families`)."""
     if not isinstance(value, dict) or any(not isinstance(k, str) for k in value):
         raise ValueError("parameters must be an object")
-    result: dict[str, int | float | str] = {}
+    result: dict[str, Any] = {}
     for key, item in value.items():
         if isinstance(item, bool):
             result[key] = int(item)
@@ -38,9 +67,27 @@ def scalar_parameters(value: Any) -> dict[str, int | float | str]:
             or isinstance(item, str)
         ):
             result[key] = item
+        elif isinstance(item, dict):
+            result[key] = colour_parameter(key, item)
         else:
             raise ValueError(f"parameter {key}: only finite scalar values are supported")
     return result
+
+
+def by_value(value: Any) -> Any:
+    """What a parameter is matched by across source contexts: a colour by its components (the
+    space Painter reports depends on the source's context: sRGB on a material source, Raw on a
+    split one, with the same components), any other value as it is."""
+    return value["components"] if isinstance(value, dict) else value
+
+
+def overrides_effective(effective: dict[str, Any], requested: dict[str, Any]) -> bool:
+    """Every requested override reads back, a colour by its components."""
+    return all(
+        key in effective
+        and canonical_state(by_value(effective[key])) == canonical_state(by_value(value))
+        for key, value in requested.items()
+    )
 
 
 def capture_inputs(value: Any) -> dict[str, dict[str, Any]]:
@@ -111,6 +158,10 @@ def capture_request(value: Any) -> dict[str, Any]:
         "resource": resource,
         "parameters": scalar_parameters(value["parameters"]),
     }
+    for name, item in result["parameters"].items():
+        # A Working colour reads back in sRGB with another value (the 2026-11-11 survey).
+        if isinstance(item, dict) and item["working_space"] not in ("sRGB", "Raw"):
+            raise ValueError(f"parameter {name}: a requested colour is in sRGB or Raw")
     if multi:
         preset = value["preset"]
         if preset is not None and (not isinstance(preset, str) or not preset):
@@ -247,7 +298,7 @@ def validate_readback(
     effective = scalar_parameters(source["parameters"])
     if canonical_state(effective) != canonical_state(source["parameters"]):
         raise ValueError("effective parameters must retain observed scalar types")
-    if any(effective.get(key) != value for key, value in request["parameters"].items()):
+    if not overrides_effective(effective, request["parameters"]):
         raise ValueError("effective parameters differ from requested overrides")
     source["parameters"] = effective
     return source
@@ -309,7 +360,7 @@ def validate_generator(
     effective = scalar_parameters(source["parameters"])
     if canonical_state(effective) != canonical_state(source["parameters"]):
         raise ValueError("effective parameters must retain observed scalar types")
-    if any(effective.get(key) != value for key, value in request["parameters"].items()):
+    if not overrides_effective(effective, request["parameters"]):
         raise ValueError("effective parameters differ from requested overrides")
     return source
 
@@ -481,7 +532,7 @@ def validate_multi(readback: Any, request: dict[str, Any]) -> dict[str, Any]:
     effective = scalar_parameters(source["parameters"])
     if canonical_state(effective) != canonical_state(source["parameters"]):
         raise ValueError("effective parameters must retain observed scalar types")
-    if any(effective.get(key) != value for key, value in request["parameters"].items()):
+    if not overrides_effective(effective, request["parameters"]):
         raise ValueError("effective parameters differ from requested overrides")
     return source
 
@@ -510,8 +561,16 @@ def check_contexts(
             raise ValueError(f"preset {name} gives parameters outside the scalar typed domain")
         observed[name] = pair[0]
     material = contexts["material"]
-    if canonical_state(material["parameters"]) != canonical_state(source["parameters"]) or (
-        canonical_state(material["input_sources"]) != canonical_state(source["input_sources"])
+    parameters = scalar_parameters(material["parameters"])
+    if (
+        set(parameters) != set(source["parameters"])
+        or any(
+            isinstance(value, dict) != isinstance(source["parameters"][key], dict)
+            or canonical_state(by_value(value))
+            != canonical_state(by_value(source["parameters"][key]))
+            for key, value in parameters.items()
+        )
+        or canonical_state(material["input_sources"]) != canonical_state(source["input_sources"])
     ):
         raise ValueError("the material source of the same state reads another state")
     if not all(value in source["outputs"] for value in material["output_mapping"].values()):

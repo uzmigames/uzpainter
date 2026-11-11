@@ -250,5 +250,93 @@ int RunSnapshotMultiOutput(const fs::path& work) {
     noIdentity.erase("resource_id");
     Check(!ReceiptMultiOutputMetadata(receipt(noIdentity, noIdentity, material), resource, captured),
           "multi-output receipt: a source without its observed ResourceID refuses");
+
+    // Schema /5 (phase3.3_procedural-families item 2.16): a colour parameter is the seam's tagged
+    // colour, read in Raw on the capture's split sources and in sRGB on the material source with the
+    // same components. Scalar-only metadata keeps its schema and bytes (the /4 checks above).
+    const auto colourOf = [](std::string space, json::Array components) {
+        return json::Object{{"type", std::string("color")}, {"working_space", std::move(space)},
+                            {"components", std::move(components)}, {"alpha", json::Value()}};
+    };
+    const json::Object raw = colourOf("Raw", json::Array{0.25, 0.5, 1.0});
+    const json::Object srgb = colourOf("sRGB", json::Array{0.25, 0.5, 1.0});
+    ProceduralRequest coloured = captured;
+    coloured.params["tint"] = *ParamFromJson(raw);
+    const json::Value colouredSignature = SignatureJson(coloured);
+    Check(json::WriteCanonical(std::get<json::Object>(std::get<json::Object>(colouredSignature.data).at("params").data).at("tint")) ==
+              R"({"alpha":null,"components":[0.25,0.5,1],"type":"color","working_space":"Raw"})",
+          "metadata v5: a colour parameter enters the signature as the seam's tagged colour, components by value");
+    const auto colourSource = [&](json::Object value) {
+        json::Object observed = source(painterInputs);
+        std::get<json::Object>(observed["parameters"].data)["tint"] = std::move(value);
+        return observed;
+    };
+    json::Object colourMaterial = material;
+    std::get<json::Object>(colourMaterial["parameters"].data)["tint"] = srgb;
+    const auto colourReceipt = [&](json::Object first, json::Object second, json::Object materialContext) {
+        json::Object result = receipt(std::move(first), std::move(second), std::move(materialContext));
+        result["preset_parameters"] = json::Object{
+            {"authored preset", json::Object{{"gain", 0.25}, {"$randomseed", int64_t{0}}, {"tint", raw}}}};
+        return result;
+    };
+    const auto v5Read =
+        ReceiptMultiOutputMetadata(colourReceipt(colourSource(raw), colourSource(raw), colourMaterial), resource, coloured);
+    const auto* v5Material = v5Read && v5Read->contexts
+                                 ? std::get_if<json::Object>(&v5Read->contexts->at("material").data)
+                                 : nullptr;
+    Check(v5Read && v5Material != nullptr && v5Material->contains("colour_spaces") &&
+              json::WriteCanonical(v5Material->at("colour_spaces")) == R"({"tint":"sRGB"})" &&
+              json::WriteCanonical(v5Read->typed_effective_parameters->at("tint")) == json::WriteCanonical(raw),
+          "metadata v5: the split readback is the typed colour, the material source's space is recorded",
+          v5Read ? std::string() : v5Read.error());
+    if (v5Read) {
+        const json::Value v5 = store::SourceMetadataJson(colouredSignature, *v5Read);
+        const auto v5Again = store::ParseSourceMetadata(colouredSignature, v5);
+        Check(std::get<std::string>(std::get<json::Object>(v5.data).at("schema").data) == store::kSourceMetadataSchemaV5 &&
+                  v5Again && *v5Again == *v5Read,
+              "metadata v5: a colour parameter makes the metadata /5, which roundtrips",
+              v5Again ? std::string() : v5Again.error());
+        const std::vector<std::pair<std::string, std::function<void(json::Object&)>>> invalidV5{
+            {"a colour parameter under /4", [](json::Object& m) { m["schema"] = std::string(store::kSourceMetadataSchemaV4); }},
+            {"a typed colour of other components", [&](json::Object& m) {
+                 std::get<json::Object>(m["typed_effective_parameters"].data)["tint"] = colourOf("Raw", json::Array{0.25, 0.5, 0.5});
+             }},
+            {"a typed colour of another space", [&](json::Object& m) {
+                 std::get<json::Object>(m["typed_effective_parameters"].data)["tint"] = srgb;
+             }},
+            {"a colour with alpha", [&](json::Object& m) {
+                 json::Object alpha = raw;
+                 alpha["alpha"] = 1.0;
+                 std::get<json::Object>(m["typed_effective_parameters"].data)["tint"] = alpha;
+             }},
+            {"a colour of two components", [&](json::Object& m) {
+                 std::get<json::Object>(m["typed_effective_parameters"].data)["tint"] = colourOf("Raw", json::Array{0.25, 0.5});
+             }},
+            {"a material context without colour spaces", [](json::Object& m) {
+                 auto& context = std::get<json::Object>(std::get<json::Object>(m["contexts"].data)["material"].data);
+                 context.erase("colour_spaces");
+             }},
+            {"colour spaces naming a scalar parameter", [](json::Object& m) {
+                 auto& context = std::get<json::Object>(std::get<json::Object>(m["contexts"].data)["material"].data);
+                 context["colour_spaces"] = json::Object{{"tint", std::string("sRGB")}, {"gain", std::string("sRGB")}};
+             }},
+        };
+        for (const auto& [name, mutate] : invalidV5) {
+            json::Object changed = std::get<json::Object>(v5.data);
+            mutate(changed);
+            Check(!store::ParseSourceMetadata(colouredSignature, changed), "metadata v5: " + name + " refuses");
+        }
+    }
+    json::Object v5Scalar = std::get<json::Object>(store::SourceMetadataJson(signature, metadata).data);
+    v5Scalar["schema"] = std::string(store::kSourceMetadataSchemaV5);
+    Check(!store::ParseSourceMetadata(signature, v5Scalar), "metadata v5: /5 without a colour refuses");
+    json::Object otherComponents = colourMaterial;
+    std::get<json::Object>(otherComponents["parameters"].data)["tint"] = colourOf("sRGB", json::Array{0.25, 0.5, 0.75});
+    Check(!ReceiptMultiOutputMetadata(colourReceipt(colourSource(raw), colourSource(raw), otherComponents), resource, coloured),
+          "metadata v5: a material colour of other components is another state and refuses");
+    json::Object scalarMaterial = colourMaterial;
+    std::get<json::Object>(scalarMaterial["parameters"].data)["tint"] = 0.25;
+    Check(!ReceiptMultiOutputMetadata(colourReceipt(colourSource(raw), colourSource(raw), scalarMaterial), resource, coloured),
+          "metadata v5: a material scalar where the split sources read a colour refuses");
     return Finish();
 }

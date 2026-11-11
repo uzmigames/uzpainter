@@ -84,5 +84,14 @@ def test_snapshot_multi_output(procedural_tests: Path, tmp_path: Path) -> None:
         "metadata v4: preset parameters, input sources and contexts roundtrip",
         "metadata v4: the 3-channel snapshot keeps its texels and observations after reopen",
         "multi-output receipt: the state's observations, a bitmap by its staged file's hash",
+        "metadata v5: a colour parameter enters the signature as the seam's tagged colour, "
+        "components by value",
+        "metadata v5: the split readback is the typed colour, the material source's space is "
+        "recorded",
+        "metadata v5: a colour parameter makes the metadata /5, which roundtrips",
+        "metadata v5: a colour parameter under /4 refuses",
+        "metadata v5: a material context without colour spaces refuses",
+        "metadata v5: /5 without a colour refuses",
+        "metadata v5: a material colour of other components is another state and refuses",
     ):
         assert f"PASS {name}" in result.stdout

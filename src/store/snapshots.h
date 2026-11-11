@@ -59,6 +59,10 @@ inline constexpr std::string_view kSourceMetadataSchema = "uzpainter/procedural-
 inline constexpr std::string_view kSourceMetadataSchemaV2 = "uzpainter/procedural-source-metadata/2";
 inline constexpr std::string_view kSourceMetadataSchemaV3 = "uzpainter/procedural-source-metadata/3";
 inline constexpr std::string_view kSourceMetadataSchemaV4 = "uzpainter/procedural-source-metadata/4";
+/// `/5` (phase3.3_procedural-families item 2.16): the `/4` members with colour parameters. It is
+/// written only when a parameter, preset parameter or property value is a tagged colour, so the
+/// bytes of every scalar-only entry are unchanged.
+inline constexpr std::string_view kSourceMetadataSchemaV5 = "uzpainter/procedural-source-metadata/5";
 
 /// The ResourceID a recording observed through its documented getters (decision 361): every part
 /// as Painter returned it. Provenance only: it never resolves, imports, binds or searches.
@@ -126,6 +130,11 @@ core::json::Value SourceMetadataJson(const core::json::Value& signature, const s
 /// keys are exactly the signature's `params` and whose values equal them by value
 /// (`ParamByValue`); or `observed_resource_id` is not exactly four nonempty strings `url`,
 /// `context`, `name` and `version` with the signature's pin `uzasset://snapshot/<sha256(url)>@1`.
+/// Under `/5` (and only there), a typed parameter, a preset parameter or a property value may also
+/// be a tagged colour (`TypedParamByValue`), at least one of them is one, and `contexts.material`
+/// also holds `colour_spaces`: the space name the material source reads each colour parameter in,
+/// keyed exactly by the colour-valued typed parameters (the capture's split sources read Raw, the
+/// material source sRGB, with the same components; item 2.16).
 /// Under `/4` only (which holds at least one of them): `preset_parameters` is an object, keyed
 /// exactly by the observed `presets` when they are present, of parameter maps keyed exactly by the
 /// signature's `params` with int64, finite double or string values; `input_sources` is an object
@@ -140,6 +149,13 @@ std::expected<SourceMetadata, std::string> ParseSourceMetadata(const core::json:
 /// double stays a double, integers and strings are unchanged; empty for any other value (bool,
 /// null, array, object), which a typed parameter map refuses.
 std::optional<core::json::Value> ParamByValue(const core::json::Value& value);
+/// `ParamByValue`, or a colour parameter as the signature encodes it (procedural/seam.h
+/// `ParamJson`): exactly `{"type": "color", "working_space": <nonempty>, "components": [three
+/// finite numbers], "alpha": null}`, each component by value. Empty for any other value. A `/5`
+/// typed map takes these colours; `/1` to `/4` take scalars only.
+std::optional<core::json::Value> TypedParamByValue(const core::json::Value& value);
+/// Whether `value` is a tagged colour that `TypedParamByValue` admits.
+bool IsColourParam(const core::json::Value& value);
 /// The error of `ParseSourceMetadata`, or empty.
 std::string SourceMetadataProblem(const core::json::Value& signature, const core::json::Value& metadata);
 

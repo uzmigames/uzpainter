@@ -24,6 +24,45 @@ def same_path(left: Any, right: str) -> bool:
     )
 
 
+def typed_value(value: Any) -> Any:
+    """A parameter or property value as JSON: a `colormanagement.Color` is the seam's tagged colour
+    `{"type": "color", "working_space": <its GenericColorSpace name>, "components": <value_raw>,
+    "alpha": None}` (procedural/seam.h `ParamJson`), as Painter reads it back in this source's
+    context; any other value is unchanged."""
+    if isinstance(value, sp.colormanagement.Color):
+        space = value.color_space
+        name = None if space is None else space.name
+        if not isinstance(name, str) or not name:
+            raise ValueError("a colour value reads back without a named colour space")
+        return {
+            "type": "color",
+            "working_space": name,
+            "components": [float(c) for c in value.value_raw],
+            "alpha": None,
+        }
+    return value
+
+
+def typed_parameters(source: Any) -> dict[str, Any]:
+    """`get_parameters()` with each colour as its tagged value (`typed_value`)."""
+    return {name: typed_value(value) for name, value in source.get_parameters().items()}
+
+
+def painter_parameters(parameters: dict[str, Any]) -> dict[str, Any]:
+    """Parameters for `set_parameters`: a tagged colour becomes the `Color` of its components in
+    its GenericColorSpace, sRGB or Raw (`set_parameters` takes only a `Color` for a colour
+    parameter, and a Working colour reads back with another value)."""
+    result: dict[str, Any] = {}
+    for name, value in parameters.items():
+        if isinstance(value, dict) and value.get("type") == "color":
+            generic = sp.colormanagement.GenericColorSpace
+            space = {"sRGB": generic.sRGB, "Raw": generic.Raw}[value["working_space"]]
+            r, g, b = (float(c) for c in value["components"])
+            value = sp.colormanagement.Color(r, g, b, space)
+        result[name] = value
+    return result
+
+
 def check_owned() -> None:
     current = identity()
     owner = STATE.get("owner")
@@ -59,7 +98,7 @@ def configure(request: dict[str, Any]) -> None:
         source = fill.get_source(channel)
         if not isinstance(source, sp.source.SourceSubstance):
             raise RuntimeError("resource is not SourceSubstance")
-        source.set_parameters(request["parameters"])
+        source.set_parameters(painter_parameters(request["parameters"]))
         apply_state(source, request)
         fill.set_opacity(1.0, channel)
         fill.set_blending_mode(sp.layerstack.BlendingMode.Normal, channel)
@@ -136,7 +175,7 @@ def configure_generator(request: dict[str, Any]) -> None:
     source = effect.get_source()
     if not isinstance(source, sp.source.SourceSubstance):
         raise RuntimeError("generator effect source is not SourceSubstance")
-    source.set_parameters(request["parameters"])
+    source.set_parameters(painter_parameters(request["parameters"]))
     STATE["fill"] = fill
     STATE["base"] = base
     STATE["effect"] = effect
@@ -166,7 +205,7 @@ def generator_readback() -> dict[str, Any]:
             "name": identifier.name,
             "version": identifier.version,
         },
-        "parameters": source.get_parameters(),
+        "parameters": typed_parameters(source),
         "inputs": list(source.image_inputs),
         "outputs": list(source.image_outputs),
     }
@@ -310,7 +349,7 @@ def preset_parameters() -> dict[str, Any]:
         observed = []
         for channel in channels:
             fill.get_source(channel).apply_preset(preset)
-            observed.append(fill.get_source(channel).get_parameters())
+            observed.append(typed_parameters(fill.get_source(channel)))
         result[preset] = observed
         for channel, parameters in zip(channels, original, strict=True):
             fill.get_source(channel).set_parameters(parameters)
@@ -336,7 +375,7 @@ def contexts(request: dict[str, Any]) -> dict[str, Any]:
     try:
         material.set_material_source(sp.resource.ResourceID.from_url(request["resource"]))
         source = material.get_material_source()
-        source.set_parameters(request["parameters"])
+        source.set_parameters(painter_parameters(request["parameters"]))
         apply_state(source, request)
         source = material.get_material_source()
         mapping = source.output_mapping
@@ -344,7 +383,7 @@ def contexts(request: dict[str, Any]) -> dict[str, Any]:
             "output_mapping": {key.name: mapping[key] for key in mapping},
             "mask_output": source.mask_output,
             "active_channels": sorted(c.name for c in material.active_channels),
-            "parameters": source.get_parameters(),
+            "parameters": typed_parameters(source),
             "input_sources": {n: described_input(source, n) for n in source.image_inputs},
         }
         try:
@@ -369,10 +408,11 @@ def plain(value: Any) -> Any:
 def described(prop: Any) -> dict[str, Any]:
     """One `properties.Property` through its documented getters (store/snapshots.h metadata).
 
-    Only finite integer, number and string values are representable; anything else refuses the
-    capture before any project change (no typed codec for vectors or colours yet)."""
-    value = prop.value()
-    if isinstance(value, bool) or not isinstance(value, (int, float, str)) or value != value:
+    Only finite integer, number and string values and colours (`typed_value`) are representable;
+    anything else refuses the capture before any project change (no typed codec for vectors)."""
+    value = typed_value(prop.value())
+    scalar = isinstance(value, (int, float, str)) and not isinstance(value, bool)
+    if not isinstance(value, dict) and (not scalar or value != value):
         raise ValueError(f"property {prop.name()!r} has a value the snapshot cannot represent")
     if isinstance(value, float) and value in (float("inf"), float("-inf")):
         raise ValueError(f"property {prop.name()!r} has a non-finite value")
@@ -404,7 +444,7 @@ def readback() -> dict[str, Any]:
                     "name": identifier.name,
                     "version": identifier.version,
                 },
-                "parameters": source.get_parameters(),
+                "parameters": typed_parameters(source),
                 "inputs": list(source.image_inputs),
                 "outputs": list(source.image_outputs),
                 "presets": list(source.get_preset_list()),

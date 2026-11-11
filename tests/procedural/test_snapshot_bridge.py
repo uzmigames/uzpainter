@@ -247,6 +247,7 @@ def painter_module(monkeypatch: pytest.MonkeyPatch) -> tuple[dict[str, Any], dic
     modules["application"].version_info = lambda: (1, 0, 0)
     modules["project"].is_open = lambda: True
     modules["project"].last_imported_mesh_path = lambda: "foreign.obj"
+    modules["colormanagement"].Color = type("Color", (), {})
     module_globals = runpy.run_path(str(Path(bridge.__file__).with_name("painter_side.py")))
     return module_globals, modules
 
@@ -305,7 +306,7 @@ def test_painter_readback_observes_resource_fields_without_reconstruction(
         "name": "documented name",
         "version": "documented version",
     }
-    assert captured["parameters"] is parameters
+    assert bridge.canonical_state(captured["parameters"]) == bridge.canonical_state(parameters)
 
 
 class FakeRemote:
@@ -882,3 +883,130 @@ def test_generator_lookup_requires_the_generator_usage(
     with pytest.raises(ValueError, match="generator ResourceID"):
         bridge.record(context, request, tmp_path)
     assert not remote.created
+
+
+# Colour parameters (phase3.3_procedural-families item 2.16): the seam's tagged colour, read in Raw
+# on the capture's split sources and in sRGB on the material source, matched by its components.
+def colour(space: str, *components: float) -> dict[str, Any]:
+    return {"type": "color", "working_space": space, "components": list(components), "alpha": None}
+
+
+def test_colour_parameters_are_tagged_values() -> None:
+    parameters = bridge.scalar_parameters({"tint": colour("Raw", 0.25, 1, 0.5)})
+    assert parameters == {"tint": colour("Raw", 0.25, 1.0, 0.5)}
+    assert isinstance(parameters["tint"]["components"][1], float)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        {**colour("Raw", 0.25, 0.5, 1.0), "alpha": 1.0},
+        colour("Raw", 0.25, 0.5),
+        colour("Raw", 0.25, True, 1.0),
+        colour("Raw", 0.25, float("nan"), 1.0),
+        colour("", 0.25, 0.5, 1.0),
+        {**colour("Raw", 0.25, 0.5, 1.0), "type": "vector"},
+        {**colour("Raw", 0.25, 0.5, 1.0), "extra": 1},
+    ],
+)
+def test_malformed_colour_parameters_refuse(value: Any) -> None:
+    with pytest.raises(ValueError, match="tagged colours"):
+        bridge.scalar_parameters({"tint": value})
+
+
+def test_requested_colour_is_srgb_or_raw() -> None:
+    request = {"resource": RESOURCE, "parameters": {"tint": colour("sRGB", 0.25, 0.5, 1.0)}}
+    assert bridge.capture_request(request)["parameters"]["tint"]["working_space"] == "sRGB"
+    working = {"resource": RESOURCE, "parameters": {"tint": colour("Working", 0.25, 0.5, 1.0)}}
+    with pytest.raises(ValueError, match="sRGB or Raw"):
+        bridge.capture_request(working)
+
+
+def test_requested_colour_reads_back_by_its_components() -> None:
+    observed = readback()
+    for source in observed["sources"]:
+        source["parameters"]["tint"] = colour("Raw", 0.25, 0.5, 1.0)
+    request = bridge.capture_request(
+        {"resource": RESOURCE, "parameters": {"tint": colour("sRGB", 0.25, 0.5, 1.0)}}
+    )
+    assert bridge.validate_readback(deepcopy(observed), request)["parameters"]["tint"] == colour(
+        "Raw", 0.25, 0.5, 1.0
+    )
+    request["parameters"]["tint"] = colour("sRGB", 0.25, 0.5, 0.75)
+    with pytest.raises(ValueError, match="effective parameters"):
+        bridge.validate_readback(observed, request)
+
+
+def colour_contexts(material: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "split": {"output_mapping": REFUSED, "mask_output": REFUSED},
+        "material": {
+            "output_mapping": {"Height": "value"},
+            "mask_output": "alpha",
+            "active_channels": ["Height"],
+            "parameters": material,
+            "input_sources": {},
+            "active_output": REFUSED,
+        },
+    }
+
+
+def test_material_context_matches_a_colour_by_its_components() -> None:
+    source = {
+        "presets": [],
+        "outputs": ["value"],
+        "input_sources": {},
+        "parameters": {"gain": 0.5, "tint": colour("Raw", 0.25, 0.5, 1.0)},
+    }
+    material = {"gain": 0.5, "tint": colour("sRGB", 0.25, 0.5, 1.0)}
+    _, contexts = bridge.check_contexts(colour_contexts(material), source, {})
+    assert contexts["material"]["parameters"]["tint"]["working_space"] == "sRGB"
+    for other in (
+        {"gain": 0.5, "tint": colour("sRGB", 0.25, 0.5, 0.75)},
+        {"gain": 0.5, "tint": 0.25},
+        {"gain": 0.5},
+    ):
+        with pytest.raises(ValueError, match="material source"):
+            bridge.check_contexts(colour_contexts(other), source, {})
+
+
+class FakeSpace:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+
+class FakeColor:
+    def __init__(self, r: float, g: float, b: float, space: Any) -> None:
+        self.value_raw = (r, g, b)
+        self.color_space = space
+
+
+def test_painter_side_tags_a_colour_and_sets_it_back_as_a_color(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module_globals, modules = painter_module(monkeypatch)
+    spaces = ModuleType("GenericColorSpace")
+    spaces.Raw = FakeSpace("Raw")  # type: ignore[attr-defined]
+    spaces.sRGB = FakeSpace("sRGB")  # type: ignore[attr-defined]
+    modules["colormanagement"].Color = FakeColor
+    modules["colormanagement"].GenericColorSpace = spaces
+    source = MagicMock()
+    source.get_parameters.return_value = {
+        "gain": 0.5,
+        "tint": FakeColor(0.25, 0.5, 1.0, spaces.sRGB),
+    }
+    tagged = module_globals["typed_parameters"](source)
+    assert tagged == {"gain": 0.5, "tint": colour("sRGB", 0.25, 0.5, 1.0)}
+    back = module_globals["painter_parameters"](tagged)
+    assert back["gain"] == 0.5
+    assert isinstance(back["tint"], FakeColor)
+    assert back["tint"].value_raw == (0.25, 0.5, 1.0) and back["tint"].color_space is spaces.sRGB
+    prop = MagicMock()
+    prop.value.return_value = FakeColor(0.25, 0.5, 1.0, spaces.Raw)
+    prop.name.return_value = "tint"
+    prop.enum_values.return_value = {}
+    prop.properties.return_value = {}
+    assert module_globals["described"](prop)["value"] == colour("Raw", 0.25, 0.5, 1.0)
+    unnamed = FakeColor(0.25, 0.5, 1.0, None)
+    with pytest.raises(ValueError, match="named colour space"):
+        module_globals["typed_value"](unnamed)

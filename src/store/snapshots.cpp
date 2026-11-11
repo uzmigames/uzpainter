@@ -78,7 +78,7 @@ std::expected<std::vector<std::string>, std::string> DistinctNames(const Value& 
 /// (python/uzpainter_snapshot/painter_side.py `described`): exactly the documented getters
 /// `value`, `name`, `short_name`, `label`, `widget_type` (one of the documented widget types),
 /// `enum_values` (label -> integer) and `properties` (an object), with `name` equal to its key.
-std::string PropertyProblem(const std::string& key, const Value& description) {
+std::string PropertyProblem(const std::string& key, const Value& description, bool colours) {
     static constexpr std::array<std::string_view, 7> kFields = {
         "value", "name", "short_name", "label", "widget_type", "enum_values", "properties"};
     // python-doc `Property.widget_type() -> str`, "One of:".
@@ -104,18 +104,22 @@ std::string PropertyProblem(const std::string& key, const Value& description) {
         return "enum_values must map labels to integers";
     }
     if (!object->at("properties").IsObject()) return "properties must be an object";
-    // No typed codec exists for vectors, colours or other values yet: only finite scalars are kept.
+    // No typed codec exists for vectors or other values yet: only finite scalars, and under `/5`
+    // tagged colours, are kept.
     const Value& value = object->at("value");
     const bool finite = value.IsInt() || value.IsString() ||
                         (value.IsDouble() && std::isfinite(std::get<double>(value.data)));
-    if (!finite) return "value must be a finite integer, number or string";
+    if (!finite && !(colours && IsColourParam(value))) {
+        return colours ? "value must be a finite integer, number, string or tagged colour"
+                       : "value must be a finite integer, number or string";
+    }
     return {};
 }
 
 /// Why `typed` is not the typed parameter map of a snapshot of `signature` (decision 361): an
 /// object whose keys are exactly the signature's `params` and whose int64, finite double or
 /// string values equal them by value. The raw values are kept; nothing is converted.
-std::string TypedParametersProblem(const Value& signature, const Value& typed) {
+std::string TypedParametersProblem(const Value& signature, const Value& typed, bool colours) {
     const auto* map = std::get_if<Object>(&typed.data);
     if (map == nullptr) return "typed_effective_parameters must be an object";
     const auto* object = std::get_if<Object>(&signature.data);
@@ -126,8 +130,12 @@ std::string TypedParametersProblem(const Value& signature, const Value& typed) {
     for (const auto& [name, value] : *map) {
         const auto it = expected->find(name);
         if (it == expected->end()) return "typed_effective_parameters keys must be exactly the signature's parameters";
-        const std::optional<Value> byValue = ParamByValue(value);
-        if (!byValue) return "typed_effective_parameters." + name + " must be an int64, finite double or string";
+        const std::optional<Value> byValue = colours ? TypedParamByValue(value) : ParamByValue(value);
+        if (!byValue) {
+            return "typed_effective_parameters." + name +
+                   (colours ? " must be an int64, finite double, string or tagged colour"
+                            : " must be an int64, finite double or string");
+        }
         if (core::json::WriteCanonical(*byValue) != core::json::WriteCanonical(it->second)) {
             return "typed_effective_parameters." + name + " is not the signature's value";
         }
@@ -183,7 +191,7 @@ bool SameKeys(const Object& object, const std::optional<std::vector<std::string>
 
 /// Why `value` is not the `/4` `preset_parameters` of a snapshot of `signature` (decision 413).
 std::string PresetParametersProblem(const Value& signature, const Value& value,
-                                    const std::optional<std::vector<std::string>>& presets) {
+                                    const std::optional<std::vector<std::string>>& presets, bool colours) {
     const auto* map = std::get_if<Object>(&value.data);
     if (map == nullptr || !SameKeys(*map, presets)) return "preset_parameters must be an object keyed by the presets";
     const auto* object = std::get_if<Object>(&signature.data);
@@ -196,7 +204,7 @@ std::string PresetParametersProblem(const Value& signature, const Value& value,
             return "preset_parameters." + preset + " must map exactly the signature's parameters";
         }
         for (const auto& [name, item] : *values) {
-            if (!expected->contains(name) || !ParamByValue(item)) {
+            if (!expected->contains(name) || !(colours ? TypedParamByValue(item) : ParamByValue(item))) {
                 return "preset_parameters." + preset + "." + name + " must be a signature parameter of int64, finite double or string";
             }
         }
@@ -277,7 +285,8 @@ bool ChannelName(const std::string& name) {
 }
 
 /// Why `value` is not the `/4` `contexts` of a snapshot listing `outputs` (decision 413).
-std::string ContextsProblem(const Value& value, const std::vector<std::string>& outputs) {
+std::string ContextsProblem(const Value& value, const std::vector<std::string>& outputs,
+                            const std::optional<std::vector<std::string>>& colourParameters) {
     const auto* object = std::get_if<Object>(&value.data);
     if (object == nullptr || object->size() != 2 || !object->contains("split") || !object->contains("material")) {
         return "contexts must hold exactly split and material";
@@ -290,9 +299,25 @@ std::string ContextsProblem(const Value& value, const std::vector<std::string>& 
     const auto* material = std::get_if<Object>(&object->at("material").data);
     static constexpr std::array<std::string_view, 4> kMaterial = {"output_mapping", "mask_output", "active_channels",
                                                                   "active_output"};
-    if (material == nullptr || material->size() != kMaterial.size() ||
-        !std::all_of(kMaterial.begin(), kMaterial.end(), [&](std::string_view k) { return material->contains(std::string(k)); })) {
-        return "contexts.material must hold exactly output_mapping, mask_output, active_channels and active_output";
+    // Under `/5`, the space the material source reads each colour parameter in (item 2.16).
+    const std::size_t extra = colourParameters ? 1 : 0;
+    if (material == nullptr || material->size() != kMaterial.size() + extra ||
+        !std::all_of(kMaterial.begin(), kMaterial.end(), [&](std::string_view k) { return material->contains(std::string(k)); }) ||
+        (colourParameters && !material->contains("colour_spaces"))) {
+        return colourParameters ? "contexts.material must hold exactly output_mapping, mask_output, active_channels, "
+                                  "active_output and colour_spaces"
+                                : "contexts.material must hold exactly output_mapping, mask_output, active_channels and "
+                                  "active_output";
+    }
+    if (colourParameters) {
+        const auto* spaces = std::get_if<Object>(&material->at("colour_spaces").data);
+        if (spaces == nullptr || spaces->size() != colourParameters->size() ||
+            !std::all_of(colourParameters->begin(), colourParameters->end(), [&](const std::string& name) {
+                const auto it = spaces->find(name);
+                return it != spaces->end() && it->second.IsString() && !std::get<std::string>(it->second.data).empty();
+            })) {
+            return "contexts.material.colour_spaces must name a space for exactly the colour parameters";
+        }
     }
     const auto* mapping = std::get_if<Object>(&material->at("output_mapping").data);
     if (mapping == nullptr) return "contexts.material.output_mapping must be an object";
@@ -328,11 +353,72 @@ std::optional<Value> ParamByValue(const Value& value) {
     return value;
 }
 
+bool IsColourParam(const Value& value) {
+    const auto* object = std::get_if<Object>(&value.data);
+    if (object == nullptr || object->size() != 4) return false;
+    const auto field = [&](std::string_view name) -> const Value* {
+        const auto it = object->find(name);
+        return it == object->end() ? nullptr : &it->second;
+    };
+    const Value* type = field("type");
+    const Value* space = field("working_space");
+    const Value* components = field("components");
+    const Value* alpha = field("alpha");
+    if (type == nullptr || *type != Value("color") || space == nullptr || !space->IsString() ||
+        std::get<std::string>(space->data).empty() || alpha == nullptr || !alpha->IsNull() || components == nullptr) {
+        return false;
+    }
+    const auto* list = std::get_if<core::json::Array>(&components->data);
+    return list != nullptr && list->size() == 3 && std::all_of(list->begin(), list->end(), [](const Value& component) {
+               const auto number = ParamByValue(component);
+               return number && !number->IsString();
+           });
+}
+
+std::optional<Value> TypedParamByValue(const Value& value) {
+    if (auto scalar = ParamByValue(value)) return scalar;
+    if (!IsColourParam(value)) return std::nullopt;
+    Object colour = std::get<Object>(value.data);
+    core::json::Array components;
+    for (const Value& component : std::get<core::json::Array>(colour.at("components").data)) {
+        components.push_back(*ParamByValue(component));
+    }
+    colour["components"] = std::move(components);
+    return Value(std::move(colour));
+}
+
+namespace {
+
+/// Whether any parameter, preset parameter or property value of `metadata` is a tagged colour.
+bool HoldsColour(const SourceMetadata& metadata) {
+    const auto any = [](const Object& map) {
+        return std::any_of(map.begin(), map.end(), [](const auto& entry) { return IsColourParam(entry.second); });
+    };
+    if (metadata.typed_effective_parameters && any(*metadata.typed_effective_parameters)) return true;
+    if (metadata.preset_parameters) {
+        for (const auto& [preset, parameters] : *metadata.preset_parameters) {
+            if (const auto* map = std::get_if<Object>(&parameters.data); map && any(*map)) return true;
+        }
+    }
+    if (metadata.properties) {
+        for (const auto& [name, description] : *metadata.properties) {
+            const auto* object = std::get_if<Object>(&description.data);
+            const auto value = object ? object->find("value") : Object::const_iterator{};
+            if (object && value != object->end() && IsColourParam(value->second)) return true;
+        }
+    }
+    return false;
+}
+
+}  // namespace
+
 Value SourceMetadataJson(const Value& signature, const SourceMetadata& metadata) {
+    const bool v5 = HoldsColour(metadata);
     const bool v4 = metadata.preset_parameters || metadata.input_sources || metadata.contexts;
     const bool v3 = metadata.typed_effective_parameters || metadata.observed_resource_id;
     const bool v2 = metadata.image_inputs || metadata.presets || metadata.properties;
-    const std::string_view schema = v4   ? kSourceMetadataSchemaV4
+    const std::string_view schema = v5   ? kSourceMetadataSchemaV5
+                                    : v4 ? kSourceMetadataSchemaV4
                                     : v3 ? kSourceMetadataSchemaV3
                                     : v2 ? kSourceMetadataSchemaV2
                                          : kSourceMetadataSchema;
@@ -364,15 +450,17 @@ std::expected<SourceMetadata, std::string> ParseSourceMetadata(const Value& sign
     const bool v1 = schema && schema->IsString() && std::get<std::string>(schema->data) == kSourceMetadataSchema;
     const bool v2 = schema && schema->IsString() && std::get<std::string>(schema->data) == kSourceMetadataSchemaV2;
     const bool v3 = schema && schema->IsString() && std::get<std::string>(schema->data) == kSourceMetadataSchemaV3;
-    const bool v4 = schema && schema->IsString() && std::get<std::string>(schema->data) == kSourceMetadataSchemaV4;
+    const bool v5 = schema && schema->IsString() && std::get<std::string>(schema->data) == kSourceMetadataSchemaV5;
+    const bool v4 = v5 || (schema && schema->IsString() && std::get<std::string>(schema->data) == kSourceMetadataSchemaV4);
     if (object == nullptr || !object->contains("asset") || !object->contains("image_outputs") || schema == nullptr) {
         return Result(std::unexpect, "source_metadata must be an object of schema, asset and image_outputs");
     }
     if (!v1 && !v2 && !v3 && !v4) {
         return Result(std::unexpect, "source_metadata schema must be " + std::string(kSourceMetadataSchema) + ", " +
                                          std::string(kSourceMetadataSchemaV2) + ", " +
-                                         std::string(kSourceMetadataSchemaV3) + " or " +
-                                         std::string(kSourceMetadataSchemaV4));
+                                         std::string(kSourceMetadataSchemaV3) + ", " +
+                                         std::string(kSourceMetadataSchemaV4) + " or " +
+                                         std::string(kSourceMetadataSchemaV5));
     }
     for (const auto& [name, ignored] : *object) {
         const bool required = name == "schema" || name == "asset" || name == "image_outputs";
@@ -388,7 +476,7 @@ std::expected<SourceMetadata, std::string> ParseSourceMetadata(const Value& sign
     if (v3 && !object->contains("typed_effective_parameters") && !object->contains("observed_resource_id")) {
         return Result(std::unexpect, "source_metadata /3 needs typed_effective_parameters or observed_resource_id");
     }
-    if (v4 && !object->contains("preset_parameters") && !object->contains("input_sources") && !object->contains("contexts")) {
+    if (v4 && !v5 && !object->contains("preset_parameters") && !object->contains("input_sources") && !object->contains("contexts")) {
         return Result(std::unexpect, "source_metadata /4 needs preset_parameters, input_sources or contexts");
     }
     const auto [pin, output] = PinAndOutput(signature);
@@ -416,13 +504,13 @@ std::expected<SourceMetadata, std::string> ParseSourceMetadata(const Value& sign
         const auto* properties = std::get_if<Object>(&object->at("properties").data);
         if (properties == nullptr) return Result(std::unexpect, "source_metadata properties must be an object");
         for (const auto& [name, description] : *properties) {
-            const std::string problem = PropertyProblem(name, description);
+            const std::string problem = PropertyProblem(name, description, v5);
             if (!problem.empty()) return Result(std::unexpect, "source_metadata properties." + name + ": " + problem);
         }
         parsed.properties = *properties;
     }
     if (const auto typed = object->find("typed_effective_parameters"); typed != object->end()) {
-        const std::string problem = TypedParametersProblem(signature, typed->second);
+        const std::string problem = TypedParametersProblem(signature, typed->second, v5);
         if (!problem.empty()) return Result(std::unexpect, "source_metadata " + problem);
         parsed.typed_effective_parameters = std::get<Object>(typed->second.data);
     }
@@ -432,7 +520,7 @@ std::expected<SourceMetadata, std::string> ParseSourceMetadata(const Value& sign
         parsed.observed_resource_id = std::move(*observed);
     }
     if (const auto presets = object->find("preset_parameters"); presets != object->end()) {
-        const std::string problem = PresetParametersProblem(signature, presets->second, parsed.presets);
+        const std::string problem = PresetParametersProblem(signature, presets->second, parsed.presets, v5);
         if (!problem.empty()) return Result(std::unexpect, "source_metadata " + problem);
         parsed.preset_parameters = std::get<Object>(presets->second.data);
     }
@@ -442,10 +530,19 @@ std::expected<SourceMetadata, std::string> ParseSourceMetadata(const Value& sign
         parsed.input_sources = std::get<Object>(inputs->second.data);
     }
     if (const auto contexts = object->find("contexts"); contexts != object->end()) {
-        const std::string problem = ContextsProblem(contexts->second, parsed.image_outputs);
+        std::optional<std::vector<std::string>> colourParameters;
+        if (v5 && parsed.typed_effective_parameters) {
+            colourParameters.emplace();
+            for (const auto& [name, value] : *parsed.typed_effective_parameters) {
+                if (IsColourParam(value)) colourParameters->push_back(name);
+            }
+        }
+        const std::string problem = ContextsProblem(contexts->second, parsed.image_outputs, colourParameters);
         if (!problem.empty()) return Result(std::unexpect, "source_metadata " + problem);
         parsed.contexts = std::get<Object>(contexts->second.data);
     }
+    // One encoding per observation set: /5 exists only for metadata holding a colour.
+    if (v5 && !HoldsColour(parsed)) return Result(std::unexpect, "source_metadata /5 needs a colour parameter or property");
     return parsed;
 }
 

@@ -245,7 +245,8 @@ std::expected<core::RequestOutcome, std::string> RecordSnapshotExport(
 namespace {
 
 /// The recorded parameters of a paired source, equal to the request's effective parameters as the
-/// signature encodes them, key for key; every value int64, finite double or string.
+/// signature encodes them, key for key; every value int64, finite double, string or tagged colour
+/// (`store::TypedParamByValue`; a colour makes the metadata `/5`).
 const json::Object& RecordedParameters(const json::Object& source, const ProceduralRequest& request) {
     // The recorded parameters are the request's effective parameters as the signature encodes
     // them (ParamJson: numbers by value, so 15.0 and 15, or -0.0 and 0.0, are one identity; a
@@ -262,8 +263,9 @@ const json::Object& RecordedParameters(const json::Object& source, const Procedu
             throw std::invalid_argument("the paired sources' parameter " + name + " differs from the capture signature");
         }
         // Decision 361: a value outside the typed domain refuses the capture rather than losing its type.
-        if (!store::ParamByValue(value)) {
-            throw std::invalid_argument("the paired sources' parameter " + name + " is not an int64, finite double or string");
+        if (!store::TypedParamByValue(value)) {
+            throw std::invalid_argument("the paired sources' parameter " + name +
+                                        " is not an int64, finite double, string or tagged colour");
         }
     }
     return recorded;
@@ -361,12 +363,36 @@ std::expected<store::SourceMetadata, std::string> ReceiptMultiOutputMetadata(
         metadata.input_sources = std::move(inputs);
         const auto& contexts = Object(top.at("contexts"), "contexts");
         json::Object material = Object(contexts.at("material"), "material context");
-        if (json::WriteCanonical(material.at("parameters")) != json::WriteCanonical(source.at("parameters")) ||
-            json::WriteCanonical(material.at("input_sources")) != json::WriteCanonical(source.at("input_sources"))) {
+        // The material source reads the same state. A colour parameter is matched by its components:
+        // the material source reads it in sRGB where the capture's split sources read Raw (item
+        // 2.16), so the space it reads is recorded beside the material context (`/5`).
+        const auto& materialParameters = Object(material.at("parameters"), "material parameters");
+        const auto& splitParameters = Object(source.at("parameters"), "source parameters");
+        json::Object colourSpaces;
+        bool same = materialParameters.size() == splitParameters.size();
+        for (const auto& [name, value] : same ? materialParameters : json::Object{}) {
+            const auto split = splitParameters.find(name);
+            if (split == splitParameters.end()) {
+                same = false;
+                break;
+            }
+            if (store::IsColourParam(value) && store::IsColourParam(split->second)) {
+                const auto components = [](const json::Value& colour) {
+                    return json::WriteCanonical(std::get<json::Object>(store::TypedParamByValue(colour)->data).at("components"));
+                };
+                same = components(value) == components(split->second);
+                colourSpaces[name] = std::get<json::Object>(value.data).at("working_space");
+            } else {
+                same = json::WriteCanonical(value) == json::WriteCanonical(split->second);
+            }
+            if (!same) break;
+        }
+        if (!same || json::WriteCanonical(material.at("input_sources")) != json::WriteCanonical(source.at("input_sources"))) {
             throw std::invalid_argument("the material source of the same state reads another state");
         }
         material.erase("parameters");
         material.erase("input_sources");
+        if (!colourSpaces.empty()) material["colour_spaces"] = std::move(colourSpaces);
         metadata.contexts = json::Object{{"split", contexts.at("split")}, {"material", std::move(material)}};
         const json::Value signature = SignatureJson(request);
         const std::string problem = store::SourceMetadataProblem(signature, store::SourceMetadataJson(signature, metadata));
