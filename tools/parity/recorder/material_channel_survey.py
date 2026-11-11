@@ -74,6 +74,28 @@ def survey(session: PainterSession, directory: Path) -> dict[str, Any]:
     return result
 
 
+def colour_values(session: PainterSession) -> dict[str, Any]:
+    """In the connected Painter, for each material: which parameters a colour edit changes,
+    compared by value (`mcs_colour_values`, item 2.16), on a new plane project closed after."""
+    session.connect()
+    source = PAINTER_SURVEY.read_text(encoding="utf-8")
+    session.transport.run(extension_code(source).replace("uzp_material_survey", "uzp_mcs"))
+    session.wait_catalog_ready(600)
+    result: dict[str, Any] = {"schema": SCHEMA.replace("survey/1", "colour-values/1")}
+    for family, url in MATERIAL_URLS.items():
+        create = {"mesh": "plane", "normal_map_format": "OpenGL", "default_texture_resolution": 128}
+        session.call(
+            "apply_step", step=1, call=ps.CREATE, args=create, resolved={"mesh": str(PLANE)}
+        )
+        session.wait_ready()
+        try:
+            result[family] = session.call("mcs_colour_values", url=url)
+            session.wait_ready()
+        finally:
+            session.call("close_project")
+    return result
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m tools.parity.recorder.material_channel_survey")
     parser.add_argument("--host", default=REMOTE_HOST)

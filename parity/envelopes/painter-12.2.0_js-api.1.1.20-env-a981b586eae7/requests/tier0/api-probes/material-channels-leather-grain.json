@@ -1,0 +1,92 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/api-probes/material-channels-leather-grain",
+  "tier": "0",
+  "domain": "tier0/api-probes/material-channels-leather-grain",
+  "description": "Item 2.16 (decision 431): the starter material leather-grain alone as a fill's material source over the empty stack, its active channels, then the BaseColor, BaseMetalness, SpecularRoughness, Normal and Height channels as OpenEXR 32f with passthrough padding and no dithering, repeated after save/reopen. Recorded in the Painter session that captured the destination's snapshots.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 128
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "position": "top"
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.layerstack.FillLayerNode.set_material_source",
+        "args": {
+          "node_step": 2,
+          "resource_url": "resource://starter_assets/leather_grain/leather_grain?version=540286d1112f9b9f88e09eede773eed3931d38a1.sbsar"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 2
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/basecolor:RGB",
+            "documentMap/basemetalness:L",
+            "documentMap/specularroughness:L",
+            "documentMap/normal:RGB",
+            "documentMap/height:L"
+          ],
+          "file_format": "exr",
+          "bit_depth": "32f",
+          "padding": "passthrough",
+          "dithering": false
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "texture_set.resolution",
+      "value": 128,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.2.0",
+      "build_id": "12.2.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": []
+}

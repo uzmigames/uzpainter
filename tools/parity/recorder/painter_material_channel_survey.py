@@ -311,5 +311,63 @@ def mcs_exports(args: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def comparable(value: Any) -> Any:
+    """A parameter value compared by value: a colour as its class, space and `value_raw`."""
+    if isinstance(value, (bool, int, float, str)):
+        return value
+    return colour_getters(value) | {"value_raw": guarded(lambda: json_value(value.value_raw))}
+
+
+def changed(before: dict[str, Any], after: dict[str, Any]) -> list[str]:
+    """The parameters whose readback differs by value (`comparable`), by name."""
+    return sorted(name for name in set(before) | set(after) if before.get(name) != after.get(name))
+
+
+def mcs_colour_values(args: dict[str, Any]) -> dict[str, Any]:
+    """Which parameters each colour edit changes, compared by value (item 2.16): on a material
+    fill of the resource, each colour parameter is set to the sRGB `Color` of the authored triple
+    and to its own read value, and every parameter is read back after each set, then restored."""
+    ls = substance_painter.layerstack
+    ts = substance_painter.textureset
+    cm = substance_painter.colormanagement
+    stack = ts.get_active_stack()
+    identifier = substance_painter.resource.ResourceID.from_url(str(args["url"]))
+    fill = ls.insert_fill(ls.InsertPosition.from_textureset_stack(stack))
+    result: dict[str, Any] = {"url": args["url"]}
+    try:
+        fill.set_material_source(identifier)
+
+        def read() -> dict[str, Any]:
+            params = fill.get_material_source().get_parameters()
+            return {name: comparable(value) for name, value in params.items()}
+
+        first = read()
+        originals = fill.get_material_source().get_parameters()
+        trials: dict[str, Any] = {}
+        for name, original in sorted(originals.items()):
+            if isinstance(original, (bool, int, float, str)):
+                continue
+            observed: dict[str, Any] = {}
+            for label, value in (
+                ("srgb", cm.Color(*TRIPLE, cm.GenericColorSpace.sRGB)),
+                ("same", original),
+            ):
+                try:
+                    fill.get_material_source().set_parameters({name: value})
+                    observed[label] = changed(first, read())
+                except Exception as error:
+                    observed[label] = {"raised": raised_by(error)}
+                fill.get_material_source().set_parameters({name: original})
+                observed[label + "_restored"] = changed(first, read())
+            trials[name] = observed
+        result["trials"] = trials
+    except Exception as error:
+        result["raised"] = raised_by(error)
+    finally:
+        ls.delete_node(fill)
+    return result
+
+
 OPERATIONS["mcs_colour"] = mcs_colour
 OPERATIONS["mcs_exports"] = mcs_exports
+OPERATIONS["mcs_colour_values"] = mcs_colour_values
