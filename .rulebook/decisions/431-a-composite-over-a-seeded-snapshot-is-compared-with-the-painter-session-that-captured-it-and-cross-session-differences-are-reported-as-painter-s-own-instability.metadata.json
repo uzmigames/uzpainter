@@ -1,0 +1,9 @@
+{
+  "id": 431,
+  "slug": "a-composite-over-a-seeded-snapshot-is-compared-with-the-painter-session-that-captured-it-and-cross-session-differences-are-reported-as-painter-s-own-instability",
+  "title": "A composite over a seeded snapshot is compared with the Painter session that captured it, and cross-session differences are reported as Painter's own instability",
+  "status": "accepted",
+  "date": "2026-11-11",
+  "relatedTasks": ["phase3.3_procedural-families"],
+  "supersededBy": null
+}

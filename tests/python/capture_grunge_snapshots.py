@@ -24,6 +24,8 @@ import json
 import os
 import shutil
 import subprocess
+import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +34,7 @@ import pytest
 from tools.parity.proc_generators.requests import GENERATOR_URLS
 from tools.parity.proc_grunges.requests import GRUNGE_URLS
 from tools.parity.recorder.launcher import PainterLauncher
+from tools.parity.recorder.session import REMOTE_HOST, REMOTE_PORT, HttpTransport, PainterSession
 from tools.parity.store.store import locate
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -96,6 +99,16 @@ def create_script(project: Path) -> str:
 
 
 def test_capture(tmp_path_factory: pytest.TempPathFactory) -> None:
+    capture_session(tmp_path_factory)
+
+
+def capture_session(
+    tmp_path_factory: pytest.TempPathFactory,
+    requests: Sequence[Path] = (),
+    record_id: str = "grunge-snapshots-project",
+) -> None:
+    """Build, create the destination, capture every entry of `CAPTURES` in one Painter session,
+    then record each Tier 0 request of `requests` in that same session (decision 431)."""
     if os.environ.get("OCIO") or os.environ.get("PAINTER_ACE_CONFIG"):
         pytest.fail("the capture runs Painter under Legacy colour management", pytrace=False)
     store = locate()
@@ -132,19 +145,30 @@ def test_capture(tmp_path_factory: pytest.TempPathFactory) -> None:
             "request_sha256": hashlib.sha256(request.read_bytes()).hexdigest(),
         }
 
+    runs: dict[str, list[str]] = {}
     launcher = PainterLauncher()
     launcher.start({"OCIO": None, "PAINTER_ACE_CONFIG": None})
     try:
+        if requests:
+            session = PainterSession(HttpTransport(REMOTE_HOST, REMOTE_PORT))
+            session.connect()
+            session.wait_catalog_ready(600)
         captured = {
             name: capture(name, usage, resource, parameters)
             for name, (usage, resource, parameters) in CAPTURES.items()
         }
+        for path in requests:
+            recorded = run(
+                [sys.executable, "-m", "tools.parity.recorder", "record", str(path)], 3000
+            )
+            assert recorded.returncode == 0, f"{path.name}: " + recorded.stdout + recorded.stderr
+            runs[path.stem] = [x for x in recorded.stdout.splitlines() if "recorded: " in x]
     finally:
         launcher.stop()
     digest = hashlib.sha256(project.read_bytes()).hexdigest()
     size = store.put_blob(project, digest)
     summary = {
-        "project": {"record_id": "grunge-snapshots-project", "sha256": digest, "size_bytes": size},
+        "project": {"record_id": record_id, "sha256": digest, "size_bytes": size},
         "exe_sha256": hashlib.sha256(exe.read_bytes()).hexdigest(),
         "captures": {
             name: {
@@ -156,4 +180,6 @@ def test_capture(tmp_path_factory: pytest.TempPathFactory) -> None:
             for name, item in captured.items()
         },
     }
+    if runs:
+        summary["recorded"] = runs
     print("UZP_CAPTURE_SUMMARY:" + json.dumps(summary, sort_keys=True))

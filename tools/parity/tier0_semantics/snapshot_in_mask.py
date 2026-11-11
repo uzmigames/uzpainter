@@ -111,7 +111,41 @@ SOURCE_CASES: tuple[Case, ...] = (
     Case("metal-edge-wear", "Black", (Effect("generator", "Metal Edge Wear"),)),
     Case("mask-builder-legacy", "Black", (Effect("generator", "Mask Builder - Legacy"),)),
 )
-GOLDENS: dict[str, tuple[Case, ...]] = {NAME: CASES, SOURCES_NAME: SOURCE_CASES}
+# Decision 431 (owner, 2026-11-11): a composite over a seeded snapshot is compared with a recording
+# made in the Painter session that captured the snapshot. `snapshot-in-mask-session` holds the
+# composites of `CASES` again, recorded by `tests/python/capture_snapshot_in_mask_session.py` in the
+# Painter session whose `assets snapshot` captures fill the destination project it stores.
+SESSION_NAME = "snapshot-in-mask-session"
+# The 16-bit read on this very path, in that session: the bitmap `mask-codes` (every 16-bit code
+# once) as the only effect of a black mask at Normal 1, so the channel holds G(k) of every code k.
+READ_NAME = "snapshot-in-mask-read"
+READ_CASES: tuple[Case, ...] = (
+    Case("mask-codes-normal-1", "Black", (Effect("bitmap", "mask-codes"),)),
+)
+GOLDENS: dict[str, tuple[Case, ...]] = {
+    NAME: CASES,
+    SOURCES_NAME: SOURCE_CASES,
+    SESSION_NAME: CASES,
+    READ_NAME: READ_CASES,
+}
+# What each golden's description adds after the shared text.
+SESSION_NOTES = {
+    SESSION_NAME: " Recorded in the Painter session that captured the destination's snapshots "
+    "(decision 431).",
+    READ_NAME: " Recorded in the Painter session that captured the destination's snapshots "
+    "(decision 431): the 16-bit read of every code on this path.",
+}
+
+
+def extra_bitmaps(cases: tuple[Case, ...]) -> list[str]:
+    """The bitmap effects' inputs that are not one of the destination's mesh maps."""
+    found: list[str] = []
+    for case in cases:
+        for effect in case.effects:
+            bitmap = effect.kind == "bitmap" and effect.asset not in MESH_MAPS.values()
+            if bitmap and effect.asset not in found:
+                found.append(effect.asset)
+    return found
 
 
 def user(k: int) -> str:
@@ -127,6 +161,8 @@ def instruction_steps(cases: tuple[Case, ...] = CASES) -> list[dict[str, Any]]:
     for usage, input_id in MESH_MAPS.items():
         imported[input_id] = steps.add(ps.IMPORT_RESOURCE, input=input_id, usage="TEXTURE")
         steps.add(ps.SET_MESH_MAP, usage=usage, resource_step=imported[input_id])
+    for input_id in extra_bitmaps(cases):
+        imported[input_id] = steps.add(ps.IMPORT_RESOURCE, input=input_id, usage="TEXTURE")
     channels = [user(k) for k in range(len(cases))]
     for channel in channels:
         steps.add(ps.ADD_CHANNEL, channel=channel, format="L32F")
@@ -235,5 +271,10 @@ def request(name: str) -> Golden:
     sequence = Sequence()
     sequence.steps = instruction_steps(cases)
     return Golden(
-        name, DOMAIN, description(cases), "plane", ["plane", *MESH_MAPS.values()], sequence
+        name,
+        DOMAIN,
+        description(cases) + SESSION_NOTES.get(name, ""),
+        "plane",
+        ["plane", *MESH_MAPS.values(), *extra_bitmaps(cases)],
+        sequence,
     )
