@@ -136,6 +136,11 @@ render::Result<std::shared_ptr<const evaluator::ProceduralImage>> SnapshotSource
         }
         if (half) image->image.encoding = render::TexelEncoding::Float16;
         image->materialHeight = true;
+    } else if (mask) {
+        // Inside a mask Painter reads the source as its 16-bit code (decision 431): the UNORM16
+        // write rule of the stored float32 value, which gives back the code of every captured value.
+        for (uint32_t& bits : image->image.values) bits = evaluator::arith::WriteUnorm(std::bit_cast<float>(bits), 16);
+        image->image.encoding = render::TexelEncoding::Unorm16;
     }
     for (const auto& entry : store::ProjectSnapshots(project)) {
         if (entry.key != image->signature || !entry.version) continue;

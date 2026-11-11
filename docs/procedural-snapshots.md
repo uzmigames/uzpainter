@@ -122,9 +122,17 @@ signature and is refused.
 
 Serving: a grunge snapshot binds to a User L32F fill (`assets bind-snapshot`) and is evaluated by
 the fill provider at its texture set's resolution, on any mesh and resolution of the domain above.
-A generator snapshot is served by `SnapshotBackend` for `SnapshotGeneratorRequest`. The compositor
-does not yet evaluate a generator effect, or a snapshot source inside a mask stack, which is how the
-recipes use both. Those stay release gaps (`phase3.3_procedural-families` item 2.15).
+A generator snapshot is served by `SnapshotBackend` for `SnapshotGeneratorRequest`.
+
+Inside a mask stack (decision 431): a fill effect of a mask may read a snapshot of the fixed grunges
+`grunge/rock` and `grunge/dirt-large` as its source. The source names its output with `mask_output`
+(a mask-stack procedural maps no channel), and takes no preset, image input or plugged source.
+Painter reads it as its 16-bit code, so the provider serves the UNORM16 code of each stored value,
+and the mask arithmetic is the evaluator's (`parity/semantics/masks-levels.json`). Seeded grunge
+snapshots and generator effects stay refused in a mask: each Painter instance of a seeded source can
+differ from another one on a few texels, in the capturing session too, so the capture does not
+predict the mask stack (`docs/analysis/proc-grunge-families/05-snapshot-in-mask-session-2026-11-11.md`).
+They stay release gaps (`phase3.3_procedural-families` item 2.15).
 
 Evidence over a real private capture: `tests/procedural/test_proc_grunge_snapshot_served.py`, from
 the capture `tests/python/capture_grunge_snapshots.py` (owner's machine, under the Painter lock).

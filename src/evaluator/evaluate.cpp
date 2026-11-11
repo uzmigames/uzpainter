@@ -560,7 +560,7 @@ private:
     /// cached output up; each output is stored in `format` (whose coverage plane is the start's:
     /// levels keep it, a fill effect over a covered backdrop keeps full coverage) and cached
     /// under (`owner`, `kind`, the effect's chained hash). A mask's fill effect blends through the
-    /// effect mix a + (r - a) alpha (masks-levels.json `mask-stack-effect-mix`); a content fill
+    /// effect mix fma(r - a, alpha, a) (masks-levels.json `mask-stack-effect-mix`); a content fill
     /// effect through the layer mix a (1 - alpha) + r alpha (Tier 0 `effect-order`, decision 346).
     render::Result<Operand> RunEffects(core::Id owner, CacheKind kind, Operand start,
                                        const std::vector<DagEffect>& effects, TileFormat format) {

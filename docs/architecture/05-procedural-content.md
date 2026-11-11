@@ -83,7 +83,7 @@ Since decision 429, snapshots are also the only route for Painter's grunges and 
 - `assets snapshot` with a `usage` captures on the destination's own mesh and texture set resolution. A grunge is captured as a fill source. A generator is captured in a mask, reading the destination's mesh maps imported into Painter.
 - The signature names the seed, every effective parameter, the resolution, the mesh's identity and, for a generator, each mesh map by hash.
 - Any single change is `unavailable`, naming its field.
-- The compositor serves grunge snapshots as User fill sources. Generator effects and snapshot sources inside mask stacks are not evaluated yet (`phase3.3_procedural-families` item 2.15).
+- The compositor serves grunge snapshots as User fill sources, and the fixed grunges `grunge/rock` and `grunge/dirt-large` as a mask fill effect's source (decision 431). Generator effects and seeded grunge snapshots inside mask stacks are not evaluated: a seeded source differs between Painter instances, the capturing session included (`phase3.3_procedural-families` item 2.15).
 - Details: `docs/procedural-snapshots.md`.
 
 ## 5. What remains unsupported

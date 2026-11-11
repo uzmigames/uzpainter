@@ -264,6 +264,22 @@ Gap FillGap(const core::Project& project, const core::Stack* stack, const core::
         }
         if (Gap gap = SourceGap(project, stack, source, channel, node)) return gap;
     }
+    if (fill.mono_source && fill.mono_source->kind() == SourceKind::procedural) {
+        // A mask fill effect's procedural source: only a snapshot the provider admits in a mask
+        // (snapshot_source.h `SnapshotFillRequest`, decision 431), as the 16-bit mask source. A mask
+        // does not depend on the channel: the provider ignores the channel and format it is given.
+        if (deferProcedural) return std::nullopt;
+        const core::TextureSet* set = nullptr;
+        if (stack)
+            for (const auto& candidate : project.texture_sets)
+                for (const auto& candidateStack : candidate.stacks)
+                    if (candidateStack.id == stack->id) set = &candidate;
+        if (!procedurals || !set) return Make(node, "a procedural source", "phase3.3_procedural-families");
+        auto admitted = procedurals->Resolve(project, *set, ChannelType::BaseColor, core::ChannelFormat::L16, fill,
+                                             std::get<core::ProceduralSource>(fill.mono_source->value).ref, node, true);
+        if (!admitted) return Make(node, admitted.error().reason, "phase3.3_procedural-families item 2.15");
+        return std::nullopt;
+    }
     if (fill.mono_source) return SourceGap(project, stack, *fill.mono_source, std::nullopt, node);
     return std::nullopt;
 }

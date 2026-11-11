@@ -654,6 +654,9 @@ std::array<float, 4> Composite(const CompositeInput& in) {
                 v = ri;
             } else if (in.fusedReadout) {
                 v = Fma(Sub(ri, a), alphaS, a);
+            } else if (in.effectMix && !in.filterEffectMix) {
+                // One rounding of a + (r - a) alpha (decision 431: snapshot-in-mask goldens).
+                v = Fma(Sub(ri, a), alphaS, a);
             } else if (in.mode == M::Replace || in.effectMix) {
                 const float d = Sub(ri, a);
                 v = Add(a, Mul(d, alphaS));

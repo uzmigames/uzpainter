@@ -10,7 +10,8 @@
 // - the blend kernels of parity/semantics/blend-kernels.json in float32 with the fused
 //   multiply-adds the goldens show (one rounding each), the recording GPU's reciprocal and
 //   square roots where Painter divides or takes roots (hwmath.h), and the opacity mix
-//   v = a (1 - alpha) + r alpha (Replace: a + (r - a) alpha; ColorBurn: fma(a, 1 - alpha, r alpha));
+//   v = a (1 - alpha) + r alpha (Replace: a + (r - a) alpha; ColorBurn: fma(a, 1 - alpha, r alpha);
+//   a mask effect: fma(r - a, alpha, a));
 // - the write rules ("Write"): UNORM n bits truncated to n + 4 fractional bits then the nearest
 //   code, ties down; sRGB8 round(255 encode(v)); 16-bit float toward zero; 32-bit float as it
 //   is, re-composited over the channel base (1 + (v - 1)) once at read-out;
@@ -160,9 +161,14 @@ struct CompositeInput {
     /// UNORM formats clamp r to [0, 1] before the opacity mix (blend-modes.json).
     bool clampUnorm = false;
     /// The mix of a mask effect (parity/semantics/masks-levels.json): over an opaque backdrop
-    /// v = a + (r - a) alpha for every mode, instead of the layer mix. A content fill effect takes
-    /// the layer mix (Tier 0 `effect-order`, decision 346).
+    /// v = fma(r - a, alpha, a), one rounding of a + (r - a) alpha, for every mode, instead of the
+    /// layer mix (decision 431: the snapshot-in-mask goldens; it equals the two-rounding form on
+    /// every earlier mask golden). A content fill effect takes the layer mix (Tier 0
+    /// `effect-order`, decision 346).
     bool effectMix = false;
+    /// With `effectMix`, the content filter effect's mix (filters.h): it keeps the two roundings
+    /// a + fl((r - a) alpha) the mask effect mix had, as no recording sets it apart.
+    bool filterEffectMix = false;
     /// The source-over onto a backdrop that is not opaque weights its terms with the coverage it
     /// computes (profile.h `EvaluatorProfile::coverageWeights`): wb = (1 - as) ab, ao = as + wb,
     /// ws = ao - ab and v = fma(ws, Cs, fma(ab, as B, wb Cb)) x Rcp(ao) with the recording GPU's

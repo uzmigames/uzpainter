@@ -430,7 +430,7 @@ def build_document(exe: Path, work: Path) -> dict[str, Any]:
             "mask-precision",
             "Mask stacks: background, a bitmap fill effect and its opacity, mask storage precision",
             "m := background (White 1, Black 0); each visible mask effect bottom-up: a fill "
-            "effect m := m + (r - m) alpha with r = kernel(mode, m, b) clamped to [0, 1], b the "
+            "effect m := fma(r - m, alpha, m) with r = kernel(mode, m, b) clamped to [0, 1], b the "
             "source's mono value and alpha the effect's opacity; m is stored at 16 bits (the "
             "UNORM write rule) after every effect on every channel format; the layer blends with "
             "opacity x m (a disabled or absent mask counts as 1).",
@@ -444,9 +444,11 @@ def build_document(exe: Path, work: Path) -> dict[str, Any]:
         entry(
             "mask-stack-effect-mix",
             "The mix of a mask effect over the mask below it (two mask effects, Multiply)",
-            "v = a + (r - a) alpha for every mode (the layer mix a (1 - alpha) + r alpha misses 6 "
-            "of 65536 texels of the second, Multiply, effect); a content fill effect takes the "
-            "layer mix instead (entry content-effect-order).",
+            "v = fma(r - a, alpha, a) for every mode (the layer mix a (1 - alpha) + r alpha "
+            "misses 6 of 65536 texels of the second, Multiply, effect); a content fill effect "
+            "takes the layer mix instead (entry content-effect-order). The one rounding is "
+            "decision 431's (the snapshot-in-mask goldens); on these goldens "
+            "fl(a + fl((r - a) alpha)) gives the same values.",
             [PYDOC, W3C],
             [],
             runs.residuals(MASK_MIX),
@@ -557,7 +559,7 @@ def build_document(exe: Path, work: Path) -> dict[str, Any]:
             "channel, the content stored in the channel format after each effect: a fill effect "
             "blends its source for the channel with its per-channel mode and opacity through the "
             "layer mix fl(fl(a fl(1 - alpha)) + fl(r alpha)) with r = kernel(mode, a, b) (not the "
-            "mask effect mix fl(a + fl(fl(r - a) alpha))), a levels effect remaps its affected "
+            "two-rounding mix fl(a + fl(fl(r - a) alpha))), a levels effect remaps its affected "
             "channel only, and the starter-asset Blur at its default parameters, Normal at "
             "opacity 1, on this 256 x 256 RGB16 or sRGB8 content is the content rounded toward "
             "zero to binary16.",
@@ -571,7 +573,7 @@ def build_document(exe: Path, work: Path) -> dict[str, Any]:
                 "uncertified and no alias names it. Evidence that no kernel acts there: the "
                 "linear fields of s7 (codes 257 x, 257 y, 256 x + y) are unchanged at the texture "
                 "borders, which bounds any kernel weight off the centre below 0.002. With the "
-                "mask effect mix the content fill effect misses s3 on 20 values, s4 on 32, s0, "
+                "two-rounding mix the content fill effect misses s3 on 20 values, s4 on 32, s0, "
                 "s1 and s2 on 1 or 2 (one 16-bit code, RGB16). s6 is entry `levels`."
             ),
         ),

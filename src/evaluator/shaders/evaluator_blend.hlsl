@@ -609,10 +609,7 @@ float LoadMask(uint srv, int2 p, uint enc) {
 
 float Mix(float a, float r, float alphaS) {
     if (g_fusedReadout) return Fma(r - a, alphaS, a);
-    if (g_effectMix) {
-        const float e = r - a;
-        return a + e * alphaS;
-    }
+    if (g_effectMix) return Fma(r - a, alphaS, a);
 #if defined(UZP_MODE_Replace)
     const float d = r - a;
     return a + d * alphaS;

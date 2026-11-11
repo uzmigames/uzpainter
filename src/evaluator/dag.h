@@ -25,7 +25,7 @@
 // Masks and effects (phase1.11_compositor-mask-effects, parity/semantics/masks-levels.json): a
 // layer's or group's mask is mono and stored at 16 bits: it starts from its background (White 1,
 // Black 0) and runs its visible effects bottom-up, a fill effect blending its source with its own
-// mode and opacity through the effect mix v = a + (r - a) alpha, a levels effect remapping the
+// mode and opacity through the effect mix v = fma(r - a, alpha, a), a levels effect remapping the
 // value (arith::Levels); a disabled mask counts as 1; a `Mesh` geometry mask (geometry_mask.h)
 // multiplies the result. Content effects run in list order on a fill layer's own content for the
 // channel: a fill effect blends its source for the channel (when the channel is active on it)

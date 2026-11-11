@@ -2149,6 +2149,8 @@ int RunTga(const std::vector<std::string>& args) {
 int RunSnapshotSource(const std::filesystem::path& path, std::optional<int64_t> seed);
 int RunProceduralEffects(const std::filesystem::path& path, bool observation = false);
 int RunSnapshotMaterial(const std::filesystem::path& path);
+int RunSnapshotInMask(const std::filesystem::path& path, const std::filesystem::path& cases,
+                      const std::filesystem::path& out);
 int RunSnapshotBindFixture(const std::filesystem::path& path);
 int RunFrozenHostProofCases(const std::filesystem::path& work);
 int RunFilterImportV2Cases(const std::filesystem::path& work);
@@ -2172,6 +2174,7 @@ int main(int argc, char** argv) {
             return RunSnapshotSource(args[1], args.size() == 3 ? std::optional<int64_t>(std::stoll(args[2])) : std::nullopt);
         if (args.size() == 2 && args[0] == "procedural-effects") return RunProceduralEffects(args[1]);
         if (args.size() == 2 && args[0] == "snapshot-material") return RunSnapshotMaterial(args[1]);
+        if (args.size() == 4 && args[0] == "snapshot-in-mask") return RunSnapshotInMask(args[1], args[2], args[3]);
         if (args.size() == 2 && args[0] == "procedural-observations") return RunProceduralEffects(args[1], true);
         if (args.size() == 2 && args[0] == "snapshot-bind") return RunSnapshotBindFixture(args[1]);
         if (args.size() == 2 && args[0] == "frozen-host-proof") return RunFrozenHostProofCases(args[1]);

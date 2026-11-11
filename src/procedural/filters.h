@@ -94,7 +94,8 @@ render::Result<Raster> LevelsFilterReference(const ProceduralRequest& request, c
 /// A filter effect on the CPU candidate lane (04 §2 step 4): the filter of `request` evaluated on
 /// `content` (the Levels filter through `LevelsFilterReference`, the others through
 /// `hlsl.EvaluateReference`), then blended over the same content with the effect's own `mode` and
-/// `opacity` through the evaluator's effect mix (`arith::Composite` with `effectMix`, mask 1),
+/// `opacity` through the effect mix a + fl((r - a) alpha) (`arith::Composite` with `effectMix` and
+/// `filterEffectMix`, mask 1),
 /// over the request's tile. `content` must have the SHA-256 that the request's content input
 /// names, one or three channels, and a mode with a blend kernel; otherwise `request_failed`.
 render::Result<Raster> FilterEffectReference(const HlslBackend& hlsl, const AssetLibrary& library,

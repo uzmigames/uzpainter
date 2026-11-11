@@ -420,6 +420,7 @@ render::Result<Raster> FilterEffectReference(const HlslBackend& hlsl, const Asse
             in.opacity = opacity;
             in.mode = mode;
             in.effectMix = true;
+            in.filterEffectMix = true;
             in.channels = static_cast<int>(content.channels);
             const std::array<float, 4> v = arith::Composite(in);
             for (uint32_t c = 0; c < content.channels; ++c) out.texels.push_back(v[c]);

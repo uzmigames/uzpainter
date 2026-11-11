@@ -6,6 +6,7 @@
 #include <expected>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <initializer_list>
 #include <iostream>
 #include <iterator>
@@ -15,15 +16,18 @@
 #include <set>
 #include <stdexcept>
 #include <string_view>
+#include <vector>
 
 #include "evaluator/arith.h"
 #include "evaluator/evaluator.h"
 #include "evaluator/profile.h"
 #include "evaluator/result_cache.h"
+#include "evaluator/sources.h"
 #include "evaluator/support.h"
 #include "procedural/admission.h"
 #include "procedural/filter_observation_source.h"
 #include "procedural/snapshot_backend.h"
+#include "procedural/snapshot_recording.h"
 #include "procedural/snapshot_source.h"
 #include "store/bundle.h"
 #include "store/filter_observations.h"
@@ -1248,5 +1252,202 @@ int RunFrozenHostProofCases(const std::filesystem::path& work) {
                                                    {"validator_code_sha256", run->evidence.at("validator_code_sha256")},
                                                    {"samples", static_cast<std::int64_t>(128 * 128)}})
               << "\n";
+    return 0;
+}
+
+namespace {
+
+/// A number of the case file (an integer or a double).
+double CaseNumber(const uzp::core::json::Value& value) {
+    if (const auto* integer = std::get_if<std::int64_t>(&value.data)) return static_cast<double>(*integer);
+    return std::get<double>(value.data);
+}
+
+/// One mask effect of `snapshot-in-mask`, in the case file's bottom-up order: a snapshot of the
+/// project by `signature_sha256` as a fill effect's source (with `generator`, as a generator
+/// effect), or a PNG by `bitmap` path staged as a resource, with its `mode` and `opacity`.
+uzp::core::Effect MaskCaseEffect(uzp::store::ProjectStore& store, uzp::core::Edit& edit,
+                                 const uzp::core::json::Object& spec) {
+    using namespace uzp;
+    namespace json = core::json;
+    core::Effect effect;
+    effect.uid = edit.AllocateId();
+    effect.kind = core::EffectKind::fill;
+    const auto mode = core::FromString<core::BlendingMode>(std::get<std::string>(spec.at("mode").data));
+    Check(mode.has_value(), "snapshot-in-mask: a mask effect mode");
+    effect.mono_blending = core::Blending{*mode, CaseNumber(spec.at("opacity")), {}};
+    if (const auto bitmap = spec.find("bitmap"); bitmap != spec.end()) {
+        std::ifstream in(std::filesystem::path(std::get<std::string>(bitmap->second.data)), std::ios::binary);
+        const std::string bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        Check(!bytes.empty(), "snapshot-in-mask: the bitmap reads");
+        core::BitmapSource source;
+        source.resource.sha256 = store.StageResource(bytes, "image/png");
+        source.color_space = "Raw";
+        core::ResourceMeta meta;
+        meta.id = edit.AllocateId();
+        meta.name = "snapshot-in-mask bitmap";
+        meta.mime = "image/png";
+        meta.size = static_cast<std::int64_t>(bytes.size());
+        meta.usage = "TEXTURE";
+        meta.origin = "test";
+        meta.imported_at = "2026-11-11T00:00:00Z";
+        meta.color_space = "Raw";
+        edit.project().resources[source.resource.sha256].push_back(std::move(meta));
+        effect.fill.emplace();
+        effect.fill->mono_source = core::Source{source};
+        return effect;
+    }
+    const std::string key = std::get<std::string>(spec.at("signature_sha256").data);
+    const auto entries = store::ProjectSnapshots(edit.project());
+    const store::SnapshotEntry* found = nullptr;
+    for (const auto& entry : entries)
+        if (entry.key == key) found = &entry;
+    Check(found != nullptr, "snapshot-in-mask: the project holds the signature");
+    const auto request = procedural::RequestFromSignature(found->signature);
+    Check(request.has_value(), "snapshot-in-mask: the signature parses");
+    core::ProceduralRef ref;
+    ref.asset = core::FormatAssetUrl(request->asset);
+    ref.params = std::get<json::Object>(std::get<json::Object>(found->signature.data).at("params").data);
+    ref.mask_output = request->outputId;
+    if (spec.contains("generator")) {
+        effect.kind = core::EffectKind::generator;
+        effect.procedural = ref;
+    } else {
+        effect.fill.emplace();
+        effect.fill->mono_source = core::Source{core::ProceduralSource{ref}};
+    }
+    return effect;
+}
+
+/// A white Raw fill on `channel` under a mask of the case's `background` and `effects`.
+uzp::core::Layer MaskCaseLayer(uzp::store::ProjectStore& store, uzp::core::Edit& edit,
+                               const uzp::core::json::Object& spec, uzp::core::ChannelType channel) {
+    using namespace uzp;
+    namespace json = core::json;
+    core::Layer layer;
+    layer.uid = edit.AllocateId();
+    layer.kind = core::LayerKind::fill;
+    layer.fill.emplace();
+    layer.fill->active_channels.insert(channel);
+    layer.fill->sources[channel] = core::Source{core::UniformColorSource{{1.0, 1.0, 1.0}, "Raw", {}}};
+    core::Mask mask;
+    mask.background = std::get<std::string>(spec.at("background").data) == "White" ? core::MaskBackground::White
+                                                                                   : core::MaskBackground::Black;
+    for (const json::Value& effect : std::get<json::Array>(spec.at("effects").data))
+        mask.effects.insert(mask.effects.begin(), MaskCaseEffect(store, edit, std::get<json::Object>(effect.data)));
+    layer.mask = std::move(mask);
+    return layer;
+}
+
+}  // namespace
+
+/// `snapshot-in-mask <project.uzp> <cases.json> <out-dir>` (phase3.3_procedural-families item
+/// 2.15, decision 431): in one transaction the support check admits, every case of `cases`
+/// (`{"background", "effects"}`) becomes a white Raw fill on its own L32F User channel (User0 up)
+/// over a black Raw base fill, under its mask; each channel's CPU read-out is written as
+/// `user<k>.raw` (float32, rows top first) and printed as `SERVED <k> <sha256>`. Each case of
+/// `refusals` is then submitted alone on top and must not commit: `REFUSED <k> <result>`.
+int RunSnapshotInMask(const std::filesystem::path& path, const std::filesystem::path& casesPath,
+                      const std::filesystem::path& out) {
+    using namespace uzp;
+    namespace json = core::json;
+    std::ifstream casesFile(casesPath, std::ios::binary);
+    const std::string text((std::istreambuf_iterator<char>(casesFile)), std::istreambuf_iterator<char>());
+    const json::Object root = std::get<json::Object>(json::Parse(text).data);
+    const json::Array& cases = std::get<json::Array>(root.at("cases").data);
+    auto opened = store::ProjectStore::Open(path);
+    Check(opened.report.ok(), "snapshot-in-mask: the project opens");
+    core::Document document(std::move(opened.state));
+    opened.store->Attach(document);
+    auto& store = *opened.store;
+    const auto channelOf = [](size_t k) {
+        const auto channel = core::FromString<core::ChannelType>("User" + std::to_string(k));
+        Check(channel.has_value(), "snapshot-in-mask: at most eight cases");
+        return *channel;
+    };
+    int key = 0;
+    const auto submit = [&](const std::function<void(core::Edit&)>& call) {
+        const auto id = "snapshot-in-mask-" + std::to_string(++key);
+        return store.Submit(document, {"snapshot-in-mask", json::Object{}, id, document.revision()}, call);
+    };
+    const auto built = submit([&](core::Edit& edit) {
+        auto& stack = edit.project().texture_sets.front().stacks.front();
+        core::Layer base;
+        base.uid = edit.AllocateId();
+        base.kind = core::LayerKind::fill;
+        base.fill.emplace();
+        std::vector<core::Layer> layers;
+        for (size_t k = 0; k < cases.size(); ++k) {
+            const core::ChannelType channel = channelOf(k);
+            stack.channels[channel].format = core::ChannelFormat::L32F;
+            base.fill->active_channels.insert(channel);
+            base.fill->sources[channel] = core::Source{core::UniformColorSource{{0.0, 0.0, 0.0}, "Raw", {}}};
+            layers.insert(layers.begin(), MaskCaseLayer(store, edit, std::get<json::Object>(cases[k].data), channel));
+        }
+        layers.push_back(std::move(base));
+        stack.root_layers.insert(stack.root_layers.begin(), std::make_move_iterator(layers.begin()),
+                                 std::make_move_iterator(layers.end()));
+        procedural::SnapshotSourceProvider provider(store, edit.project());
+        evaluator::RequireSupported(edit.base(), edit.project(), {}, &provider);
+    });
+    if (!built.result || built.result->status != core::ResultStatus::committed) {
+        throw std::runtime_error("snapshot-in-mask: the cases are refused: " +
+                                 (built.result ? json::WriteCanonical(built.result->ToJson()) : std::string("no result")));
+    }
+    const core::Project project = *document.snapshot().project;
+    auto templates = std::make_shared<const evaluator::TemplateLibrary>(
+        evaluator::TemplateLibrary::Load(evaluator::TemplateLibrary::DefaultDirectory()));
+    evaluator::CpuEvaluator cpu(templates, {1ull << 31, 1ull << 20});
+    evaluator::EvaluateRequest evaluation;
+    evaluation.textureSet = project.texture_sets.front().id;
+    evaluation.stack = project.texture_sets.front().stacks.front().id;
+    evaluation.templateId = project.settings.template_id;
+    evaluation.procedurals = std::make_shared<procedural::SnapshotSourceProvider>(store, project);
+    evaluation.resources = std::make_shared<evaluator::DecodingResourceProvider>(
+        [&store](std::string_view sha) -> std::optional<std::string> { return store.ReadResource(sha); });
+    std::filesystem::create_directories(out);
+    for (size_t k = 0; k < cases.size(); ++k) {
+        evaluation.channel = channelOf(k);
+        auto output = cpu.Evaluate(project, evaluation);
+        if (!output) throw std::runtime_error("snapshot-in-mask: case " + std::to_string(k) + ": " + output.error().reason);
+        std::vector<float> raster(size_t{output->width} * output->height, 0.0f);
+        for (const evaluator::TileResult& tile : output->tiles) {
+            Check(tile.constant || tile.texels.size() == size_t{tile.width} * tile.height * sizeof(float),
+                  "snapshot-in-mask: one float32 per texel");
+            for (uint32_t y = 0; y < tile.height; ++y) {
+                for (uint32_t x = 0; x < tile.width; ++x) {
+                    float value = 0.0f;
+                    if (tile.constant) {
+                        value = (*tile.constant)[0];
+                    } else {
+                        std::memcpy(&value, tile.texels.data() + (size_t{y} * tile.width + x) * sizeof(float), sizeof(float));
+                    }
+                    raster[size_t{tile.y0 + y} * output->width + tile.x0 + x] = value;
+                }
+            }
+        }
+        const std::string bytes(reinterpret_cast<const char*>(raster.data()), raster.size() * sizeof(float));
+        std::ofstream file(out / ("user" + std::to_string(k) + ".raw"), std::ios::binary);
+        file.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+        Check(static_cast<bool>(file), "snapshot-in-mask: the raster is written");
+        std::cout << "SERVED " << k << " " << core::Sha256Hex(bytes) << "\n";
+    }
+    if (const auto refusals = root.find("refusals"); refusals != root.end()) {
+        const json::Array& refused = std::get<json::Array>(refusals->second.data);
+        for (size_t k = 0; k < refused.size(); ++k) {
+            const auto before = document.revision();
+            const auto outcome = submit([&](core::Edit& edit) {
+                auto& stack = edit.project().texture_sets.front().stacks.front();
+                stack.root_layers.insert(stack.root_layers.begin(),
+                                         MaskCaseLayer(store, edit, std::get<json::Object>(refused[k].data), channelOf(0)));
+                procedural::SnapshotSourceProvider provider(store, edit.project());
+                evaluator::RequireSupported(edit.base(), edit.project(), {}, &provider);
+            });
+            Check(outcome.result && outcome.result->status != core::ResultStatus::committed && document.revision() == before,
+                  "snapshot-in-mask: a refusal case is refused before mutation");
+            std::cout << "REFUSED " << k << " " << json::WriteCanonical(outcome.result->ToJson()) << "\n";
+        }
+    }
+    store.Close();
     return 0;
 }

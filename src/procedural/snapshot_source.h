@@ -50,7 +50,10 @@ std::expected<ProceduralRequest, std::string> SnapshotGeneratorRequest(const cor
 /// identity UV or Fill projection with BilinearHQ and Repeat, one explicit scalar output mapping,
 /// no raster image input or mask output; a preset and plugged input sources join the signature),
 /// `SnapshotUseContext` and `RequestFor`, at the set's resolution. A fill in Material mode is `SnapshotMaterialRequest` (channel Height only). `SnapshotSourceProvider` admits only such a request; this does not say that
-/// a snapshot holds it.
+/// a snapshot holds it. With `mask`, the source of a fill effect of a mask stack (decision 431):
+/// the same capture domain and projection, only the fixed grunges `grunge/rock` and
+/// `grunge/dirt-large`, no preset, image input or plugged source, and the output named by
+/// `mask_output` (no output mapping); `channel` and `format` play no part.
 std::expected<ProceduralRequest, std::string> SnapshotFillRequest(
     const core::Project& project, const core::TextureSet& set, core::ChannelType channel, core::ChannelFormat format,
     const core::FillContent& fill, const core::ProceduralRef& ref, core::Id node, bool mask);
