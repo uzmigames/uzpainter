@@ -49,7 +49,7 @@ std::expected<ProceduralRequest, std::string> SnapshotGeneratorRequest(const cor
 /// provider's domain (a User L32F fill in the capture settings of `SnapshotSetRequest`, the
 /// identity UV or Fill projection with BilinearHQ and Repeat, one explicit scalar output mapping,
 /// no raster image input or mask output; a preset and plugged input sources join the signature),
-/// `SnapshotUseContext` and `RequestFor`, at the set's resolution. A fill in Material mode is `SnapshotMaterialRequest` (channel Height only). `SnapshotSourceProvider` admits only such a request; this does not say that
+/// `SnapshotUseContext` and `RequestFor`, at the set's resolution. A fill in Material mode is `SnapshotMaterialRequest` of `channel` and `format`. `SnapshotSourceProvider` admits only such a request; this does not say that
 /// a snapshot holds it. With `mask`, the source of a fill effect of a mask stack (decision 431):
 /// the same capture domain and projection, only the fixed grunges `grunge/rock` and
 /// `grunge/dirt-large`, no preset, image input or plugged source, and the output named by
@@ -64,16 +64,28 @@ inline constexpr std::string_view kMaterialMaskRefusal =
     "a material mask output other than the output mapped to Height is not recorded exactly "
     "(phase3.3_procedural-families item 2.7)";
 
-/// The request a material fill (`SourceMode::Material`, decision 413, P413-A/C) asks for: the
-/// shared capture domain of `SnapshotFillRequest`, Height active and mapped, no raster image input,
-/// a mask output absent or equal to Height's output (`kMaterialMaskRefusal` otherwise); its preset
-/// and plugged input sources join the signature. The request is the raw F32 scalar view of the
-/// output mapped to Height. Only Height is evaluated: Painter's material fill activates Height only,
-/// as `tz16(float32(2 x - 1))` of that view (the Height bitmap rule).
+/// Why a material channel outside the recorded channel rules is refused (item 2.16).
+inline constexpr std::string_view kMaterialChannelOwner = "phase3.3_procedural-families item 2.16";
+
+/// The channel view a material fill's `channel` of `format` reads (decision 413, P413-A; the
+/// 2026-11-11 material channel survey): Height (L16F or L32F), BaseMetalness and SpecularRoughness
+/// (L8) read the raw F32 scalar view (1); BaseColor (sRGB8) and Normal (RGB16F) the RGB view (3).
+/// Empty for any other channel or format, which no recording composes.
+std::optional<uint32_t> MaterialChannelView(core::ChannelType channel, core::ChannelFormat format);
+
+/// The request a material fill (`SourceMode::Material`, decision 413, P413-A/C, item 2.16) asks for
+/// on `channel` of `format`: the shared capture domain of `SnapshotFillRequest`, the channel mapped,
+/// no raster image input; on Height a mask output absent or equal to Height's output
+/// (`kMaterialMaskRefusal` otherwise), on another channel none. Its preset and plugged input
+/// sources join the signature. The request is the `MaterialChannelView` of the output mapped to the
+/// channel (refused, naming `kMaterialChannelOwner`, for an unrecorded channel or format). The
+/// defaults are Height's scalar view, which the material handle's recorded reads use.
 std::expected<ProceduralRequest, std::string> SnapshotMaterialRequest(const core::Project& project,
                                                                       const core::TextureSet& set,
                                                                       const core::FillContent& fill,
-                                                                      const core::ProceduralRef& ref, core::Id node);
+                                                                      const core::ProceduralRef& ref, core::Id node,
+                                                                      core::ChannelType channel = core::ChannelType::Height,
+                                                                      core::ChannelFormat format = core::ChannelFormat::L32F);
 
 /// Provider lifetime must not outlive the store. Each revision owns its provider.
 class SnapshotSourceProvider final : public evaluator::IProceduralSourceProvider {

@@ -80,8 +80,9 @@ struct SourceResolutionOverride {
 
 void CheckProceduralParameters(const core::json::Object& params) {
     for (const auto& [name, value] : params) {
-        if (!value.IsInt() && !value.IsDouble() && !value.IsString()) {
-            ThrowNotYetSupported("procedural parameter " + name + " is outside the scalar snapshot domain");
+        // A colour parameter is the seam's tagged colour (store::IsColourParam; item 2.16).
+        if (!value.IsInt() && !value.IsDouble() && !value.IsString() && !store::IsColourParam(value)) {
+            ThrowNotYetSupported("procedural parameter " + name + " is outside the scalar and colour snapshot domain");
         }
     }
 }
@@ -1047,6 +1048,16 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
                 const auto existing = ref.params.find(name);
                 if (existing == ref.params.end()) throw core::ValueError("unknown procedural parameter: " + name);
                 const auto value = item.second;
+                if (store::IsColourParam(existing->second)) {
+                    // Painter's `set_parameters` takes only a Color for a colour parameter; the facade
+                    // passes one as its tagged value. No recording observed a colour edit's readback on
+                    // a snapshot source, so it selects no snapshot (item 2.16).
+                    if (!py::isinstance<py::dict>(value)) {
+                        throw py::type_error("Bad value for property '" + name + "': expected value of type <Color>");
+                    }
+                    ThrowNotYetSupported("editing the colour parameter " + name +
+                                         " of a snapshot source is unrecorded (phase3.3_procedural-families item 2.16)");
+                }
                 if (py::isinstance<py::bool_>(value)) {
                     // Painter's refusal of a bool for an integer parameter, value unchanged
                     // (`tier0/api-probes/source-substance-booleans-filter`); other types are unrecorded.

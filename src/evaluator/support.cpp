@@ -1,6 +1,7 @@
 #include "evaluator/support.h"
 
 #include <algorithm>
+#include <functional>
 #include <vector>
 
 #include "evaluator/sources.h"
@@ -187,23 +188,14 @@ Gap SourceGap(const core::Project& project, const core::Stack* stack, const core
 Gap FillGap(const core::Project& project, const core::Stack* stack, const core::FillContent& fill, core::Id node, const IProceduralSourceProvider* procedurals, bool deferProcedural) {
     if (fill.source_mode == core::SourceMode::Material) {
         // A material fill is admitted only as a procedural snapshot the provider serves through its
-        // material rule (decision 413): Height of the output mapped to Height, the mask rule of
-        // P413-C. Projections, symmetry and colour management are the provider's domain checks.
-        // Only Height's composition is recorded (P413-A, a material fill activating Height alone).
-        // Painter writes a material's output into every other active channel too (the task's two
-        // starter materials activate BaseColor, BaseMetalness and SpecularRoughness by default,
-        // decision 432), so such a fill is refused rather than left as the layers below give it.
-        const auto otherChannel = [&]() -> Gap {
-            for (const ChannelType channel : fill.active_channels) {
-                if (channel != ChannelType::Height) {
-                    return Make(node, "a material fill's active " + std::string(core::ToString(channel)) + " channel",
-                                "phase3.3_procedural-families item 2.16");
-                }
-            }
-            return std::nullopt;
-        };
+        // material rule on each active channel (decision 413, item 2.16): Height of the output mapped
+        // to Height with the mask rule of P413-C, and BaseColor, BaseMetalness, SpecularRoughness and
+        // Normal by the rules of the 2026-11-11 survey. Projections, symmetry and colour management
+        // are the provider's domain checks; the layout those rules are recorded in is
+        // `MaterialLayoutGap`'s. Painter writes a material's output into every active channel, so an
+        // unrecorded one is refused rather than left as the layers below give it.
         if (deferProcedural && fill.material_source && fill.material_source->kind() == SourceKind::procedural) {
-            return otherChannel();
+            return std::nullopt;
         }
         if (!procedurals || !stack || !fill.material_source ||
             fill.material_source->kind() != SourceKind::procedural) {
@@ -217,14 +209,29 @@ Gap FillGap(const core::Project& project, const core::Stack* stack, const core::
         if (!set || height == stack->channels.end()) {
             return Make(node, "a material fill whose stack has no Height channel", "phase3.2_proc-material-families");
         }
-        if (Gap other = otherChannel()) return other;
-        const auto admitted = procedurals->Resolve(project, *set, ChannelType::Height, height->second.format, fill,
-                                                   std::get<core::ProceduralSource>(fill.material_source->value).ref,
-                                                   node, false);
-        if (!admitted) {
+        const core::ProceduralRef& ref = std::get<core::ProceduralSource>(fill.material_source->value).ref;
+        // The channel rules are implemented and match the 2026-11-11 survey and a capture of
+        // another Painter session on every texel, but no same-session golden is admitted yet
+        // (decision 431): until one is, every channel but Height stays refused.
+        for (const ChannelType channel : fill.active_channels) {
+            if (channel != ChannelType::Height && stack->channels.contains(channel)) {
+                return Make(node,
+                            "a material fill's active " + std::string(core::ToString(channel)) +
+                                " channel (its rule awaits a same-session golden)",
+                            "phase3.3_procedural-families item 2.16");
+            }
+        }
+        for (const ChannelType channel : fill.active_channels) {
+            const auto target = stack->channels.find(channel);
+            if (target == stack->channels.end()) continue;  // a channel the stack lacks is not evaluated
+            const auto admitted = procedurals->Resolve(project, *set, channel, target->second.format, fill, ref, node, false);
+            if (admitted) continue;
             const std::string reason = admitted.error().reason;
-            const bool mask = reason.find("phase3.3_procedural-families item 2.7") != std::string::npos;
-            return Make(node, reason, mask ? "phase3.3_procedural-families item 2.7" : "phase3.2_proc-material-families");
+            for (const std::string_view owner : {std::string_view("phase3.3_procedural-families item 2.7"),
+                                                 std::string_view("phase3.3_procedural-families item 2.16")}) {
+                if (reason.find(owner) != std::string::npos) return Make(node, reason, std::string(owner));
+            }
+            return Make(node, reason, "phase3.2_proc-material-families");
         }
         return std::nullopt;
     }
@@ -328,6 +335,69 @@ Gap PaintLayerGap(const core::Layer& layer) {
     return std::nullopt;
 }
 
+/// Whether `layer` contributes to `channel` of its stack: visible, not an empty paint layer, not
+/// disabled on the channel, and a fill only when the channel is active (a group or paint content
+/// always counts).
+bool Contributes(const core::Layer& layer, ChannelType channel) {
+    if (!layer.visible || core::IsEmptyPaintLayer(layer)) return false;
+    const auto blending = layer.blending.find(channel);
+    if (blending != layer.blending.end() && blending->second.mode == core::BlendingMode::Disable) return false;
+    if (layer.kind == LayerKind::fill && layer.fill) return layer.fill->active_channels.contains(channel);
+    return true;
+}
+
+/// The configuration a material fill's BaseColor, BaseMetalness, SpecularRoughness and Normal are
+/// recorded in (item 2.16; the 2026-11-11 material channel survey): the fill alone over the empty
+/// stack, as a visible root layer that is the only layer contributing to the channel, with no mask,
+/// geometry mask or content effect, at opacity 1 in Painter's default mode (Normal, and
+/// NormalMapDetail on Normal). Checked on every edit of the stack, since another layer changes it.
+Gap MaterialLayoutGap(const core::Stack* stack) {
+    if (stack == nullptr) return std::nullopt;
+    const std::string owner = "phase3.3_procedural-families item 2.16";
+    const auto material = [](const core::Layer& layer) {
+        return layer.kind == LayerKind::fill && layer.fill && layer.fill->source_mode == core::SourceMode::Material;
+    };
+    // A material fill inside a group is not recorded on these channels.
+    const std::function<Gap(const std::vector<core::Layer>&)> nested = [&](const std::vector<core::Layer>& layers) -> Gap {
+        for (const core::Layer& layer : layers) {
+            if (material(layer)) {
+                for (const ChannelType channel : layer.fill->active_channels) {
+                    if (channel != ChannelType::Height) return Make(layer.uid, "a material fill inside a group", owner);
+                }
+            }
+            if (Gap gap = nested(layer.children)) return gap;
+        }
+        return std::nullopt;
+    };
+    for (const core::Layer& layer : stack->root_layers) {
+        if (Gap gap = nested(layer.children)) return gap;
+    }
+    for (const core::Layer& layer : stack->root_layers) {
+        if (!material(layer)) continue;
+        for (const ChannelType channel : layer.fill->active_channels) {
+            if (channel == ChannelType::Height || !stack->channels.contains(channel)) continue;
+            const std::string name(core::ToString(channel));
+            for (const core::Layer& other : stack->root_layers) {
+                if (other.uid != layer.uid && Contributes(other, channel)) {
+                    return Make(layer.uid, "a material fill's " + name + " channel over or under another layer", owner);
+                }
+            }
+            const auto blending = layer.blending.find(channel);
+            const core::Blending effective = blending == layer.blending.end() ? core::Blending{} : blending->second;
+            const core::BlendingMode recorded =
+                channel == ChannelType::Normal ? core::BlendingMode::NormalMapDetail : core::BlendingMode::Normal;
+            if (!layer.visible || layer.mask || !layer.content_effects.empty() ||
+                !(layer.geometry_mask == core::GeometryMask{}) || effective.mode != recorded || effective.opacity != 1.0) {
+                return Make(layer.uid,
+                            "a material fill's " + name + " channel outside its recorded configuration (visible, no mask "
+                            "or effect, " + std::string(core::ToString(recorded)) + " at opacity 1)",
+                            owner);
+            }
+        }
+    }
+    return std::nullopt;
+}
+
 Gap LayerGap(const core::Project& project, const core::Stack* stack, const core::Layer& layer, const IProceduralSourceProvider* procedurals, bool deferProcedural) {
     switch (layer.kind) {
         case LayerKind::paint:
@@ -346,6 +416,7 @@ Gap LayerGap(const core::Project& project, const core::Stack* stack, const core:
         return Make(layer.uid, "a Mesh geometry mask", "phase4.2_remaining-nodes");
     }
     if (Gap gap = DirectXNormalGap(project, layer)) return gap;
+    if (Gap gap = MaterialLayoutGap(stack)) return gap;
     if (layer.kind == LayerKind::fill && layer.fill) return FillGap(project, stack, *layer.fill, layer.uid, procedurals, deferProcedural);
     return std::nullopt;
 }
@@ -432,6 +503,8 @@ std::optional<SupportGap> FirstNewGap(const core::Project& before, const core::P
             (void)channel;
             uses = uses || source.kind() == SourceKind::procedural;
         }
+        // A material fill's snapshot signature names the set's resolution and settings too.
+        uses = uses || (fill->material_source && fill->material_source->kind() == SourceKind::procedural);
         // Existing unsupported refs must not prevent unrelated edits. Contextual
         // validation matters only when a formerly admitted source becomes invalid.
         if (uses && (snapshots(before) != snapshots(after) || !NodeGap(before, UidOf(visit), shapes, procedurals)))

@@ -164,10 +164,22 @@ std::expected<ProceduralRequest, std::string> SnapshotMaskRequest(const core::Pr
 
 }  // namespace
 
+std::optional<uint32_t> MaterialChannelView(core::ChannelType channel, core::ChannelFormat format) {
+    using C = core::ChannelType;
+    using F = core::ChannelFormat;
+    if (channel == C::Height && (format == F::L16F || format == F::L32F)) return 1;
+    if ((channel == C::BaseMetalness || channel == C::SpecularRoughness) && format == F::L8) return 1;
+    if (channel == C::BaseColor && format == F::sRGB8) return 3;
+    if (channel == C::Normal && format == F::RGB16F) return 3;
+    return std::nullopt;
+}
+
 std::expected<ProceduralRequest, std::string> SnapshotMaterialRequest(const core::Project& project,
                                                                       const core::TextureSet& set,
                                                                       const core::FillContent& fill,
-                                                                      const core::ProceduralRef& ref, core::Id node) {
+                                                                      const core::ProceduralRef& ref, core::Id node,
+                                                                      core::ChannelType channel,
+                                                                      core::ChannelFormat format) {
     using Result = std::expected<ProceduralRequest, std::string>;
     const auto fail = [](std::string_view reason) { return Result(std::unexpect, std::string(reason)); };
     if (fill.source_mode != core::SourceMode::Material) return fail("the fill is not in Material source mode");
@@ -176,18 +188,32 @@ std::expected<ProceduralRequest, std::string> SnapshotMaterialRequest(const core
         case Domain::Projection: return fail(kProjectionRefusal);
         case Domain::Admitted: break;
     }
-    if (!fill.active_channels.contains(core::ChannelType::Height)) {
-        return fail("a material fill is evaluated through its recorded Height channel only");
+    const std::string name(core::ToString(channel));
+    const std::optional<uint32_t> view = MaterialChannelView(channel, format);
+    if (!view) {
+        return fail("a material fill's " + name + " channel of format " + std::string(core::ToString(format)) +
+                    " is not recorded (" + std::string(kMaterialChannelOwner) + ")");
     }
-    const auto height = ref.output_mapping.find("Height");
-    if (height == ref.output_mapping.end() || height->second.empty()) {
-        return fail("a material fill without an output mapped to Height is not recorded");
+    const auto mapped = ref.output_mapping.find(name);
+    if (mapped == ref.output_mapping.end() || mapped->second.empty()) {
+        // Height's refusal keeps decision 416's owner; the other channels are item 2.16's.
+        return fail("a material fill without an output mapped to " + name + " is not recorded" +
+                    (channel == core::ChannelType::Height ? std::string()
+                                                          : " (" + std::string(kMaterialChannelOwner) + ")"));
     }
     if (!ref.image_inputs.empty()) return fail("a material fill takes no raster image inputs");
     // P413-C: a mask output equal to Height's output leaves Height unchanged in every recording;
-    // another one is exact in the same session only (its save/reopen value differs).
-    if (ref.mask_output && *ref.mask_output != height->second) return fail(kMaterialMaskRefusal);
-    return RequestOf(project, set, ref, height->second);
+    // another one is exact in the same session only (its save/reopen value differs). The other
+    // channels are recorded with Painter's default mask output only (item 2.16).
+    if (channel == core::ChannelType::Height) {
+        if (ref.mask_output && *ref.mask_output != mapped->second) return fail(kMaterialMaskRefusal);
+    } else if (ref.mask_output) {
+        return fail("a material fill's " + name + " channel is recorded with the default mask output only (" +
+                    std::string(kMaterialChannelOwner) + ")");
+    }
+    auto request = RequestOf(project, set, ref, mapped->second);
+    if (request) request->output.channels = *view;
+    return request;
 }
 
 std::expected<ProceduralRequest, std::string> SnapshotFillRequest(
@@ -196,10 +222,8 @@ std::expected<ProceduralRequest, std::string> SnapshotFillRequest(
     using Result = std::expected<ProceduralRequest, std::string>;
     const auto fail = [](std::string_view reason) { return Result(std::unexpect, std::string(reason)); };
     if (fill.source_mode == core::SourceMode::Material) {
-        if (mask || channel != core::ChannelType::Height) {
-            return fail("a material fill is evaluated through its recorded Height channel only");
-        }
-        return SnapshotMaterialRequest(project, set, fill, ref, node);
+        if (mask) return fail("a material fill is not a mask source");
+        return SnapshotMaterialRequest(project, set, fill, ref, node, channel, format);
     }
     if (mask) return SnapshotMaskRequest(project, set, fill, ref, node);
     const Domain domain = DomainOf(project, set, fill, node);

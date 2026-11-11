@@ -219,7 +219,7 @@ render::Result<DagSource> ResolveSource(const Context& ctx, const core::FillCont
             result.procedural = *image;
             writer.Str("procedural-snapshot").Str((*image)->signature).Str((*image)->rasterDigest)
                 .Str(core::json::WriteCanonical((*image)->provenance));
-            if ((*image)->materialHeight) writer.Str("material-height");
+            if (!(*image)->materialRule.empty()) writer.Str("material-" + (*image)->materialRule);
             break;
         }
         case core::SourceKind::vector:
@@ -245,12 +245,10 @@ render::Result<std::optional<DagSource>> SourceOf(const Context& ctx, const Laye
                             "(phase3.2_proc-material-families)",
                             layer.uid);
         }
-        // Painter's material fill activates Height only (decision 413, P413-A): its Height is the
-        // procedural snapshot of the output mapped to Height, through the provider's material rule;
-        // every other channel is left as the layers below give it.
-        if (ctx.channel != ChannelType::Height || !fill.active_channels.contains(ChannelType::Height)) {
-            return std::optional<DagSource>{};
-        }
+        // Each active channel of a material fill is the procedural snapshot of the output mapped to
+        // it, through the provider's material rule for that channel (decision 413, P413-A; item
+        // 2.16). The support check admits only the recorded channels and configuration.
+        if (!fill.active_channels.contains(ctx.channel)) return std::optional<DagSource>{};
         render::Result<DagSource> source = ResolveSource(ctx, fill, *fill.material_source, layer.uid, false);
         if (!source) return render::Unexpected(source.error());
         return std::optional<DagSource>{std::move(*source)};
@@ -559,6 +557,13 @@ render::Result<void> AppendLayer(Context& ctx, const Layer& layer, DagList& list
     DagLayer node;
     node.uid = layer.uid;
     node.mode = blending.mode;
+    if (layer.kind == LayerKind::fill && layer.fill && layer.fill->source_mode == core::SourceMode::Material &&
+        ctx.channel == ChannelType::Normal && node.mode == BlendingMode::NormalMapDetail) {
+        // Over the empty stack, the only configuration the support check admits, Painter's material
+        // fill writes its Normal rule's value itself (the 2026-11-11 material channel survey, item
+        // 2.16): NormalMapDetail over the flat base does not renormalise it, so it composes as Normal.
+        node.mode = BlendingMode::Normal;
+    }
     node.opacity = static_cast<float>(blending.opacity);
     node.mask = constantMask;
     node.maskStack = std::move(*mask);

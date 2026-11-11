@@ -19,10 +19,20 @@ The request has exactly two fields:
 Use the exact `Resource.identifier().url()` of a documented `PROCEDURAL` Substance
 resource. `parameters` supplies finite scalar overrides; an empty object keeps the
 source's effective defaults. The recorder reads all resulting parameters back.
-Unversioned resources, vectors and colours are outside the recording domain and are
-refused. No substitute asset or compatibility alias is selected. This two-field request
-records a source with one output and no image input; a source with presets, image inputs
-or several outputs uses the multi-output request below.
+Unversioned resources and vectors are outside the recording domain and are refused. No
+substitute asset or compatibility alias is selected. This two-field request records a source
+with one output and no image input; a source with presets, image inputs or several outputs
+uses the multi-output request below.
+
+A colour parameter (`phase3.3_procedural-families` item 2.16) is the seam's tagged colour
+`{"type": "color", "working_space": <space>, "components": [r, g, b], "alpha": null}`: the
+`GenericColorSpace` name and `value_raw` of the `colormanagement.Color` Painter reads back
+(`set_parameters` takes only a `Color`). The space Painter reports depends on the source's
+context: the capture's split sources read Raw, a material source sRGB, with the same
+components. The capture records the split readback, as for every parameter, and matches a
+requested colour and the material source's colour by their components. A requested colour is
+in sRGB or Raw: a Working colour reads back with another value (the 2026-11-11 material channel
+survey). Scalar signatures and metadata keep their bytes.
 
 ## Multi-output captures
 
@@ -78,6 +88,13 @@ differing signature field; nothing is substituted, resampled or interpolated. Fo
 `uzasset://snapshot/` pin, the seam and admission return the snapshot backend's refusal
 (`UnsupportedProcedural{reason: "no snapshot with this signature", field: ...}`). A snapshot is never
 stored in the repository, never shipped and never transported by a recipe.
+
+A multi-output request with a fifth field `"usage": "MATERIAL"` (item 2.16) is the same
+capture on the destination's own mesh and texture set resolution, in the destination domain
+below: Painter creates its disposable project from the destination's mesh at its resolution, and
+each stored signature (resolution, settings and mesh identity, seed, preset, plugged inputs and
+view) must be exactly what the destination's own texture set asks for (`SnapshotSetRequest`).
+The receipt is `uzpainter/procedural-capture/2` with `usage` `MATERIAL`.
 
 A request with exactly three fields captures on the destination's own mesh and texture set
 resolution:
@@ -386,6 +403,12 @@ Schema `/3` (decision 361) adds two observations, each optional on its own:
   getters returned them, every part nonempty. The URL must be the requested resource of the
   capture and the resource whose SHA-256 the snapshot pin names (`uzasset://snapshot/<sha256(url)>@1`).
 
+Schema `/5` (item 2.16) is `/4` for metadata holding a colour: a typed parameter, a preset
+parameter or a property value may then be a tagged colour, compared by value (each component as
+the signature encodes numbers), and `contexts.material` also holds `colour_spaces`, the space the
+material source reads each colour parameter in. `/5` is written only when a colour is present; a
+colour under `/1` to `/4`, and `/5` without one, are refused.
+
 Schema `/4` (decision 413) adds the multi-output observations, each optional on its own:
 `preset_parameters` (per preset, the raw parameter map Painter's `apply_preset` gave from the
 recorded state, keyed exactly by the observed presets and the signature's parameters),
@@ -440,19 +463,46 @@ switches to `SourceMode.Material`. Its active channels are the recorded ones, wh
 decision-412 starter material is Height only. Its reference holds the recorded output mapping,
 no mask output (Painter's default) and no resolution override.
 
-The evaluator composes only Height. A material fill with any other active channel is refused by
-the support check before any change, naming `phase3.3_procedural-families item 2.16` (decision
-432): Painter writes a material's output into every active channel, and only Height's
-composition is recorded. Height is `tz16(float32(2 x - 1))`, where `x` is the L32F
-view of the output that `output_mapping` gives Height, and `tz16` is binary16 rounding toward
-zero. This is the Height channel's own rule for float operands, applied through the fill's Height
-blending. Every other channel is untouched. A mask output equal to Height's output leaves Height
-unchanged. Any other mask output is refused by the support check before any change, naming
-`phase3.3_procedural-families item 2.7`. Its r1 is fitted, but Painter's value after save and
-reopen is one binary16 ulp lower (P413-C).
+Painter writes a material's output into every active channel (decision 432). The evaluator
+composes each active channel from the snapshot of the output that `output_mapping` gives it, in
+that channel's view, by the rules below. The support check admits only Height for now: every other
+active channel is refused before any change, naming `phase3.3_procedural-families item 2.16`,
+until a golden recorded in the capturing Painter session is admitted (decision 431). `x` is the
+L32F view and `(r, g, b)` the RGB32F view of that output; `tz16` is binary16 rounding toward zero.
+
+- **Height** (L16F or L32F): `tz16(float32(2 x - 1))`, the Height channel's own rule for float
+  operands, applied through the fill's Height blending (P413-A). A mask output equal to Height's
+  output leaves Height unchanged. Any other mask output is refused by the support check before
+  any change, naming `phase3.3_procedural-families item 2.7`. Its r1 is fitted, but Painter's
+  value after save and reopen is one binary16 ulp lower (P413-C).
+- **BaseMetalness, SpecularRoughness** (L8): `((k >> 4) 255 + 2047) >> 12` of the 16-bit code
+  `k = round(65535 x)`, the survey's rule, on views within 1/64 of a code only (felt's views are
+  exactly `k / 65535`, leather grain's within 0.003 of a code). For `x` exactly the float32 of
+  `k / 65535` it is the tile store's L8 write rule.
+- **BaseColor** (sRGB8): the code `round(255 v)` of each component `v` of the RGB view, with no
+  transfer, on binary16 views in [0, 1] only.
+- **Normal** (RGB16F): `(tz16 r, tz16(1 - g), tz16 b)`. Over the empty stack Painter's default
+  NormalMapDetail of a material fill writes this value itself, so the evaluator composes it as
+  Normal there.
+
+The four non-Height rules match the 2026-11-11 survey's default felt and leather grain fills, and
+a capture of those materials in another Painter session, on every texel
+(`docs/analysis/proc-material-families/03-material-channels-2026-11-11.md`). They are measured
+only for the fill alone over the empty stack: a visible root layer that is the only layer
+contributing to the channel, with no mask, geometry mask or content effect, at opacity 1 in
+Painter's default mode (Normal; NormalMapDetail on Normal), with Painter's default mask output.
+The support check refuses any other configuration, an unmapped channel and any other channel or
+format, naming item 2.16, on every edit of the stack. Authored evidence on both lanes:
+`tests/procedural/test_material_channel_rules.py`.
 
 The material's `SourceSubstance` covers these members:
 
+- **Colour parameters.** The native `get_parameters` returns a colour parameter as the seam's
+  tagged colour, in the capture's space (Raw); the material context records the space the material
+  source reads it in (`/5` `colour_spaces`, sRGB). The facade returns it as a `Color` of those
+  components in that space and takes only a `Color` in `set_parameters` (a list or tuple raises
+  Painter's `TypeError`). No recording observed a colour edit's readback on a snapshot source, so
+  a colour edit is refused before any change.
 - **Snapshot reads.** `get_parameters`, `get_properties`, `get_preset_list`, `image_inputs`,
   `image_outputs` and `resource_id` read the snapshot of Height's output at the current exact
   signature.

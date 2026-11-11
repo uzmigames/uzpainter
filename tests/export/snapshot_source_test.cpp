@@ -1350,6 +1350,140 @@ uzp::core::Layer MaskCaseLayer(uzp::store::ProjectStore& store, uzp::core::Edit&
 /// over a black Raw base fill, under its mask; each channel's CPU read-out is written as
 /// `user<k>.raw` (float32, rows top first) and printed as `SERVED <k> <sha256>`. Each case of
 /// `refusals` is then submitted alone on top and must not commit: `REFUSED <k> <result>`.
+// Records the authored decision-413 capture of one material whose default fill activates BaseColor,
+// BaseMetalness, SpecularRoughness, Normal and Height (item 2.16 of phase3.3_procedural-families):
+// both views of each output, a colour parameter (Raw in the typed parameters, sRGB in the material
+// context, schema /5), at the project's texture set resolution. Authored values only: the native
+// half of tests/procedural/test_material_channel_rules.py, which writes no Painter value.
+int RunSnapshotMaterialChannels(const std::filesystem::path& path) {
+    using namespace uzp;
+    namespace json = core::json;
+    const std::string url = "resource://starter_assets/authored/coloured?version=1.sbsar";
+    auto opened = store::ProjectStore::Open(path);
+    Check(opened.report.ok(), "material channels: initial project integrity");
+    core::Document document(std::move(opened.state));
+    opened.store->Attach(document);
+    auto& store = *opened.store;
+    const core::TextureSet& set = document.snapshot().project->texture_sets.front();
+    const uint32_t size = static_cast<uint32_t>(set.resolution.width);
+    const json::Object single{{"raised", json::Object{{"type", std::string("EditionContextException")},
+                                                       {"message", std::string("Only valid in single channel context")}}}};
+    const json::Object refused{{"raised", json::Object{{"type", std::string("EditionContextException")},
+                                                        {"message", std::string("Only valid in multi channel context")}}}};
+    const json::Object tint{{"type", std::string("color")}, {"working_space", std::string("Raw")},
+                            {"components", json::Array{0.25, 0.5, 0.75}}, {"alpha", json::Value()}};
+    const json::Object params{{"amount", 0.5}, {"$randomseed", int64_t{0}}, {"tint", tint}};
+    const std::vector<std::string> outputs{"basecolor", "metallic", "roughness", "normal", "height"};
+    const json::Object contexts{
+        {"split", json::Object{{"output_mapping", json::Object{{"returned", std::string("OutputMapping")}}},
+                               {"mask_output", refused}}},
+        {"material", json::Object{{"output_mapping", json::Object{{"BaseColor", std::string("basecolor")},
+                                                                   {"BaseMetalness", std::string("metallic")},
+                                                                   {"SpecularRoughness", std::string("roughness")},
+                                                                   {"Normal", std::string("normal")},
+                                                                   {"Height", std::string("height")}}},
+                                  {"mask_output", std::string("channels_Alpha")},
+                                  {"active_channels", json::Array{std::string("BaseColor"), std::string("BaseMetalness"),
+                                                                  std::string("Height"), std::string("Normal"),
+                                                                  std::string("SpecularRoughness")}},
+                                  {"active_output", single},
+                                  {"colour_spaces", json::Object{{"tint", std::string("sRGB")}}}}}};
+    // Each output's view `channels` (1: L32F, 3: RGB32F), every value authored: BaseColor binary16
+    // components k / 1024 (ties of round(255 v) included), BaseMetalness and SpecularRoughness 16-bit
+    // codes k / 65535 (their 12-bit truncations included), Normal and Height float32 values whose
+    // binary16 rounding toward zero differs from round to nearest.
+    const auto value = [&](const std::string& output, size_t texel, uint32_t component) -> float {
+        const size_t i = texel * 3 + component;
+        if (output == "basecolor") return static_cast<float>((i * 37 + 11) % 1025) / 1024.0f;
+        if (output == "metallic" || output == "roughness") {
+            const size_t k = (texel * (output == "metallic" ? 4099 : 61) + 7) % 65536;
+            const float x = static_cast<float>(static_cast<double>(k) / 65535.0);
+            // Leather grain's views stand off their code by float32 ulps: every third roughness one.
+            return output == "roughness" && texel % 3 == 1 && k < 65535 ? std::nextafter(x, 1.0f) : x;
+        }
+        return static_cast<float>((i * 7919 + 3) % 99991) / 99991.0f;
+    };
+    int key = 0;
+    for (const std::string& output : outputs) {
+        for (const uint32_t channels : {1u, 3u}) {
+            procedural::ProceduralRequest request;
+            request.asset = core::ParseAssetUrl("uzasset://snapshot/" + core::Sha256Hex(url) + "@1");
+            for (const auto& [name, parameter] : params) request.params[name] = *procedural::ParamFromJson(parameter);
+            request.meshClass = "quad";
+            request.outputId = output;
+            request.output = {size, procedural::ChannelFormat::F32, "raw", channels};
+            request.settings = procedural::EvaluationSettings(*document.snapshot().project);
+            store::SourceMetadata metadata;
+            metadata.image_outputs = outputs;
+            metadata.image_inputs = std::vector<std::string>{};
+            metadata.presets = std::vector<std::string>{};
+            metadata.properties = json::Object{};
+            metadata.typed_effective_parameters = params;
+            metadata.observed_resource_id =
+                store::ObservedResourceId{url, "starter_assets", "authored/coloured", "1.sbsar"};
+            metadata.preset_parameters = json::Object{};
+            metadata.input_sources = json::Object{};
+            metadata.contexts = contexts;
+            std::string bytes(size_t{size} * size * channels * 4, '\0');
+            for (size_t texel = 0; texel < size_t{size} * size; ++texel) {
+                for (uint32_t c = 0; c < channels; ++c) {
+                    // The L view of a grey output is its first component, as Painter's paired views.
+                    const float v = value(output, texel, channels == 1 || output == "metallic" || output == "roughness" ? 0 : c);
+                    std::memcpy(bytes.data() + (texel * channels + c) * 4, &v, 4);
+                }
+            }
+            const auto id = "material-channels-" + std::to_string(++key);
+            auto recorded = store.Submit(document, {"material-channels-test", json::Object{}, id, document.revision()},
+                                         [&](core::Edit& edit) { procedural::RecordSnapshot(store, edit, request, bytes, metadata); });
+            Check(recorded.result && recorded.result->status == core::ResultStatus::committed,
+                  "material channels: record an authored view");
+        }
+    }
+    // The material fill alone over the empty stack, as `set_material_source` binds it, with Painter's
+    // default blending (Height LinearDodge, Normal NormalMapDetail): committed without the support
+    // check, which refuses its other channels until their same-session golden is admitted.
+    core::ProceduralRef ref;
+    ref.asset = "uzasset://snapshot/" + core::Sha256Hex(url) + "@1";
+    ref.params = params;
+    const auto& mapping = std::get<json::Object>(std::get<json::Object>(contexts.at("material").data).at("output_mapping").data);
+    for (const auto& [channel, output] : mapping) ref.output_mapping[channel] = std::get<std::string>(output.data);
+    const core::Project before = *document.snapshot().project;
+    core::Id layer = core::kNoId;
+    auto bound = store.Submit(document, {"material-channels-test", json::Object{}, "material-channels-fill", document.revision()},
+                              [&](core::Edit& edit) {
+                                  auto& stack = edit.project().texture_sets.front().stacks.front();
+                                  core::Layer fill;
+                                  fill.uid = layer = edit.AllocateId();
+                                  fill.name = "material";
+                                  fill.kind = core::LayerKind::fill;
+                                  fill.fill.emplace();
+                                  fill.fill->source_mode = core::SourceMode::Material;
+                                  fill.fill->material_source = core::Source{core::ProceduralSource{ref}};
+                                  fill.fill->active_channels = {core::ChannelType::BaseColor, core::ChannelType::BaseMetalness,
+                                                                core::ChannelType::Height, core::ChannelType::Normal,
+                                                                core::ChannelType::SpecularRoughness};
+                                  fill.blending[core::ChannelType::Height] = core::Blending{core::BlendingMode::LinearDodge, 1.0, {}};
+                                  fill.blending[core::ChannelType::Normal] = core::Blending{core::BlendingMode::NormalMapDetail, 1.0, {}};
+                                  stack.root_layers.insert(stack.root_layers.begin(), std::move(fill));
+                              });
+    Check(bound.result && bound.result->status == core::ResultStatus::committed, "material channels: insert the material fill");
+    std::string refusal;
+    try {
+        const procedural::SnapshotSourceProvider provider(store, *document.snapshot().project);
+        evaluator::RequireSupported(before, *document.snapshot().project, {}, &provider);
+    } catch (const core::NotYetSupported& error) {
+        refusal = error.what();
+    }
+    Check(refusal.find("phase3.3_procedural-families item 2.16") != std::string::npos &&
+              refusal.find("same-session golden") != std::string::npos,
+          "material channels: the support check refuses the other channels, naming item 2.16");
+    store.Save(document);
+    store.Close();
+    std::cout << "material channels: recorded " << key << " authored views at " << size << " px, fill " << layer << "\n";
+    return 0;
+}
+
+
 int RunSnapshotInMask(const std::filesystem::path& path, const std::filesystem::path& casesPath,
                       const std::filesystem::path& out) {
     using namespace uzp;

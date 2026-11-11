@@ -15,9 +15,10 @@ struct ProceduralImage {
     std::string signature;
     std::string rasterDigest;
     core::json::Object provenance;
-    /// A material fill's Height: `image` holds the signed values float32(2 x - 1) of the stored
-    /// raster x (whose digest `rasterDigest` stays).
-    bool materialHeight = false;
+    /// A material fill's channel rule, empty for any other source: `height` (`image` holds the
+    /// signed values float32(2 x - 1) of the stored raster x), `l8`, `srgb8` or `normal` (item 2.16,
+    /// `SnapshotSourceProvider::Resolve`). The digest `rasterDigest` stays the stored raster's.
+    std::string materialRule;
 };
 
 class IProceduralSourceProvider {

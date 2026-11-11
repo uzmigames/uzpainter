@@ -494,12 +494,54 @@ class SourceSubstance:
         # The native `properties.Property` handles are the facade's class (as for baking).
         return dict(self._native().get_properties())
 
-    def get_parameters(self) -> dict[str, int | float | str]:
-        return dict(self._native().get_parameters())
+    def get_parameters(self) -> dict[str, Any]:
+        parameters = dict(self._native().get_parameters())
+        if not any(_colour_parameter(value) for value in parameters.values()):
+            return parameters
+        # A colour reads back as a `Color` of its recorded components. The capture's split sources
+        # read it in Raw, the material source in sRGB (recorded beside the material context).
+        spaces = (
+            self._native()._material_context()["material"]["colour_spaces"]
+            if self._material
+            else {}
+        )
+        return {
+            name: (
+                colour.Color(
+                    *value["components"],
+                    getattr(colour.GenericColorSpace, spaces.get(name, value["working_space"])),
+                )
+                if _colour_parameter(value)
+                else value
+            )
+            for name, value in parameters.items()
+        }
 
     @edits
-    def set_parameters(self, parameters: dict[str, int | float | str]) -> None:
-        self._native().set_parameters(parameters)
+    def set_parameters(self, parameters: dict[str, Any]) -> None:
+        current = self._native().get_parameters()
+        native: dict[str, Any] = {}
+        for name, value in parameters.items():
+            if not _colour_parameter(current.get(name)):
+                native[name] = value
+            elif isinstance(value, colour.Color):
+                native[name] = {
+                    "type": "color",
+                    "working_space": colour.color_space_name(value.color_space),
+                    "components": [float(c) for c in value.value_raw],
+                    "alpha": None,
+                }
+            elif isinstance(value, (list, tuple)):
+                # Painter's refusal of a list or a tuple for a colour parameter (the 2026-11-11
+                # material channel survey, felt and leather grain).
+                items = ", ".join(type(item).__name__ for item in value)
+                raise TypeError(
+                    f"Bad value for property '{name}': expected value of type <Color> but got "
+                    f"<tuple[{items}]>."
+                )
+            else:
+                raise TypeError(f"Bad value for property '{name}': expected value of type <Color>")
+        self._native().set_parameters(native)
 
     @property
     def active_output(self) -> str:
@@ -547,6 +589,11 @@ class SourceSubstance:
 
 # The owner every unrecorded multiple-output case names.
 OWNER = "(phase3.2_source-substance-presets-inputs)"
+
+
+def _colour_parameter(value: Any) -> bool:
+    """Whether a native parameter value is the seam's tagged colour (store `IsColourParam`)."""
+    return isinstance(value, dict) and value.get("type") == "color"
 
 
 def unrecorded(what: str) -> Exception:

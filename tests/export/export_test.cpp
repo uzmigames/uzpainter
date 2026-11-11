@@ -172,6 +172,8 @@
 #include "snapshot_capture_validate.h"
 
 #include "procedural/filter_import_cli.h"
+#include "procedural/snapshot_source.h"
+#include "mesh/reload.h"
 
 #include <algorithm>
 #include <array>
@@ -640,6 +642,80 @@ int RunFiles(const fs::path& templatesDir, const fs::path& specPath, const fs::p
     }
     std::ofstream index(out / "index.json", std::ios::binary);
     index << json::WriteCanonical(json::Object{{"plan", exporter::PlanJson(plan)}, {"files", std::move(files)}});
+    return 0;
+}
+
+// Exports `project` with `config` (export_project_textures JSON) through the CPU tile store or a
+// GPU engine (`dx12`), serving its procedural snapshots with `SnapshotSourceProvider`: the two
+// lanes of item 2.16's evaluator rules, compared by tests/procedural/test_material_channel_rules.py
+// and tests/procedural/test_material_channels_served.py. Prints the written files as JSON.
+int RunMaterialExport(const std::filesystem::path& path, const std::filesystem::path& configPath,
+                      const std::string& backend) {
+    using namespace uzp;
+    namespace json = core::json;
+    auto opened = store::ProjectStore::Open(path);
+    if (!opened.report.ok()) throw std::runtime_error("material export: the project does not open cleanly");
+    const core::Project project = opened.state.project;
+    std::ifstream configFile(configPath, std::ios::binary);
+    const std::string config((std::istreambuf_iterator<char>(configFile)), std::istreambuf_iterator<char>());
+    const exporter::ExportPlan plan = exporter::CompilePlan(project, config);
+    auto templates = std::make_shared<const evaluator::TemplateLibrary>(
+        evaluator::TemplateLibrary::Load(evaluator::TemplateLibrary::DefaultDirectory()));
+    exporter::SourceInputs inputs;
+    inputs.templateId = project.settings.template_id;
+    inputs.procedurals = std::make_shared<procedural::SnapshotSourceProvider>(*opened.store, project);
+    // The project's own mesh gives the UV coverage the padding reads (export/project_export.cpp).
+    store::ProjectStore& projectStore = *opened.store;
+    if (project.mesh) {
+        mesh::ImportResult imported = mesh::RederiveMesh(
+            project, [&projectStore](const std::string& sha) { return projectStore.ReadResource(sha); });
+        inputs.mesh = std::make_shared<const mesh::TexturingMesh>(std::move(imported.mesh));
+        inputs.geometry = std::make_shared<evaluator::MeshGeometryMasks>(inputs.mesh);
+    }
+    const auto write = [&](evaluator::ITileStore& tiles, evaluator::TileCache& cache) {
+        return exporter::WriteExport(project, 1, plan, inputs, *templates, tiles, cache);
+    };
+    json::Object result{{"backend", backend}};
+    auto written = [&]() -> render::Result<std::vector<exporter::WrittenFile>> {
+        if (backend == "cpu") {
+            evaluator::CpuEvaluator cpu(templates, evaluator::AdmissionLimits{8ull << 30, 1 << 20});
+            return write(cpu.store(), cpu.cache());
+        }
+        if (backend != "dx12") throw std::invalid_argument("material export: the backend is cpu or dx12");
+        render::EngineOptions options;
+        options.kernelCacheRoot = configPath.parent_path() / "kernel-cache-dx12";
+        render::Engine engine(options);
+        if (engine.DeviceError()) return render::Unexpected(*engine.DeviceError());
+        return engine.Submit(std::make_shared<const int>(0),
+            [&](render::EngineContext& context, const int&) -> render::Result<std::vector<exporter::WrittenFile>> {
+                result["adapter"] = context.Device().AdapterName();
+                evaluator::GpuTileStore gpu(context.Device());
+                evaluator::TileCache cache(evaluator::AdmissionLimits{8ull << 30, 1 << 20});
+                gpu.BeginRequest(context);
+                auto files = write(gpu, cache);
+                auto flushed = gpu.Flush();
+                gpu.EndRequest();
+                if (!flushed) return render::Unexpected(flushed.error());
+                return files;
+            }).get();
+    }();
+    opened.store->Close();
+    if (!written && written.error().code == render::ErrorCode::GpuBackendUnavailable) {
+        result["error"] = "GpuBackendUnavailable";
+        std::cout << json::WriteCanonical(result) << "\n";
+        return 77;
+    }
+    if (!written) {
+        result["error"] = written.error().reason;
+        std::cout << json::WriteCanonical(result) << "\n";
+        return 1;
+    }
+    json::Array files;
+    for (const exporter::WrittenFile& file : *written) {
+        files.push_back(json::Object{{"relativePath", file.relativePath}, {"path", file.path}, {"sha256", file.sha256}});
+    }
+    result["files"] = std::move(files);
+    std::cout << json::WriteCanonical(result) << "\n";
     return 0;
 }
 
@@ -2149,6 +2225,7 @@ int RunTga(const std::vector<std::string>& args) {
 int RunSnapshotSource(const std::filesystem::path& path, std::optional<int64_t> seed);
 int RunProceduralEffects(const std::filesystem::path& path, bool observation = false);
 int RunSnapshotMaterial(const std::filesystem::path& path);
+int RunSnapshotMaterialChannels(const std::filesystem::path& path);
 int RunSnapshotInMask(const std::filesystem::path& path, const std::filesystem::path& cases,
                       const std::filesystem::path& out);
 int RunSnapshotBindFixture(const std::filesystem::path& path);
@@ -2175,6 +2252,8 @@ int main(int argc, char** argv) {
         if (args.size() == 2 && args[0] == "procedural-effects") return RunProceduralEffects(args[1]);
         if (args.size() == 2 && args[0] == "snapshot-material") return RunSnapshotMaterial(args[1]);
         if (args.size() == 4 && args[0] == "snapshot-in-mask") return RunSnapshotInMask(args[1], args[2], args[3]);
+        if (args.size() == 2 && args[0] == "snapshot-material-channels") return RunSnapshotMaterialChannels(args[1]);
+        if (args.size() == 4 && args[0] == "material-export") return RunMaterialExport(args[1], args[2], args[3]);
         if (args.size() == 2 && args[0] == "procedural-observations") return RunProceduralEffects(args[1], true);
         if (args.size() == 2 && args[0] == "snapshot-bind") return RunSnapshotBindFixture(args[1]);
         if (args.size() == 2 && args[0] == "frozen-host-proof") return RunFrozenHostProofCases(args[1]);
