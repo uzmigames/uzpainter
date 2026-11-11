@@ -2571,6 +2571,9 @@ ADMITTED = frozenset(
         # phase3.3_procedural-families item 2.15 (Painter session of 2026-11-10, Legacy).
         "snapshot-in-mask",
         "snapshot-in-mask-sources",
+        # Item 2.15 under decision 431 (one Painter session of 2026-11-11 with its captures).
+        "snapshot-in-mask-session",
+        "snapshot-in-mask-read",
     }
 )
 
@@ -2629,6 +2632,8 @@ PRESERVED_REQUESTS = frozenset(
         "ocio-added-channel-bases",
         "snapshot-in-mask",
         "snapshot-in-mask-sources",
+        "snapshot-in-mask-session",
+        "snapshot-in-mask-read",
     }
 )
 

@@ -42,6 +42,8 @@ from tools.parity.tier0_semantics.snapshot_in_mask import (
     BITMAPS,
     CASES,
     NAME,
+    READ_NAME,
+    SESSION_NAME,
     SOURCE_CASES,
     SOURCES_NAME,
     Case,
@@ -67,6 +69,21 @@ RECEIPTS: dict[str, tuple[str, int]] = {
         15646,
     ),
 }
+# The captures of the one-session probe of 2026-11-11 (decision 431,
+# `tests/python/capture_snapshot_in_mask_session.py`): `capture.json` SHA-256 and size.
+SESSION_RECEIPTS: dict[str, tuple[str, int]] = {
+    "rock": ("9ef8dc1c6397b59b9d187da0086dcebda344b77a0c2a66e2f4b41dfa08a291b7", 19085),
+    "dirt-large": ("aa8006144cb181f4c5dd9d8c1c0869938ecd301864f2d87c4040d27a2c86471c", 16437),
+    "dirt-a-seed-1": ("87903364831160847ec60bcc65953ee49c6c0cea777f9dd57caa31f7a25b5fde", 18763),
+    "dirt-a-seed-2": ("4faea404f8e9ba2af3cd4ffc1ccf210100c08ebc9081758c8ab2b4c16e053858", 18763),
+    "dirt": ("0c0ecb21aba205ac45c0aaca3a66bcfdbf387faab6b25bf7bdf343f7ddfd98e3", 12903),
+    "dirt-seed-2": ("67cac4c7108da550c42ef82422510d1090577e48e0ac54e88f4e5d5ec7f5fa37", 12903),
+    "metal-edge-wear": ("1a748a21f6633d1fbf2196d0274ee66b99402322bb88d90b426c3bfea2e90553", 13147),
+    "mask-builder-legacy": (
+        "f37f2cc731c305e999244a2f170b98e520badf442846a5e72284c3c3d2a66001",
+        15625,
+    ),
+}
 GENERATOR_CAPTURES = {
     "Dirt": "dirt",
     "Metal Edge Wear": "metal-edge-wear",
@@ -82,8 +99,8 @@ def capture_name(effect: Effect) -> str:
     return base if seed is None else f"{base}-seed-{seed}"
 
 
-def snapshot_rasters() -> dict[str, F32]:
-    wanted = {value: name for name, value in RECEIPTS.items()}
+def snapshot_rasters(receipts: dict[str, tuple[str, int]] = RECEIPTS) -> dict[str, F32]:
+    wanted = {value: name for name, value in receipts.items()}
     found: dict[str, F32] = {}
     for receipt in sorted(SNAPSHOTS.glob("*/capture.json")):
         data = receipt.read_bytes()
@@ -91,7 +108,7 @@ def snapshot_rasters() -> dict[str, F32]:
         if name is not None:
             values = decode_exr((receipt.parent / "export1" / "user0.exr").read_bytes()).values
             found[name] = np.asarray(values, dtype=np.float32).reshape(-1)
-    missing = sorted(set(RECEIPTS) - set(found))
+    missing = sorted(set(receipts) - set(found))
     if missing:
         raise SystemExit(f"snapshot captures not on this machine: {missing}")
     return found
@@ -128,6 +145,14 @@ def bitmap_codes(input_id: str) -> I64:
     if values.ndim == 3:
         values = values[..., 0]
     return values.astype(np.int64).reshape(-1)
+
+
+def read_g(k: I64) -> F32:
+    """G(k): the float32 the channel holds for a mask of 16-bit code k, 1 + (F(k) - 1) with F the
+    correctly rounded fetch (decision 424) and the L32F read-out over the white base (arith.h
+    `Float32Readout`); equal to 1 - (1 - F(k)), the AO's I(I(F(k)))."""
+    one = np.float32(1)
+    return ((operand(k) - one).astype(np.float32) + one).astype(np.float32)
 
 
 def write_unorm16(v: F32) -> I64:
@@ -236,11 +261,55 @@ def report(store: OracleStore) -> Iterator[str]:
         yield f"   User{k} {case.case_id}: " + "; ".join(cells)
 
 
+def differing(a: F32, b: F32) -> tuple[int, int]:
+    """Texels where `a` and `b` differ, and the largest difference in 16-bit codes."""
+    where = np.nonzero(a.view(np.uint32) != b.view(np.uint32))[0]
+    return where.size, int(np.abs(codes(a)[where] - codes(b)[where]).max(initial=0))
+
+
+def session_report(store: OracleStore) -> Iterator[str]:
+    """Decision 431: the one-session probe of 2026-11-11 against its own captures, and the
+    cross-session differences, reported and not compared."""
+    sources = snapshot_rasters(SESSION_RECEIPTS)
+    earlier = snapshot_rasters()
+    session = golden_maps(store, SESSION_NAME)
+    read = golden_maps(store, READ_NAME)
+    old = golden_maps(store, NAME)
+    yield "4. The 16-bit read on this path (snapshot-in-mask-read, every code)"
+    k = np.arange(TEXELS, dtype=np.int64)
+    for rec in ("r1", "r2"):
+        values = read[(rec, 0)]
+        g_off = int((values.view(np.uint32) != read_g(k).view(np.uint32)).sum())
+        f_off = int((values.view(np.uint32) != operand(k).view(np.uint32)).sum())
+        yield (
+            f"   {rec}: codes off {int((codes(values) != k).sum())}; "
+            f"G(k) = 1 + (F(k) - 1) misses {g_off}; float32(k / 65535) misses {f_off}"
+        )
+    yield "5. Same session (snapshot-in-mask-session over its own captures, mismatching texels)"
+    unstable = sum(int((session[("r1", i)] != session[("r2", i)]).sum()) for i in range(len(CASES)))
+    yield f"   texels where r1 and r2 differ: {unstable}"
+    for i, case in enumerate(CASES):
+        cells = []
+        for label, mix in (("plain", mix_plain), ("fma", mix_fma)):
+            predicted = read_g(model_codes(case, sources, mix)).view(np.uint32)
+            cells.append(f"{label} {int((predicted != session[('r1', i)].view(np.uint32)).sum())}")
+        yield f"   User{i} {case.case_id}: " + "; ".join(cells)
+    yield "6. Across sessions (reported, not compared)"
+    for name in SESSION_RECEIPTS:
+        count, largest = differing(sources[name], earlier[name])
+        yield f"   {name}: vs the 2026-11-10 capture: {count} texels, largest {largest} codes"
+    for i, case in enumerate(CASES):
+        count, largest = differing(session[("r1", i)], old[("r1", i)])
+        yield f"   User{i} {case.case_id}: vs `{NAME}`: {count} texels, largest {largest} codes"
+
+
 def main() -> int:
     store = locate()
     if store is None:
         raise SystemExit("no private store on this machine")
     for line in report(store):
+        print(line)
+    for line in session_report(store):
         print(line)
     return 0
 
