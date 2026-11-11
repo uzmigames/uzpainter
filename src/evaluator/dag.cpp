@@ -237,17 +237,19 @@ render::Result<DagSource> ResolveSource(const Context& ctx, const core::FillCont
 render::Result<std::optional<DagSource>> SourceOf(const Context& ctx, const Layer& layer) {
     const core::FillContent& fill = *layer.fill;
     if (fill.source_mode == core::SourceMode::Material) {
-        // Painter's material fill activates Height only (decision 413, P413-A): its Height is the
-        // procedural snapshot of the output mapped to Height, through the provider's material rule;
-        // every other channel is left as the layers below give it.
-        if (ctx.channel != ChannelType::Height || !fill.active_channels.contains(ChannelType::Height)) {
-            return std::optional<DagSource>{};
-        }
+        // Decision 416 admits a material fill only with a bound procedural material source; any
+        // other material fill is refused on every channel, as the support check refuses it.
         if (!fill.material_source || fill.material_source->kind() != core::SourceKind::procedural) {
             return EvalFail(EvalErrorKind::UnsupportedSource,
                             "a material fill without a procedural material source is outside this profile "
                             "(phase3.2_proc-material-families)",
                             layer.uid);
+        }
+        // Painter's material fill activates Height only (decision 413, P413-A): its Height is the
+        // procedural snapshot of the output mapped to Height, through the provider's material rule;
+        // every other channel is left as the layers below give it.
+        if (ctx.channel != ChannelType::Height || !fill.active_channels.contains(ChannelType::Height)) {
+            return std::optional<DagSource>{};
         }
         render::Result<DagSource> source = ResolveSource(ctx, fill, *fill.material_source, layer.uid, false);
         if (!source) return render::Unexpected(source.error());
