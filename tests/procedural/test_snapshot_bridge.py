@@ -1010,3 +1010,75 @@ def test_painter_side_tags_a_colour_and_sets_it_back_as_a_color(
     unnamed = FakeColor(0.25, 0.5, 1.0, None)
     with pytest.raises(ValueError, match="named colour space"):
         module_globals["typed_value"](unnamed)
+
+
+class MaterialRemote(MultiRemote):
+    """`MultiRemote` on the destination's texture set at 256 px (item 2.16)."""
+
+    def __init__(self, mesh: str, sets: list[dict[str, Any]]) -> None:
+        super().__init__(mesh)
+        self.sets = sets
+        self.created_with: list[Any] = []
+        self.exported_sets: list[Any] = []
+
+    def state(self) -> dict[str, Any]:
+        observed = super().state()
+        observed["sets"] = self.sets
+        return observed
+
+    def call(self, operation: str, args: dict[str, Any] | None = None) -> Any:
+        if operation == "create":
+            self.created_with.append(args)
+        if operation == "export":
+            assert args is not None
+            self.exported_sets.append(args["exportList"])
+        return super().call(operation, args)
+
+
+def material_request(tmp_path: Path) -> dict[str, Any]:
+    request = dict(multi_request(tmp_path))
+    request["usage"] = "MATERIAL"
+    return bridge.capture_request(request)
+
+
+def test_material_usage_request_shape_and_refusals(tmp_path: Path) -> None:
+    request = material_request(tmp_path)
+    assert request["usage"] == "MATERIAL" and request["preset"] == "authored preset"
+    body: dict[str, Any] = {"resource": RESOURCE, "parameters": {}, "preset": None, "inputs": {}}
+    for usage in ("PROCEDURAL", "GENERATOR", "material"):
+        with pytest.raises(ValueError, match="MATERIAL"):
+            bridge.capture_request({**body, "usage": usage})
+    with pytest.raises(ValueError, match="PROCEDURAL or GENERATOR"):
+        bridge.capture_request({"resource": RESOURCE, "parameters": {}, "usage": "MATERIAL"})
+
+
+def test_material_usage_capture_records_the_destination_resolution(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    sets = [{"name": "destination", "resolution": [256, 256], "has_uv_tiles": False}]
+    remote = MaterialRemote(str(tmp_path / "mesh.obj"), sets)
+    monkeypatch.setattr(bridge, "Remote", lambda: remote)
+    context = {
+        "mesh_path": remote.mesh,
+        "project_uuid": "authored",
+        "revision": 5,
+        "settings": {},
+        "texture_set": "destination",
+        "resolution": 256,
+    }
+    work = tmp_path / "work"
+    work.mkdir()
+    report = bridge.record(context, material_request(tmp_path), work)
+    assert report["schema"] == "uzpainter/procedural-capture/2" and report["usage"] == "MATERIAL"
+    assert {c["signature"]["output"]["resolution"] for c in report["captures"]} == {256}
+    assert remote.created_with == [{"mesh_path": remote.mesh, "resolution": 256}]
+    assert remote.exported_sets and all(
+        e == [{"rootPath": "destination"}] for e in remote.exported_sets
+    )
+    assert remote.closed
+    remote = MaterialRemote(str(tmp_path / "mesh.obj"), sets)
+    monkeypatch.setattr(bridge, "Remote", lambda: remote)
+    other = tmp_path / "other"
+    other.mkdir()
+    with pytest.raises(ValueError, match="texture set or resolution"):
+        bridge.record({**context, "resolution": 512}, material_request(tmp_path), other)

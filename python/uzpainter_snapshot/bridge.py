@@ -7,7 +7,10 @@ exports before committing any project change. A request that also names `preset`
 L32F and RGB32F channels, with the state's presets and its single and multiple output contexts.
 A request of `resource`, `parameters` and `usage` (decision 428) captures on the destination's
 own mesh and texture set resolution: a single-output procedural source (a grunge) as that paired
-fill source, or a generator in the mask of a white fill, reading the destination's mesh maps.
+fill source, or a generator in the mask of a white fill, reading the destination's mesh maps. A
+request of `resource`, `parameters`, `preset`, `inputs` and `usage` `MATERIAL` (item 2.16 of
+`phase3.3_procedural-families`) is the multi-output capture on the destination's own mesh and
+texture set resolution.
 """
 
 from __future__ import annotations
@@ -123,22 +126,29 @@ def capture_inputs(value: Any) -> dict[str, dict[str, Any]]:
 # The usages of a capture on the destination's own mesh (decision 428): a single-output procedural
 # source as a fill source, or a generator in a fill's mask reading the destination's mesh maps.
 CAPTURE_USAGES = ("PROCEDURAL", "GENERATOR")
+# The multi-output capture of a material on the destination's own mesh (item 2.16).
+MATERIAL_USAGE = "MATERIAL"
 
 
 def capture_request(value: Any) -> dict[str, Any]:
     """Accept one explicitly versioned ResourceID and scalar parameter overrides, and for a
     multi-output capture a preset name (or null) and image-input plugs (possibly none), or for a
-    capture on the destination's own mesh and resolution its `usage` (decision 428)."""
-    multi = isinstance(value, dict) and set(value) == {"resource", "parameters", "preset", "inputs"}
-    usage = isinstance(value, dict) and set(value) == {"resource", "parameters", "usage"}
+    capture on the destination's own mesh and resolution its `usage` (decision 428): `MATERIAL`
+    beside a preset and plugs (item 2.16), `PROCEDURAL` or `GENERATOR` without them."""
+    keys = set(value) if isinstance(value, dict) else set()
+    material = keys == {"resource", "parameters", "preset", "inputs", "usage"}
+    multi = material or keys == {"resource", "parameters", "preset", "inputs"}
+    usage = keys == {"resource", "parameters", "usage"}
     if not isinstance(value, dict) or (
-        set(value) != {"resource", "parameters"} and not multi and not usage
+        keys != {"resource", "parameters"} and not multi and not usage
     ):
         raise ValueError(
             "request requires exactly resource and parameters (and preset and inputs, or usage)"
         )
     if usage and value["usage"] not in CAPTURE_USAGES:
         raise ValueError("usage must be PROCEDURAL or GENERATOR")
+    if material and value["usage"] != MATERIAL_USAGE:
+        raise ValueError("a multi-output capture's usage must be MATERIAL")
     resource = value["resource"]
     if not isinstance(resource, str):
         raise ValueError("resource must be a versioned resource:// URL")
@@ -171,7 +181,7 @@ def capture_request(value: Any) -> dict[str, Any]:
             raise ValueError("a preset capture takes no parameter overrides")
         result["preset"] = preset
         result["inputs"] = capture_inputs(value["inputs"])
-    if usage:
+    if usage or material:
         result["usage"] = value["usage"]
     return result
 
@@ -476,9 +486,12 @@ def signature_inputs(
     return result
 
 
-def validate_multi(readback: Any, request: dict[str, Any]) -> dict[str, Any]:
-    """The multi-output state: the isolated paired layer of the legacy capture, sources naming
-    the requested resource with at least one output, and the requested overrides effective."""
+def validate_multi(
+    readback: Any, request: dict[str, Any], sets: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
+    """The multi-output state: the isolated paired layer of the legacy capture on `sets` (the
+    plane's by default), sources naming the requested resource with at least one output, and the
+    requested overrides effective."""
     if readback["channel_formats"] != {"User0": "L32F", "User1": "RGB32F"}:
         raise ValueError("capture channels changed native precision")
     if (
@@ -506,7 +519,7 @@ def validate_multi(readback: Any, request: dict[str, Any]) -> dict[str, Any]:
         "mask_effects": [],
     }:
         raise ValueError("capture layer tree is not isolated")
-    if readback["sets"] != [{"name": "uzp_plane", "resolution": [128, 128], "has_uv_tiles": False}]:
+    if readback["sets"] != (PLANE_SETS if sets is None else sets):
         raise ValueError("capture texture set or resolution changed")
     sources = readback["sources"]
     if len(sources) != 2 or canonical_state(sources[0]) != canonical_state(sources[1]):
@@ -581,12 +594,16 @@ def check_contexts(
 def record_outputs(
     context: dict[str, Any], request: dict[str, Any], root: Path, remote: Remote
 ) -> dict[str, Any]:
-    """Every listed output of one state, inside the owned project; see `record_multi`."""
+    """Every listed output of one state, inside the owned project; see `record_multi`. A
+    `MATERIAL` usage captures on the destination's texture set and resolution (item 2.16)."""
+    destination = request.get("usage") == MATERIAL_USAGE
+    texture_set = context["texture_set"] if destination else "uzp_plane"
+    resolution = context["resolution"] if destination else 128
     staged, hashes = stage_bitmaps(request, root)
     remote.call("configure", staged)
     remote.wait("ready")
     readback = remote.call("readback")
-    source = validate_multi(readback, request)
+    source = validate_multi(readback, request, destination_sets(context) if destination else None)
     inputs = signature_inputs(source, staged, readback, hashes)
     base = without_output(readback)
     seed = source["parameters"].get("$randomseed", 0)
@@ -606,7 +623,7 @@ def record_outputs(
         for repeat in (1, 2):
             directory = root / f"output{index}-export{repeat}"
             directory.mkdir()
-            config = export_config(directory)
+            config = export_config(directory, texture_set)
             status = remote.call("export", config)
             if status["status"] != "Success":
                 raise RuntimeError(f"Painter export failed: {status}")
@@ -631,7 +648,7 @@ def record_outputs(
                         "seed": seed,
                         "output": {
                             "id": output,
-                            "resolution": 128,
+                            "resolution": resolution,
                             "format": "f32",
                             "colour_space": "raw",
                             "channels": channels,
@@ -655,7 +672,7 @@ def record_outputs(
     if canonical_state(remote.call("readback")) != canonical_state(readback):
         raise RuntimeError("reading the output contexts changed the captured state")
     preset_parameters, observed_contexts = check_contexts(contexts, source, presets)
-    return {
+    report: dict[str, Any] = {
         "schema": "uzpainter/procedural-capture/2",
         "request": request,
         "readback": readback,
@@ -665,6 +682,9 @@ def record_outputs(
         "contexts": observed_contexts,
         "bitmaps": hashes,
     }
+    if destination:
+        report["usage"] = MATERIAL_USAGE
+    return report
 
 
 def export_twice(
@@ -800,7 +820,7 @@ def record(context: dict[str, Any], request: dict[str, Any], root: Path) -> dict
         remote.wait("ready")
         if not still_owned():
             raise RuntimeError("Painter capture project ownership changed")
-        if "usage" in request:
+        if "usage" in request and "inputs" not in request:
             report = record_usage(context, request, root, remote, still_owned)
             report.update(
                 {

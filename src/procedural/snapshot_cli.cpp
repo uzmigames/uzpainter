@@ -195,11 +195,12 @@ struct CapturedOutput {
 
 /// Reads and checks every capture of a multi-output receipt before any project change: each file's
 /// hash, the repeat export identical at native precision, the signature in the capture domain
-/// (the requested resource's pin, a 128px raw F32 output of 1 or 3 channels named by the capture,
-/// the requested preset and plugged inputs, the quad mesh with one UV tile) and the state's
-/// observations, identical for every capture; every listed output has exactly both views.
+/// (the requested resource's pin, a raw F32 output of 1 or 3 channels at `resolution` named by the
+/// capture, the requested preset and plugged inputs, the quad mesh with one UV tile) and the
+/// state's observations, identical for every capture; every listed output has exactly both views.
 std::vector<CapturedOutput> ReadMultiOutputCapture(const json::Value& capture, const fs::path& work,
-                                                   const std::string& resource, const json::Object& requested) {
+                                                   const std::string& resource, const json::Object& requested,
+                                                   uint32_t resolution) {
     const auto& receipt = Object(capture);
     const auto& hashes = Object(receipt.at("files"));
     const json::Value& preset = requested.at("preset");
@@ -216,7 +217,7 @@ std::vector<CapturedOutput> ReadMultiOutputCapture(const json::Value& capture, c
         const bool presetMatches = preset.IsNull() ? !request->preset
                                                    : request->preset && *request->preset == std::get<std::string>(preset.data);
         if (core::FormatAssetUrl(request->asset) != "uzasset://snapshot/" + core::Sha256Hex(resource) + "@1" ||
-            request->output.resolution != 128 || request->output.format != ChannelFormat::F32 ||
+            request->output.resolution != resolution || request->output.format != ChannelFormat::F32 ||
             request->output.colourSpace != "raw" || (request->output.channels != 1 && request->output.channels != 3) ||
             request->outputId.empty() || request->outputId != String(entry, "output") || !presetMatches ||
             !request->inputs.empty() || plugged != plugs || request->meshClass != "quad" || request->uvTiles != 1) {
@@ -412,6 +413,8 @@ int RunSnapshotCommand(const std::vector<std::string>& args, std::FILE* out, std
         return 2;
     }
     fs::path work;
+    // The step a host error happened in, reported beside it.
+    std::string stage = "preflight";
     try {
         const fs::path bin = BinaryDirectory();
         const fs::path bridge = bin / "python" / "uzpainter_snapshot" / "bridge.py";
@@ -420,11 +423,14 @@ int RunSnapshotCommand(const std::vector<std::string>& args, std::FILE* out, std
         const std::string painterSideHash = core::Sha256Hex(Read(painterSide));
         const json::Value requested = json::Parse(Read(Path(args[4])));
         const auto& requestObject = Object(requested);
-        // Decision 412 §3: `preset` and `inputs` beside them ask for every listed output of that state.
-        const bool multi = requestObject.size() == 4 && requestObject.contains("preset") && requestObject.contains("inputs");
+        // Decision 412 §3: `preset` and `inputs` beside them ask for every listed output of that state;
+        // with `usage` `MATERIAL` too, on the destination's own mesh and resolution (item 2.16).
+        const bool presetAndInputs = requestObject.contains("preset") && requestObject.contains("inputs");
+        const bool material = requestObject.size() == 5 && presetAndInputs && requestObject.contains("usage");
+        const bool multi = material || (requestObject.size() == 4 && presetAndInputs);
         // Decision 428: `usage` beside them asks for a capture on the destination's own mesh and
         // resolution, of a procedural fill source or of a generator reading its mesh maps.
-        const bool usage = requestObject.size() == 3 && requestObject.contains("usage");
+        const bool usage = material || (requestObject.size() == 3 && requestObject.contains("usage"));
         if ((requestObject.size() != 2 && !multi && !usage) || !requestObject.contains("parameters") ||
             !requestObject.contains("resource")) {
             throw std::runtime_error("request requires exactly resource and parameters (and preset and inputs, or usage)");
@@ -433,8 +439,9 @@ int RunSnapshotCommand(const std::vector<std::string>& args, std::FILE* out, std
         std::string usageName;
         if (usage) {
             usageName = String(requestObject, "usage");
-            if (usageName != "PROCEDURAL" && usageName != "GENERATOR") {
-                throw std::runtime_error("usage must be PROCEDURAL or GENERATOR");
+            if (material ? usageName != "MATERIAL" : usageName != "PROCEDURAL" && usageName != "GENERATOR") {
+                throw std::runtime_error(material ? "a multi-output capture's usage must be MATERIAL"
+                                                  : "usage must be PROCEDURAL or GENERATOR");
             }
         }
         const bool generator = usageName == "GENERATOR";
@@ -491,7 +498,9 @@ int RunSnapshotCommand(const std::vector<std::string>& args, std::FILE* out, std
             context["signature_inputs"] = SignatureInputs(meshMaps);
         }
         Write(work / "context.json", json::WriteCanonical(context));
+        stage = "bridge";
         RunBridge(work);
+        stage = "receipt";
         if (core::Sha256Hex(Read(bridge)) != bridgeHash || core::Sha256Hex(Read(painterSide)) != painterSideHash) {
             throw std::runtime_error("installed recorder changed during capture");
         }
@@ -501,11 +510,35 @@ int RunSnapshotCommand(const std::vector<std::string>& args, std::FILE* out, std
             if (String(receipt, "schema") != "uzpainter/procedural-capture/2" ||
                 String(receipt, "project_uuid") != opened.store->project_uuid() ||
                 std::get<int64_t>(receipt.at("revision").data) != document.revision() ||
-                String(receipt, "resource") != resource) {
+                String(receipt, "resource") != resource || receipt.contains("usage") != material ||
+                (material && String(receipt, "usage") != usageName)) {
                 throw std::runtime_error("capture identity differs from request");
             }
-            const std::vector<CapturedOutput> outputs = ReadMultiOutputCapture(capture, work, resource, requestObject);
+            const uint32_t size = material ? static_cast<uint32_t>(usageSet->resolution.width) : 128;
+            const std::vector<CapturedOutput> outputs = ReadMultiOutputCapture(capture, work, resource, requestObject, size);
+            if (material) {
+                // Each stored signature must be exactly what the destination's own texture set asks for
+                // in this state: its settings and mesh identity, resolution, seed, preset and plugged
+                // inputs, in the capture's view of the output (item 2.16).
+                for (const CapturedOutput& output : outputs) {
+                    core::ProceduralRef ref;
+                    ref.asset = core::FormatAssetUrl(output.request.asset);
+                    ref.params = *output.metadata.typed_effective_parameters;
+                    ref.preset = output.request.preset;
+                    for (const auto& [name, input] : output.request.sourceInputs) {
+                        ref.input_sources[name] =
+                            core::ProceduralInputSource{input.bitmapSha256, input.colourSpace, input.workingColour};
+                    }
+                    auto own = SnapshotSetRequest(project, *usageSet, ref, output.request.outputId);
+                    if (!own) throw std::runtime_error("the destination's own request is refused: " + own.error());
+                    own->output.channels = output.request.output.channels;
+                    if (SignatureHash(*own) != SignatureHash(output.request)) {
+                        throw std::runtime_error("the capture signature is not the destination's own request");
+                    }
+                }
+            }
             json::Array signatures;
+            stage = "transactions";
             for (const CapturedOutput& output : outputs) {
                 const auto outcome = RecordSnapshotExport(*opened.store, document, output.request, output.exportFile,
                                                           opened.store->project_uuid(), document.revision(), output.metadata);
@@ -515,12 +548,16 @@ int RunSnapshotCommand(const std::vector<std::string>& args, std::FILE* out, std
                 }
                 signatures.push_back(SignatureHash(output.request));
             }
+            stage = "save";
             opened.store->Save(document);
             const int64_t recordedRevision = document.revision();
             opened.store->Close();
+            stage = "reopen";
             auto reopened = store::ProjectStore::Open(Path(args[2]));
+            stage = "reload";
             const auto backend = SnapshotBackend::Load(*reopened.store, reopened.state.project);
             if (!backend) throw std::runtime_error("saved snapshot backend did not reload: " + backend.error());
+            stage = "verify";
             for (const CapturedOutput& output : outputs) {
                 const auto stored = backend->Stored(output.request);
                 const auto storedObservations = backend->Metadata(output.request);
@@ -622,7 +659,7 @@ int RunSnapshotCommand(const std::vector<std::string>& args, std::FILE* out, std
         Print(out, report);
         return 0;
     } catch (const std::exception& error) {
-        Print(out, {{"status", "host_error"}, {"error", error.what()}, {"work", Utf8(work)}});
+        Print(out, {{"status", "host_error"}, {"error", error.what()}, {"stage", stage}, {"work", Utf8(work)}});
         return 3;
     }
 }
